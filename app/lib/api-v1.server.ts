@@ -30,7 +30,9 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import {
+  completeCommittedIdempotencyKey,
   completeIdempotencyKey,
+  idempotencyCompletionFailureSummary,
   hashIdempotencyRequest,
   IDEMPOTENCY_RETRY_AFTER_SECONDS,
   idempotencyClientKey,
@@ -3986,22 +3988,12 @@ export async function runIdempotentApiV1Mutation(
   }
 
   const responseBody = idempotentMutationBody(requestId, result.data);
-  try {
-    await completeIdempotencyKey(db, reservation.record.id, {
-      status: result.status,
-      body: responseBody,
-    });
-  } catch (error) {
-    if (!options.recoverInFlight) throw error;
-    try {
-      await completeIdempotencyKey(db, reservation.record.id, {
-        status: result.status,
-        body: responseBody,
-      });
-    } catch {
-      // Leave the reserved key recoverable; the committed write is more important than a duplicate response write failure.
-    }
-  }
+  // The write has committed: answer it as committed even if its response cannot be saved.
+  const completionFailure = await completeCommittedIdempotencyKey(db, reservation.record.id, {
+    status: result.status,
+    body: responseBody,
+  });
+  if (completionFailure) reportIdempotencyCompletionFailure(args, requestId, operation, completionFailure);
 
   return withApiV1Telemetry(Response.json(responseBody, {
     status: result.status,
@@ -7160,6 +7152,19 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
 export function normalizeApiV1InternalError(error: unknown): ApiV1Error {
   return new ApiV1Error("internal_error", "Internal error");
+}
+
+/**
+ * A committed write whose response could not be saved on its idempotency key. The write is
+ * answered as committed; this makes the stuck key visible in logs and exception telemetry.
+ */
+function reportIdempotencyCompletionFailure(args: ApiV1RouteArgs, requestId: string, operation: string, error: unknown) {
+  console.error("[api-v1] idempotency_completion_failed", {
+    requestId,
+    operation,
+    error: idempotencyCompletionFailureSummary(error),
+  });
+  captureApiV1InternalException(args, error);
 }
 
 function logApiV1InternalError(args: ApiV1RouteArgs, requestId: string, error: unknown) {

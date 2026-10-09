@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { createApiCredential } from "~/lib/api-auth.server";
 import {
+  completeCommittedIdempotencyKey,
   completeIdempotencyKey,
+  idempotencyCompletionFailureSummary,
   hashIdempotencyRequest,
   idempotencyClientKey,
   IdempotencyConflictError,
@@ -508,5 +510,36 @@ describe("API idempotency helpers", () => {
     expect(result.status).toBe("reserved");
     if (result.status !== "reserved") throw new Error("expected reservation");
     expect(result.record.expiresAt.getTime()).toBeGreaterThanOrEqual(before + IDEMPOTENCY_TTL_MS);
+  });
+
+  it("saves a committed write's response, trying twice, and answers the last failure", async () => {
+    const reserved = await reserveIdempotencyKey(db, {
+      userId,
+      clientKey: `chef:${userId}`,
+      key: "committed-save",
+      operation: "recipes.create",
+      requestHash: "hash",
+      now,
+    });
+    const response = { status: 201, body: { ok: true } };
+    const update = vi.spyOn(db.apiIdempotencyKey, "update");
+
+    update.mockRejectedValueOnce(new Error("first")).mockRejectedValueOnce(new Error("second"));
+    await expect(completeCommittedIdempotencyKey(db, reserved.record.id, response)).resolves.toEqual(new Error("second"));
+    await expect(db.apiIdempotencyKey.findUniqueOrThrow({ where: { id: reserved.record.id } }))
+      .resolves.toMatchObject({ responseStatus: null });
+
+    update.mockRejectedValueOnce(new Error("first"));
+    await expect(completeCommittedIdempotencyKey(db, reserved.record.id, response)).resolves.toBeNull();
+    await expect(db.apiIdempotencyKey.findUniqueOrThrow({ where: { id: reserved.record.id } }))
+      .resolves.toMatchObject({ responseStatus: 201, responseBody: JSON.stringify({ ok: true }) });
+    update.mockRestore();
+  });
+
+  it("summarizes a failed key save by its Prisma code, or its message", () => {
+    expect(idempotencyCompletionFailureSummary(Object.assign(new Error("Record not found"), { code: "P2025" }))).toBe("P2025");
+    expect(idempotencyCompletionFailureSummary(new Error("D1 is down"))).toBe("D1 is down");
+    expect(idempotencyCompletionFailureSummary("timeout")).toBe("timeout");
+    expect(idempotencyCompletionFailureSummary(null)).toBe("null");
   });
 });

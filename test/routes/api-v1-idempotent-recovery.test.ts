@@ -8,6 +8,7 @@ import {
 } from "~/lib/api-idempotency.server";
 import { runIdempotentApiV1Mutation } from "~/lib/api-v1.server";
 import { getLocalDb } from "~/lib/db.server";
+import { expectConsoleError } from "../warning-policy";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
 
@@ -203,51 +204,39 @@ describe("API v1 idempotent mutation recovery", () => {
     await expect(db.recipe.count({ where: { chefId: principal.id, title: body.title } })).resolves.toBe(1);
   });
 
-  it("surfaces completion failures without recovery and tolerates them when recovery exists", async () => {
+  it("answers a committed write whose response cannot be saved, with or without recovery", async () => {
+    // The write deletes its own key, so saving the response fails both times (P2025). The write
+    // has committed, so it is answered as committed either way; it used to be answered as an
+    // error when there was no recovery.
     const principal = await createPrincipal(db);
-    const body = { clientMutationId: "completion-failure", title: "Completion Failure Recipe" };
+    for (const [clientMutationId, recovery] of [
+      ["completion-failure", undefined],
+      ["completion-failure-recoverable", async () => null],
+    ] as const) {
+      const requestId = `req_${clientMutationId.replaceAll("-", "_")}`;
+      const body = { clientMutationId, title: `Recipe ${clientMutationId}` };
+      expectConsoleError("[api-v1] idempotency_completion_failed", { requestId, operation: "recipes.create", error: "P2025" });
+      const response = await runIdempotentApiV1Mutation(
+        routeArgs(mutationRequest(requestId, body), "recipes"),
+        requestId,
+        principal,
+        body,
+        clientMutationId,
+        "recipes.create",
+        async (database, reservation) => {
+          await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
+          return { status: 201, data: { mutation: { clientMutationId, replayed: false } } };
+        },
+        recovery,
+      );
 
-    await expect(runIdempotentApiV1Mutation(
-      routeArgs(mutationRequest("req_completion_failure_no_recovery", body), "recipes"),
-      "req_completion_failure_no_recovery",
-      principal,
-      body,
-      body.clientMutationId,
-      "recipes.create",
-      async (database, reservation) => {
-        await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
-        return {
-          status: 201,
-          data: { mutation: { clientMutationId: body.clientMutationId, replayed: false } },
-        };
-      },
-    )).rejects.toThrow();
-
-    const recoverableBody = { clientMutationId: "completion-failure-recoverable", title: "Recoverable Completion Failure" };
-    const response = await runIdempotentApiV1Mutation(
-      routeArgs(mutationRequest("req_completion_failure_recoverable", recoverableBody), "recipes"),
-      "req_completion_failure_recoverable",
-      principal,
-      recoverableBody,
-      recoverableBody.clientMutationId,
-      "recipes.create",
-      async (database, reservation) => {
-        await database.apiIdempotencyKey.delete({ where: { id: reservation.id } });
-        return {
-          status: 201,
-          data: { mutation: { clientMutationId: recoverableBody.clientMutationId, replayed: false } },
-        };
-      },
-      async () => null,
-    );
-    const payload = await readJson(response);
-
-    expect(response.status).toBe(201);
-    expect(payload).toEqual({
-      ok: true,
-      requestId: "req_completion_failure_recoverable",
-      data: { mutation: { clientMutationId: recoverableBody.clientMutationId, replayed: false } },
-    });
+      expect(response.status).toBe(201);
+      await expect(readJson(response)).resolves.toEqual({
+        ok: true,
+        requestId,
+        data: { mutation: { clientMutationId, replayed: false } },
+      });
+    }
   });
 
   it("keeps the original write error when cleanup also fails", async () => {

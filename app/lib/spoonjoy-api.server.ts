@@ -13,7 +13,8 @@ import {
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import {
-  completeIdempotencyKey,
+  completeCommittedIdempotencyKey,
+  idempotencyCompletionFailureSummary,
   hashIdempotencyRequest,
   idempotencyClientKey,
   reserveIdempotencyKey,
@@ -770,10 +771,17 @@ async function runIdempotentMcpCoverMutation<T>(
     throw error;
   }
 
-  await completeIdempotencyKey(context.db, reservation.record.id, {
+  // The write has committed: answer it even if its response cannot be saved on the key.
+  const completionFailure = await completeCommittedIdempotencyKey(context.db, reservation.record.id, {
     status: 200,
     body: result,
   });
+  if (completionFailure) {
+    console.error("[spoonjoy-api] idempotency_completion_failed", {
+      operation: input.operation,
+      error: idempotencyCompletionFailureSummary(completionFailure),
+    });
+  }
   return result;
 }
 

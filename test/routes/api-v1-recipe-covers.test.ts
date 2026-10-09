@@ -760,6 +760,11 @@ describe("API v1 recipe cover management", () => {
     };
 
     try {
+      expectConsoleError("[api-v1] idempotency_completion_failed", {
+        requestId: "req_recipe_image_recover_first",
+        operation: "recipes.image.upload",
+        error: "idempotency completion retry failed after upload",
+      });
       const first = await action(routeArgs(
         recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_recover_first", recipeImageForm(body)),
         `recipes/${fixture.recipe.id}/image`,
@@ -2061,37 +2066,44 @@ describe("API v1 recipe cover management", () => {
     expect(recipe).toMatchObject({ activeCoverId: null, activeCoverVariant: null, coverMode: "none" });
   });
 
-  it("surfaces idempotency completion failures for cover mutations without recovery", async () => {
+  it("answers a committed cover mutation without recovery, and retries saving its response once", async () => {
+    // The response save after a committed write used to be tried once, and its failure was
+    // answered as a 500 even though the cover had already been cleared.
     const fixture = await createCoverFixture(db);
     const originalUpdate = db.apiIdempotencyKey.update;
-    const updateError = new Error("idempotency completion unavailable");
-    const updateSpy = vi.fn().mockRejectedValueOnce(updateError);
+    const updateSpy = vi.fn(originalUpdate).mockRejectedValueOnce(new Error("idempotency completion unavailable"));
     db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
+    const clearCover = (requestId: string) => action(routeArgs(jsonRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`,
+      "PATCH",
+      fixture.ownerKitchenWrite.token,
+      requestId,
+      { clientMutationId: "cover-none-completion-failure", confirmNoCover: true },
+    ), `recipes/${fixture.recipe.id}/covers`));
 
     try {
-      expectConsoleError("[api-v1] internal_error", {
-        requestId: "req_cover_completion_failure_no_recovery",
-        method: "PATCH",
-        path: `/api/v1/recipes/${fixture.recipe.id}/covers`,
-        error: {
-          name: updateError.name,
-          message: updateError.message,
-          stack: updateError.stack,
-        },
-      });
-      const response = await action(routeArgs(jsonRequest(
-        `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`,
-        "PATCH",
-        fixture.ownerKitchenWrite.token,
-        "req_cover_completion_failure_no_recovery",
-        { clientMutationId: "cover-none-completion-failure", confirmNoCover: true },
-      ), `recipes/${fixture.recipe.id}/covers`));
+      const response = await clearCover("req_cover_completion_failure_no_recovery");
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(200);
       await expect(response.json()).resolves.toMatchObject({
-        ok: false,
+        ok: true,
         requestId: "req_cover_completion_failure_no_recovery",
-        error: { code: "internal_error", status: 500 },
+        data: { mutation: { clientMutationId: "cover-none-completion-failure", replayed: false } },
+      });
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: fixture.recipe.id } })).resolves.toMatchObject({
+        activeCoverId: null,
+        coverMode: "none",
+      });
+      await expect(db.apiIdempotencyKey.findFirstOrThrow({
+        where: { userId: fixture.owner.id, key: "cover-none-completion-failure" },
+      })).resolves.toMatchObject({ responseStatus: 200 });
+
+      const replay = await clearCover("req_cover_completion_failure_replay");
+      expect(replay.status).toBe(200);
+      await expect(replay.json()).resolves.toMatchObject({
+        requestId: "req_cover_completion_failure_replay",
+        data: { mutation: { clientMutationId: "cover-none-completion-failure", replayed: true } },
       });
     } finally {
       db.apiIdempotencyKey.update = originalUpdate;

@@ -172,6 +172,37 @@ export async function completeIdempotencyKey(
   });
 }
 
+/** A short, stable description of a failed key save for logs: the Prisma error code, or the message. */
+export function idempotencyCompletionFailureSummary(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string") return code;
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Saves a committed write's response on its key, trying twice. The write has already
+ * committed, so a failure here must not turn it into an error answer: the caller answers the
+ * write as committed and reports the failure. The key then stays in flight, and a retry with
+ * it gets "in progress" until it expires, unless the operation can recover the write.
+ * Answers null once saved, or the last failure.
+ */
+export async function completeCommittedIdempotencyKey(
+  db: PrismaClientType,
+  id: string,
+  response: { status: number; body: unknown },
+): Promise<unknown> {
+  let failure: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await completeIdempotencyKey(db, id, response);
+      return null;
+    } catch (error) {
+      failure = error;
+    }
+  }
+  return failure;
+}
+
 export function replayIdempotencyResponse(
   record: Pick<ApiIdempotencyKey, "responseStatus" | "responseBody">,
   requestId: string,
