@@ -2,10 +2,21 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { render, screen, waitFor } from '@testing-library/react'
 import { m, motion } from 'motion/react'
-import { describe, expect, it, vi } from 'vitest'
+import { Component, type ReactNode } from 'react'
+import { describe, expect, it } from 'vitest'
 import { LazyLayoutGroup } from '~/components/motion/lazy-motion'
 
 const ROOT = resolve(__dirname, '../../..')
+
+class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  render() {
+    return this.state.failed ? <p>refused</p> : this.props.children
+  }
+}
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -46,14 +57,18 @@ describe('Motion loading', () => {
   })
 
   it('refuses a full motion component inside the group', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(() =>
-      render(
+    // React hands the caught render error to onCaughtError instead of logging it.
+    const caught: unknown[] = []
+    render(
+      <Boundary>
         <LazyLayoutGroup>
           <motion.div />
-        </LazyLayoutGroup>,
-      ),
-    ).toThrow()
-    error.mockRestore()
+        </LazyLayoutGroup>
+      </Boundary>,
+      { onCaughtError: (error) => caught.push(error) },
+    )
+    expect(screen.getByText('refused')).toBeInTheDocument()
+    expect(caught).toHaveLength(1)
+    expect(String(caught[0])).toMatch(/strict/i)
   })
 })
