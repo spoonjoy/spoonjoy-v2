@@ -2363,6 +2363,12 @@ describe("deployment preflight", () => {
       "    invalid_if: (github.event_name == 'workflow_run'",
     ],
     ["the deploy steps block", "    steps:\n", "    invalid_steps:\n"],
+    // Present but malformed: a step list holding something other than step mappings.
+    [
+      "well-formed report steps",
+      "    steps:\n      - name: Checkout released source SHA",
+      "    steps:\n      - not-a-step\n      - name: Checkout released source SHA",
+    ],
   ])("rejects a secure-looking workflow without %s", (_name, expected, replacement) => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = replaceRequired(secureProductionDeployWorkflow(), expected, replacement);
