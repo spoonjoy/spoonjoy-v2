@@ -227,9 +227,10 @@ async function main() {
       await aiSwitch.click()
     }
 
-    await replaceControlledText(page.locator('input[name="quantity"]:visible'), '1')
-    await replaceControlledText(page.locator('input[name="unit"]:visible'), 'cup')
-    await replaceControlledText(page.locator('input[name="ingredientName"]:visible'), 'rice')
+    // The manual ingredient inputs are labelled controls (no name attributes), as the e2e flows use.
+    await replaceControlledText(page.getByLabel(/^quantity/i).first(), '1')
+    await replaceControlledText(page.getByLabel(/^unit/i).first(), 'cup')
+    await replaceControlledText(page.getByLabel(/^ingredient$/i).first(), 'rice')
     await page.getByRole('button', { name: /^add ingredient$/i }).first().click()
     await page.getByRole('button', { name: /^save$/i }).first().click()
     await expect(page.getByRole('button', { name: /create recipe/i })).not.toHaveAttribute('aria-disabled', 'true')
