@@ -155,7 +155,7 @@ type Database = PrismaClientType | Prisma.TransactionClient;
 
 type RecipeWithDetails = Prisma.RecipeGetPayload<{
   include: {
-    chef: { select: { id: true; email: true; username: true } };
+    chef: { select: { id: true; username: true } };
     covers: true;
     steps: {
       include: {
@@ -175,12 +175,12 @@ type ApiCredentialRecord = Prisma.ApiCredentialGetPayload<{}>;
 
 type CookbookWithRecipes = Prisma.CookbookGetPayload<{
   include: {
-    author: { select: { id: true; email: true; username: true } };
+    author: { select: { id: true; username: true } };
     recipes: {
       include: {
         recipe: {
           include: {
-            chef: { select: { id: true; email: true; username: true } };
+            chef: { select: { id: true; username: true } };
             covers: true;
             steps: {
               include: {
@@ -196,7 +196,7 @@ type CookbookWithRecipes = Prisma.CookbookGetPayload<{
 
 type CookbookSummaryBase = Prisma.CookbookGetPayload<{
   include: {
-    author: { select: { id: true; email: true; username: true } };
+    author: { select: { id: true; username: true } };
   };
 }>;
 
@@ -214,13 +214,13 @@ const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
 
 const cookbookRecipeInclude = {
-  author: { select: { id: true, email: true, username: true } },
+  author: { select: { id: true, username: true } },
   recipes: {
     orderBy: { createdAt: "desc" },
     include: {
       recipe: {
         include: {
-          chef: { select: { id: true, email: true, username: true } },
+          chef: { select: { id: true, username: true } },
           covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
           steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
         },
@@ -230,7 +230,7 @@ const cookbookRecipeInclude = {
 } satisfies Prisma.CookbookInclude;
 
 const cookbookSummaryInclude = {
-  author: { select: { id: true, email: true, username: true } },
+  author: { select: { id: true, username: true } },
 } satisfies Prisma.CookbookInclude;
 
 const cookbookSummaryRecipeInclude = {
@@ -1067,7 +1067,7 @@ async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, 
   return db.recipe.findFirst({
     where: id ? { id, deletedAt: null } : { title, deletedAt: null },
     include: {
-      chef: { select: { id: true, email: true, username: true } },
+      chef: { select: { id: true, username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
       steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
     },
@@ -1501,7 +1501,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
             deletedAt: null,
           },
           include: {
-            chef: { select: { id: true, email: true, username: true } },
+            chef: { select: { id: true, username: true } },
             covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
             steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
           },
@@ -2510,7 +2510,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
     const recipe = await context.db.recipe.findUniqueOrThrow({
       where: { id: created.id },
       include: {
-        chef: { select: { id: true, email: true, username: true } },
+        chef: { select: { id: true, username: true } },
         covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
         steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
       },
@@ -2662,7 +2662,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     const recipe = await context.db.recipe.findUniqueOrThrow({
       where: { id: existing.id },
       include: {
-        chef: { select: { id: true, email: true, username: true } },
+        chef: { select: { id: true, username: true } },
         covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
         steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
       },
