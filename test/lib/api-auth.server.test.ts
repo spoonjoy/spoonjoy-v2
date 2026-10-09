@@ -310,7 +310,7 @@ describe("API authentication helpers", () => {
   it("writes lastUsedAt at most once every five minutes per credential", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const created = await createApiCredential(db, user.id, "Busy native client");
-    const writes = vi.spyOn(db.apiCredential, "updateMany");
+    const writes = vi.spyOn(db.apiCredential, "update");
     try {
       await authenticateApiToken(db, created.token);
       const first = (await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt;
@@ -325,8 +325,10 @@ describe("API authentication helpers", () => {
 
       const stale = new Date(Date.now() - LAST_USED_AT_WRITE_INTERVAL_MS - 1_000);
       await db.apiCredential.update({ where: { id: created.credential.id }, data: { lastUsedAt: stale } });
+      // Count only the writes authentication makes, not the setup write above.
+      writes.mockClear();
       await authenticateApiToken(db, created.token);
-      expect(writes).toHaveBeenCalledTimes(2);
+      expect(writes).toHaveBeenCalledTimes(1);
       const refreshed = (await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt;
       expect(refreshed!.getTime()).toBeGreaterThan(stale.getTime());
     } finally {
@@ -367,13 +369,52 @@ describe("API authentication helpers", () => {
           scopes: "kitchen:read",
           user: { id: "user-bg", email: "bg@example.com", username: "bg" },
         }),
-        updateMany: async () => { throw failure; },
+        update: async () => { throw failure; },
       },
     } as never;
     await expect(authenticateApiTokenRaw(stub, "sj_bg", "https://spoonjoy.app", { waitUntil: (p) => deferred.push(p) }))
       .resolves.toMatchObject({ credentialId: "credential-bg" });
     // The warning policy fails the test unless exactly this warning was logged.
     await Promise.all(deferred);
+  });
+
+  it("still authenticates when the credential is deleted before the awaited lastUsedAt write", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Deleted mid-request");
+    const realFindUnique = db.apiCredential.findUnique.bind(db.apiCredential);
+    const read = vi.spyOn(db.apiCredential, "findUnique").mockImplementationOnce((async (args: never) => {
+      const found = await realFindUnique(args);
+      // Another request revokes and deletes the credential between our read and our write.
+      await db.apiCredential.delete({ where: { id: created.credential.id } });
+      return found;
+    }) as never);
+    try {
+      await expect(authenticateApiToken(db, created.token)).resolves.toMatchObject({ credentialId: created.credential.id });
+      await expect(db.apiCredential.findUnique({ where: { id: created.credential.id } })).resolves.toBeNull();
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  it("fails the request when the awaited lastUsedAt write fails for any other reason", async () => {
+    const failure = Object.assign(new Error("D1 write failed"), { code: "P1001" });
+    const stub = {
+      apiCredential: {
+        findUnique: async () => ({
+          id: "credential-fg",
+          revokedAt: null,
+          expiresAt: null,
+          lastUsedAt: null,
+          oauthClientId: null,
+          oauthIssuer: null,
+          oauthResource: null,
+          scopes: "kitchen:read",
+          user: { id: "user-fg", email: "fg@example.com", username: "fg" },
+        }),
+        update: async () => { throw failure; },
+      },
+    } as never;
+    await expect(authenticateApiTokenRaw(stub, "sj_fg", "https://spoonjoy.app")).rejects.toBe(failure);
   });
 
   it("rejects issuer metadata on a credential that has no OAuth client", async () => {

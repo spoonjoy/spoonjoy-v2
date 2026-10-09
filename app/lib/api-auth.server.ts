@@ -210,6 +210,10 @@ export async function createApiCredential(
   return { token, credential };
 }
 
+function isRecordNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2025";
+}
+
 /** `lastUsedAt` is advisory, so it is refreshed at most this often per credential. */
 export const LAST_USED_AT_WRITE_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -279,7 +283,9 @@ export async function authenticateApiToken(
 
   const now = Date.now();
   if (credential.lastUsedAt === null || now - credential.lastUsedAt.getTime() >= LAST_USED_AT_WRITE_INTERVAL_MS) {
-    const touch = db.apiCredential.updateMany({
+    // `update`, not `updateMany`: Prisma's D1 adapter runs updateMany as an
+    // implicit transaction and warns that D1 cannot do one.
+    const touch = db.apiCredential.update({
       where: { id: credential.id },
       data: { lastUsedAt: new Date(now) },
     });
@@ -288,7 +294,13 @@ export async function authenticateApiToken(
         console.warn("[api-auth] lastUsedAt update failed", error);
       }));
     } else {
-      await touch;
+      try {
+        await touch;
+      } catch (error) {
+        // P2025: the credential was deleted after we read it. The request was
+        // already authenticated, and there is nothing left to record.
+        if (!isRecordNotFound(error)) throw error;
+      }
     }
   }
 
