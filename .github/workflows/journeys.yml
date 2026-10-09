@@ -238,7 +238,8 @@ jobs:
       # test/scripts/summarize-worker-tail.test.ts. Per invocation it keeps the outcome, the
       # path without its query, method, status, CPU and wall time and redacted exception
       # messages, for non-ok invocations, the first 50 5xx responses (whatever the outcome), the
-      # first 20 with exceptions and the 25 slowest,
+      # first 20 with exceptions and the 25 slowest, counts of requests the runtime canceled as
+      # hung (Error 1101) and of requests that waited over 2 s on under 5 ms of CPU,
       # plus p50/p95/max wall and CPU time per path pattern, and the routes whose p95 CPU time is
       # over the 10 ms per-request budget (printed as warnings). No header, cookie, body or log line
       # is copied. If the tail had already exited when the suite finished, or recorded nothing,
@@ -280,7 +281,11 @@ jobs:
           if [ "$(jq -r '.complete' test-results/worker-tail-summary.json 2>/dev/null)" != "true" ]; then
             echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, or recorded no events). Treat worker-tail-summary.json as no evidence, not as a run without Worker-side failures."
           fi
-          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), slowestPaths: (.byPath | .[0:5]) }' \
+          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, slowestPaths: (.byPath | .[0:5]) }' \
+            test-results/worker-tail-summary.json || true
+          # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
+          # a server failure, so name it in the log. Non-fatal for now.
+          jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
           # One warning per route whose p95 CPU time is over the per-request budget (the Workers
           # Free plan's 10 ms CPU limit). Non-fatal for now. A path is reduced to URL-safe
