@@ -516,6 +516,7 @@ describe("/api/v1 shell", () => {
       method_not_allowed: 405,
       idempotency_conflict: 409,
       idempotency_in_progress: 409,
+      edit_conflict: 409,
       rate_limited: 429,
       upstream_error: 502,
       upstream_timeout: 504,
