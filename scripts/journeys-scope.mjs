@@ -6,8 +6,9 @@
 // the pull request can enter the merge queue, and the queue's merge_group run always runs the full
 // suite on the exact commit that will land on main.
 //
-// Run in the Journeys workflow's `changes` job: it reads the pull request's files and labels from
-// GitHub at run time (so adding `visual` and re-running forces the suite) and writes
+// Run in the Journeys workflow's `changes` job from the base branch's copy of this file, so a pull
+// request cannot widen the list for its own run. It reads the pull request's files and labels from
+// GitHub at run time (so adding `visual` and re-running the run forces the suite) and writes
 // `journeys=true|false` to GITHUB_OUTPUT with the reason in the job summary.
 import { execFile } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -22,18 +23,31 @@ export const FORCE_LABEL = "visual";
 export const MAX_LISTED_FILES = 3000;
 
 // Each entry: a path that cannot affect rendering or the Journeys run, and why.
+// Files under app/ are never on this list, test or story or not: app/styles/tailwind.css builds the
+// shipped CSS from every file under app/ and from stories/, so they can change what renders.
 export const SKIPPABLE_PATHS = Object.freeze([
   { pattern: /^docs\//, why: "documentation" },
   { pattern: /\.md$/i, why: "Markdown" },
   { pattern: /^\.github\/workflows\/(?!journeys\.yml$)[^/]+\.ya?ml$/, why: "another workflow" },
   { pattern: /^test\//, why: "unit tests" },
-  { pattern: /^(?:app|workers|worker|scripts)\/(?:.+\/)?[^/]+\.test\.(?:ts|tsx|mjs|js)$/, why: "a unit test" },
-  { pattern: /^stories\//, why: "Storybook stories" },
-  { pattern: /^app\/(?:.+\/)?[^/]+\.stories\.tsx?$/, why: "a Storybook story" },
-  { pattern: /^(?:LICENSE|\.gitignore|\.editorconfig|BACKLOG\.md|AGENTS\.md)$/, why: "repository metadata" },
+  { pattern: /^(?:workers|worker|scripts)\/(?:.+\/)?[^/]+\.test\.(?:ts|mjs|js)$/, why: "a unit test" },
+  { pattern: /^(?:LICENSE|\.editorconfig)$/, why: "repository metadata" },
 ]);
 
+// Files the Journeys run reads although they match the list above: the "Check the QA config" step
+// (scripts/qa-preflight.ts) reads these, so a change to one can change whether Journeys passes.
+// test/scripts/journeys-scope.test.ts checks this list against qa-preflight.ts.
+export const NEVER_SKIP = Object.freeze(new Set([
+  ".github/workflows/ci.yml",
+  ".github/workflows/production-deploy.yml",
+  ".github/workflows/qa-image-cover-smoke.yml",
+  ".github/workflows/storybook.yml",
+  "README.md",
+  "docs/deployment.md",
+]));
+
 export function skippableReason(file) {
+  if (NEVER_SKIP.has(file)) return null;
   return SKIPPABLE_PATHS.find(({ pattern }) => pattern.test(file))?.why ?? null;
 }
 
@@ -54,7 +68,7 @@ export function decide({ files, labels }) {
   }
   return {
     journeys: false,
-    why: `All ${files.length} changed file(s) are documentation, tests, stories or other workflows, so this pull request's Journeys run skips the suite. The merge queue still runs it.`,
+    why: `All ${files.length} changed file(s) are documentation, unit tests or other workflows, so this pull request's Journeys run skips the suite. The merge queue still runs it.`,
   };
 }
 

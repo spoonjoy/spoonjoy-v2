@@ -1173,12 +1173,30 @@ describe("Journeys workflow", () => {
     expect(changes.if).toBe("github.event_name == 'pull_request'");
     expect(changes.permissions).toEqual({ contents: "read", "pull-requests": "read" });
     expect(changes.outputs).toEqual({ journeys: "${{ steps.scope.outputs.journeys }}" });
-    expect(changes.steps.at(-1)).toEqual({
-      name: "Decide whether this pull request needs the suite",
-      id: "scope",
-      env: { GH_TOKEN: "${{ github.token }}", PR_NUMBER: "${{ github.event.pull_request.number }}" },
-      run: "node scripts/journeys-scope.mjs",
-    });
+    // The base branch's copy of the script decides, so a pull request cannot widen the list for its
+    // own run, and the job never sees a secret.
+    expect(changes.steps).toEqual([
+      {
+        uses: "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+        with: {
+          ref: "${{ github.event.pull_request.base.sha }}",
+          "sparse-checkout": "scripts/journeys-scope.mjs",
+          "sparse-checkout-cone-mode": false,
+          "persist-credentials": false,
+        },
+      },
+      { uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38", with: { "node-version": "22" } },
+      {
+        name: "Decide whether this pull request needs the suite",
+        id: "scope",
+        env: { GH_TOKEN: "${{ github.token }}", PR_NUMBER: "${{ github.event.pull_request.number }}" },
+        run: "node scripts/journeys-scope.mjs",
+      },
+    ]);
+    expect(JSON.stringify(changes)).not.toMatch(/secrets\./);
+    // A job skipped by its own `if` never evaluates an expression name, so the required check's
+    // name must stay a plain string.
+    expect(journeys.name).toBe("journeys");
   });
 
   it("cancels only a superseded pull-request run, whose teardown still runs", () => {
@@ -1187,6 +1205,10 @@ describe("Journeys workflow", () => {
       "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
     });
     expect(step("Delete this run's QA stack").if).toBe("always()");
+    // Bounded, so a hung teardown cannot hold a cancelled run for the whole job timeout.
+    for (const name of ["Rotate persona passwords", "Clean up disposable QA data", "Delete this run's QA stack"]) {
+      expect([name, step(name)["timeout-minutes"]]).toEqual([name, 5]);
+    }
   });
 
   it("skips main's journeys only when the merge queue's Journeys run of the same commit passed", () => {

@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FORCE_LABEL,
   MAX_LISTED_FILES,
+  NEVER_SKIP,
+  SKIPPABLE_PATHS,
   decide,
   isCliEntry,
   pullRequestFiles,
@@ -53,19 +55,14 @@ async function scope(env: NodeJS.ProcessEnv, run: ReturnType<typeof githubRunner
 describe("skippableReason", () => {
   it.each([
     "docs/qa/journeys.md",
-    "README.md",
+    "CONTRIBUTING.md",
     "app/routes/README.md",
-    ".github/workflows/ci.yml",
-    ".github/workflows/storybook.yaml",
+    ".github/workflows/apple-release.yml",
+    ".github/workflows/qa-run-sweep.yaml",
     "test/scripts/qa-run-scope.test.ts",
-    "app/lib/recipe.test.ts",
-    "app/components/Button.test.tsx",
     "scripts/qa-run-scope.test.mjs",
     "workers/cook-session.test.ts",
-    "stories/Button.stories.tsx",
-    "app/components/Button.stories.tsx",
     "LICENSE",
-    ".gitignore",
   ])("lets %s skip", (file) => {
     expect(skippableReason(file)).not.toBeNull();
   });
@@ -96,6 +93,18 @@ describe("skippableReason", () => {
     "playwright.journeys.config.ts",
     "scripts/qa-run-scope.mjs",
     "scripts/seed-qa-kitchen.mjs",
+    // Tailwind builds the shipped CSS from every file under app/ and from stories/.
+    "app/lib/recipe.test.ts",
+    "app/components/Button.test.tsx",
+    "app/components/Button.stories.tsx",
+    "stories/Button.stories.tsx",
+    // Read by the "Check the QA config" step (scripts/qa-preflight.ts).
+    ".github/workflows/ci.yml",
+    ".github/workflows/production-deploy.yml",
+    ".github/workflows/storybook.yml",
+    "README.md",
+    "docs/deployment.md",
+    ".gitignore",
     // Unknown paths cost a run.
     "something-new/file.ts",
     "docs",
@@ -104,10 +113,38 @@ describe("skippableReason", () => {
     expect(skippableReason(file)).toBeNull();
   });
 
+  it("keeps the skip list and the force label exactly as reviewed", () => {
+    // Widening the list lets more pull requests skip; change this pin only with a review of what
+    // the new paths can affect.
+    expect(SKIPPABLE_PATHS.map(({ pattern }) => pattern.source)).toEqual([
+      "^docs\\/",
+      "\\.md$",
+      "^\\.github\\/workflows\\/(?!journeys\\.yml$)[^/]+\\.ya?ml$",
+      "^test\\/",
+      "^(?:workers|worker|scripts)\\/(?:.+\\/)?[^/]+\\.test\\.(?:ts|mjs|js)$",
+      "^(?:LICENSE|\\.editorconfig)$",
+    ]);
+    expect(FORCE_LABEL).toBe("visual");
+  });
+
+  it("never lets a file the QA config check reads skip", () => {
+    const preflight = readFileSync("scripts/qa-preflight.ts", "utf8");
+    const read = [...preflight.matchAll(/path\.join\(rootDir, "([^"]+)"\)/g)].map(([, file]) => file);
+    expect(read).toEqual(expect.arrayContaining([".github/workflows/ci.yml", "docs/deployment.md"]));
+    for (const file of read) expect([file, skippableReason(file)]).toEqual([file, null]);
+    for (const file of NEVER_SKIP) expect(read).toContain(file);
+  });
+
   it("never lets a file the Journeys workflow itself uses skip", () => {
     const workflow = readFileSync(".github/workflows/journeys.yml", "utf8");
     const referenced = [...workflow.matchAll(/(?<![\w./-])(?:scripts|e2e)\/[A-Za-z0-9_./-]+\.(?:mjs|ts|jq|js)/g)].map(([file]) => file);
-    referenced.push(".github/workflows/journeys.yml", "playwright.journeys.config.ts", "playwright.explore.config.ts");
+    referenced.push(
+      ".github/workflows/journeys.yml",
+      "playwright.journeys.config.ts",
+      "playwright.explore.config.ts",
+      "e2e/support/disposable-auth.ts",
+      "app/styles/tailwind.css",
+    );
     expect(referenced.length).toBeGreaterThan(5);
     for (const file of referenced) expect([file, skippableReason(file)]).toEqual([file, null]);
   });
@@ -115,7 +152,7 @@ describe("skippableReason", () => {
 
 describe("decide", () => {
   it("skips only when every changed file is skippable", () => {
-    expect(decide({ files: ["docs/a.md", "test/a.test.ts", ".github/workflows/ci.yml"], labels: [] })).toEqual({
+    expect(decide({ files: ["docs/a.md", "test/a.test.ts", ".github/workflows/apple-release.yml"], labels: [] })).toEqual({
       journeys: false,
       why: expect.stringContaining("All 3 changed file(s)"),
     });
