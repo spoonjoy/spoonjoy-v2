@@ -21,6 +21,7 @@ import {
 import { readSessionVersion, sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1 } from "../helpers/sqlite-d1";
+import { expectConsoleError } from "../warning-policy";
 
 const ISSUER = "https://spoonjoy.app";
 const REDIRECT = "https://agent.example/cb";
@@ -430,6 +431,27 @@ describe("session-version fence", () => {
         expiresAt: new Date(Date.now() - 1000),
       });
       await expect(authenticateApiToken(db, expired.token, ISSUER)).rejects.toMatchObject({ status: 401 });
+    });
+
+    it("reports a database failure while creating a token through the API as a server error, not a sign-out", async () => {
+      const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
+      const diskError = new Error("D1_ERROR: disk I/O error");
+      const spy = vi.spyOn(db, "$executeRawUnsafe").mockRejectedValueOnce(diskError);
+      expectConsoleError("[api-v1] internal_error", {
+        requestId: "req_fence_token",
+        method: "POST",
+        path: "/api/v1/tokens",
+        error: { name: diskError.name, message: diskError.message, stack: diskError.stack },
+      });
+      let response: Response;
+      try {
+        response = await createThroughApi(writer.token);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(response.status).toBe(500);
+      expect((await response.json() as any).error?.code).not.toBe("authentication_required");
+      expect(await db.apiCredential.count({ where: { userId, name: "Survivor" } })).toBe(0);
     });
 
     it("does not fence an environment-configured owner", async () => {
