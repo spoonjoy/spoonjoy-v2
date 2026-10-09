@@ -138,7 +138,7 @@ export function CookTimerTray({
               <li
                 key={view.stepNum}
                 data-testid={`cook-timer-tray-item-${view.stepNum}`}
-                className={`flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 ${
+                className={`flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--sj-radius-surface)] border px-3 py-2 ${
                   view.ringing
                     ? "border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_12%,var(--sj-panel-solid))]"
                     : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)]"
