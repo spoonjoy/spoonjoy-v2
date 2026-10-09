@@ -646,8 +646,9 @@ describe("chooseReleaseTarget", () => {
         return "";
       }
       if (command === `git rev-list --first-parent ${TRIGGER}..origin/main`) return newer.map((sha) => `${sha}\n`).join("");
-      if (command.startsWith("gh run list --workflow .github/workflows/ci.yml --branch main --event push --status success")) {
-        return runList ?? JSON.stringify(green.map((headSha, index) => ({ databaseId: index + 1, headSha, event: "push" })));
+      const perCommit = /^gh run list --workflow \.github\/workflows\/ci\.yml --branch main --commit ([0-9a-f]{40}) --event push --status success --limit 1 --json databaseId,headSha,event$/.exec(command);
+      if (perCommit) {
+        return runList ?? JSON.stringify(green.includes(perCommit[1]) ? [{ databaseId: 1, headSha: perCommit[1], event: "push" }] : []);
       }
       throw new Error(`Unexpected command: ${command}`);
     });
@@ -672,6 +673,15 @@ describe("chooseReleaseTarget", () => {
     // TIP's CI finished first and its deploy may already have run; this late run releases TIP too.
     const { target } = await choose(targetEnv(), mainRunner({ green: [TRIGGER, TIP] }));
     expect(target).toBe(TIP);
+  });
+
+  it("asks about each commit newest first and stops at the first green one", async () => {
+    // Per-commit queries: however many other green runs landed meanwhile, TIP cannot be missed.
+    const run = mainRunner({ green: [TIP, TRIGGER] });
+    const { target } = await choose(targetEnv(), run);
+    expect(target).toBe(TIP);
+    const ciQueries = run.mock.calls.map(([, args]) => args).filter((args) => args.includes("--commit"));
+    expect(ciQueries.map((args) => args[args.indexOf("--commit") + 1])).toEqual([TIP]);
   });
 
   it("releases the triggering commit when it is the tip or nothing newer is green yet", async () => {

@@ -314,12 +314,21 @@ async function isAncestor(run, ancestor, descendant) {
   }
 }
 
-function greenMainCommits(output) {
-  const parsed = parseJson(output, "Canonical CI workflow");
+// Whether this exact commit has a successful push CI run on main. Asked per commit, newest first,
+// so no window of recent runs can hide a newer green commit and let production move backwards.
+async function hasGreenPushCi(run, sha) {
+  const parsed = parseJson(await run("gh", [
+    "run", "list",
+    "--workflow", ".github/workflows/ci.yml",
+    "--branch", "main",
+    "--commit", sha,
+    "--event", "push",
+    "--status", "success",
+    "--limit", "1",
+    "--json", "databaseId,headSha,event",
+  ]), "Canonical CI workflow");
   if (!Array.isArray(parsed)) throw new Error("Canonical CI workflow did not return a run list.");
-  return new Set(parsed
-    .filter((entry) => entry && typeof entry === "object" && entry.event === "push" && SHA_PATTERN.test(entry.headSha))
-    .map((entry) => entry.headSha));
+  return parsed.some((entry) => entry && typeof entry === "object" && entry.event === "push" && entry.headSha === sha);
 }
 
 // Chooses what this Production Deploy run releases. A dispatch releases exactly its input. A
@@ -347,16 +356,13 @@ export async function chooseReleaseTarget({
     const newer = (await run("git", ["rev-list", "--first-parent", `${requested}..origin/main`]))
       .split("\n").map((line) => line.trim()).filter(Boolean);
     if (newer.some((sha) => !SHA_PATTERN.test(sha))) throw new Error("git rev-list returned a malformed commit.");
-    const green = greenMainCommits(await run("gh", [
-      "run", "list",
-      "--workflow", ".github/workflows/ci.yml",
-      "--branch", "main",
-      "--event", "push",
-      "--status", "success",
-      "--limit", "100",
-      "--json", "databaseId,headSha,event",
-    ]));
-    const chosen = [...newer, requested].find((sha) => green.has(sha));
+    let chosen;
+    for (const sha of [...newer, requested]) {
+      if (await hasGreenPushCi(run, sha)) {
+        chosen = sha;
+        break;
+      }
+    }
     if (!chosen) {
       throw new Error(`No commit from ${requested} to main's tip has a successful push CI run; refusing to deploy.`);
     }
