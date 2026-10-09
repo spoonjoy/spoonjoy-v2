@@ -74,9 +74,20 @@ test.describe("Chef profile paging", () => {
     await expect(rows.nth(PAGE_SIZE * 2).getByRole("link").first()).toBeFocused();
     await expect(showMore).toHaveCount(0);
     await expectAccessible();
+    // With the button gone, Recent cooks follows the last row with no gap where the button was:
+    // closer than on the first page, where the button sat between them.
+    const lastPageRowBox = await rows.last().boundingBox();
+    const lastPageRecentCooksBox = await recentCooks.boundingBox();
+    const firstPageGap = recentCooksBox!.y - (lastRowBox!.y + lastRowBox!.height);
+    const lastPageGap = lastPageRecentCooksBox!.y - (lastPageRowBox!.y + lastPageRowBox!.height);
+    expect(lastPageGap).toBeGreaterThan(0);
+    expect(lastPageGap).toBeLessThan(firstPageGap - buttonBox!.height);
     await rows.last().evaluate((element) => element.scrollIntoView({ block: "center" }));
     await capture(page, testInfo, "c-last-page-end");
-    await capture(page, testInfo, "c-last-page-full", true);
+    // Sixty rows make a full-page shot taller than a screenshot can be on a phone, so the third
+    // view is the end of the list with Recent cooks below it, in one screen.
+    await recentCooks.evaluate((element) => element.scrollIntoView({ block: "end" }));
+    await capture(page, testInfo, "c-last-page-list-to-recent-cooks");
 
     // Open an appended recipe, then come back. Record what the list shows on return, for the
     // reviewer; the profile URL never held the appended pages.
@@ -95,8 +106,8 @@ test.describe("Chef profile paging", () => {
     await page.goto(PAGER);
     await waitForHydration(page);
     await expect(page.getByRole("main").getByRole("link", { name: "Show more recipes", exact: true })).toBeVisible();
-    await expectAccessible();
     await centre(page, '[data-testid="show-more"]');
     await capture(page, testInfo, "d-dark-first-page-end");
+    await expectAccessible();
   });
 });
