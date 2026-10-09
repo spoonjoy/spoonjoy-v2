@@ -1473,13 +1473,14 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 
 const searchRecipesTool: SpoonjoyApiOperation = {
   name: "search_recipes",
-  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps, ingredients, and optional chef email. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own chefEmail. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
   requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
       query: { type: "string" },
-      chefEmail: { type: "string" },
+      chefUsername: { type: "string", description: "Only recipes by the chef with this username." },
+      chefEmail: { type: "string", description: "Only your own recipes: must be your own email. Any other address returns no recipes." },
       limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
     },
     additionalProperties: false,
@@ -1487,12 +1488,32 @@ const searchRecipesTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const query = optionalString(args.query);
     const chefEmail = optionalString(args.chefEmail)?.toLowerCase();
+    const chefUsername = optionalString(args.chefUsername);
     const limit = normalizeLimit(args.limit);
-    const chef = chefEmail
-      ? await context.db.user.findUnique({ where: { email: chefEmail }, select: { id: true } })
-      : null;
 
-    if (chefEmail && !chef) {
+    // Emails are private (audit 2026-10-09, findings 1 and 14). A chefEmail filter that matched any
+    // account let anyone ask "does this address have a Spoonjoy account?" by comparing results, so
+    // it now matches only the caller's own address (or the local owner in stdio mode), and any
+    // other address returns nothing without looking it up. Usernames are public, so chefUsername
+    // filters by any chef.
+    // Without a principal, only a configured owner (stdio MCP mode) counts as the caller; the web
+    // API never configures one, so an anonymous web caller matches no email.
+    const callerEmail = (context.principal ? context.principal.email : context.defaultOwnerEmail)?.toLowerCase();
+    if (chefEmail && chefEmail !== callerEmail) {
+      return json({ recipes: [] });
+    }
+    const ownChef = chefEmail
+      ? context.principal
+        ? { id: context.principal.id }
+        : await context.db.user.findUnique({ where: { email: chefEmail }, select: { id: true } })
+      : null;
+    const namedChef = chefUsername
+      ? await context.db.user.findUnique({ where: { username: chefUsername }, select: { id: true } })
+      : null;
+    // Given both, they must name the same chef.
+    const chef = chefEmail && chefUsername ? (ownChef && namedChef?.id === ownChef.id ? ownChef : null) : ownChef ?? namedChef;
+
+    if ((chefEmail || chefUsername) && !chef) {
       return json({ recipes: [] });
     }
 

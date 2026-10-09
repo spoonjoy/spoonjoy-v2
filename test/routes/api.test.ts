@@ -441,6 +441,28 @@ describe("Spoonjoy REST API route", () => {
       .resolves.toMatchObject({ ok: true, data: { recipe: { id: recipeId, title: "REST Pasta" } } });
     await expect(readJson(await loader(routeArgs(new UndiciRequest("http://localhost/api/recipes?query=Pasta&limit=1"), "recipes"))))
       .resolves.toMatchObject({ ok: true, data: { recipes: [{ id: recipeId }] } });
+    // Anyone may filter by a public username; only the account itself may filter by its email.
+    const recipeIds = async (query: string, init?: RequestInit) =>
+      ((await readJson(await loader(routeArgs(new UndiciRequest(`http://localhost/api/recipes?query=Pasta&${query}`, init), "recipes")))).data.recipes as { id: string }[]).map((recipe) => recipe.id);
+    await expect(recipeIds(`chefUsername=${encodeURIComponent(user.username)}`)).resolves.toEqual([recipeId]);
+    await expect(recipeIds(`chefEmail=${encodeURIComponent(user.email)}`)).resolves.toEqual([]);
+    await expect(recipeIds(`chefEmail=${encodeURIComponent(user.email)}`, { headers })).resolves.toEqual([recipeId]);
+    // ownerEmail never looks the address up: an anonymous caller gets the same answer for a real
+    // account's email as for a made-up one, and a signed-in caller can name only their own.
+    const answer = async (path: string, init?: RequestInit) => {
+      const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/${path}`, init), path.split("?")[0]!));
+      return { status: response.status, body: await readJson(response) };
+    };
+    for (const path of ["cookbooks", "search", "shopping-list"]) {
+      const known = await answer(`${path}?ownerEmail=${encodeURIComponent(user.email)}`);
+      const unknown = await answer(`${path}?ownerEmail=${encodeURIComponent(uniqueEmail("nobody"))}`);
+      expect(known).toEqual(unknown);
+    }
+    const otherAccount = await db.user.create({ data: { email: uniqueEmail("other"), username: faker.internet.username() } });
+    const forOther = await answer(`cookbooks?ownerEmail=${encodeURIComponent(otherAccount.email)}`, { headers });
+    const forNobody = await answer(`cookbooks?ownerEmail=${encodeURIComponent(uniqueEmail("nobody"))}`, { headers });
+    expect(forOther.status).toBe(403);
+    expect(forOther).toEqual(forNobody);
 
     const cookbookResponse = await action(routeArgs(new UndiciRequest("http://localhost/api/cookbooks", {
       method: "POST",
