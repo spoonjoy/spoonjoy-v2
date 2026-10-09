@@ -529,7 +529,8 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     ),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature("pnpm run verify:clean:typecheck"),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --no-tags --depth=1 origin "$SPOONJOY_CHANGED_SINCE"`),
+    commandStepSignature("pnpm run verify:clean:generated-contract"),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"`),
     commandStepSignature("pnpm run verify:clean:test:changed"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],
@@ -597,11 +598,10 @@ const CI_JOB_CONTRACTS = Object.freeze({
     timeoutMinutes: 15,
     env: undefined,
   }),
-  // Skipped on pull requests (the required check then reports passed); the merge queue's run of
-  // the exact commit that lands runs it in full.
+  // Every step is skipped on pull requests (CI_COVERAGE_STEP_CONDITION), so the job reports the
+  // required check as passed; the merge queue's run of the exact commit that lands runs it in full.
   coverage: Object.freeze({
     name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
-    if: "github.event_name != 'pull_request'",
     timeoutMinutes: 90,
     env: undefined,
   }),
@@ -626,6 +626,26 @@ const CI_JOB_CONTRACTS = Object.freeze({
     }),
   }),
 });
+
+// The coverage job runs everywhere but pull requests. The skip is on each step, not on the job,
+// because GitHub does not evaluate the job's name expression for a skipped job, which would leave the
+// required `coverage` check unreported on every pull request.
+export const CI_COVERAGE_STEP_CONDITION = "github.event_name != 'pull_request'";
+export const CI_COVERAGE_CLEANUP_STEP_CONDITION = "always() && github.event_name != 'pull_request'";
+
+// A coverage step as the rest of the contract checks it: each step must carry exactly the coverage
+// condition (the cleanup step its always() form), which is then removed, or replaced by the cleanup
+// step's usual always(). Any other condition, or none, makes the job non-canonical.
+function ungatedCoverageSteps(steps: Record<string, unknown>[]): Record<string, unknown>[] | null {
+  const ungated: Record<string, unknown>[] = [];
+  for (const step of steps) {
+    const { if: condition, ...rest } = step;
+    if (condition === CI_COVERAGE_STEP_CONDITION) ungated.push(rest);
+    else if (condition === CI_COVERAGE_CLEANUP_STEP_CONDITION) ungated.push({ ...rest, if: "always()" });
+    else return null;
+  }
+  return ungated;
+}
 
 const CI_CHANGED_SINCE_ENV = Object.freeze({
   SPOONJOY_CHANGED_SINCE: "${{ github.event.pull_request.base.sha }}",
@@ -705,7 +725,9 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
       (contract.env ? !exactWorkflowRecord(job.env, contract.env) : job.env !== undefined)
     ) return false;
 
-    const steps = workflowStepRecords(job.steps);
+    const declaredSteps = workflowStepRecords(job.steps);
+    if (!declaredSteps) return false;
+    const steps = jobName === "coverage" ? ungatedCoverageSteps(declaredSteps) : declaredSteps;
     if (!steps) return false;
     const expectedStepSignatures = CI_STEP_SIGNATURES_BY_JOB.get(jobName)!;
     const stepSignatures = steps.map(workflowStepSignature);
@@ -756,7 +778,7 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
         commands.includes(`${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`);
       const isDisposableCleanupStep =
         commands.length === 1 && commands[0] === CI_DISPOSABLE_CLEANUP_COMMAND;
-      // unit-changed's base-commit steps read the base SHA from the event through env, never by
+      // unit-changed's affected-tests step reads the base SHA from the event through env, never by
       // interpolating it into the shell.
       const isChangedSinceStep = jobName === "unit-changed" && step.env !== undefined;
       if (
@@ -1778,8 +1800,9 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "output gate scripts",
       scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false" &&
+        scripts["test:changed"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then node scripts/test-changed.mjs" &&
         scripts["test:e2e"] === "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
-      "package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI."
+      "package.json test:coverage, test:changed and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI."
     ),
     check(
       "preflight script",
@@ -1789,7 +1812,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "CI workflow",
       ciWorkflowIsCanonical,
-      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, run coverage everywhere but pull requests and the changed-files unit job only on pull requests, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
+      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, skip every coverage step on pull requests (and nowhere else) and run the changed-files unit job only on pull requests, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",

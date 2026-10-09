@@ -56,8 +56,10 @@ function secureProductionDeployWorkflow(
 
 const COVERAGE_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}";
-const COVERAGE_JOB_IF_LINE = "    if: github.event_name != 'pull_request'";
-const COVERAGE_JOB_HEAD = `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n${COVERAGE_JOB_IF_LINE}\n`;
+const COVERAGE_JOB_HEAD = `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n`;
+// Every coverage step carries this condition, so the job reports `coverage` on a pull request
+// without running anything.
+const COVERAGE_STEP_IF = "        if: github.event_name != 'pull_request'\n";
 const STORYBOOK_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}";
 
@@ -296,6 +298,7 @@ function validInputs(): DeploymentPreflightInputs {
         typecheck: "react-router typegen && tsc",
         "typecheck:scripts": "tsc -p tsconfig.scripts.json",
         "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
+        "test:changed": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then node scripts/test-changed.mjs",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
         "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
@@ -2771,7 +2774,7 @@ describe("deployment preflight", () => {
     ],
     [
       "missing Python setup action",
-      `      - name: 🐍 Setup Python\n        uses: ${SETUP_PYTHON_ACTION} # v6\n        with:\n          python-version: '3.13'\n`,
+      `      - name: 🐍 Setup Python\n${COVERAGE_STEP_IF}        uses: ${SETUP_PYTHON_ACTION} # v6\n        with:\n          python-version: '3.13'\n`,
       "",
     ],
     [
@@ -2786,7 +2789,7 @@ describe("deployment preflight", () => {
     ],
     [
       "missing official Python MCP SDK conformance",
-      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python\n",
+      `      - name: 🐍 Official Python MCP SDK conformance\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:mcp-sdk-python\n`,
       "",
     ],
     [
@@ -2806,8 +2809,8 @@ describe("deployment preflight", () => {
     ],
     [
       "step SHELLOPTS",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage\n        env:\n          SHELLOPTS: xtrace",
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage`,
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage\n        env:\n          SHELLOPTS: xtrace`,
     ],
     [
       "custom default shell",
@@ -2816,8 +2819,8 @@ describe("deployment preflight", () => {
     ],
     [
       "step shell override",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage\n        shell: python",
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage`,
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage\n        shell: python`,
     ],
     [
       "unrecognized pinned action",
@@ -2867,23 +2870,23 @@ describe("deployment preflight", () => {
     ],
     [
       "required step if false",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage\n        if: false",
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage`,
+      `      - name: 🧪 Test & Coverage\n        if: false\n        run: pnpm run verify:clean:test:coverage`,
     ],
     [
       "required step soft failure",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage",
-      "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage\n        continue-on-error: true",
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage`,
+      `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage\n        continue-on-error: true`,
     ],
     [
       "Python SDK conformance step if false",
-      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python",
-      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python\n        if: false",
+      `      - name: 🐍 Official Python MCP SDK conformance\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:mcp-sdk-python`,
+      "      - name: 🐍 Official Python MCP SDK conformance\n        if: false\n        run: pnpm run verify:clean:test:mcp-sdk-python",
     ],
     [
       "Python SDK conformance soft failure",
-      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python",
-      "      - name: 🐍 Official Python MCP SDK conformance\n        run: pnpm run verify:clean:test:mcp-sdk-python\n        continue-on-error: true",
+      `      - name: 🐍 Official Python MCP SDK conformance\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:mcp-sdk-python`,
+      `      - name: 🐍 Official Python MCP SDK conformance\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:mcp-sdk-python\n        continue-on-error: true`,
     ],
     [
       "inline-map BASH_ENV",
@@ -2931,8 +2934,8 @@ describe("deployment preflight", () => {
       "step PATH injection",
       (workflow: string) => replaceRequired(
         workflow,
-        "      - name: 🧪 Test & Coverage\n        run: pnpm run verify:clean:test:coverage",
-        "      - name: 🧪 Test & Coverage\n        env:\n          PATH: /tmp/attacker\n        run: pnpm run verify:clean:test:coverage",
+        `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        run: pnpm run verify:clean:test:coverage`,
+        `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        env:\n          PATH: /tmp/attacker\n        run: pnpm run verify:clean:test:coverage`,
       ),
     ],
     [
@@ -3289,13 +3292,18 @@ describe("deployment preflight", () => {
   });
 
   it.each([
-    ["coverage runs on pull requests again", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n`],
-    ["coverage skips everywhere", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: github.event_name == 'pull_request'\n`],
-    ["coverage skips in the merge queue", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: github.event_name != 'merge_group'\n`],
+    ["coverage's tests run on pull requests again", `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}`, "      - name: 🧪 Test & Coverage\n"],
+    ["a coverage step drops its condition", `      - if: github.event_name != 'pull_request'\n        uses: actions/checkout`, "      - uses: actions/checkout"],
+    ["a coverage step skips in the merge queue", `      - name: 🏗️ Build\n${COVERAGE_STEP_IF}`, "      - name: 🏗️ Build\n        if: github.event_name != 'merge_group'\n"],
+    ["a coverage step skips everywhere", `      - name: 🔍 Typecheck\n${COVERAGE_STEP_IF}`, "      - name: 🔍 Typecheck\n        if: github.event_name == 'pull_request'\n"],
+    ["coverage's cleanup runs on pull requests", "        if: always() && github.event_name != 'pull_request'\n", "        if: always()\n"],
+    ["coverage is skipped as a whole job, which never reports the required check", COVERAGE_JOB_HEAD, `${COVERAGE_JOB_HEAD}    if: github.event_name != 'pull_request'\n`],
     ["unit-changed runs outside pull requests", "    name: unit-changed\n    if: github.event_name == 'pull_request'\n", "    name: unit-changed\n    if: always()\n"],
-    ["unit-changed interpolates the base commit into its shell", 'git fetch --no-tags --depth=1 origin "$SPOONJOY_CHANGED_SINCE"', "git fetch --no-tags --depth=1 origin ${{ github.event.pull_request.base.sha }}"],
+    ["unit-changed interpolates a commit into its shell", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', "git fetch --quiet --no-tags --deepen=1 origin ${{ github.event.pull_request.head.sha }}"],
+    ["unit-changed fetches the base commit without its history", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', 'git fetch --quiet --no-tags --depth=1 origin "$CI_SOURCE_SHA"'],
     ["unit-changed reads its base from elsewhere", "        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}\n        run: pnpm run verify:clean:test:changed", "        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.head.ref }}\n        run: pnpm run verify:clean:test:changed"],
     ["unit-changed runs an ungated test command", "        run: pnpm run verify:clean:test:changed", "        run: pnpm exec vitest run"],
+    ["unit-changed drops the generated contract check", "        run: pnpm run verify:clean:typecheck\n\n      - name: 🔐 Verify generated API contract\n        run: pnpm run verify:clean:generated-contract\n\n      # The checkout", "        run: pnpm run verify:clean:typecheck\n\n      # The checkout"],
     ["unit-changed is removed", "\n  unit-changed:\n", "\n  unit-changed-removed:\n"],
   ])("rejects a CI workflow where %s", (_label, expected, replacement) => {
     const inputs = validInputs();
@@ -3304,6 +3312,15 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("CI workflow");
+  });
+
+  it("rejects a test:changed script that bypasses the warning gate", () => {
+    const inputs = validInputs();
+    inputs.packageJson.scripts!["test:changed"] = "node scripts/test-changed.mjs";
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("output gate scripts");
   });
 
   it("rejects a command-free CI metadata job without warning-clean setup", () => {

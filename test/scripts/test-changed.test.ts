@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runInherited, testChanged } from "../../scripts/test-changed.mjs";
@@ -14,6 +14,7 @@ function deps(listing: unknown, statuses: number[] = [0, 0]) {
     run,
     log,
     readFile: vi.fn(() => (typeof listing === "string" ? listing : JSON.stringify(listing))),
+    removeFile: vi.fn(),
     listFile: "/tmp/changed.json",
   };
 }
@@ -29,9 +30,16 @@ describe("testChanged", () => {
     expect(d.log).toHaveBeenCalledWith(`1 test file(s) are affected by the changes since ${BASE}.`);
   });
 
+  it("deletes the listing even when it cannot be read", () => {
+    const d = { ...deps([]), readFile: vi.fn(() => { throw new Error("EACCES"); }) };
+    expect(() => testChanged(d)).toThrow("EACCES");
+    expect(d.removeFile).toHaveBeenCalledWith("/tmp/changed.json");
+  });
+
   it("passes without running Vitest when no test is affected", () => {
     const d = deps([]);
     expect(testChanged(d)).toBe(0);
+    expect(d.removeFile).toHaveBeenCalledWith("/tmp/changed.json");
     expect(d.run).toHaveBeenCalledTimes(1);
     expect(d.log).toHaveBeenCalledWith(`No unit tests are affected by the changes since ${BASE}.`);
   });
@@ -61,6 +69,7 @@ describe("testChanged", () => {
     try {
       expect(testChanged({ env: { SPOONJOY_CHANGED_SINCE: BASE }, run: () => 0, listFile })).toBe(0);
       expect(write).toHaveBeenCalledWith(`No unit tests are affected by the changes since ${BASE}.\n`);
+      expect(existsSync(listFile)).toBe(false);
     } finally {
       write.mockRestore();
     }

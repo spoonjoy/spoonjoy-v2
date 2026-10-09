@@ -4,7 +4,7 @@
 // config makes Vitest select every test. When no test is affected it says so and passes, because
 // Vitest's own "No test files found" goes to stderr, which the warning gate rightly rejects.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,7 @@ export function testChanged({
   env = process.env,
   run = runInherited,
   readFile = (file) => readFileSync(file, "utf8"),
+  removeFile = (file) => unlinkSync(file),
   log = (message) => process.stdout.write(`${message}\n`),
   listFile = path.join(tmpdir(), `spoonjoy-changed-tests-${process.pid}.json`),
 } = {}) {
@@ -27,7 +28,13 @@ export function testChanged({
   if (!SHA_PATTERN.test(base)) throw new Error("SPOONJOY_CHANGED_SINCE must be the base commit's 40-character SHA.");
   const listed = run("pnpm", ["exec", "vitest", "list", "--changed", base, "--filesOnly", `--json=${listFile}`]);
   if (listed !== 0) return listed;
-  const files = JSON.parse(readFile(listFile));
+  let listing;
+  try {
+    listing = readFile(listFile);
+  } finally {
+    removeFile(listFile);
+  }
+  const files = JSON.parse(listing);
   if (!Array.isArray(files)) throw new Error("vitest list did not return a file list.");
   if (files.length === 0) {
     log(`No unit tests are affected by the changes since ${base}.`);
