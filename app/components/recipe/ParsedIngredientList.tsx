@@ -69,7 +69,7 @@ export function ParsedIngredientList({
             aria-label={`Add all ${ingredients.length} ingredients to recipe`}
           >
             <Plus data-slot="icon" aria-hidden="true" />
-            Add All ({ingredients.length})
+            Add all ({ingredients.length})
           </Button>
         </div>
       )}

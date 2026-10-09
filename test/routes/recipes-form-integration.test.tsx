@@ -14,7 +14,7 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 
-async function waitForRecipeSubmitToSettle(buttonName: "Create Recipe" | "Save Recipe") {
+async function waitForRecipeSubmitToSettle(buttonName: "Create recipe" | "Save recipe") {
   await waitFor(() => {
     expect(screen.getByRole("button", { name: buttonName })).toBeEnabled();
   });
@@ -77,7 +77,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         // RecipeBuilder should render with create mode
         // The submit button should say "Create Recipe"
-        expect(await screen.findByRole("button", { name: "Create Recipe" })).toBeInTheDocument();
+        expect(await screen.findByRole("button", { name: "Create recipe" })).toBeInTheDocument();
 
         // RecipeBuilder uses "Title" label, not "Recipe Title *"
         expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("RecipeBuilder Route Integration", () => {
         expect(screen.getByLabelText(/Servings/)).toBeInTheDocument();
 
         // RecipeBuilder has "Recipe Image" label for image upload, not "Image URL"
-        expect(screen.getByLabelText(/Recipe Image/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Recipe image/i)).toBeInTheDocument();
       });
 
       it("should render RecipeImageUpload component instead of URL input", async () => {
@@ -99,7 +99,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={["/recipes/new"]} />);
 
-        await screen.findByRole("button", { name: "Create Recipe" });
+        await screen.findByRole("button", { name: "Create recipe" });
 
         // Should NOT have an Image URL text input
         expect(screen.queryByLabelText(/Image URL/i)).not.toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={["/recipes/new"]} />);
 
-        await screen.findByRole("button", { name: "Create Recipe" });
+        await screen.findByRole("button", { name: "Create recipe" });
 
         // RecipeBuilder uses "e.g., Chocolate Chip Cookies" placeholder
         expect(screen.getByPlaceholderText("e.g., Chocolate Chip Cookies")).toBeInTheDocument();
@@ -141,7 +141,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={["/recipes/new"]} />);
 
-        await screen.findByRole("button", { name: "Create Recipe" });
+        await screen.findByRole("button", { name: "Create recipe" });
 
         // RecipeBuilder renders Cancel as a button that calls onCancel
         const cancelButton = screen.getByRole("button", { name: "Cancel" });
@@ -175,7 +175,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={["/recipes/new"]} />);
 
-        await screen.findByRole("button", { name: "Create Recipe" });
+        await screen.findByRole("button", { name: "Create recipe" });
 
         // Fill out form
         fireEvent.change(screen.getByLabelText(/^Title$/i), {
@@ -195,12 +195,12 @@ describe("RecipeBuilder Route Integration", () => {
         fireEvent.change(uploadInput, { target: { files: [file] } });
 
         // Submit form
-        await user.click(screen.getByRole("button", { name: "Create Recipe" }));
+        await user.click(screen.getByRole("button", { name: "Create recipe" }));
 
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitForRecipeSubmitToSettle("Create Recipe");
+        await waitForRecipeSubmitToSettle("Create recipe");
 
         expect(submittedData.title).toBe("My New Recipe");
         expect(submittedData.description).toBe("A delicious dish");
@@ -235,7 +235,7 @@ describe("RecipeBuilder Route Integration", () => {
           />
         );
 
-        await screen.findByRole("button", { name: "Create Recipe" });
+        await screen.findByRole("button", { name: "Create recipe" });
 
         // RecipeBuilder should display these errors
         await waitFor(() => {
@@ -270,7 +270,7 @@ describe("RecipeBuilder Route Integration", () => {
           />
         );
 
-        await screen.findByRole("button", { name: "Create Recipe" });
+        await screen.findByRole("button", { name: "Create recipe" });
 
         // RecipeBuilder uses role="alert" for general errors
         await waitFor(() => {
@@ -301,7 +301,7 @@ describe("RecipeBuilder Route Integration", () => {
         const titleInput = await screen.findByLabelText(/^Title$/i);
         await user.type(titleInput, "Test Recipe");
 
-        const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+        const submitButton = screen.getByRole("button", { name: "Create recipe" });
         await user.click(submitButton);
 
         // RecipeBuilder sets aria-busy on submit button during loading
@@ -342,7 +342,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         // RecipeBuilder should render with edit mode
         // The submit button should say "Save Recipe"
-        expect(await screen.findByRole("button", { name: "Save Recipe" })).toBeInTheDocument();
+        expect(await screen.findByRole("button", { name: "Save recipe" })).toBeInTheDocument();
 
         // RecipeBuilder uses "Title" label
         expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
@@ -371,7 +371,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // Should NOT have Image URL input
         expect(screen.queryByLabelText(/Image URL/i)).not.toBeInTheDocument();
@@ -407,7 +407,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // RecipeBuilder should be populated with recipe data
         expect(screen.getByLabelText(/^Title$/i)).toHaveValue("Existing Recipe Title");
@@ -438,7 +438,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // RecipeBuilder should show empty strings for null values
         expect(screen.getByLabelText(/Description/)).toHaveValue("");
@@ -480,19 +480,19 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // Click remove/clear image button
         const clearButton = screen.getByRole("button", { name: /remove|clear/i });
         await user.click(clearButton);
 
         // Submit form
-        await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+        await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitForRecipeSubmitToSettle("Save Recipe");
+        await waitForRecipeSubmitToSettle("Save recipe");
 
         // RecipeBuilder should include clearImage flag when image is cleared
         expect(submittedData.clearImage).toBe("true");
@@ -533,7 +533,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // Click change image button - this triggers the RecipeImageUpload's file input click handler
         const changeButton = screen.getByRole("button", { name: /change image/i });
@@ -545,12 +545,12 @@ describe("RecipeBuilder Route Integration", () => {
         await user.upload(uploadInput, file);
 
         // Submit form
-        await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+        await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitForRecipeSubmitToSettle("Save Recipe");
+        await waitForRecipeSubmitToSettle("Save recipe");
 
         expect(submittedData.hasImage).toBe(true);
         expect(submittedData.imageFileName).toBe("new-image.jpg");
@@ -592,15 +592,15 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // Submit form without changes
-        await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+        await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
         await waitFor(() => {
           expect(submittedData).not.toBeNull();
         });
-        await waitForRecipeSubmitToSettle("Save Recipe");
+        await waitForRecipeSubmitToSettle("Save recipe");
 
         // RecipeBuilder should include recipe ID in edit mode submission
         expect(submittedData.id).toBe(recipeId);
@@ -645,7 +645,7 @@ describe("RecipeBuilder Route Integration", () => {
           />
         );
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // RecipeBuilder should display these errors
         await waitFor(() => {
@@ -695,7 +695,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // Step list should still be rendered
         expect(screen.getByRole("heading", { name: "Recipe Steps" })).toBeInTheDocument();
@@ -726,10 +726,10 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // Add Step button should still be in step section
-        expect(screen.getByRole("link", { name: "+ Add Step" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "+ Add step" })).toBeInTheDocument();
       });
     });
 
@@ -763,7 +763,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-        await screen.findByRole("button", { name: "Save Recipe" });
+        await screen.findByRole("button", { name: "Save recipe" });
 
         // RecipeBuilder Cancel button should navigate back
         const cancelButton = screen.getByRole("button", { name: "Cancel" });
@@ -788,7 +788,7 @@ describe("RecipeBuilder Route Integration", () => {
 
       render(<Stub initialEntries={["/recipes/new"]} />);
 
-      await screen.findByRole("button", { name: "Create Recipe" });
+      await screen.findByRole("button", { name: "Create recipe" });
 
       // Find the form element and check encType
       const form = document.querySelector("form");
@@ -818,11 +818,11 @@ describe("RecipeBuilder Route Integration", () => {
 
       render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
 
-      await screen.findByRole("button", { name: "Save Recipe" });
+      await screen.findByRole("button", { name: "Save recipe" });
 
       // Find the main recipe form (not step reorder forms)
       const forms = document.querySelectorAll("form");
-      const mainForm = Array.from(forms).find(f => f.querySelector('button[type="submit"]')?.textContent?.includes("Save Recipe"));
+      const mainForm = Array.from(forms).find(f => f.querySelector('button[type="submit"]')?.textContent?.includes("Save recipe"));
       expect(mainForm).toHaveAttribute("encType", "multipart/form-data");
     });
   });

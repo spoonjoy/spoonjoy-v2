@@ -21,7 +21,7 @@ function recipeStep(page: Page, stepNum: number) {
 
 // A step on the recipe's edit page (articles named "Step N").
 function editPageStep(page: Page, stepNum: number) {
-  return page.getByRole("region", { name: "Recipe Steps" }).getByRole("article", { name: `Step ${stepNum}`, exact: true });
+  return page.getByRole("region", { name: "Recipe steps" }).getByRole("article", { name: `Step ${stepNum}`, exact: true });
 }
 
 function ingredient(page: Page, name: string) {
@@ -60,7 +60,7 @@ test.describe("Recipe create and edit", () => {
     await expect(titleField).toHaveValue(title);
 
     // Two steps with manual ingredients. Neither card's own "Save" is pressed (R-M3-1).
-    await page.getByRole("button", { name: "Add Step", exact: true }).click();
+    await page.getByRole("button", { name: "Add step", exact: true }).click();
     const firstCard = page.getByRole("article", { name: "Step 1", exact: true });
     await firstCard.getByLabel("Instructions").fill("Toast the bread");
     await firstCard.getByRole("switch", { name: "AI Parse" }).setChecked(false);
@@ -70,7 +70,7 @@ test.describe("Recipe create and edit", () => {
     await firstCard.getByRole("button", { name: "Add ingredient" }).click();
     await expect(firstCard.getByRole("button", { name: "Remove bread" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Add Step", exact: true }).click();
+    await page.getByRole("button", { name: "Add step", exact: true }).click();
     const secondCard = page.getByRole("article", { name: "Step 2", exact: true });
     await secondCard.getByLabel("Instructions").fill("Butter the toast");
     await secondCard.getByRole("switch", { name: "AI Parse" }).setChecked(false);
@@ -82,7 +82,7 @@ test.describe("Recipe create and edit", () => {
     // Both cards' manual forms are on the page at once; their labels must not collide.
     await expectAccessible();
 
-    await page.getByRole("button", { name: "Create Recipe", exact: true }).click();
+    await page.getByRole("button", { name: "Create recipe", exact: true }).click();
     await expect(page).toHaveURL(RECIPE_URL);
     const recipePath = new URL(page.url()).pathname;
     await expect(recipeHeading(title)).toBeVisible();
@@ -106,7 +106,7 @@ test.describe("Recipe create and edit", () => {
     await expect(page).toHaveURL(pathUrl(`${recipePath}/edit`));
     await expect(titleField).toHaveValue(title);
     await titleField.fill(renamed);
-    await page.getByRole("button", { name: "Save Recipe", exact: true }).click();
+    await page.getByRole("button", { name: "Save recipe", exact: true }).click();
     await expect(page).toHaveURL(pathUrl(recipePath));
     await expect(recipeHeading(renamed)).toBeVisible();
 
@@ -150,13 +150,13 @@ test.describe("Recipe create and edit", () => {
     // --- Change step 1's ingredient: bread becomes brioche.
     await page.getByRole("link", { name: "← Back to recipe" }).click();
     await expect(page).toHaveURL(pathUrl(`${recipePath}/edit`));
-    await expect(page.getByRole("link", { name: "+ Add Step" })).toHaveAttribute("href", `${recipePath}/steps/new`);
+    await expect(page.getByRole("link", { name: "+ Add step" })).toHaveAttribute("href", `${recipePath}/steps/new`);
     await expect(editPageStep(page, 3)).toContainText("Drizzle with honey");
     await expect(editPageStep(page, 3)).toContainText("1 ingredient");
     await editPageStep(page, 1).getByRole("link", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Edit Step", exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "+ Add Ingredient" }).click();
+    await page.getByRole("button", { name: "+ Add ingredient" }).click();
     await page.getByRole("switch", { name: "AI Parse" }).setChecked(false);
     await page.getByLabel("Quantity").fill("2");
     await page.getByLabel("Unit").fill("slice");
@@ -173,13 +173,13 @@ test.describe("Recipe create and edit", () => {
     await expect(page).toHaveURL(pathUrl(`${recipePath}/edit`));
 
     // --- Reorder: "Butter the toast" moves up to step 1.
-    await editPageStep(page, 2).getByRole("button", { name: "Move Up" }).click();
+    await editPageStep(page, 2).getByRole("button", { name: "Move up" }).click();
     await expect(editPageStep(page, 1)).toContainText("Butter the toast");
     await expect(editPageStep(page, 2)).toContainText("Toast the bread");
 
     // --- Delete step 3 through its dialog.
     await editPageStep(page, 3).getByRole("button", { name: "Delete", exact: true }).click();
-    const deleteStepDialog = page.getByRole("alertdialog", { name: "Delete Step" });
+    const deleteStepDialog = page.getByRole("alertdialog", { name: "Delete step" });
     await deleteStepDialog.getByRole("button", { name: "Confirm" }).click();
     await expect(editPageStep(page, 3)).toHaveCount(0);
 

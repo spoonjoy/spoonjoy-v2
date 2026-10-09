@@ -77,7 +77,7 @@ export function BioCard({
       {onEditProfile && (
         <div className="mt-5">
           <Button plain onClick={onEditProfile} className="w-full justify-center">
-            Edit Profile
+            Edit profile
           </Button>
         </div>
       )}

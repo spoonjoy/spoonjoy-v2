@@ -330,7 +330,7 @@ export default function AgentConnect() {
               Deny skips validation, so it works without a code; the action ignores the code on deny. */}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="submit" name="intent" value="approve">
-              Approve Access
+              Approve access
             </Button>
             <Button type="submit" name="intent" value="deny" formNoValidate plain>
               Deny

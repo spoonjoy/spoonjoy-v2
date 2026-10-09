@@ -107,7 +107,7 @@ test.describe("Social", () => {
     expectAccessible,
   }, testInfo) => {
     const cookbook = `Journey Saved ${runSuffix(testInfo)}`;
-    const saveDialog = page.getByRole("dialog", { name: "Save to Cookbook" });
+    const saveDialog = page.getByRole("dialog", { name: "Save to cookbook" });
     const cookbookToggle = saveDialog.getByRole("button", { name: cookbook, exact: true });
 
     await openRisotto(page);

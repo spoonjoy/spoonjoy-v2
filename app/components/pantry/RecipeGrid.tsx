@@ -45,7 +45,7 @@ export function RecipeGrid({
         {emptyCtaHref ? (
           <div className="mt-4">
             <Button href={emptyCtaHref}>
-              Create Recipe
+              Create recipe
             </Button>
           </div>
         ) : null}

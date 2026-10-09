@@ -591,7 +591,7 @@ export default function EditRecipe() {
           <input type="hidden" name="steps" />
           <input type="hidden" name="clearImage" />
           <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
-          <button type="submit">Save Recipe</button>
+          <button type="submit">Save recipe</button>
         </Form>
 
         {actionData?.errors?.reorder && (
@@ -618,10 +618,10 @@ export default function EditRecipe() {
           showSteps={false}
         />
 
-        <section aria-label="Recipe Steps" className="mt-10">
+        <section aria-label="Recipe steps" className="mt-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <CookbookSectionTitle className="my-0 flex-1">Recipe Steps</CookbookSectionTitle>
-            <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link inline-flex min-h-11 items-center">+ Add Step</Link>
+            <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link inline-flex min-h-11 items-center">+ Add step</Link>
           </div>
 
           {recipe.steps.length === 0 ? (
@@ -653,14 +653,14 @@ export default function EditRecipe() {
                         <input type="hidden" name="intent" value="reorderStep" />
                         <input type="hidden" name="stepId" value={step.id} />
                         <input type="hidden" name="direction" value="up" />
-                        <Button type="submit" plain disabled={index === 0}>Move Up</Button>
+                        <Button type="submit" plain disabled={index === 0}>Move up</Button>
                       </Form>
 
                       <Form method="post" className="m-0">
                         <input type="hidden" name="intent" value="reorderStep" />
                         <input type="hidden" name="stepId" value={step.id} />
                         <input type="hidden" name="direction" value="down" />
-                        <Button type="submit" plain disabled={index === recipe.steps.length - 1}>Move Down</Button>
+                        <Button type="submit" plain disabled={index === recipe.steps.length - 1}>Move down</Button>
                       </Form>
 
                       <Button href={`/recipes/${recipe.id}/steps/${step.id}/edit`}>Edit</Button>
@@ -680,9 +680,9 @@ export default function EditRecipe() {
         </section>
 
         <Dialog open={stepToDelete !== null} onClose={() => setStepToDelete(null)} role="alertdialog">
-          <DialogTitle>Delete Step</DialogTitle>
+          <DialogTitle>Delete step</DialogTitle>
           <DialogDescription>
-            Delete Step {stepToDelete?.stepNum}? This cannot be undone.
+            Delete step {stepToDelete?.stepNum}? This cannot be undone.
           </DialogDescription>
           <DialogActions>
             <Button plain onClick={() => setStepToDelete(null)}>

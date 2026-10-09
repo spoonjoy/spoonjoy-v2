@@ -1026,7 +1026,7 @@ export default function DeveloperPlayground() {
             <CopyButton value={absoluteSpecUrl(selectedSurface.url)} label="Copy import URL" />
             <Button href={selectedSurface.url} plain>
               <Braces data-slot="icon" aria-hidden="true" />
-              Open Spec
+              Open spec
             </Button>
           </div>
         </div>
@@ -1465,7 +1465,7 @@ export default function DeveloperPlayground() {
             <div className="mt-5">
               <Button type="submit" disabled={!canSend} aria-describedby={validationId}>
                 <Play data-slot="icon" aria-hidden="true" />
-                {selected.kind === "redirect" ? "Open authorization URL" : isSending ? "Sending" : "Send Request"}
+                {selected.kind === "redirect" ? "Open authorization URL" : isSending ? "Sending" : "Send request"}
               </Button>
             </div>
           </div>

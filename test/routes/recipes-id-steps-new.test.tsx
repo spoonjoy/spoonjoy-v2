@@ -1405,8 +1405,8 @@ describe("Recipes $id Steps New Route", () => {
 
       await screen.findByRole("heading", { name: /Add Step/i });
 
-      expect(screen.queryByText("Uses Output From")).not.toBeInTheDocument();
-      expect(screen.queryByText("Uses Output From (optional)")).not.toBeInTheDocument();
+      expect(screen.queryByText("Uses output from")).not.toBeInTheDocument();
+      expect(screen.queryByText("Uses output from (optional)")).not.toBeInTheDocument();
       expect(screen.queryByText("No previous steps available")).not.toBeInTheDocument();
     });
 
@@ -1591,7 +1591,7 @@ describe("Recipes $id Steps New Route", () => {
         await screen.findByRole("heading", { name: /Add Step/i });
 
         // Label should be shown but without "(optional)" suffix
-        expect(screen.getByText("Uses Output From")).toBeInTheDocument();
+        expect(screen.getByText("Uses output from")).toBeInTheDocument();
         // Should not have the dropdown selector
         expect(screen.queryByRole("button", { name: /Select previous steps/i })).not.toBeInTheDocument();
       });

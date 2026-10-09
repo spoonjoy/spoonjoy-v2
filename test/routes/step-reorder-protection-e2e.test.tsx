@@ -642,8 +642,8 @@ describe("E2E: Step Reorder Protection", () => {
       });
 
       // Verify reorder buttons are present
-      expect(screen.getAllByRole("button", { name: "Move Down" }).length).toBeGreaterThan(0);
-      expect(screen.getAllByRole("button", { name: "Move Up" }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole("button", { name: "Move down" }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole("button", { name: "Move up" }).length).toBeGreaterThan(0);
 
       // No reorder error should be visible
       const alerts = screen.queryAllByRole("alert");

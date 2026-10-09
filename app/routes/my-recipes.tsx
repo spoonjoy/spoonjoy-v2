@@ -98,7 +98,7 @@ export default function MyRecipes() {
         action={(
           <Button href="/recipes/new">
             <Plus data-slot="icon" className="size-4" />
-            Create Recipe
+            Create recipe
           </Button>
         )}
       >
@@ -122,7 +122,7 @@ export default function MyRecipes() {
       ) : (
         <RuledEmptyState
           title={query ? "No matching recipes" : "No recipes yet"}
-          action={<Button href="/recipes/new">Create Recipe</Button>}
+          action={<Button href="/recipes/new">Create recipe</Button>}
         >
           <Text>
             {query

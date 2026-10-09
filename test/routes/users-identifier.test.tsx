@@ -483,7 +483,7 @@ describe("Users $identifier Route", () => {
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Create Recipe" })).toHaveAttribute("href", "/recipes/new");
+      expect(screen.getByRole("link", { name: "Create recipe" })).toHaveAttribute("href", "/recipes/new");
       expect(screen.getByText("No cookbooks yet.")).toBeInTheDocument();
     });
 
@@ -610,7 +610,7 @@ describe("Users $identifier Route", () => {
       expect(screen.getByText("No public recipes yet")).toBeInTheDocument();
       expect(screen.getByText("chef-quiet has not shared any recipes yet.")).toBeInTheDocument();
       expect(screen.getByText("chef-quiet has not shared any cookbooks yet.")).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Create Recipe" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Create recipe" })).not.toBeInTheDocument();
     });
   });
 });

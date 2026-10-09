@@ -82,8 +82,8 @@ export default function SavedRecipes() {
           title={query ? "No matching saved recipes" : "No saved recipes yet"}
           action={(
             <div className="flex flex-wrap gap-2">
-              <Button href="/recipes">Explore Recipes</Button>
-              <Button href="/cookbooks/new" plain>New Cookbook</Button>
+              <Button href="/recipes">Explore recipes</Button>
+              <Button href="/cookbooks/new" plain>New cookbook</Button>
             </div>
           )}
         >

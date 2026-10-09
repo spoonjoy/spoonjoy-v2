@@ -330,7 +330,7 @@ describe("Recipes Index Route", () => {
 
     expect(await screen.findByText("No public recipes yet")).toBeInTheDocument();
     expect(screen.getByText("The public recipe box will fill as kitchens publish their first recipes.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Clear Search" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Clear search" })).not.toBeInTheDocument();
     unmount();
 
     const EmptySearchStub = createTestRoutesStub([
@@ -349,7 +349,7 @@ describe("Recipes Index Route", () => {
 
     expect(await screen.findByText("No matching recipes yet")).toBeInTheDocument();
     expect(screen.getByText("Try a broader ingredient, dish name, or chef.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Clear Search" })).toHaveAttribute("href", "/recipes");
+    expect(screen.getByRole("link", { name: "Clear search" })).toHaveAttribute("href", "/recipes");
   });
 
   it("returns public recipe metadata", () => {

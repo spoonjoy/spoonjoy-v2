@@ -81,13 +81,13 @@ export function KitchenHome({
                 </Button>
                 <Button href="/recipes/new">
                   <Plus data-slot="icon" className="size-4" />
-                  Create Recipe
+                  Create recipe
                 </Button>
               </>
             ) : (
               <Button href="/search" plain>
                 <SearchIcon data-slot="icon" className="size-4" />
-                Search Recipes
+                Search recipes
               </Button>
             )}
           </div>
@@ -171,7 +171,7 @@ function RecipeIndex({
                 <div className="mt-6">
                   <Button href="/recipes/new">
                     <Plus data-slot="icon" className="size-4" />
-                    Create First Recipe
+                    Create first recipe
                   </Button>
                 </div>
               ) : (
@@ -251,7 +251,7 @@ function CookbookShelf({
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Cookbooks</p>
           <Subheading level={2} className="mt-1 text-2xl/8">Cookbooks</Subheading>
         </div>
-        {isOwner ? <Button href="/cookbooks/new" plain>New Cookbook</Button> : null}
+        {isOwner ? <Button href="/cookbooks/new" plain>New cookbook</Button> : null}
       </div>
 
       {cookbooks.length > 0 ? (
@@ -271,7 +271,7 @@ function CookbookShelf({
                 : "This kitchen has not published a cookbook yet."}
             </Text>
           </div>
-          {isOwner ? <Button href="/cookbooks/new">Create First Cookbook</Button> : null}
+          {isOwner ? <Button href="/cookbooks/new">Create first cookbook</Button> : null}
         </div>
       )}
     </section>

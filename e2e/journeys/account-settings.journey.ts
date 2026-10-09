@@ -104,7 +104,7 @@ test.describe("Account settings", () => {
     await page.goto("/recipes/new");
     await waitForHydration(page);
     await page.getByLabel("Title", { exact: true }).fill(recipeTitle);
-    await page.getByRole("button", { name: "Create Recipe", exact: true }).click();
+    await page.getByRole("button", { name: "Create recipe", exact: true }).click();
     await expect(page).toHaveURL(RECIPE_URL);
     const recipePath = new URL(page.url()).pathname;
     await expect(page.getByRole("heading", { level: 1, name: recipeTitle, exact: true })).toBeVisible();
@@ -161,7 +161,7 @@ test.describe("Account settings", () => {
     const settingsAvatar = photoSection.getByRole("img", { name: "Profile photo", exact: true });
     await expect(settingsAvatar).toHaveAttribute("src", DEFAULT_AVATAR);
     const chooser = page.waitForEvent("filechooser");
-    await photoSection.getByRole("button", { name: "Upload Photo", exact: true }).click();
+    await photoSection.getByRole("button", { name: "Upload photo", exact: true }).click();
     await (await chooser).setFiles(PHOTO_FIXTURE);
 
     const cropDialog = page.getByRole("dialog", { name: "Crop your photo" });
@@ -178,13 +178,13 @@ test.describe("Account settings", () => {
     expect((await uploaded).status()).toBe(200);
     await expect(cropDialog).toBeHidden();
     await expect(settingsAvatar).toHaveAttribute("src", UPLOADED_AVATAR);
-    await expect(photoSection.getByRole("button", { name: "Change Photo", exact: true })).toBeVisible();
+    await expect(photoSection.getByRole("button", { name: "Change photo", exact: true })).toBeVisible();
     const photoUrl = (await settingsAvatar.getAttribute("src")) ?? "";
     expect(photoUrl).toMatch(UPLOADED_AVATAR);
 
     await verifyAfterReload(async () => {
       await expect(settingsAvatar).toHaveAttribute("src", photoUrl);
-      await expect(photoSection.getByRole("button", { name: "Remove Photo", exact: true })).toBeVisible();
+      await expect(photoSection.getByRole("button", { name: "Remove photo", exact: true })).toBeVisible();
       await expectImageLoaded(settingsAvatar);
     });
 
@@ -211,14 +211,14 @@ test.describe("Account settings", () => {
     await page.goto(SETTINGS);
     await waitForHydration(page);
     const passwordSection = page.getByTestId("password-section");
-    await passwordSection.getByRole("button", { name: "Change Password", exact: true }).click();
-    const currentPasswordField = passwordSection.getByLabel("Current Password", { exact: true });
+    await passwordSection.getByRole("button", { name: "Change password", exact: true }).click();
+    const currentPasswordField = passwordSection.getByLabel("Current password", { exact: true });
     await expect(currentPasswordField).toBeVisible();
     await expectAccessible();
     await fillSecret(currentPasswordField, account.password);
-    await fillSecret(passwordSection.getByLabel("New Password", { exact: true }), newPassword);
-    await fillSecret(passwordSection.getByLabel("Confirm Password", { exact: true }), newPassword);
-    await passwordSection.getByRole("button", { name: "Change Password", exact: true }).click();
+    await fillSecret(passwordSection.getByLabel("New password", { exact: true }), newPassword);
+    await fillSecret(passwordSection.getByLabel("Confirm password", { exact: true }), newPassword);
+    await passwordSection.getByRole("button", { name: "Change password", exact: true }).click();
     await expect(confirmation(page, "Your password has been changed successfully.")).toBeVisible();
     // The form closes, so the typed passwords don't stay on screen.
     await expect(currentPasswordField).toBeHidden();

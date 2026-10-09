@@ -257,7 +257,7 @@ describe("Cookbooks New Route", () => {
       expect(await screen.findByRole("heading", { name: "Make a collection worth coming back to." })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
       expect(screen.getByLabelText(/Cookbook Title/)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Create Cookbook" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Create cookbook" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", "/cookbooks");
     });
 
@@ -292,7 +292,7 @@ describe("Cookbooks New Route", () => {
 
       // The form should exist with post method
       await screen.findByLabelText(/Cookbook Title/);
-      const button = screen.getByRole("button", { name: "Create Cookbook" });
+      const button = screen.getByRole("button", { name: "Create cookbook" });
       expect(button).toHaveAttribute("type", "submit");
     });
 

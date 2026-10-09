@@ -74,8 +74,8 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
 
     await expectTouchTarget(page.getByRole('button', { name: 'Save' }).first(), 'step Save button');
     await expectTouchTarget(page.getByRole('button', { name: 'Remove' }).first(), 'step Remove button');
-    await page.getByRole('button', { name: 'Create Recipe' }).scrollIntoViewIfNeeded();
-    await expectTouchTarget(page.getByRole('button', { name: 'Create Recipe' }), 'Create Recipe button');
+    await page.getByRole('button', { name: 'Create recipe' }).scrollIntoViewIfNeeded();
+    await expectTouchTarget(page.getByRole('button', { name: 'Create recipe' }), 'Create Recipe button');
   });
 
   test('edit flow keeps save controls usable without the fixed dock', async ({ page }) => {
@@ -83,7 +83,7 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
     try {
       await page.goto('/recipes/new');
       const createTitle = `e2e mobile edit audit ${Date.now()}`;
-      const createAction = page.getByRole('button', { name: 'Create Recipe' });
+      const createAction = page.getByRole('button', { name: 'Create recipe' });
       const createTitleInput = page.getByLabel(/^Title$/).last();
       await expect.poll(async () => {
         await createTitleInput.fill(createTitle);
@@ -99,7 +99,7 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
 
       const updatedTitle = `Mobile Dock Save ${Date.now()}`;
       await page.getByLabel(/^Title$/).last().fill(updatedTitle);
-      const saveAction = page.getByRole('button', { name: 'Save Recipe' });
+      const saveAction = page.getByRole('button', { name: 'Save recipe' });
       await saveAction.scrollIntoViewIfNeeded();
       await expectTouchTarget(saveAction, 'edit Save Recipe button');
       await saveAction.click();
