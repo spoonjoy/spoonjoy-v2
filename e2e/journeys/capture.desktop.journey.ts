@@ -1,6 +1,5 @@
 // CAPTURE-ONLY. Lives on capture branches that never merge. It records before/after screenshots
-// for root review of #386 (rule-parsed rows on the Add Step page when AI parsing is unavailable)
-// and #416 (cover history across regenerations) on this run's own disposable QA stack. Run stacks
+// for root review of #459 (a failed regeneration's card in the cover history, on top of #416) on this run's own disposable QA stack. Run stacks
 // have no OpenAI or image-generation key, so AI parsing is off and every regeneration fails.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -73,30 +72,6 @@ function runD1(sql: string) {
 }
 
 test.describe("capture @capture", () => {
-  test("Add Step page parses typed ingredients with AI parsing unavailable @capture", async ({ browser }, testInfo) => {
-    test.setTimeout(240_000);
-    const recipePath = await createRecipe(browser, `Capture Pasta ${Date.now().toString(36)}`);
-    const shoot = async (mode: Mode) => {
-      const { context, page } = await open(browser, mode);
-      await page.goto(`${recipePath}/steps/new`);
-      await waitForHydration(page);
-      await page.getByRole("textbox", { name: "Description *" }).fill("Boil the pasta in salted water");
-      const parseResponse = page.waitForResponse(
-        (response) => response.request().method() === "POST" && new URL(response.url()).pathname.startsWith(`${recipePath}/steps/new`),
-      );
-      await page.getByRole("textbox", { name: "Ingredient text" }).fill("1 lb spaghetti\n2 tbsp kosher salt\n3 cloves garlic, minced");
-      await parseResponse;
-      await expect(
-        page.getByRole("button", { name: "Remove spaghetti" }).or(page.getByRole("alert")).first(),
-      ).toBeVisible({ timeout: 20_000 });
-      await page.waitForTimeout(500);
-      await save(testInfo, `386-add-step-${mode.name}`, await page.screenshot({ fullPage: true }));
-      await context.close();
-    };
-    await shoot(MOBILE_MODES[0]);
-    await shoot(MOBILE_MODES[1]);
-  });
-
   test("cover history across regenerations @capture", async ({ browser }, testInfo) => {
     test.setTimeout(420_000);
     const recipePath = await createRecipe(browser, `Capture Covers ${Date.now().toString(36)}`);
