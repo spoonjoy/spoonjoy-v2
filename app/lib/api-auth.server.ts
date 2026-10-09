@@ -1,6 +1,7 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
@@ -57,6 +58,11 @@ export interface ApiPrincipal {
   oauthIssuer?: string | null;
   oauthResource?: string | null;
   scopes: string[];
+  /**
+   * The account's session version when this request authenticated (a browser session, or a bearer
+   * token): the fence for a token it creates. Unset for an environment-configured owner.
+   */
+  sessionVersion?: number;
 }
 
 export interface CreatedApiCredential {
@@ -149,7 +155,7 @@ export function expandCredentialScopes(scopes: string | null | undefined): strin
 }
 
 function toPrincipal(
-  user: Pick<User, "id" | "email" | "username">,
+  user: Pick<User, "id" | "email" | "username"> & { sessionVersion?: number },
   source: ApiPrincipalSource,
   credentialId?: string,
   scopes: readonly string[] = ALL_FIRST_SLICE_SCOPES,
@@ -167,6 +173,7 @@ function toPrincipal(
     oauthIssuer,
     oauthResource,
     scopes: [...scopes],
+    ...(user.sessionVersion === undefined ? {} : { sessionVersion: user.sessionVersion }),
   };
 }
 
@@ -210,6 +217,30 @@ export async function createApiCredential(
   return { token, credential };
 }
 
+/**
+ * Create a personal API token for the chef `principal` authenticated as. A token has no grant, so
+ * nothing else would stop one created while sign out everywhere or a password change lands: the
+ * session-version fence checks the version `principal` authenticated with after the insert, and
+ * revokes the new token and refuses the request if it moved. A revocation that lands after the
+ * check finds the token and revokes it itself.
+ */
+export async function createApiCredentialForPrincipal(
+  db: PrismaClientType,
+  principal: Pick<ApiPrincipal, "id" | "sessionVersion">,
+  name: string,
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null } = {},
+): Promise<CreatedApiCredential> {
+  const created = await createApiCredential(db, principal.id, name, options);
+  if (principal.sessionVersion !== undefined && !(await sessionVersionUnchanged(db, principal.id, principal.sessionVersion))) {
+    await db.apiCredential.updateMany({
+      where: { id: created.credential.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    throw new ApiAuthError("Your session was signed out. Sign in again to create a token.", 401);
+  }
+  return created;
+}
+
 export async function authenticateApiToken(
   db: PrismaClientType,
   token: string,
@@ -218,7 +249,7 @@ export async function authenticateApiToken(
   const tokenHash = await hashApiToken(token);
   const credential = await db.apiCredential.findUnique({
     where: { tokenHash },
-    include: { user: { select: { id: true, email: true, username: true } } },
+    include: { user: { select: { id: true, email: true, username: true, sessionVersion: true } } },
   });
 
   if (

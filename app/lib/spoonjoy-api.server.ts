@@ -6,7 +6,7 @@ import type {
 import {
   ApiAuthError,
   assertCanUseOwnerEmail,
-  createApiCredential,
+  createApiCredentialForPrincipal,
   expandCredentialScopes,
   normalizeCredentialScopes,
   requireApiPrincipal,
@@ -1394,7 +1394,13 @@ const createApiTokenTool: SpoonjoyApiOperation = {
     const owner = await getCredentialOwner(args, context);
     const name = optionalString(args.name) ?? "Spoonjoy API token";
     const scopes = normalizeCreateApiTokenScopes(args.scopes, context.principal);
-    const created = await createApiCredential(context.db, owner.id, name, { scopes });
+    // A signed-in caller's token is fenced on the session version it authenticated with.
+    const created = await createApiCredentialForPrincipal(
+      context.db,
+      { id: owner.id, sessionVersion: context.principal?.sessionVersion },
+      name,
+      { scopes },
+    );
 
     return json({
       token: created.token,

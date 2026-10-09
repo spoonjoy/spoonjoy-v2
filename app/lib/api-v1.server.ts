@@ -1,3 +1,4 @@
+import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
 import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
@@ -8,7 +9,7 @@ import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
   authenticateApiRequest,
-  createApiCredential,
+  createApiCredentialForPrincipal,
   expandCredentialScopes,
   normalizeCredentialScopes,
   type ApiPrincipal,
@@ -6432,8 +6433,14 @@ async function handleNativePasswordSignInRequest(args: ApiV1RouteArgs, requestId
       const code = error.status === 401 ? "invalid_token" : "validation_error";
       throw new ApiV1Error(code, error.message, { providerCode: error.code });
     }
-    // The password may have changed since it was checked: answer as a failed sign-in.
     if (revokedDuringSignIn(error)) {
+      // A password change since the check makes this a failed sign-in; sign out everywhere alone
+      // leaves the password right, so ask the chef to try again.
+      if (await authenticateUserByEmailOrUsername(db, emailOrUsername, password)) {
+        throw new ApiV1Error("validation_error", "Your account was signed out everywhere while you were signing in. Try again.", {
+          providerCode: "sign_in_interrupted",
+        });
+      }
       throw new ApiV1Error("invalid_token", "Invalid username/email or password.", { providerCode: "invalid_credentials" });
     }
     throw error;
@@ -6638,7 +6645,14 @@ async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authen
   }
 
   const db = await getRequestDb(args.context);
-  const created = await createApiCredential(db, authenticated.id, name, { scopes: storedScopes });
+  let created: Awaited<ReturnType<typeof createApiCredentialForPrincipal>>;
+  try {
+    created = await createApiCredentialForPrincipal(db, authenticated, name, { scopes: storedScopes });
+  } catch (error) {
+    // Sign out everywhere or a password change landed while the token was created.
+    if (error instanceof ApiAuthError) throw normalizeApiV1AuthError(error);
+    throw error;
+  }
 
   return withApiV1Telemetry(apiV1PrivateSuccess(requestId, {
     token: created.token,

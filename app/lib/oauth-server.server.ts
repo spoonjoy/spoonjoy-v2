@@ -830,7 +830,8 @@ async function resolveConnectorGrant(
   }
   // The session-version fence: sign out everywhere or a password change that landed since the flow
   // read the version revoked every grant then, before this one existed, so this one must not
-  // survive it. One that lands after this check finds the grant and revokes it.
+  // survive it. One that lands after this check finds the grant and revokes it. (This read is
+  // consistent with the revocation's write because D1 read replication is off.)
   if (!(await sessionVersionUnchanged(db, input.userId, input.sessionVersion))) {
     await db.oAuthGrant.updateMany({
       where: { id: created.id, status: "active" },

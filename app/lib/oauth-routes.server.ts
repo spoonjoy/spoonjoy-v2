@@ -1046,7 +1046,8 @@ export async function handleOAuthAuthorizeAction(
   }
   // The session-version fence: sign out everywhere or a password change that landed after this
   // request's session was checked spent every code then, before this one existed, so this one
-  // must not survive it. One that lands after this check finds the code and spends it.
+  // must not survive it. One that lands after this check finds the code and spends it. (This
+  // read is consistent with the revocation's write because D1 read replication is off.)
   if (consumed.count !== 1 || !(await sessionVersionUnchanged(db, userId, identity.sessionVersion))) {
     await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
     return consumedError();

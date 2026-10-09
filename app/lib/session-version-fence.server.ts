@@ -12,6 +12,9 @@ type Database = PrismaClientType;
  * then checks that the version has not moved:
  * - If the revocation landed before the check, the version moved, so the flow undoes its own row.
  * - If it lands after the check, the row already existed, so the revocation's sweep catches it.
+ *
+ * This relies on the check reading the revocation's write, which holds while D1 read replication
+ * is off (no `withSession` anywhere). Turning replication on needs a D1 session for these reads.
  */
 export async function readSessionVersion(db: Database, userId: string): Promise<number | null> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });

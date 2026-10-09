@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { faker } from "@faker-js/faker";
 import { getLocalDb } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
-import { authenticateApiToken } from "~/lib/api-auth.server";
+import { authenticateApiToken, createApiCredential, createApiCredentialForPrincipal } from "~/lib/api-auth.server";
+import { callSpoonjoyMcpTool } from "~/lib/mcp/spoonjoy-tools.server";
+import { action as apiV1Action } from "~/routes/api.v1.$";
+import { Request as UndiciRequest } from "undici";
 import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import { approveAgentConnectionRequest, pollAgentConnection, startAgentConnection } from "~/lib/agent-connection.server";
 import { handleNativePasswordSignIn } from "~/lib/native-password-auth.server";
@@ -196,7 +199,7 @@ describe("session-version fence", () => {
       // The approving request's session (version 0) was checked; the sign-out lands just before
       // the approval is written, when the request is still pending and so not swept.
       const result = await approveAgentConnectionRequest(
-        racing(db, "agentConnectionRequest", "update", signOutEverywhere),
+        racing(db, "agentConnectionRequest", "updateMany", signOutEverywhere),
         started.request.id,
         { userId, sessionVersion: 0 },
       );
@@ -206,6 +209,114 @@ describe("session-version fence", () => {
       expect(polled.status).toBe("denied");
       expect(polled).not.toHaveProperty("token");
       await expect(db.apiCredential.count({ where: { userId } })).resolves.toBe(0);
+    });
+  });
+
+  describe("agent connection approval, with a poll in between", () => {
+    it("revokes the token a poll collected between the approval and the fence check", async () => {
+      const started = await startAgentConnection(db, { agentName: "Ouro agent", scopes: "kitchen:read" });
+      let collected: Awaited<ReturnType<typeof pollAgentConnection>> | null = null;
+      // Sign out everywhere runs while the request is still pending, so its sweep has nothing to
+      // deny. The approval is then written, and the agent's poll collects a token before the
+      // fence reads the version.
+      let afterApproval = false;
+      const raced = new Proxy(racing(db, "agentConnectionRequest", "updateMany", signOutEverywhere), {
+        get(target, prop) {
+          const delegate = Reflect.get(target, prop);
+          if (prop !== "user") return delegate;
+          return new Proxy(delegate, {
+            get(inner, innerProp) {
+              const fn = Reflect.get(inner, innerProp);
+              return innerProp === "findUnique"
+                ? async (...args: unknown[]) => {
+                  if (!afterApproval) {
+                    afterApproval = true;
+                    collected = await pollAgentConnection(db, { deviceCode: started.deviceCode });
+                  }
+                  return fn.apply(inner, args);
+                }
+                : fn;
+            },
+          });
+        },
+      });
+
+      const result = await approveAgentConnectionRequest(raced, started.request.id, { userId, sessionVersion: 0 });
+
+      expect(collected).toMatchObject({ status: "approved", token: expect.stringMatching(/^sj_/) });
+      expect(result.status).toBe("claimed");
+      await expect(authenticateApiToken(db, collected!.token!, ISSUER)).rejects.toMatchObject({ status: 401 });
+    });
+
+    it("does not deny a request someone else already settled", async () => {
+      const started = await startAgentConnection(db, { agentName: "Ouro agent", scopes: "kitchen:read" });
+      // The chef denies it in another tab while this approval is in flight.
+      const result = await approveAgentConnectionRequest(
+        racing(db, "agentConnectionRequest", "updateMany", () => db.agentConnectionRequest.update({
+          where: { id: started.request.id }, data: { status: "denied", deniedAt: new Date() },
+        })),
+        started.request.id,
+        { userId, sessionVersion: 0 },
+      );
+      expect(result.status).toBe("denied");
+      expect(result.approvedById).toBeNull();
+    });
+  });
+
+  describe("personal API token creation", () => {
+    it("revokes a token whose creation sign out everywhere interrupts, and refuses the request", async () => {
+      const raced = racing(db, "apiCredential", "create", signOutEverywhere);
+
+      await expect(createApiCredentialForPrincipal(raced, { id: userId, sessionVersion: 0 }, "Laptop script"))
+        .rejects.toMatchObject({ status: 401 });
+      expect(await db.apiCredential.count({ where: { userId, revokedAt: null } })).toBe(0);
+    });
+
+    it("does not fence an environment-configured owner", async () => {
+      await signOutEverywhere();
+      const created = await createApiCredentialForPrincipal(db, { id: userId }, "Local script");
+      expect(created.credential.revokedAt).toBeNull();
+    });
+
+    it("refuses a token created through the API by a bearer token the sign-out revoked mid-request", async () => {
+      const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
+      const create = db.apiCredential.create.bind(db.apiCredential);
+      let first = true;
+      const spy = (await import("vitest")).vi.spyOn(db.apiCredential, "create").mockImplementation((async (args: any) => {
+        if (first) {
+          first = false;
+          await signOutEverywhere();
+        }
+        return create(args);
+      }) as any);
+      try {
+        const response = await apiV1Action({
+          request: new UndiciRequest("http://localhost/api/v1/tokens", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${writer.token}`, "Content-Type": "application/json", "X-Request-Id": "req_fence_token" },
+            body: JSON.stringify({ name: "Survivor" }),
+          }) as unknown as Request,
+          params: { "*": "tokens" },
+          context: { cloudflare: { env: null } },
+        } as any);
+        expect(response.status).toBe(401);
+        expect((await response.json() as any).error).toMatchObject({ code: "authentication_required" });
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await db.apiCredential.count({ where: { userId, revokedAt: null } })).toBe(0);
+    });
+
+    it("refuses a token created through MCP by a caller the sign-out revoked mid-request", async () => {
+      const writer = await createApiCredential(db, userId, "Token writer", { scopes: ["tokens:write"] });
+      const principal = await authenticateApiToken(db, writer.token, ISSUER);
+      expect(principal.sessionVersion).toBe(0);
+
+      await expect(callSpoonjoyMcpTool("create_api_token", { name: "Survivor" }, {
+        db: racing(db, "apiCredential", "create", signOutEverywhere),
+        principal,
+      })).rejects.toMatchObject({ status: 401 });
+      expect(await db.apiCredential.count({ where: { userId, revokedAt: null } })).toBe(0);
     });
   });
 
