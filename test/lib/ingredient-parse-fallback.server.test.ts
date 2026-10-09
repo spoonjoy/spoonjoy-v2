@@ -41,4 +41,29 @@ describe('parseIngredientsWithRulesFallback', () => {
 
     await expect(parseIngredientsWithRulesFallback('2 cups')).rejects.toBe(error)
   })
+
+  it('records each fallback, and whether the rules found anything, when telemetry is configured', async () => {
+    vi.spyOn(ingredientParse, 'parseIngredients').mockRejectedValue(new IngredientParseError('OpenAI API key is required'))
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+    const telemetry = { postHogConfig: { enabled: true, key: 'ph_test', host: 'https://posthog.example' }, fetchImpl, distinctId: 'chef-1' }
+
+    await parseIngredientsWithRulesFallback('3 large eggs', {}, telemetry)
+    await expect(parseIngredientsWithRulesFallback('2 cups', {}, { ...telemetry, distinctId: undefined })).rejects.toThrow()
+
+    const bodies = vi.mocked(fetchImpl).mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string))
+    expect(bodies).toEqual([
+      expect.objectContaining({ event: 'spoonjoy.ingredient_parse.rules_fallback', distinct_id: 'chef-1', properties: expect.objectContaining({ error_name: 'IngredientParseError', rule_parsed_count: 1 }) }),
+      expect.objectContaining({ distinct_id: 'anon', properties: expect.objectContaining({ rule_parsed_count: 0 }) }),
+    ])
+  })
+
+  it('names a non-Error failure by its type', async () => {
+    vi.spyOn(ingredientParse, 'parseIngredients').mockRejectedValue('timeout')
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+
+    await parseIngredientsWithRulesFallback('3 large eggs', {}, { postHogConfig: { enabled: true, key: 'ph_test', host: 'https://posthog.example' }, fetchImpl })
+
+    const [[, init]] = vi.mocked(fetchImpl).mock.calls
+    expect(JSON.parse((init as RequestInit).body as string).properties).toMatchObject({ error_name: 'string' })
+  })
 })
