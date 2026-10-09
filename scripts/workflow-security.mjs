@@ -17,7 +17,7 @@ const STORYBOOK_WORKFLOW_PATH = ".github/workflows/storybook.yml";
 const JOURNEYS_WORKFLOW_PATH = ".github/workflows/journeys.yml";
 // The merge queue tests each group on a branch GitHub names gh-readonly-queue/main/pr-<n>-<sha>,
 // and the commit it tests is the commit that lands on main.
-const MERGE_QUEUE_BRANCH_PREFIX = "gh-readonly-queue/main/";
+const MERGE_QUEUE_BRANCH_PATTERN = /^gh-readonly-queue\/main\/pr-\d+-[0-9a-f]{40}$/;
 // What each workflow's push run on main may skip, because the merge queue already ran it.
 export const QUEUE_TESTED_MODES = Object.freeze({
   "queue-tested-ci": Object.freeze({ workflowPath: CI_WORKFLOW_PATH, jobs: CANONICAL_CI_JOB_NAMES }),
@@ -302,7 +302,7 @@ export async function mergeQueueRunIds(run, repository, workflowPath, sha) {
       entry.repository?.full_name === repository &&
       entry.head_repository?.full_name === repository &&
       typeof entry.head_branch === "string" &&
-      entry.head_branch.startsWith(MERGE_QUEUE_BRANCH_PREFIX))
+      MERGE_QUEUE_BRANCH_PATTERN.test(entry.head_branch))
     .map((entry) => entry.id);
 }
 
@@ -435,9 +435,11 @@ async function hasCanonicalCi(run, repository, sha) {
 
 // Chooses what this Production Deploy run releases. A dispatch releases exactly its input. A
 // workflow_run releases the newest main commit, from the tip back to the commit whose CI triggered
-// it, that has green canonical CI (findEvidenceRun): so a deploy that waited while main moved ships the newest
-// tested commit instead of refusing, a deploy that runs after a newer one never moves production
-// backwards, and a pending deploy that GitHub replaced loses nothing. Any doubt fails closed.
+// it, that has green canonical CI (findEvidenceRun). A deploy that waited while main moved ships the
+// newest tested commit instead of refusing, and a pending deploy that GitHub replaced loses nothing.
+// This choice alone does not stop production moving backwards: if a newer commit's evidence is
+// briefly missing (its CI is being re-run), an older commit can be chosen. The deploy step refuses
+// any release that is not a descendant of the commit production runs. Any doubt fails closed.
 export async function chooseReleaseTarget({
   env = process.env,
   run = runWorkflowCommand,
@@ -456,7 +458,7 @@ export async function chooseReleaseTarget({
     if (!await isAncestor(run, requested, "origin/main")) {
       throw new Error(`Triggering commit ${requested} is not on main; refusing to choose a release.`);
     }
-    const newer = (await run("git", ["rev-list", "--first-parent", `${requested}..origin/main`]))
+    const newer = (await run("git", ["rev-list", "--first-parent", "--ancestry-path", `${requested}..origin/main`]))
       .split("\n").map((line) => line.trim()).filter(Boolean);
     if (newer.some((sha) => !SHA_PATTERN.test(sha))) throw new Error("git rev-list returned a malformed commit.");
     let chosen;

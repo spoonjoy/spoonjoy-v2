@@ -42,9 +42,12 @@ env:
 
 jobs:
   # Chooses the commit this run releases (scripts/workflow-security.mjs choose-release-target): for a
-  # CI completion, the newest main commit with a successful push CI run, so a deploy that waited
-  # while main moved ships the newest tested commit instead of refusing; for a dispatch, exactly
-  # source_sha. It runs the trusted workflow tooling with only a read token, and fails closed.
+  # CI completion, the newest main commit with green canonical CI (a push run, or the merge-queue run
+  # that tested the same commit), so a deploy that waited while main moved ships the newest tested
+  # commit instead of refusing; for a dispatch, exactly source_sha. It runs the trusted workflow
+  # tooling with only a read token, and fails closed. When it fails, deploy and report-canary skip,
+  # so the failed run itself is the only signal: GitHub notifies on the failed workflow run, and
+  # production keeps running the commit it had.
   release-target:
     name: release-target
     if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')

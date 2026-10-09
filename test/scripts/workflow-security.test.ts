@@ -557,6 +557,9 @@ describe("validateProductionDeploySource", () => {
     ["of a workflow file only named like CI", { path: ".github/workflows/ci.yml@refs/heads/evil" }],
     ["off the queue's branch for main", { head_branch: "main" }],
     ["on a queue branch for another base", { head_branch: "gh-readonly-queue/release/pr-1-abc" }],
+    ["on a branch only prefixed like the queue's", { head_branch: "gh-readonly-queue/main/evil" }],
+    ["on a queue-like branch without a full base SHA", { head_branch: "gh-readonly-queue/main/pr-1-abc" }],
+    ["on a queue-like branch with a suffix", { head_branch: `gh-readonly-queue/main/pr-1-${"c".repeat(40)}-x` }],
     ["from a push event", { event: "push" }],
     ["with a malformed id", { id: "21" }],
   ])("rejects a merge-queue CI run %s", async (_name, overrides) => {
@@ -822,7 +825,7 @@ describe("chooseReleaseTarget", () => {
         if (!onMain) throw new Error("not an ancestor");
         return "";
       }
-      if (command === `git rev-list --first-parent ${TRIGGER}..origin/main`) return newer.map((sha) => `${sha}\n`).join("");
+      if (command === `git rev-list --first-parent --ancestry-path ${TRIGGER}..origin/main`) return newer.map((sha) => `${sha}\n`).join("");
       const perCommit = /^gh run list --workflow \.github\/workflows\/ci\.yml --branch main --commit ([0-9a-f]{40}) --event push --status success --limit 100 --json databaseId,headSha,event$/.exec(command);
       if (perCommit) {
         const sha = perCommit[1];
