@@ -403,7 +403,8 @@ describe("API v1 recipe write mutations", () => {
       const payload = await readJson(response);
 
       expect(response.status).toBe(201);
-      expect(waitUntil).toHaveBeenCalledTimes(1);
+      // One deferred task is the bearer credential's lastUsedAt write; the other is the placeholder.
+      expect(waitUntil).toHaveBeenCalledTimes(2);
       await vi.waitFor(() => expect(placeholder).toHaveBeenCalledTimes(1));
       const cover = await db.recipeCover.findFirstOrThrow({ where: { recipeId: payload.data.recipe.id } });
       expect(cover).toMatchObject({ sourceType: "ai-placeholder", status: "processing", generationStatus: "processing", imageUrl: "", createdById: fixture.chef.id });

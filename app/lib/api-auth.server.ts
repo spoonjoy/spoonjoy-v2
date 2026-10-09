@@ -250,10 +250,23 @@ export async function createApiCredential(
   return { token, credential };
 }
 
+function isRecordNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2025";
+}
+
+/** `lastUsedAt` is advisory, so it is refreshed at most this often per credential. */
+export const LAST_USED_AT_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+
+export type ApiAuthOptions = {
+  /** Runs the throttled `lastUsedAt` write after the response instead of before it. */
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
+
 export async function authenticateApiToken(
   db: PrismaClientType,
   token: string,
   expectedOAuthIssuer: string,
+  options: ApiAuthOptions = {},
 ): Promise<ApiPrincipal> {
   const tokenHash = await hashApiToken(token);
   const credential = await db.apiCredential.findUnique({
@@ -274,15 +287,24 @@ export async function authenticateApiToken(
     if (oauthIssuer !== null && oauthIssuer !== expectedOAuthIssuer) {
       throw new ApiAuthError("Invalid API token", 401);
     }
-    await db.oAuthClient.updateMany({
-      where: { id: credential.oauthClientId, issuer: null, revokedAt: null },
-      data: { issuer: expectedOAuthIssuer },
+    // Legacy clients registered before issuers existed are bound to the first
+    // issuer that uses them. Read first so a bound client (every client after
+    // its first use) costs one read and no write on the request path.
+    let client = await db.oAuthClient.findFirst({
+      where: { id: credential.oauthClientId, revokedAt: null },
+      select: { id: true, issuer: true },
     });
-    const client = await db.oAuthClient.findFirst({
-      where: { id: credential.oauthClientId, issuer: expectedOAuthIssuer, revokedAt: null },
-      select: { id: true },
-    });
-    if (!client) throw new ApiAuthError("Invalid API token", 401);
+    if (client && client.issuer === null) {
+      await db.oAuthClient.updateMany({
+        where: { id: credential.oauthClientId, issuer: null, revokedAt: null },
+        data: { issuer: expectedOAuthIssuer },
+      });
+      client = await db.oAuthClient.findFirst({
+        where: { id: credential.oauthClientId, revokedAt: null },
+        select: { id: true, issuer: true },
+      });
+    }
+    if (!client || client.issuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
 
     if (oauthIssuer === null) {
       await db.apiCredential.updateMany({
@@ -299,10 +321,28 @@ export async function authenticateApiToken(
     throw new ApiAuthError("Invalid API token", 401);
   }
 
-  await db.apiCredential.update({
-    where: { id: credential.id },
-    data: { lastUsedAt: new Date() },
-  });
+  const now = Date.now();
+  if (credential.lastUsedAt === null || now - credential.lastUsedAt.getTime() >= LAST_USED_AT_WRITE_INTERVAL_MS) {
+    // `update`, not `updateMany`: Prisma's D1 adapter runs updateMany as an
+    // implicit transaction and warns that D1 cannot do one.
+    const touch = db.apiCredential.update({
+      where: { id: credential.id },
+      data: { lastUsedAt: new Date(now) },
+    });
+    if (options.waitUntil) {
+      options.waitUntil(touch.catch((error: unknown) => {
+        console.warn("[api-auth] lastUsedAt update failed", error);
+      }));
+    } else {
+      try {
+        await touch;
+      } catch (error) {
+        // P2025: the credential was deleted after we read it. The request was
+        // already authenticated, and there is nothing left to record.
+        if (!isRecordNotFound(error)) throw error;
+      }
+    }
+  }
 
   return toPrincipal(
     credential.user,
@@ -319,6 +359,7 @@ export async function authenticateApiRequest(
   db: PrismaClientType,
   request: Request,
   env?: (SessionEnv & { SPOONJOY_BASE_URL?: string }) | null,
+  options: ApiAuthOptions = {},
 ): Promise<ApiPrincipal | null> {
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
@@ -326,6 +367,7 @@ export async function authenticateApiRequest(
       db,
       bearerToken,
       resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
+      options,
     );
   }
 

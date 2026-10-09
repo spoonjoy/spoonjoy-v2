@@ -854,7 +854,9 @@ export function normalizeApiV1AuthError(error: ApiAuthError): ApiV1Error {
 async function optionalPrincipal(args: ApiV1RouteArgs): Promise<ApiPrincipal | null> {
   const db = await getRequestDb(args.context);
   try {
-    return await authenticateApiRequest(db, args.request, args.context.cloudflare?.env ?? null);
+    return await authenticateApiRequest(db, args.request, args.context.cloudflare?.env ?? null, {
+      waitUntil: apiV1WaitUntilFor(args),
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       throw normalizeApiV1AuthError(error);
