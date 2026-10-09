@@ -15,6 +15,7 @@ import { formatServingsLabel } from "~/lib/quantity";
 import { useEffect, useState } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { listImageProps } from "~/lib/image-loading";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -455,6 +456,7 @@ export default function CookbookDetail() {
             recipeCount={cookbook.recipes.length}
             recipeImages={recipeImages}
             className="mx-auto w-full max-w-56 lg:max-w-none"
+            priority
             // The page's own <h1> (in CookbookHeader, just above) already is this exact
             // title, and it renders before the "Recipes" <h2> below — a second <h3> here
             // would skip past that <h2> and trip heading-order.
@@ -511,7 +513,7 @@ export default function CookbookDetail() {
                       </span>
                       <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
                         {item.recipe.coverImageUrl ? (
-                          <img src={item.recipe.coverImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+                          <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
                         ) : (
                           <span className="block h-full w-full bg-[linear-gradient(135deg,color-mix(in_srgb,var(--sj-flour)_82%,var(--sj-panel-solid)),var(--sj-panel-solid))]" />
                         )}

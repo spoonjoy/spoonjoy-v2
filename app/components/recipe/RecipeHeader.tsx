@@ -8,6 +8,7 @@ import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 import type { CookSyncStatus } from '~/lib/cook-session-sync'
 import { CookSyncStatusLine } from './CookSyncStatusLine'
+import { HERO_IMAGE_PROPS } from '~/lib/image-loading'
 
 function normalizeCoverPlaceholderLabel(label: string) {
   return label === 'Awaiting first chef photo' ? 'Awaiting first photo' : label
@@ -135,6 +136,7 @@ export function RecipeHeader({
             <img
               src={displayImageUrl}
               alt={`Photo of ${title}`}
+              {...HERO_IMAGE_PROPS}
               className="h-full min-h-[16rem] w-full object-cover lg:min-h-0"
             />
             <CoverProvenanceBadge

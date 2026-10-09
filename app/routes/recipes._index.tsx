@@ -20,6 +20,7 @@ import {
 import { formatServingsLabel } from "~/lib/quantity";
 import { RecipesSectionNav } from "~/components/navigation";
 import { ShowMore, useAppendingList, useFocusFirstNew } from "~/components/ui/show-more";
+import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -156,6 +157,7 @@ export default function RecipesIndex() {
                   <RecipeRow
                     recipe={recipe}
                     ordinal={index + 1}
+                    imageProps={listImageProps(index)}
                     linkRef={index === list.firstNewIndex ? firstNewRef : undefined}
                   />
                 </li>
@@ -195,10 +197,12 @@ export default function RecipesIndex() {
 function RecipeRow({
   recipe,
   ordinal,
+  imageProps,
   linkRef,
 }: {
   recipe: PublicRecipe;
   ordinal: number;
+  imageProps: ImageLoadingProps;
   linkRef?: React.Ref<HTMLAnchorElement>;
 }) {
   const servingsLabel = formatServingsLabel(recipe.servings);
@@ -218,7 +222,7 @@ function RecipeRow({
       </span>
       <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_62%,var(--sj-panel-solid))]">
         {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+          <img src={displayImageUrl} alt="" {...imageProps} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
         ) : (
           <ChefHat className="size-6 text-[var(--sj-brass)]" aria-hidden="true" />
         )}
