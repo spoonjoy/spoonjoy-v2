@@ -1,14 +1,13 @@
 // Round trips on iPhone (read-only, chef session): home -> recipe -> the recipe's Back link -> home, browser Back and Forward, the Recipes tab and its Everyone switch, and the recipe's Back link from a public recipe. Each tab or link tap
 // happens exactly once and the very next assertion must pass: nothing needs a second tap. QA also
-// holds unrelated data, so recipes are located by their seeded ids and nothing asserts counts or
-// positions.
+// holds unrelated data, so seeded recipes are located by their ids, the public list's recipe is
+// whichever it shows first, and nothing asserts counts.
 import { test, expect } from "./support/journey";
 import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 const TOMATO_SOUP = "/recipes/qa-kitchen-recipe-tomato-soup";
-const RISOTTO = "/recipes/qa-kitchen-recipe-risotto";
 
 test.describe("Round trips on iPhone", () => {
   // The stored session path, not persona("chef").storageState: persona() reads the per-run
@@ -71,10 +70,18 @@ test.describe("Round trips on iPhone", () => {
     await expect(allPublicRecipes).toBeVisible();
     await expectAccessible();
 
-    // A friend's public recipe opened from the list: the recipe's Back link returns to the list.
-    await recipeLink(main, "Saffron Risotto", RISOTTO).click();
-    await expect(page).toHaveURL(pathUrl(RISOTTO));
-    await expect(page.getByRole("heading", { level: 1, name: "Saffron Risotto", exact: true })).toBeVisible();
+    // A public recipe opened from the list: the recipe's Back link returns to the list. The list
+    // shows only the most recent public recipes, and other journeys on QA keep adding their own,
+    // so a seeded recipe can fall off it; open whichever recipe the list shows first.
+    const firstListed = main.locator('li a[href^="/recipes/"]').first();
+    const firstHref = await firstListed.getAttribute("href");
+    expect(firstHref).toMatch(/^\/recipes\/[^/]+$/);
+    const cardText = await firstListed.innerText();
+    await firstListed.click();
+    await expect(page).toHaveURL(pathUrl(firstHref!));
+    const recipeTitle = page.getByRole("heading", { level: 1 });
+    await expect(recipeTitle).toBeVisible();
+    expect(cardText).toContain((await recipeTitle.innerText()).trim());
     await expectAccessible();
 
     await recipeBack.click();
