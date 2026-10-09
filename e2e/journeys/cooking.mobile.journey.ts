@@ -1,4 +1,4 @@
-// The recipe's "Add to list" action on iPhone uses the recipe's current scale and then shows that the
+// The recipe's "Add to list" action on iPhone uses the recipe's current scale (1.25×) and then shows that the
 // ingredients are on the list. It writes to a shopping list, so it runs as a throwaway user
 // (codex-e2e-*, removed by the workflow's QA cleanup) who forks Lemon Herb Rice, leaving the
 // personas' lists untouched.
@@ -40,35 +40,36 @@ test.describe("Recipe list action on iPhone", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
     await expect(page.getByTestId("recipe-header-edit-action")).toBeVisible();
 
-    // 2×, four presses of 0.25.
+    // 1.25×, one press of 0.25, so the list gets fractional amounts to write out.
     await increaseScale.click();
     await expect(scaleDisplay).toHaveText("1.25×");
-    await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("1.5×");
-    await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("1.75×");
-    await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("2×");
 
     await expect(listAction).toHaveText("Add to list");
     await listAction.click();
     // The toast appears once QA's add-and-reload round trip finishes, which can be slow.
-    await expect(page.getByRole("status").filter({ hasText: "4 items added at 2x" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("status").filter({ hasText: "4 items added at 1.25x" })).toBeVisible({ timeout: 15_000 });
     await expect(listAction).toHaveText("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
 
-    // The list holds the 2× quantities (jasmine rice 1 cup -> 2 cup, chicken stock 2 cup -> 4 cup).
+    // The list holds the 1.25× amounts written the way the recipe writes them (product audit
+    // 2026-10-09, finding 8: parsley read "0.3125 cup"). Jasmine rice 1 cup -> 1 ¼ cups, chicken stock
+    // 2 cups -> 2 ½ cups, parsley ¼ cup -> ⅓ cup, and 1 ¼ lemons round up to the 2 a shopper buys.
     const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
     const chickenStock = page.getByRole("checkbox", { name: "chicken stock", exact: true });
+    const parsley = page.getByRole("checkbox", { name: "parsley", exact: true });
+    const lemon = page.getByRole("checkbox", { name: "lemon", exact: true });
+    const expectWrittenAmounts = async () => {
+      await expect(jasmineRice).toContainText("1 ¼ cups");
+      await expect(chickenStock).toContainText("2 ½ cups");
+      await expect(parsley).toContainText("⅓ cup");
+      await expect(parsley).not.toContainText("0.3125");
+      await expect(lemon).toContainText("2 whole");
+    };
     await page.goto("/shopping-list");
-    await expect(jasmineRice).toContainText("2 cup");
-    await expect(chickenStock).toContainText("4 cup");
+    await expectWrittenAmounts();
 
-    await verifyAfterReload(async () => {
-      await expect(jasmineRice).toContainText("2 cup");
-      await expect(chickenStock).toContainText("4 cup");
-    });
+    await verifyAfterReload(expectWrittenAmounts);
     await expectAccessible();
   });
 });

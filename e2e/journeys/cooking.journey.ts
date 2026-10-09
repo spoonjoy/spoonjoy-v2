@@ -104,20 +104,20 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await jasmineRice.click();
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await scaleToOneAndAHalf(page);
-      await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+      await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
       await saved;
 
       await verifyAfterReload(async () => {
         await expect(scaleDisplay).toHaveText("1.5×");
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-        await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+        await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
       });
 
       // Somewhere else and back to the recipe through the app: the progress is still there.
       await openLemonRiceFromSearch(page);
       await expect(scaleDisplay).toHaveText("1.5×");
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-      await expect(jasmineRiceQuantity).toHaveText("1 ½ cup");
+      await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
       await expectAccessible();
     });
 
@@ -157,7 +157,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toContainText("Step 1 of 3");
       await expect(page.getByRole("region", { name: "Cook the rice", exact: true })).toBeVisible();
       // Step 1's quantities follow the scale, and the checklist carries over.
-      await expect(panel.getByTestId(JASMINE_RICE_QUANTITY)).toHaveText("1 ½ cup");
+      await expect(panel.getByTestId(JASMINE_RICE_QUANTITY)).toHaveText("1 ½ cups");
       await expect(panel.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAttribute("aria-checked", "true");
       // Nothing covers the step controls on a phone (R-M2-5): the tab bar is hidden in cook mode.
       await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeHidden();
