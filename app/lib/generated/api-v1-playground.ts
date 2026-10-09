@@ -151,19 +151,23 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "/api/v1/tokens/{credentialId}"
       ],
       "scopes": [
-        "account:read",
-        "account:write",
+        "public:read",
+        "recipes:read",
+        "cookbooks:read",
         "kitchen:read",
         "kitchen:write",
         "shopping_list:read",
         "shopping_list:write"
       ],
       "notes": [
+        "Delegated approval never grants account:* or tokens:* scopes; requests for them fail with 400.",
+        "The approval link never carries the code: the chef opens it, signs in, and types userCode, so show both.",
+        "Approved delegated tokens expire after 90 days; start a new connection after that.",
         "The device code expires after 10 minutes.",
         "Poll no faster than the returned interval, currently 2 seconds.",
         "A pending poll returns pending plus authorizationUrl, verificationUri, verificationUriComplete, and userCode.",
         "Pass scopes such as shopping_list:read shopping_list:write to request a least-privilege delegated token; omitted scopes default to shopping_list:read shopping_list:write.",
-        "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl.",
+        "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl; verificationUriComplete is the same link as authorizationUrl and also needs the typed code.",
         "An approved poll returns the sj_... token once, plus token metadata.",
         "The token is a normal bearer credential. A device can revoke its own credential id with DELETE /api/v1/tokens/{credentialId}; revoking any other credential requires tokens:write."
       ],
@@ -13156,8 +13160,9 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "auth": "optional",
       "scopes": [],
       "grantableScopes": [
-        "account:read",
-        "account:write",
+        "public:read",
+        "recipes:read",
+        "cookbooks:read",
         "kitchen:read",
         "kitchen:write",
         "shopping_list:read",
@@ -13214,7 +13219,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"deviceCode\": \"sjdc_...\",\n    \"userCode\": \"ABCD-2345\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"expiresIn\": 600,\n    \"interval\": 2,\n    \"message\": \"Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"deviceCode\": \"sjdc_...\",\n    \"userCode\": \"ABCD-2345\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"expiresIn\": 600,\n    \"interval\": 2,\n    \"message\": \"Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.\"\n  }\n}"
         },
         {
           "status": "400",
@@ -13295,13 +13300,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "pending",
           "label": "Pending",
-          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"pending\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"userCode\": \"ABCD-2345\",\n    \"message\": \"Waiting for the user to approve this Spoonjoy connection.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"pending\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"userCode\": \"ABCD-2345\",\n    \"message\": \"Waiting for the user to approve this Spoonjoy connection. Show them authorizationUrl and, separately, userCode: they type the code on that page to approve.\"\n  }\n}"
         },
         {
           "status": "200",
           "name": "approved",
           "label": "Approved",
-          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"approved\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"token\": \"sj_...\",\n    \"credential\": {\n      \"id\": \"cred_1\",\n      \"name\": \"Kitchen display delegated token\",\n      \"tokenPrefix\": \"sj_abc123456\",\n      \"scopes\": [\n        \"shopping_list:read\",\n        \"shopping_list:write\"\n      ],\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"expiresAt\": null\n    },\n    \"message\": \"Connection approved. Cache this token locally and use it for future Spoonjoy calls.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"approved\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"token\": \"sj_...\",\n    \"credential\": {\n      \"id\": \"cred_1\",\n      \"name\": \"Kitchen display delegated token\",\n      \"tokenPrefix\": \"sj_abc123456\",\n      \"scopes\": [\n        \"shopping_list:read\",\n        \"shopping_list:write\"\n      ],\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"expiresAt\": \"2026-08-30T00:00:00.000Z\"\n    },\n    \"message\": \"Connection approved. Cache this token locally and use it for future Spoonjoy calls.\"\n  }\n}"
         },
         {
           "status": "200",
