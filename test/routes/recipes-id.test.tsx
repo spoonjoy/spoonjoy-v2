@@ -1805,14 +1805,23 @@ describe("Recipes $id Route", () => {
         params: { id: recipeId },
       } as any);
 
-      expect(result).toEqual({ success: true, intent: "regenerateRecipeCover", coverId: cover.id });
+      // The cover has an editorial image, so the regeneration fills a new child cover and the
+      // cover keeps "/photos/old-editorial.jpg" (it used to be overwritten).
+      const child = await db.recipeCover.findFirstOrThrow({ where: { parentCoverId: cover.id } });
+      expect(result).toEqual({ success: true, intent: "regenerateRecipeCover", coverId: child.id });
+      expect(child).toMatchObject({
+        status: "processing",
+        generationStatus: "processing",
+        failureReason: null,
+        promptAddition: "less shadow more basil",
+        sourceImageUrl: "/photos/source.jpg",
+      });
       await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } }))
         .resolves.toMatchObject({
-          status: "processing",
-          generationStatus: "processing",
-          failureReason: null,
-          promptAddition: "less shadow more basil",
-          parentCoverId: cover.id,
+          stylizedImageUrl: "/photos/old-editorial.jpg",
+          status: "ready",
+          generationStatus: "succeeded",
+          parentCoverId: null,
         });
       await expect(
         db.recipe.findUniqueOrThrow({

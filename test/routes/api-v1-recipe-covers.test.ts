@@ -2006,9 +2006,11 @@ describe("API v1 recipe cover management", () => {
           id: fixture.activeCover.id,
           activeVariant: "stylized",
         }),
+        // The replacement cover already has a stylized image, so regenerating it adds a child
+        // cover rather than overwriting that image. No provider is configured, so the child fails.
         createdCover: expect.objectContaining({
-          id: fixture.replacementCover.id,
-          status: "ready",
+          id: expect.not.stringMatching(`^${fixture.replacementCover.id}$`),
+          status: "failed",
           generationStatus: "failed",
           failureReason: expect.stringContaining("missing_image_provider_config"),
         }),
@@ -2017,11 +2019,20 @@ describe("API v1 recipe cover management", () => {
       },
     });
     await expect(db.recipeCover.findUniqueOrThrow({
-      where: { id: fixture.replacementCover.id },
+      where: { id: payload.data.createdCover.id },
       select: { promptAddition: true, parentCoverId: true },
     })).resolves.toEqual({
       promptAddition: `keep same plate ${"x".repeat(224)}`,
       parentCoverId: fixture.replacementCover.id,
+    });
+    await expect(db.recipeCover.findUniqueOrThrow({
+      where: { id: fixture.replacementCover.id },
+      select: { stylizedImageUrl: true, status: true, promptAddition: true, parentCoverId: true },
+    })).resolves.toEqual({
+      stylizedImageUrl: fixture.replacementCover.stylizedImageUrl,
+      status: fixture.replacementCover.status,
+      promptAddition: null,
+      parentCoverId: null,
     });
   });
 

@@ -13,6 +13,7 @@ import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe
 import {
   archiveRecipeCover,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
@@ -989,29 +990,19 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       throw new Response("Cover has no source image", { status: 400 });
     }
     const { bucket, env, waitUntil } = getCloudflareCtx(context);
-    await database.recipeCover.update({
-      where: { id: cover.id },
-      data: {
-        status: "processing",
-        generationStatus: "processing",
-        failureReason: null,
-        sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-        promptAddition,
-        parentCoverId: cover.id,
-      },
-    });
+    const regeneration = await startRecipeCoverRegeneration(database, cover, { createdById: userId, rawPhotoUrl, promptAddition });
     await runOrQueueSpoonCoverStylization(
       {
         db: database,
         userId,
         recipeId: id,
-        coverId: cover.id,
+        coverId: regeneration.coverId,
         rawPhotoUrl,
         recipeTitle: recipe.title,
         env,
         bucket,
         sourceType: cover.sourceType === "spoon" ? "spoon" : "chef-upload",
-        parentCoverId: cover.id,
+        parentCoverId: regeneration.parentCoverId,
         promptAddition,
         activateWhenReady,
         suppressAutoActivation: !activateWhenReady,
@@ -1025,7 +1016,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       },
       waitUntil,
     );
-    return { success: true, intent: "regenerateRecipeCover", coverId: cover.id };
+    return { success: true, intent: "regenerateRecipeCover", coverId: regeneration.coverId };
   }
 
   if (intent === "archiveRecipeCover") {

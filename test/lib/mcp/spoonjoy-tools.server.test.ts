@@ -906,7 +906,10 @@ describe("spoonjoy MCP tools", () => {
       select: { promptAddition: true, parentCoverId: true },
     })).resolves.toEqual({
       promptAddition: `keep same plate ${"x".repeat(224)}`,
-      parentCoverId: cover.id,
+      // The cover had no editorial image to lose, so it was regenerated in place. Its lineage is
+      // no longer set to itself (a cover is not its own parent); a regeneration of a cover that
+      // has an editorial image is a child cover instead.
+      parentCoverId: null,
     });
   });
 

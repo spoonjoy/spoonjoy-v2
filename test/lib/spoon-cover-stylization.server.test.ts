@@ -1181,7 +1181,9 @@ describe("scheduleSpoonCoverStylization", () => {
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover.stylizedImageUrl).toBeNull();
     expect(cover).toMatchObject({
-      status: "ready",
+      // A regeneration's cover (it has a parent) only copied its parent's photo, so a failed
+      // regeneration is marked failed rather than left as a usable duplicate of the parent.
+      status: "failed",
       generationStatus: "failed",
       promptVersion: "spoon-photo-editorial-v1",
       styleVersion: "mendelow-phone-to-editorial-v1",

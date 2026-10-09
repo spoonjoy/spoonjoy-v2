@@ -42,6 +42,7 @@ import {
   clearActiveRecipeCover,
   coverInsertStatement,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   setActiveRecipeCover,
@@ -2119,22 +2120,16 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
           });
         }
 
-        await context.db.recipeCover.update({
-          where: { id: cover.id },
-          data: {
-            status: "processing",
-            generationStatus: "processing",
-            failureReason: null,
-            sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-            promptAddition,
-            parentCoverId: cover.id,
-          },
+        const regeneration = await startRecipeCoverRegeneration(context.db, cover, {
+          createdById: principal.id,
+          rawPhotoUrl,
+          promptAddition,
         });
         await scheduleRecipeCoverStylization(context, {
           userId: principal.id,
           recipeId,
-          coverId: cover.id,
-          parentCoverId: cover.id,
+          coverId: regeneration.coverId,
+          parentCoverId: regeneration.parentCoverId,
           promptAddition,
           rawPhotoUrl,
           recipeTitle: recipe.title,
@@ -2151,7 +2146,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
         });
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
-        const regeneratedCover = await reloadFullCoverPayload(context, nextRecipe, cover.id);
+        const regeneratedCover = await reloadFullCoverPayload(context, nextRecipe, regeneration.coverId);
         const activeCover = await activeFullCoverPayload(context, nextRecipe);
         return coverMutationResponse({
           activeCover,
