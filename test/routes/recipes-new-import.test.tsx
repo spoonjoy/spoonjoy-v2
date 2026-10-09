@@ -129,8 +129,8 @@ describe("RecipeImportPanel", () => {
   it("switches to pasting the recipe, pointing paper recipes at the photo option", async () => {
     const user = userEvent.setup();
     renderPanel(() => null);
-    await user.click(await screen.findByRole("button", { name: "Paste the recipe" }));
-    expect(screen.getByRole("button", { name: "Paste the recipe" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(await screen.findByRole("button", { name: "Paste text" }));
+    expect(screen.getByRole("button", { name: "Paste text" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("Recipe link")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Recipe text").tagName).toBe("TEXTAREA");
     expect(screen.getByText("Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead.")).toBeInTheDocument();
@@ -218,7 +218,7 @@ describe("RecipeImportPanel", () => {
     expect(within(alert).getByRole("link", { name: "Open it" })).toHaveAttribute("href", "/recipes/r-soup");
     expect(screen.getByLabelText("Recipe link")).toHaveAttribute("aria-invalid", "true");
 
-    await user.click(screen.getByRole("button", { name: "Paste the recipe" }));
+    await user.click(screen.getByRole("button", { name: "Paste text" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("RecipeImportPanel", () => {
     const user = userEvent.setup();
     let finish: (value: unknown) => void = () => undefined;
     renderPanel(() => new Promise((resolve) => { finish = resolve; }));
-    await user.click(await screen.findByRole("button", { name: "Paste the recipe" }));
+    await user.click(await screen.findByRole("button", { name: "Paste text" }));
     await user.type(screen.getByLabelText("Recipe text"), "Toast");
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     const busy = await screen.findByRole("button", { name: "Reading the recipe…" });

@@ -31,7 +31,7 @@ const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
 const KIND_OPTIONS: Array<{ kind: RecipeImportKind; label: string }> = [
   { kind: "link", label: "From a link" },
-  { kind: "text", label: "Paste the recipe" },
+  { kind: "text", label: "Paste text" },
   { kind: "photo", label: "From a photo" },
 ];
 

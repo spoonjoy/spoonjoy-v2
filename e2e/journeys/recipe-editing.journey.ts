@@ -236,7 +236,7 @@ test.describe("Recipe create and edit", () => {
     await expect(page.getByRole("alert")).toHaveText("Importing isn't switched on here yet. You can still write the recipe below.");
     await expect(page).toHaveURL(pathUrl("/recipes/new"));
 
-    await page.getByRole("button", { name: "Paste the recipe", exact: true }).click();
+    await page.getByRole("button", { name: "Paste text", exact: true }).click();
     await expect(page.getByLabel("Recipe text", { exact: true })).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expectAccessible();
