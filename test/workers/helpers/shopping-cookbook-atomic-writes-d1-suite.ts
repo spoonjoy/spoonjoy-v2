@@ -275,6 +275,24 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
       ]);
     });
 
+    it("restarts a cleared item from the recipe's amount on the web, REST and MCP", async () => {
+      // A cleared row keeps its last quantity; re-adding the recipe must not add on top of it.
+      const clear = () => run(`UPDATE "ShoppingListItem" SET "deletedAt" = ? WHERE "shoppingListId" = ?`, OLD, LIST);
+      await seedItem(APPLES, 7, { deleted: true });
+
+      await webAddRecipe("sca-pie", "1");
+      expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 2, deleted: 0, checked: 0 }]);
+      await clear();
+
+      const added = await apiPost("shopping-list/add-from-recipe", { clientMutationId: "sca-rest-readd", recipeId: "sca-pie" });
+      expect(added.body.data).toMatchObject({ updated: 1, items: [{ name: "sca apples", quantity: 2 }] });
+      expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 2, deleted: 0, checked: 0 }]);
+      await clear();
+
+      await callSpoonjoyApiOperation("add_recipe_to_shopping_list", { recipeId: "sca-pie" }, mcp());
+      expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 2, deleted: 0, checked: 0 }]);
+    });
+
     it("keeps both amounts when a web add lands inside an MCP add", async () => {
       await seedItem(APPLES, 4);
 
