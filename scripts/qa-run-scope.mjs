@@ -28,7 +28,8 @@
 // to the run's identity, after the QA preflight has checked both against the shared QA identity.
 // Every later `--env qa` command (migrations, deploy, seed, rotate, cleanup) then targets the
 // run's own stack with no other change. Only identity fields change; anything else differing is
-// an error. It refuses to run outside GitHub Actions, so it never rewrites a developer's config.
+// an error. It refuses to run outside GitHub Actions, so it never rewrites a developer's config
+// by accident; SPOONJOY_QA_LOCAL_RUN=1 is the explicit opt-in for a local run (see below).
 //
 // Commands (node scripts/qa-run-scope.mjs <command>):
 //   prepare   sweep stale run stacks, create this run's empty D1, rewrite the configs, write the
@@ -44,6 +45,16 @@
 //
 // Environment (set by GitHub Actions): GITHUB_ACTIONS, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
 // GITHUB_ENV, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+//
+// Local run: prepare, deploy, verify and teardown also run outside GitHub Actions when
+// SPOONJOY_QA_LOCAL_RUN=1 (exactly "1"). Use a throwaway worktree, because prepare rewrites
+// wrangler.json and the generated build config in place. Set GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT
+// to whole numbers of your own (pick a run id no CI run uses, such as 9 followed by nine digits),
+// plus CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; leave GITHUB_ENV unset. For example:
+//   SPOONJOY_QA_LOCAL_RUN=1 GITHUB_RUN_ID=9200000001 GITHUB_RUN_ATTEMPT=1 \
+//     node scripts/qa-run-scope.mjs prepare
+// Always run teardown with the same values when you are done; the scheduled sweep deletes a
+// forgotten stack once it is STALE_AFTER_MS old.
 import { execFile as nodeExecFile } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import {
@@ -126,9 +137,18 @@ export function runIdentity(env) {
   };
 }
 
+// A developer can run the per-run commands on purpose, from a throwaway checkout, by setting
+// exactly SPOONJOY_QA_LOCAL_RUN=1. Nothing else changes for a local run: the run still needs a
+// numeric GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT (so its stack keeps a per-run name the scheduled
+// sweep deletes), the configs must still name shared QA before anything is rewritten, and only
+// that run's own Worker and D1 are created or deleted.
+export const LOCAL_RUN_FLAG = "SPOONJOY_QA_LOCAL_RUN";
+
 export function requireGitHubActions(env) {
-  if (env.GITHUB_ACTIONS !== "true") {
-    throw new Error("qa-run-scope rewrites wrangler.json in place, so it runs only inside GitHub Actions.");
+  if (env.GITHUB_ACTIONS !== "true" && env[LOCAL_RUN_FLAG] !== "1") {
+    throw new Error(
+      `qa-run-scope rewrites wrangler.json in place, so it runs only inside GitHub Actions, or locally from a throwaway checkout with ${LOCAL_RUN_FLAG}=1.`,
+    );
   }
 }
 
