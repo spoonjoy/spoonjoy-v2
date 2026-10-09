@@ -204,6 +204,45 @@ describe("API authentication helpers", () => {
     await expect(authenticateApiToken(db, created.token)).rejects.toMatchObject({ status: 401 });
   });
 
+  it("rejects an OAuth credential whose grant is no longer active, found by grant id or connection key", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Example App", redirectUris: "https://example.com/cb" },
+    });
+    const grant = await db.oAuthGrant.create({
+      data: {
+        userId: user.id,
+        clientId: client.id,
+        issuer: "http://localhost",
+        scope: "kitchen:read",
+        connectionKey: `key-${faker.string.alphanumeric(12)}`,
+        status: "active",
+        statusChangedAt: new Date(),
+      },
+    });
+    const mint = async (link: { oauthGrantId?: string; oauthConnectionKey?: string }) => {
+      const created = await createApiCredential(db, user.id, "OAuth token", { oauthClientId: client.id, scopes: ["kitchen:read"] });
+      await db.apiCredential.update({ where: { id: created.credential.id }, data: link });
+      return created.token;
+    };
+    const byId = await mint({ oauthGrantId: grant.id });
+    const byKey = await mint({ oauthConnectionKey: grant.connectionKey });
+    const unlinked = await mint({});
+
+    await expect(authenticateApiToken(db, byId)).resolves.toMatchObject({ id: user.id });
+    await expect(authenticateApiToken(db, byKey)).resolves.toMatchObject({ id: user.id });
+
+    await db.oAuthGrant.update({
+      where: { id: grant.id },
+      data: { status: "revoked", statusReason: "security_event", statusChangedAt: new Date() },
+    });
+
+    await expect(authenticateApiToken(db, byId)).rejects.toMatchObject({ status: 401 });
+    await expect(authenticateApiToken(db, byKey)).rejects.toMatchObject({ status: 401 });
+    // A credential with no grant link (issued before grants existed) is judged by its own row.
+    await expect(authenticateApiToken(db, unlinked)).resolves.toMatchObject({ id: user.id });
+  });
+
   it("binds legacy OAuth credentials once and rejects a different issuer before usage mutation", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const client = await db.oAuthClient.create({

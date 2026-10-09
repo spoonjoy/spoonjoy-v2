@@ -229,6 +229,22 @@ export async function authenticateApiToken(
     throw new ApiAuthError("Invalid API token", 401);
   }
 
+  // An OAuth credential is only as live as its grant. Revoking a connection, or every connection
+  // on the account, revokes the grant first; a refresh that raced it and inserted an access token
+  // after the token sweep must still mint nothing usable.
+  if (credential.oauthClientId && (credential.oauthGrantId || credential.oauthConnectionKey)) {
+    const grant = await db.oAuthGrant.findFirst({
+      where: {
+        OR: [
+          ...(credential.oauthGrantId ? [{ id: credential.oauthGrantId }] : []),
+          ...(credential.oauthConnectionKey ? [{ connectionKey: credential.oauthConnectionKey }] : []),
+        ],
+      },
+      select: { status: true },
+    });
+    if (grant && grant.status !== "active") throw new ApiAuthError("Invalid API token", 401);
+  }
+
   let oauthIssuer = credential.oauthIssuer;
   if (credential.oauthClientId) {
     if (oauthIssuer !== null && oauthIssuer !== expectedOAuthIssuer) {

@@ -604,7 +604,10 @@ async function requireLinkedConnectorGrant(
     connectionKey: record.connectionKey,
   };
   const permittedStatus = grant?.status === "active"
-    || (allowDisconnected && grant?.status === "revoked" && grant.statusReason === "disconnect");
+    // Revoking a token that is already dead succeeds (RFC 7009 §2.2), whatever ended its grant:
+    // a disconnect, sign out everywhere, expiry or reuse detection. Otherwise the iPhone app's
+    // sign-out, which waits for the revoke call, fails after the account was revoked elsewhere.
+    || (allowDisconnected && (grant?.status === "revoked" || grant?.status === "compromised"));
   if (!grant || !grantIdentityMatches(grant, expected) || !permittedStatus) {
     throw new OAuthError("invalid_grant", "OAuth grant identity does not match the connector");
   }
