@@ -266,6 +266,70 @@ describe("recipe editor routes on a D1 binding", () => {
     });
   });
 
+  describe("recipe edit page save precondition", () => {
+    const LATER = new Date("2026-02-01T00:00:00.000Z");
+    const CONFLICT = "This recipe changed after you opened it, maybe in another tab or the app. Nothing was saved. Save again to keep your version, or reload the page to see the other changes.";
+
+    /** Someone else's save after this page loaded the recipe at OLD. */
+    const otherSave = (seeded: Seeded) => db.recipe.update({
+      where: { id: seeded.recipe.id },
+      data: { description: "Their description", updatedAt: LATER },
+    });
+
+    it.each([
+      ["Prisma", () => ({ PHOTOS: photos() })],
+      ["a D1 binding", () => ({ DB: d1.binding, PHOTOS: photos() })],
+    ])("answers a stale save with 409 and the current updatedAt on %s, writing nothing; saving again applies", async (_label, env) => {
+      const mine = await seedRecipe(`Stale ${crypto.randomUUID()}`);
+      await otherSave(mine);
+      const fields = (expectedUpdatedAt: string) => () => ({ title: "My title", description: "Mine", servings: "4", expectedUpdatedAt });
+
+      const stale = await withD1Routes(() => act("edit", mine, fields(OLD.toISOString()), env()));
+
+      expect(responseStatus(stale)).toBe(409);
+      expect((stale as { data: unknown }).data).toEqual({ errors: { general: CONFLICT }, currentUpdatedAt: LATER.toISOString() });
+      await expect(graph(mine)).resolves.toMatchObject({ description: "Their description", cookbookTouched: false });
+
+      const again = await withD1Routes(() => act("edit", mine, fields(LATER.toISOString()), env()));
+      expect(responseStatus(again)).toBe(302);
+      await expect(graph(mine)).resolves.toMatchObject({ title: "My title", description: "Mine", servings: "4" });
+    });
+
+    it("saves when the recipe is unchanged since the page loaded it", async () => {
+      const { statuses } = await expectParity("edit", ({ recipe }) => ({
+        title: `${recipe.title} saved`, description: "Fresh", servings: "6", expectedUpdatedAt: OLD.toISOString(),
+      }));
+      expect(statuses).toEqual([302, 302]);
+    });
+
+    it("saves as before when the form sends no or an unreadable expectedUpdatedAt", async () => {
+      for (const expectedUpdatedAt of [undefined, "", "yesterday"]) {
+        const mine = await seedRecipe(`Legacy ${crypto.randomUUID()}`);
+        await otherSave(mine);
+        const status = await withD1Routes(() => post("edit", mine, () => ({
+          title: "Last write wins", description: "Mine", ...(expectedUpdatedAt === undefined ? {} : { expectedUpdatedAt }),
+        }), { DB: d1.binding, PHOTOS: photos() }));
+        expect(status).toBe(302);
+        await expect(graph(mine)).resolves.toMatchObject({ description: "Mine" });
+        await db.recipe.update({ where: { id: mine.recipe.id }, data: { title: `Done ${crypto.randomUUID()}` } });
+      }
+    });
+
+    it("answers 409 and removes the upload when another save lands between the check and the batch", async () => {
+      const mine = await seedRecipe("Raced save");
+      const bucket = photos();
+      const result = await withD1Routes(() => act("edit", mine, () => ({
+        title: "Raced save", description: "Mine", expectedUpdatedAt: OLD.toISOString(),
+        image: new File([PNG], "cover.png", { type: "image/png" }),
+      }), { DB: racing(() => otherSave(mine)), PHOTOS: bucket }));
+
+      expect(responseStatus(result)).toBe(409);
+      expect((result as { data: unknown }).data).toEqual({ errors: { general: CONFLICT }, currentUpdatedAt: LATER.toISOString() });
+      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      await expect(graph(mine)).resolves.toMatchObject({ description: "Their description", covers: [] });
+    });
+  });
+
   describe("after the save batch commits", () => {
     /** The fake binding, answering an error after its first batch has committed. */
     function committedThenThrows() {
