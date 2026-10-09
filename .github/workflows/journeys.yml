@@ -96,9 +96,9 @@ jobs:
     name: journeys
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    # The Cloudflare token is deliberately not a job-level env: it is given only to the steps
+    # that deploy to or touch QA, so it is absent while `pnpm install` runs dependency install
+    # scripts from the PR's lockfile.
     steps:
       - name: Require this run's turn on QA
         if: needs.qa-turn.result != 'success'
@@ -117,6 +117,9 @@ jobs:
           node-version: '22'
 
       - name: Require Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
             echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required. Journeys fail closed."
@@ -151,9 +154,15 @@ jobs:
       # row is read back to confirm this run and attempt hold it. Waits up to 10 minutes.
       - name: Take the QA lock
         id: qa-lock
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/qa-lock.mjs acquire --target-env qa
 
       - name: Deploy this build to QA
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm run deploy:qa
 
       # Workers-side evidence for every run: stream the QA Worker's invocation log while the
@@ -163,6 +172,9 @@ jobs:
       # must never fail a run, so this step and the summary step are non-fatal.
       - name: Start QA Worker tail
         continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           mkdir -p .worker-tail
           nohup ./node_modules/.bin/wrangler tail spoonjoy-v2-qa --format json \
@@ -172,6 +184,9 @@ jobs:
           sleep 10 || true
 
       - name: Seed the QA kitchen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           mkdir -p .journeys
           pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
@@ -183,6 +198,9 @@ jobs:
           done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
       - name: Run test suite
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
@@ -246,11 +264,17 @@ jobs:
       - name: Rotate persona passwords
         id: rotate-passwords
         if: always() && steps.qa-lock.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
         if: always() && steps.qa-lock.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files
@@ -324,4 +348,7 @@ jobs:
       # run and attempt hold it; a failed release only warns, and the lock then expires.
       - name: Release the QA lock
         if: always() && steps.qa-lock.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/qa-lock.mjs release --target-env qa
