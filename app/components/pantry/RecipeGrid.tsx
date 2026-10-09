@@ -81,14 +81,13 @@ export function RecipeGrid({
               <Link
                 href={href}
                 ref={firstNew && index === firstNew.index ? firstNew.ref : undefined}
-                aria-label={recipe.title}
                 className="grid gap-4 py-5 no-underline sm:grid-cols-[7rem_minmax(0,1fr)] sm:pr-24"
               >
                 <span className="sj-photo-tile block aspect-[4/3] overflow-hidden sm:aspect-square">
                   {displayImageUrl ? (
                     <img
                       src={displayImageUrl}
-                      alt={recipe.title}
+                      alt=""
                       className="h-full w-full object-cover"
                     />
                   ) : (
