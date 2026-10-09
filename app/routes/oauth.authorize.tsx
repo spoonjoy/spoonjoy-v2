@@ -33,7 +33,7 @@ import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 
 // Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
-// loader (consent screen / login-gate redirect) and the action (Allow/Deny).
+// loader (consent screen / login-gate redirect) and the action (Approve/Deny).
 // Cheap to call; runs before any DB work.
 async function checkAuthorizeRateLimit(request: Request, env: { API_IP_RATE_LIMITER?: unknown } | null | undefined) {
   const rateLimit = await enforceRateLimit({
@@ -354,7 +354,7 @@ export default function OAuthAuthorize() {
         <form method="post">
           <input type="hidden" name="consent_token" value={view.consentToken} />
           <Button className="w-full sm:w-auto" type="submit" name="decision" value="approve">
-            Allow access
+            Approve access
           </Button>
         </form>
         <form method="post">

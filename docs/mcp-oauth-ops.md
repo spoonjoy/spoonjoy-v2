@@ -99,7 +99,7 @@ CI emulates Claude's MCP OAuth shape, but a real hosted Claude session remains a
 1. Open Claude's connector UI.
 2. Add `https://spoonjoy.app/mcp`.
 3. Confirm Spoonjoy opens the simplified consent page.
-4. Click **Allow access**.
+4. Click **Approve access**.
 5. Confirm Claude returns to a connected state.
 6. Ask Claude to list available Spoonjoy tools or read the shopping list.
 7. Disconnect from Spoonjoy account settings and confirm Claude no longer has access.

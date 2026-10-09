@@ -413,7 +413,8 @@ describe("oauth.authorize route", () => {
     expect(screen.getByText(/add, edit, and remove kitchen data/i)).toBeInTheDocument();
     expect(screen.getByText(/stays active until you disconnect/i)).toBeInTheDocument();
     expect(screen.getByText(/connection details/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /allow access/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve access" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /allow access/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deny/i })).toBeInTheDocument();
     const forms = Array.from(rendered.container.querySelectorAll("form"));
     expect(forms).toHaveLength(2);
