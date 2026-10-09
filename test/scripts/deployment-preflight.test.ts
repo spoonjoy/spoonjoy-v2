@@ -295,7 +295,7 @@ function validInputs(): DeploymentPreflightInputs {
         "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
         typecheck: "react-router typegen && tsc",
         "typecheck:scripts": "tsc -p tsconfig.scripts.json",
-        "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
+        "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
         "cleanup:qa": "node scripts/cleanup-local-qa-data.mjs --target-env local",
