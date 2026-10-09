@@ -51,6 +51,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -79,6 +80,14 @@ export const REQUIRED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPI
 export const MASKED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PRIVATE_KEY"];
 export const READY_TIMEOUT_MS = 3 * 60_000;
 export const READY_POLL_MS = 5_000;
+// Every hashed file the build will serve from /assets/, and how long a fresh Worker gets to serve
+// them all. A brand-new Worker can answer /health while some static assets still 404 (seen on a
+// lazily loaded chunk), so the journeys would fail on their first page load for a reason that is
+// not the PR's.
+export const CLIENT_ASSETS_DIR = join("build", "client", "assets");
+export const ASSETS_READY_TIMEOUT_MS = 2 * 60_000;
+export const ASSET_FETCH_CONCURRENCY = 8;
+export const EXPECTED_ASSET_TYPES = { ".js": /javascript/, ".css": /^text\/css/ };
 // Cloudflare's API allows 1,200 requests per 5 minutes per user, shared by every concurrent run.
 // A rate-limited request backs off for up to about 4 minutes in all (each delay jittered between
 // half and one and a half times its base, and never shorter than the response's Retry-After), so a
@@ -409,6 +418,7 @@ export const defaultFs = {
   exists: existsSync,
   mkdir: mkdirSync,
   remove: rmSync,
+  listDir: readdirSync,
 };
 
 // Creates the run's database. A create retried after a 5xx can find that the first try worked,
@@ -527,6 +537,53 @@ async function waitFor(check, { now, sleep, timeoutMs, describe }) {
   }
 }
 
+export function builtAssetPaths(fs) {
+  const names = fs.exists(CLIENT_ASSETS_DIR) ? fs.listDir(CLIENT_ASSETS_DIR).map(String) : [];
+  const paths = names.filter((name) => /^[^/]+\.[A-Za-z0-9]+$/.test(name)).sort().map((name) => `/assets/${name}`);
+  if (paths.length === 0) throw new Error(`${CLIENT_ASSETS_DIR} has no built assets; run the QA build before verify.`);
+  return paths;
+}
+
+async function assetProblem(fetchImpl, url, path) {
+  try {
+    const response = await fetchImpl(url, { redirect: "manual" });
+    if (response.status !== 200) return `${path} returned ${response.status}`;
+    const expected = EXPECTED_ASSET_TYPES[/\.[A-Za-z0-9]+$/.exec(path)[0]];
+    const type = response.headers?.get?.("content-type") ?? "";
+    if (expected && !expected.test(type)) return `${path} was served as ${type || "no content-type"}`;
+    return null;
+  } catch (error) {
+    return `${path} failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+// Polls every built asset until each returns 200 with the right content-type, re-checking only the
+// ones still missing, and fails with a clear message (not a test failure) after the bound.
+export async function waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl, timeoutMs = ASSETS_READY_TIMEOUT_MS }) {
+  const all = builtAssetPaths(fs);
+  let pending = all;
+  const started = now();
+  for (;;) {
+    const problems = [];
+    for (let index = 0; index < pending.length; index += ASSET_FETCH_CONCURRENCY) {
+      const batch = pending.slice(index, index + ASSET_FETCH_CONCURRENCY);
+      const results = await Promise.all(batch.map((path) => assetProblem(fetchImpl, `${baseUrl}${path}`, path)));
+      results.forEach((problem, offset) => {
+        if (problem) problems.push({ path: batch[offset], problem });
+      });
+    }
+    if (problems.length === 0) return all.length;
+    pending = problems.map(({ path }) => path);
+    if (now() - started >= timeoutMs) {
+      const shown = problems.slice(0, 5).map(({ problem }) => problem).join("; ");
+      throw new Error(
+        `${problems.length} of ${all.length} built assets not live on ${baseUrl} after ${Math.round(timeoutMs / 1000)} s: ${shown}${problems.length > 5 ? "; …" : ""}.`,
+      );
+    }
+    await sleep(READY_POLL_MS);
+  }
+}
+
 export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
   requireGitHubActions(env);
   const state = readState(fs);
@@ -556,7 +613,9 @@ export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
     return script.status === 200 ? true : `${asset} returned ${script.status}`;
   }, { now, sleep, timeoutMs: READY_TIMEOUT_MS, describe: `${state.baseUrl} did not become ready` });
 
-  log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and hashed assets live.`);
+  const served = await waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl: state.baseUrl });
+
+  log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and all ${served} hashed assets live.`);
   return state;
 }
 

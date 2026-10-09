@@ -148,8 +148,9 @@ jobs:
           SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: node scripts/qa-run-scope.mjs deploy
 
-      # Secrets set, no pending migration, and /health plus a hashed script served from the run's
-      # URL, so the suite never starts against a Worker that is not live yet.
+      # Secrets set, no pending migration, /health up, and every file in build/client/assets served
+      # from the run's URL with the right content-type (bounded at 2 minutes), so the suite never
+      # starts against a Worker whose static assets have not all propagated yet.
       - name: Check this run's QA Worker is live
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

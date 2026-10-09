@@ -12,6 +12,11 @@ import {
   MAX_RETRY_AFTER_MS,
   MAX_RUN_WORKERS,
   READY_TIMEOUT_MS,
+  ASSETS_READY_TIMEOUT_MS,
+  ASSET_FETCH_CONCURRENCY,
+  CLIENT_ASSETS_DIR,
+  builtAssetPaths,
+  waitForBuiltAssets,
   REQUIRED_RUN_SECRETS,
   SECRETS_FILE,
   STALE_AFTER_MS,
@@ -87,7 +92,9 @@ function fakeFs(files: Record<string, string> = {}) {
     chmod: vi.fn((path: string, mode: number) => {
       modes.set(path, mode);
     }),
-    exists: vi.fn((path: string) => store.has(path)),
+    exists: vi.fn((path: string) => store.has(path) || [...store.keys()].some((key) => key.startsWith(`${path}/`))),
+    listDir: vi.fn((path: string) =>
+      [...store.keys()].filter((key) => key.startsWith(`${path}/`)).map((key) => key.slice(path.length + 1).split("/")[0])),
     mkdir: vi.fn(),
     remove: vi.fn((path: string) => {
       removed.push(path);
@@ -587,6 +594,10 @@ function scopedFiles(overrides: Record<string, unknown> = {}) {
   return fakeFs({
     [STATE_FILE]: JSON.stringify(state),
     [WRANGLER_CONFIG]: JSON.stringify(scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID)),
+    [`${CLIENT_ASSETS_DIR}/entry.client-AbC_1.js`]: "",
+    [`${CLIENT_ASSETS_DIR}/createLucideIcon-Xy9.js`]: "",
+    [`${CLIENT_ASSETS_DIR}/root-Q1.css`]: "",
+    [`${CLIENT_ASSETS_DIR}/nested/ignored.txt`]: "",
   });
 }
 
@@ -597,20 +608,28 @@ function verifyExec({ secrets = REQUIRED_RUN_SECRETS, migrations = "✅ No migra
   });
 }
 
-function site(routes: Record<string, { status: number; body?: string } | Error>) {
+type Route = { status: number; body?: string; type?: string };
+
+function site(routes: Record<string, Route | Error>) {
   return vi.fn(async (url: string) => {
     const path = url.slice(IDENTITY.baseUrl.length);
     const route = routes[path] ?? { status: 404 };
     if (route instanceof Error) throw route;
-    return { status: route.status, text: async () => route.body ?? "" };
+    const headers = new Headers(route.type === undefined ? {} : { "content-type": route.type });
+    return { status: route.status, headers, text: async () => route.body ?? "" };
   });
 }
 
-const LIVE = {
+const JS = "application/javascript; charset=utf-8";
+const LIVE: Record<string, Route> = {
   "/health": { status: 200 },
   "/": { status: 200, body: '<link rel="modulepreload" href="/assets/entry.client-AbC_1.js">' },
-  "/assets/entry.client-AbC_1.js": { status: 200 },
+  "/assets/entry.client-AbC_1.js": { status: 200, type: JS },
+  "/assets/createLucideIcon-Xy9.js": { status: 200, type: JS },
+  "/assets/root-Q1.css": { status: 200, type: "text/css; charset=utf-8" },
 };
+const ASSET_URLS = ["/assets/createLucideIcon-Xy9.js", "/assets/entry.client-AbC_1.js", "/assets/root-Q1.css"]
+  .map((path) => `${IDENTITY.baseUrl}${path}`);
 
 describe("verify", () => {
   it("passes once the run's Worker has its secrets, no pending migration, and serves /health and a hashed asset", async () => {
@@ -624,7 +643,65 @@ describe("verify", () => {
       `${IDENTITY.baseUrl}/health`,
       `${IDENTITY.baseUrl}/`,
       `${IDENTITY.baseUrl}/assets/entry.client-AbC_1.js`,
+      ...ASSET_URLS,
     ]);
+  });
+
+  it("waits until every built asset is live, re-fetching only the ones still missing", async () => {
+    let lucideTries = 0;
+    const live = site(LIVE);
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/assets/createLucideIcon-Xy9.js") && ++lucideTries < 3) {
+        if (lucideTries === 1) throw new Error("socket hang up");
+        throw "connection reset";
+      }
+      return live(url, init);
+    });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    await verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep, log });
+
+    expect(sleep).toHaveBeenCalledTimes(2);
+    const assetFetches = fetchImpl.mock.calls.map(([url]) => url).slice(3);
+    expect(assetFetches).toEqual([...ASSET_URLS, ASSET_URLS[0], ASSET_URLS[0]]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("all 3 hashed assets live"));
+  });
+
+  it.each([
+    ["a lazily loaded chunk keeps returning 404", { "/assets/createLucideIcon-Xy9.js": { status: 404 } }, "/assets/createLucideIcon-Xy9.js returned 404"],
+    ["a script is served as HTML", { "/assets/createLucideIcon-Xy9.js": { status: 200, type: "text/html" } }, "/assets/createLucideIcon-Xy9.js was served as text/html"],
+    ["a stylesheet has no content-type", { "/assets/root-Q1.css": { status: 200 } }, "/assets/root-Q1.css was served as no content-type"],
+  ])("fails with a clear assets-not-live message when %s", async (_name, broken, reason) => {
+    let clock = 0;
+    const sleep = vi.fn(async (ms: number) => {
+      clock += ms;
+    });
+    await expect(verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl: site({ ...LIVE, ...broken }), now: () => clock, sleep, log: vi.fn() }))
+      .rejects.toThrow(`1 of 3 built assets not live on ${IDENTITY.baseUrl} after ${ASSETS_READY_TIMEOUT_MS / 1000} s: ${reason}.`);
+    expect(clock).toBe(ASSETS_READY_TIMEOUT_MS);
+  });
+
+  it("lists at most five problems, fetches in bounded batches, and refuses a missing build", async () => {
+    const files = scopedFiles();
+    const routes: Record<string, Route> = { ...LIVE };
+    for (let index = 0; index < 9; index += 1) files.store.set(`${CLIENT_ASSETS_DIR}/chunk-${index}.js`, "");
+    let inFlight = 0;
+    let peak = 0;
+    const live = site(routes);
+    const fetchImpl = vi.fn(async (url: string) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return live(url);
+    });
+    await expect(waitForBuiltAssets({ fs: files.fs, fetchImpl, now: () => 0, sleep: vi.fn(), baseUrl: IDENTITY.baseUrl, timeoutMs: 0 }))
+      .rejects.toThrow(/^9 of 12 built assets not live .*chunk-4\.js returned 404; …\.$/);
+    expect(peak).toBeLessThanOrEqual(ASSET_FETCH_CONCURRENCY);
+
+    const empty = fakeFs();
+    expect(() => builtAssetPaths(empty.fs)).toThrow(`${CLIENT_ASSETS_DIR} has no built assets; run the QA build before verify.`);
+    expect(() => builtAssetPaths(fakeFs({ [`${CLIENT_ASSETS_DIR}/only-a-dir/x.js`]: "" }).fs)).toThrow(/no built assets/);
   });
 
   it("waits for a new hostname to come up", async () => {
@@ -633,8 +710,7 @@ describe("verify", () => {
       calls += 1;
       if (calls === 1) throw new Error("ENOTFOUND");
       if (calls === 2) throw "reset";
-      const route = LIVE[url.slice(IDENTITY.baseUrl.length) as keyof typeof LIVE];
-      return { status: route.status, text: async () => ("body" in route ? route.body : "") };
+      return site(LIVE)(url);
     });
     const sleep = vi.fn(async () => {});
     await verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep, log: vi.fn() });
@@ -826,6 +902,7 @@ describe("main and the CLI guard", () => {
     expect(api.createDatabase).toHaveBeenCalled();
 
     expect(await main(["deploy"], { env: RUN_ENV, exec: vi.fn(async () => ({ stdout: "", stderr: "" })), fs: files.fs, log })).toBe(1);
+    files.store.set(`${CLIENT_ASSETS_DIR}/entry.client-AbC_1.js`, "");
     await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
