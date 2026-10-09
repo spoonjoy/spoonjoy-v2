@@ -412,6 +412,7 @@ model Recipe {
   @@index([coverMode])
   @@index([deletedAt, updatedAt])
   @@index([chefId, deletedAt, updatedAt])
+  @@index([chefId, deletedAt, updatedAt, id])
 }
 
 model RecipeStep {
