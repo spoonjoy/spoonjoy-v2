@@ -590,6 +590,20 @@ function successfulD1Fetch() {
   }));
 }
 
+const PRE_MIGRATION_BOOKMARK = "000002d3-000002e9-000050ff-b5a760ef72525d4e6c502f1a227d77da";
+
+function successfulD1BookmarkFetch() {
+  return vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+    success: true,
+    errors: [],
+    messages: [],
+    result: { bookmark: PRE_MIGRATION_BOOKMARK },
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  }));
+}
+
 describe("remote mutation command oracle", () => {
   it.each([
     ["a bare Worker deploy", { command: "pnpm", args: ["exec", "wrangler", "deploy"] }, true],
@@ -814,6 +828,7 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
   return {
     artifactDir: "mcp-oauth-canary-artifacts",
     d1Fetch,
+    d1BookmarkFetch: successfulD1BookmarkFetch(),
     env: {
       PATH: "/test/bin",
       CLOUDFLARE_ACCOUNT_ID,
@@ -934,6 +949,127 @@ describe("immutable migration apply boundary", () => {
     expect(recordedCommands(runCommand)).not.toContain(
       "pnpm exec wrangler d1 migrations apply DB --remote",
     );
+  });
+
+  it("takes a D1 Time Travel restore point before applying migrations and records it in the artifact", async () => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    const order: string[] = [];
+    deps.d1BookmarkFetch.mockImplementation(async (...args) => {
+      order.push("bookmark");
+      return successfulD1BookmarkFetch()(...args);
+    });
+    deps.d1Fetch.mockImplementation(async (...args) => {
+      order.push("migrate");
+      return successfulD1Fetch()(...args);
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({
+        status: "promoted",
+        migrationApply: "succeeded",
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
+      });
+      expect(log).toHaveBeenCalledWith(`D1 restore point before migrations: ${PRE_MIGRATION_BOOKMARK}`);
+    } finally {
+      log.mockRestore();
+    }
+
+    expect(order).toEqual(["bookmark", "migrate"]);
+    const [url, request] = deps.d1BookmarkFetch.mock.calls[0]!;
+    expect(url).toBe(`https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${D1_DATABASE_ID}/time_travel/bookmark`);
+    expect(request).toEqual({ method: "GET", headers: { Authorization: `Bearer ${D1_API_TOKEN}` } });
+  });
+
+  it("takes no restore point when there is no migration to apply", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler d1 migrations list DB --remote": noPendingMigrations,
+    });
+    const deps = releaseDeps(runCommand);
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(result).toMatchObject({ status: "promoted", migrationApply: "not_needed" });
+    expect(result).not.toHaveProperty("preMigrationBookmark");
+    expect(deps.d1BookmarkFetch).not.toHaveBeenCalled();
+  });
+
+  it("reads the restore point with the runtime fetch when no bookmark fetch is injected", async () => {
+    const runtimeFetch = successfulD1BookmarkFetch();
+    vi.stubGlobal("fetch", runtimeFetch);
+    const { d1BookmarkFetch: _omitted, ...deps } = releaseDeps(successfulRunner());
+
+    try {
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ preMigrationBookmark: PRE_MIGRATION_BOOKMARK });
+      expect(runtimeFetch).toHaveBeenCalledTimes(1);
+      expect(deps.d1Fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    {
+      label: "a rejected request",
+      response: new Error(`transport ${D1_API_TOKEN}`),
+      failure: "Cloudflare D1 restore point request failed; no migration was applied.",
+    },
+    {
+      label: "an HTTP error",
+      response: new Response(`${D1_API_TOKEN}`, { status: 403 }),
+      failure: "Cloudflare D1 restore point request failed with HTTP 403; no migration was applied.",
+    },
+    {
+      label: "malformed JSON",
+      response: new Response(`${D1_API_TOKEN}`, { status: 200 }),
+      failure: "Cloudflare D1 restore point request returned malformed JSON; no migration was applied.",
+    },
+    {
+      label: "an unsuccessful envelope",
+      response: new Response(JSON.stringify({ success: false, result: { bookmark: PRE_MIGRATION_BOOKMARK } }), { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+    {
+      label: "a null body",
+      response: new Response("null", { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+    {
+      label: "a missing result",
+      response: new Response(JSON.stringify({ success: true }), { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+    {
+      label: "a malformed bookmark",
+      response: new Response(JSON.stringify({ success: true, result: { bookmark: "latest; DROP" } }), { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+  ] as const)("does not migrate without a restore point: $label", async ({ response, failure }) => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    if (response instanceof Error) deps.d1BookmarkFetch.mockRejectedValueOnce(response);
+    else deps.d1BookmarkFetch.mockResolvedValueOnce(response);
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-d1-restore-point-"));
+    deps.artifactDir = artifactDir;
+    deps.writeReleaseArtifact = (artifact) => writeReleaseArtifactFile(artifactDir, artifact);
+
+    try {
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(failure);
+      expect(deps.d1Fetch).not.toHaveBeenCalled();
+      const written = await readFile(path.join(artifactDir, "production-release.json"), "utf8");
+      expect(JSON.parse(written)).toMatchObject({
+        status: "failed_before_stage",
+        phase: "migration_review",
+        migrationApply: "not_started",
+        failure,
+      });
+      expect(written).not.toContain("preMigrationBookmark");
+      expect(written).not.toContain(D1_API_TOKEN);
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
   });
 
   it("uses the runtime fetch implementation when no D1 fetch dependency is injected", async () => {
@@ -3187,6 +3323,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
     });
@@ -3721,6 +3858,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -3856,6 +3994,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -3943,6 +4082,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "stage failed",
@@ -3995,6 +4135,7 @@ describe("production canary release orchestration", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "stage failed",
@@ -4108,6 +4249,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "Production version did not converge to " + CANDIDATE_VERSION + ".",
@@ -4158,6 +4300,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -4935,6 +5078,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "failed",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       failure: "Cloudflare D1 migration query request failed.",
     });
@@ -4961,6 +5105,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       failure: "full preflight failed",
     });
@@ -4992,6 +5137,7 @@ describe("release failure containment", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: "upload failed",
       });
@@ -5134,6 +5280,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
     });
@@ -5148,6 +5295,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "disk unavailable",
@@ -5188,6 +5336,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -5221,6 +5370,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -5260,6 +5410,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "promotion failed",
@@ -5306,6 +5457,7 @@ describe("release failure containment", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "promotion failed",
@@ -5357,6 +5509,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "promotion failed [REDACTED]",
@@ -5673,6 +5826,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "Bearer visible token=value\nnext",
@@ -5699,6 +5853,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "Bearer [REDACTED] token=[REDACTED] next",
@@ -5716,6 +5871,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "failed",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: "migration apply failed",
       } as ReleaseArtifact & {
@@ -5733,9 +5889,33 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "failed",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: "migration apply failed",
       });
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["a malformed restore point", "not-a-bookmark", "succeeded"],
+    ["a restore point when no migration ran", PRE_MIGRATION_BOOKMARK, "not_started"],
+  ] as const)("rejects an artifact with %s", async (_label, preMigrationBookmark, migrationApply) => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-bad-restore-point-"));
+    try {
+      await expect(writeReleaseArtifactFile(artifactDir, {
+        status: "failed_before_stage",
+        sourceSha: RELEASE_SHA,
+        releaseMode: "atomic-bootstrap",
+        deploymentStrategy: "atomic",
+        phase: "migration_review",
+        reviewedMigrations: ["0024_add_release_marker.sql"],
+        migrationApply,
+        databaseRollbackSupported: false,
+        preMigrationBookmark,
+        failure: "stopped",
+      } as ReleaseArtifact)).rejects.toThrow("lifecycle");
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -6163,6 +6343,7 @@ describe("release artifact and CLI boundary", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
     };
@@ -6199,6 +6380,7 @@ describe("release artifact and CLI boundary", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "failed",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       failure: "migration failed",
     };
@@ -6748,6 +6930,7 @@ describe("release artifact and CLI boundary", () => {
         ...postHogArtifactReaderDeps("https://us.i.posthog.com"),
         argv: ["--artifact-dir", artifactDir],
         d1Fetch: successfulD1Fetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
         env: {
           CLOUDFLARE_ACCOUNT_ID,
           CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -6807,6 +6990,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
       };
@@ -7287,6 +7471,7 @@ describe("release artifact and CLI boundary", () => {
       const result = await runProductionReleaseCli({
         ...postHogArtifactReaderDeps(),
         d1Fetch: successfulD1Fetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
         env: {
           CLOUDFLARE_ACCOUNT_ID,
           CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -7332,6 +7517,7 @@ describe("release artifact and CLI boundary", () => {
       await expect(runProductionReleaseCli({
         ...postHogArtifactReaderDeps(),
         d1Fetch: successfulD1Fetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
         env: {
           CLOUDFLARE_ACCOUNT_ID,
           CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -7394,6 +7580,8 @@ describe("release artifact and CLI boundary", () => {
         await expect(runProductionReleaseCli({
           ...postHogArtifactReaderDeps(),
           d1Fetch: successfulD1Fetch(),
+          d1BookmarkFetch: successfulD1BookmarkFetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
           env: {
             CLOUDFLARE_ACCOUNT_ID,
             CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -8062,6 +8250,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: failurePoint === "D1 apply" ? "failed" : "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: failurePoint === "D1 apply"
           ? "Cloudflare D1 migration query request failed."
@@ -8135,6 +8324,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         ...(candidateWasResolved ? { candidateVersionId: CANDIDATE_VERSION } : {}),
         failure: failurePoint === "convergence"
@@ -8297,6 +8487,7 @@ describe("release artifact and CLI boundary", () => {
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...(migrationApply === "succeeded" ? { preMigrationBookmark: PRE_MIGRATION_BOOKMARK } : {}),
           previousVersionId: PREVIOUS_VERSION,
           candidateVersionId: CANDIDATE_VERSION,
         });
@@ -8310,6 +8501,7 @@ describe("release artifact and CLI boundary", () => {
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...(migrationApply === "succeeded" ? { preMigrationBookmark: PRE_MIGRATION_BOOKMARK } : {}),
           previousVersionId: PREVIOUS_VERSION,
           candidateVersionId: CANDIDATE_VERSION,
           failure: "artifact failed [REDACTED] [REDACTED]",

@@ -22,6 +22,8 @@ const MIGRATION_NAME_PATTERN = /^\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql$/;
 const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql\b/g;
 const CLOUDFLARE_ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/;
 const CLOUDFLARE_API_TOKEN_PATTERN = /^[\x21-\x7e]{1,2048}$/;
+// A D1 Time Travel bookmark, as `wrangler d1 time-travel info` prints it.
+const D1_BOOKMARK_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{32}$/;
 const D1_MIGRATIONS_TABLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RFC3339_UTC_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
@@ -112,6 +114,12 @@ export interface ReleaseArtifact {
   reviewedMigrations: string[];
   migrationApply: "not_started" | "not_needed" | "attempted" | "succeeded" | "failed";
   databaseRollbackSupported: false;
+  /**
+   * The D1 Time Travel bookmark taken just before the reviewed migrations were applied: the
+   * point to restore the database to if a migration damaged data (docs/d1-restore-runbook.md).
+   * Restoring is a manual decision; the release never restores the database itself.
+   */
+  preMigrationBookmark?: string;
   previousVersionId?: string;
   candidateVersionId?: string;
   failure?: string;
@@ -121,6 +129,8 @@ export interface ReleaseArtifact {
 interface RunProductionCanaryReleaseDeps {
   artifactDir: string;
   d1Fetch?: typeof fetch;
+  /** Reads the D1 Time Travel bookmark before migrating; separate from d1Fetch, which applies them. */
+  d1BookmarkFetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   postHogHost: string;
   readBootstrapProbe?: (
@@ -1156,6 +1166,43 @@ async function applyReviewedMigrations(
   }
 }
 
+/**
+ * Reads the production database's current Time Travel bookmark, the restore point for the
+ * migrations about to run. The release stops before migrating when it cannot get one.
+ */
+async function readD1RestorePoint(
+  config: ProductionD1Config,
+  credentials: { accountId: string; token: string },
+  fetchImpl: typeof fetch,
+): Promise<string> {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${credentials.accountId}/d1/database/${config.databaseId}/time_travel/bookmark`;
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${credentials.token}` },
+    });
+  } catch {
+    throw new Error("Cloudflare D1 restore point request failed; no migration was applied.");
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudflare D1 restore point request failed with HTTP ${response.status}; no migration was applied.`);
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Cloudflare D1 restore point request returned malformed JSON; no migration was applied.");
+  }
+  const bookmark = (payload as { success?: unknown; result?: { bookmark?: unknown } } | null)?.success === true
+    ? (payload as { result?: { bookmark?: unknown } }).result?.bookmark
+    : undefined;
+  if (typeof bookmark !== "string" || !D1_BOOKMARK_PATTERN.test(bookmark)) {
+    throw new Error("Cloudflare D1 restore point response had no valid bookmark; no migration was applied.");
+  }
+  return bookmark;
+}
+
 function migrationNamesMatch(
   actual: readonly string[],
   expected: readonly ReviewedMigration[],
@@ -1863,6 +1910,10 @@ export async function runProductionCanaryRelease(
   let reviewedMigrations: string[] = [];
   let reviewedMigrationState: ReviewedMigration[] = [];
   let migrationApply: ReleaseArtifact["migrationApply"] = "not_started";
+  let preMigrationBookmark: string | undefined;
+  const restorePoint = (): Pick<ReleaseArtifact, "preMigrationBookmark"> => (
+    preMigrationBookmark ? { preMigrationBookmark } : {}
+  );
   let previousVersionId: string | undefined;
   let candidateVersionId: string | undefined;
   let previousDeployment: ProductionDeployment | undefined;
@@ -2007,6 +2058,12 @@ export async function runProductionCanaryRelease(
         "Active production version changed before D1 migration apply.",
       );
       const productionD1Credentials = requireProductionD1Credentials(d1Env);
+      preMigrationBookmark = await readD1RestorePoint(
+        productionD1Config,
+        productionD1Credentials,
+        deps.d1BookmarkFetch ?? fetch,
+      );
+      console.log(`D1 restore point before migrations: ${preMigrationBookmark}`);
 
       phase = "migration_apply";
       migrationApply = "attempted";
@@ -2226,6 +2283,7 @@ export async function runProductionCanaryRelease(
       reviewedMigrations,
       migrationApply,
       databaseRollbackSupported: false,
+      ...restorePoint(),
       previousVersionId,
       candidateVersionId,
     };
@@ -2308,6 +2366,7 @@ export async function runProductionCanaryRelease(
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...restorePoint(),
           previousVersionId,
           candidateVersionId,
           failure,
@@ -2347,6 +2406,7 @@ export async function runProductionCanaryRelease(
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...restorePoint(),
           previousVersionId,
           candidateVersionId,
           failure,
@@ -2371,6 +2431,7 @@ export async function runProductionCanaryRelease(
         reviewedMigrations,
         migrationApply,
         databaseRollbackSupported: false,
+        ...restorePoint(),
         previousVersionId,
         candidateVersionId,
         failure,
@@ -2388,6 +2449,7 @@ export async function runProductionCanaryRelease(
       reviewedMigrations,
       migrationApply,
       databaseRollbackSupported: false,
+      ...restorePoint(),
       ...(previousVersionId ? { previousVersionId } : {}),
       ...(candidateVersionId ? { candidateVersionId } : {}),
       failure,
@@ -2458,6 +2520,10 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
     if (!RELEASE_SHA_PATTERN.test(String(value.protocolV1BoundarySha))) fail();
   } else if (present("protocolV1BoundarySha")) fail();
   if (value.databaseRollbackSupported !== false) fail();
+  if (present("preMigrationBookmark")) {
+    if (!D1_BOOKMARK_PATTERN.test(String(value.preMigrationBookmark))) fail();
+    if (!inSet(migrationApply, ["attempted", "succeeded", "failed"])) fail();
+  }
   if (!reviewedMigrations.every((name: unknown) => (
     typeof name === "string" && MIGRATION_NAME_PATTERN.test(name) && !name.includes("..")
   ))) fail();
@@ -2655,6 +2721,7 @@ export async function writeReleaseArtifactFile(
     reviewedMigrations: [...artifact.reviewedMigrations],
     migrationApply: artifact.migrationApply,
     databaseRollbackSupported: false,
+    ...(artifact.preMigrationBookmark ? { preMigrationBookmark: artifact.preMigrationBookmark } : {}),
     ...(artifact.previousVersionId ? { previousVersionId: artifact.previousVersionId } : {}),
     ...(artifact.candidateVersionId ? { candidateVersionId: artifact.candidateVersionId } : {}),
     ...(artifact.failure ? { failure: sanitizedFailure(artifact.failure) } : {}),
@@ -2721,6 +2788,7 @@ export function parseReleaseCliOptions(argv: readonly string[], env: NodeJS.Proc
 interface ReleaseCliDeps {
   argv?: readonly string[];
   d1Fetch?: typeof fetch;
+  d1BookmarkFetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   execFileImpl?: ExecFileLike;
   readBootstrapProbe?: (
@@ -2775,6 +2843,7 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
   return runProductionCanaryRelease({
     ...shared,
     ...(deps.d1Fetch ? { d1Fetch: deps.d1Fetch } : {}),
+    ...(deps.d1BookmarkFetch ? { d1BookmarkFetch: deps.d1BookmarkFetch } : {}),
   });
 }
 

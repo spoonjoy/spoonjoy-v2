@@ -2111,6 +2111,55 @@ describe("deployment preflight", () => {
     }
   }, 120_000);
 
+  it("keeps a valid pre-migration restore point and distrusts a malformed or impossible one", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-restore-point-artifact-"));
+    const artifactPath = path.join(root, "mcp-oauth-canary-artifacts/production-release.json");
+    const sourceSha = "a".repeat(40);
+    const complete = {
+      status: "promoted",
+      sourceSha,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: "b".repeat(40),
+      reviewedMigrations: ["0024_add_release_marker.sql"],
+      migrationApply: "succeeded",
+      databaseRollbackSupported: false,
+      preMigrationBookmark: "000002d3-000002e9-000050ff-b5a760ef72525d4e6c502f1a227d77da",
+      previousVersionId: "11111111-1111-4111-8111-111111111111",
+      candidateVersionId: "22222222-2222-4222-8222-222222222222",
+    };
+    const script = workflowRunScript(
+      secureProductionDeployWorkflow("atomic-product-activation", ""),
+      "Ensure release artifact exists",
+      "Upload MCP OAuth canary artifacts",
+    );
+    const env = { ...process.env, SOURCE_SHA: sourceSha, SPOONJOY_RELEASE_MODE: "atomic-product-activation", SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "" };
+
+    try {
+      await mkdir(path.dirname(artifactPath), { recursive: true });
+      await writeFile(artifactPath, JSON.stringify(complete));
+      await execFile("bash", ["-c", script], { cwd: root, env });
+      expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(complete);
+
+      for (const invalid of [
+        { ...complete, preMigrationBookmark: "latest" },
+        { ...complete, preMigrationBookmark: 7 },
+        { ...complete, reviewedMigrations: [], migrationApply: "not_needed" },
+      ]) {
+        await writeFile(artifactPath, JSON.stringify(invalid));
+        await execFile("bash", ["-c", script], { cwd: root, env });
+        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toMatchObject({
+          status: "forward_repair_required",
+          phase: "unknown",
+          failure: "Release workflow failed without a trustworthy orchestrator artifact.",
+        });
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it.each([
     ["a missing canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""'],
     ["a malformed canary boundary", `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${"d".repeat(40)}"`, '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "main"'],
