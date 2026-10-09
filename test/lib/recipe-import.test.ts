@@ -2203,6 +2203,94 @@ describe("importRecipeFromUrl — extraction paths", () => {
   });
 });
 
+describe("importRecipeFromSource — photos", () => {
+  const recipe = {
+    title: "Card Scones",
+    description: null,
+    servings: "8",
+    ingredients: ["2 cups flour"],
+    steps: ["Rub in the butter."],
+  };
+
+  function photoRunner(read: RecipeLlmRunner["extractFromPhoto"] = vi.fn(async () => recipe)): RecipeLlmRunner {
+    return { extract: vi.fn(), extractFromPhoto: read };
+  }
+
+  function photoSource(contentType = "image/png", photo = new Uint8Array([1, 2, 3])) {
+    return { type: "photo" as const, photo, contentType };
+  }
+
+  it("reads a large photo whole, as one data URL", async () => {
+    const chef = await makeChef();
+    const runner = photoRunner();
+    const photo = new Uint8Array(100_000).map((_, i) => i % 251);
+    const result = await importRecipeFromSource(
+      { chefId: chef.id, source: photoSource("image/webp", photo) },
+      baseDeps({ llmRunner: runner }),
+    );
+    expect(runner.extractFromPhoto).toHaveBeenCalledWith({
+      dataUrl: `data:image/webp;base64,${Buffer.from(photo).toString("base64")}`,
+    });
+    expect(result).toMatchObject({ source: "llm", confidence: "low", existingRecipeId: null });
+    await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+      title: "Card Scones",
+      servings: "8",
+      sourceUrl: null,
+    });
+  });
+
+  it.each([
+    ["a type the model can't read", photoSource("image/heic"), 415],
+    ["an empty photo", photoSource("image/png", new Uint8Array()), 413],
+    ["a photo over the limit", photoSource("image/png", new Uint8Array(10 * 1024 * 1024 + 1)), 413],
+  ])("refuses %s before spending a photo import", async (_name, source, status) => {
+    const chef = await makeChef();
+    const runner = photoRunner();
+    const error = await importRecipeFromSource({ chefId: chef.id, source }, baseDeps({ llmRunner: runner })).catch((e) => e);
+    expect(error).toBeInstanceOf(ImportRecipeError);
+    expect(error).toMatchObject({ code: "bad-image", status });
+    expect(runner.extractFromPhoto).not.toHaveBeenCalled();
+    await expect(db.imageGenLedger.count({ where: { userId: chef.id } })).resolves.toBe(0);
+  });
+
+  it("reports a model failure as llm-failed", async () => {
+    const chef = await makeChef();
+    const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+    const runner = photoRunner(vi.fn(async () => {
+      throw new RecipeLlmError("vision down");
+    }));
+    await expect(importRecipeFromSource({ chefId: chef.id, source: photoSource() }, baseDeps({ llmRunner: runner })))
+      .rejects.toMatchObject({ code: "llm-failed", status: 502, message: "vision down" });
+  });
+
+  it("lets an unexpected failure through", async () => {
+    const chef = await makeChef();
+    const runner = photoRunner(vi.fn(async () => {
+      throw new TypeError("bad bytes");
+    }));
+    await expect(importRecipeFromSource({ chefId: chef.id, source: photoSource() }, baseDeps({ llmRunner: runner })))
+      .rejects.toThrow("bad bytes");
+  });
+
+  it("needs a model key, like every other import", async () => {
+    const chef = await makeChef();
+    await expect(importRecipeFromSource(
+      { chefId: chef.id, source: photoSource() },
+      baseDeps({ llmRunner: undefined, env: {} }),
+    )).rejects.toMatchObject({ code: "llm-failed", message: "Photo reading is not configured" });
+  });
+
+  it("spends nothing and writes nothing on a dry run", async () => {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource(
+      { chefId: chef.id, source: photoSource(), dryRun: true },
+      baseDeps({ llmRunner: photoRunner() }),
+    );
+    expect(result.recipeId).toBeNull();
+    await expect(db.imageGenLedger.count({ where: { userId: chef.id } })).resolves.toBe(0);
+  });
+});
+
 describe("importRecipeFromSource — ingredient parsing and placement", () => {
   // Strips a leading quantity and unit, as the real parser does, so names read like the
   // ingredient the steps talk about.

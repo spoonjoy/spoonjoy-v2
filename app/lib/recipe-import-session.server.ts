@@ -6,7 +6,8 @@
  * kind "import"), the SSRF-guarded page fetch and the persistence. This module adds only what a
  * cookie session needs on top of it:
  *
- * - form parsing and size limits;
+ * - form parsing and size limits, including the photo checks (type and size) before any quota
+ *   is spent;
  * - the same provider gate the API applies (no OpenAI key, no import);
  * - the same per-IP request limiter the API applies (`API_IP_RATE_LIMITER`);
  * - a per-form import id, so a double submit opens the one recipe instead of writing two;
@@ -24,21 +25,24 @@ import {
   type ImportRecipeCode,
   type ImportRecipeDeps,
   type NativeRecipeImportSource,
+  RECIPE_PHOTO_MAX_BYTES,
+  RECIPE_PHOTO_TYPES,
 } from "~/lib/recipe-import.server";
 import { enforceRateLimit } from "~/lib/rate-limit.server";
-import { IMPORT_DAILY_CAP } from "~/lib/image-gen-ledger.server";
+import { IMPORT_DAILY_CAP, PHOTO_IMPORT_DAILY_CAP } from "~/lib/image-gen-ledger.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 
 export const IMPORT_URL_MAX_LENGTH = 2048;
 export const IMPORT_TEXT_MAX_LENGTH = 20000;
 
-export type SessionImportKind = "link" | "text";
+export type SessionImportKind = "link" | "text" | "photo";
 
 export interface SessionImportInput {
   kind: SessionImportKind;
   importId: string;
   url?: string;
   text?: string;
+  photo?: Blob;
 }
 
 export type SessionImportOutcome =
@@ -58,6 +62,9 @@ export const IMPORT_MESSAGES = {
   linkTooLong: "That link is too long to read. Try the page's shorter address.",
   textMissing: "Paste the recipe: its title, ingredients and steps.",
   textTooLong: `That's more text than one recipe needs. Paste up to ${IMPORT_TEXT_MAX_LENGTH.toLocaleString("en-US")} characters.`,
+  photoMissing: "Choose a photo of the recipe.",
+  photoType: "Spoonjoy can read a JPEG, PNG, WebP or GIF photo. Try another photo, or paste the recipe instead.",
+  photoTooLarge: `That photo is over ${RECIPE_PHOTO_MAX_BYTES / (1024 * 1024)} MB. Try a smaller one, or a screenshot of it.`,
   unavailable: "Importing isn't switched on here yet. You can still write the recipe below.",
   busy: "That's a lot of imports at once. Wait a minute, then try again.",
   failed: "Something went wrong while bringing that recipe in. Try again, or write it below.",
@@ -76,6 +83,12 @@ const PIPELINE_MESSAGES: Record<ImportRecipeCode, string> = {
   "title-conflict": "You already have recipes with this title. Rename one of them, then import again.",
   "oembed-failed": "We couldn't read that video. Paste the recipe from its description instead.",
   "video-unavailable": "That video isn't available. Paste the recipe from its description instead.",
+  "bad-image": IMPORT_MESSAGES.photoType,
+};
+
+const PHOTO_MESSAGES: Partial<Record<ImportRecipeCode, string>> = {
+  "no-content": "We couldn't read a recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
+  "rate-limited": `You've read ${PHOTO_IMPORT_DAILY_CAP} recipe photos today, the daily limit. Paste the recipe instead, or try the photo tomorrow.`,
 };
 
 const TEXT_NO_CONTENT_MESSAGE = "We couldn't find a recipe in that text. Include the ingredients and the steps.";
@@ -88,7 +101,8 @@ export function sessionImportRecipeId(importId: string): string {
 export function parseSessionImportForm(
   formData: FormData,
 ): { ok: true; input: SessionImportInput } | { ok: false; kind: SessionImportKind; message: string } {
-  const kind: SessionImportKind = formData.get("importKind")?.toString() === "text" ? "text" : "link";
+  const rawKind = formData.get("importKind")?.toString();
+  const kind: SessionImportKind = rawKind === "text" || rawKind === "photo" ? rawKind : "link";
   // The page sets an id per submission once it has loaded; a form sent before that gets a
   // fresh one (it just has no double-submit protection).
   const rawImportId = formData.get("importId")?.toString() ?? "";
@@ -102,6 +116,16 @@ export function parseSessionImportForm(
     if (!text.trim()) return { ok: false, kind, message: IMPORT_MESSAGES.textMissing };
     if (text.length > IMPORT_TEXT_MAX_LENGTH) return { ok: false, kind, message: IMPORT_MESSAGES.textTooLong };
     return { ok: true, input: { kind, importId, text } };
+  }
+
+  if (kind === "photo") {
+    const photo = formData.get("photo");
+    if (!(photo instanceof Blob) || photo.size === 0) return { ok: false, kind, message: IMPORT_MESSAGES.photoMissing };
+    if (!(RECIPE_PHOTO_TYPES as readonly string[]).includes(photo.type)) {
+      return { ok: false, kind, message: IMPORT_MESSAGES.photoType };
+    }
+    if (photo.size > RECIPE_PHOTO_MAX_BYTES) return { ok: false, kind, message: IMPORT_MESSAGES.photoTooLarge };
+    return { ok: true, input: { kind, importId, photo } };
   }
 
   const url = formData.get("url")?.toString().trim() ?? "";
@@ -178,7 +202,9 @@ export async function importRecipeForSession(args: SessionImportArgs): Promise<S
 
   const source: NativeRecipeImportSource = input.kind === "text"
     ? { type: "text", text: input.text! }
-    : { type: "url", url: input.url! };
+    : input.kind === "photo"
+      ? { type: "photo", photo: new Uint8Array(await input.photo!.arrayBuffer()), contentType: input.photo!.type }
+      : { type: "url", url: input.url! };
 
   const deps: ImportRecipeDeps = {
     db,
@@ -198,9 +224,9 @@ export async function importRecipeForSession(args: SessionImportArgs): Promise<S
     return { ok: true, recipeId };
   } catch (error) {
     if (error instanceof ImportRecipeError) {
-      const message = error.code === "no-content" && input.kind === "text"
-        ? TEXT_NO_CONTENT_MESSAGE
-        : PIPELINE_MESSAGES[error.code];
+      const message = (input.kind === "photo" ? PHOTO_MESSAGES[error.code] : undefined)
+        ?? (error.code === "no-content" && input.kind === "text" ? TEXT_NO_CONTENT_MESSAGE : undefined)
+        ?? PIPELINE_MESSAGES[error.code];
       return { ok: false, kind: input.kind, message };
     }
     // A thrown write is not proof nothing landed (a concurrent submit of the same form, or an

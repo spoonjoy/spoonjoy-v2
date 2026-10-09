@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { db } from "~/lib/db.server";
 import {
   IMPORT_DAILY_CAP,
+  PHOTO_IMPORT_DAILY_CAP,
   PLACEHOLDER_DAILY_CAP,
   STYLIZATION_DAILY_CAP,
   tryConsumeImageGenQuota,
@@ -162,6 +163,20 @@ describe("image-gen-ledger.server", () => {
     expect(ok).toBe(true);
     const row = await db.imageGenLedger.findFirst({ where: { userId, kind: "placeholder" } });
     expect(row?.count).toBe(1);
+  });
+
+  describe("kind=import-photo", () => {
+    it("allows ten photo imports a day, counted apart from other imports", async () => {
+      const now = () => new Date("2026-05-11T08:30:00Z");
+      expect(PHOTO_IMPORT_DAILY_CAP).toBe(10);
+      for (let i = 0; i < PHOTO_IMPORT_DAILY_CAP; i++) {
+        await expect(tryConsumeImageGenQuota(db, userId, "import-photo", { now })).resolves.toBe(true);
+      }
+      await expect(tryConsumeImageGenQuota(db, userId, "import-photo", { now })).resolves.toBe(false);
+      await expect(tryConsumeImageGenQuota(db, userId, "import", { now })).resolves.toBe(true);
+      const row = await db.imageGenLedger.findFirst({ where: { userId, kind: "import-photo" } });
+      expect(row?.count).toBe(PHOTO_IMPORT_DAILY_CAP);
+    });
   });
 
   describe("kind=import", () => {

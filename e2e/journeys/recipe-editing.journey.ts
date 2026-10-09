@@ -11,6 +11,12 @@ import type { Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 
+// A 1×1 PNG: enough to be a real photo file for the import form.
+const RECIPE_CARD_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 // A recipe page, not /recipes/new.
 const RECIPE_URL = /\/recipes\/(?!new$)[^/?#]+$/;
 
@@ -215,7 +221,7 @@ test.describe("Recipe create and edit", () => {
   // QA has no OpenAI key (see AGENTS.md), so import answers that it isn't switched on rather than
   // reading the page; if that secret is ever added to QA, this test must import a seeded page
   // instead. It writes nothing, so it is not tagged @mutates.
-  test("a chef is offered import first on New Recipe, and gets a plain answer when it is unavailable", async ({
+  test("a chef is offered import first on New Recipe, by link, text or photo, and gets a plain answer when it is unavailable", async ({
     page,
     expectAccessible,
   }) => {
@@ -233,6 +239,20 @@ test.describe("Recipe create and edit", () => {
     await page.getByRole("button", { name: "Paste the recipe", exact: true }).click();
     await expect(page.getByLabel("Recipe text", { exact: true })).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
+    await expectAccessible();
+
+    // A photo reaches the server: one that went missing on the way would be answered with
+    // "Choose a photo of the recipe." instead.
+    await page.getByRole("button", { name: "From a photo", exact: true }).click();
+    await page.getByLabel("Recipe photo", { exact: true }).setInputFiles({
+      name: "recipe-card.png",
+      mimeType: "image/png",
+      buffer: RECIPE_CARD_PNG,
+    });
+    await page.getByRole("button", { name: "Import recipe", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText("Importing isn't switched on here yet. You can still write the recipe below.");
+    await expect(page.getByRole("button", { name: "From a photo", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page).toHaveURL(pathUrl("/recipes/new"));
     await expectAccessible();
   });
 });

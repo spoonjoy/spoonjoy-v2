@@ -1,11 +1,13 @@
 /**
  * RecipeImportPanel: the first choice on New Recipe.
  *
- * A cook brings in a recipe they already have, from a link or by pasting the recipe itself.
- * The form posts `intent=import` to the New Recipe action, which runs the shared import
- * pipeline and opens the imported recipe in the editor for review.
+ * A cook brings in a recipe they already have: from a link, by pasting the recipe itself, or
+ * from a photo of a card, a cookbook page or a screen. The form posts `intent=import` to the
+ * New Recipe action, which runs the shared import pipeline and opens the imported recipe in
+ * the editor for review.
  */
 import { useId, useRef, useState, type FormEvent } from "react";
+import * as Headless from "@headlessui/react";
 import { Form, useNavigation } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -14,7 +16,7 @@ import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { Link } from "~/components/ui/link";
 
-export type RecipeImportKind = "link" | "text";
+export type RecipeImportKind = "link" | "text" | "photo";
 
 export interface RecipeImportActionData {
   kind: RecipeImportKind;
@@ -24,11 +26,16 @@ export interface RecipeImportActionData {
 
 const TEXT_MAX_LENGTH = 20000;
 const URL_MAX_LENGTH = 2048;
+// Listing the types (not image/*) makes iPhones hand over a JPEG instead of a HEIC photo.
+const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
 const KIND_OPTIONS: Array<{ kind: RecipeImportKind; label: string }> = [
   { kind: "link", label: "From a link" },
   { kind: "text", label: "Paste the recipe" },
+  { kind: "photo", label: "From a photo" },
 ];
+
+const FIELD_NAME: Record<RecipeImportKind, string> = { link: "url", text: "text", photo: "photo" };
 
 function newImportId(): string {
   return crypto.randomUUID();
@@ -62,8 +69,10 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const form = event.currentTarget;
-    const value = (form.elements.namedItem(kind === "link" ? "url" : "text") as HTMLInputElement).value;
-    const key = `${kind}:${value.trim()}`;
+    const field = form.elements.namedItem(FIELD_NAME[kind]) as HTMLInputElement;
+    const photo = field.files?.[0];
+    const value = photo ? `${photo.name}:${photo.size}:${photo.lastModified}` : field.value.trim();
+    const key = `${kind}:${value}`;
     if (lastSubmission.current?.key !== key) {
       lastSubmission.current = { key, id: newImportId() };
     }
@@ -81,7 +90,7 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
       </p>
 
       <div
-        className="mt-6 grid max-w-xl grid-cols-2 border-y border-[var(--sj-border)] font-sj-ui text-xs font-bold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"
+        className="mt-6 grid max-w-xl grid-cols-3 border-y border-[var(--sj-border)] font-sj-ui text-xs font-bold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"
         role="group"
         aria-label="How to bring the recipe in"
       >
@@ -103,7 +112,7 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
         ))}
       </div>
 
-      <Form method="post" onSubmit={handleSubmit} className="mt-6 max-w-xl space-y-4" aria-labelledby={headingId}>
+      <Form method="post" encType="multipart/form-data" onSubmit={handleSubmit} className="mt-6 max-w-xl space-y-4" aria-labelledby={headingId}>
         <input type="hidden" name="intent" value="import" />
         <input type="hidden" name="importKind" value={kind} />
         <input type="hidden" name="importId" defaultValue="" />
@@ -125,6 +134,24 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
             <Description>Any recipe page, or a YouTube or TikTok video with the recipe in its description.</Description>
             {errorNode}
           </Field>
+        ) : kind === "photo" ? (
+          <Field disabled={pending}>
+            <Label>Recipe photo</Label>
+            <Headless.Input
+              key="photo"
+              name="photo"
+              type="file"
+              accept={PHOTO_ACCEPT}
+              required
+              invalid={showResult || undefined}
+              data-slot="control"
+              className="block w-full font-sj-ui text-sm/6 text-[var(--sj-ink-soft)] file:mr-4 file:min-h-11 file:cursor-pointer file:border file:border-[var(--sj-ink)] file:bg-transparent file:px-4 file:font-sj-ui file:text-xs file:font-bold file:uppercase file:tracking-[0.14em] file:text-[var(--sj-ink)] hover:file:bg-[var(--sj-ink)] hover:file:text-[var(--sj-paper)] data-disabled:opacity-50"
+            />
+            <Description>
+              A recipe card, a cookbook page or a screenshot, with the whole recipe in frame. Spoonjoy reads the title, ingredients and steps from it.
+            </Description>
+            {errorNode}
+          </Field>
         ) : (
           <Field>
             <Label>Recipe text</Label>
@@ -139,7 +166,7 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
               invalid={showResult || undefined}
             />
             <Description>
-              Paste the title, ingredients and steps. Have it on paper? On a phone, copy the text straight out of a photo of the page and paste it here.
+              Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead.
             </Description>
             {errorNode}
           </Field>

@@ -18,15 +18,35 @@ import {
 } from "~/lib/recipe-import-session.server";
 import { RecipeLlmError, type RecipeLlmRunner } from "~/lib/recipe-import-llm.server";
 import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
-import { IMPORT_DAILY_CAP, startOfUtcDay } from "~/lib/image-gen-ledger.server";
+import { IMPORT_DAILY_CAP, PHOTO_IMPORT_DAILY_CAP, startOfUtcDay } from "~/lib/image-gen-ledger.server";
+import { RECIPE_PHOTO_MAX_BYTES } from "~/lib/recipe-import.server";
 import * as analytics from "~/lib/analytics-server";
 
 const IMPORT_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
-function form(fields: Record<string, string>): FormData {
+function form(fields: Record<string, string | Blob>): FormData {
   const data = new FormData();
   for (const [key, value] of Object.entries(fields)) data.append(key, value);
   return data;
+}
+
+const PHOTO_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+
+function photoFile(type = "image/jpeg", bytes: Uint8Array = PHOTO_BYTES): File {
+  return new File([bytes], "card.jpg", { type });
+}
+
+function photoLlm(payload: Partial<{ title: string; ingredients: string[]; steps: string[] }>): RecipeLlmRunner {
+  return {
+    extract: vi.fn(),
+    extractFromPhoto: vi.fn(async () => ({
+      title: payload.title ?? "",
+      description: null,
+      servings: null,
+      ingredients: payload.ingredients ?? [],
+      steps: payload.steps ?? [],
+    })),
+  };
 }
 
 function htmlResponse(body: string, url = "https://example.com/r"): Response {
@@ -139,6 +159,32 @@ describe("parseSessionImportForm", () => {
     const fields: Record<string, string> = { importKind: "text", importId: IMPORT_ID };
     if (text !== undefined) fields.text = text;
     expect(parseSessionImportForm(form(fields))).toEqual({ ok: false, kind: "text", message });
+  });
+});
+
+describe("parseSessionImportForm — photos", () => {
+  it("accepts a photo of the recipe", () => {
+    const photo = photoFile();
+    const parsed = parseSessionImportForm(form({ importKind: "photo", importId: IMPORT_ID, photo }));
+    expect(parsed).toEqual({ ok: true, input: { kind: "photo", importId: IMPORT_ID, photo: expect.any(Blob) } });
+    if (parsed.ok) expect(parsed.input.photo!.type).toBe("image/jpeg");
+  });
+
+  it.each([
+    ["no photo", undefined, IMPORT_MESSAGES.photoMissing],
+    ["a text field instead of a file", "card.jpg", IMPORT_MESSAGES.photoMissing],
+    ["an empty file", photoFile("image/jpeg", new Uint8Array()), IMPORT_MESSAGES.photoMissing],
+    ["a HEIC photo", photoFile("image/heic"), IMPORT_MESSAGES.photoType],
+    ["a PDF", photoFile("application/pdf"), IMPORT_MESSAGES.photoType],
+    ["a photo over the size limit", photoFile("image/png", new Uint8Array(RECIPE_PHOTO_MAX_BYTES + 1)), IMPORT_MESSAGES.photoTooLarge],
+  ])("rejects %s", (_name, photo, message) => {
+    const fields: Record<string, string | Blob> = { importKind: "photo", importId: IMPORT_ID };
+    if (photo !== undefined) fields.photo = photo;
+    expect(parseSessionImportForm(form(fields))).toEqual({ ok: false, kind: "photo", message });
+  });
+
+  it("names the size limit in megabytes", () => {
+    expect(IMPORT_MESSAGES.photoTooLarge).toBe("That photo is over 10 MB. Try a smaller one, or a screenshot of it.");
   });
 });
 
@@ -308,6 +354,69 @@ describe("importRecipeForSession", () => {
     expect(outcome).toEqual({
       ok: false,
       kind: "text",
+      message: "Recipe reading isn't working right now. Try again in a few minutes, or write the recipe below.",
+    });
+  });
+
+  it("imports a photo with the vision model and spends one photo import, not a text one", async () => {
+    const runner = photoLlm({ title: "Nana's Scones", ingredients: ["2 cups flour", "1 egg"], steps: ["Rub the flour and butter.", "Beat in the egg."] });
+    const outcome = await importRecipeForSession(args(
+      { kind: "photo", photo: photoFile() },
+      { pipeline: { llmRunner: runner, ingredientParser: ingredientParser() } },
+    ));
+    expect(outcome).toEqual({ ok: true, recipeId: sessionImportRecipeId(IMPORT_ID) });
+    expect(runner.extractFromPhoto).toHaveBeenCalledWith({
+      dataUrl: `data:image/jpeg;base64,${Buffer.from(PHOTO_BYTES).toString("base64")}`,
+    });
+    expect(runner.extract).not.toHaveBeenCalled();
+    const recipe = await db.recipe.findUniqueOrThrow({
+      where: { id: sessionImportRecipeId(IMPORT_ID) },
+      include: { steps: { include: { ingredients: { include: { ingredientRef: true } } }, orderBy: { stepNum: "asc" } } },
+    });
+    expect(recipe).toMatchObject({ title: "Nana's Scones", sourceUrl: null, chefId });
+    expect(recipe.steps.map((step) => step.ingredients.map((i) => i.ingredientRef.name))).toEqual([["2 cups flour"], ["1 egg"]]);
+    const ledger = await db.imageGenLedger.findMany({ where: { userId: chefId } });
+    expect(ledger.map((row) => [row.kind, row.count])).toEqual([["import-photo", 1]]);
+  });
+
+  it("says import is not switched on for a photo when the server has no model key", async () => {
+    const runner = photoLlm({ title: "Toast" });
+    const outcome = await importRecipeForSession(args(
+      { kind: "photo", photo: photoFile() },
+      { context: context({}), pipeline: { llmRunner: runner } },
+    ));
+    expect(outcome).toEqual({ ok: false, kind: "photo", message: IMPORT_MESSAGES.unavailable });
+    expect(runner.extractFromPhoto).not.toHaveBeenCalled();
+  });
+
+  it("stops at the daily photo limit", async () => {
+    await db.imageGenLedger.create({
+      data: { userId: chefId, kind: "import-photo", bucketStart: startOfUtcDay(new Date()), count: PHOTO_IMPORT_DAILY_CAP },
+    });
+    const runner = photoLlm({ title: "Toast" });
+    const outcome = await importRecipeForSession(args({ kind: "photo", photo: photoFile() }, { pipeline: { llmRunner: runner } }));
+    expect(outcome).toEqual({
+      ok: false,
+      kind: "photo",
+      message: `You've read ${PHOTO_IMPORT_DAILY_CAP} recipe photos today, the daily limit. Paste the recipe instead, or try the photo tomorrow.`,
+    });
+    expect(runner.extractFromPhoto).not.toHaveBeenCalled();
+  });
+
+  it("explains a photo with no recipe in it", async () => {
+    const outcome = await importRecipeForSession(args({ kind: "photo", photo: photoFile() }, { pipeline: { llmRunner: photoLlm({ title: "" }) } }));
+    expect(outcome).toEqual({
+      ok: false,
+      kind: "photo",
+      message: "We couldn't read a recipe in that photo. Try a sharper photo with the whole recipe in it, or paste the recipe instead.",
+    });
+  });
+
+  it("explains that photo reading is down when the model can't read photos", async () => {
+    const outcome = await importRecipeForSession(args({ kind: "photo", photo: photoFile() }, { pipeline: { llmRunner: llm({ title: "Toast" }) } }));
+    expect(outcome).toEqual({
+      ok: false,
+      kind: "photo",
       message: "Recipe reading isn't working right now. Try again in a few minutes, or write the recipe below.",
     });
   });

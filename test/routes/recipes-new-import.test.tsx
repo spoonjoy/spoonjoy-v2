@@ -126,14 +126,58 @@ describe("RecipeImportPanel", () => {
     expect(screen.getByLabelText("Recipe link")).toHaveAttribute("type", "url");
   });
 
-  it("switches to pasting the recipe, with the photo tip", async () => {
+  it("switches to pasting the recipe, pointing paper recipes at the photo option", async () => {
     const user = userEvent.setup();
     renderPanel(() => null);
     await user.click(await screen.findByRole("button", { name: "Paste the recipe" }));
     expect(screen.getByRole("button", { name: "Paste the recipe" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("Recipe link")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Recipe text").tagName).toBe("TEXTAREA");
-    expect(screen.getByText(/copy the text straight out of a photo/)).toBeInTheDocument();
+    expect(screen.getByText("Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead.")).toBeInTheDocument();
+  });
+
+  it("takes a photo of the recipe, posts it with an import id, and reuses the id only for the same photo", async () => {
+    const user = userEvent.setup();
+    const posts: Array<{ kind: string; importId: string }> = [];
+    // The test router's request drops file bodies, so read the photo off the form as it submits.
+    const submittedPhotos: string[] = [];
+    const onSubmit = (event: Event) => {
+      const field = (event.target as HTMLFormElement).elements.namedItem("photo") as HTMLInputElement | null;
+      submittedPhotos.push(field?.files?.[0]?.name ?? "none");
+    };
+    document.addEventListener("submit", onSubmit, true);
+    renderPanel((formData) => {
+      posts.push({ kind: String(formData.get("importKind")), importId: String(formData.get("importId")) });
+      return { importResult: { kind: "photo", message: "We couldn't read a recipe in that photo." } };
+    });
+    await user.click(await screen.findByRole("button", { name: "From a photo" }));
+    expect(screen.getByRole("button", { name: "From a photo" })).toHaveAttribute("aria-pressed", "true");
+    const field = screen.getByLabelText("Recipe photo");
+    expect(field).toHaveAttribute("type", "file");
+    expect(field).toHaveAttribute("accept", "image/jpeg,image/png,image/webp,image/gif");
+    expect(field).toBeRequired();
+    expect(screen.getByText(/A recipe card, a cookbook page or a screenshot/)).toBeInTheDocument();
+
+    await user.upload(field, new File([new Uint8Array([1, 2, 3])], "card.jpg", { type: "image/jpeg" }));
+    await user.click(screen.getByRole("button", { name: "Import recipe" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We couldn't read a recipe in that photo.");
+    expect(screen.getByLabelText("Recipe photo")).toHaveAttribute("aria-invalid", "true");
+    expect(posts[0].kind).toBe("photo");
+    expect(posts[0].importId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(submittedPhotos[0]).toBe("card.jpg");
+
+    await user.click(screen.getByRole("button", { name: "Import recipe" }));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1].importId).toBe(posts[0].importId);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Import recipe" })).toBeEnabled());
+    await user.upload(screen.getByLabelText("Recipe photo"), new File([new Uint8Array([4, 5])], "page.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: "Import recipe" }));
+    await waitFor(() => expect(posts).toHaveLength(3));
+    expect(posts[2].importId).not.toBe(posts[0].importId);
+    expect(submittedPhotos).toEqual(["card.jpg", "card.jpg", "page.png"]);
+    document.removeEventListener("submit", onSubmit, true);
   });
 
   it("posts the link with an import id, shows the answer, and reuses the id only for the same link", async () => {
