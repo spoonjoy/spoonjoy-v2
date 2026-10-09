@@ -59,6 +59,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Dev/test platform-proxy bind failure falls back to a local SQLite db; restricted sandboxes legitimately cannot bind loopback ports.",
   },
   {
+    file: "app/lib/photo-delivery.server.ts",
+    category: "swallow",
+    reason:
+      "A /photos/ path that is not valid percent-encoding is answered as not found, and a failed edge-cache write is skipped because the photo was already served from R2.",
+  },
+  {
     file: "app/lib/recipe-import-jsonld.server.ts",
     category: "swallow",
     reason:

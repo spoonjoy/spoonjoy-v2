@@ -11,6 +11,10 @@ declare global {
 
   interface R2ObjectBody {
     body: BodyInit | null;
+    /** Stored size in bytes. */
+    size: number;
+    /** The object's ETag, quoted, ready for an ETag header. */
+    httpEtag: string;
     httpMetadata?: {
       contentType?: string;
     };
@@ -23,7 +27,8 @@ declare global {
       value: Blob | ArrayBuffer | ArrayBufferView | ReadableStream,
       options?: { httpMetadata?: { contentType?: string } }
     ): Promise<unknown>;
-    delete(key: string): Promise<void>;
+    /** Deletes one key or, in one call, up to 1000 keys. */
+    delete(keys: string | string[]): Promise<void>;
   }
 
   interface ExecutionContext {
