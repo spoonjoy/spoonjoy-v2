@@ -102,7 +102,7 @@ function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
     <Headless.Menu as="div" className="relative">
       <Headless.MenuButton className="sj-desktop-nav-link">
-        Login
+        Log in
       </Headless.MenuButton>
       <Headless.MenuItems
         anchor="bottom end"
