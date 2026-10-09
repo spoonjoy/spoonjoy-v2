@@ -90,17 +90,9 @@ function gifBytes(): Uint8Array {
 }
 
 function makeIngredientParser(): ImportRecipeDeps["ingredientParser"] {
-  // Deterministic: yields one parsed ingredient per input string.
-  return vi.fn(async (text: string): Promise<ParsedIngredient[]> => {
-    if (!text.trim()) return [];
-    return [
-      {
-        quantity: 1,
-        unit: "whole",
-        ingredientName: text.trim(),
-      },
-    ];
-  });
+  // Deterministic: yields one parsed ingredient per input line, like the real parser.
+  return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+    text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ quantity: 1, unit: "whole", ingredientName: line })));
 }
 
 function makeLlmRunner(
@@ -2208,6 +2200,88 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ),
       ).rejects.toMatchObject({ code: "title-conflict", status: 409 });
     });
+  });
+});
+
+describe("importRecipeFromSource — ingredient parsing and placement", () => {
+  // Strips a leading quantity and unit, as the real parser does, so names read like the
+  // ingredient the steps talk about.
+  function namingParser() {
+    return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+      text.split("\n").map((line) => ({
+        quantity: 1,
+        unit: "whole",
+        ingredientName: line.replace(/^[\d/]+\s+(cups?|tbsp|tsp|cloves?)?\s*/, "").trim(),
+      })));
+  }
+
+  async function importText(ingredients: string[], steps: string[], parser = namingParser()) {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      source: { type: "text", text: "a card", sourceUrl: null },
+    }, baseDeps({
+      ingredientParser: parser,
+      llmRunner: makeLlmRunner({ title: "Placement Soup", ingredients, steps }),
+    }));
+    const rows = await db.ingredient.findMany({
+      where: { recipeId: result.recipeId! },
+      include: { ingredientRef: true },
+    });
+    const stepOf = Object.fromEntries(rows.map((row) => [row.ingredientRef.name, row.stepNum]));
+    return { parser, stepOf };
+  }
+
+  it("parses every ingredient line in one call per recipe", async () => {
+    const { parser } = await importText(
+      ["2 cups flour", "1 tsp\nsalt", "3 eggs"],
+      ["Whisk the eggs.", "Fold in the flour and salt."],
+    );
+    expect(parser).toHaveBeenCalledTimes(1);
+    expect(parser).toHaveBeenCalledWith("2 cups flour\n1 tsp salt\n3 eggs", expect.anything());
+  });
+
+  it("puts each ingredient on the first step that mentions it", async () => {
+    const { stepOf } = await importText(
+      ["3 eggs", "2 cups flour", "1 tsp salt"],
+      ["Whisk the eggs until pale.", "Sift the flour over the eggs.", "Season with salt."],
+    );
+    expect(stepOf).toEqual({ eggs: 1, flour: 2, salt: 3 });
+  });
+
+  it("matches singular and plural, prep notes and the ingredient's last words", async () => {
+    const { stepOf } = await importText(
+      [
+        "1 onion, finely diced",
+        "2 tomatoes",
+        "1 cup fresh blueberries",
+        "4 cloves garlic",
+        "1 yellow bell pepper",
+        "1 cup extra virgin olive oil",
+      ],
+      [
+        "Warm the olive oil.",
+        "Soften the onions and garlic.",
+        "Add the tomato and the pepper.",
+        "Scatter over a blueberry or two.",
+      ],
+    );
+    expect(stepOf).toEqual({
+      "onion, finely diced": 2,
+      tomatoes: 3,
+      "fresh blueberries": 4,
+      garlic: 2,
+      "yellow bell pepper": 3,
+      "extra virgin olive oil": 1,
+    });
+  });
+
+  it("keeps ingredients no step names, or named only inside another word, on step 1", async () => {
+    const { stepOf } = await importText(
+      ["1 tsp salt", "1 egg", "1 pinch of sumac", "2 cups rice", "!!"],
+      ["Boil the water.", "Stir in the eggplant.", "Cook the riced cauliflower.", "Serve."],
+    );
+    expect(stepOf).toEqual({ salt: 1, egg: 1, "pinch of sumac": 1, rice: 1, "!!": 1 });
   });
 });
 

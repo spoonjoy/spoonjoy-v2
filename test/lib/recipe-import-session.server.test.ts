@@ -46,9 +46,8 @@ function htmlResponse(body: string, url = "https://example.com/r"): Response {
 }
 
 function ingredientParser() {
-  return vi.fn(async (text: string): Promise<ParsedIngredient[]> => [
-    { quantity: 1, unit: "whole", ingredientName: text.trim() },
-  ]);
+  return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+    text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ quantity: 1, unit: "whole", ingredientName: line })));
 }
 
 function llm(payload: Partial<{ title: string; ingredients: string[]; steps: string[] }>): RecipeLlmRunner {

@@ -61,10 +61,8 @@ function statusJsonResponse(status: number): Response {
 }
 
 function ingredientParser(): NonNullable<ImportRecipeDeps["ingredientParser"]> {
-  return vi.fn(async (text: string): Promise<ParsedIngredient[]> => {
-    if (!text.trim()) return [];
-    return [{ quantity: 1, unit: "whole", ingredientName: text.trim() }];
-  });
+  return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+    text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ quantity: 1, unit: "whole", ingredientName: line })));
 }
 
 function mockLlm(payload: {

@@ -634,6 +634,43 @@ async function resolveTitleWithRetry(
 // between sends it back to pick the next free one, this many times at most.
 const D1_TITLE_RACE_ATTEMPTS = 3;
 
+function ingredientWordForms(word: string): string[] {
+  if (word.endsWith("ies")) return [word, `${word.slice(0, -3)}y`];
+  if (word.endsWith("es")) return [word, word.slice(0, -2), word.slice(0, -1)];
+  if (word.endsWith("s")) return [word, word.slice(0, -1)];
+  return [word, `${word}s`, `${word}es`];
+}
+
+// The phrase is already lower-case letters, hyphens and single spaces, so it is safe to
+// place in a pattern as it is.
+function mentions(stepText: string, phrase: string): boolean {
+  const words = phrase.split(" ");
+  const last = words.pop() as string;
+  const head = words.map((word) => `${word}\\s+`).join("");
+  return ingredientWordForms(last).some((form) =>
+    new RegExp(`(^|[^a-z])${head}${form}([^a-z]|$)`).test(stepText));
+}
+
+/**
+ * The step an imported ingredient belongs on: the first step whose text names it, by its
+ * full name, its last two words or (when longer than three letters) its last word, allowing
+ * a plural. Ingredients no step names stay on step 1.
+ */
+export function stepForIngredient(ingredientName: string, steps: string[]): number {
+  const name = ingredientName.split(",")[0].toLowerCase().replace(/[^a-z\s-]/g, " ").trim().replace(/\s+/g, " ");
+  if (!name) return 1;
+  const words = name.split(" ");
+  const phrases = [name];
+  if (words.length > 2) phrases.push(words.slice(-2).join(" "));
+  const lastWord = words[words.length - 1];
+  if (words.length > 1 && lastWord.length > 3) phrases.push(lastWord);
+  for (const phrase of phrases) {
+    const index = steps.findIndex((step) => mentions(step.toLowerCase(), phrase));
+    if (index >= 0) return index + 1;
+  }
+  return 1;
+}
+
 async function persistRecipe(
   db: PrismaClient,
   chefId: string,
@@ -645,12 +682,13 @@ async function persistRecipe(
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   let title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 
-  // Parse ingredient strings up-front (outside the transaction).
-  const allIngredients: ParsedIngredient[] = [];
-  for (const ingredientText of draft.ingredients) {
-    const parsed = await ingredientParser(ingredientText, env);
-    for (const p of parsed) allIngredients.push(p);
-  }
+  // Parse every ingredient line in one call, outside the transaction.
+  const allIngredients = draft.ingredients.length === 0
+    ? []
+    : await ingredientParser(
+      draft.ingredients.map((line) => line.replace(/\s*\n\s*/g, " ")).join("\n"),
+      env,
+    );
 
   const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
   const ingredientRows = [];
@@ -659,7 +697,7 @@ async function persistRecipe(
     const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
     ingredientRows.push({
       recipeId: id,
-      stepNum: 1,
+      stepNum: stepForIngredient(ingredient.ingredientName, draft.steps),
       quantity: ingredient.quantity,
       unitId: unit.id,
       ingredientRefId: ref.id,
