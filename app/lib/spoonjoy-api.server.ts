@@ -1605,7 +1605,7 @@ const getRecipeTool: SpoonjoyApiOperation = {
 
 const listRecipeCoversTool: SpoonjoyApiOperation = {
   name: "list_recipe_covers",
-  description: "List Recipe Photo Studio cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only.",
+  description: "List Recipe Photo Studio cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only. May record that an abandoned generation failed: a cover still processing ten minutes after its generation started is reported, and stored, as failed.",
   requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
@@ -2178,7 +2178,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
 
 const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
   name: "get_cover_generation_status",
-  description: "Fetch Recipe Photo Studio generation status and active-cover context.",
+  description: "Fetch Recipe Photo Studio generation status and active-cover context. May record that an abandoned generation failed: a cover still processing ten minutes after its generation started is reported, and stored, as failed, so polling can stop.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",

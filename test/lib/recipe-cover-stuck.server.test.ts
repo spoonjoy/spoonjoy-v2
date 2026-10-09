@@ -188,6 +188,21 @@ describe("settleStuckCoverGenerations", () => {
     });
   });
 
+  it.each([
+    ["Prisma", () => prismaStuckCoverStore(db)],
+    ["D1", () => d1StuckCoverStore(d1.binding)],
+  ] as const)("settles a cover left processing before migration 0033, which has no start time, by its createdAt, through %s", async (_store, store) => {
+    const seeded = await seed();
+    // Written the way rows written before the migration look: the column was never set.
+    await d1.binding.prepare(`UPDATE "RecipeCover" SET "generationStartedAt" = NULL WHERE "id" = ?`).bind(seeded.deadEditorial.id).run();
+    const read = await db.recipeCover.findUniqueOrThrow({ where: { id: seeded.deadEditorial.id } });
+    expect(read).toMatchObject({ generationStartedAt: null, createdAt: minutesAgo(90) });
+
+    const [settled] = await settleStuckCoverGenerations(store(), seeded.recipe.id, [read], NOW);
+
+    expect(settled).toMatchObject({ status: "ready", generationStatus: "failed", failureReason: STUCK_COVER_FAILURE_REASON });
+  });
+
   it("keeps a generation restarted after the read, through D1", async () => {
     const seeded = await seed();
     const read = await db.recipeCover.findUniqueOrThrow({ where: { id: seeded.deadPlaceholder.id } });
