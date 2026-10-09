@@ -165,8 +165,8 @@ export function AppNavbar({
             <ThemeToggle />
             <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
             <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-              <button type="submit" className={navLinkClass} aria-label="Log out">
-                Logout
+              <button type="submit" className={navLinkClass}>
+                Log out
               </button>
             </Form>
           </div>

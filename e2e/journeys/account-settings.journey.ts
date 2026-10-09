@@ -232,7 +232,7 @@ test.describe("Account settings", () => {
     // --- Sign out from the profile page (the one sign-out button both devices have).
     await page.goto(`/users/${newName}`);
     await waitForHydration(page);
-    await page.getByRole("button", { name: "Log out", exact: true }).click();
+    await page.getByRole("main").getByRole("button", { name: "Log out", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/login"));
     await page.goto(SETTINGS);
     await expect(page).toHaveURL(/\/login\?redirectTo=%2Faccount%2Fsettings$/);
