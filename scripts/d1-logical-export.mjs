@@ -82,6 +82,49 @@ export function planExport(schema) {
   return { tables, skipped, extras };
 }
 
+/**
+ * Orders tables so every table comes after the tables its foreign keys reference. Remote D1
+ * refuses an import whose rows reference a parent row that is not there yet (it fails with
+ * `{"D1_RESET_DO":true}`, whatever `PRAGMA defer_foreign_keys` says), and wrangler writes rows in
+ * table-creation order, which on Spoonjoy puts Ingredient before IngredientRef and Unit. Tables
+ * in a reference cycle keep their creation order; a self-reference (a fork's sourceRecipeId) is
+ * left to row order, which is creation order too.
+ */
+export function tableOrder(schema, tables) {
+  const sqlByName = new Map(schema.filter((entry) => entry.type === "table").map((entry) => [entry.name, entry.sql ?? ""]));
+  const parents = new Map(tables.map((table) => [table, new Set(
+    [...sqlByName.get(table).matchAll(/REFERENCES\s+["'`]?([A-Za-z0-9_]+)["'`]?/gi)]
+      .map((match) => match[1])
+      .filter((parent) => parent !== table && tables.includes(parent)),
+  )]));
+  const ordered = [];
+  while (ordered.length < tables.length) {
+    const next = tables.find((table) => !ordered.includes(table) && [...parents.get(table)].every((parent) => ordered.includes(parent)))
+      ?? tables.find((table) => !ordered.includes(table));
+    ordered.push(next);
+  }
+  return ordered;
+}
+
+/** Regroups wrangler's INSERT statements by table, in the given table order. */
+export function orderRows(rowsSql, order) {
+  const groups = new Map();
+  const preamble = [];
+  let current;
+  for (const line of rowsSql.split("\n")) {
+    const table = /^INSERT INTO "([^"]+)"/.exec(line)?.[1];
+    if (table) {
+      current = table;
+      if (!groups.has(table)) groups.set(table, []);
+    }
+    if (current) groups.get(current).push(line);
+    else preamble.push(line);
+  }
+  const unexpected = [...groups.keys()].filter((table) => !order.includes(table));
+  if (unexpected.length > 0) throw new Error(`The export has rows for unexpected tables: ${unexpected.join(", ")}.`);
+  return [...preamble, ...order.flatMap((table) => groups.get(table) ?? [])].join("\n");
+}
+
 /** Whether the SQL creates the table, however wrangler quoted its name. */
 export function createsTable(sql, table) {
   const name = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -142,8 +185,8 @@ export async function exportDatabase({ target, output, exec, fs, log }) {
       tableSchema.trim(),
       "-- Indexes and triggers (`wrangler d1 export --table` leaves them out):",
       ...plan.extras,
-      "-- Rows:",
-      rows.trim(),
+      "-- Rows (parents before children):",
+      orderRows(rows.trim(), tableOrder(schema, plan.tables)),
       "",
     ].join("\n"));
   } finally {

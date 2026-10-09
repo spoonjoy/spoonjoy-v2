@@ -8,9 +8,11 @@ import {
   SCHEMA_SQL,
   createsTable,
   exportDatabase,
+  orderRows,
   parseExportArgs,
   parseWranglerJson,
   planExport,
+  tableOrder,
   targetFlags,
 } from "../../scripts/d1-logical-export.mjs";
 
@@ -18,6 +20,8 @@ import {
 // its shadow tables, a foreign key whose parent columns are only unique through an index
 // (StepOutputUse -> RecipeStep(recipeId, stepNum)), a trigger, and D1's internal _cf_KV table.
 const SCHEMA = `
+  CREATE TABLE "Ingredient" ("id" TEXT NOT NULL PRIMARY KEY, "unitId" TEXT NOT NULL REFERENCES "Unit" ("id"));
+  CREATE TABLE "Unit" ("id" TEXT NOT NULL PRIMARY KEY, "name" TEXT);
   CREATE TABLE "Recipe" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL, "activeCoverId" TEXT);
   CREATE TABLE "RecipeStep" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -59,8 +63,11 @@ function fakeWrangler(db: Database.Database, options: { afterExport?: () => void
       const sql = args[args.indexOf("--command") + 1];
       return { stdout: `noise before json\n${JSON.stringify([{ success: true, results: db.prepare(sql).all() }])}`, stderr: "" };
     }
-    const tables = args.flatMap((arg, index) => (args[index - 1] === "--table" ? [arg] : []));
-    if (tables.length === 0) throw new Error("D1 Export error: cannot export databases with virtual tables (like FTS5)");
+    const requested = args.flatMap((arg, index) => (args[index - 1] === "--table" ? [arg] : []));
+    const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid`).all() as { name: string }[])
+      .map(({ name }) => name)
+      .filter((name) => requested.includes(name));
+    if (requested.length === 0) throw new Error("D1 Export error: cannot export databases with virtual tables (like FTS5)");
     const output = args[args.indexOf("--output") + 1];
     const lines: string[] = [];
     for (const table of tables) {
@@ -99,6 +106,8 @@ describe("d1-logical-export", () => {
     source = new Database(":memory:");
     source.exec(SCHEMA);
     source.exec(`
+      INSERT INTO "Unit" VALUES ('cup', 'cup');
+      INSERT INTO "Ingredient" VALUES ('i1', 'cup');
       INSERT INTO "Recipe" VALUES ('r1', 'Grandma''s Stew', 'c1');
       INSERT INTO "RecipeStep" VALUES ('s1', 'r1', 1, 'Brown the beef'), ('s2', 'r1', 2, NULL);
       INSERT INTO "StepOutputUse" VALUES ('o1', 'r1', 1, 2);
@@ -131,6 +140,7 @@ describe("d1-logical-export", () => {
     expect(restored.prepare(`SELECT * FROM "StepOutputUse"`).all()).toEqual([{ id: "o1", recipeId: "r1", outputStepNum: 1, inputStepNum: 2 }]);
     expect(restored.prepare(`SELECT "description" FROM "RecipeStep" ORDER BY "stepNum"`).all()).toEqual([{ description: "Brown the beef" }, { description: null }]);
     expect(restored.prepare(`SELECT "title" FROM "Recipe"`).get()).toEqual({ title: "Grandma's Stew" });
+    expect(restored.prepare(`SELECT * FROM "Ingredient"`).all()).toEqual([{ id: "i1", unitId: "cup" }]);
     expect(restored.pragma("foreign_key_check")).toEqual([]);
     // The unique index and the trigger came back too.
     expect(() => restored.exec(`INSERT INTO "RecipeStep" VALUES ('s3', 'r1', 1, 'duplicate')`)).toThrow(/UNIQUE/);
@@ -138,7 +148,7 @@ describe("d1-logical-export", () => {
     expect(restored.prepare(`SELECT "activeCoverId" FROM "Recipe"`).get()).toEqual({ activeCoverId: null });
     // The search index is derived and is not in the export; the app rebuilds it.
     expect(restored.prepare(`SELECT name FROM sqlite_master WHERE name LIKE 'SearchDocument%' OR name = '_cf_KV'`).all()).toEqual([]);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("Exported 4 tables with 3 indexes and triggers"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Exported 6 tables with 3 indexes and triggers"));
   });
 
   it("puts the indexes before the rows, because D1 refuses rows whose foreign key has no unique parent index yet", async () => {
@@ -151,6 +161,59 @@ describe("d1-logical-export", () => {
     // Rows first and indexes last, as appending to wrangler's own `--table` export would give.
     const tablesThenRows = sql.replace(/^CREATE (UNIQUE )?INDEX.*$/gm, "").replace(/^CREATE TRIGGER[\s\S]*?END;$/gm, "");
     expect(() => importIntoFreshD1(tablesThenRows)).toThrow(/foreign key mismatch/);
+  });
+
+  it("writes parent rows before child rows, though wrangler writes them in table-creation order", async () => {
+    const output = join(dir, "export.sql");
+    await exportDatabase({ target: "qa", output, exec: fakeWrangler(source), fs, log: vi.fn() });
+    const sql = await readFile(output, "utf8");
+
+    expect(sql.indexOf(`INSERT INTO "Unit"`)).toBeLessThan(sql.indexOf(`INSERT INTO "Ingredient"`));
+    // Remote D1 checks foreign keys as rows arrive; SQLite with foreign keys on, without deferral,
+    // refuses the same rows in wrangler's order.
+    const restored = new Database(":memory:");
+    restored.pragma("foreign_keys = ON");
+    restored.exec(sql.replace(/^PRAGMA defer_foreign_keys.*$/gm, ""));
+    expect(restored.prepare(`SELECT count(*) AS n FROM "Ingredient"`).get()).toEqual({ n: 1 });
+    const wranglerOrder = `CREATE TABLE "Ingredient" ("id" TEXT PRIMARY KEY, "unitId" TEXT REFERENCES "Unit" ("id"));
+      CREATE TABLE "Unit" ("id" TEXT PRIMARY KEY);
+      INSERT INTO "Ingredient" VALUES ('i1', 'cup');
+      INSERT INTO "Unit" VALUES ('cup');`;
+    const strict = new Database(":memory:");
+    strict.pragma("foreign_keys = ON");
+    expect(() => strict.exec(wranglerOrder)).toThrow(/FOREIGN KEY/);
+  });
+
+  it("orders tables parents first, keeping creation order for cycles and ignoring self-references", () => {
+    const table = (name: string, sql: string) => ({ type: "table", name, tbl_name: name, sql });
+    const schema = [
+      table("Child", `CREATE TABLE "Child" ("p" TEXT REFERENCES "Parent"("id"), "o" TEXT REFERENCES 'Outside'("id"))`),
+      table("A", `CREATE TABLE "A" ("b" TEXT REFERENCES "B"("id"))`),
+      table("B", `CREATE TABLE B ("a" TEXT REFERENCES A(id), "self" TEXT REFERENCES "B"("id"))`),
+      table("Parent", `CREATE TABLE "Parent" ("id" TEXT PRIMARY KEY, "up" TEXT REFERENCES "Parent"("id"))`),
+      table("NoSql", null as unknown as string),
+    ];
+
+    expect(tableOrder(schema, ["Child", "A", "B", "Parent", "NoSql"])).toEqual(["Parent", "Child", "NoSql", "A", "B"]);
+  });
+
+  it("regroups INSERT statements by table, keeping multi-line values and the preamble", () => {
+    const rows = [
+      "PRAGMA defer_foreign_keys=TRUE;",
+      `INSERT INTO "Child" VALUES('c1','line one`,
+      `line two');`,
+      `INSERT INTO "Parent" VALUES('p1');`,
+      `INSERT INTO "Child" VALUES('c2','x');`,
+    ].join("\n");
+
+    expect(orderRows(rows, ["Parent", "Child", "Empty"]).split("\n")).toEqual([
+      "PRAGMA defer_foreign_keys=TRUE;",
+      `INSERT INTO "Parent" VALUES('p1');`,
+      `INSERT INTO "Child" VALUES('c1','line one`,
+      `line two');`,
+      `INSERT INTO "Child" VALUES('c2','x');`,
+    ]);
+    expect(() => orderRows(rows, ["Parent"])).toThrow("The export has rows for unexpected tables: Child.");
   });
 
   it("reads production from the default environment", async () => {
@@ -174,7 +237,7 @@ describe("d1-logical-export", () => {
       return { stdout: "", stderr: "" };
     });
     await expect(exportDatabase({ target: "qa", output: join(dir, "x.sql"), exec, fs, log: vi.fn() }))
-      .rejects.toThrow("The export is missing tables: RecipeCover, RecipeStep, StepOutputUse.");
+      .rejects.toThrow("The export is missing tables: Ingredient, RecipeCover, RecipeStep, StepOutputUse, Unit.");
 
     const empty = new Database(":memory:");
     await expect(exportDatabase({ target: "qa", output: join(dir, "y.sql"), exec: fakeWrangler(empty), fs, log: vi.fn() }))
