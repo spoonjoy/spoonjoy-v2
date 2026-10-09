@@ -688,6 +688,36 @@ const schemas = {
   AccountDeleteMutationRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
+  NativeChefRef: objectSchema(["id", "username", "photoUrl"], { id: shortTextSchema, username: shortTextSchema, photoUrl: nullableStringSchema }),
+  NativeChefRow: objectSchema(["chefId", "username", "photoUrl", "interactionCounts", "latestInteractionAt"], {
+    chefId: shortTextSchema,
+    username: shortTextSchema,
+    photoUrl: nullableStringSchema,
+    interactionCounts: objectSchema(["spoons", "forks", "cookbookSaves"], {
+      spoons: { type: "integer", minimum: 0 },
+      forks: { type: "integer", minimum: 0 },
+      cookbookSaves: { type: "integer", minimum: 0 },
+    }),
+    latestInteractionAt: dateTimeSchema,
+  }),
+  NativeChefList: objectSchema(["total", "rows"], { total: { type: "integer", minimum: 0 }, rows: { type: "array", items: ref("NativeChefRow") } }),
+  NativeChefActivity: objectSchema(["id", "kind", "direction", "eventAt", "actor", "otherChef", "recipe", "cookbook", "label"], {
+    id: shortTextSchema,
+    kind: { type: "string", enum: ["spooned", "forked", "saved"] },
+    direction: { type: "string", enum: ["outbound", "inbound"] },
+    eventAt: dateTimeSchema,
+    actor: ref("NativeChefRef"),
+    otherChef: ref("NativeChefRef"),
+    recipe: { oneOf: [objectSchema(["id", "title"], { id: shortTextSchema, title: shortTextSchema }), { type: "null" }] },
+    cookbook: { oneOf: [objectSchema(["id", "title"], { id: shortTextSchema, title: shortTextSchema }), { type: "null" }] },
+    label: shortTextSchema,
+  }),
+  NativeChefs: objectSchema(["viewer", "fellowChefs", "chefsUsingMyRecipes", "activity"], {
+    viewer: ref("NativeChefRef"),
+    fellowChefs: ref("NativeChefList"),
+    chefsUsingMyRecipes: ref("NativeChefList"),
+    activity: { type: "array", items: ref("NativeChefActivity") },
+  }),
   NotificationPreferences: objectSchema(notificationPreferenceRequired, notificationPreferenceProperties),
   NotificationPreferencesMutationData: objectSchema([...notificationPreferenceRequired, "mutation"], {
     ...notificationPreferenceProperties,
@@ -1359,6 +1389,7 @@ const schemas = {
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
   AccountProfileMutationEnvelope: successEnvelope(ref("AccountProfileMutationData")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
+  NativeChefsEnvelope: successEnvelope(ref("NativeChefs")),
   NotificationPreferencesMutationEnvelope: successEnvelope(ref("NotificationPreferencesMutationData")),
   ApnsDeviceRegistrationEnvelope: successEnvelope(ref("ApnsDeviceRegistrationData")),
   ApnsDeviceRevokeEnvelope: successEnvelope(ref("ApnsDeviceRevokeData")),
@@ -1536,6 +1567,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/me/sync": {
     GET: { operationId: "getApiV1MeSync", tags: ["Account"], summary: "Bootstrap native offline account data", auth: "bearer", scopes: ["account:read", "kitchen:read"], success: { 200: "NativeAccountSyncEnvelope" }, errors: ["invalid_cursor", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.cursor, queryParameters.limit] },
+  },
+  "/api/v1/me/chefs": {
+    GET: { operationId: "getApiV1MeChefs", tags: ["Account"], summary: "Read the signed-in chef's fellow chefs, kitchen visitors, and recent chef activity", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "NativeChefsEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
   },
   "/api/v1/me/photo": {
     POST: { operationId: "postApiV1MePhoto", tags: ["Account"], summary: "Upload the authenticated account profile photo", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "ProfilePhotoUploadRequest", requestBodyContentType: "multipart/form-data", requestBodyEncoding: { photo: { contentType: "image/jpeg,image/png,image/gif,image/webp" } } },
@@ -1821,6 +1855,26 @@ const exampleNativeProfileSnapshot = {
   joinedLabel: "Joined Spoonjoy",
   createdAt: exampleTimestamp,
   updatedAt: exampleTimestamp,
+};
+const exampleChefRef = { id: "chef_2", username: "julia", photoUrl: null };
+const exampleNativeChefs = {
+  viewer: { id: "chef_1", username: "ari", photoUrl: null },
+  fellowChefs: {
+    total: 1,
+    rows: [{ chefId: "chef_2", username: "julia", photoUrl: null, interactionCounts: { spoons: 1, forks: 0, cookbookSaves: 1 }, latestInteractionAt: exampleTimestamp }],
+  },
+  chefsUsingMyRecipes: { total: 0, rows: [] },
+  activity: [{
+    id: "outbound:spoon:spoon_1",
+    kind: "spooned",
+    direction: "outbound",
+    eventAt: exampleTimestamp,
+    actor: { id: "chef_1", username: "ari", photoUrl: null },
+    otherChef: exampleChefRef,
+    recipe: { id: "recipe_1", title: "Lemon Pasta" },
+    cookbook: null,
+    label: "You cooked Lemon Pasta from julia.",
+  }],
 };
 const exampleNotificationPreferences = {
   notifySpoonOnMyRecipe: true,
@@ -2264,6 +2318,7 @@ const responseExamples: Record<string, unknown> = {
       mutation: { clientMutationId: "device-uuid-account-update", replayed: false },
     },
   },
+  NativeChefsEnvelope: { ok: true, requestId: "req_example", data: exampleNativeChefs },
   NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
   NotificationPreferencesMutationEnvelope: {
     ok: true,
@@ -4075,6 +4130,7 @@ const SDK_PATHS = new Set([
   "/api/v1/cookbooks/{id}/recipes/{recipeId}",
   "/api/v1/me",
   "/api/v1/me/sync",
+  "/api/v1/me/chefs",
   "/api/v1/me/photo",
   "/api/v1/me/notification-preferences",
   "/api/v1/me/connections",

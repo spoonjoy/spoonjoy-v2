@@ -68,6 +68,7 @@ const OPERATION_SCOPES = {
   "GET /api/v1/me/sync": ["account:read", "kitchen:read"],
   "POST /api/v1/me/photo": ["account:write"],
   "DELETE /api/v1/me/photo": ["account:write"],
+  "GET /api/v1/me/chefs": ["kitchen:read"],
   "GET /api/v1/me/notification-preferences": ["account:read"],
   "PATCH /api/v1/me/notification-preferences": ["account:write"],
   "POST /api/v1/me/apns-devices": ["account:write"],

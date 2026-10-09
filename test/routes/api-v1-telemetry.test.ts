@@ -1382,6 +1382,20 @@ describe("API v1 mutation and validation telemetry", () => {
       forbidden: ["telemetry-account-photo-remove", removePhoto.bodyText, cookie],
     });
 
+    const readChefs = await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/me/chefs",
+      "req_account_operation_chefs_read",
+      { Cookie: cookie },
+    ), "me/chefs").args);
+    expect(readChefs.status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/me/chefs",
+      requestId: "req_account_operation_chefs_read",
+      operation: "account.chefs.read",
+      status: 200,
+      forbidden: [cookie],
+    });
+
     const readNotifications = await loader(routeArgs(apiRequest(
       "http://localhost/api/v1/me/notification-preferences",
       "req_account_operation_notifications_read",

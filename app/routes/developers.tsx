@@ -230,6 +230,7 @@ const externalGuideSteps = [
     sample: [
       "GET /api/v1/me",
       "GET /api/v1/me/sync",
+      "GET /api/v1/me/chefs",
       "PATCH /api/v1/me",
       "POST /api/v1/me/photo",
       "DELETE /api/v1/me/photo",
