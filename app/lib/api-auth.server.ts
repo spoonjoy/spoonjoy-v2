@@ -216,7 +216,7 @@ export function resolvePersonalTokenExpiry(value: unknown, now: Date = new Date(
     value > MAX_PERSONAL_API_TOKEN_TTL_DAYS
   ) {
     throw new ApiAuthError(
-      `expiresInDays must be a whole number of days from 1 to ${MAX_PERSONAL_API_TOKEN_TTL_DAYS}, or null for a token that never expires`,
+      `expiresInDays must be a whole number of days from 1 to ${MAX_PERSONAL_API_TOKEN_TTL_DAYS}, or null or "never" for a token that never expires`,
       400,
     );
   }

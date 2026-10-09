@@ -937,10 +937,11 @@ const schemas = {
       ],
     },
     expiresInDays: {
-      description: "Days until the token expires, from 1 to 365. Omit it for the 90-day default; send null for a token that never expires.",
+      description: "Days until the token expires, from 1 to 365. Omit it for the 90-day default; send null or \"never\" for a token that never expires.",
       oneOf: [
         { type: "integer", minimum: 1, maximum: 365 },
         { type: "null" },
+        { type: "string", enum: ["never"] },
       ],
     },
   }),

@@ -1385,10 +1385,11 @@ const createApiTokenTool: SpoonjoyApiOperation = {
         ],
       },
       expiresInDays: {
-        description: "Days until the token expires, 1 to 365. Defaults to 90. Pass null for a token that never expires.",
+        description: "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires.",
         oneOf: [
           { type: "integer", minimum: 1, maximum: 365 },
           { type: "null" },
+          { type: "string", enum: ["never"] },
         ],
       },
     },

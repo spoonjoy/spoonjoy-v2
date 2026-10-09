@@ -81,10 +81,13 @@ export const OAUTH_REFRESH_TOKEN_TTL_SECONDS = 180 * 24 * 60 * 60;
 export const LEGACY_OAUTH_REFRESH_EXPIRES_AT = new Date("2027-04-07T00:00:00.000Z");
 /**
  * A refresh token replayed this soon after its rotation is refused without revoking the
- * connection: two refreshes racing from the same client (the iPhone app's App Intents each run
- * their own refresh) are not an attack. Later replays mean the token was copied.
+ * connection. The iPhone app's main app, root view and App Intents each refresh on their own,
+ * and a process the system suspended between reading the keychain and sending its refresh can
+ * replay the token it read minutes later; that is a race on one device, not a stolen token, and
+ * revoking would sign the chef out. Fifteen minutes, one generic access-token lifetime, covers
+ * a suspended App Intent; a replay later than that means someone holds a copy of an old token.
  */
-export const OAUTH_REFRESH_REUSE_GRACE_SECONDS = 60;
+export const OAUTH_REFRESH_REUSE_GRACE_SECONDS = 15 * 60;
 // Each refresh ownership query binds every key twice (connectionKey + legacy id).
 // D1 allows 100 bound parameters, so 32 leaves headroom for fixed predicates,
 // mutation values, and adapter-added pagination bindings.
@@ -972,13 +975,15 @@ function connectionKeyOf(record: Pick<OAuthRefreshTokenRecord, "id" | "connectio
 /**
  * Revokes every refresh token and access credential on one connection and moves its grant to
  * `status`. Rotation keeps `connectionKey` across a connection's refresh tokens, and a legacy
- * token without one is the connection's key itself.
+ * token without one is the connection's key itself. Access tokens minted before migration 0026
+ * carry no connection key, so, as on disconnect, every unkeyed access token this client holds
+ * for the chef is revoked with the connection: it cannot be told which connection it belongs to.
  */
 async function revokeConnection(
   db: Database,
   record: OAuthRefreshTokenRecord,
   now: Date,
-  grant: { status: "compromised"; statusReason: "refresh_reuse" } | { status: "revoked"; statusReason: "absolute_expiry" },
+  grant: { status: "compromised"; statusReason: "refresh_reuse" } | { status: "revoked"; statusReason: "inactivity_expiry" },
 ): Promise<void> {
   const connectionKey = connectionKeyOf(record);
   await db.oAuthRefreshToken.updateMany({
@@ -991,7 +996,12 @@ async function revokeConnection(
     data: { revokedAt: now },
   });
   await db.apiCredential.updateMany({
-    where: { userId: record.userId, oauthClientId: record.clientId, oauthConnectionKey: connectionKey, revokedAt: null },
+    where: {
+      userId: record.userId,
+      oauthClientId: record.clientId,
+      revokedAt: null,
+      ...oauthAccessConnectionOwnership([connectionKey], now),
+    },
     data: { revokedAt: now },
   });
   await db.oAuthGrant.updateMany({
@@ -1028,9 +1038,12 @@ async function revokeConnectionOnRefreshReuse(
   await revokeConnection(db, record, now, { status: "compromised", statusReason: "refresh_reuse" });
 }
 
-/** A refresh token past its expiry ends its connection: nothing on it can be refreshed again. */
+/**
+ * A refresh token past its expiry ends its connection: nothing on it can be refreshed again.
+ * Every rotation renews the expiry, so this is an inactivity timeout, not an absolute one.
+ */
 async function expireConnection(db: Database, record: OAuthRefreshTokenRecord, now: Date): Promise<void> {
-  await revokeConnection(db, record, now, { status: "revoked", statusReason: "absolute_expiry" });
+  await revokeConnection(db, record, now, { status: "revoked", statusReason: "inactivity_expiry" });
 }
 
 /**
@@ -1109,6 +1122,9 @@ export async function rotateConnectorTokens(
     await dependencies.onPersistenceMutation("parent_revoke", "after");
     await dependencies.onPersistenceMutation("replacement_insert", "before");
   }
+  // The access token issued with the presented refresh token stays valid until its own expiry:
+  // the iPhone app's processes refresh independently, and revoking it here would fail requests
+  // another process has in flight. Reuse detection, disconnect and account revocation end it.
   const replacement = await issueConnectorTokens(db, {
     userId: record.userId,
     clientId: record.clientId,
