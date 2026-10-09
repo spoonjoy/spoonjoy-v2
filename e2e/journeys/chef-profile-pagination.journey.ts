@@ -51,6 +51,13 @@ test.describe("Chef profile paging", () => {
     const recentCooksBox = await recentCooks.boundingBox();
     expect(buttonBox!.y).toBeGreaterThan(lastRowBox!.y + lastRowBox!.height - 1);
     expect(recentCooksBox!.y).toBeGreaterThan(buttonBox!.y + buttonBox!.height);
+    // The next section starts the list-to-section distance (the grid's 32 px gap) below the
+    // button: Cookbooks on a phone, Recent cooks on desktop, where Cookbooks is a side column.
+    const nextSection = testInfo.project.name === "iphone-webkit"
+      ? main.getByRole("heading", { name: "Cookbooks", exact: true })
+      : recentCooks;
+    const nextSectionBox = await nextSection.boundingBox();
+    expect(nextSectionBox!.y - (buttonBox!.y + buttonBox!.height)).toBeGreaterThanOrEqual(30);
     await expectAccessible();
     await centre(page, '[data-testid="show-more"]');
     await capture(page, testInfo, "a-first-page-end");
@@ -98,6 +105,41 @@ test.describe("Chef profile paging", () => {
     await expect(rows.first()).toBeVisible();
     testInfo.annotations.push({ type: "rows after back", description: String(await rows.count()) });
     await capture(page, testInfo, "e-after-back");
+  });
+
+  test("Back from a recipe restores every page and the place in the list", async ({ page }, testInfo) => {
+    await page.setViewportSize(viewportFor(testInfo));
+    const main = page.getByRole("main");
+    const rows = main.locator("section").filter({ has: page.getByRole("heading", { name: "Recipes", exact: true }) }).last().getByRole("article");
+    const showMore = main.getByRole("link", { name: "Show more recipes", exact: true });
+
+    await page.goto(PAGER);
+    await waitForHydration(page);
+    await showMore.click();
+    await expect(rows).toHaveCount(PAGE_SIZE * 2);
+    await showMore.click();
+    await expect(rows).toHaveCount(TOTAL);
+
+    // Open the fiftieth recipe from the middle of the screen, then come back.
+    const row = rows.nth(49);
+    await row.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    const label = (await row.getByRole("link").first().textContent())!.trim();
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    const rowTopBefore = (await row.boundingBox())!.y;
+    await row.getByRole("link").first().click();
+    await expect(page).toHaveURL(/\/recipes\//);
+    await page.goBack();
+
+    // The URL is still the plain profile, and all sixty rows are back without another click.
+    await expect(page).toHaveURL(new RegExp(`${PAGER}$`));
+    await expect(rows).toHaveCount(TOTAL);
+    await expect(showMore).toHaveCount(0);
+    // Scroll restoration lands where the visitor left, with the same recipe in the same place.
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBefore - 4);
+    expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollBefore)).toBeLessThanOrEqual(4);
+    await expect(rows.nth(49).getByRole("link").first()).toHaveText(label);
+    expect(Math.abs((await rows.nth(49).boundingBox())!.y - rowTopBefore)).toBeLessThanOrEqual(4);
+    await capture(page, testInfo, "f-back-restored-row-50");
   });
 
   test("the first page in dark mode", async ({ page, expectAccessible }, testInfo) => {

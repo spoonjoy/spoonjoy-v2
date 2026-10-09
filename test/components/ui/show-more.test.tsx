@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, useLoaderData } from "react-router";
+import { Link, MemoryRouter, useLoaderData, useNavigate } from "react-router";
 import { createTestRoutesStub } from "../../utils";
 import { ShowMore, useAppendingList, type AppendingList } from "~/components/ui/show-more";
 
@@ -41,6 +41,9 @@ function stub(pages: Record<string, Data>) {
 }
 
 describe("useAppendingList and ShowMore", () => {
+  // Saved rows are keyed by history entry, and every memory router starts on the "default" entry.
+  beforeEach(() => window.sessionStorage.clear());
+
   it("drops rows it already shows and keeps the last focus target when a page adds nothing new", async () => {
     const Stub = stub({
       first: { rows: [{ id: "a", name: "Apple" }, { id: "b", name: "Bean" }], next: "b", key: "k" },
@@ -111,5 +114,80 @@ describe("useAppendingList and ShowMore", () => {
     // The status still announces the last page, but the wrapper adds no margin of its own.
     expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 60 recipes");
     expect(container.firstElementChild).not.toHaveClass("mt-6");
+  });
+  it("restores appended rows when the visitor goes back to the list, and only then", async () => {
+    const loads: string[] = [];
+    const pages: Record<string, Data> = {
+      first: { rows: [{ id: "a", name: "Apple" }], next: "a", key: "k" },
+      a: { rows: [{ id: "b", name: "Bean" }], next: "b", key: "k" },
+    };
+    function Away() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button type="button" onClick={() => navigate(-1)}>Back</button>
+          <Link to="/rows">Rows again</Link>
+        </>
+      );
+    }
+    function RowsWithLink() {
+      return (
+        <>
+          <Rows />
+          <Link to="/away">Open a row</Link>
+        </>
+      );
+    }
+    const Stub = createTestRoutesStub([
+      {
+        path: "/rows",
+        children: [
+          {
+            index: true,
+            Component: RowsWithLink,
+            loader: ({ request }: { request: Request }) => {
+              const after = new URL(request.url).searchParams.get("after") ?? "first";
+              loads.push(after);
+              return pages[after]!;
+            },
+          },
+        ],
+      },
+      { path: "/away", Component: Away },
+    ]);
+    render(<Stub initialEntries={["/rows"]} />);
+
+    fireEvent.click(await screen.findByRole("link", { name: "Show more rows" }));
+    expect(await screen.findByText("Bean")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: "Open a row" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Back" }));
+
+    // Back on the same history entry: the appended row is there with the first page, without
+    // fetching its page again, and Show more continues from where it was.
+    expect(await screen.findByText("Bean")).toBeInTheDocument();
+    expect(screen.getByText("Apple")).toBeInTheDocument();
+    expect(loads.filter((after) => after === "a")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Show more rows" })).toHaveAttribute("href", "/rows?after=b");
+    expect(screen.getByTestId("first-new")).toHaveTextContent("null");
+
+    // A new visit to the list is a new history entry, so it starts from the first page.
+    fireEvent.click(screen.getByRole("link", { name: "Open a row" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Rows again" }));
+    expect(await screen.findByText("Apple")).toBeInTheDocument();
+    expect(screen.queryByText("Bean")).not.toBeInTheDocument();
+  });
+
+  it("starts from the first page when saved rows are unreadable", async () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("SecurityError");
+    });
+    try {
+      const Stub = stub({ first: { rows: [{ id: "a", name: "Apple" }], next: "a", key: "k" } });
+      render(<Stub initialEntries={["/rows"]} />);
+      expect(await screen.findByText("Apple")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Show more rows" })).toHaveAttribute("href", "/rows?after=a");
+    } finally {
+      getItem.mockRestore();
+    }
   });
 });

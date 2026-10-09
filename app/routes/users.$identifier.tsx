@@ -330,11 +330,16 @@ export default function UserProfile() {
           </section>
         </div>
 
-        <SettingsPanel title="Recent cooks">
-          <div className="mt-4">
-            <SpoonsStrip spoons={recentSpoons} showRecipe now={renderedAt} />
-          </div>
-        </SettingsPanel>
+        {/* On a phone the grid's gap-8 already separates the recipe list from Cookbooks below
+            it. On desktop Recent cooks follows the list directly, and the panel's own padding
+            alone left it tighter than that, so it gets the difference. */}
+        <div className="lg:mt-2">
+          <SettingsPanel title="Recent cooks">
+            <div className="mt-4">
+              <SpoonsStrip spoons={recentSpoons} showRecipe now={renderedAt} />
+            </div>
+          </SettingsPanel>
+        </div>
 
       </section>
     </CookbookPage>
