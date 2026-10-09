@@ -152,6 +152,24 @@ describe("requireGitHubActions", () => {
     expect(() => requireGitHubActions({})).toThrow(/only inside GitHub Actions/);
     expect(() => requireGitHubActions({ GITHUB_ACTIONS: "true" })).not.toThrow();
   });
+
+  it("runs on a developer machine only with the explicit SPOONJOY_QA_LOCAL_RUN=1 opt-in", () => {
+    expect(() => requireGitHubActions({ SPOONJOY_QA_LOCAL_RUN: "1" })).not.toThrow();
+  });
+
+  it("accepts no other spelling of the local-run opt-in", () => {
+    for (const value of ["", "0", "true", "yes", "TRUE", " 1", "1 "]) {
+      expect(() => requireGitHubActions({ SPOONJOY_QA_LOCAL_RUN: value })).toThrow(/only inside GitHub Actions/);
+    }
+    expect(() => requireGitHubActions({ GITHUB_ACTIONS: "false", SPOONJOY_QA_LOCAL_RUN: "0" })).toThrow(
+      /SPOONJOY_QA_LOCAL_RUN=1/,
+    );
+  });
+
+  it("still needs a numeric run identity on a local run, so the stack keeps a sweepable per-run name", () => {
+    expect(() => runIdentity({ SPOONJOY_QA_LOCAL_RUN: "1" })).toThrow(/whole numbers/);
+    expect(runIdentity({ SPOONJOY_QA_LOCAL_RUN: "1", GITHUB_RUN_ID: "1001", GITHUB_RUN_ATTEMPT: "2" })).toEqual(IDENTITY);
+  });
 });
 
 describe("scopeWranglerConfig", () => {
@@ -932,6 +950,44 @@ describe("teardown", () => {
 
   it("refuses to run outside GitHub Actions", async () => {
     await expect(teardown({ env: { ...RUN_ENV, GITHUB_ACTIONS: "false" }, fs: fakeFs().fs, api: fakeApi(), log: vi.fn() })).rejects.toThrow(/GitHub Actions/);
+  });
+});
+
+describe("local runs (SPOONJOY_QA_LOCAL_RUN=1)", () => {
+  const LOCAL_ENV = {
+    SPOONJOY_QA_LOCAL_RUN: "1",
+    GITHUB_RUN_ID: "1001",
+    GITHUB_RUN_ATTEMPT: "2",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  };
+  const secrets = () => ({ SESSION_SECRET: "s3cret", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_SUBJECT: IDENTITY.baseUrl, POSTHOG_DISABLED: "1" });
+
+  it("prepares and tears down the same per-run stack it would in CI, and exports nothing to GITHUB_ENV", async () => {
+    const files = fakeFs(preparedFiles());
+    const api = fakeApi();
+    const state = await prepare({ env: LOCAL_ENV, fs: files.fs, api, now: Date.now, log: vi.fn(), secrets });
+
+    expect(state).toEqual({ ...IDENTITY, databaseId: RUN_DB_ID });
+    expect(files.json(WRANGLER_CONFIG).env.qa.name).toBe(IDENTITY.workerName);
+    expect(files.appended).toEqual([]);
+
+    expect(await teardown({ env: LOCAL_ENV, fs: files.fs, api, log: vi.fn() })).toBe(true);
+    expect(api.deleteWorker).toHaveBeenCalledWith(IDENTITY.workerName);
+    expect(api.deleteDatabase).toHaveBeenCalledWith(RUN_DB_ID);
+  });
+
+  it("still refuses a config that does not name shared QA, and a run id that is not a number", async () => {
+    const production = structuredClone(REAL_WRANGLER);
+    production.env.qa.vars.SPOONJOY_BASE_URL = "https://spoonjoy.app";
+    const api = fakeApi();
+    await expect(
+      prepare({ env: LOCAL_ENV, fs: fakeFs({ ...preparedFiles(), [WRANGLER_CONFIG]: JSON.stringify(production) }).fs, api, now: Date.now, log: vi.fn(), secrets }),
+    ).rejects.toThrow(/does not target/);
+    await expect(
+      prepare({ env: { ...LOCAL_ENV, GITHUB_RUN_ID: "mine" }, fs: fakeFs(preparedFiles()).fs, api, now: Date.now, log: vi.fn(), secrets }),
+    ).rejects.toThrow(/whole numbers/);
+    expect(api.createDatabase).not.toHaveBeenCalled();
   });
 });
 
