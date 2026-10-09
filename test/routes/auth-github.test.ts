@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach, onTestFinished } from "vitest";
-import { sessionStorage } from "~/lib/session.server";
+import { getSessionAuthenticatedAt, sessionStorage } from "~/lib/session.server";
 import { commitOAuthStartSession, readOAuthStartSession } from "~/lib/oauth-route.server";
 
 const mocks = vi.hoisted(() => ({
@@ -415,6 +415,58 @@ describe("GitHub OAuth routes", () => {
     await callbackLoader({ request, context: { cloudflare: { env: githubEnv } }, params: {} } as any);
 
     expect(mocks.handleGitHubOAuthCallback).toHaveBeenCalledWith(expect.objectContaining({ currentUserId: "user-1" }));
+  });
+
+  it("keeps the session's sign-in time when linking, so a linked provider cannot stand in for a fresh sign-in", async () => {
+    onTestFinished(await ensureSessionUser("user-1"));
+    const loginSession = await sessionStorage.getSession();
+    loginSession.set("userId", "user-1");
+    loginSession.set("authenticatedAt", 1_700_000_000_000);
+    const loginCookie = await sessionStorage.commitSession(loginSession);
+    const oauthCookie = await commitOAuthStartSession(
+      new Request("https://spoonjoy.app/auth/github", { headers: { Cookie: cookieHeader(loginCookie) } }),
+      "github",
+      { state: "state", redirectTo: "/account/settings", failureRedirect: "/account/settings", linking: true },
+    );
+    mocks.verifyGitHubCallback.mockResolvedValueOnce({
+      success: true,
+      githubUser: { id: "gh1", email: "gh@example.com", emailVerified: true, login: "ghchef", name: null, avatarUrl: null },
+    });
+    mocks.handleGitHubOAuthCallback.mockResolvedValueOnce({ success: true, userId: "user-1", action: "account_linked", redirectTo: "/account/settings" });
+
+    const response = await callbackLoader({
+      request: new Request("https://spoonjoy.app/auth/github/callback?state=state&code=code", {
+        headers: { Cookie: `${cookieHeader(loginCookie)}; ${cookieHeader(oauthCookie)}` },
+      }),
+      context: { cloudflare: { env: githubEnv } },
+      params: {},
+    } as any);
+
+    const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
+    const reissued = new Request("https://spoonjoy.app/account/settings", { headers: { Cookie: cookieHeader(sessionCookie) } });
+    await expect(getSessionAuthenticatedAt(reissued)).resolves.toBe(1_700_000_000_000);
+  });
+
+  it("records a new sign-in time when signing in with GitHub", async () => {
+    mocks.verifyGitHubCallback.mockResolvedValueOnce({
+      success: true,
+      githubUser: { id: "gh1", email: "gh@example.com", emailVerified: true, login: "ghchef", name: null, avatarUrl: null },
+    });
+    mocks.handleGitHubOAuthCallback.mockResolvedValueOnce({ success: true, userId: "user-1", action: "user_logged_in", redirectTo: "/" });
+    const oauthCookie = await commitOAuthStartSession(new Request("https://spoonjoy.app/auth/github"), "github", {
+      state: "state", redirectTo: "/", failureRedirect: "/login", linking: false,
+    });
+    const before = Date.now();
+
+    const response = await callbackLoader({
+      request: new Request("https://spoonjoy.app/auth/github/callback?state=state&code=code", { headers: { Cookie: cookieHeader(oauthCookie) } }),
+      context: { cloudflare: { env: githubEnv } },
+      params: {},
+    } as any);
+
+    const sessionCookie = response.headers.getSetCookie().find((value: string) => value.startsWith("__session="))!;
+    const signedInAt = await getSessionAuthenticatedAt(new Request("https://spoonjoy.app/", { headers: { Cookie: cookieHeader(sessionCookie) } }));
+    expect(signedInAt).toBeGreaterThanOrEqual(before);
   });
 
   it("rejects linking callbacks without a current user", async () => {

@@ -5,6 +5,7 @@ import {
   createUserSession,
   createUserSessionCookie,
   destroyUserSession,
+  getSessionAuthenticatedAt,
   getSessionIdentity,
   getUserId,
   isCurrentSession,
@@ -81,6 +82,31 @@ describe("revocable sessions", () => {
       await expect(getSessionIdentity(requestWithCookie(cookie))).resolves.toEqual({ userId, sessionVersion: 0 });
     } finally {
       findUnique.mockRestore();
+    }
+  });
+
+  it("records the sign-in time in a new session cookie, and keeps a re-issued cookie's", async () => {
+    const userId = await createSessionUser(0);
+    const before = Date.now();
+
+    const signIn = (await createUserSessionCookie(userId)).split(";")[0];
+    const signedInAt = await getSessionAuthenticatedAt(requestWithCookie(signIn));
+    expect(signedInAt).toBeGreaterThanOrEqual(before);
+    expect(signedInAt).toBeLessThanOrEqual(Date.now());
+
+    const reissued = (await createUserSessionCookie(userId, null, null, { authenticatedAt: 1_700_000_000_000 })).split(";")[0];
+    await expect(getSessionAuthenticatedAt(requestWithCookie(reissued))).resolves.toBe(1_700_000_000_000);
+
+    const unrecorded = (await createUserSessionCookie(userId, null, null, { authenticatedAt: null })).split(";")[0];
+    await expect(getSessionAuthenticatedAt(requestWithCookie(unrecorded))).resolves.toBeNull();
+    await expect(getUserId(requestWithCookie(unrecorded))).resolves.toBe(userId);
+  });
+
+  it("reads no sign-in time from an older cookie or a malformed value", async () => {
+    const userId = await createSessionUser(0);
+    await expect(getSessionAuthenticatedAt(requestWithCookie(await cookieFor({ userId })))).resolves.toBeNull();
+    for (const authenticatedAt of ["1700000000000", 0, -5, 1.5]) {
+      await expect(getSessionAuthenticatedAt(requestWithCookie(await cookieFor({ userId, authenticatedAt })))).resolves.toBeNull();
     }
   });
 
