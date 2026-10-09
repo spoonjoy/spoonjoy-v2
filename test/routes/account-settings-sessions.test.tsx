@@ -10,6 +10,8 @@ import { createUserSessionCookie, getSessionIdentity, getUserId } from "~/lib/se
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
+import { issueConnectorTokens, registerOAuthClient } from "~/lib/oauth-server.server";
 
 interface DataResult {
   data: AccountSettingsActionResult;
@@ -71,7 +73,7 @@ describe("Account settings - revocable sessions", () => {
 
       expect(result.data).toEqual({
         success: true,
-        message: "You've been signed out everywhere else. You're still signed in here.",
+        message: "You've been signed out everywhere else, and apps, agents and API tokens have been disconnected. You're still signed in here.",
       });
       expect(await currentVersion(userId)).toBe(1);
 
@@ -118,6 +120,92 @@ describe("Account settings - revocable sessions", () => {
     });
   });
 
+  describe("bearer credentials", () => {
+    const ISSUER = "http://localhost:3000";
+
+    async function seedAccess() {
+      const db = await getLocalDb();
+      const personal = await createApiCredential(db, userId, "Laptop script");
+      const delegated = await createApiCredential(db, userId, "Spoonjoy for iPhone delegated token", { scopes: "account:read account:write" });
+      const client = await registerOAuthClient(db, { clientName: "Some agent", redirectUris: ["https://agent.example/cb"], issuer: ISSUER });
+      const oauth = await issueConnectorTokens(db, { userId, clientId: client.clientId, scope: "kitchen:read", issuer: ISSUER });
+      const pending = await db.agentConnectionRequest.create({
+        data: {
+          deviceCodeHash: `hash-${userId}`,
+          userCode: `CODE-${userId.slice(-4)}`,
+          agentName: "Approved but uncollected",
+          scopes: "kitchen:read",
+          status: "approved",
+          approvedById: userId,
+          approvedAt: new Date(),
+          expiresAt: new Date(Date.now() + 600_000),
+        },
+      });
+      return { db, personal, delegated, oauth, pending };
+    }
+
+    async function expectAllRevoked(seed: Awaited<ReturnType<typeof seedAccess>>, reason: string) {
+      for (const token of [seed.personal.token, seed.delegated.token, seed.oauth.accessToken]) {
+        await expect(authenticateApiToken(seed.db, token, ISSUER)).rejects.toMatchObject({ status: 401 });
+      }
+      expect(await seed.db.oAuthRefreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+      const grants = await seed.db.oAuthGrant.findMany({ where: { userId } });
+      expect(grants.map((grant) => [grant.status, grant.statusReason])).toEqual([["revoked", reason]]);
+      const request = await seed.db.agentConnectionRequest.findUniqueOrThrow({ where: { id: seed.pending.id } });
+      expect(request.status).toBe("denied");
+    }
+
+    it("sign out everywhere revokes API tokens, delegated tokens, OAuth connections and approved agent requests", async () => {
+      const seed = await seedAccess();
+      await expect(authenticateApiToken(seed.db, seed.personal.token, ISSUER)).resolves.toMatchObject({ id: userId });
+
+      await postAction(cookiePair(await createUserSessionCookie(userId)), { intent: "signOutEverywhere" });
+
+      await expectAllRevoked(seed, "security_event");
+    });
+
+    it("a password change revokes bearer credentials by default", async () => {
+      const seed = await seedAccess();
+
+      await postAction(cookiePair(await createUserSessionCookie(userId)), {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "newSecurePassword456!",
+        confirmPassword: "newSecurePassword456!",
+        connectionsChoice: "1",
+        revokeConnections: "on",
+      });
+
+      await expectAllRevoked(seed, "security_event");
+    });
+
+    it("a password change keeps bearer credentials when the chef unticks the box", async () => {
+      const seed = await seedAccess();
+
+      const result = (await postAction(cookiePair(await createUserSessionCookie(userId)), {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "newSecurePassword456!",
+        confirmPassword: "newSecurePassword456!",
+        connectionsChoice: "1",
+      })) as unknown as DataResult;
+
+      expect(result.data.message).toBe("Your password has been changed successfully. Other browsers signed in to your account have been signed out.");
+      await expect(authenticateApiToken(seed.db, seed.personal.token, ISSUER)).resolves.toMatchObject({ id: userId });
+      await expect(authenticateApiToken(seed.db, seed.oauth.accessToken, ISSUER)).resolves.toMatchObject({ id: userId });
+    });
+
+    it("does not touch another chef's credentials", async () => {
+      const db = await getLocalDb();
+      const other = await createUser(db, faker.internet.email(), `other_${faker.string.alphanumeric(8)}`, PASSWORD);
+      const otherToken = await createApiCredential(db, other.id, "Other chef");
+
+      await postAction(cookiePair(await createUserSessionCookie(userId)), { intent: "signOutEverywhere" });
+
+      await expect(authenticateApiToken(db, otherToken.token, ISSUER)).resolves.toMatchObject({ id: other.id });
+    });
+  });
+
   describe("action - change password", () => {
     it("revokes every other session and keeps this browser signed in", async () => {
       const thisBrowser = cookiePair(await createUserSessionCookie(userId));
@@ -133,7 +221,7 @@ describe("Account settings - revocable sessions", () => {
       expect(result.data).toEqual({
         success: true,
         intent: "changePassword",
-        message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
+        message: "Your password has been changed. Other browsers have been signed out, and apps, agents and API tokens have been disconnected.",
       });
       expect(await currentVersion(userId)).toBe(1);
       const db = await getLocalDb();
