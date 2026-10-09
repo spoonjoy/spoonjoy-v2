@@ -513,6 +513,26 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:build"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],
+  ["unit-changed", [
+    actionStepSignature(PINNED_CHECKOUT_ACTION),
+    actionStepSignature(PINNED_SETUP_NODE_ACTION),
+    commandStepSignature(CI_INVOCATION_VALIDATION_COMMAND),
+    commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
+      `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
+    commandStepSignature("pnpm run verify:clean:migrations"),
+    commandStepSignature(
+      `DATABASE_URL="file:./test.db" ${WARNING_GATE_COMMAND_PREFIX}pnpm exec prisma db push --skip-generate`,
+    ),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
+    commandStepSignature("pnpm run verify:clean:typecheck"),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --no-tags --depth=1 origin "$SPOONJOY_CHANGED_SINCE"`),
+    commandStepSignature("pnpm run verify:clean:test:changed"),
+    commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
+  ]],
   ["workers-coverage", [
     actionStepSignature(PINNED_CHECKOUT_ACTION),
     actionStepSignature(PINNED_SETUP_NODE_ACTION),
@@ -577,9 +597,19 @@ const CI_JOB_CONTRACTS = Object.freeze({
     timeoutMinutes: 15,
     env: undefined,
   }),
+  // Skipped on pull requests (the required check then reports passed); the merge queue's run of
+  // the exact commit that lands runs it in full.
   coverage: Object.freeze({
     name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}",
+    if: "github.event_name != 'pull_request'",
     timeoutMinutes: 90,
+    env: undefined,
+  }),
+  // Pull requests only, not required: typecheck and the tests the change affects.
+  "unit-changed": Object.freeze({
+    name: "unit-changed",
+    if: "github.event_name == 'pull_request'",
+    timeoutMinutes: 30,
     env: undefined,
   }),
   "workers-coverage": Object.freeze({
@@ -595,6 +625,10 @@ const CI_JOB_CONTRACTS = Object.freeze({
       SESSION_SECRET: "ci-e2e-session-secret",
     }),
   }),
+});
+
+const CI_CHANGED_SINCE_ENV = Object.freeze({
+  SPOONJOY_CHANGED_SINCE: "${{ github.event.pull_request.base.sha }}",
 });
 
 const CI_OSV_SCANNER_ENV = Object.freeze({
@@ -652,12 +686,19 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
 
   for (const [jobName, rawJob] of Object.entries(jobs)) {
     const job = objectRecord(rawJob);
-    const contract = CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
-    const expectedJobKeys = contract.env
-      ? ["name", "runs-on", "timeout-minutes", "env", "steps"]
-      : ["name", "runs-on", "timeout-minutes", "steps"];
+    const contract: { name: string; if?: string; timeoutMinutes: number; env?: Record<string, string> } =
+      CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
+    const expectedJobKeys = [
+      "name",
+      ...(contract.if === undefined ? [] : ["if"]),
+      "runs-on",
+      "timeout-minutes",
+      ...(contract.env ? ["env"] : []),
+      "steps",
+    ];
     if (
       !exactObjectKeys(job, expectedJobKeys) ||
+      job.if !== contract.if ||
       job.name !== contract.name ||
       job["runs-on"] !== "ubuntu-latest" ||
       job["timeout-minutes"] !== contract.timeoutMinutes ||
@@ -715,16 +756,20 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
         commands.includes(`${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`);
       const isDisposableCleanupStep =
         commands.length === 1 && commands[0] === CI_DISPOSABLE_CLEANUP_COMMAND;
+      // unit-changed's base-commit steps read the base SHA from the event through env, never by
+      // interpolating it into the shell.
+      const isChangedSinceStep = jobName === "unit-changed" && step.env !== undefined;
       if (
         !exactObjectKeys(
           step,
-          isOsvInstallStep
+          isOsvInstallStep || isChangedSinceStep
             ? ["name", "env", "run"]
             : isDisposableCleanupStep
               ? ["name", "if", "run"]
               : ["name", "run"],
         ) ||
         (isOsvInstallStep && !exactWorkflowRecord(step.env, CI_OSV_SCANNER_ENV)) ||
+        (isChangedSinceStep && !exactWorkflowRecord(step.env, CI_CHANGED_SINCE_ENV)) ||
         (isDisposableCleanupStep && (
           step.name !== "🧹 Cleanup local disposable data" || step.if !== "always()"
         )) ||
@@ -1744,7 +1789,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "CI workflow",
       ciWorkflowIsCanonical,
-      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
+      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, run coverage everywhere but pull requests and the changed-files unit job only on pull requests, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",

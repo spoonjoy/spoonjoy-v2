@@ -428,7 +428,8 @@ describe("CI warning suppression at source", () => {
 
     expect(envIndex).toBeGreaterThan(-1);
     expect(envIndex).toBeLessThan(jobsIndex);
-    expect(generateCommands).toHaveLength(2);
+    // coverage, unit-changed and e2e.
+    expect(generateCommands).toHaveLength(3);
     expect(generateCommands.every((index) => index > envIndex)).toBe(true);
     expect(packageJson.scripts.postinstall).toBe(
       "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
@@ -464,7 +465,8 @@ describe("CI warning suppression at source", () => {
   });
 
   it("warning-gates every Corepack command in canonical CI", () => {
-    expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(4);
+    // advisory, coverage, unit-changed, workers-coverage and e2e.
+    expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(5);
     expect(ci).not.toMatch(/^\s*corepack\s/m);
   });
 });

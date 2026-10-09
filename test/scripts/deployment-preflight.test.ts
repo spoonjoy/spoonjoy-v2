@@ -56,6 +56,8 @@ function secureProductionDeployWorkflow(
 
 const COVERAGE_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}";
+const COVERAGE_JOB_IF_LINE = "    if: github.event_name != 'pull_request'";
+const COVERAGE_JOB_HEAD = `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n${COVERAGE_JOB_IF_LINE}\n`;
 const STORYBOOK_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}";
 
@@ -2799,8 +2801,8 @@ describe("deployment preflight", () => {
     ],
     [
       "job ENV",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env:\n      ENV: /tmp/bypass\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    env:\n      ENV: /tmp/bypass\n    runs-on:`,
     ],
     [
       "step SHELLOPTS",
@@ -2860,7 +2862,7 @@ describe("deployment preflight", () => {
   it.each([
     [
       "job if false",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
       `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: false\n    runs-on:`,
     ],
     [
@@ -2885,8 +2887,8 @@ describe("deployment preflight", () => {
     ],
     [
       "inline-map BASH_ENV",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env: {BASH_ENV: /tmp/preload}\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    env: {BASH_ENV: /tmp/preload}\n    runs-on:`,
     ],
     [
       "NODE_OPTIONS preload",
@@ -2895,8 +2897,8 @@ describe("deployment preflight", () => {
     ],
     [
       "case-folded dangerous env",
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    runs-on:`,
+      `${COVERAGE_JOB_HEAD}    env: {node_options: --require=/tmp/preload.cjs}\n    runs-on:`,
     ],
     [
       "extra trigger",
@@ -3284,6 +3286,24 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it.each([
+    ["coverage runs on pull requests again", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n`],
+    ["coverage skips everywhere", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: github.event_name == 'pull_request'\n`],
+    ["coverage skips in the merge queue", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: github.event_name != 'merge_group'\n`],
+    ["unit-changed runs outside pull requests", "    name: unit-changed\n    if: github.event_name == 'pull_request'\n", "    name: unit-changed\n    if: always()\n"],
+    ["unit-changed interpolates the base commit into its shell", 'git fetch --no-tags --depth=1 origin "$SPOONJOY_CHANGED_SINCE"', "git fetch --no-tags --depth=1 origin ${{ github.event.pull_request.base.sha }}"],
+    ["unit-changed reads its base from elsewhere", "        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}\n        run: pnpm run verify:clean:test:changed", "        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.head.ref }}\n        run: pnpm run verify:clean:test:changed"],
+    ["unit-changed runs an ungated test command", "        run: pnpm run verify:clean:test:changed", "        run: pnpm exec vitest run"],
+    ["unit-changed is removed", "\n  unit-changed:\n", "\n  unit-changed-removed:\n"],
+  ])("rejects a CI workflow where %s", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("CI workflow");
   });
 
   it("rejects a command-free CI metadata job without warning-clean setup", () => {

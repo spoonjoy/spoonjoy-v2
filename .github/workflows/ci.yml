@@ -84,8 +84,14 @@ jobs:
         run: |
           node scripts/warning-gate.ts -- pnpm run advisory:scan -- --scanner .cache/osv-scanner/osv-scanner --output .advisory/osv-results.json
 
+  # Coverage (about 18 minutes) runs in the merge queue, on main and on dispatches, not on pull
+  # requests: on a pull request this job is skipped by `if`, which reports the required `coverage`
+  # check as passed so the pull request can enter the queue, and the queue's merge_group run of the
+  # exact commit that will land then runs it in full and gates the merge. `unit-changed` below gives
+  # a pull request fast feedback from the tests its changes affect.
   coverage:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -155,6 +161,67 @@ jobs:
 
       - name: 🏗️ Build
         run: pnpm run verify:clean:build
+
+      - name: 🧹 Cleanup local disposable data
+        if: always()
+        run: node scripts/warning-gate.ts -- pnpm run cleanup:local:apply
+
+  # Pull requests only, and not a required check: typecheck, then the unit tests affected by the
+  # files this pull request changes (vitest --changed against the base commit; a change to
+  # package.json, the lockfile or the Vitest config reruns everything). Full coverage runs in the
+  # merge queue before anything lands.
+  unit-changed:
+    name: unit-changed
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
+      - name: 📦 Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: 📥 Install dependencies
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+
+      - name: 🔧 Generate Prisma client
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
+
+      - name: 🗄️ Apply D1 migrations (local)
+        run: pnpm run verify:clean:migrations
+
+      - name: 🗄️ Apply Prisma schema to test database
+        run: DATABASE_URL="file:./test.db" node scripts/warning-gate.ts -- pnpm exec prisma db push --skip-generate
+
+      - name: 🌱 Seed local D1 database
+        run: node scripts/warning-gate.ts -- pnpm db:seed
+
+      - name: 🔍 Typecheck
+        run: pnpm run verify:clean:typecheck
+
+      - name: 📥 Fetch the pull request's base commit
+        env:
+          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/warning-gate.ts -- git fetch --no-tags --depth=1 origin "$SPOONJOY_CHANGED_SINCE"
+
+      - name: 🧪 Tests affected by this change
+        env:
+          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}
+        run: pnpm run verify:clean:test:changed
 
       - name: 🧹 Cleanup local disposable data
         if: always()
