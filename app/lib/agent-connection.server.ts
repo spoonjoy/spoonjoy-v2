@@ -65,28 +65,17 @@ const DEFAULT_BASE_URL = "https://spoonjoy.app";
 const DEFAULT_TTL_MINUTES = 10;
 const DEFAULT_SCOPES = "shopping_list:read shopping_list:write";
 
-/**
- * The only scopes an agent connection can grant. Anyone can start a request and send the link to a
- * chef, so a connection never grants account-level access (email, password, tokens): those stay
- * with the chef's own signed-in session and OAuth apps they authorize directly.
- */
-export const AGENT_CONNECTION_SCOPES = [
-  "public:read",
-  "recipes:read",
-  "cookbooks:read",
-  "shopping_list:read",
-  "shopping_list:write",
-  "kitchen:read",
-  "kitchen:write",
-] as const;
-
-const AGENT_CONNECTION_SCOPE_SET = new Set<string>(AGENT_CONNECTION_SCOPES);
-
-/** Scopes that let the agent change the chef's data. The approval page warns about each one. */
-export const AGENT_CONNECTION_WRITE_SCOPES = ["shopping_list:write", "kitchen:write"] as const;
-
-/** How long a token from an approved agent connection lasts. The chef connects again after this. */
-export const AGENT_CONNECTION_TOKEN_TTL_DAYS = 90;
+export {
+  AGENT_CONNECTION_SCOPES,
+  AGENT_CONNECTION_TOKEN_TTL_DAYS,
+  AGENT_CONNECTION_WRITE_SCOPES,
+  isGrantableAgentConnectionScope,
+} from "~/lib/agent-connection-scopes";
+import {
+  AGENT_CONNECTION_SCOPES,
+  AGENT_CONNECTION_TOKEN_TTL_DAYS,
+  isGrantableAgentConnectionScope,
+} from "~/lib/agent-connection-scopes";
 
 /** Network details of whoever started a request. Reported by the network; never verified. */
 export interface AgentConnectionRequester {
@@ -95,10 +84,6 @@ export interface AgentConnectionRequester {
   country?: string | null;
 }
 
-/** True when every scope on the request is one an agent connection may grant. */
-export function isGrantableAgentConnectionScope(scopes: string): boolean {
-  return scopes.trim().split(/\s+/).filter(Boolean).every((scope) => AGENT_CONNECTION_SCOPE_SET.has(scope));
-}
 const USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export type AgentConnectionPublicStatus = "pending" | "approved" | "denied" | "expired" | "claimed";
@@ -176,7 +161,7 @@ function normalizeDelegatedScopes(value: string | undefined): string {
     }
     throw error;
   }
-  const refused = scopes.split(" ").filter((scope) => !AGENT_CONNECTION_SCOPE_SET.has(scope));
+  const refused = scopes.split(" ").filter((scope) => !isGrantableAgentConnectionScope(scope));
   if (refused.length > 0) {
     throw new ApiAuthError(
       `Agent connections cannot grant ${refused.join(", ")}. Allowed scopes: ${AGENT_CONNECTION_SCOPES.join(" ")}.`,

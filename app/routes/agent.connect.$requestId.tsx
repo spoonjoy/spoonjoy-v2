@@ -3,14 +3,16 @@ import { Form, data, redirect, useActionData, useLoaderData } from "react-router
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import {
-  AGENT_CONNECTION_TOKEN_TTL_DAYS,
-  AGENT_CONNECTION_WRITE_SCOPES,
   approveAgentConnectionRequest,
   denyAgentConnectionRequest,
   getAgentConnectionRequest,
   type AgentConnectionPublicStatus,
 } from "~/lib/agent-connection.server";
-import { ApiAuthError } from "~/lib/api-auth.server";
+import {
+  AGENT_CONNECTION_TOKEN_TTL_DAYS,
+  AGENT_CONNECTION_WRITE_SCOPES,
+  isGrantableAgentConnectionScope,
+} from "~/lib/agent-connection-scopes";
 import { requestNetworkDetails } from "~/lib/spoonjoy-api-request.server";
 import {
   isSameSiteFormPost,
@@ -161,14 +163,15 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     );
   }
 
-  try {
-    await approveAgentConnectionRequest(db, params.requestId, userId);
-  } catch (error) {
-    if (error instanceof ApiAuthError) {
-      return data({ error: error.message } satisfies ActionData, { status: error.status });
-    }
-    throw error;
+  // A request started before account scopes were refused can't be approved with them.
+  if (!isGrantableAgentConnectionScope(connection.scopes)) {
+    return data(
+      { error: "This request asks for account access, which agent connections can't grant. Ask your agent to start a new connection." } satisfies ActionData,
+      { status: 400 },
+    );
   }
+
+  await approveAgentConnectionRequest(db, params.requestId, userId);
   throw redirect(`/agent/connect/${params.requestId}`);
 }
 
