@@ -1,5 +1,5 @@
 import type { Route } from "./+types/agent.connect.$requestId";
-import { Form, data, redirect, useLoaderData } from "react-router";
+import { Form, data, redirect, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import {
@@ -8,33 +8,68 @@ import {
   getAgentConnectionRequest,
   type AgentConnectionPublicStatus,
 } from "~/lib/agent-connection.server";
+import {
+  AGENT_CONNECTION_TOKEN_TTL_DAYS,
+  AGENT_CONNECTION_WRITE_SCOPES,
+  isGrantableAgentConnectionScope,
+} from "~/lib/agent-connection-scopes";
+import { requestNetworkDetails } from "~/lib/spoonjoy-api-request.server";
+import {
+  isSameSiteFormPost,
+  normalizeUserCode,
+  typedCodeFor,
+} from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/ui/button";
 import { Heading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 
+type Requester = {
+  ip: string | null;
+  country: string | null;
+  userAgent: string | null;
+  requestedMinutesAgo: number;
+};
+
 type LoaderData = {
   status: AgentConnectionPublicStatus | "missing";
   agentName: string;
-  userCode: string | null;
   scopes: string[];
   userEmail: string | null;
   expiresAt: string | null;
+  // Only once the chef has typed the code for this request (on the lookup page).
+  confirmedCode?: string | null;
+  requester?: Requester | null;
+  approverCountry?: string | null;
 };
+
+type ActionData = { error: string };
 
 const SCOPE_LABELS: Record<string, string> = {
   "cookbooks:read": "Read public cookbooks",
   "kitchen:read": "Read public recipes, cookbooks, and your shopping list",
-  "kitchen:write": "Use write-capable kitchen tools and shopping-list writes",
+  "kitchen:write": "Create, change, and delete your recipes, cookbooks, and shopping list",
   "public:read": "Read public Spoonjoy data",
   "recipes:read": "Read public recipes",
   "shopping_list:read": "Read your shopping list",
   "shopping_list:write": "Add, check, and remove shopping-list items",
 };
 
+const WRITE_SCOPE_WARNINGS: Record<(typeof AGENT_CONNECTION_WRITE_SCOPES)[number], string> = {
+  "shopping_list:write": "can add, check off, and remove items on your shopping list.",
+  "kitchen:write": "can create, change, and delete your recipes and cookbooks, and change your shopping list.",
+};
+
+const MISSING: LoaderData = {
+  status: "missing",
+  agentName: "this agent",
+  scopes: [],
+  userEmail: null,
+  expiresAt: null,
+};
+
 function loginRedirect(request: Request): string {
-  const url = new URL(request.url);
-  const path = `${url.pathname}${url.search}`;
-  return `/login?redirectTo=${encodeURIComponent(path)}`;
+  // Only the path: an older link may carry ?code=, which must not survive into the approval.
+  return `/login?redirectTo=${encodeURIComponent(new URL(request.url).pathname)}`;
 }
 
 function connectionTitle(status: LoaderData["status"]): string {
@@ -52,73 +87,60 @@ export function meta({ data }: Route.MetaArgs) {
   ];
 }
 
-function normalizeUserCode(value: string | null): string {
-  const compact = (value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (compact.length <= 4) return compact;
-  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
-}
-
 export async function loader({ request, context, params }: Route.LoaderArgs) {
+  const env = context.cloudflare?.env;
   const db = await getRequestDb(context);
   const connection = await getAgentConnectionRequest(db, params.requestId);
-  if (!connection) {
+  if (!connection) return MISSING;
+
+  const scopes = connection.scopes.split(/\s+/).filter(Boolean);
+  if (connection.status !== "pending") {
     return {
-      status: "missing",
-      agentName: "this agent",
-      userCode: null,
-      scopes: [],
+      status: connection.status as AgentConnectionPublicStatus,
+      agentName: connection.agentName,
+      scopes,
       userEmail: null,
-      expiresAt: null,
+      expiresAt: connection.expiresAt.toISOString(),
     } satisfies LoaderData;
   }
 
-  const suppliedCode = normalizeUserCode(new URL(request.url).searchParams.get("code"));
-  if (connection.status === "pending" && suppliedCode !== connection.userCode) {
-    return {
-      status: "missing",
-      agentName: "this agent",
-      userCode: null,
-      scopes: [],
-      userEmail: null,
-      expiresAt: null,
-    } satisfies LoaderData;
-  }
+  const userId = await getUserId(request, env);
+  if (!userId) throw redirect(loginRedirect(request));
 
-  const userId = await getUserId(request, context.cloudflare?.env);
-  if (!userId && connection.status === "pending") {
-    throw redirect(loginRedirect(request));
-  }
-
-  const user = userId
-    ? await db.user.findUnique({ where: { id: userId }, select: { email: true } })
-    : null;
-
+  // getUserId has just confirmed this account exists.
+  const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true } });
+  const typedCode = await typedCodeFor(env, request, connection.id);
   return {
-    status: connection.status as AgentConnectionPublicStatus,
+    status: "pending",
     agentName: connection.agentName,
-    userCode: connection.userCode,
-    scopes: connection.scopes.split(/\s+/).filter(Boolean),
-    userEmail: user?.email ?? null,
+    scopes,
+    userEmail: user.email,
     expiresAt: connection.expiresAt.toISOString(),
+    confirmedCode: typedCode === connection.userCode ? typedCode : null,
+    requester: {
+      ip: connection.requesterIp,
+      country: connection.requesterCountry,
+      userAgent: connection.requesterUserAgent,
+      requestedMinutesAgo: Math.max(0, Math.floor((Date.now() - connection.createdAt.getTime()) / 60000)),
+    },
+    approverCountry: requestNetworkDetails(request).country,
   } satisfies LoaderData;
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
-  const userId = await getUserId(request, context.cloudflare?.env);
+  const env = context.cloudflare?.env;
+  const userId = await getUserId(request, env);
   if (!userId) throw redirect(loginRedirect(request));
+  if (!isSameSiteFormPost(request, env)) {
+    return data({ error: "Approve or deny this connection from this page." } satisfies ActionData, { status: 403 });
+  }
 
   const formData = await request.formData();
   const intent = formData.get("intent")?.toString();
-  const userCode = normalizeUserCode(formData.get("userCode")?.toString() ?? "");
   const db = await getRequestDb(context);
   const connection = await getAgentConnectionRequest(db, params.requestId);
-  if (!connection || userCode !== connection.userCode) {
-    return data({ error: "Connection code is required" }, { status: 400 });
-  }
-
-  if (intent === "approve") {
-    await approveAgentConnectionRequest(db, params.requestId, userId);
-    throw redirect(`/agent/connect/${params.requestId}`);
+  if (!connection) {
+    return data({ error: "This connection request was not found or has expired." } satisfies ActionData, { status: 404 });
   }
 
   if (intent === "deny") {
@@ -126,47 +148,107 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     throw redirect(`/agent/connect/${params.requestId}`);
   }
 
-  return data({ error: "Choose approve or deny" }, { status: 400 });
+  if (intent !== "approve") {
+    return data({ error: "Choose approve or deny" } satisfies ActionData, { status: 400 });
+  }
+
+  // The code must come from the chef: typed into this page, or typed earlier on the lookup page
+  // (remembered in a signed cookie for this request only). It is never read from the link.
+  const typedCode = normalizeUserCode(formData.get("userCode")?.toString() ?? "")
+    || (await typedCodeFor(env, request, connection.id))
+    || "";
+  if (typedCode !== connection.userCode) {
+    return data(
+      { error: "That code doesn't match. Type the code your agent shows you." } satisfies ActionData,
+      { status: 400 },
+    );
+  }
+
+  // A request started before account scopes were refused can't be approved with them.
+  if (!isGrantableAgentConnectionScope(connection.scopes)) {
+    return data(
+      { error: "This request asks for account access, which agent connections can't grant. Ask your agent to start a new connection." } satisfies ActionData,
+      { status: 400 },
+    );
+  }
+
+  await approveAgentConnectionRequest(db, params.requestId, userId);
+  throw redirect(`/agent/connect/${params.requestId}`);
 }
 
+function requestedAgo(minutes: number): string {
+  if (minutes < 1) return "less than a minute ago";
+  if (minutes === 1) return "1 minute ago";
+  return `${minutes} minutes ago`;
+}
+
+const LABEL = "font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]";
+
 export default function AgentConnect() {
-  const connection = useLoaderData<typeof loader>();
+  const connection = useLoaderData<typeof loader>() as LoaderData;
+  const actionData = useActionData<typeof action>() as ActionData | undefined;
   const actionable = connection.status === "pending";
+  const connected = connection.status === "approved" || connection.status === "claimed";
   const scopes = connection.scopes ?? [];
-  const broadScopes = scopes.filter((scope) => scope === "kitchen:read" || scope === "kitchen:write");
+  const writeScopes = AGENT_CONNECTION_WRITE_SCOPES.filter((scope) => scopes.includes(scope));
+  const requester = connection.requester;
 
   return (
     <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
-      <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-        Agent access
-      </p>
+      <p className={LABEL}>Agent access</p>
       <Heading className="mt-3">{connectionTitle(connection.status)}</Heading>
       <Text className="mt-5 text-lg/7">
         {actionable
-          ? `${connection.agentName} wants permission to use Spoonjoy with these exact scopes.`
-          : connection.status === "approved" || connection.status === "claimed"
-            ? `${connection.agentName} can now use Spoonjoy on your behalf.`
+          ? `A client calling itself "${connection.agentName}" wants permission to use Spoonjoy with these exact scopes.`
+          : connected
+            ? `A client calling itself "${connection.agentName}" is now connected to your Spoonjoy kitchen.`
             : connection.status === "denied"
-              ? `${connection.agentName} was not given access to your Spoonjoy kitchen.`
+              ? `The client calling itself "${connection.agentName}" was not given access to your Spoonjoy kitchen.`
               : "This Spoonjoy connection link is no longer available."}
       </Text>
 
-      {connection.userCode && (
-        <div className="mt-8 border-y border-[var(--sj-border)] py-5">
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-            Code
-          </p>
-          <p className="mt-2 font-sj-ui text-2xl font-semibold tracking-[0.12em] text-[var(--sj-ink)]">
-            {connection.userCode}
-          </p>
-        </div>
-      )}
+      {actionable ? (
+        <>
+          <Text className="mt-5" role="alert">
+            Spoonjoy did not verify who made this request; the name above is whatever the client chose. Deny it unless you just started this connection from your own agent, device, or app.
+          </Text>
 
-      {actionable && scopes.length > 0 ? (
+          {requester ? (
+            <div className="mt-6 border-y border-[var(--sj-border)] py-5">
+              <p className={LABEL}>Request details</p>
+              <dl className="mt-3 grid gap-2 text-sm/6 text-[var(--sj-ink)]">
+                <div>
+                  <dt className="inline font-semibold">Requested </dt>
+                  <dd className="inline">{requestedAgo(requester.requestedMinutesAgo)}</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold">From </dt>
+                  <dd className="inline break-all">
+                    {requester.ip ?? "an unknown IP address"}
+                    {requester.country ? ` (${requester.country})` : ""}
+                  </dd>
+                </div>
+                {requester.userAgent ? (
+                  <div>
+                    <dt className="inline font-semibold">Client software </dt>
+                    <dd className="inline break-all">{requester.userAgent}</dd>
+                  </div>
+                ) : null}
+                {connection.approverCountry ? (
+                  <div>
+                    <dt className="inline font-semibold">You are in </dt>
+                    <dd className="inline">{connection.approverCountry}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {(actionable || connected) && scopes.length > 0 ? (
         <div className="mt-6 border-y border-[var(--sj-border)] py-5">
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-            Requested scopes
-          </p>
+          <p className={LABEL}>{connected ? "Access granted" : "Requested scopes"}</p>
           <ul className="mt-3 grid gap-2">
             {scopes.map((scope) => (
               <li key={scope} className="text-sm/6 text-[var(--sj-ink)]">
@@ -179,6 +261,18 @@ export default function AgentConnect() {
         </div>
       ) : null}
 
+      {actionable && writeScopes.length > 0 ? (
+        <ul className="mt-5 grid gap-2" aria-label="Write access warnings">
+          {writeScopes.map((scope) => (
+            <li key={scope}>
+              <Text>
+                <strong>Write access:</strong> with <span className="font-mono">{scope}</span>, this client {WRITE_SCOPE_WARNINGS[scope]}
+              </Text>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {connection.userEmail && actionable && (
         <Text className="mt-5">
           You are approving as {connection.userEmail}.
@@ -186,27 +280,62 @@ export default function AgentConnect() {
       )}
 
       {actionable ? (
+        <Text className="mt-5">
+          Approval creates a Spoonjoy bearer token for this client that lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days. The client should never ask for your Spoonjoy password, and you can revoke the token in account settings.
+        </Text>
+      ) : null}
+
+      {connected ? (
         <>
-          {broadScopes.length ? (
-            <Text className="mt-5" role="alert">
-              This request includes broad kitchen scopes. Approve only if you trust this client to act across Spoonjoy kitchen data.
-            </Text>
-          ) : null}
           <Text className="mt-5">
-            Approval creates a normal Spoonjoy bearer token for this client. The client should never ask for your Spoonjoy password, and the token can be revoked later through Spoonjoy token-management APIs.
+            This access lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days from approval. You can revoke it at any time under API and app access in your account settings.
           </Text>
+          <div className="mt-8 flex flex-col sm:flex-row">
+            <Button href="/account/settings" plain>
+              Manage connected apps and tokens
+            </Button>
+          </div>
         </>
       ) : null}
 
+      {actionData?.error ? (
+        <Text className="mt-5" role="alert">{actionData.error}</Text>
+      ) : null}
+
       {actionable && (
-        <Form method="post" className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <input type="hidden" name="userCode" value={connection.userCode ?? ""} />
-          <Button type="submit" name="intent" value="approve">
-            Approve Access
-          </Button>
-          <Button type="submit" name="intent" value="deny" plain>
-            Deny
-          </Button>
+        <Form method="post" className="mt-8 grid gap-4">
+          {connection.confirmedCode ? (
+            <div className="border-y border-[var(--sj-border)] py-5">
+              <p className={LABEL}>Code you entered</p>
+              <p className="mt-2 font-sj-ui text-2xl font-semibold tracking-[0.12em] text-[var(--sj-ink)]">
+                {connection.confirmedCode}
+              </p>
+            </div>
+          ) : (
+            <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+              Type the code your agent shows you
+              <input
+                name="userCode"
+                required
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="ABCD-2345"
+                className="min-h-12 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xl font-semibold tracking-[0.12em] text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
+              />
+            </label>
+          )}
+          {/* Full-width stacked buttons on phones, side by side from sm up, as on the other auth pages.
+              Deny skips validation, so it works without a code; the action ignores the code on deny. */}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button type="submit" name="intent" value="approve">
+              Approve Access
+            </Button>
+            <Button type="submit" name="intent" value="deny" formNoValidate plain>
+              Deny
+            </Button>
+          </div>
         </Form>
       )}
     </main>

@@ -147,12 +147,12 @@ describe("production release provenance", () => {
       "Upload MCP OAuth canary artifacts",
     ]);
     expect(sha256(normalizedStepRun(production, "Validate release source", "Setup Node.js")))
-      .toBe("7ff584e5c41d0b6b53ad5c0b9b5aefadf05401629951332634ada34c1a843343");
+      .toBe("c95499e715c882b89cbdb467d525c80669fadadcd7d758a9c776685f07b1405a");
     expect(sha256(normalizedStepRun(
       production,
       "Ensure release artifact exists",
       "Upload MCP OAuth canary artifacts",
-    ))).toBe("4f5e514c5dabb8657117f837629d3222b0c010b55932451d8479cc79a192eeb6");
+    ))).toBe("41ecb18082678011e76875d3b6433f01e50bb5169722e6bc1b6aac078b78b0f8");
   });
 
   it("derives release recovery only from required canary evidence", () => {
@@ -182,14 +182,15 @@ describe("production release provenance", () => {
     expect(production).not.toContain("      protocol_v1_boundary_sha:");
     expect(production).not.toContain("--release-mode");
     expect(production).not.toContain("--protocol-v1-boundary-sha");
-    expect(production.split(rollbackGuard)).toHaveLength(2);
+    // Rollback dispatches work in every release mode; only canary mode adds the boundary ancestry check.
+    expect(production).not.toContain(rollbackGuard);
     expect(production.split(ancestryCheck)).toHaveLength(2);
 
     const validationStart = production.indexOf("name: Validate release source");
     const setupStart = production.indexOf("name: Setup Node.js");
     const deployStart = production.indexOf("name: Deploy staged release to Cloudflare Workers");
     const validation = production.slice(validationStart, setupStart);
-    expect(validation).toContain(rollbackGuard);
+    expect(validation).not.toContain(rollbackGuard);
     expect(validation).toContain('test -n "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"');
     expect(validation).toContain(`protocol_boundary_marker=${markerPath}`);
     expect(validation).toContain(
@@ -206,7 +207,6 @@ describe("production release provenance", () => {
     );
     expect(validation).toContain(ancestryCheck);
     expect(existsSync(markerPath)).toBe(true);
-    expect(production.indexOf(rollbackGuard)).toBeLessThan(deployStart);
     expect(production.indexOf(ancestryCheck)).toBeLessThan(deployStart);
     expect(production).toContain('releaseMode: $release_mode');
     expect(production).toContain(

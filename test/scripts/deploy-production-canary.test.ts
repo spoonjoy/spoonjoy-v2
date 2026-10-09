@@ -1574,6 +1574,92 @@ describe("deployment mutation identity protocol", () => {
     expect(deps.sleep).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["atomic-bootstrap", "atomic-product-activation"] as const)(
+    "rolls back in %s mode without a configured protocol boundary and writes a valid artifact",
+    async (releaseMode) => {
+      const runCommand = successfulRunner({
+        "git rev-parse HEAD": TOOLING_SHA,
+        "git rev-parse origin/main": TOOLING_SHA,
+        "pnpm exec wrangler deployments list --json": [
+          deploymentPayload(PREVIOUS_VERSION),
+          deploymentPayload(PREVIOUS_VERSION),
+          stagedDeploymentPayload(),
+          stagedDeploymentPayload(),
+          stagedDeploymentPayload(),
+          deploymentPayload(CANDIDATE_VERSION),
+          deploymentPayload(CANDIDATE_VERSION),
+        ],
+      }, { exactDeploymentSequence: true, preserveDeploymentIds: true });
+      const { protocolV1BoundarySha: _boundary, ...base } = rollbackDeps(runCommand);
+      const written: ReleaseArtifact[] = [];
+      const deps = {
+        ...base,
+        releaseMode,
+        writeReleaseArtifact: vi.fn(async (artifact: ReleaseArtifact) => {
+          written.push(artifact);
+          const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-artifact-"));
+          await writeReleaseArtifactFile(dir, artifact);
+        }),
+      };
+
+      const result = await runProductionRollback(deps);
+
+      expect(result).toMatchObject({
+        status: "rollback_promoted",
+        releaseMode,
+        deploymentStrategy: "atomic",
+        candidateVersionId: CANDIDATE_VERSION,
+      });
+      expect(result).not.toHaveProperty("protocolV1BoundarySha");
+      expect(written).toHaveLength(1);
+      const keys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+      if (releaseMode === "atomic-bootstrap") {
+        // Before product activation there is no boundary marker, so there is nothing to cross.
+        expect(keys.some((key) => key.startsWith("git log"))).toBe(false);
+        expect(keys.some((key) => key.includes("merge-base"))).toBe(false);
+      } else {
+        // After product activation the boundary comes from Git, and both sources must descend from it.
+        expect(keys).toContain(PROTOCOL_BOUNDARY_LOG_COMMAND);
+        expect(keys).toEqual(expect.arrayContaining([
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+        ]));
+      }
+      expect(keys).toContain(
+        `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+      );
+    },
+  );
+
+  it.each([
+    ["rollback_version_lookup", { treeHash: TREE_HASH }],
+    ["rollback_current_deployment", { treeHash: TREE_HASH, candidateVersionId: CANDIDATE_VERSION }],
+    ["rollback_already_active", {
+      treeHash: TREE_HASH,
+      previousVersionId: CANDIDATE_VERSION,
+      candidateVersionId: CANDIDATE_VERSION,
+    }],
+    ["rollback_active_version_mapping", {
+      treeHash: TREE_HASH,
+      previousVersionId: PREVIOUS_VERSION,
+      candidateVersionId: CANDIDATE_VERSION,
+    }],
+  ] as const)("accepts an atomic-mode rollback failure artifact at %s", async (phase, fields) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-failure-artifact-"));
+    await expect(writeReleaseArtifactFile(dir, {
+      status: "failed_before_stage",
+      sourceSha: RELEASE_SHA,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase,
+      reviewedMigrations: [],
+      migrationApply: "not_needed",
+      databaseRollbackSupported: false,
+      failure: "Rollback refused.",
+      ...fields,
+    } as ReleaseArtifact)).resolves.toBeUndefined();
+  });
+
   it("tolerates one exact predecessor observation after a rollback deploy", async () => {
     const runCommand = successfulRunner({
       "git rev-parse HEAD": TOOLING_SHA,
@@ -3814,6 +3900,24 @@ describe("production canary release orchestration", () => {
         "Cloudflare-Workers-Version-Overrides": `spoonjoy-v2=\"${CANDIDATE_VERSION}\"`,
       },
     });
+  });
+
+  it("targets the QA Worker name only when the rehearsal override is given", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    await readCandidateCspHeaders("https://example.test", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch);
+    await readCandidateCspHeaders(
+      "https://example.test",
+      CANDIDATE_VERSION,
+      fetchImpl as unknown as typeof fetch,
+      "spoonjoy-v2-qa",
+    );
+    const overrides = fetchImpl.mock.calls.map(([, init]) => (
+      (init as RequestInit).headers as Record<string, string>
+    )["Cloudflare-Workers-Version-Overrides"]);
+    expect(overrides).toEqual([
+      `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+      `spoonjoy-v2-qa="${CANDIDATE_VERSION}"`,
+    ]);
   });
 
   it("restores the previous version when the candidate smoke fails", async () => {
@@ -7267,7 +7371,7 @@ describe("release artifact and CLI boundary", () => {
       },
     );
 
-    it("parses only source-controlled lifecycle modes and forbids rollback in atomic modes", () => {
+    it("parses only source-controlled lifecycle modes and accepts rollback in every mode", () => {
       expect(parseReleaseCliOptions([], {
         SOURCE_SHA: RELEASE_SHA,
         SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
@@ -7302,18 +7406,19 @@ describe("release artifact and CLI boundary", () => {
         SOURCE_SHA: RELEASE_SHA,
         SPOONJOY_RELEASE_MODE: "gradual",
       })).toThrow("release mode");
-      expect(() => parseReleaseCliOptions([
-        "--rollback-version-id", CANDIDATE_VERSION,
-      ], {
-        SOURCE_SHA: RELEASE_SHA,
-        SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
-      })).toThrow("rollback");
-      expect(() => parseReleaseCliOptions([
-        "--rollback-version-id", CANDIDATE_VERSION,
-      ], {
-        SOURCE_SHA: RELEASE_SHA,
-        SPOONJOY_RELEASE_MODE: "atomic-product-activation",
-      })).toThrow("rollback");
+      for (const mode of ["atomic-bootstrap", "atomic-product-activation"] as const) {
+        expect(parseReleaseCliOptions([
+          "--rollback-version-id", CANDIDATE_VERSION,
+        ], {
+          SOURCE_SHA: RELEASE_SHA,
+          SPOONJOY_RELEASE_MODE: mode,
+        })).toEqual({
+          artifactDir: "mcp-oauth-canary-artifacts",
+          releaseMode: mode,
+          releaseSha: RELEASE_SHA,
+          rollbackVersionId: CANDIDATE_VERSION,
+        });
+      }
       expect(() => parseReleaseCliOptions([], {
         SOURCE_SHA: RELEASE_SHA,
         SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: PRODUCT_BOUNDARY_SHA,
@@ -7886,8 +7991,8 @@ describe("release artifact and CLI boundary", () => {
     it.each([
       ["protocol-v1-canary", undefined, "boundary"],
       ["protocol-v1-canary", "main", "boundary"],
-      ["atomic-bootstrap", undefined, "rollback"],
-      ["atomic-product-activation", undefined, "rollback"],
+      ["atomic-bootstrap", PRODUCT_BOUNDARY_SHA, "boundary"],
+      ["atomic-product-activation", PRODUCT_BOUNDARY_SHA, "boundary"],
     ] as const)("rejects direct %s rollback with boundary %s", async (
       releaseMode,
       protocolV1BoundarySha,
@@ -8064,6 +8169,45 @@ describe("release artifact and CLI boundary", () => {
         failure,
       });
     });
+
+    it.each(["rollback target", "current active"])(
+      "refuses an atomic product-activation rollback when the %s is below the Git boundary marker",
+      async (version) => {
+        const failure = version === "rollback target"
+          ? "Rollback target source is below the protocol-v1 boundary."
+          : "Current Worker source is below the protocol-v1 boundary.";
+        const targetCommand = `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`;
+        const currentCommand = `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`;
+        const runCommand = successfulRunner({
+          "git rev-parse HEAD": TOOLING_SHA,
+          "git rev-parse origin/main": TOOLING_SHA,
+          [PROTOCOL_BOUNDARY_LOG_COMMAND]: PRODUCT_BOUNDARY_SHA,
+          "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+          [version === "rollback target" ? targetCommand : currentCommand]: new Error("not an ancestor"),
+        });
+        const { protocolV1BoundarySha: _boundary, ...base } = rollbackDeps(runCommand);
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...base,
+          releaseMode: "atomic-product-activation" as const,
+          writeReleaseArtifact: vi.fn(async (artifact: ReleaseArtifact) => {
+            written.push(artifact);
+            const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-artifact-"));
+            await writeReleaseArtifactFile(dir, artifact);
+          }),
+        };
+
+        await expect(runProductionRollback(deps)).rejects.toThrow(failure);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([expect.objectContaining({
+          status: "failed_before_stage",
+          releaseMode: "atomic-product-activation",
+          phase: "rollback_protocol_ancestry",
+          failure,
+        })]);
+        expect(written[0]).not.toHaveProperty("protocolV1BoundarySha");
+      },
+    );
 
     it.each(["rollback target", "current active"])(
       "refuses a manual %s below the protocol-v1 boundary",
