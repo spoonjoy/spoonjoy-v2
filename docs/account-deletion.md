@@ -32,7 +32,7 @@ Deleting needs the username typed back, plus proof that the person is the owner 
 
 Deletion is one atomic D1 batch: every step applies, or none does.
 
-**Recipes that other cooks built on stay public, under the "deleted chef" account.** A recipe counts as built on when another cook forked it, saved it in one of their cookbooks, or logged a cook of it. Its chef becomes the `deleted-chef` account (profile `/users/deleted-chef`). Nobody can sign in to that account, and the username `deleted-chef` is reserved.
+**Recipes that other cooks built on stay public, under the "deleted chef" account.** A recipe counts as built on when another cook forked it, saved it in one of their cookbooks, or logged a cook of it. Its chef becomes the `deleted-chef` account (profile `/users/deleted-chef`), which bylines show as "Deleted chef" (`chefDisplayName` in `app/lib/username.ts`). Nobody can sign in to that account, and the username `deleted-chef` is reserved.
 
 **Forks stay with the cook who forked them.** A fork keeps pointing at the recipe it came from. If that recipe was one of the deleted person's own forks of their own recipe, the link is cleared.
 

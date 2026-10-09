@@ -27,6 +27,10 @@ export const WrongPassword: Story = {
   args: { deleteError: { error: "password_incorrect", message: "That password isn't right." } },
 };
 
+export const PasswordlessOpen: Story = {
+  args: { hasPassword: false, defaultOpen: true },
+};
+
 export const PasswordlessNeedsSignIn: Story = {
   args: {
     hasPassword: false,

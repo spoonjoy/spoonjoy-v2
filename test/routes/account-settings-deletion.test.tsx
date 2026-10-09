@@ -168,7 +168,7 @@ describe("Account deleted page", () => {
     const Stub = createTestRoutesStub([{ path: "/account/deleted", Component: AccountDeleted }]);
     render(<Stub initialEntries={["/account/deleted"]} />);
     expect(await screen.findByRole("heading", { name: "Your account is deleted" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "create a new account" })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: "Create a new account" })).toHaveAttribute("href", "/signup");
   });
 });
 
@@ -225,11 +225,17 @@ describe("Account settings - Your data section", () => {
 
     await user.click(await screen.findByRole("button", { name: "Delete account…" }));
     expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
+    // Neutral guidance before any attempt, and no error yet.
     expect(screen.getByText(/signed in within the last 10 minutes/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in again" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Type your username, ada, to confirm"), "ada");
     await user.click(screen.getByRole("button", { name: "Delete my account" }));
 
-    await user.click(await screen.findByRole("button", { name: "Sign in again" }));
+    // A failed attempt's message replaces the guidance.
+    expect(await screen.findByRole("alert")).toHaveTextContent("For your safety, sign in again");
+    expect(screen.queryByText(/signed in within the last 10 minutes/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign in again" }));
     expect(posted.map((f) => f.intent)).toEqual(["deleteAccount", "reauthenticate"]);
   });
 });

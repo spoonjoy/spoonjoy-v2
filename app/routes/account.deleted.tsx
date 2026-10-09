@@ -16,13 +16,14 @@ export default function AccountDeleted() {
         <CookbookHeader eyebrow="Spoonjoy" title="Your account is deleted">
           <Text className="mt-4 text-base/7">
             Your recipes, cookbooks, shopping list, cooks and sign-in methods are gone, and every app and agent you
-            connected has lost access. Recipes other cooks forked, saved or cooked stay up, credited to deleted-chef.
+            connected has lost access. Recipes other cooks forked, saved or cooked stay up, credited to a “Deleted chef” placeholder.
           </Text>
         </CookbookHeader>
-        <Text className="mt-6">
-          Thanks for cooking with us. You can <TextLink href="/signup">create a new account</TextLink> any time, or read
-          how we handle data in the <TextLink href="/privacy">privacy policy</TextLink>.
-        </Text>
+        <Text className="mt-6 text-base/7">Thanks for cooking with us. You're welcome back any time.</Text>
+        <div className="mt-2 flex flex-wrap gap-x-6">
+          <TextLink href="/signup">Create a new account</TextLink>
+          <TextLink href="/privacy#deletion">How we handle deleted accounts</TextLink>
+        </div>
       </div>
     </CookbookPage>
   );

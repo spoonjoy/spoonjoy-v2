@@ -13,13 +13,15 @@ export interface AccountDataSectionProps {
   hasPassword: boolean;
   /** The result of the last deleteAccount submission, if it failed. */
   deleteError?: { error?: string; message?: string } | null;
+  /** Open the deletion form on first render (Storybook). */
+  defaultOpen?: boolean;
 }
 
 // "Your data": download everything as JSON, or delete the account. Deleting asks for the username
 // typed back and, for an account with a password, that password; an account without one needs a
 // recent sign-in, so its form offers "Sign in again".
-export function AccountDataSection({ username, hasPassword, deleteError }: AccountDataSectionProps) {
-  const [isDeleting, setIsDeleting] = useState(Boolean(deleteError));
+export function AccountDataSection({ username, hasPassword, deleteError, defaultOpen = false }: AccountDataSectionProps) {
+  const [isDeleting, setIsDeleting] = useState(defaultOpen || Boolean(deleteError));
   const [typedUsername, setTypedUsername] = useState("");
   const needsFreshSignIn = deleteError?.error === "recent_sign_in_required";
 
@@ -41,8 +43,8 @@ export function AccountDataSection({ username, hasPassword, deleteError }: Accou
           <Text className="font-medium text-[var(--sj-ink)]">Delete account</Text>
           <Text className="mt-1 text-sm/6">
             Permanently deletes your account, recipes, cookbooks, shopping list, cooks and photos, and signs out every
-            app and agent you connected. Recipes other cooks forked, saved or cooked stay up, credited to deleted-chef;
-            their forks stay theirs. This can't be undone, so download your data first if you want a copy.
+            app and agent you connected. Recipes other cooks forked, saved or cooked stay up,
+            credited to a “Deleted chef” placeholder; their forks stay theirs. This can't be undone, so download your data first if you want a copy.
           </Text>
           <TextLink href="/privacy#deletion" className="text-sm">What gets deleted</TextLink>
           {isDeleting ? (
@@ -71,9 +73,11 @@ export function AccountDataSection({ username, hasPassword, deleteError }: Accou
                     invalid={deleteError?.error === "password_incorrect" || deleteError?.error === "password_required"}
                   />
                 </Field>
-              ) : (
+              ) : needsFreshSignIn ? null : (
+                // Neutral guidance before any attempt; a failed attempt's message replaces it.
                 <Text className="text-sm/6">
-                  Your account has no password, so you need to have signed in within the last 10 minutes.
+                  Your account has no password, so you need to have signed in within the last 10 minutes. If it has
+                  been longer, sign in again first.
                 </Text>
               )}
               {deleteError?.message ? (
@@ -90,12 +94,12 @@ export function AccountDataSection({ username, hasPassword, deleteError }: Accou
             </Form>
           ) : (
             <div className="mt-3">
-              <Button type="button" plain onClick={() => setIsDeleting(true)}>
+              <Button type="button" variant="destructive" onClick={() => setIsDeleting(true)}>
                 Delete account…
               </Button>
             </div>
           )}
-          {isDeleting && needsFreshSignIn ? (
+          {isDeleting && !hasPassword ? (
             <Form method="post" className="mt-3">
               <input type="hidden" name="intent" value="reauthenticate" />
               <Button type="submit" plain>

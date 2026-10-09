@@ -101,11 +101,12 @@ export default function Privacy() {
 
         <Section id="export" title="Download your data">
           <Text>
-            In <TextLink href="/account/settings#delete-account">account settings</TextLink>, choose
+            In account settings, choose
             Download my data to get one JSON file with your account details, your recipes with
             their steps and ingredients, your cookbooks, shopping list, and cooks, and links to
             your photos. The iPhone app offers the same download in its account screen.
           </Text>
+          <TextLink href="/account/settings#delete-account">Open account settings</TextLink>
         </Section>
 
         <Section id="deletion" title="Deleting your account">
@@ -123,8 +124,8 @@ export default function Privacy() {
           </ul>
           <Text>
             A recipe of yours that another cook has forked, saved to a cookbook, or cooked stays
-            up so their kitchen keeps working, but it is credited to a &ldquo;deleted-chef&rdquo;
-            account instead of you. Their forks remain theirs. Photos are erased from storage
+            up so their kitchen keeps working, but it is credited to a &ldquo;Deleted chef&rdquo;
+            placeholder instead of you. Their forks remain theirs. Photos are erased from storage
             after a short grace period once nothing uses them.
           </Text>
         </Section>

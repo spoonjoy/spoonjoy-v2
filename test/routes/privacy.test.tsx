@@ -32,8 +32,8 @@ describe("Privacy route", () => {
     expect(screen.getByText(/Spoonjoy is a public cookbook/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Download your data" }).closest("section")).toHaveAttribute("id", "export");
     expect(screen.getByRole("heading", { name: "Deleting your account" }).closest("section")).toHaveAttribute("id", "deletion");
-    expect(screen.getByText(/credited to a “deleted-chef”/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "account settings" })).toHaveAttribute("href", "/account/settings#delete-account");
+    expect(screen.getByText(/credited to a “Deleted chef”/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open account settings" })).toHaveAttribute("href", "/account/settings#delete-account");
     expect(screen.queryByText(/Request export or deletion of your data by emailing us/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "ari@spoonjoy.app" })).toHaveAttribute(
       "href",
