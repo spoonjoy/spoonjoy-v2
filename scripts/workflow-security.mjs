@@ -438,11 +438,15 @@ const PRODUCTION_DEPLOY_WORKFLOW_FILE = "production-deploy.yml";
 const RELEASE_ARTIFACT_NAME = "mcp-oauth-canary-artifacts";
 const RELEASE_ARTIFACT_FILE = "production-release.json";
 const RELEASED_RUN_LOOKBACK = 10;
+const RELEASE_RUN_EVENTS = new Set(["workflow_run", "workflow_dispatch"]);
 
 // The commit production runs, as the newest successful Production Deploy run that recorded a
 // release says: its release artifact must show the release promoted and complete. A successful run
-// with no artifact (one that was superseded, so its deploy job skipped) is passed over. Anything
-// else, including a rollback or any lookup error, gives null, and the caller releases as usual.
+// with no artifact (one that was superseded, so its deploy job skipped) is passed over. Only a run
+// GitHub started for main (a CI completion or a dispatch) whose own commit is on main counts, so
+// its artifact was written by main's own workflow; its released commit must be on main too.
+// Anything else, including a rollback or any lookup error, gives null, and the caller releases as
+// usual.
 export async function latestPromotedSha({
   run,
   repository,
@@ -457,11 +461,15 @@ export async function latestPromotedSha({
       "--branch", "main",
       "--status", "success",
       "--limit", String(RELEASED_RUN_LOOKBACK),
-      "--json", "databaseId",
+      "--json", "databaseId,event,headSha",
     ]), "gh run list");
     if (!Array.isArray(runs)) return null;
     for (const entry of runs) {
-      if (!Number.isSafeInteger(entry?.databaseId)) return null;
+      if (
+        !Number.isSafeInteger(entry?.databaseId) ||
+        !RELEASE_RUN_EVENTS.has(entry.event) ||
+        !await isAncestor(run, entry.headSha, "origin/main")
+      ) return null;
       const directory = makeTempDir();
       try {
         await run("gh", [
@@ -474,7 +482,9 @@ export async function latestPromotedSha({
         continue;
       }
       const artifact = parseJson(readFile(path.join(directory, RELEASE_ARTIFACT_FILE)), "The release artifact");
-      return artifact?.status === "promoted" && artifact.phase === "complete" && SHA_PATTERN.test(artifact.sourceSha)
+      return artifact?.status === "promoted" &&
+        artifact.phase === "complete" &&
+        await isAncestor(run, artifact.sourceSha, "origin/main")
         ? artifact.sourceSha
         : null;
     }
@@ -536,7 +546,7 @@ export async function chooseReleaseTarget({
     const released = await promotedSha({ run, repository });
     if (released && (released === target || await isAncestor(run, target, released))) {
       release = false;
-      reason = `Superseded: production already runs ${released}, which includes ${target}, so this run releases nothing.`;
+      reason = `${reason} Superseded: production already runs ${released}, which includes ${target}, so this run releases nothing. To release it anyway (for example after a rollback outside this workflow), dispatch Production Deploy with source_sha ${target}.`;
       log(`::notice title=Release superseded::${reason}`);
     }
   } else if (event !== "workflow_dispatch") {

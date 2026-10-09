@@ -888,7 +888,7 @@ describe("chooseReleaseTarget", () => {
     expect(target).toBe(TIP);
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, `source_sha=${TIP}\n`);
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "release=false\n");
-    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^::notice title=Release superseded::Superseded: production already runs 3{40}/));
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^::notice title=Release superseded::Main moved on; .* Superseded: production already runs 3{40}.* dispatch Production Deploy with source_sha 3{40}\.$/));
     expect(summary).toContain(`- Releasing: nothing (\`${TIP}\` is already in production)`);
   });
 
@@ -1042,10 +1042,14 @@ describe("chooseReleaseTarget", () => {
 
 describe("latestPromotedSha", () => {
   const RELEASED = "4".repeat(40);
-  const LIST = `gh run list --repo ${REPOSITORY} --workflow production-deploy.yml --branch main --status success --limit 10 --json databaseId`;
+  const RUN_SHA = "5".repeat(40);
+  const OFF_MAIN = "6".repeat(40);
+  const LIST = `gh run list --repo ${REPOSITORY} --workflow production-deploy.yml --branch main --status success --limit 10 --json databaseId,event,headSha`;
+  const released = (databaseId: number, overrides: Record<string, unknown> = {}) =>
+    ({ databaseId, event: "workflow_run", headSha: RUN_SHA, ...overrides });
 
   function releaseRunner({
-    runs = [{ databaseId: 7 }] as unknown,
+    runs = [released(7)] as unknown,
     artifacts = { 7: { status: "promoted", phase: "complete", sourceSha: RELEASED } } as Record<number, unknown>,
     list = undefined as string | undefined,
   } = {}) {
@@ -1053,6 +1057,11 @@ describe("latestPromotedSha", () => {
     const run = vi.fn(async (file: string, args: readonly string[]) => {
       const command = [file, ...args].join(" ");
       if (command === LIST) return list ?? JSON.stringify(runs);
+      const onMain = /^git merge-base --is-ancestor (\S+) origin\/main$/.exec(command);
+      if (onMain) {
+        if (onMain[1] === OFF_MAIN) throw new Error("not an ancestor");
+        return "";
+      }
       const download = /^gh run download (\d+) --repo spoonjoy\/spoonjoy-v2 --name mcp-oauth-canary-artifacts --dir (\S+)$/.exec(command);
       if (download) {
         const artifact = artifacts[Number(download[1])];
@@ -1075,14 +1084,18 @@ describe("latestPromotedSha", () => {
   });
 
   it("passes over successful runs with no release artifact, as superseded runs have", async () => {
-    const deps = releaseRunner({ runs: [{ databaseId: 9 }, { databaseId: 7 }] });
+    const deps = releaseRunner({ runs: [released(9), released(7)] });
     expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBe(RELEASED);
-    expect(deps.run).toHaveBeenCalledTimes(3);
+    expect(deps.run.mock.calls.filter(([, args]) => args[1] === "download")).toHaveLength(2);
   });
 
   it.each([
     ["no successful run", { runs: [] }],
-    ["no run with an artifact", { runs: [{ databaseId: 9 }] }],
+    ["no run with an artifact", { runs: [released(9)] }],
+    ["a run GitHub did not start for main's CI or a dispatch", { runs: [released(7, { event: "push" })] }],
+    ["a run whose own commit is not on main, as a dispatch from a tag named main would be", { runs: [released(7, { headSha: OFF_MAIN })] }],
+    ["a run with a malformed commit", { runs: [released(7, { headSha: "abc" })] }],
+    ["a released commit that is not on main", { artifacts: { 7: { status: "promoted", phase: "complete", sourceSha: OFF_MAIN } } }],
     ["a rollback as the newest release", { artifacts: { 7: { status: "rolled_back", phase: "complete", sourceSha: RELEASED } } }],
     ["an incomplete release", { artifacts: { 7: { status: "promoted", phase: "canary", sourceSha: RELEASED } } }],
     ["a malformed commit", { artifacts: { 7: { status: "promoted", phase: "complete", sourceSha: "abc" } } }],
@@ -1090,7 +1103,7 @@ describe("latestPromotedSha", () => {
     ["an artifact that is null", { artifacts: { 7: "null" } }],
     ["a run list that is not a list", { list: "{}" }],
     ["a run list that is not JSON", { list: "rate limited" }],
-    ["a run with a malformed id", { runs: [{ databaseId: "7" }] }],
+    ["a run with a malformed id", { runs: [released(7, { databaseId: "7" })] }],
     ["a null run", { runs: [null] }],
   ])("returns null, so the run releases as usual, for %s", async (_name, options) => {
     expect(await latestPromotedSha({ repository: REPOSITORY, ...releaseRunner(options as never) })).toBeNull();
@@ -1106,7 +1119,8 @@ describe("latestPromotedSha", () => {
   it("downloads into a real temporary directory and reads the artifact from disk by default", async () => {
     const { mkdirSync, writeFileSync } = await import("node:fs");
     const run = vi.fn(async (file: string, args: readonly string[]) => {
-      if (args[1] === "list") return JSON.stringify([{ databaseId: 7 }]);
+      if (file === "git") return "";
+      if (args[1] === "list") return JSON.stringify([released(7)]);
       const dir = args[args.indexOf("--dir") + 1];
       mkdirSync(dir, { recursive: true });
       writeFileSync(`${dir}/production-release.json`, JSON.stringify({ status: "promoted", phase: "complete", sourceSha: RELEASED }));

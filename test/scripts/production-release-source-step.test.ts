@@ -19,6 +19,9 @@ function git(cwd: string, ...args: string[]) {
   }).trim();
 }
 
+// Each case starts git and bash, which is slow on a loaded machine.
+const STEP_TIMEOUT = 60_000;
+
 function releaseCheckout() {
   const root = mkdtempSync(path.join(tmpdir(), "spoonjoy-release-step-"));
   const origin = path.join(root, "origin");
@@ -31,8 +34,12 @@ function releaseCheckout() {
   return { checkout, script, sha: git(checkout, "rev-parse", "HEAD") };
 }
 
+let shared: ReturnType<typeof releaseCheckout> | undefined;
+
 function runStep(overrides: Record<string, string>) {
-  const { checkout, script, sha } = releaseCheckout();
+  // One scratch repository serves every case: the step only reads it and fetches from its origin.
+  shared ??= releaseCheckout();
+  const { checkout, script, sha } = shared;
   return spawnSync("bash", ["--noprofile", "--norc", "-e", script], {
     cwd: checkout,
     encoding: "utf8",
@@ -59,16 +66,24 @@ describe("Production Deploy's release-source validation step", () => {
     ["the triggering CI run did not succeed", { WORKFLOW_RUN_CONCLUSION: "failure" }, 'test "$WORKFLOW_RUN_CONCLUSION" = "success"'],
     ["the triggering run was not a push", { WORKFLOW_RUN_EVENT: "pull_request" }, 'test "$WORKFLOW_RUN_EVENT" = "push"'],
     ["the triggering run was not on main", { WORKFLOW_RUN_HEAD_BRANCH: "feature" }, 'test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"'],
-    ["the triggering run is another workflow", { WORKFLOW_RUN_PATH: ".github/workflows/storybook.yml" }, "test \"$GITHUB_EVENT_NAME\" = 'workflow_dispatch'"],
   ])("names the failed check in the log when %s", (_name, overrides, check) => {
     const result = runStep(overrides);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(`::error title=Release source refused::Check failed: ${check}`);
-  });
+  }, STEP_TIMEOUT);
+
+  it.each([
+    ["the triggering run is another workflow", { WORKFLOW_RUN_PATH: ".github/workflows/storybook.yml" }, "The triggering run came from .github/workflows/storybook.yml, not .github/workflows/ci.yml"],
+    ["the release mode is unknown", { SPOONJOY_RELEASE_MODE: "yolo" }, "Unknown SPOONJOY_RELEASE_MODE: yolo"],
+  ])("explains the refusal when %s", (_name, overrides, message) => {
+    const result = runStep(overrides);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`::error title=Release source refused::${message}`);
+  }, STEP_TIMEOUT);
 
   it("keeps its own message for a malformed source SHA", () => {
     const result = runStep({ SOURCE_SHA: "main" });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("source_sha must be an exact 40-character lowercase Git SHA");
-  });
+  }, STEP_TIMEOUT);
 });

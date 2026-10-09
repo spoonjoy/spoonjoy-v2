@@ -120,7 +120,7 @@ jobs:
           fi
           case "$SPOONJOY_RELEASE_MODE" in
             atomic-bootstrap|atomic-product-activation|protocol-v1-canary) ;;
-            *) exit 1 ;;
+            *) echo "::error title=Release source refused::Unknown SPOONJOY_RELEASE_MODE: $SPOONJOY_RELEASE_MODE" >&2; exit 1 ;;
           esac
           if [ "$SPOONJOY_RELEASE_MODE" = "protocol-v1-canary" ]; then
             protocol_boundary_marker=workers/cook-session-protocol-v1-boundary
@@ -146,7 +146,10 @@ jobs:
             exit 1
           fi
 
-          test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          if [ "$WORKFLOW_RUN_PATH" != '.github/workflows/ci.yml' ] && [ "$GITHUB_EVENT_NAME" != 'workflow_dispatch' ]; then
+            echo "::error title=Release source refused::The triggering run came from $WORKFLOW_RUN_PATH, not .github/workflows/ci.yml" >&2
+            exit 1
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
             test -z "$ROLLBACK_VERSION_ID"
             test "$WORKFLOW_RUN_CONCLUSION" = "success"
