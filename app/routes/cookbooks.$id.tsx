@@ -1,6 +1,8 @@
 import type { Route } from "./+types/cookbooks.$id";
 import { redirect, useLoaderData, useActionData, Form, data, useSubmit, type AppLoadContext } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readCookbookDetailFromD1, readCookbookDetailWithPrisma } from "~/lib/cookbook-detail-reads.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
@@ -123,48 +125,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
 
-  const database = await getRequestDb(context);
-
-  const cookbook = await database.cookbook.findUnique({
-    where: { id },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-        },
-      },
-      recipes: {
-        where: {
-          recipe: {
-            deletedAt: null,
-          },
-        },
-        include: {
-          recipe: {
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              servings: true,
-              activeCoverId: true,
-              activeCoverVariant: true,
-              coverMode: true,
-              covers: {
-                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              },
-              chef: {
-                select: {
-                  username: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      },
-    },
-  });
+  const d1 = requestD1(context);
+  const readInput = { cookbookId: id, viewerId: userId };
+  const { cookbook, availableRecipes } = d1
+    ? await readCookbookDetailFromD1(d1, readInput)
+    : await readCookbookDetailWithPrisma(await getRequestDb(context), readInput);
 
   if (!cookbook) {
     throw new Response("Cookbook not found", { status: 404 });
@@ -172,30 +137,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   // Check if user owns this cookbook
   const isOwner = userId !== null && cookbook.authorId === userId;
-
-  // Get user's recipes that aren't in this cookbook
-  const availableRecipes = isOwner
-    ? await database.recipe.findMany({
-        where: {
-          chefId: userId,
-          deletedAt: null,
-          NOT: {
-            cookbooks: {
-              some: {
-                cookbookId: id,
-              },
-            },
-          },
-        },
-        select: {
-          id: true,
-          title: true,
-        },
-        orderBy: {
-          title: "asc",
-        },
-      })
-    : [];
 
   const cookbookWithCovers = {
     ...cookbook,
