@@ -27,7 +27,28 @@ export const KITCHEN = Object.freeze({
     weeknight: { id: "qa-kitchen-cookbook-weeknight", title: "Weeknight Dinners" },
     soups: { id: "qa-kitchen-cookbook-soups", title: "Soups" },
   },
+  // A public chef with more than two pages of recipes (the profile shows 24 a page), so the
+  // profile's Show more journey can append a page and then reach the last one. No password:
+  // journeys only read this chef's profile signed out.
+  pager: { id: "qa-kitchen-pager", username: "qa_kitchen_pager", email: "qa-kitchen-pager@example.com", recipeCount: 60 },
 });
+
+const PAGER_DISHES = [
+  "Charred Corn Salad", "Ginger Scallion Noodles", "Brown Butter Gnocchi", "Smoky Black Bean Soup",
+  "Lemon Garlic Chicken", "Sesame Greens", "Harissa Roast Carrots", "Mushroom Barley Stew",
+  "Chili Crisp Eggs", "Herbed Flatbread", "Tamarind Lentils", "Miso Butter Squash",
+];
+const PAGER_STYLES = ["Weeknight", "Sunday", "Market", "Pantry", "Picnic"];
+
+/** The pager chef's recipes, newest-sorting last: ids 01..60 with distinct, readable titles. */
+export function pagerRecipes() {
+  return Array.from({ length: KITCHEN.pager.recipeCount }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    const dish = PAGER_DISHES[index % PAGER_DISHES.length];
+    const style = PAGER_STYLES[Math.floor(index / PAGER_DISHES.length)];
+    return { id: `qa-kitchen-pager-recipe-${number}`, title: `${style} ${dish}` };
+  });
+}
 
 // Recipe content: steps (with an optional StepOutputUse) and per-step ingredients.
 // Units and ingredient refs are shared, named lookup tables — see buildKitchenResetSql,
@@ -130,6 +151,8 @@ function sqlString(value) {
 }
 
 const PERSONA_IDS = [KITCHEN.chef.id, KITCHEN.friend.id, KITCHEN.newbie.id];
+// Every user the kitchen reset deletes and re-creates: the personas and the pager chef.
+const KITCHEN_USER_IDS = [...PERSONA_IDS, KITCHEN.pager.id];
 
 // Session cookies carry the user's sessionVersion, and a cookie is valid only while it equals
 // the user's current value (app/lib/session.server.ts). Every reset deletes and re-inserts the
@@ -285,7 +308,7 @@ export function buildScratchInvalidationSql() {
 export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.hashSync(password, 10), now = Date.now }) {
   const statements = [];
   const sessionVersion = personaSessionVersion(now());
-  const personaIds = sqlIdList(PERSONA_IDS);
+  const personaIds = sqlIdList(KITCHEN_USER_IDS);
 
   // 1. Detach forks that point at ANY recipe owned by a kitchen persona. Match by
   // ownership (chefId), not by the forked recipe's own id: a persona's recipe can carry
@@ -342,6 +365,19 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
     const salt = hashedPassword.slice(0, 29);
     statements.push(
       `INSERT INTO "User" (id, email, username, hashedPassword, salt, sessionVersion, createdAt, updatedAt) VALUES (${sqlString(persona.id)}, ${sqlString(persona.email)}, ${sqlString(persona.username)}, ${sqlString(hashedPassword)}, ${sqlString(salt)}, ${sessionVersion}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+    );
+  }
+
+  // 6b. The pager chef: a public profile with no password, signed into by nobody.
+  statements.push(
+    `INSERT INTO "User" (id, email, username, hashedPassword, salt, sessionVersion, createdAt, updatedAt) VALUES (${sqlString(KITCHEN.pager.id)}, ${sqlString(KITCHEN.pager.email)}, ${sqlString(KITCHEN.pager.username)}, NULL, NULL, ${sessionVersion}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+  );
+  for (const recipe of pagerRecipes()) {
+    statements.push(
+      `INSERT INTO Recipe (id, title, description, servings, chefId, deletedAt, sourceRecipeId, sourceUrl, activeCoverId, activeCoverVariant, coverMode, createdAt, updatedAt) VALUES (${sqlString(recipe.id)}, ${sqlString(recipe.title)}, NULL, NULL, ${sqlString(KITCHEN.pager.id)}, NULL, NULL, NULL, NULL, NULL, ${sqlString("auto")}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);`,
+    );
+    statements.push(
+      `INSERT INTO RecipeStep (id, recipeId, stepNum, stepTitle, description, updatedAt) VALUES (${sqlString(`${recipe.id}-step-1`)}, ${sqlString(recipe.id)}, 1, NULL, ${sqlString("Cook until it smells done.")}, CURRENT_TIMESTAMP);`,
     );
   }
 

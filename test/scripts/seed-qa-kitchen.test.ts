@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import { describe, expect, it, vi } from "vitest";
-import {
+import { pagerRecipes,
   KITCHEN,
   SCRATCH_ACCOUNT_COUNT,
   SCRATCH_USER_COUNT,
@@ -53,6 +53,21 @@ describe("seed-qa-kitchen", () => {
     expect(db.prepare("SELECT COUNT(*) n FROM ShoppingListItem i JOIN ShoppingList l ON l.id = i.shoppingListId WHERE l.authorId = ? AND i.checked = 0").get(KITCHEN.chef.id)).toEqual({ n: 3 });
     expect(db.prepare("SELECT COUNT(*) n FROM RecipeSpoon WHERE chefId = ?").get(KITCHEN.chef.id)).toEqual({ n: 1 });
     expect(db.prepare("SELECT COUNT(*) n FROM Recipe WHERE chefId = ?").get(KITCHEN.newbie.id)).toEqual({ n: 0 });
+  });
+
+  it("seeds a public chef with more than two profile pages of recipes, and resets it on every run", () => {
+    const db = migratedDb();
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+    db.exec(`INSERT INTO Recipe (id, title, chefId, updatedAt) VALUES ('journey-made', 'Left by a journey', '${KITCHEN.pager.id}', CURRENT_TIMESTAMP)`);
+    db.exec(buildKitchenResetSql({ passwords, hash: fastHash }));
+
+    const pager = db.prepare('SELECT username, hashedPassword FROM "User" WHERE id = ?').get(KITCHEN.pager.id);
+    expect(pager).toEqual({ username: "qa_kitchen_pager", hashedPassword: null });
+    const recipes = db.prepare("SELECT id, title FROM Recipe WHERE chefId = ? AND deletedAt IS NULL ORDER BY id").all(KITCHEN.pager.id) as Array<{ id: string; title: string }>;
+    // The profile shows 24 a page: 60 makes two full pages and a partial third.
+    expect(recipes).toHaveLength(60);
+    expect(new Set(recipes.map((recipe) => recipe.title)).size).toBe(60);
+    expect(recipes.map((recipe) => recipe.id)).toEqual(pagerRecipes().map((recipe) => recipe.id));
   });
 
   describe("session versions (revoking leftover persona sessions)", () => {
