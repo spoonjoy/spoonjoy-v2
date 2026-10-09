@@ -4685,9 +4685,7 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
       emailChanged: false,
       usernameChanged,
     });
-    if (saved === "email_taken") {
-      throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
-    }
+    // The API never changes the email (that is web-only), so only the username can collide.
     if (saved === "username_taken") {
       throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
     }
