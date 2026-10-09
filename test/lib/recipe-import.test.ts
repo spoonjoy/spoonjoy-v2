@@ -2280,14 +2280,16 @@ describe("importRecipeFromSource — photos", () => {
     )).rejects.toMatchObject({ code: "llm-failed", message: "Photo reading is not configured" });
   });
 
-  it("spends nothing and writes nothing on a dry run", async () => {
+  it("spends a photo import on a dry run, because the model still reads the photo, but writes nothing", async () => {
     const chef = await makeChef();
     const result = await importRecipeFromSource(
       { chefId: chef.id, source: photoSource(), dryRun: true },
       baseDeps({ llmRunner: photoRunner() }),
     );
     expect(result.recipeId).toBeNull();
-    await expect(db.imageGenLedger.count({ where: { userId: chef.id } })).resolves.toBe(0);
+    const ledger = await db.imageGenLedger.findMany({ where: { userId: chef.id } });
+    expect(ledger.map((row) => [row.kind, row.count])).toEqual([["import-photo", 1]]);
+    await expect(db.recipe.count({ where: { chefId: chef.id } })).resolves.toBe(0);
   });
 });
 

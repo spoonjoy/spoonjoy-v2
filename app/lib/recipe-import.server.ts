@@ -1124,7 +1124,8 @@ export async function importRecipeFromSource(
     case "photo": {
       // Validate before spending quota, so a wrong file costs nothing.
       ensureRecipePhoto(options.source.photo, options.source.contentType);
-      await consumeImportQuota(deps, chefId, dryRun, "import-photo");
+      // A dry run still makes the vision call, so it spends a photo import too.
+      await consumeImportQuota(deps, chefId, false, "import-photo");
       const extraction = await runPhotoExtraction(
         options.source.photo,
         options.source.contentType,
