@@ -39,6 +39,44 @@ interface SavedRows<T> {
   nextCursor: string | null
 }
 
+// Limits on what is saved, so a long session cannot fill sessionStorage: at most this many
+// pages per history entry (the first page comes from the loader and is not saved), and at most
+// this many history entries, the oldest dropped first.
+export const MAX_SAVED_PAGES = 10
+export const MAX_SAVED_ENTRIES = 20
+const SAVED_INDEX = `${SAVED_PREFIX}index`
+
+function savedIndex(): string[] {
+  const raw = window.sessionStorage.getItem(SAVED_INDEX)
+  const index: unknown = raw ? JSON.parse(raw) : []
+  return Array.isArray(index) ? index.filter((key): key is string => typeof key === 'string') : []
+}
+
+/**
+ * Saves a list's appended rows for one history entry. Past the page cap it keeps the first
+ * pages and points the cursor after the last kept row, so Show more carries on from there.
+ * Any storage error (unavailable, full) drops this entry's save: going back starts over.
+ */
+export function saveRows<T extends { id: string }>(storageKey: string, rows: SavedRows<T>, pageSize: number): void {
+  const maxRows = Math.max(1, pageSize) * (MAX_SAVED_PAGES - 1)
+  const extra = rows.extra.slice(0, maxRows)
+  const nextCursor = extra.length < rows.extra.length ? extra[extra.length - 1]!.id : rows.nextCursor
+  try {
+    const index = [...savedIndex().filter((key) => key !== storageKey), storageKey]
+    for (const old of index.splice(0, Math.max(0, index.length - MAX_SAVED_ENTRIES))) {
+      window.sessionStorage.removeItem(old)
+    }
+    window.sessionStorage.setItem(storageKey, JSON.stringify({ extra, nextCursor }))
+    window.sessionStorage.setItem(SAVED_INDEX, JSON.stringify(index))
+  } catch {
+    try {
+      window.sessionStorage.removeItem(storageKey)
+    } catch {
+      // Storage is unavailable altogether; nothing was saved.
+    }
+  }
+}
+
 function readSaved<T>(storageKey: string): SavedRows<T> | null {
   if (!hydrated) return null
   try {
@@ -93,12 +131,8 @@ export function useAppendingList<T extends { id: string }, D>({
   // Save appended rows for this history entry, so going back to it restores them.
   useEffect(() => {
     if (state.key !== resetKey || state.extra.length === 0) return
-    try {
-      window.sessionStorage.setItem(storageKey, JSON.stringify({ extra: state.extra, nextCursor: state.nextCursor }))
-    } catch {
-      // Without storage, going back shows the first page again.
-    }
-  }, [state, resetKey, storageKey])
+    saveRows(storageKey, { extra: state.extra, nextCursor: state.nextCursor }, page.items.length)
+  }, [state, resetKey, storageKey, page.items.length])
 
   useEffect(() => {
     if (state.key !== resetKey) {
