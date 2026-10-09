@@ -979,7 +979,7 @@ describe("immutable migration apply boundary", () => {
     expect(order).toEqual(["bookmark", "migrate"]);
     const [url, request] = deps.d1BookmarkFetch.mock.calls[0]!;
     expect(url).toBe(`https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${D1_DATABASE_ID}/time_travel/bookmark`);
-    expect(request).toEqual({ method: "GET", headers: { Authorization: `Bearer ${D1_API_TOKEN}` } });
+    expect(request).toEqual({ method: "GET", headers: { Authorization: `Bearer ${D1_API_TOKEN}` }, signal: expect.any(AbortSignal) });
   });
 
   it("takes no restore point when there is no migration to apply", async () => {
@@ -7581,7 +7581,6 @@ describe("release artifact and CLI boundary", () => {
           ...postHogArtifactReaderDeps(),
           d1Fetch: successfulD1Fetch(),
           d1BookmarkFetch: successfulD1BookmarkFetch(),
-        d1BookmarkFetch: successfulD1BookmarkFetch(),
           env: {
             CLOUDFLARE_ACCOUNT_ID,
             CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,

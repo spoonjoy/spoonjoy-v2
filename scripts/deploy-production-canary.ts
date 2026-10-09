@@ -24,6 +24,8 @@ const CLOUDFLARE_ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/;
 const CLOUDFLARE_API_TOKEN_PATTERN = /^[\x21-\x7e]{1,2048}$/;
 // A D1 Time Travel bookmark, as `wrangler d1 time-travel info` prints it.
 const D1_BOOKMARK_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{32}$/;
+// A hung bookmark request fails the release before migrating instead of stalling it.
+const D1_RESTORE_POINT_TIMEOUT_MS = 30_000;
 const D1_MIGRATIONS_TABLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RFC3339_UTC_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
@@ -1181,6 +1183,7 @@ async function readD1RestorePoint(
     response = await fetchImpl(url, {
       method: "GET",
       headers: { Authorization: `Bearer ${credentials.token}` },
+      signal: AbortSignal.timeout(D1_RESTORE_POINT_TIMEOUT_MS),
     });
   } catch {
     throw new Error("Cloudflare D1 restore point request failed; no migration was applied.");

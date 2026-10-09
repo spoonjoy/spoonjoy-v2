@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -109,7 +109,7 @@ describe("d1-logical-export", () => {
       INSERT INTO "Unit" VALUES ('cup', 'cup');
       INSERT INTO "Ingredient" VALUES ('i1', 'cup');
       INSERT INTO "Recipe" VALUES ('r1', 'Grandma''s Stew', 'c1');
-      INSERT INTO "RecipeStep" VALUES ('s1', 'r1', 1, 'Brown the beef'), ('s2', 'r1', 2, NULL);
+      INSERT INTO "RecipeStep" VALUES ('s1', 'r1', 1, 'Brown the beef' || char(10) || 'INSERT INTO "Recipe" it''s fine'), ('s2', 'r1', 2, NULL);
       INSERT INTO "StepOutputUse" VALUES ('o1', 'r1', 1, 2);
       INSERT INTO "RecipeCover" VALUES ('c1', 'r1');
       INSERT INTO "SearchDocument" VALUES ('r1', 'Grandma''s Stew');
@@ -136,9 +136,10 @@ describe("d1-logical-export", () => {
         ["exec", "wrangler", "d1", "export", "DB", "--remote", "--env", "qa"],
       ]);
 
+    expect((await stat(output)).mode & 0o777).toBe(0o600);
     const restored = importIntoFreshD1(await readFile(output, "utf8"));
     expect(restored.prepare(`SELECT * FROM "StepOutputUse"`).all()).toEqual([{ id: "o1", recipeId: "r1", outputStepNum: 1, inputStepNum: 2 }]);
-    expect(restored.prepare(`SELECT "description" FROM "RecipeStep" ORDER BY "stepNum"`).all()).toEqual([{ description: "Brown the beef" }, { description: null }]);
+    expect(restored.prepare(`SELECT "description" FROM "RecipeStep" ORDER BY "stepNum"`).all()).toEqual([{ description: 'Brown the beef\nINSERT INTO "Recipe" it\'s fine' }, { description: null }]);
     expect(restored.prepare(`SELECT "title" FROM "Recipe"`).get()).toEqual({ title: "Grandma's Stew" });
     expect(restored.prepare(`SELECT * FROM "Ingredient"`).all()).toEqual([{ id: "i1", unitId: "cup" }]);
     expect(restored.pragma("foreign_key_check")).toEqual([]);
@@ -214,6 +215,20 @@ describe("d1-logical-export", () => {
       `INSERT INTO "Child" VALUES('c2','x');`,
     ]);
     expect(() => orderRows(rows, ["Parent"])).toThrow("The export has rows for unexpected tables: Child.");
+
+    // A value with a line that reads like a statement stays in its row.
+    const tricky = [
+      `INSERT INTO "Child" VALUES('c1','Step: it''s done`,
+      `INSERT INTO "Parent" VALUES(''p9'');`,
+      `still the same value');`,
+      `INSERT INTO "Parent" VALUES('p1');`,
+    ].join("\n");
+    expect(orderRows(tricky, ["Parent", "Child"]).split("\n")).toEqual([
+      `INSERT INTO "Parent" VALUES('p1');`,
+      `INSERT INTO "Child" VALUES('c1','Step: it''s done`,
+      `INSERT INTO "Parent" VALUES(''p9'');`,
+      `still the same value');`,
+    ]);
   });
 
   it("reads production from the default environment", async () => {

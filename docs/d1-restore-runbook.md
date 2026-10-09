@@ -10,7 +10,7 @@ Spoonjoy's production data is one Cloudflare D1 database, `spoonjoy` (binding `D
 
 ## Choose the restore
 
-1. **A migration damaged data, and production has had few writes since.** Restore to the release's `preMigrationBookmark`. Every write after the migration started is lost.
+1. **A migration damaged data, and production has had few writes since.** Restore to the release's `preMigrationBookmark`. Every write after the bookmark was taken, just before the migration, is lost.
 2. **A job or bad write damaged data at a known time.** Restore to a timestamp just before it, using `--timestamp`. Every write after that time is lost.
 3. **Time Travel cannot reach the point you need,** for example because it is past retention or the database was deleted. Load the newest logical export into a new D1 database and point the `DB` binding at it.
 
@@ -38,7 +38,7 @@ Then verify. Run `PRAGMA foreign_key_check;` (it should return no rows), compare
 node scripts/d1-logical-export.mjs --target production --output /secure/path/spoonjoy-$(date -u +%Y%m%dT%H%M%SZ).sql
 ```
 
-The export holds user data and credential hashes. Store it encrypted, never in Git, and keep it off shared machines. To restore, create an empty D1 database and load the file with `pnpm exec wrangler d1 execute <new-db> --remote --file <export.sql>`. Then point the `DB` binding in `wrangler.json` at the new database and deploy through the normal release, which needs a reviewed PR. While an export runs it reads the whole database, so run it at a quiet time.
+The export holds user data and credential hashes. The script writes it readable only by you (mode 0600); store it encrypted, never in Git, and keep it off shared machines. To restore, create an empty D1 database and load the file with `pnpm exec wrangler d1 execute <new-db> --remote --file <export.sql>`. Then point the `DB` binding in `wrangler.json` at the new database and deploy through the normal release, which needs a reviewed PR. While an export runs it reads the whole database, so run it at a quiet time.
 
 ## Rehearsal, 2026-10-09
 

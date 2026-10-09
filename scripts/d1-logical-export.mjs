@@ -111,8 +111,13 @@ export function orderRows(rowsSql, order) {
   const groups = new Map();
   const preamble = [];
   let current;
+  // A line starts a statement only outside a quoted value: recipe text can contain a line that
+  // reads like `INSERT INTO "Recipe"`. SQL escapes a quote inside a value by doubling it, which
+  // toggles twice, so counting quotes tracks whether a line ends inside a value.
+  let inValue = false;
   for (const line of rowsSql.split("\n")) {
-    const table = /^INSERT INTO "([^"]+)"/.exec(line)?.[1];
+    const table = inValue ? undefined : /^INSERT INTO "([^"]+)"/.exec(line)?.[1];
+    if ((line.match(/'/g) ?? []).length % 2 === 1) inValue = !inValue;
     if (table) {
       current = table;
       if (!groups.has(table)) groups.set(table, []);
@@ -188,7 +193,7 @@ export async function exportDatabase({ target, output, exec, fs, log }) {
       "-- Rows (parents before children):",
       orderRows(rows.trim(), tableOrder(schema, plan.tables)),
       "",
-    ].join("\n"));
+    ].join("\n"), { mode: 0o600 });
   } finally {
     await fs.rm(workDir, { recursive: true, force: true });
   }
