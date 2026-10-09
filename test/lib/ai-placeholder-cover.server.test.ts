@@ -392,18 +392,23 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
       imageToImage: vi.fn(),
     };
 
+    // The failure write itself fails. (A missing or archived cover is no longer an error: the
+    // write is guarded and simply matches nothing.)
+    const updateMany = vi.spyOn(db.recipeCover, "updateMany").mockRejectedValueOnce(new Error("D1 unavailable"));
+
     await expect(
       scheduleAiPlaceholderCover({
         db,
         userId,
         recipeId,
-        coverId: "missing-cover-id",
+        coverId,
         title: "Pasta",
         description: null,
         runner,
         logger: errorSpy,
       }),
     ).resolves.toBeUndefined();
+    updateMany.mockRestore();
 
     expect(errorSpy.error).toHaveBeenCalledWith(
       "ai-placeholder cover failure state update failed",
@@ -875,5 +880,77 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
         status: "ready",
         generationStatus: "succeeded",
       });
+  });
+
+  describe("a placeholder archived while it is generating", () => {
+    async function archive() {
+      await db.recipeCover.update({ where: { id: coverId }, data: { status: "archived", archivedAt: new Date() } });
+    }
+    async function recipeCover() {
+      return db.recipe.findUniqueOrThrow({
+        where: { id: recipeId },
+        select: { activeCoverId: true, activeCoverVariant: true, coverMode: true },
+      });
+    }
+
+    it("stays archived and is not made the recipe's cover when generation finishes", async () => {
+      const runner = makeRunner();
+      runner.textToImage = vi.fn(async () => {
+        await archive();
+        return { bytes: GENERATED_BYTES, contentType: "image/png" };
+      });
+
+      await scheduleAiPlaceholderCover({ db, userId, recipeId, coverId, title: "Pasta", description: null, runner, bucket: mockR2(), logger: errorSpy });
+
+      expect(await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } })).toMatchObject({ status: "archived", imageUrl: "" });
+      expect(await recipeCover()).toEqual({ activeCoverId: null, activeCoverVariant: null, coverMode: "auto" });
+      expect(errorSpy.error).not.toHaveBeenCalled();
+    });
+
+    it("stays archived when a requested activation's guard still matches", async () => {
+      const runner = makeRunner();
+      runner.textToImage = vi.fn(async () => {
+        await archive();
+        return { bytes: GENERATED_BYTES, contentType: "image/png" };
+      });
+
+      await scheduleAiPlaceholderCover({
+        db, userId, recipeId, coverId, title: "Pasta", description: null, runner, bucket: mockR2(), logger: errorSpy,
+        activateWhenReady: true,
+        suppressAutoActivation: true,
+        activationGuard: { activeCoverId: null, activeCoverVariant: null, coverMode: "auto" },
+      });
+
+      expect((await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } })).status).toBe("archived");
+      expect((await recipeCover()).activeCoverId).toBeNull();
+    });
+
+    it("is not activated when it is archived just after it was marked ready", async () => {
+      const markReady = db.recipeCover.updateMany.bind(db.recipeCover);
+      vi.spyOn(db.recipeCover, "updateMany").mockImplementation((async (args: Parameters<typeof markReady>[0]) => {
+        const result = await markReady(args);
+        await archive();
+        return result;
+      }) as never);
+
+      await scheduleAiPlaceholderCover({ db, userId, recipeId, coverId, title: "Pasta", description: null, runner: makeRunner(), bucket: mockR2(), logger: errorSpy });
+      vi.mocked(db.recipeCover.updateMany).mockRestore();
+
+      expect((await recipeCover()).activeCoverId).toBeNull();
+    });
+
+    it("stays archived when generation fails", async () => {
+      const runner: ImageGenRunner = {
+        textToImage: vi.fn(async () => {
+          await archive();
+          throw new Error("provider down");
+        }),
+        imageToImage: vi.fn(),
+      };
+
+      await scheduleAiPlaceholderCover({ db, userId, recipeId, coverId, title: "Pasta", description: null, runner, logger: errorSpy });
+
+      expect(await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } })).toMatchObject({ status: "archived", failureReason: null });
+    });
   });
 });

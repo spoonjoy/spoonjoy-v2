@@ -179,14 +179,20 @@ async function captureGenerationException(
   });
 }
 
+// A placeholder the chef archived while it was generating stays archived: finishing or failing
+// never rewrites its status (which would bring it back), and it is never made the recipe's cover.
+function unarchivedCover(coverId: string) {
+  return { id: coverId, status: { not: "archived" }, archivedAt: null };
+}
+
 async function markPlaceholderFailed(
   input: SchedulePlaceholderInput,
   reason: string,
   logger: Pick<Console, "error">,
 ): Promise<void> {
   try {
-    await input.db.recipeCover.update({
-      where: { id: input.coverId },
+    await input.db.recipeCover.updateMany({
+      where: unarchivedCover(input.coverId),
       data: {
         status: "failed",
         generationStatus: "failed",
@@ -207,6 +213,7 @@ async function activatePlaceholderIfStillAutomatic(
       id: input.recipeId,
       coverMode: "auto",
       activeCoverId: null,
+      covers: { some: unarchivedCover(input.coverId) },
     },
     data: {
       activeCoverId: input.coverId,
@@ -227,6 +234,7 @@ async function activatePlaceholderIfStillRequested(
       activeCoverId: input.activationGuard.activeCoverId,
       activeCoverVariant: input.activationGuard.activeCoverVariant,
       coverMode: input.activationGuard.coverMode,
+      covers: { some: unarchivedCover(input.coverId) },
     },
     data: {
       activeCoverId: input.coverId,
@@ -296,8 +304,8 @@ export async function scheduleAiPlaceholderCover(
       promptAddition: input.promptAddition,
     });
 
-    await input.db.recipeCover.update({
-      where: { id: input.coverId },
+    const marked = await input.db.recipeCover.updateMany({
+      where: unarchivedCover(input.coverId),
       data: {
         imageUrl: url,
         status: "ready",
@@ -306,6 +314,7 @@ export async function scheduleAiPlaceholderCover(
         promptAddition: sanitizeImagePromptAddition(input.promptAddition),
       },
     });
+    if (marked.count === 0) return;
     if (input.activateWhenReady) {
       await activatePlaceholderIfStillRequested(input);
     } else {
