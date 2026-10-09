@@ -8,7 +8,8 @@ export const CSP_REPORT_ONLY_BREAK_GLASS_ACK = "ACK_REPORT_ONLY_CSP_ROLLBACK";
 const execFileAsync = promisify(execFile);
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const WORKER_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ORDINARY_CI_EVENTS = new Set(["push", "pull_request"]);
+// merge_group: a merge-queue run tests the exact commit that will land on main.
+const ORDINARY_CI_EVENTS = new Set(["push", "pull_request", "merge_group"]);
 const CANONICAL_CI_JOB_NAMES = ["coverage", "workers-coverage", "e2e", "advisory"];
 const REPORT_ONLY_CI_JOB_NAMES = [
   "report-only-coverage",

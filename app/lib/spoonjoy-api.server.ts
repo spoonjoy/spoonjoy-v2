@@ -21,6 +21,7 @@ import {
 import {
   pollAgentConnection,
   startAgentConnection,
+  type AgentConnectionRequester,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
@@ -111,6 +112,8 @@ export interface SpoonjoyApiContext {
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;
   logger?: Pick<Console, "error">;
+  /** Network details of the caller, recorded on agent connection requests. Never verified. */
+  requester?: AgentConnectionRequester | null;
 }
 
 export interface SpoonjoyApiOperationInfo {
@@ -153,7 +156,7 @@ type Database = PrismaClientType | Prisma.TransactionClient;
 
 type RecipeWithDetails = Prisma.RecipeGetPayload<{
   include: {
-    chef: { select: { id: true; email: true; username: true } };
+    chef: { select: { id: true; username: true } };
     covers: true;
     steps: {
       include: {
@@ -173,12 +176,12 @@ type ApiCredentialRecord = Prisma.ApiCredentialGetPayload<{}>;
 
 type CookbookWithRecipes = Prisma.CookbookGetPayload<{
   include: {
-    author: { select: { id: true; email: true; username: true } };
+    author: { select: { id: true; username: true } };
     recipes: {
       include: {
         recipe: {
           include: {
-            chef: { select: { id: true; email: true; username: true } };
+            chef: { select: { id: true; username: true } };
             covers: true;
             steps: {
               include: {
@@ -194,7 +197,7 @@ type CookbookWithRecipes = Prisma.CookbookGetPayload<{
 
 type CookbookSummaryBase = Prisma.CookbookGetPayload<{
   include: {
-    author: { select: { id: true; email: true; username: true } };
+    author: { select: { id: true; username: true } };
   };
 }>;
 
@@ -212,13 +215,13 @@ const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 25;
 
 const cookbookRecipeInclude = {
-  author: { select: { id: true, email: true, username: true } },
+  author: { select: { id: true, username: true } },
   recipes: {
     orderBy: { createdAt: "desc" },
     include: {
       recipe: {
         include: {
-          chef: { select: { id: true, email: true, username: true } },
+          chef: { select: { id: true, username: true } },
           covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
           steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
         },
@@ -228,7 +231,7 @@ const cookbookRecipeInclude = {
 } satisfies Prisma.CookbookInclude;
 
 const cookbookSummaryInclude = {
-  author: { select: { id: true, email: true, username: true } },
+  author: { select: { id: true, username: true } },
 } satisfies Prisma.CookbookInclude;
 
 const cookbookSummaryRecipeInclude = {
@@ -1065,7 +1068,7 @@ async function findRecipeByIdOrTitle(db: PrismaClientType, args: Record<string, 
   return db.recipe.findFirst({
     where: id ? { id, deletedAt: null } : { title, deletedAt: null },
     include: {
-      chef: { select: { id: true, email: true, username: true } },
+      chef: { select: { id: true, username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
       steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
     },
@@ -1314,7 +1317,7 @@ const authStatusTool: SpoonjoyApiOperation = {
 const startAgentConnectionTool: SpoonjoyApiOperation = {
   name: "start_agent_connection",
   description:
-    "Start a browser-approved delegated Spoonjoy connection for this agent. Send authorizationUrl to the user, then poll with deviceCode.",
+    "Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.",
   inputSchema: {
     type: "object",
     properties: {
@@ -1329,6 +1332,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
       agentName: optionalString(args.agentName),
       baseUrl: context.env?.SPOONJOY_BASE_URL ?? optionalString(args.baseUrl),
       scopes: optionalString(args.scopes),
+      requester: context.requester,
     });
 
     return json({
@@ -1341,7 +1345,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
       expiresIn: started.expiresIn,
       interval: started.interval,
       message:
-        "Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
+        "Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
     });
   },
 };
@@ -1498,7 +1502,7 @@ const searchRecipesTool: SpoonjoyApiOperation = {
             deletedAt: null,
           },
           include: {
-            chef: { select: { id: true, email: true, username: true } },
+            chef: { select: { id: true, username: true } },
             covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
             steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
           },
@@ -2501,7 +2505,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
     const recipe = await context.db.recipe.findUniqueOrThrow({
       where: { id: created.id },
       include: {
-        chef: { select: { id: true, email: true, username: true } },
+        chef: { select: { id: true, username: true } },
         covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
         steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
       },
@@ -2653,7 +2657,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
     const recipe = await context.db.recipe.findUniqueOrThrow({
       where: { id: existing.id },
       include: {
-        chef: { select: { id: true, email: true, username: true } },
+        chef: { select: { id: true, username: true } },
         covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
         steps: { include: { ingredients: { include: { unit: true, ingredientRef: true } } } },
       },
