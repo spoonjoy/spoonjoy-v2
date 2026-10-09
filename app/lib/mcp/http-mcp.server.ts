@@ -397,6 +397,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       db,
       bearerToken,
       resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL),
+      { waitUntil },
     );
   } catch (error) {
     const response = authChallengeResponse(request, cloudflareEnv);

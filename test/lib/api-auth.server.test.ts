@@ -14,6 +14,7 @@ import {
   normalizeCredentialScopes,
   generateApiToken,
   hashApiToken,
+  LAST_USED_AT_WRITE_INTERVAL_MS,
   principalFromUserEmail,
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
@@ -266,19 +267,115 @@ describe("API authentication helpers", () => {
           scopes: "kitchen:read",
           user: { id: "user-race", email: "race@example.com", username: "race" },
         }),
-        updateMany: async () => ({ count: 0 }),
+        updateMany: updateLastUsed.mockResolvedValue({ count: 0 }),
         findUniqueOrThrow: async () => ({ oauthIssuer: "https://issuer-b.example" }),
-        update: updateLastUsed,
       },
       oAuthClient: {
         updateMany: async () => ({ count: 1 }),
-        findFirst: async () => ({ id: "client-race" }),
+        findFirst: async () => ({ id: "client-race", issuer: "https://issuer-a.example" }),
       },
     } as never;
 
     await expect(authenticateApiTokenRaw(stub, "sj_race", "https://issuer-a.example"))
       .rejects.toMatchObject({ status: 401 });
-    expect(updateLastUsed).not.toHaveBeenCalled();
+    // Only the issuer-promotion write ran; usage was never recorded.
+    expect(updateLastUsed).toHaveBeenCalledTimes(1);
+    expect(updateLastUsed).toHaveBeenCalledWith({
+      where: { id: "credential-race", oauthIssuer: null },
+      data: { oauthIssuer: "https://issuer-a.example" },
+    });
+  });
+
+  it("does no issuer write on the request path once a client is bound", async () => {
+    const issuer = "https://spoonjoy.app";
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Bound App", redirectUris: "https://example.com/cb", issuer },
+    });
+    const created = await createApiCredential(db, user.id, "Bound token", {
+      oauthClientId: client.id,
+      oauthIssuer: issuer,
+      scopes: ["kitchen:read"],
+    });
+    const clientWrites = vi.spyOn(db.oAuthClient, "updateMany");
+    try {
+      await expect(authenticateApiToken(db, created.token, issuer)).resolves.toMatchObject({ oauthIssuer: issuer });
+      expect(clientWrites).not.toHaveBeenCalled();
+    } finally {
+      clientWrites.mockRestore();
+    }
+  });
+
+  it("writes lastUsedAt at most once every five minutes per credential", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Busy native client");
+    const writes = vi.spyOn(db.apiCredential, "updateMany");
+    try {
+      await authenticateApiToken(db, created.token);
+      const first = (await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt;
+      expect(first).toBeInstanceOf(Date);
+      expect(writes).toHaveBeenCalledTimes(1);
+
+      await authenticateApiToken(db, created.token);
+      await authenticateApiToken(db, created.token);
+      expect(writes).toHaveBeenCalledTimes(1);
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
+        .resolves.toMatchObject({ lastUsedAt: first });
+
+      const stale = new Date(Date.now() - LAST_USED_AT_WRITE_INTERVAL_MS - 1_000);
+      await db.apiCredential.update({ where: { id: created.credential.id }, data: { lastUsedAt: stale } });
+      await authenticateApiToken(db, created.token);
+      expect(writes).toHaveBeenCalledTimes(2);
+      const refreshed = (await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt;
+      expect(refreshed!.getTime()).toBeGreaterThan(stale.getTime());
+    } finally {
+      writes.mockRestore();
+    }
+  });
+
+  it("hands the lastUsedAt write to waitUntil instead of awaiting it", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Background usage");
+    const deferred: Promise<unknown>[] = [];
+
+    await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Authorization: `Bearer ${created.token}` },
+    }) as unknown as Request, null, { waitUntil: (promise) => deferred.push(promise) }))
+      .resolves.toMatchObject({ source: "bearer" });
+
+    expect(deferred).toHaveLength(1);
+    await Promise.all(deferred);
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: expect.any(Date) });
+  });
+
+  it("logs instead of failing the request when the background lastUsedAt write fails", async () => {
+    const deferred: Promise<unknown>[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const stub = {
+      apiCredential: {
+        findUnique: async () => ({
+          id: "credential-bg",
+          revokedAt: null,
+          expiresAt: null,
+          lastUsedAt: null,
+          oauthClientId: null,
+          oauthIssuer: null,
+          oauthResource: null,
+          scopes: "kitchen:read",
+          user: { id: "user-bg", email: "bg@example.com", username: "bg" },
+        }),
+        updateMany: async () => { throw new Error("D1 write failed"); },
+      },
+    } as never;
+    try {
+      await expect(authenticateApiTokenRaw(stub, "sj_bg", "https://spoonjoy.app", { waitUntil: (p) => deferred.push(p) }))
+        .resolves.toMatchObject({ credentialId: "credential-bg" });
+      await Promise.all(deferred);
+      expect(warn).toHaveBeenCalledWith("[api-auth] lastUsedAt update failed", expect.any(Error));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("rejects issuer metadata on a credential that has no OAuth client", async () => {
