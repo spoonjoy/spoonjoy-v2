@@ -21,6 +21,7 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "auth.webauthn.register.verify",
   "csp-report",
   "health",
+  "health.ready",
   "mcp",
   "oauth.register",
   "oauth.revoke",
