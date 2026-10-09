@@ -5,6 +5,7 @@ import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
+import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
@@ -288,6 +289,13 @@ export default {
           cloudflare: { env, ctx },
         });
         return finalizeResponse(response, env);
+      }
+
+      // Static assets already served the current build; a hashed asset that reaches the Worker
+      // belongs to an earlier release, so serve it from the release archive before the 404 page.
+      const archivedAsset = await serveReleaseAssetFallback(request, env.PHOTOS);
+      if (archivedAsset) {
+        return finalizeResponse(archivedAsset, env);
       }
 
       // One nonce per request: it must appear identically in the selected CSP
