@@ -140,7 +140,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
 
     expect(runner.textToImage).toHaveBeenCalledWith(
       expect.stringContaining("Additional direction: brighter herbs and tighter crop."),
-      { model: "dall-e-3" },
+      { model: "dall-e-3", signal: expect.any(AbortSignal) },
     );
     await expect(
       db.recipeCover.findUniqueOrThrow({
@@ -319,6 +319,39 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     ).resolves.toBeUndefined();
     expect(errorSpy.error).toHaveBeenCalledTimes(1);
     await expectPlaceholderFailed("boom");
+  });
+
+  // A provider that never answers used to hold the job until waitUntil was cancelled, leaving
+  // the cover in "processing" for good. The job's budget now cuts the call off and marks it failed.
+  it("marks the placeholder failed, not processing, when the provider outlasts the job's budget", async () => {
+    let providerSignal: AbortSignal | undefined;
+    const runner: ImageGenRunner = {
+      textToImage: vi.fn((_prompt: string, opts: { signal?: AbortSignal }) => {
+        providerSignal = opts.signal;
+        return new Promise<never>(() => undefined);
+      }),
+      imageToImage: vi.fn(),
+    };
+    const started = Date.now();
+
+    await scheduleAiPlaceholderCover({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      title: "Pasta",
+      description: null,
+      runner,
+      bucket: mockR2(),
+      timeLimits: { totalMs: 60, attemptTimeoutMs: 60 },
+      logger: errorSpy,
+    });
+
+    expect(Date.now() - started).toBeLessThan(5_000);
+    await expectPlaceholderFailed("ran out of its 60ms budget");
+    // The provider request itself is aborted, not just abandoned.
+    expect(providerSignal?.aborted).toBe(true);
+    expect(errorSpy.error).toHaveBeenCalledWith("ai-placeholder cover generation failed", expect.anything());
   });
 
   it("includes non-Error provider failures in the visible failure reason", async () => {
