@@ -22,6 +22,7 @@ import {
 import {
   pollAgentConnection,
   startAgentConnection,
+  type AgentConnectionRequester,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
@@ -111,6 +112,8 @@ export interface SpoonjoyApiContext {
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;
   logger?: Pick<Console, "error">;
+  /** Network details of the caller, recorded on agent connection requests. Never verified. */
+  requester?: AgentConnectionRequester | null;
 }
 
 export interface SpoonjoyApiOperationInfo {
@@ -1314,7 +1317,7 @@ const authStatusTool: SpoonjoyApiOperation = {
 const startAgentConnectionTool: SpoonjoyApiOperation = {
   name: "start_agent_connection",
   description:
-    "Start a browser-approved delegated Spoonjoy connection for this agent. Send authorizationUrl to the user, then poll with deviceCode.",
+    "Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.",
   inputSchema: {
     type: "object",
     properties: {
@@ -1329,6 +1332,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
       agentName: optionalString(args.agentName),
       baseUrl: context.env?.SPOONJOY_BASE_URL ?? optionalString(args.baseUrl),
       scopes: optionalString(args.scopes),
+      requester: context.requester,
     });
 
     return json({
@@ -1341,7 +1345,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
       expiresIn: started.expiresIn,
       interval: started.interval,
       message:
-        "Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
+        "Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
     });
   },
 };

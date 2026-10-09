@@ -152,6 +152,11 @@ model AgentConnectionRequest {
   scopes         String @default("kitchen:read kitchen:write")
   status         String @default("pending")
 
+  // Network details of whoever started the request, shown on the approval page. Not verified.
+  requesterIp        String?
+  requesterUserAgent String?
+  requesterCountry   String?
+
   approvedById String?
   approvedBy   User?   @relation(fields: [approvedById], references: [id], onDelete: SetNull)
 
