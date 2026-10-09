@@ -45,7 +45,6 @@
       "ws@8": "8.21.0"
     },
     "patchedDependencies": {
-      "@prisma/adapter-d1@6.19.2": "patches/@prisma__adapter-d1@6.19.2.patch",
       "react-router@7.18.2": "patches/react-router@7.18.2.patch"
     }
   },
@@ -130,8 +129,8 @@
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
     "@posthog/react": "1.10.4",
-    "@prisma/adapter-d1": "^6.19.2",
-    "@prisma/client": "6.19.2",
+    "@prisma/adapter-d1": "7.10.0",
+    "@prisma/client": "7.10.0",
     "@react-router/cloudflare": "7.18.2",
     "@react-router/dev": "7.18.2",
     "@react-router/node": "7.18.2",
@@ -188,7 +187,7 @@
     "jsdom-testing-mocks": "^1.16.0",
     "pg": "^8.21.0",
     "postcss": "^8.5.23",
-    "prisma": "6.19.2",
+    "prisma": "7.10.0",
     "sharp": "^0.35.5",
     "storybook": "10.2.10",
     "tailwindcss": "^4.1.18",

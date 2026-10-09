@@ -9,7 +9,7 @@ import { shouldLogRollupBuildMessage } from "./scripts/build-output-hygiene";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
-const prismaWasmClient = new URL("./node_modules/.prisma/client/wasm.js", import.meta.url).pathname;
+const prismaWasmClient = new URL("./node_modules/.prisma/client/edge.js", import.meta.url).pathname;
 const serverPostHogReactShim = new URL("./app/lib/posthog-react.server-shim.ts", import.meta.url).pathname;
 
 type RequestInitWithDuplex = RequestInit & { duplex: "half" };
