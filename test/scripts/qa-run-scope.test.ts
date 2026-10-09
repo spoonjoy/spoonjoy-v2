@@ -1,13 +1,15 @@
 // @vitest-environment node
 import { generateKeyPairSync } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import {
   API_RETRY_DELAYS_MS,
-  CANONICAL_DUMP_FILE,
   GENERATED_BUILD_CONFIG,
+  MASKED_RUN_SECRETS,
+  MAX_RETRY_AFTER_MS,
+  MAX_RUN_WORKERS,
   READY_TIMEOUT_MS,
   REQUIRED_RUN_SECRETS,
   SECRETS_FILE,
@@ -16,6 +18,7 @@ import {
   STATE_FILE,
   WRANGLER_CONFIG,
   assertOnlyIdentityChanged,
+  assertRunWorkerHeadroom,
   buildRunSecrets,
   createCloudflareApi,
   defaultCliErrorHandler,
@@ -23,15 +26,15 @@ import {
   defaultSleep,
   generateVapidKeys,
   isCliEntry,
-  localMigrationNames,
   main,
-  pendingSharedQaMigrations,
   prepare,
   requireGitHubActions,
+  retryDelayMs,
   runCliIfEntry,
   runIdentity,
   scopeGeneratedBuildConfig,
   scopeWranglerConfig,
+  sweep,
   sweepStaleRunStacks,
   teardown,
   verify,
@@ -55,7 +58,6 @@ const IDENTITY = {
   baseUrl: "https://spoonjoy-v2-qa-run-1001-2.mendelow-studio.workers.dev",
 };
 const RUN_DB_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
-const ZERO_DB_ID = "00000000-0000-0000-0000-000000000000";
 
 // The generated build config as the Cloudflare Vite plugin writes it for CLOUDFLARE_ENV=qa: the
 // QA section flattened, named spoonjoy-v2-qa.
@@ -89,7 +91,6 @@ function fakeFs(files: Record<string, string> = {}) {
       removed.push(path);
       for (const key of [...store.keys()]) if (key.startsWith(path)) store.delete(key);
     }),
-    readDir: vi.fn(() => ["0000_init.sql", "0002_seed.sql", "0003_new.sql", "README.md"]),
   };
   return { fs, store, appended, modes, removed, json: (path: string) => JSON.parse(store.get(path)!) };
 }
@@ -112,19 +113,14 @@ function fakeApi(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-// A fake `pnpm exec wrangler ...` that answers the shared-QA d1_migrations query.
-function fakeExec(applied: string[] = ["0000_init.sql", "0002_seed.sql", "0003_new.sql"], extra: Record<string, string> = {}) {
+// A fake `pnpm exec wrangler ...` answering by command prefix.
+function fakeExec(answers: Record<string, string> = {}) {
   const calls: string[][] = [];
   const exec = vi.fn(async (file: string, args: string[]) => {
     calls.push([file, ...args]);
     const command = args.slice(2).join(" ");
-    for (const [prefix, stdout] of Object.entries(extra)) {
-      if (command.startsWith(prefix)) return { stdout, stderr: "" };
-    }
-    if (command.includes("SELECT name FROM d1_migrations")) {
-      return { stdout: `noise\n${JSON.stringify([{ results: applied.map((name) => ({ name })) }])}`, stderr: "" };
-    }
-    return { stdout: "", stderr: "" };
+    const match = Object.entries(answers).find(([prefix]) => command.startsWith(prefix));
+    return { stdout: match ? match[1] : "", stderr: "" };
   });
   return { exec, calls };
 }
@@ -252,16 +248,17 @@ describe("per-run secrets", () => {
 });
 
 describe("createCloudflareApi", () => {
-  function jsonResponse(status: number, body: unknown) {
-    return { ok: status >= 200 && status < 300, status, json: async () => body };
+  function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
+    return { ok: status >= 200 && status < 300, status, headers: new Headers(headers), json: async () => body };
   }
+  const half = () => 0.5;
 
   it("requires a token and a 32-hex account id", () => {
     expect(() => createCloudflareApi({ env: {} })).toThrow(/are required/);
     expect(() => createCloudflareApi({ env: { CLOUDFLARE_API_TOKEN: "t", CLOUDFLARE_ACCOUNT_ID: "nope" } })).toThrow(/are required/);
   });
 
-  it("calls the account's D1 and Workers endpoints with the bearer token", async () => {
+  it("calls the account's D1 and Workers endpoints with the bearer token, listing databases unfiltered", async () => {
     const fetchImpl = vi.fn(async (url: string, init: { method: string; body?: string }) => {
       if (url.includes("/d1/database?")) return jsonResponse(200, { success: true, result: [{ name: "spoonjoy-qa-run-1-1", uuid: "u" }] });
       if (init.method === "POST") return jsonResponse(200, { success: true, result: { uuid: RUN_DB_ID } });
@@ -278,7 +275,7 @@ describe("createCloudflareApi", () => {
 
     const base = `https://api.cloudflare.com/client/v4/accounts/${RUN_ENV.CLOUDFLARE_ACCOUNT_ID}`;
     expect(fetchImpl.mock.calls.map(([url, init]) => `${init.method} ${url}`)).toEqual([
-      `GET ${base}/d1/database?name=spoonjoy-qa-run-&page=1&per_page=100`,
+      `GET ${base}/d1/database?page=1&per_page=100`,
       `POST ${base}/d1/database`,
       `DELETE ${base}/d1/database/u`,
       `GET ${base}/workers/scripts`,
@@ -311,7 +308,7 @@ describe("createCloudflareApi", () => {
     expect(endless).toHaveBeenCalledTimes(20);
   });
 
-  it("retries rate limits, server errors and network failures, then reports the failure", async () => {
+  it("backs off for about four minutes on rate limits, server errors and network failures, then reports the failure", async () => {
     const sleep = vi.fn(async () => {});
     const responses: Array<() => unknown> = [
       () => jsonResponse(429, {}),
@@ -322,9 +319,9 @@ describe("createCloudflareApi", () => {
       () => jsonResponse(200, { success: true, result: [] }),
     ];
     const fetchImpl = vi.fn(async () => responses.shift()!());
-    const api = createCloudflareApi({ env: RUN_ENV, fetchImpl, sleep });
+    const api = createCloudflareApi({ env: RUN_ENV, fetchImpl, sleep, random: half });
     expect(await api.listWorkers()).toEqual([]);
-    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(API_RETRY_DELAYS_MS);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(API_RETRY_DELAYS_MS.slice(0, 3));
 
     const down = createCloudflareApi({
       env: RUN_ENV,
@@ -332,11 +329,29 @@ describe("createCloudflareApi", () => {
         throw "offline";
       }),
       sleep,
+      random: half,
     });
     await expect(down.listWorkers()).rejects.toThrow(/returned a network error: offline/);
 
-    const failing = createCloudflareApi({ env: RUN_ENV, fetchImpl: vi.fn(async () => jsonResponse(500, {})), sleep });
-    await expect(failing.listWorkers()).rejects.toThrow(/GET \/workers\/scripts returned 500$/);
+    sleep.mockClear();
+    const failing = createCloudflareApi({ env: RUN_ENV, fetchImpl: vi.fn(async () => jsonResponse(429, {})), sleep, random: half });
+    await expect(failing.listWorkers()).rejects.toThrow(/GET \/workers\/scripts returned 429$/);
+    const total = sleep.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
+    expect(total).toBe(246_000);
+    expect(sleep).toHaveBeenCalledTimes(API_RETRY_DELAYS_MS.length);
+  });
+
+  it("waits at least as long as Retry-After asks, up to five minutes, with jitter on its own delays", () => {
+    expect(retryDelayMs(0, jsonResponse(429, {}, { "retry-after": "30" }), half)).toBe(30_000);
+    expect(retryDelayMs(0, jsonResponse(429, {}, { "retry-after": "9999" }), half)).toBe(MAX_RETRY_AFTER_MS);
+    expect(retryDelayMs(3, jsonResponse(429, {}, { "retry-after": "1" }), half)).toBe(16_000);
+    expect(retryDelayMs(3, jsonResponse(429, {}, { "retry-after": "soon" }), half)).toBe(16_000);
+    expect(retryDelayMs(3, jsonResponse(429, {}, { "retry-after": "-5" }), half)).toBe(16_000);
+    expect(retryDelayMs(3, undefined, () => 0)).toBe(8_000);
+    expect(retryDelayMs(3, { status: 503 }, () => 0.999)).toBe(23_984);
+    const jittered = retryDelayMs(1, jsonResponse(503, {}));
+    expect(jittered).toBeGreaterThanOrEqual(2_000);
+    expect(jittered).toBeLessThanOrEqual(6_000);
   });
 
   it("reports a client error or an unsuccessful payload with Cloudflare's messages, without retrying", async () => {
@@ -365,6 +380,14 @@ describe("createCloudflareApi", () => {
   });
 });
 
+function notFoundApi() {
+  return createCloudflareApi({
+    env: RUN_ENV,
+    fetchImpl: vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ success: false }) })),
+    sleep: vi.fn(),
+  });
+}
+
 describe("sweepStaleRunStacks", () => {
   const now = () => Date.parse("2026-10-09T12:00:00Z");
   const old = new Date(now() - STALE_AFTER_MS - 1).toISOString();
@@ -372,11 +395,14 @@ describe("sweepStaleRunStacks", () => {
 
   it("deletes only per-run stacks older than three hours, never shared QA or another run in progress", async () => {
     const api = fakeApi({
+      // A listing that returns more than per-run names: the sweep matches names itself.
       listDatabases: vi.fn(async () => [
         { name: "spoonjoy-qa-run-1-1", uuid: "stale-db", created_at: old },
         { name: "spoonjoy-qa-run-2-1", uuid: "fresh-db", created_at: fresh },
         { name: "spoonjoy-qa", uuid: "shared", created_at: old },
+        { name: "spoonjoy", uuid: "production", created_at: old },
         { name: "spoonjoy-qa-run-x", uuid: "odd", created_at: old },
+        { name: "copy-of-spoonjoy-qa-run-4-1", uuid: "not-a-prefix", created_at: old },
         { uuid: "nameless", created_at: old },
         { name: "spoonjoy-qa-run-3-1", uuid: "undated" },
       ]),
@@ -390,52 +416,62 @@ describe("sweepStaleRunStacks", () => {
     });
     const log = vi.fn();
 
-    expect(await sweepStaleRunStacks({ api, now, log })).toBe(2);
+    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 2, remainingRunWorkers: 1 });
     expect(api.deleteDatabase.mock.calls).toEqual([["stale-db"]]);
     expect(api.deleteWorker.mock.calls).toEqual([["spoonjoy-v2-qa-run-1-1"]]);
     expect(log).toHaveBeenCalledTimes(2);
   });
-});
 
-describe("pendingSharedQaMigrations", () => {
-  it("lists this checkout's migrations that shared QA's d1_migrations does not record", async () => {
-    const { exec, calls } = fakeExec(["0000_init.sql"]);
-    const readDir = vi.fn(() => ["0003_new.sql", "0000_init.sql", "notes.txt", "0002_seed.sql"]);
-
-    expect(await pendingSharedQaMigrations({ exec, readDir })).toEqual(["0002_seed.sql", "0003_new.sql"]);
-    expect(calls[0]).toEqual([
-      "pnpm", "exec", "wrangler", "d1", "execute", "DB", "--remote", "--env", "qa", "--json",
-      "--command", "SELECT name FROM d1_migrations ORDER BY id;",
+  it("treats a stack another run deleted first (404) as already gone, and fails on any other error", async () => {
+    const gone = notFoundApi();
+    const api = fakeApi({
+      listDatabases: vi.fn(async () => [{ name: "spoonjoy-qa-run-1-1", uuid: "stale-db", created_at: old }]),
+      deleteDatabase: gone.deleteDatabase,
+      listWorkers: vi.fn(async () => [{ id: "spoonjoy-v2-qa-run-1-1", created_on: old }]),
+      deleteWorker: gone.deleteWorker,
+    });
+    const log = vi.fn();
+    expect(await sweepStaleRunStacks({ api, now, log })).toEqual({ swept: 2, remainingRunWorkers: 0 });
+    expect(log.mock.calls.map(([line]) => line)).toEqual([
+      `Already gone: stale QA run database spoonjoy-qa-run-1-1 (created ${old}).`,
+      `Already gone: stale QA run Worker spoonjoy-v2-qa-run-1-1 (created ${old}).`,
     ]);
+
+    const broken = fakeApi({
+      listDatabases: vi.fn(async () => [{ name: "spoonjoy-qa-run-1-1", uuid: "stale-db", created_at: old }]),
+      deleteDatabase: vi.fn(async () => {
+        throw new Error("d1 500");
+      }),
+    });
+    await expect(sweepStaleRunStacks({ api: broken, now, log })).rejects.toThrow("d1 500");
   });
 
-  it("treats an empty result as nothing applied, and fails on output without JSON", async () => {
-    const empty = vi.fn(async () => ({ stdout: "[{}]", stderr: "" }));
-    expect(await pendingSharedQaMigrations({ exec: empty, readDir: () => ["0000_init.sql"] })).toEqual(["0000_init.sql"]);
-
-    const garbage = vi.fn(async () => ({ stdout: "error", stderr: "" }));
-    await expect(pendingSharedQaMigrations({ exec: garbage, readDir: () => [] })).rejects.toThrow(/no JSON results/);
-  });
-
-  it("reads the real migrations directory by default", () => {
-    const names = localMigrationNames(readdirSync);
-    expect(names[0]).toBe("0000_init.sql");
-    expect(names.every((name) => /^\d{4}_.+\.sql$/.test(name))).toBe(true);
+  it("fails loudly once more than 100 run Workers are in use", async () => {
+    const workers = (count: number) => Array.from({ length: count }, (_, index) => ({ id: `spoonjoy-v2-qa-run-${index}-1`, created_on: fresh }));
+    const log = vi.fn();
+    expect(await sweep({ api: fakeApi({ listWorkers: vi.fn(async () => workers(MAX_RUN_WORKERS)) }), now, log })).toEqual({
+      swept: 0,
+      remainingRunWorkers: MAX_RUN_WORKERS,
+    });
+    expect(log).toHaveBeenCalledWith(`Swept 0 stale QA run resource(s); ${MAX_RUN_WORKERS} run Worker(s) are in use.`);
+    await expect(sweep({ api: fakeApi({ listWorkers: vi.fn(async () => workers(MAX_RUN_WORKERS + 1)) }), now, log })).rejects.toThrow(
+      /101 QA run Workers exist \(limit 100; the account allows 500 scripts\)/,
+    );
+    expect(() => assertRunWorkerHeadroom(0)).not.toThrow();
   });
 });
 
 describe("prepare", () => {
-  const secrets = () => ({ SESSION_SECRET: "s3cret", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_SUBJECT: "x", POSTHOG_DISABLED: "1" });
+  const secrets = () => ({ SESSION_SECRET: "s3cret", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_SUBJECT: IDENTITY.baseUrl, POSTHOG_DISABLED: "1" });
 
-  it("creates the run's database, rewrites both configs to it, writes secrets and exports the run's URL", async () => {
+  it("creates the run's empty database, rewrites both configs to it, writes secrets and exports the run's URL", async () => {
     const files = fakeFs(preparedFiles());
     const api = fakeApi();
-    const { exec, calls } = fakeExec();
     const log = vi.fn();
 
-    const state = await prepare({ env: RUN_ENV, exec, fs: files.fs, api, now: Date.now, log, secrets });
+    const state = await prepare({ env: RUN_ENV, fs: files.fs, api, now: Date.now, log, secrets });
 
-    expect(state).toEqual({ ...IDENTITY, databaseId: RUN_DB_ID, clonedFromSharedQa: false, pendingMigrations: [] });
+    expect(state).toEqual({ ...IDENTITY, databaseId: RUN_DB_ID });
     expect(api.createDatabase).toHaveBeenCalledWith(IDENTITY.databaseName);
     expect(files.json(STATE_FILE)).toEqual(state);
     expect(files.json(WRANGLER_CONFIG).env.qa.d1_databases[0].database_id).toBe(RUN_DB_ID);
@@ -446,37 +482,17 @@ describe("prepare", () => {
     expect(files.appended).toEqual([
       [RUN_ENV.GITHUB_ENV, `SPOONJOY_JOURNEYS_BASE_URL=${IDENTITY.baseUrl}\nSPOONJOY_QA_RUN_WORKER=${IDENTITY.workerName}\n`],
     ]);
-    expect(log).toHaveBeenCalledWith("::add-mask::s3cret");
-    // Only the shared-QA migration read ran: no export, no import.
-    expect(calls).toHaveLength(1);
     expect(files.fs.mkdir).toHaveBeenCalledWith(STATE_DIR, { recursive: true });
+    // Nothing is copied from shared QA: no file but the configs, state and secrets is written.
+    expect([...files.store.keys()].sort()).toEqual([GENERATED_BUILD_CONFIG, SECRETS_FILE, STATE_FILE, WRANGLER_CONFIG].sort());
   });
 
-  it("starts the run's database as a copy of shared QA when this checkout has migrations shared QA lacks", async () => {
-    const files = fakeFs(preparedFiles());
-    const { exec, calls } = fakeExec(["0000_init.sql", "0002_seed.sql"]);
-    const order: string[] = [];
-    exec.mockImplementation(async (file: string, args: string[]) => {
-      calls.push([file, ...args]);
-      const command = args.slice(2).join(" ");
-      // The import must target the run's database: wrangler.json is already rewritten by then.
-      order.push(`${args[3]}:${JSON.parse(files.store.get(WRANGLER_CONFIG)!).env.qa.d1_databases[0].database_name}`);
-      if (command.includes("SELECT name FROM d1_migrations")) {
-        return { stdout: JSON.stringify([{ results: [{ name: "0000_init.sql" }, { name: "0002_seed.sql" }] }]), stderr: "" };
-      }
-      return { stdout: "", stderr: "" };
-    });
-
-    const state = await prepare({ now: Date.now, env: RUN_ENV, exec, fs: files.fs, api: fakeApi(), log: vi.fn(), secrets });
-
-    expect(state.clonedFromSharedQa).toBe(true);
-    expect(state.pendingMigrations).toEqual(["0003_new.sql"]);
-    expect(calls.map((call) => call.slice(3, 5).join(" "))).toEqual(["d1 execute", "d1 export", "d1 execute"]);
-    expect(calls[1]).toContain(CANONICAL_DUMP_FILE);
-    expect(calls[2]).toEqual(["pnpm", "exec", "wrangler", "d1", "execute", "DB", "--remote", "--env", "qa", "--yes", "--file", CANONICAL_DUMP_FILE]);
-    expect(order).toEqual(["execute:spoonjoy-qa", "export:spoonjoy-qa", `execute:${IDENTITY.databaseName}`]);
-    // The dump of shared QA is emptied once imported.
-    expect(files.store.get(CANONICAL_DUMP_FILE)).toBe("");
+  it("masks only the real secrets, so the run's URL and plain flags stay readable in the log", async () => {
+    const log = vi.fn();
+    await prepare({ env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: fakeApi(), now: Date.now, log, secrets });
+    const masks = log.mock.calls.map(([line]) => line).filter((line: string) => line.startsWith("::add-mask::"));
+    expect(masks).toEqual(["::add-mask::s3cret", "::add-mask::priv"]);
+    expect(MASKED_RUN_SECRETS).toEqual(["SESSION_SECRET", "VAPID_PRIVATE_KEY"]);
   });
 
   it("replaces a database left by an earlier try of the same attempt, and still runs when the sweep fails", async () => {
@@ -487,7 +503,7 @@ describe("prepare", () => {
         .mockResolvedValueOnce([{ name: IDENTITY.databaseName, uuid: "leftover" }, { name: "other", uuid: "keep" }]),
     });
     const log = vi.fn();
-    await prepare({ now: Date.now, env: { ...RUN_ENV, GITHUB_ENV: undefined }, exec: fakeExec().exec, fs: files.fs, api, log, secrets });
+    await prepare({ now: Date.now, env: { ...RUN_ENV, GITHUB_ENV: undefined }, fs: files.fs, api, log, secrets });
 
     expect(api.deleteDatabase.mock.calls).toEqual([["leftover"]]);
     expect(log).toHaveBeenCalledWith("::warning::Could not sweep stale QA run stacks: sweep down");
@@ -495,21 +511,59 @@ describe("prepare", () => {
 
     const stringFailure = fakeApi({ listDatabases: vi.fn().mockRejectedValueOnce("plain").mockResolvedValue([]) });
     const log2 = vi.fn();
-    await prepare({ now: Date.now, env: RUN_ENV, exec: fakeExec().exec, fs: fakeFs(preparedFiles()).fs, api: stringFailure, log: log2, secrets });
+    await prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: stringFailure, log: log2, secrets });
     expect(log2).toHaveBeenCalledWith("::warning::Could not sweep stale QA run stacks: plain");
+
+    // A leftover another sweep already deleted (404) does not stop the run.
+    const gone = notFoundApi();
+    const raced = fakeApi({
+      listDatabases: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ name: IDENTITY.databaseName, uuid: "leftover" }]),
+      deleteDatabase: gone.deleteDatabase,
+    });
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: raced, log: vi.fn(), secrets })).resolves.toMatchObject({
+      databaseId: RUN_DB_ID,
+    });
+  });
+
+  it("reuses the run's database when a retried create finds the first try had worked", async () => {
+    const api = fakeApi({
+      listDatabases: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ name: `${IDENTITY.databaseName}0`, uuid: "similar" }, { name: IDENTITY.databaseName, uuid: RUN_DB_ID }]),
+      createDatabase: vi.fn(async () => {
+        throw new Error("Cloudflare API POST /d1/database returned 400: database already exists");
+      }),
+    });
+    const state = await prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn(), secrets });
+    expect(state.databaseId).toBe(RUN_DB_ID);
+
+    const failed = fakeApi({
+      createDatabase: vi.fn(async () => {
+        throw new Error("create 500");
+      }),
+    });
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: failed, log: vi.fn(), secrets })).rejects.toThrow("create 500");
+  });
+
+  it("refuses to create a stack when more than 100 run Workers are already in use", async () => {
+    const workers = Array.from({ length: MAX_RUN_WORKERS + 1 }, (_, index) => ({ id: `spoonjoy-v2-qa-run-${index}-1`, created_on: new Date().toISOString() }));
+    const api = fakeApi({ listWorkers: vi.fn(async () => workers) });
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn(), secrets })).rejects.toThrow(/101 QA run Workers exist/);
+    expect(api.createDatabase).not.toHaveBeenCalled();
   });
 
   it("creates nothing unless both configs name shared QA and the build exists", async () => {
     const api = fakeApi();
     const missingBuild = fakeFs({ [WRANGLER_CONFIG]: JSON.stringify(REAL_WRANGLER) });
-    await expect(prepare({ now: Date.now, env: RUN_ENV, exec: fakeExec().exec, fs: missingBuild.fs, api, log: vi.fn() })).rejects.toThrow(/is missing/);
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: missingBuild.fs, api, log: vi.fn() })).rejects.toThrow(/is missing/);
 
     const production = structuredClone(REAL_WRANGLER);
     production.env.qa.vars.SPOONJOY_BASE_URL = "https://spoonjoy.app";
     const wrongConfig = fakeFs({ ...preparedFiles(), [WRANGLER_CONFIG]: JSON.stringify(production) });
-    await expect(prepare({ now: Date.now, env: RUN_ENV, exec: fakeExec().exec, fs: wrongConfig.fs, api, log: vi.fn() })).rejects.toThrow(/does not target/);
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: wrongConfig.fs, api, log: vi.fn() })).rejects.toThrow(/does not target/);
 
-    await expect(prepare({ now: Date.now, env: { ...RUN_ENV, GITHUB_ACTIONS: undefined }, exec: fakeExec().exec, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn() }))
+    await expect(prepare({ now: Date.now, env: { ...RUN_ENV, GITHUB_ACTIONS: undefined }, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn() }))
       .rejects.toThrow(/only inside GitHub Actions/);
 
     expect(api.createDatabase).not.toHaveBeenCalled();
@@ -518,16 +572,16 @@ describe("prepare", () => {
 
   it("fails if Cloudflare returns no database id", async () => {
     const api = fakeApi({ createDatabase: vi.fn(async () => ({})) });
-    await expect(prepare({ now: Date.now, env: RUN_ENV, exec: fakeExec().exec, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn(), secrets }))
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api, log: vi.fn(), secrets }))
       .rejects.toThrow(/did not return the new database's id/);
     const nothing = fakeApi({ createDatabase: vi.fn(async () => undefined) });
-    await expect(prepare({ now: Date.now, env: RUN_ENV, exec: fakeExec().exec, fs: fakeFs(preparedFiles()).fs, api: nothing, log: vi.fn(), secrets }))
+    await expect(prepare({ now: Date.now, env: RUN_ENV, fs: fakeFs(preparedFiles()).fs, api: nothing, log: vi.fn(), secrets }))
       .rejects.toThrow(/did not return the new database's id/);
   });
 });
 
 function scopedFiles(overrides: Record<string, unknown> = {}) {
-  const state = { ...IDENTITY, databaseId: RUN_DB_ID, clonedFromSharedQa: false, pendingMigrations: [], ...overrides };
+  const state = { ...IDENTITY, databaseId: RUN_DB_ID, ...overrides };
   return fakeFs({
     [STATE_FILE]: JSON.stringify(state),
     [WRANGLER_CONFIG]: JSON.stringify(scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID)),
@@ -535,7 +589,7 @@ function scopedFiles(overrides: Record<string, unknown> = {}) {
 }
 
 function verifyExec({ secrets = REQUIRED_RUN_SECRETS, migrations = "✅ No migrations to apply!" } = {}) {
-  return fakeExec([], {
+  return fakeExec({
     "secret list": JSON.stringify(secrets.map((name) => ({ name, type: "secret_text" }))),
     "d1 migrations list": migrations,
   });
@@ -605,7 +659,10 @@ describe("verify", () => {
       .rejects.toThrow("The run's Worker is missing secret(s): VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT.");
     await expect(verify({ env: RUN_ENV, exec: verifyExec({ migrations: "0029_x.sql pending" }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
       .rejects.toThrow(/still has pending migrations/);
-    const nullRows = fakeExec([], { "secret list": "[null]" });
+    const noJson = fakeExec({ "secret list": "Authentication error" });
+    await expect(verify({ env: RUN_ENV, exec: noJson.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+      .rejects.toThrow(/no JSON results/);
+    const nullRows = fakeExec({ "secret list": "[null]" });
     await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
       .rejects.toThrow(/missing secret/);
   });
@@ -627,28 +684,55 @@ describe("verify", () => {
 });
 
 describe("teardown", () => {
-  it("deletes this run's Worker and database and its local state", async () => {
-    const api = fakeApi({
-      listDatabases: vi.fn(async () => [
-        { name: IDENTITY.databaseName, uuid: RUN_DB_ID },
-        { name: "spoonjoy-qa-run-1001-1", uuid: "earlier-attempt" },
-      ]),
-    });
+  it("deletes this run's Worker and the database prepare recorded, by id, and its local state", async () => {
+    const api = fakeApi();
     const files = scopedFiles();
     const log = vi.fn();
 
     expect(await teardown({ env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(api.deleteWorker.mock.calls).toEqual([[IDENTITY.workerName]]);
     expect(api.deleteDatabase.mock.calls).toEqual([[RUN_DB_ID]]);
+    // The recorded id is enough: no listing, so nothing depends on how a listing matches names.
+    expect(api.listDatabases).not.toHaveBeenCalled();
     expect(files.removed).toEqual([STATE_DIR]);
+    expect(log).toHaveBeenCalledWith(`Deleted QA run database ${IDENTITY.databaseName} (${RUN_DB_ID}).`);
   });
 
-  it("treats an already-deleted Worker as done", async () => {
-    const fetchImpl = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({ success: false }) }));
-    const realApi = createCloudflareApi({ env: RUN_ENV, fetchImpl, sleep: vi.fn() });
-    const api = fakeApi({ deleteWorker: realApi.deleteWorker });
-    expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api, log: vi.fn() })).toBe(true);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  it("finds the database by its exact name when prepare failed before recording it", async () => {
+    const api = fakeApi({
+      listDatabases: vi.fn(async () => [
+        { name: `${IDENTITY.databaseName}0`, uuid: "longer-name" },
+        { name: "spoonjoy-qa-run-1001-1", uuid: "earlier-attempt" },
+        { name: IDENTITY.databaseName, uuid: RUN_DB_ID },
+      ]),
+    });
+    expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log: vi.fn() })).toBe(true);
+    expect(api.deleteDatabase.mock.calls).toEqual([[RUN_DB_ID]]);
+
+    // State from another attempt is ignored in favour of the exact-name lookup.
+    const other = fakeApi({ listDatabases: vi.fn(async () => []) });
+    const foreign = scopedFiles({ workerName: "spoonjoy-v2-qa-run-1001-1", databaseName: "spoonjoy-qa-run-1001-1", databaseId: "other" });
+    await teardown({ env: RUN_ENV, fs: foreign.fs, api: other, log: vi.fn() });
+    expect(other.deleteDatabase).not.toHaveBeenCalled();
+    expect(other.listDatabases).toHaveBeenCalled();
+  });
+
+  it("warns when there was nothing to delete", async () => {
+    const gone = notFoundApi();
+    const api = fakeApi({ deleteWorker: gone.deleteWorker, listDatabases: vi.fn(async () => [{ name: "spoonjoy-qa-run-1-1", uuid: "x" }]) });
+    const log = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log })).toBe(true);
+    expect(api.deleteDatabase).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(
+      `::warning::Nothing to delete for part of this run's QA stack: no Worker named ${IDENTITY.workerName} existed; no database named ${IDENTITY.databaseName} existed.`,
+    );
+
+    const alreadyDeleted = fakeApi({ deleteDatabase: gone.deleteDatabase });
+    const log2 = vi.fn();
+    expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api: alreadyDeleted, log: log2 })).toBe(true);
+    expect(log2).toHaveBeenCalledWith(
+      `::warning::Nothing to delete for part of this run's QA stack: database ${IDENTITY.databaseName} (${RUN_DB_ID}) was already deleted.`,
+    );
   });
 
   it("warns instead of failing when deletion fails, so the sweep can finish it later", async () => {
@@ -661,17 +745,14 @@ describe("teardown", () => {
       }),
     });
     const log = vi.fn();
-    expect(await teardown({ env: RUN_ENV, fs: scopedFiles().fs, api, log })).toBe(false);
+    expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log })).toBe(false);
     expect(log).toHaveBeenCalledWith(
-      "::warning::Could not fully delete this run's QA stack (worker 500; d1 500). A later run deletes it once it is 3 hours old.",
+      "::warning::Could not fully delete this run's QA stack (worker 500; d1 500). The scheduled sweep deletes it once it is 3 hours old.",
     );
   });
 
-  it("works from the run's names alone when prepare failed before writing state", async () => {
-    const api = fakeApi();
-    expect(await teardown({ env: RUN_ENV, fs: fakeFs().fs, api, log: vi.fn() })).toBe(true);
-    expect(api.deleteWorker).toHaveBeenCalledWith(IDENTITY.workerName);
-    await expect(teardown({ env: { ...RUN_ENV, GITHUB_ACTIONS: "false" }, fs: fakeFs().fs, api, log: vi.fn() })).rejects.toThrow(/GitHub Actions/);
+  it("refuses to run outside GitHub Actions", async () => {
+    await expect(teardown({ env: { ...RUN_ENV, GITHUB_ACTIONS: "false" }, fs: fakeFs().fs, api: fakeApi(), log: vi.fn() })).rejects.toThrow(/GitHub Actions/);
   });
 });
 
@@ -682,11 +763,12 @@ describe("main and the CLI guard", () => {
     const log = vi.fn();
     const secrets = () => ({ SESSION_SECRET: "s", VAPID_PUBLIC_KEY: "p", VAPID_PRIVATE_KEY: "k", VAPID_SUBJECT: "x", POSTHOG_DISABLED: "1" });
 
-    await main(["prepare"], { env: RUN_ENV, exec: fakeExec().exec, fs: files.fs, api, log, secrets, now: Date.now });
+    await main(["prepare"], { env: RUN_ENV, fs: files.fs, api, log, secrets, now: Date.now });
     expect(api.createDatabase).toHaveBeenCalled();
 
     await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
+    expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
     await expect(main(["release"], { env: RUN_ENV, api })).rejects.toThrow(/Usage/);
   });
 
@@ -786,14 +868,23 @@ describe("Journeys workflow", () => {
     expect(step("Start QA Worker tail").run).toContain('wrangler tail "$SPOONJOY_QA_RUN_WORKER"');
   });
 
-  it("touches the run's stack after a failure only if it was created, and always deletes it last", () => {
+  it("touches the run's stack after a failure only if it was created, and always deletes it, then reports API use", () => {
     for (const name of ["Stop QA Worker tail and summarise it", "Rotate persona passwords", "Clean up disposable QA data"]) {
       expect(step(name).if, name).toBe("always() && steps.qa-run.outcome == 'success'");
     }
-    const last = steps.at(-1)!;
-    expect(last.name).toBe("Delete this run's QA stack");
-    expect(last.if).toBe("always()");
-    expect(last.run).toBe("node scripts/qa-run-scope.mjs teardown");
+    const [teardownStep, report] = steps.slice(-2);
+    expect(teardownStep.name).toBe("Delete this run's QA stack");
+    expect(teardownStep.if).toBe("always()");
+    expect(teardownStep.run).toBe("node scripts/qa-run-scope.mjs teardown");
+    expect(report.name).toBe("Report Cloudflare API requests");
+    expect(report.if).toBe("always()");
+    expect(report.run).toContain('node scripts/count-cloudflare-requests.mjs summary "$RUNNER_TEMP/cloudflare-requests.log"');
+  });
+
+  it("migrates the run's empty database itself and never exports or copies shared QA", () => {
+    const text = readFileSync(resolve(ROOT, ".github/workflows/journeys.yml"), "utf8");
+    expect(text).not.toMatch(/d1 export/);
+    expect(step("Migrate this run's QA database").run).toBe("pnpm run qa:migrate");
   });
 
   it("gives the Cloudflare token only to steps that use Cloudflare, never to dependency install", () => {
@@ -811,6 +902,13 @@ describe("Journeys workflow", () => {
       "Clean up disposable QA data",
       "Delete this run's QA stack",
     ]);
+    // Every one of those steps also logs its Cloudflare API requests.
+    for (const name of withToken) {
+      expect(step(name!).env, name).toMatchObject({
+        NODE_OPTIONS: "--import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs",
+        SPOONJOY_CF_REQUEST_LOG: "${{ runner.temp }}/cloudflare-requests.log",
+      });
+    }
   });
 
   it("keeps shared QA a mirror of main: deployed only after main's journeys pass, one deploy at a time", () => {
@@ -820,9 +918,33 @@ describe("Journeys workflow", () => {
     expect(deploy.if).toContain("github.ref == 'refs/heads/main'");
     expect(deploy.if).toContain("needs.journeys.result == 'success'");
     expect(deploy.concurrency).toEqual({ group: "journeys-shared-qa-deploy", "cancel-in-progress": false });
-    const deploySteps: Array<{ name?: string; run?: string; env?: Record<string, string> }> = deploy.steps;
-    expect(deploySteps.at(-1)).toMatchObject({ name: "Deploy main to shared QA", run: "pnpm run deploy:qa" });
+    const deploySteps: Array<{ name?: string; id?: string; if?: string; run?: string; env?: Record<string, string> }> = deploy.steps;
+    expect(deploySteps.at(-1)).toMatchObject({
+      name: "Deploy main to shared QA",
+      if: "steps.tip.outputs.current == 'true'",
+      run: "pnpm run deploy:qa",
+    });
     expect(deploySteps.filter((candidate) => candidate.env?.CLOUDFLARE_API_TOKEN)).toHaveLength(1);
+  });
+
+  it("never deploys an older main over a newer one", () => {
+    const deploySteps: Array<{ name?: string; id?: string; run?: string }> = workflow.jobs["deploy-shared-qa"].steps;
+    const tip = deploySteps.at(-2)!;
+    expect(tip).toMatchObject({ name: "Check this commit is still main's tip", id: "tip" });
+    expect(tip.run).toContain('gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha');
+    expect(tip.run).toContain('if [ "$tip" = "$GITHUB_SHA" ]; then');
+    expect(tip.run).toContain('echo "current=true" >> "$GITHUB_OUTPUT"');
+    expect(tip.run).toContain('echo "current=false" >> "$GITHUB_OUTPUT"');
+  });
+
+  it("sweeps orphaned run stacks every hour, with only the Cloudflare credentials", () => {
+    const sweepWorkflow = parse(readFileSync(resolve(ROOT, ".github/workflows/qa-run-sweep.yml"), "utf8"));
+    expect(sweepWorkflow.on.schedule).toEqual([{ cron: "41 * * * *" }]);
+    expect(sweepWorkflow.permissions).toEqual({ contents: "read" });
+    const sweepSteps: Array<{ name?: string; run?: string; env?: Record<string, string> }> = sweepWorkflow.jobs.sweep.steps;
+    expect(sweepSteps.at(-1)).toMatchObject({ name: "Delete stale QA run stacks", run: "node scripts/qa-run-scope.mjs sweep" });
+    expect(sweepSteps.filter((candidate) => candidate.env?.CLOUDFLARE_API_TOKEN)).toHaveLength(1);
+    expect(sweepSteps.some((candidate) => candidate.run?.includes("pnpm install"))).toBe(false);
   });
 
   it("targets shared QA by the same identity the preflight pins", () => {

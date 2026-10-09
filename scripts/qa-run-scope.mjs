@@ -5,21 +5,23 @@
 // Before this, QA was single-tenant: every run deployed its build to the one `spoonjoy-v2-qa`
 // Worker and seeded the one `spoonjoy-qa` D1, so runs queued for their turn (about 10 minutes
 // each; 40 queued runs meant a 7-hour wait). Now each run gets:
-//   - its own D1 database, `spoonjoy-qa-run-<run id>-<attempt>`, migrated from this checkout's
-//     `migrations/` (so a pull request's own migrations apply only to its own database);
+//   - its own D1 database, `spoonjoy-qa-run-<run id>-<attempt>`, created empty and migrated from
+//     this checkout's `migrations/` (so a pull request's own migrations apply only to its own
+//     database, and never to shared QA before they merge);
 //   - its own Worker, `spoonjoy-v2-qa-run-<run id>-<attempt>`, served at
 //     `https://spoonjoy-v2-qa-run-<run id>-<attempt>.mendelow-studio.workers.dev`, with its own
 //     cook-session Durable Object namespace and per-run secrets;
-//   - the shared QA R2 bucket and rate-limit namespaces. Every R2 key a run writes is under an id
-//     that run created, and cleanup deletes only keys its own database references.
+//   - the shared QA R2 bucket and rate-limit namespaces. The seed writes no R2 objects, and every
+//     key the app writes has a timestamp and a random UUID in it, so every R2 key the run's
+//     database references was uploaded by this run; cleanup deletes only keys its own database
+//     references.
 //
 // Cloudflare does not generate version preview URLs for a Worker that implements a Durable
 // Object, so a per-run Worker is the way to give each run its own URL.
 //
-// If this checkout has migrations the shared QA database has not applied yet, the run's database
-// starts as a copy of the shared QA database (`wrangler d1 export`), and the new migrations then
-// apply on top. A pull request that changes the schema is still tested against real accumulated
-// QA data, without changing the shared database for anyone else.
+// The run's database always starts empty. It is never a copy of shared QA: D1 cannot export a
+// database with a virtual table (migration 0006 adds an FTS5 table), an export blocks shared QA
+// while it runs, and a copy would let cleanup delete R2 objects shared QA still references.
 //
 // How the rest of the workflow follows: `prepare` rewrites this CI checkout's wrangler.json
 // `env.qa` (Worker name, D1 binding, SPOONJOY_BASE_URL) and the generated build/server/wrangler.json
@@ -29,12 +31,14 @@
 // an error. It refuses to run outside GitHub Actions, so it never rewrites a developer's config.
 //
 // Commands (node scripts/qa-run-scope.mjs <command>):
-//   prepare   sweep stale run stacks, create this run's D1 (cloned from shared QA when needed),
-//             rewrite the configs, write the per-run secrets file, export the run's base URL.
+//   prepare   sweep stale run stacks, create this run's empty D1, rewrite the configs, write the
+//             per-run secrets file, export the run's base URL.
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
 //             and the URL serves /health and a hashed asset.
-//   teardown  delete this run's Worker and D1 (always; a failure only warns, and a later run's
-//             sweep deletes anything older than STALE_AFTER_MS).
+//   teardown  delete this run's Worker and D1 (always; a failure only warns, and a later sweep
+//             deletes anything older than STALE_AFTER_MS).
+//   sweep     delete run stacks older than STALE_AFTER_MS; run on a schedule as well as by each
+//             prepare, and fails when more than MAX_RUN_WORKERS run Workers remain.
 //
 // Environment (set by GitHub Actions): GITHUB_ACTIONS, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
 // GITHUB_ENV, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
@@ -46,7 +50,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -66,14 +69,23 @@ export const STALE_AFTER_MS = 3 * 60 * 60_000;
 export const STATE_DIR = ".qa-run";
 export const STATE_FILE = join(STATE_DIR, "scope.json");
 export const SECRETS_FILE = join(STATE_DIR, "secrets.json");
-export const CANONICAL_DUMP_FILE = join(STATE_DIR, "canonical-qa.sql");
 export const WRANGLER_CONFIG = "wrangler.json";
 export const GENERATED_BUILD_CONFIG = join("build", "server", "wrangler.json");
-export const MIGRATIONS_DIR = "migrations";
 export const REQUIRED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"];
+// Only these per-run values are secret. Masking the others would hide the run's URL
+// (VAPID_SUBJECT) or every "1" in the log (POSTHOG_DISABLED).
+export const MASKED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PRIVATE_KEY"];
 export const READY_TIMEOUT_MS = 3 * 60_000;
 export const READY_POLL_MS = 5_000;
-export const API_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
+// Cloudflare's API allows 1,200 requests per 5 minutes per user, shared by every concurrent run.
+// A rate-limited request backs off for up to about 4 minutes in all (each delay jittered between
+// half and one and a half times its base, and never shorter than the response's Retry-After), so a
+// burst of runs spreads out instead of failing.
+export const API_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 120_000];
+export const MAX_RETRY_AFTER_MS = 5 * 60_000;
+// Workers Paid allows 500 scripts per account. Far more run Workers than concurrent runs means
+// teardown and the sweep are failing, so fail loudly long before the account limit.
+export const MAX_RUN_WORKERS = 100;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MIGRATION_FILE_PATTERN = /^\d{4}_[A-Za-z0-9_.-]+\.sql$/;
@@ -226,7 +238,15 @@ class CloudflareApiError extends Error {
   }
 }
 
-export function createCloudflareApi({ env, fetchImpl, sleep }) {
+export function retryDelayMs(attempt, response, random = Math.random) {
+  const base = API_RETRY_DELAYS_MS[attempt] * (0.5 + random());
+  const header = response?.headers?.get?.("retry-after");
+  const seconds = header == null ? Number.NaN : Number(header);
+  const retryAfter = Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS) : 0;
+  return Math.round(Math.max(base, retryAfter));
+}
+
+export function createCloudflareApi({ env, fetchImpl, sleep, random = Math.random }) {
   const token = env.CLOUDFLARE_API_TOKEN ?? "";
   const accountId = env.CLOUDFLARE_ACCOUNT_ID ?? "";
   if (token === "" || !/^[0-9a-f]{32}$/.test(accountId)) {
@@ -249,7 +269,7 @@ export function createCloudflareApi({ env, fetchImpl, sleep }) {
       }
       const retryable = failure !== undefined || response.status === 429 || response.status >= 500;
       if (retryable && attempt < API_RETRY_DELAYS_MS.length) {
-        await sleep(API_RETRY_DELAYS_MS[attempt]);
+        await sleep(retryDelayMs(attempt, response, random));
         continue;
       }
       if (failure !== undefined) throw new CloudflareApiError(method, path, "a network error", failure);
@@ -265,8 +285,7 @@ export function createCloudflareApi({ env, fetchImpl, sleep }) {
   async function listAll(path) {
     const items = [];
     for (let page = 1; page <= 20; page += 1) {
-      // Every listed path already carries a query (`?name=`).
-      const payload = await request("GET", `${path}&page=${page}&per_page=100`);
+      const payload = await request("GET", `${path}?page=${page}&per_page=100`);
       const result = payload.result ?? [];
       items.push(...result);
       const totalPages = payload.result_info?.total_pages;
@@ -276,7 +295,9 @@ export function createCloudflareApi({ env, fetchImpl, sleep }) {
   }
 
   return {
-    listDatabases: () => listAll(`/d1/database?name=${encodeURIComponent(RUN_DATABASE_PREFIX)}`),
+    // Every database in the account, unfiltered: callers match names exactly themselves, so
+    // nothing depends on how the API's own `name` filter matches.
+    listDatabases: () => listAll("/d1/database"),
     createDatabase: async (name) => (await request("POST", "/d1/database", { name })).result,
     deleteDatabase: (id) => request("DELETE", `/d1/database/${id}`),
     // The scripts list is not paginated.
@@ -292,6 +313,17 @@ function isNotFound(error) {
 
 // Deletes run stacks older than STALE_AFTER_MS. Never touches the shared QA Worker or database:
 // only names matching the per-run patterns are candidates.
+// A 404 means another run's sweep or teardown deleted it first.
+async function deleteTolerating404(remove) {
+  try {
+    await remove();
+    return true;
+  } catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
+}
+
 export async function sweepStaleRunStacks({ api, now, log }) {
   const cutoff = now() - STALE_AFTER_MS;
   const isStale = (timestamp) => {
@@ -301,17 +333,38 @@ export async function sweepStaleRunStacks({ api, now, log }) {
   let swept = 0;
   for (const database of await api.listDatabases()) {
     if (!RUN_DATABASE_PATTERN.test(database.name ?? "") || !isStale(database.created_at)) continue;
-    await api.deleteDatabase(database.uuid);
-    log(`Deleted stale QA run database ${database.name} (created ${database.created_at}).`);
+    const deleted = await deleteTolerating404(() => api.deleteDatabase(database.uuid));
+    log(`${deleted ? "Deleted" : "Already gone:"} stale QA run database ${database.name} (created ${database.created_at}).`);
     swept += 1;
   }
+  let remaining = 0;
   for (const worker of await api.listWorkers()) {
-    if (!RUN_WORKER_PATTERN.test(worker.id ?? "") || !isStale(worker.created_on)) continue;
-    await api.deleteWorker(worker.id);
-    log(`Deleted stale QA run Worker ${worker.id} (created ${worker.created_on}).`);
+    if (!RUN_WORKER_PATTERN.test(worker.id ?? "")) continue;
+    if (!isStale(worker.created_on)) {
+      remaining += 1;
+      continue;
+    }
+    const deleted = await deleteTolerating404(() => api.deleteWorker(worker.id));
+    log(`${deleted ? "Deleted" : "Already gone:"} stale QA run Worker ${worker.id} (created ${worker.created_on}).`);
     swept += 1;
   }
-  return swept;
+  return { swept, remainingRunWorkers: remaining };
+}
+
+export function assertRunWorkerHeadroom(remainingRunWorkers) {
+  if (remainingRunWorkers > MAX_RUN_WORKERS) {
+    throw new Error(
+      `${remainingRunWorkers} QA run Workers exist (limit ${MAX_RUN_WORKERS}; the account allows 500 scripts). ` +
+        "Teardown or the sweep is failing; delete the stale spoonjoy-v2-qa-run-* Workers and find out why.",
+    );
+  }
+}
+
+export async function sweep({ api, now, log }) {
+  const result = await sweepStaleRunStacks({ api, now, log });
+  log(`Swept ${result.swept} stale QA run resource(s); ${result.remainingRunWorkers} run Worker(s) are in use.`);
+  assertRunWorkerHeadroom(result.remainingRunWorkers);
+  return result;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -326,21 +379,6 @@ function parseJsonResults(stdout) {
   const start = stdout.indexOf("[");
   if (start === -1) throw new Error("wrangler returned no JSON results.");
   return JSON.parse(stdout.slice(start));
-}
-
-export function localMigrationNames(readDir) {
-  return readDir(MIGRATIONS_DIR).filter((name) => MIGRATION_FILE_PATTERN.test(name)).sort();
-}
-
-// The migrations in this checkout that the shared QA database has not applied yet. Runs while
-// wrangler.json still names the shared QA database (checked by the caller).
-export async function pendingSharedQaMigrations({ exec, readDir }) {
-  const stdout = await runWrangler(exec, [
-    "d1", "execute", "DB", "--remote", "--env", "qa", "--json",
-    "--command", "SELECT name FROM d1_migrations ORDER BY id;",
-  ]);
-  const applied = new Set((parseJsonResults(stdout)[0]?.results ?? []).map((row) => row.name));
-  return localMigrationNames(readDir).filter((name) => !applied.has(name));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -363,10 +401,21 @@ export const defaultFs = {
   exists: existsSync,
   mkdir: mkdirSync,
   remove: rmSync,
-  readDir: readdirSync,
 };
 
-export async function prepare({ env, exec, fs, api, now, log, secrets }) {
+// Creates the run's database. A create retried after a 5xx can find that the first try worked,
+// so on failure the database is looked up by its exact name and reused if it exists.
+async function createRunDatabase(api, name) {
+  try {
+    return await api.createDatabase(name);
+  } catch (error) {
+    const existing = (await api.listDatabases()).find((database) => database.name === name);
+    if (!existing) throw error;
+    return existing;
+  }
+}
+
+export async function prepare({ env, fs, api, now, log, secrets }) {
   requireGitHubActions(env);
   const identity = runIdentity(env);
   assertRunNames(identity);
@@ -381,41 +430,30 @@ export async function prepare({ env, exec, fs, api, now, log, secrets }) {
   scopeGeneratedBuildConfig(buildConfig, identity, "00000000-0000-0000-0000-000000000000");
   fs.mkdir(STATE_DIR, { recursive: true });
 
+  let remainingRunWorkers = 0;
   try {
-    await sweepStaleRunStacks({ api, now, log });
+    ({ remainingRunWorkers } = await sweepStaleRunStacks({ api, now, log }));
   } catch (error) {
     log(`::warning::Could not sweep stale QA run stacks: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  // Read from the shared QA database while wrangler.json still names it.
-  const pending = await pendingSharedQaMigrations({ exec, readDir: fs.readDir });
-  if (pending.length > 0) {
-    log(`This checkout has ${pending.length} migration(s) shared QA has not applied (${pending.join(", ")}); the run's database starts as a copy of shared QA.`);
-    await runWrangler(exec, ["d1", "export", "DB", "--remote", "--env", "qa", "--output", CANONICAL_DUMP_FILE]);
-  }
+  assertRunWorkerHeadroom(remainingRunWorkers);
 
   // A database left by an earlier try of this same attempt is replaced, never reused.
   for (const database of await api.listDatabases()) {
-    if (database.name === identity.databaseName) await api.deleteDatabase(database.uuid);
+    if (database.name === identity.databaseName) await deleteTolerating404(() => api.deleteDatabase(database.uuid));
   }
-  const created = await api.createDatabase(identity.databaseName);
+  const created = await createRunDatabase(api, identity.databaseName);
   const databaseId = created?.uuid ?? "";
   if (!/^[0-9a-f-]{36}$/.test(databaseId)) throw new Error("Cloudflare did not return the new database's id.");
   log(`Created QA run database ${identity.databaseName} (${databaseId}).`);
 
-  const state = { ...identity, databaseId, clonedFromSharedQa: pending.length > 0, pendingMigrations: pending };
+  const state = { ...identity, databaseId };
   writeJson(fs, STATE_FILE, state);
   writeJson(fs, WRANGLER_CONFIG, scopeWranglerConfig(wranglerConfig, identity, databaseId));
   writeJson(fs, GENERATED_BUILD_CONFIG, scopeGeneratedBuildConfig(buildConfig, identity, databaseId));
 
-  if (pending.length > 0) {
-    // wrangler.json now names the run's database, so this import can only land there.
-    await runWrangler(exec, ["d1", "execute", "DB", "--remote", "--env", "qa", "--yes", "--file", CANONICAL_DUMP_FILE]);
-    fs.writeFile(CANONICAL_DUMP_FILE, "", { encoding: "utf8" });
-  }
-
   const runSecrets = secrets(identity);
-  for (const value of Object.values(runSecrets)) log(`::add-mask::${value}`);
+  for (const name of MASKED_RUN_SECRETS) log(`::add-mask::${runSecrets[name]}`);
   writeJson(fs, SECRETS_FILE, runSecrets, 0o600);
 
   if (env.GITHUB_ENV) {
@@ -490,33 +528,50 @@ export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
   return state;
 }
 
+// The run's database id: from the state prepare wrote, or, if prepare failed before writing it,
+// by exact name from the full listing.
+async function runDatabaseIds(fs, api, identity) {
+  if (fs.exists(STATE_FILE)) {
+    const state = readState(fs);
+    if (state.databaseName === identity.databaseName) return [state.databaseId];
+  }
+  return (await api.listDatabases()).filter((database) => database.name === identity.databaseName).map((database) => database.uuid);
+}
+
 export async function teardown({ env, fs, api, log }) {
   requireGitHubActions(env);
   const identity = runIdentity(env);
   assertRunNames(identity);
   const failures = [];
+  const warnings = [];
 
   try {
-    await api.deleteWorker(identity.workerName);
-    log(`Deleted QA run Worker ${identity.workerName}.`);
+    const deleted = await deleteTolerating404(() => api.deleteWorker(identity.workerName));
+    if (deleted) log(`Deleted QA run Worker ${identity.workerName}.`);
+    else warnings.push(`no Worker named ${identity.workerName} existed`);
   } catch (error) {
-    if (!isNotFound(error)) failures.push(error.message);
+    failures.push(error.message);
   }
   try {
-    const matches = (await api.listDatabases()).filter((database) => database.name === identity.databaseName);
-    for (const database of matches) {
-      await api.deleteDatabase(database.uuid);
-      log(`Deleted QA run database ${identity.databaseName}.`);
+    const ids = await runDatabaseIds(fs, api, identity);
+    if (ids.length === 0) warnings.push(`no database named ${identity.databaseName} existed`);
+    for (const id of ids) {
+      if (await deleteTolerating404(() => api.deleteDatabase(id))) {
+        log(`Deleted QA run database ${identity.databaseName} (${id}).`);
+      } else {
+        warnings.push(`database ${identity.databaseName} (${id}) was already deleted`);
+      }
     }
   } catch (error) {
     failures.push(error.message);
   }
   fs.remove(STATE_DIR, { recursive: true, force: true });
 
+  if (warnings.length > 0) log(`::warning::Nothing to delete for part of this run's QA stack: ${warnings.join("; ")}.`);
   if (failures.length > 0) {
     log(
       `::warning::Could not fully delete this run's QA stack (${failures.join("; ")}). ` +
-        `A later run deletes it once it is ${STALE_AFTER_MS / 3_600_000} hours old.`,
+        `The scheduled sweep deletes it once it is ${STALE_AFTER_MS / 3_600_000} hours old.`,
     );
     return false;
   }
@@ -543,10 +598,11 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   } = deps;
   const [command] = argv;
   const api = () => deps.api ?? createCloudflareApi({ env, fetchImpl, sleep });
-  if (command === "prepare") return prepare({ env, exec, fs, api: api(), now, log, secrets });
+  if (command === "prepare") return prepare({ env, fs, api: api(), now, log, secrets });
   if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log });
   if (command === "teardown") return teardown({ env, fs, api: api(), log });
-  throw new Error("Usage: qa-run-scope.mjs <prepare|verify|teardown>");
+  if (command === "sweep") return sweep({ api: api(), now, log });
+  throw new Error("Usage: qa-run-scope.mjs <prepare|verify|teardown|sweep>");
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {
