@@ -36,7 +36,8 @@ export const KITCHEN = Object.freeze({
 const RECIPE_CONTENT = {
   lemonRice: {
     steps: [
-      { stepNum: 1, stepTitle: "Cook the rice", description: "Simmer rice in stock until tender." },
+      // Step 1 is timed so the cooking journey can run a cook-mode timer across steps.
+      { stepNum: 1, stepTitle: "Cook the rice", description: "Simmer rice in stock until tender.", duration: 15 },
       { stepNum: 2, stepTitle: "Make the dressing", description: "Whisk lemon juice, zest and herbs." },
       { stepNum: 3, stepTitle: "Combine", description: "Fold the dressing through the cooked rice." },
     ],
@@ -355,7 +356,7 @@ export function buildKitchenResetSql({ passwords, hash = (password) => bcrypt.ha
 
     for (const step of content.steps) {
       statements.push(
-        `INSERT INTO RecipeStep (id, recipeId, stepNum, stepTitle, description, updatedAt) VALUES (${sqlString(`${recipe.id}-step-${step.stepNum}`)}, ${sqlString(recipe.id)}, ${step.stepNum}, ${sqlString(step.stepTitle)}, ${sqlString(step.description)}, CURRENT_TIMESTAMP);`,
+        `INSERT INTO RecipeStep (id, recipeId, stepNum, stepTitle, description, duration, updatedAt) VALUES (${sqlString(`${recipe.id}-step-${step.stepNum}`)}, ${sqlString(recipe.id)}, ${step.stepNum}, ${sqlString(step.stepTitle)}, ${sqlString(step.description)}, ${step.duration ?? "NULL"}, CURRENT_TIMESTAMP);`,
       );
     }
 
