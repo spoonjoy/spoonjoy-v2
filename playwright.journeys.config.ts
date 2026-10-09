@@ -21,7 +21,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "personas", testMatch: /personas\.setup\.ts/, use: { ...devices["Desktop Chrome"] } },
+    // Capture-only: the personas setup must run despite the top-level @capture filter.
+    { name: "personas", testMatch: /personas\.setup\.ts/, grep: /./, use: { ...devices["Desktop Chrome"] } },
     // A plain *.journey.ts runs on both devices. *.desktop.journey.ts / *.mobile.journey.ts
     // route to one device only; check:journeys still scans them (they end in .journey.ts).
     {
