@@ -7,6 +7,7 @@ import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
 import { Text, TextLink } from "~/components/ui/text";
 import { ValidationError } from "~/components/ui/validation-error";
+import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "Log out - Spoonjoy" }, { name: "robots", content: "noindex" }];
@@ -31,8 +32,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 // rule explicit rather than relying on the cookie attribute alone.
 function isCrossOriginPost(request: Request, baseUrl: string | undefined): boolean {
   const origin = request.headers.get("Origin");
-  if (origin === null) return false;
-  return origin !== resolveIssuerOrigin(request.url, baseUrl) && origin !== new URL(request.url).origin;
+  if (origin === null || origin === new URL(request.url).origin) return false;
+  // A malformed SPOONJOY_BASE_URL makes resolveIssuerOrigin throw; sign-out then falls back to the
+  // request's own origin rather than failing every post.
+  if (baseUrl && !URL.canParse(baseUrl)) return true;
+  return origin !== resolveIssuerOrigin(request.url, baseUrl);
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -51,7 +55,7 @@ export default function Logout() {
         <Heading>Log out of Spoonjoy?</Heading>
         {actionData?.error && <ValidationError error={actionData.error} className="mt-4" />}
         <Text className="mt-4">This signs you out in this browser only.</Text>
-        <Form method="post" className="mt-6">
+        <Form method="post" className="mt-6" onSubmit={clearCookProgressCache}>
           <Button type="submit" className="w-full">
             Log out
           </Button>

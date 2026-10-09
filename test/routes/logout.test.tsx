@@ -163,6 +163,8 @@ describe("Logout Route", () => {
           },
         },
       ]);
+      window.localStorage.setItem("spoonjoy-cook-progress:user:test-user:recipe-1", "{}");
+      window.localStorage.setItem("spoonjoy-cook-progress:recipe-1", "{}");
       render(<Stub initialEntries={["/logout"]} />);
 
       expect(await screen.findByRole("heading", { name: "Log out of Spoonjoy?" })).toBeInTheDocument();
@@ -170,6 +172,10 @@ describe("Logout Route", () => {
       await userEvent.setup().click(screen.getByRole("button", { name: "Log out" }));
       expect(await screen.findByText("Sign-out must come from Spoonjoy.")).toBeInTheDocument();
       expect(posted).toEqual(["POST"]);
+      // Like every other Log out form, this one clears cook progress cached in the browser.
+      expect(window.localStorage.getItem("spoonjoy-cook-progress:user:test-user:recipe-1")).toBeNull();
+      expect(window.localStorage.getItem("spoonjoy-cook-progress:recipe-1")).toBeNull();
+      window.localStorage.clear();
     });
 
     it("sends a signed-out visitor to the login page", async () => {

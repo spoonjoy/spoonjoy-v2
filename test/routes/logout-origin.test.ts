@@ -31,6 +31,25 @@ describe("Logout action across hosts", () => {
     expect(((await post("https://spoonjoy.app.evil.example")) as any).init?.status).toBe(403);
   });
 
+  it("falls back to the request's own origin when the configured site is unset or malformed", async () => {
+    const post = (origin: string, baseUrl: string | undefined) =>
+      action({
+        request: new UndiciRequest("https://spoonjoy-v2.mendelow-studio.workers.dev/logout", {
+          method: "POST",
+          headers: { Origin: origin },
+        }),
+        context: { cloudflare: { env: baseUrl === undefined ? {} : { SPOONJOY_BASE_URL: baseUrl } } },
+        params: {},
+      } as any) as Promise<any>;
+
+    for (const baseUrl of [undefined, "not a url"]) {
+      const same = await post("https://spoonjoy-v2.mendelow-studio.workers.dev", baseUrl);
+      expect(same).toBeInstanceOf(Response);
+      expect(same.status).toBe(302);
+      expect((await post("https://spoonjoy.app", baseUrl)).init?.status).toBe(403);
+    }
+  });
+
   it("refuses a cross-origin post without touching the cookie", async () => {
     const result = (await action({
       request: new UndiciRequest("https://spoonjoy.app/logout", {
