@@ -97,14 +97,12 @@ function ResultCard({ result }: { result: SearchResult }) {
   const coverProvenanceLabel = typeof result.metadata.coverProvenanceLabel === "string"
     ? result.metadata.coverProvenanceLabel
     : null;
-  const accessibleLabel = result.type === "shopping-list-item"
-    ? `${RESULT_LABELS[result.type]} Private ${result.title}`
-    : `${RESULT_LABELS[result.type]} ${result.title}`;
-
+  // The link's name is everything the card shows (type, title, who it is by and the matching text),
+  // so a screen reader hears what a sighted reader sees and voice control can say any of it. A
+  // title-only aria-label hid the rest (product audit 2026-10-09, finding 19; WCAG 2.5.3).
   return (
     <Link
       href={result.href}
-      aria-label={accessibleLabel}
       className="group grid gap-4 border-t border-[var(--sj-border)] py-5 no-underline transition hover:border-[var(--sj-border-strong)] sm:grid-cols-[7rem_minmax(0,1fr)]"
     >
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[var(--sj-flour)] sm:aspect-square">

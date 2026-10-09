@@ -64,7 +64,7 @@ async function openLemonRiceFromSearch(page: Page) {
   await page.goto("/search?q=lemon");
   await waitForHydration(page);
   const results = page.getByRole("region", { name: "Search results" });
-  await seededRecipeLink(results, "Recipe Lemon Herb Rice", LEMON_RICE).click();
+  await seededRecipeLink(results, "Lemon Herb Rice", LEMON_RICE).click();
   await expect(page).toHaveURL(pathUrl(LEMON_RICE));
   await expect(recipeHeading(page)).toBeVisible();
   await expect(syncStatus(page)).toHaveText("Progress synced");

@@ -336,10 +336,15 @@ describe("Search Route", () => {
       expect(screen.getByText("4 results")).toBeInTheDocument();
       expect(screen.getByText("Editorial photo")).toBeInTheDocument();
       expect(container.querySelector('img[src="https://example.com/tomato.jpg"]')).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /Recipe Tomato Sauce/i })).toHaveAttribute("href", "/recipes/recipe-1");
-      expect(screen.getByRole("link", { name: /Cookbook Sunday Sauces/i })).toHaveAttribute("href", "/cookbooks/cookbook-1");
-      expect(screen.getByRole("link", { name: /Chef chef-ari/i })).toHaveAttribute("href", "/users/chef-ari");
-      expect(screen.getByRole("link", { name: /Shopping List Private tomato paste/i })).toHaveAttribute("href", "/shopping-list");
+      // Each result link's name is what the card shows, not a title-only label (finding 19).
+      const recipeLink = screen.getByRole("link", {
+        name: /^Recipe Editorial photo Tomato Sauce\s*Recipe by chef-ari\s*tomato basil simmer$/i,
+      });
+      expect(recipeLink).toHaveAttribute("href", "/recipes/recipe-1");
+      expect(recipeLink).not.toHaveAttribute("aria-label");
+      expect(screen.getByRole("link", { name: /^Cookbook Sunday Sauces\s*Cookbook by chef-ari/i })).toHaveAttribute("href", "/cookbooks/cookbook-1");
+      expect(screen.getByRole("link", { name: /^Chef chef-ari\s*Chef kitchen/i })).toHaveAttribute("href", "/users/chef-ari");
+      expect(screen.getByRole("link", { name: /^Shopping List Private tomato paste\s*Shopping list item for chef-ari/i })).toHaveAttribute("href", "/shopping-list");
     });
 
     it("renders the unauthenticated private-shopping prompt", async () => {
