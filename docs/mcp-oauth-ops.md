@@ -47,6 +47,16 @@ Claude may show support references such as `ofid_...` when connector authorizati
 - Do not ask the user for raw OAuth codes, bearer tokens, refresh tokens, or callback URLs.
 - If the reference cannot be correlated, preserve it in the incident issue/comment and add any available workflow run links.
 
+## Token Lifetimes
+
+- MCP-bound access tokens (the Claude connector) expire after 90 days and token responses carry `expires_in: 7776000`. They had no expiry before migration `0031_oauth_token_expiry`. Access credentials issued earlier still have `expiresAt` NULL in D1 and stop working on 2027-01-07 (`LEGACY_OAUTH_ACCESS_EXPIRES_AT`); the connector should refresh when its token runs out, but no live check has shown Claude refreshing after a `401` yet. Before the cutover, prove it on QA with a short-lived MCP token and watch for Claude refreshes with `outcome: "refreshed"` in the token telemetry. Refresh tokens issued earlier are accepted until 2027-04-07 (`LEGACY_OAUTH_REFRESH_EXPIRES_AT`).
+- Generic OAuth access tokens, including the iPhone app's, expire after 15 minutes.
+- Every refresh token is accepted for 180 days after it was issued. Rotation issues a fresh 180-day one, so a client that refreshes at least every 180 days stays connected. An expired refresh token is refused with `invalid_grant` ("Refresh token expired") and its grant moves to `revoked` / `inactivity_expiry`.
+- A refresh token that was already rotated is refused with `invalid_grant`. If it arrives more than 60 seconds after its rotation (15 minutes for the iPhone app's own clients) while the connection is still active, every refresh and access token on that connection is revoked, including access tokens from before connection keys (migration 0026) that this client holds for the chef, and the grant moves to `compromised` / `refresh_reuse`. Inside the window it is only refused. The iPhone app gets 15 minutes because its main app, root view and App Intents each refresh on their own, and a suspended App Intent can send the token it read minutes earlier. Accepted risk until the app shares one refresh across processes (spoonjoy/spoonjoy-apple#113): if a thief redeems a stolen current iPhone refresh token first, the app's own replay inside 15 minutes revokes nothing.
+- Token telemetry (`spoonjoy.oauth.token`) carries `client_id` and, on a refused refresh, `refresh_refusal`: `grace_replay`, `reuse_revoked` or `expired`. A connection revoked as compromised also emits `spoonjoy.oauth.grant_compromised` with its `client_id`.
+- Rotation leaves the access token issued with the old refresh token valid until its own expiry (15 minutes for generic clients, 90 days for MCP), so in-flight requests from another process of the same client keep working. Reuse detection, disconnect, sign-out-everywhere and expiry revoke it.
+- A chef who reports being signed out of Claude or the app with a `compromised` grant had a copy of an old refresh token replayed: treat it as either a possible token leak or a client refresh race. Check the refresh telemetry timing: two refreshes from the same client minutes apart point to a race in the client, not a leak.
+
 ## D1 Audit Interpretation
 
 `mcp-oauth-d1-audit-results.json` contains normalized invariant rows:

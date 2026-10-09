@@ -362,7 +362,7 @@ describe("handleOAuthToken", () => {
     expect(typeof body.access_token).toBe("string");
     expect(typeof body.refresh_token).toBe("string");
     expect(body.token_type).toBe("Bearer");
-    expect(body).not.toHaveProperty("expires_in");
+    expect(body.expires_in).toBe(90 * 24 * 60 * 60);
     expect(body.scope).toBe("kitchen:read kitchen:write");
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
       .resolves.toMatchObject({
@@ -370,10 +370,10 @@ describe("handleOAuthToken", () => {
         oauthClientId: clientId,
         oauthIssuer: "https://spoonjoy.app",
         oauthResource: "https://spoonjoy.app/mcp",
-        expiresAt: null,
+        expiresAt: expect.any(Date),
       });
     await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { userId } }))
-      .resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
+      .resolves.toMatchObject({ issuer: "https://spoonjoy.app", expiresAt: expect.any(Date) });
     await expect(db.oAuthClient.findUniqueOrThrow({ where: { id: clientId } }))
       .resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
     // the access token is a real ApiCredential, plus one refresh token
@@ -479,13 +479,13 @@ describe("handleOAuthToken", () => {
 
     expect(refresh.status).toBe(200);
     const refreshBody = await refresh.json() as Record<string, unknown>;
-    expect(refreshBody).not.toHaveProperty("expires_in");
+    expect(refreshBody.expires_in).toBe(90 * 24 * 60 * 60);
     await expect(db.apiCredential.findFirstOrThrow({
       where: { userId, oauthClientId: claudeClient.clientId },
       orderBy: { createdAt: "desc" },
     })).resolves.toMatchObject({
       oauthResource: "https://spoonjoy.app/mcp",
-      expiresAt: null,
+      expiresAt: expect.any(Date),
     });
     await expect(db.oAuthRefreshToken.findFirstOrThrow({
       where: { userId, clientId: claudeClient.clientId, revokedAt: null },
@@ -596,7 +596,7 @@ describe("handleOAuthToken", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(typeof body.access_token).toBe("string");
     expect(body.refresh_token).not.toBe(first.refresh_token); // rotated
-    expect(body).not.toHaveProperty("expires_in");
+    expect(body.expires_in).toBe(90 * 24 * 60 * 60);
 
     const replay = await handleOAuthToken(
       formPost("https://spoonjoy.app/oauth/token", {

@@ -4,14 +4,14 @@ import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import type { AppleUser } from "~/lib/apple-oauth.server";
 import type { AppleNativeAuthConfig } from "~/lib/env.server";
-import { issueConnectorTokens, type IssuedConnectorTokens } from "~/lib/oauth-server.server";
+import { issueConnectorTokens, SPOONJOY_APPLE_NATIVE_CLIENT_ID, type IssuedConnectorTokens } from "~/lib/oauth-server.server";
 
 type Database = PrismaClientType;
 
 const APPLE_ISSUER = "https://appleid.apple.com";
 const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
 
-export const NATIVE_APPLE_CLIENT_ID = "spoonjoy-apple-native";
+export const NATIVE_APPLE_CLIENT_ID = SPOONJOY_APPLE_NATIVE_CLIENT_ID;
 export const NATIVE_APPLE_CLIENT_NAME = "Spoonjoy Apple";
 const NATIVE_APPLE_TOKEN_SCOPES = [
   "kitchen:read",

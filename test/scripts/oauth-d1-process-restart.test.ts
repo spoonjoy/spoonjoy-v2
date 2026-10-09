@@ -150,7 +150,7 @@ describe("OAuth persistence across complete local server-process restarts", () =
         oauthResource: "https://spoonjoy.test/mcp",
         oauthConnectionKey: child?.connectionKey,
         revokedAt: null,
-        expiresAt: null,
+        expiresAt: "2026-11-27T19:00:00.000Z", // MCP access tokens last 90 days
         oauthGrantId: grant?.id,
       });
       expect(childAccess).toMatchObject({

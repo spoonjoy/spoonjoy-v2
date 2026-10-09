@@ -9,6 +9,7 @@ import {
   createApiCredential,
   expandCredentialScopes,
   normalizeCredentialScopes,
+  resolvePersonalTokenExpiry,
   requireApiPrincipal,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
@@ -1387,6 +1388,14 @@ const createApiTokenTool: SpoonjoyApiOperation = {
           { type: "array", items: { type: "string" } },
         ],
       },
+      expiresInDays: {
+        description: "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires.",
+        oneOf: [
+          { type: "integer", minimum: 1, maximum: 365 },
+          { type: "null" },
+          { type: "string", enum: ["never"] },
+        ],
+      },
     },
     additionalProperties: false,
   },
@@ -1394,7 +1403,8 @@ const createApiTokenTool: SpoonjoyApiOperation = {
     const owner = await getCredentialOwner(args, context);
     const name = optionalString(args.name) ?? "Spoonjoy API token";
     const scopes = normalizeCreateApiTokenScopes(args.scopes, context.principal);
-    const created = await createApiCredential(context.db, owner.id, name, { scopes });
+    const expiresAt = resolvePersonalTokenExpiry(args.expiresInDays);
+    const created = await createApiCredential(context.db, owner.id, name, { scopes, expiresAt });
 
     return json({
       token: created.token,

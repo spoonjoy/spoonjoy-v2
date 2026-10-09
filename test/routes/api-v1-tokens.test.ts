@@ -121,7 +121,7 @@ describe("API v1 personal token metadata", () => {
       scopes: ["recipes:read", "shopping_list:read"],
       lastUsedAt: null,
       revokedAt: null,
-      expiresAt: null,
+      expiresAt: expect.any(String),
     });
     expectCredentialMetadataShape(requestedPayload.data.credential);
     await expect(db.apiCredential.findUniqueOrThrow({ where: { id: requestedPayload.data.credential.id } }))
@@ -441,5 +441,32 @@ describe("API v1 personal token metadata", () => {
         error: { code, status: 400 },
       });
     }
+  });
+
+  it("expires new personal tokens after 90 days unless the caller picks 1 to 365 days or never", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const cookie = await sessionCookie(user.id);
+    const day = 24 * 60 * 60 * 1000;
+    const create = (requestId: string, body: Record<string, unknown>) => action(routeArgs(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { Cookie: cookie, "Content-Type": "application/json", "X-Request-Id": requestId },
+      body: JSON.stringify(body),
+    }) as unknown as Request, "tokens"));
+    const daysLeft = (expiresAt: string | null) => expiresAt === null ? null : Math.round((Date.parse(expiresAt) - Date.now()) / day);
+
+    const byDefault = await readJson(await create("req_tokens_expiry_default", { name: "Default expiry" }));
+    expect(daysLeft(byDefault.data.credential.expiresAt)).toBe(90);
+    const month = await readJson(await create("req_tokens_expiry_30", { name: "Month", expiresInDays: 30 }));
+    expect(daysLeft(month.data.credential.expiresAt)).toBe(30);
+    const never = await readJson(await create("req_tokens_expiry_never", { name: "Never", expiresInDays: "never" }));
+    expect(never.data.credential.expiresAt).toBeNull();
+    const nulled = await readJson(await create("req_tokens_expiry_null", { name: "Null", expiresInDays: null }));
+    expect(nulled.data.credential.expiresAt).toBeNull();
+
+    for (const [index, expiresInDays] of [0, 366, 1.5, "soon"].entries()) {
+      const response = await create(`req_tokens_expiry_bad_${index}`, { name: "Bad", expiresInDays });
+      expect(response.status).toBe(400);
+    }
+    expect(await db.apiCredential.count({ where: { userId: user.id, name: "Bad" } })).toBe(0);
   });
 });
