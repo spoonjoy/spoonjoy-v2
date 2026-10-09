@@ -71,6 +71,7 @@ import {
   type OEmbedMetadata,
 } from "~/lib/recipe-import-video.server";
 import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
+import { normalizeRecipeSourceUrl, recipeSourceUrlCandidates } from "~/lib/recipe-source-url.server";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 
@@ -570,9 +571,10 @@ async function findExistingRecipeId(
   chefId: string,
   sourceUrl: string | null,
 ): Promise<string | null> {
-  if (!sourceUrl) return null;
+  const candidates = recipeSourceUrlCandidates(sourceUrl);
+  if (candidates.length === 0) return null;
   const existing = await db.recipe.findFirst({
-    where: { chefId, sourceUrl, deletedAt: null },
+    where: { chefId, sourceUrl: { in: candidates }, deletedAt: null },
     select: { id: true },
   });
   return existing?.id ?? null;
@@ -885,8 +887,13 @@ async function completeImportFromExtraction(input: {
   extraction: ExtractionOutput;
   deps: ImportRecipeDeps;
 }): Promise<ImportRecipeResult> {
-  const { chefId, sourceUrl, dryRun, recipeId, extraction, deps } = input;
-  const existingRecipeId = await findExistingRecipeId(deps.db, chefId, sourceUrl);
+  const { chefId, dryRun, recipeId, deps } = input;
+  // One stored form per link, so every writer's duplicate check sees every other writer's recipes.
+  const extraction: ExtractionOutput = {
+    ...input.extraction,
+    draft: { ...input.extraction.draft, sourceUrl: normalizeRecipeSourceUrl(input.extraction.draft.sourceUrl) },
+  };
+  const existingRecipeId = await findExistingRecipeId(deps.db, chefId, input.sourceUrl);
 
   if (dryRun) {
     return {
