@@ -1,4 +1,5 @@
-import { d1Binding } from "~/lib/d1-read.server";
+import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import type { PrismaClient } from "@prisma/client";
 import {
   createGeminiImageRunner,
@@ -179,14 +180,43 @@ async function captureGenerationException(
   });
 }
 
+// A placeholder the chef archived while it was generating stays archived: finishing or failing
+// never rewrites its status (which would bring it back), and it is never made the recipe's cover.
+function unarchivedCover(coverId: string) {
+  return { id: coverId, status: { not: "archived" }, archivedAt: null };
+}
+
+// The same condition in SQL, for the D1 writes: this recipe's cover, not archived.
+const UNARCHIVED_COVER_SQL = `"id" = ? AND "recipeId" = ? AND "status" <> 'archived' AND "archivedAt" IS NULL`;
+
+/**
+ * The request's D1 binding. With it, each placeholder write goes to D1 as one batch, never
+ * through Prisma's multi-row writes, which on D1 run as separate statements outside any
+ * transaction.
+ */
+function placeholderD1(input: SchedulePlaceholderInput): D1ReadDatabase | null {
+  return d1Binding(input.env?.DB);
+}
+
 async function markPlaceholderFailed(
   input: SchedulePlaceholderInput,
   reason: string,
   logger: Pick<Console, "error">,
 ): Promise<void> {
   try {
-    await input.db.recipeCover.update({
-      where: { id: input.coverId },
+    const d1 = placeholderD1(input);
+    if (d1) {
+      await d1WriteBatch(d1, [[
+        `UPDATE "RecipeCover" SET "status" = 'failed', "generationStatus" = 'failed', "failureReason" = ?
+         WHERE ${UNARCHIVED_COVER_SQL}`,
+        reason,
+        input.coverId,
+        input.recipeId,
+      ]]);
+      return;
+    }
+    await input.db.recipeCover.updateMany({
+      where: unarchivedCover(input.coverId),
       data: {
         status: "failed",
         generationStatus: "failed",
@@ -207,6 +237,7 @@ async function activatePlaceholderIfStillAutomatic(
       id: input.recipeId,
       coverMode: "auto",
       activeCoverId: null,
+      covers: { some: unarchivedCover(input.coverId) },
     },
     data: {
       activeCoverId: input.coverId,
@@ -227,6 +258,7 @@ async function activatePlaceholderIfStillRequested(
       activeCoverId: input.activationGuard.activeCoverId,
       activeCoverVariant: input.activationGuard.activeCoverVariant,
       coverMode: input.activationGuard.coverMode,
+      covers: { some: unarchivedCover(input.coverId) },
     },
     data: {
       activeCoverId: input.coverId,
@@ -238,6 +270,69 @@ async function activatePlaceholderIfStillRequested(
   if (result.count > 0) {
     await touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt);
   }
+}
+
+/**
+ * Marks the generated placeholder ready and, when the recipe still wants it, makes it the
+ * recipe's cover, as one D1 batch: all of it applies or none does. Each activation only
+ * matches while the cover is still this recipe's and not archived, with the same recipe
+ * conditions as the Prisma path, and the cookbooks are touched only when the requested
+ * activation applied.
+ */
+async function finishPlaceholderOnD1(
+  input: SchedulePlaceholderInput,
+  d1: D1ReadDatabase,
+  url: string,
+): Promise<void> {
+  const touchedAt = d1Timestamp(new Date());
+  const coverStillUnarchived = `EXISTS (SELECT 1 FROM "RecipeCover" WHERE ${UNARCHIVED_COVER_SQL})`;
+  const statements: D1Query[] = [[
+    `UPDATE "RecipeCover"
+     SET "imageUrl" = ?, "status" = 'ready', "generationStatus" = 'succeeded', "failureReason" = NULL, "promptAddition" = ?
+     WHERE ${UNARCHIVED_COVER_SQL}`,
+    url,
+    sanitizeImagePromptAddition(input.promptAddition),
+    input.coverId,
+    input.recipeId,
+  ]];
+  if (input.activateWhenReady && input.activationGuard) {
+    const guard = input.activationGuard;
+    statements.push(
+      [
+        `UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'image', "coverMode" = 'manual', "updatedAt" = ?
+         WHERE "id" = ? AND "activeCoverId" IS ? AND "activeCoverVariant" IS ? AND "coverMode" = ? AND ${coverStillUnarchived}`,
+        input.coverId,
+        touchedAt,
+        input.recipeId,
+        guard.activeCoverId,
+        guard.activeCoverVariant,
+        guard.coverMode,
+        input.coverId,
+        input.recipeId,
+      ],
+      [
+        `UPDATE "Cookbook" SET "updatedAt" = ?
+         WHERE "id" IN (SELECT "cookbookId" FROM "RecipeInCookbook" WHERE "recipeId" = ?)
+           AND EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "activeCoverId" = ? AND "updatedAt" = ?)`,
+        touchedAt,
+        input.recipeId,
+        input.recipeId,
+        input.coverId,
+        touchedAt,
+      ],
+    );
+  } else if (!input.activateWhenReady && !input.suppressAutoActivation) {
+    statements.push([
+      `UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'image', "coverMode" = 'auto', "updatedAt" = ?
+       WHERE "id" = ? AND "coverMode" = 'auto' AND "activeCoverId" IS NULL AND ${coverStillUnarchived}`,
+      input.coverId,
+      touchedAt,
+      input.recipeId,
+      input.coverId,
+      input.recipeId,
+    ]);
+  }
+  await d1WriteBatch(d1, statements);
 }
 
 function failureReasonFor(error: unknown): string {
@@ -276,7 +371,7 @@ export async function scheduleAiPlaceholderCover(
       "placeholder",
       {
         ...(input.now ? { now: () => new Date(input.now!()) } : {}),
-        d1: d1Binding(input.env?.DB),
+        d1: placeholderD1(input),
         env: input.env,
       },
     );
@@ -297,8 +392,13 @@ export async function scheduleAiPlaceholderCover(
       promptAddition: input.promptAddition,
     });
 
-    await input.db.recipeCover.update({
-      where: { id: input.coverId },
+    const d1 = placeholderD1(input);
+    if (d1) {
+      await finishPlaceholderOnD1(input, d1, url);
+      return;
+    }
+    const marked = await input.db.recipeCover.updateMany({
+      where: unarchivedCover(input.coverId),
       data: {
         imageUrl: url,
         status: "ready",
@@ -307,6 +407,7 @@ export async function scheduleAiPlaceholderCover(
         promptAddition: sanitizeImagePromptAddition(input.promptAddition),
       },
     });
+    if (marked.count === 0) return;
     if (input.activateWhenReady) {
       await activatePlaceholderIfStillRequested(input);
     } else {
