@@ -74,6 +74,7 @@ describe("photoKeysFromRows", () => {
         { url: "/photos/covers/a.png?v=1" },
         { url: "/photos/covers/b.jpg" },
         { url: "/photos/variants/w256/covers/a.png.webp" },
+        { url: "/photos/quarantine/covers/c.jpg" },
         { url: "https://images.example.com/x.jpg" },
         { url: "/photos/" },
         { url: null },

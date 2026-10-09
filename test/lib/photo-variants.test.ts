@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isPhotoVariantKey,
-  PHOTO_VARIANT_WIDTHS,
-  photoSrcSet,
+  isServablePhotoKey,
   photoVariantKey,
   photoVariantKeys,
   photoVariantUrl,
@@ -59,13 +58,10 @@ describe("photo variants", () => {
     }
   });
 
-  it("builds a srcset of every variant for stored photos only", () => {
-    expect(photoSrcSet("/photos/covers/1-a.jpg")).toBe(
-      PHOTO_VARIANT_WIDTHS.map((width) => `/photos/covers/1-a.jpg?w=${width} ${width}w`).join(", "),
-    );
-    expect(photoSrcSet("https://images.example.com/a.jpg")).toBeUndefined();
-    expect(photoSrcSet(null)).toBeUndefined();
-    expect(photoSrcSet(undefined)).toBeUndefined();
-    expect(photoSrcSet("")).toBeUndefined();
+  it("never serves quarantined photos or variants made from them", () => {
+    expect(isServablePhotoKey("covers/1-a.png")).toBe(true);
+    expect(isServablePhotoKey("variants/w256/covers/1-a.png.webp")).toBe(true);
+    expect(isServablePhotoKey("quarantine/covers/1-a.png")).toBe(false);
+    expect(isServablePhotoKey("variants/w256/quarantine/covers/1-a.png.webp")).toBe(false);
   });
 });

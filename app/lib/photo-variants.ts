@@ -19,6 +19,20 @@ export const PHOTO_VARIANT_QUERY_PARAMETER = "w";
 const PHOTOS_PATH_PREFIX = "/photos/";
 const LARGEST_VARIANT_WIDTH = PHOTO_VARIANT_WIDTHS[PHOTO_VARIANT_WIDTHS.length - 1];
 
+/**
+ * Prefix of photos the photo sweep has quarantined. They are never served, and neither are variants
+ * made from them. The same prefix is defined by the photo lifecycle sweep (`photo-lifecycle.server.ts`).
+ */
+export const PHOTO_QUARANTINE_PREFIX = "quarantine/";
+
+const VARIANT_KEY = /^variants\/w[0-9]+\/(.+)\.webp$/;
+
+/** False for keys `/photos/` must never serve: quarantined photos and variants of them. */
+export function isServablePhotoKey(key: string): boolean {
+  const original = VARIANT_KEY.exec(key)?.[1] ?? key;
+  return !key.startsWith(PHOTO_QUARANTINE_PREFIX) && !original.startsWith(PHOTO_QUARANTINE_PREFIX);
+}
+
 /** True for keys that are themselves variants, which have no variants of their own. */
 export function isPhotoVariantKey(key: string): boolean {
   return key.startsWith(PHOTO_VARIANT_PREFIX);
@@ -71,20 +85,4 @@ export function photoVariantUrl(url: string, width: PhotoVariantWidth): string {
   }
   parsed.searchParams.set(PHOTO_VARIANT_QUERY_PARAMETER, String(width));
   return relative ? `${parsed.pathname}${parsed.search}` : parsed.toString();
-}
-
-/**
- * A `srcset` offering every variant of a stored photo, or undefined for URLs without variants.
- * Each descriptor is the variant's target width; a photo narrower than a variant is served at its
- * own size, which browsers handle as a slightly lower-density candidate.
- */
-export function photoSrcSet(url: string | null | undefined): string | undefined {
-  if (!url) {
-    return undefined;
-  }
-  const candidates = PHOTO_VARIANT_WIDTHS.map((width) => ({ width, url: photoVariantUrl(url, width) }));
-  if (candidates[0].url === url) {
-    return undefined;
-  }
-  return candidates.map((candidate) => `${candidate.url} ${candidate.width}w`).join(", ");
 }

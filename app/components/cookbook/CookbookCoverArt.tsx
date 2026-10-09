@@ -1,6 +1,5 @@
 import clsx from "clsx";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { photoSrcSet } from "~/lib/photo-variants";
 
 export interface CookbookCoverImage {
   coverImageUrl: string | null;
@@ -89,8 +88,6 @@ function CookbookImageCover({
         >
           <img
             src={image.coverImageUrl}
-            srcSet={photoSrcSet(image.coverImageUrl)}
-            sizes="(min-width: 640px) 33vw, 100vw"
             alt={image.title}
             className="h-full w-full object-cover text-[0px] text-transparent"
           />

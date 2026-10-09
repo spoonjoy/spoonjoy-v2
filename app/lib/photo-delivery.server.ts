@@ -1,5 +1,6 @@
 import {
   isPhotoVariantKey,
+  isServablePhotoKey,
   PHOTO_VARIANT_CONTENT_TYPE,
   PHOTO_VARIANT_QUERY_PARAMETER,
   photoVariantKey,
@@ -64,6 +65,10 @@ function etagMatches(ifNoneMatch: string | null, etag: string | null): boolean {
   return ifNoneMatch.split(",").some((candidate) => candidate.trim() === "*" || bare(candidate) === bare(etag));
 }
 
+function notFound(): Response {
+  return new Response("Photo not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+}
+
 function notModified(headers: Headers): Response {
   const kept = new Headers();
   for (const name of ["Cache-Control", "ETag", PHOTO_CACHE_HEADER, PHOTO_VARIANT_HEADER]) {
@@ -105,6 +110,10 @@ async function readStoredPhoto(bucket: R2Bucket, key: string, width: PhotoVarian
  * otherwise, with an ETag so clients can revalidate. Answers 404 for a missing photo.
  */
 export async function deliverPhoto({ request, key, bucket, cache, waitUntil }: PhotoDeliveryOptions): Promise<Response> {
+  // Quarantined photos (moved there by the photo sweep) and variants of them are never served.
+  if (!isServablePhotoKey(key)) {
+    return notFound();
+  }
   const requestUrl = new URL(request.url);
   const width = isPhotoVariantKey(key) ? null : photoVariantWidthFor(requestUrl.searchParams.get(PHOTO_VARIANT_QUERY_PARAMETER));
   const isHead = request.method === "HEAD";
@@ -120,7 +129,7 @@ export async function deliverPhoto({ request, key, bucket, cache, waitUntil }: P
 
   const stored = await readStoredPhoto(bucket, key, width);
   if (!stored) {
-    return new Response("Photo not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+    return notFound();
   }
 
   const { object, variant } = stored;

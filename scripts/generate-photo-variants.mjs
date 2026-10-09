@@ -54,7 +54,8 @@ export function photoKeysFromRows(rows) {
   for (const row of rows) {
     const url = typeof row?.url === "string" ? row.url : "";
     const key = url.slice("/photos/".length).split(/[?#]/)[0];
-    if (url.startsWith("/photos/") && key && !key.startsWith("variants/")) {
+    // Variants have no variants, and quarantined photos are never served, so neither gets any.
+    if (url.startsWith("/photos/") && key && !key.startsWith("variants/") && !key.startsWith("quarantine/")) {
       keys.add(key);
     }
   }

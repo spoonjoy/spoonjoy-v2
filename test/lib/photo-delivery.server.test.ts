@@ -160,6 +160,27 @@ describe("deliverPhoto", () => {
     expect(cache.put).not.toHaveBeenCalled();
   });
 
+  it("never serves a quarantined photo or a variant made from one, even from the edge", async () => {
+    const quarantined = "quarantine/covers/1-a.png";
+    const quarantinedVariant = "variants/w512/quarantine/covers/1-a.png.webp";
+    const bucket = bucketWith({ [quarantined]: storedObject("gone"), [quarantinedVariant]: storedObject("gone") });
+    const cache = memoryCache();
+    cache.entries.set(`https://spoonjoy.app/photos/${quarantined}`, new Response("stale edge copy"));
+
+    for (const [path, key] of [
+      [`/photos/${quarantined}`, quarantined],
+      [`/photos/${quarantined}?w=512`, quarantined],
+      [`/photos/${quarantinedVariant}`, quarantinedVariant],
+    ]) {
+      const response = await deliverPhoto({ request: request(path), key, bucket, cache });
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+    }
+    expect(bucket.get).not.toHaveBeenCalled();
+    expect(cache.match).not.toHaveBeenCalled();
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
   it("answers 304 when the client already has the photo, from R2 and from the edge", async () => {
     const bucket = bucketWith({ [ORIGINAL]: storedObject("original") });
     const cache = memoryCache();

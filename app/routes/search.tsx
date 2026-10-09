@@ -19,7 +19,6 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
-import { photoSrcSet } from "~/lib/photo-variants";
 
 const SCOPE_LABELS: Record<SearchScope, string> = {
   all: "Everything",
@@ -110,7 +109,7 @@ function ResultCard({ result }: { result: SearchResult }) {
     >
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[var(--sj-flour)] sm:aspect-square">
         {displayImageUrl ? (
-          <img src={displayImageUrl} srcSet={photoSrcSet(displayImageUrl)} sizes="(min-width: 640px) 7rem, 100vw" alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+          <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
         ) : (
           <Icon className="size-5" aria-hidden="true" />
         )}
