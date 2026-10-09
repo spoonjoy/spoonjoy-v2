@@ -171,6 +171,62 @@ describe("agent connect route", () => {
     }
   });
 
+  it("limits code guesses per address and per signed-in chef, before looking the code up", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const seen: string[] = [];
+    // A limiter that has used up the budget for one key prefix only.
+    const limiterRefusing = (prefix: string) => ({
+      limit: async ({ key }: { key: string }) => {
+        seen.push(key);
+        return { success: !key.startsWith(prefix), reset: 42 };
+      },
+    });
+    const lookup = (prefix: string, headers: Record<string, string>) => {
+      const formData = new UndiciFormData();
+      formData.set("code", started.request.userCode);
+      return lookupAction({
+        request: new UndiciRequest("http://localhost/agent/connect", { method: "POST", body: formData, headers }),
+        context: { cloudflare: { env: { AUTH_IP_RATE_LIMITER: limiterRefusing(prefix) } } },
+      } as any);
+    };
+    const expectRefused = (response: any) => {
+      expect(response.init.status).toBe(429);
+      expect(response.init.headers).toEqual({ "Retry-After": "42" });
+      expect(response.data).toEqual({
+        code: started.request.userCode,
+        error: "Too many codes tried. Please wait a minute and try again.",
+      });
+    };
+    const signedIn = { Cookie: await sessionCookie(userId) };
+
+    // Even the right code is refused once this address has used its guesses.
+    expectRefused(await lookup("agent-code:ip:203.0.113.7", { "CF-Connecting-IP": "203.0.113.7" }));
+    // A chef who has used their guesses is refused from a fresh address too.
+    expectRefused(await lookup(`agent-code:user:${userId}`, { ...signedIn, "CF-Connecting-IP": "198.51.100.9" }));
+    // Lookups have their own budget, so they never use up the login and signup limit (keyed "ip:").
+    expect(seen).toEqual([
+      "agent-code:ip:203.0.113.7",
+      "agent-code:ip:198.51.100.9",
+      `agent-code:user:${userId}`,
+    ]);
+
+    // Within budget, the lookup goes through as before.
+    await expect(lookup("agent-code:none", { ...signedIn, "CF-Connecting-IP": "198.51.100.9" })).rejects.toSatisfy(
+      (response: Response) => response.status === 302
+        && response.headers.get("Location") === `/agent/connect/${started.request.id}`,
+    );
+  });
+
+  it("still looks codes up when the limiter is down", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const formData = new UndiciFormData();
+    formData.set("code", started.request.userCode);
+    await expect(lookupAction({
+      request: new UndiciRequest("http://localhost/agent/connect", { method: "POST", body: formData }),
+      context: { cloudflare: { env: { AUTH_IP_RATE_LIMITER: { limit: async () => { throw new Error("down"); } } } } },
+    } as any)).rejects.toSatisfy((response: Response) => response.status === 302);
+  });
+
   it("renders lookup errors for empty submissions", async () => {
     const emptyAction = await lookupAction(lookupArgs(lookupFormRequest("http://localhost/agent/connect", "")));
     expect(emptyAction).toEqual({

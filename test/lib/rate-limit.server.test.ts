@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  enforceAgentCodeLookupRateLimit,
   enforceAuthRateLimit,
   enforceRateLimit,
   hashTokenForRateLimitKey,
@@ -456,5 +457,42 @@ describe("enforceRateLimit — fail-open + backend-error capture (L6)", () => {
     });
     expect(result).toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
     expect(phFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("enforceAgentCodeLookupRateLimit", () => {
+  const request = (headers: Record<string, string> = {}) =>
+    new Request("https://spoonjoy.app/agent/connect", { method: "POST", headers });
+
+  it("skips without a limiter", async () => {
+    await expect(enforceAgentCodeLookupRateLimit(request(), undefined, "user-1"))
+      .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+  });
+
+  it("checks the address, then the signed-in user, under the agent-code prefix", async () => {
+    const limiter = mockLimiter(true);
+    await expect(enforceAgentCodeLookupRateLimit(request({ "CF-Connecting-IP": "203.0.113.7" }), limiter, "user-1"))
+      .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "user" });
+    expect(limiter.limit.mock.calls.map(([input]) => input.key)).toEqual([
+      "agent-code:ip:203.0.113.7",
+      "agent-code:user:user-1",
+    ]);
+
+    const anonymous = mockLimiter(true);
+    await expect(enforceAgentCodeLookupRateLimit(request({ "X-Forwarded-For": "198.51.100.9, 10.0.0.1" }), anonymous, null))
+      .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "ip" });
+    expect(anonymous.limit.mock.calls.map(([input]) => input.key)).toEqual(["agent-code:ip:198.51.100.9"]);
+  });
+
+  it("refuses with the scope that ran out and a retry time", async () => {
+    const limiter = { limit: vi.fn(async ({ key }: { key: string }) => ({ success: !key.includes(":user:") })) };
+    await expect(enforceAgentCodeLookupRateLimit(request(), limiter, "user-1"))
+      .resolves.toEqual({ allowed: false, retryAfterSeconds: 60, scope: "user" });
+    expect(limiter.limit.mock.calls[0][0].key).toBe("agent-code:ip:unknown:spoonjoy.app");
+  });
+
+  it("fails open per check when the limiter throws", async () => {
+    await expect(enforceAgentCodeLookupRateLimit(request(), throwingLimiter(), "user-1"))
+      .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
   });
 });

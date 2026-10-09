@@ -208,13 +208,49 @@ export async function enforceAuthRateLimit(
   ipLimiter: RateLimiterBinding | undefined,
   postHogConfig?: PostHogServerConfig,
 ): Promise<RateLimitResult> {
-  const forwardedFor = request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || null;
-  const fallbackIp = request.headers.get("CF-Connecting-IP") ?? forwardedFor ?? `unknown:${new URL(request.url).host}`;
   return enforceRateLimit({
-    ip: fallbackIp,
+    ip: clientIpForRateLimit(request),
     ipLimiter,
     postHogConfig,
   });
+}
+
+function clientIpForRateLimit(request: Request): string {
+  const forwardedFor = request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || null;
+  return request.headers.get("CF-Connecting-IP") ?? forwardedFor ?? `unknown:${new URL(request.url).host}`;
+}
+
+/**
+ * Throttle guesses at agent connection codes on `/agent/connect`, per client
+ * IP and, when signed in, per user, so neither more addresses nor more
+ * accounts buy an attacker more guesses at someone else's pending request.
+ * Uses the `AUTH_IP_RATE_LIMITER` binding under its own key prefix, so code
+ * lookups never spend the login and signup budget.
+ *
+ * Fails OPEN like {@link enforceRateLimit}.
+ */
+export async function enforceAgentCodeLookupRateLimit(
+  request: Request,
+  limiter: RateLimiterBinding | undefined,
+  userId: string | null,
+  postHogConfig?: PostHogServerConfig,
+): Promise<Omit<RateLimitResult, "scope"> & { scope: "ip" | "user" | "skip" }> {
+  if (!limiter) return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
+  const ctx: RateLimitContext = { postHogConfig };
+  const checks: Array<{ key: string; scope: "ip" | "user" }> = [
+    { key: `agent-code:ip:${clientIpForRateLimit(request)}`, scope: "ip" },
+  ];
+  if (userId) checks.push({ key: `agent-code:user:${userId}`, scope: "user" });
+  let scope: "ip" | "user" | "skip" = "skip";
+  for (const check of checks) {
+    const result = await safeLimit(limiter, check.key, "ip", ctx);
+    if (result === LIMITER_ERRORED) continue;
+    if (!result.success) {
+      return { allowed: false, retryAfterSeconds: retryAfterSecondsForLimitResult(result), scope: check.scope };
+    }
+    scope = check.scope;
+  }
+  return { allowed: true, retryAfterSeconds: 0, scope };
 }
 
 /**
