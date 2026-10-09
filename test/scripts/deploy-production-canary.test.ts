@@ -50,6 +50,8 @@ const WRANGLER_CONFIG = JSON.stringify({
 });
 const PROTOCOL_BOUNDARY_LOG_COMMAND =
   "git log --diff-filter=A --format=%H --reverse -- workers/cook-session-protocol-v1-boundary";
+const FORWARD_ONLY_ANCESTRY_COMMAND =
+  `git merge-base --is-ancestor ${PREVIOUS_PRODUCT_SHA} ${RELEASE_SHA}`;
 const CANARY_UPLOAD_COMMAND = `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`;
 const CANARY_STAGE_COMMAND = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`;
 const CANARY_PROMOTE_COMMAND = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`;
@@ -3288,6 +3290,7 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler versions list --json",
       `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
       `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+      FORWARD_ONLY_ANCESTRY_COMMAND,
       "pnpm exec wrangler deployments list --json",
       "pnpm run deploy:preflight",
       "pnpm exec wrangler deployments list --json",
@@ -7041,6 +7044,7 @@ describe("release artifact and CLI boundary", () => {
     function atomicCommandSequence(mode: "atomic-bootstrap" | "atomic-product-activation") {
       return [
         ...READ_ONLY_RELEASE_COMMANDS,
+        ...(mode === "atomic-product-activation" ? [FORWARD_ONLY_ANCESTRY_COMMAND] : []),
         "pnpm exec wrangler deployments list --json",
         "pnpm run deploy:preflight",
         "pnpm exec wrangler deployments list --json",
@@ -7854,6 +7858,7 @@ describe("release artifact and CLI boundary", () => {
         ...READ_ONLY_RELEASE_COMMANDS,
         `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
         `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+        FORWARD_ONLY_ANCESTRY_COMMAND,
         "pnpm exec wrangler deployments list --json",
         "pnpm run deploy:preflight",
         "pnpm exec wrangler deployments list --json",
@@ -7980,6 +7985,191 @@ describe("release artifact and CLI boundary", () => {
         databaseRollbackSupported: false,
         previousVersionId: PREVIOUS_VERSION,
         failure,
+      });
+    });
+
+    describe("forward-only production releases", () => {
+      const NEWER_PRODUCTION_SHA = "f".repeat(40);
+      const BACKWARDS_FAILURE =
+        "Release source does not contain, or this checkout cannot verify that it contains, the commit production is running; refusing to move production backwards.";
+
+      function runnerWithActiveTag(
+        activeTag: unknown,
+        extraOverrides: Record<string, CommandResponse | readonly CommandResponse[]> = {},
+      ) {
+        return successfulRunner({
+          "pnpm exec wrangler versions list --json": [
+            JSON.stringify([workerVersion(PREVIOUS_VERSION, activeTag, "2026-07-14T00:00:00Z")]),
+            JSON.stringify([
+              workerVersion(PREVIOUS_VERSION, activeTag, "2026-07-14T00:00:00Z"),
+              workerVersion(CANDIDATE_VERSION, RELEASE_SHA, "2026-07-15T00:00:00Z", 2),
+            ]),
+          ],
+          ...extraOverrides,
+        });
+      }
+
+      function validatedArtifactWriter(written: ReleaseArtifact[]) {
+        return vi.fn(async (artifact: ReleaseArtifact) => {
+          written.push(artifact);
+          const dir = await mkdtemp(path.join(os.tmpdir(), "forward-only-artifact-"));
+          await writeReleaseArtifactFile(dir, artifact);
+        });
+      }
+
+      it("refuses an atomic product release older than the commit production is running", async () => {
+        const backwardsCommand = `git merge-base --is-ancestor ${NEWER_PRODUCTION_SHA} ${RELEASE_SHA}`;
+        const runCommand = runnerWithActiveTag(NEWER_PRODUCTION_SHA, {
+          [backwardsCommand]: new Error("not an ancestor"),
+        });
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow(BACKWARDS_FAILURE);
+        expect(recordedCommands(runCommand)).toEqual([
+          ...READ_ONLY_RELEASE_COMMANDS,
+          backwardsCommand,
+        ]);
+        expect(recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args)))
+          .toContain(`pnpm exec wrangler versions view ${PREVIOUS_VERSION} --json`);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(deps.d1Fetch).not.toHaveBeenCalled();
+        expect(written).toEqual([{
+          status: "failed_before_stage",
+          sourceSha: RELEASE_SHA,
+          releaseMode: "atomic-product-activation",
+          deploymentStrategy: "atomic",
+          phase: "version_snapshot",
+          treeHash: TREE_HASH,
+          reviewedMigrations: ["0024_add_release_marker.sql"],
+          migrationApply: "not_started",
+          databaseRollbackSupported: false,
+          previousVersionId: PREVIOUS_VERSION,
+          failure: BACKWARDS_FAILURE,
+        }]);
+      });
+
+      it("refuses a protocol-v1 canary older than the commit production is running", async () => {
+        const backwardsCommand = `git merge-base --is-ancestor ${NEWER_PRODUCTION_SHA} ${RELEASE_SHA}`;
+        const runCommand = runnerWithActiveTag(NEWER_PRODUCTION_SHA, {
+          [backwardsCommand]: new Error("not an ancestor"),
+        });
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...releaseDeps(runCommand),
+          protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
+          releaseMode: "protocol-v1-canary" as const,
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow(BACKWARDS_FAILURE);
+        const commandKeys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+        expect(recordedCommands(runCommand)).toEqual([
+          ...READ_ONLY_RELEASE_COMMANDS,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${NEWER_PRODUCTION_SHA}`,
+          backwardsCommand,
+        ]);
+        expect(commandKeys.filter((key) => key.startsWith("pnpm exec wrangler versions view "))).toEqual([
+          `pnpm exec wrangler versions view ${PREVIOUS_VERSION} --json`,
+        ]);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([{
+          status: "failed_before_stage",
+          sourceSha: RELEASE_SHA,
+          releaseMode: "protocol-v1-canary",
+          deploymentStrategy: "gradual",
+          protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
+          phase: "protocol_ancestry",
+          treeHash: TREE_HASH,
+          reviewedMigrations: ["0024_add_release_marker.sql"],
+          migrationApply: "not_started",
+          databaseRollbackSupported: false,
+          previousVersionId: PREVIOUS_VERSION,
+          failure: BACKWARDS_FAILURE,
+        }]);
+      });
+
+      it.each([
+        ["the release commit itself", RELEASE_SHA],
+        ["an ancestor of the release commit", PREVIOUS_PRODUCT_SHA],
+      ])("allows an atomic product release when production runs %s", async (_label, activeTag) => {
+        const runCommand = runnerWithActiveTag(activeTag, {
+          "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+          [atomicDeployCommand("atomic-product-activation")]: "",
+        });
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        const result = await runProductionCanaryRelease(deps);
+
+        expect(result).toMatchObject({
+          status: "promoted",
+          releaseMode: "atomic-product-activation",
+          previousVersionId: PREVIOUS_VERSION,
+          candidateVersionId: CANDIDATE_VERSION,
+        });
+        expect(written).toEqual([result]);
+        const commandKeys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+        const forwardCommand = `git merge-base --is-ancestor ${activeTag} ${RELEASE_SHA}`;
+        expect(commandKeys).toContain(forwardCommand);
+        expect(commandKeys.indexOf(forwardCommand))
+          .toBeLessThan(commandKeys.indexOf(atomicDeployCommand("atomic-product-activation")));
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+          atomicDeployCommand("atomic-product-activation"),
+        ]);
+      });
+
+      it.each([
+        ["untagged", undefined, "Active Worker version is not source-tagged."],
+        ["tagged with an empty source", "", "Active Worker version is not source-tagged."],
+        ["tagged with a malformed source SHA", "main", "Active Worker version has a malformed source tag."],
+      ])("fails closed when the active production version is %s in atomic product mode", async (
+        _label,
+        activeTag,
+        failure,
+      ) => {
+        const runCommand = runnerWithActiveTag(activeTag);
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow(failure);
+        expect(recordedCommands(runCommand)).toEqual(READ_ONLY_RELEASE_COMMANDS);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([expect.objectContaining({
+          status: "failed_before_stage",
+          releaseMode: "atomic-product-activation",
+          phase: "version_snapshot",
+          migrationApply: "not_started",
+          previousVersionId: PREVIOUS_VERSION,
+          failure,
+        })]);
+      });
+
+      it("leaves atomic bootstrap free to replace an untagged production version", async () => {
+        const runCommand = runnerWithActiveTag(undefined, {
+          [atomicDeployCommand("atomic-bootstrap")]: "",
+        });
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-bootstrap"),
+          readBootstrapProbe: vi.fn(async () => validProbeResult),
+        };
+
+        const result = await runProductionCanaryRelease(deps);
+
+        expect(result).toMatchObject({ status: "promoted", releaseMode: "atomic-bootstrap" });
+        const commandKeys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+        expect(commandKeys.some((key) => key.startsWith("pnpm exec wrangler versions view "))).toBe(false);
+        expect(commandKeys.some((key) => key.includes("merge-base"))).toBe(false);
       });
     });
 
