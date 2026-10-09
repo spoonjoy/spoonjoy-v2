@@ -132,6 +132,7 @@ interface RunProductionCanaryReleaseDeps {
   readClientBundleSources?: () => Promise<readonly string[]>;
   readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
+  verifyCandidatePages?: (baseUrl: string, candidateVersionId: string) => Promise<void>;
   releaseSha: string;
   releaseMode: ReleaseMode;
   protocolV1BoundarySha?: string;
@@ -337,6 +338,67 @@ export async function readCandidateCspHeaders(
     throw new Error(`Candidate CSP verification failed with HTTP ${response.status}.`);
   }
   return response.headers;
+}
+
+// Public pages and endpoints the staged candidate must serve before promotion. They cover the
+// document shell, D1-backed lists, the auth surface and OAuth discovery for API clients.
+export const CANDIDATE_PAGE_PATHS = [
+  "/",
+  "/login",
+  "/recipes",
+  "/search",
+  "/privacy",
+  "/health",
+  "/.well-known/oauth-authorization-server",
+] as const;
+
+const HASHED_ASSET_PATTERN = /["'](\/assets\/[A-Za-z0-9._-]+\.(?:js|css))["']/;
+
+// Fetches each candidate page through the exact-version override and requires a 200 from the
+// candidate itself. From the first HTML page it also fetches one hashed asset, so a candidate
+// whose static assets are missing never reaches 100%.
+export async function verifyCandidatePages(
+  baseUrl: string,
+  candidateVersionId: string,
+  fetchImpl: typeof fetch = fetch,
+  workerName: string = process.env.SPOONJOY_WORKER_NAME || "spoonjoy-v2",
+): Promise<void> {
+  requireWorkerVersionId(candidateVersionId, "Candidate page verification");
+  const headers = {
+    "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride(workerName, candidateVersionId),
+  };
+  const failures: string[] = [];
+  let assetPath: string | null = null;
+  for (const path of CANDIDATE_PAGE_PATHS) {
+    const url = new URL(path, baseUrl);
+    url.searchParams.set("candidate_page_verification", "1");
+    let response: Response;
+    try {
+      response = await fetchImpl(url, { cache: "no-store", headers, redirect: "error" });
+    } catch (error) {
+      failures.push(`${path} request failed (${error instanceof Error ? error.message : String(error)})`);
+      continue;
+    }
+    const servedBy = response.headers.get("X-Spoonjoy-Worker-Version");
+    if (response.status !== 200) failures.push(`${path} returned HTTP ${response.status}`);
+    else if (servedBy?.toLowerCase() !== candidateVersionId.toLowerCase()) {
+      failures.push(`${path} was not served by the candidate`);
+    } else if (!assetPath && (response.headers.get("Content-Type") ?? "").includes("text/html")) {
+      assetPath = (await response.text()).match(HASHED_ASSET_PATTERN)?.[1] ?? null;
+    }
+  }
+  if (failures.length === 0) {
+    if (!assetPath) {
+      failures.push("no candidate HTML page referenced a hashed /assets/ file");
+    } else {
+      const asset = await fetchImpl(new URL(assetPath, baseUrl), { cache: "no-store", headers, redirect: "error" })
+        .catch(() => null);
+      if (asset?.status !== 200) failures.push(`${assetPath} returned ${asset ? `HTTP ${asset.status}` : "no response"}`);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`Candidate page verification failed: ${failures.join("; ")}.`);
+  }
 }
 
 function requireWorkerVersionId(value: unknown, context: string): string {
@@ -2132,12 +2194,13 @@ export async function runProductionCanaryRelease(
       stagedDeployment = stageOutcome.deployment;
 
       phase = "canary";
+      const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
       await deps.runCommand("pnpm", [
         "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
       ], { env: d1Env });
+      await (deps.verifyCandidatePages ?? verifyCandidatePages)(baseUrl, candidateVersionId);
 
       phase = "candidate_csp";
-      const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
       const candidateCspHeaders = await (
         deps.readCandidateCspHeaders ?? readCandidateCspHeaders
       )(baseUrl, candidateVersionId);
@@ -2746,6 +2809,7 @@ interface ReleaseCliDeps {
   readWranglerConfig?: () => Promise<Record<string, unknown>>;
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readPublicWorkerVersion?: (baseUrl: string) => Promise<string | null>;
+  verifyCandidatePages?: (baseUrl: string, candidateVersionId: string) => Promise<void>;
   runCommand?: ReleaseCommandRunner;
   sleep?: (milliseconds: number) => Promise<void>;
   verificationAttempts?: number;
@@ -2770,6 +2834,7 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
     readCandidateCspHeaders: deps.readCandidateCspHeaders ?? readCandidateCspHeaders,
     readGeneratedWorkerConfig: deps.readGeneratedWorkerConfig,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
+    verifyCandidatePages: deps.verifyCandidatePages,
     releaseSha: options.releaseSha,
     releaseMode: options.releaseMode,
     ...(options.protocolV1BoundarySha

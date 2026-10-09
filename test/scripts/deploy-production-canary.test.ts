@@ -19,6 +19,8 @@ import {
   runProductionCanaryRelease,
   runProductionRollback,
   runProductionReleaseCli,
+  CANDIDATE_PAGE_PATHS,
+  verifyCandidatePages,
   selectCurrentProductionVersion,
   selectUploadedVersion,
   writeReleaseArtifactFile,
@@ -831,6 +833,7 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
       "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
     })),
     readPublicWorkerVersion: vi.fn(async () => CANDIDATE_VERSION),
+    verifyCandidatePages: vi.fn(async () => undefined),
     releaseSha: RELEASE_SHA,
     releaseMode: "protocol-v1-canary" as const,
     protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
@@ -3831,6 +3834,116 @@ describe("production canary release orchestration", () => {
     });
   });
 
+  it("restores the previous version when a candidate page fails before promotion", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.verifyCandidatePages.mockRejectedValue(
+      new Error("Candidate page verification failed: /recipes returned HTTP 500."),
+    );
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow("/recipes returned HTTP 500");
+
+    expect(deps.verifyCandidatePages).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
+    expect(deps.readCandidateCspHeaders).not.toHaveBeenCalled();
+    const mutations = remoteMutationCommands(recordedCommandCalls(runCommand));
+    expect(mutations.at(-1)).toBe(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
+    );
+    expect(mutations.some((command) => command.includes(`${CANDIDATE_VERSION}@100%`))).toBe(false);
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "canary",
+      failure: "Candidate page verification failed: /recipes returned HTTP 500.",
+    }));
+  });
+
+  describe("verifyCandidatePages", () => {
+    const html = (asset = "/assets/root-AbC123.js") =>
+      `<!doctype html><script type="module" src="${asset}"></script>`;
+    function pageFetch(overrides: Record<string, () => Response | Promise<Response>> = {}) {
+      return vi.fn(async (input: URL | RequestInfo) => {
+        const url = new URL(String(input));
+        const custom = overrides[url.pathname];
+        if (custom) return custom();
+        const isHtml = !url.pathname.startsWith("/assets/") && url.pathname !== "/health" && !url.pathname.startsWith("/.well-known/");
+        return new Response(isHtml ? html() : "{}", {
+          status: 200,
+          headers: {
+            "Content-Type": isHtml ? "text/html; charset=utf-8" : "application/json",
+            "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+          },
+        });
+      });
+    }
+
+    it("probes every page and one hashed asset through the candidate override", async () => {
+      const fetchImpl = pageFetch();
+      await verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch);
+      const calls = fetchImpl.mock.calls.map(([input, init]) => ({
+        path: new URL(String(input)).pathname,
+        override: ((init as RequestInit).headers as Record<string, string>)["Cloudflare-Workers-Version-Overrides"],
+      }));
+      expect(calls.map((call) => call.path)).toEqual([...CANDIDATE_PAGE_PATHS, "/assets/root-AbC123.js"]);
+      expect(new Set(calls.map((call) => call.override))).toEqual(new Set([`spoonjoy-v2="${CANDIDATE_VERSION}"`]));
+    });
+
+    it("names every page that failed or was served by another version", async () => {
+      const fetchImpl = pageFetch({
+        "/recipes": () => new Response("boom", { status: 500, headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } }),
+        "/login": () => new Response(html(), { status: 200, headers: { "Content-Type": "text/html", "X-Spoonjoy-Worker-Version": PREVIOUS_VERSION } }),
+        "/search": () => Promise.reject(new Error("socket hang up")),
+        "/privacy": () => new Response("plain", { status: 200 }),
+        "/health": () => Promise.reject("offline"),
+      });
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch))
+        .rejects.toThrow(
+          "Candidate page verification failed: /login was not served by the candidate; /recipes returned HTTP 500; /search request failed (socket hang up); /privacy was not served by the candidate; /health request failed (offline).",
+        );
+    });
+
+    it("fails when the candidate's hashed asset is missing", async () => {
+      const fetchImpl = pageFetch({ "/assets/root-AbC123.js": () => new Response("", { status: 404 }) });
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch))
+        .rejects.toThrow("/assets/root-AbC123.js returned HTTP 404");
+    });
+
+    it("fails when no page references a hashed asset, or the asset request fails", async () => {
+      // "/" answers without a Content-Type, so it is never parsed for assets.
+      const noAsset = pageFetch({ "/": () => new Response(null, { status: 200, headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } }) });
+      const htmlRoutes = ["/login", "/recipes", "/search", "/privacy"];
+      for (const route of htmlRoutes) {
+        const original = noAsset.getMockImplementation()!;
+        noAsset.mockImplementation(async (input: URL | RequestInfo, init?: RequestInit) => (
+          new URL(String(input)).pathname === route
+            ? new Response("<p>none</p>", { status: 200, headers: { "Content-Type": "text/html", "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } })
+            : original(input, init)
+        ));
+      }
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, noAsset as unknown as typeof fetch))
+        .rejects.toThrow("no candidate HTML page referenced a hashed /assets/ file");
+
+      const assetDown = pageFetch({ "/assets/root-AbC123.js": () => Promise.reject(new Error("reset")) });
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, assetDown as unknown as typeof fetch))
+        .rejects.toThrow("/assets/root-AbC123.js returned no response");
+    });
+
+    it("targets the QA Worker when asked and rejects a malformed version", async () => {
+      const fetchImpl = pageFetch();
+      await verifyCandidatePages("https://example.test", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch, "spoonjoy-v2-qa");
+      const [, init] = fetchImpl.mock.calls[0]!;
+      expect(((init as RequestInit).headers as Record<string, string>)["Cloudflare-Workers-Version-Overrides"])
+        .toBe(`spoonjoy-v2-qa="${CANDIDATE_VERSION}"`);
+      await expect(verifyCandidatePages("https://example.test", "not-a-version", fetchImpl as unknown as typeof fetch))
+        .rejects.toThrow("did not contain a valid Worker version ID");
+    });
+  });
+
   it("restores the previous version when candidate CSP validation fails before promotion", async () => {
     const runCommand = successfulRunner({
       "pnpm exec wrangler deployments list --json": [
@@ -6679,6 +6792,7 @@ describe("release artifact and CLI boundary", () => {
   });
 
   it("runs the CLI with injected commands and the authoritative Wrangler PostHog host", async () => {
+    const verifyCandidatePages = vi.fn(async () => undefined);
     vi.stubEnv("SOURCE_SHA", RELEASE_SHA);
     vi.stubEnv("SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA", PRODUCT_BOUNDARY_SHA);
     vi.stubEnv("SPOONJOY_RELEASE_MODE", "protocol-v1-canary");
@@ -6735,11 +6849,13 @@ describe("release artifact and CLI boundary", () => {
         vars: { VITE_POSTHOG_HOST: CUSTOM_POSTHOG_HOST },
       }),
       readPublicWorkerVersion: async () => CANDIDATE_VERSION,
+      verifyCandidatePages,
       sleep: async () => undefined,
       writeReleaseArtifact,
     });
 
     expect(result.status).toBe("promoted");
+    expect(verifyCandidatePages).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
     expect(execFileImpl).toHaveBeenCalled();
     expect(writeReleaseArtifact).toHaveBeenCalledWith("mcp-oauth-canary-artifacts", result);
   });
@@ -6814,7 +6930,26 @@ describe("release artifact and CLI boundary", () => {
         headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION },
         status: 200,
       }));
-    vi.stubGlobal("fetch", fetchImpl);
+    // The default page verifier probes pages and one hashed asset first; answer those as the
+    // candidate, and count only the CSP and public-version requests below.
+    const isPageProbe = (input: unknown) => {
+      const url = new URL(String(input));
+      return url.searchParams.has("candidate_page_verification") || url.pathname.startsWith("/assets/");
+    };
+    const pageResponse = (input: unknown) => new Response(
+      new URL(String(input)).pathname.startsWith("/assets/") ? "" : '<script src="/assets/root-x1.js"></script>',
+      { status: 200, headers: { "Content-Type": "text/html", "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } },
+    );
+    const queued = fetchImpl;
+    const pageCalls: string[] = [];
+    const routedFetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+      if (isPageProbe(input)) {
+        pageCalls.push(new URL(String(input)).pathname);
+        return pageResponse(input);
+      }
+      return queued(input, init);
+    });
+    vi.stubGlobal("fetch", routedFetch);
 
     const release = runProductionReleaseCli({
       ...postHogArtifactReaderDeps(),
@@ -6833,6 +6968,7 @@ describe("release artifact and CLI boundary", () => {
 
     await expect(release).resolves.toMatchObject({ status: "promoted" });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(pageCalls).toEqual([...CANDIDATE_PAGE_PATHS, "/assets/root-x1.js"]);
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
       headers: {
         "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", CANDIDATE_VERSION),
