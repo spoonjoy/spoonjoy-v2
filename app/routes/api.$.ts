@@ -235,7 +235,7 @@ function dispatchGet(path: string, segments: string[], url: URL): ApiDispatch {
 
   if (path === "health") return { operation: "health", args: {} };
   if (path === "search") return { operation: "search_spoonjoy", args: pickArgs(args, ["query", "scope", "ownerEmail", "limit"]) };
-  if (path === "recipes") return { operation: "search_recipes", args: pickArgs(args, ["query", "chefEmail", "limit"]) };
+  if (path === "recipes") return { operation: "search_recipes", args: pickArgs(args, ["query", "chefEmail", "chefUsername", "limit"]) };
   if (segments[0] === "recipes" && segments.length === 2) {
     return { operation: "get_recipe", args: { id: segments[1] } };
   }

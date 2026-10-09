@@ -1264,6 +1264,33 @@ describe("spoonjoy MCP tools", () => {
     await expect(context.db.apiCredential.count()).resolves.toBe(0);
   });
 
+  it("filters recipes by your own email or any chef's username, and never answers whether another email has an account", async () => {
+    // Audit 2026-10-09, finding 14: chefEmail was an anonymous oracle for whether an address has recipes.
+    const other = await context.db.user.create({
+      data: { email: uniqueEmail("other-chef"), username: `other-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    await context.db.recipe.create({ data: { title: "Oracle Pie", chefId: other.id } });
+    const me = await context.db.user.create({
+      data: { email: uniqueEmail("me-chef").toUpperCase(), username: `me-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    await context.db.recipe.create({ data: { title: "Oracle Tart", chefId: me.id } });
+    const { token } = await createApiCredential(context.db, me.id, "Search token", { scopes: ["kitchen:read"] });
+    const signedIn = { db: context.db, principal: await authenticateApiToken(context.db, token) };
+    const titles = async (args: Record<string, unknown>, ctx: Parameters<typeof callSpoonjoyMcpTool>[2]) =>
+      parseJson(await callSpoonjoyMcpTool("search_recipes", { query: "Oracle", ...args }, ctx)).recipes.map((recipe: { title: string }) => recipe.title);
+
+    const anonymous = { db: context.db, principal: null };
+    await expect(titles({ chefEmail: other.email }, anonymous)).resolves.toEqual([]);
+    await expect(titles({ chefEmail: other.email }, signedIn)).resolves.toEqual([]);
+    await expect(titles({ chefEmail: me.email.toLowerCase() }, signedIn)).resolves.toEqual(["Oracle Tart"]);
+    // The local stdio owner can still filter by their own address, and only theirs.
+    await expect(titles({ chefEmail: other.email }, { db: context.db, defaultOwnerEmail: other.email.toUpperCase() })).resolves.toEqual(["Oracle Pie"]);
+    await expect(titles({ chefEmail: other.email }, { db: context.db, defaultOwnerEmail: me.email })).resolves.toEqual([]);
+
+    await expect(titles({ chefUsername: other.username }, anonymous)).resolves.toEqual(["Oracle Pie"]);
+    await expect(titles({ chefUsername: "nobody-by-this-name" }, anonymous)).resolves.toEqual([]);
+  });
+
   it("writes a signed-in user's changes to their own account, not a legacy account whose email differs in case", async () => {
     const email = context.defaultOwnerEmail!;
     const own = await context.db.user.create({
