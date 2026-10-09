@@ -33,6 +33,13 @@ describe("D1 migration numbering", () => {
     expect(duplicates, "take the next free number for the migration that merged second").toEqual([]);
   });
 
+  it("never gives two Prisma mirror folders the same timestamp", () => {
+    const folders = readdirSync(join(process.cwd(), "prisma", "migrations")).filter((name) => /^\d{14}_/.test(name));
+    const stamps = folders.map((name) => name.slice(0, 14));
+    const repeated = stamps.filter((stamp, index) => stamps.indexOf(stamp) !== index);
+    expect(repeated, "give the mirror folder that merged second a later timestamp").toEqual([]);
+  });
+
   it("keeps the historical duplicate pair exactly as applied", () => {
     for (const name of APPLIED_DUPLICATES) expect(migrationFiles()).toContain(name);
   });
