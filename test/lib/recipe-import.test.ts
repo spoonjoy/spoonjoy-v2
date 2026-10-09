@@ -488,6 +488,53 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(result.existingRecipeId).toBe(existing.id);
     });
 
+    it("stores one form of a link, so the same link written differently is a duplicate on every import path", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+
+      const first = await importRecipeFromUrl(
+        { url: "  https://Example.com/r?utm_source=newsletter&utm_medium=email#step-2 ", chefId: chef.id },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      const stored = await db.recipe.findUniqueOrThrow({ where: { id: first.recipeId! }, select: { sourceUrl: true } });
+      expect(stored.sourceUrl).toBe("https://example.com/r");
+
+      const again = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      expect(again.existingRecipeId).toBe(first.recipeId);
+
+      const fromJsonLd = await importRecipeFromSource(
+        {
+          chefId: chef.id,
+          dryRun: true,
+          source: {
+            type: "json-ld",
+            sourceUrl: "HTTPS://EXAMPLE.COM/r#top",
+            jsonLd: { "@type": "Recipe", name: "Pasta", recipeIngredient: ["1 cup flour"], recipeInstructions: ["Mix"] },
+          },
+        },
+        baseDeps(),
+      );
+      expect(fromJsonLd.existingRecipeId).toBe(first.recipeId);
+      expect(fromJsonLd.recipe.sourceUrl).toBe("https://example.com/r");
+    });
+
+    it("still finds a recipe whose link was stored before links were normalized", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const legacy = await db.recipe.create({
+        data: { title: "Old Import", chefId: chef.id, sourceUrl: "https://Example.com/r" },
+      });
+
+      const result = await importRecipeFromUrl(
+        { url: "https://Example.com/r", chefId: chef.id, dryRun: true },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      expect(result.existingRecipeId).toBe(legacy.id);
+    });
+
     it("existingRecipeId=null when only match is soft-deleted", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
