@@ -151,6 +151,7 @@ beforeAll(async () => {
   await db.oAuthGrant.deleteMany({});
   await db.apiCredential.deleteMany({});
   await db.imageGenLedger.deleteMany({});
+  await db.imageGenDailyBudget.deleteMany({});
   await db.oAuthAuthCode.deleteMany({});
   await db.oAuthRefreshToken.deleteMany({});
   await db.oAuthClient.deleteMany({});

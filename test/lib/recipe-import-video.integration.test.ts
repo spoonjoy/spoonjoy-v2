@@ -339,10 +339,11 @@ describe("recipe-import-video integration", () => {
     expect(result.source).toBe("video-oembed-llm");
     const recipeCount = await db.recipe.count({ where: { chefId: chef.id } });
     expect(recipeCount).toBe(0);
-    const ledgerCount = await db.imageGenLedger.count({
+    // A dry run still runs the extraction model, so it spends one import unit.
+    const ledger = await db.imageGenLedger.findMany({
       where: { userId: chef.id, kind: "import" },
     });
-    expect(ledgerCount).toBe(0);
+    expect(ledger.map((row) => row.count)).toEqual([1]);
   });
 
   it("oEmbed 404 → ImportRecipeError code=video-unavailable status=502", async () => {

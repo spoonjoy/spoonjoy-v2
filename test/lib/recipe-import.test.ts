@@ -1,3 +1,4 @@
+import { IMPORT_DAILY_CAP } from "~/lib/image-gen-ledger.server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { readFile } from "node:fs/promises";
@@ -606,17 +607,49 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(count).toBe(0);
     });
 
-    it("does not consume rate-limit quota", async () => {
+    // A dry run still runs the extraction model, so it spends a unit like a real import.
+    it("consumes one unit of the daily import quota and the global AI budget", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
       await importRecipeFromUrl(
         { url: "https://example.com/r", chefId: chef.id, dryRun: true },
         baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
       );
-      const count = await db.imageGenLedger.count({
+      const ledger = await db.imageGenLedger.findMany({
         where: { userId: chef.id, kind: "import" },
       });
-      expect(count).toBe(0);
+      expect(ledger.map((row) => row.count)).toEqual([1]);
+      const budget = await db.imageGenDailyBudget.findMany();
+      expect(budget.map((row) => row.count)).toEqual([1]);
+    });
+
+    it("is refused with 429, before running the model, once the daily import quota is spent", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const now = new Date(Date.UTC(2026, 9, 9, 12, 0));
+      await db.imageGenLedger.create({
+        data: { userId: chef.id, kind: "import", bucketStart: new Date(Date.UTC(2026, 9, 9)), count: IMPORT_DAILY_CAP },
+      });
+      const llmRunner = makeLlmRunner();
+      const fetchImpl = makeFetchImpl(fixture);
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+          baseDeps({ fetchImpl, llmRunner, now: () => now }),
+        ),
+      ).rejects.toMatchObject({ code: "rate-limited", status: 429 });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("is refused with 429 when the global AI budget is spent", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+          baseDeps({ fetchImpl: makeFetchImpl(fixture), env: { OPENAI_API_KEY: "test-key", SPOONJOY_AI_DAILY_GENERATION_BUDGET: "0" } }),
+        ),
+      ).rejects.toMatchObject({ code: "rate-limited", status: 429 });
     });
 
     it("does not enqueue cover upload (waitUntil not called)", async () => {

@@ -40,7 +40,7 @@ import {
   captureLlmCallFailure,
   captureLlmCallSucceeded,
 } from "~/lib/llm-telemetry.server";
-import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import { tryConsumeImageGenQuota, type ImageGenBudgetEnv } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
@@ -149,7 +149,7 @@ export interface ImportRecipeFromSourceOptions {
 export interface ImportRecipeDeps {
   db: PrismaClient;
   /** The Worker environment; with a D1 binding in `DB` the recipe is written as one atomic batch. */
-  env?: (RecipeLlmEnv & PostHogServerEnv & { DB?: unknown }) | null;
+  env?: (RecipeLlmEnv & PostHogServerEnv & ImageGenBudgetEnv & { DB?: unknown }) | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
   fetchImpl?: typeof fetch;
@@ -580,15 +580,16 @@ async function findExistingRecipeId(
   return existing?.id ?? null;
 }
 
+// Every import spends one unit, dry runs included: a dry run still runs the extraction model,
+// so it counts against the chef's daily import cap and the global AI budget like a real import.
 async function consumeImportQuota(
   deps: ImportRecipeDeps,
   chefId: string,
-  dryRun: boolean,
 ): Promise<void> {
-  if (dryRun) return;
   const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
     now: deps.now,
     d1: d1Binding(deps.env?.DB),
+    env: deps.env,
   });
   if (!ok) {
     throw new ImportRecipeError(
@@ -965,8 +966,8 @@ export async function importRecipeFromUrl(
   }
   const sourceKind = detectImportSource(parsedUrl);
 
-  // 1. Quota (skip on dry-run).
-  await consumeImportQuota(deps, chefId, dryRun);
+  // 1. Quota, dry runs included.
+  await consumeImportQuota(deps, chefId);
 
   // 2. Fetch + extract — web vs. video pipeline by hostname.
   let extraction: ExtractionOutput;
@@ -1012,7 +1013,7 @@ export async function importRecipeFromSource(
       return importRecipeFromUrl({ url: options.source.url, chefId, dryRun, recipeId }, deps);
     case "text": {
       const text = ensureNonblankText(options.source.text, "source.text");
-      await consumeImportQuota(deps, chefId, dryRun);
+      await consumeImportQuota(deps, chefId);
       const sourceUrl = options.source.sourceUrl ?? null;
       const extraction = await runTextExtraction(text, sourceUrl, chefId, deps);
       return completeImportFromExtraction({
@@ -1025,7 +1026,7 @@ export async function importRecipeFromSource(
       });
     }
     case "json-ld": {
-      await consumeImportQuota(deps, chefId, dryRun);
+      await consumeImportQuota(deps, chefId);
       const sourceUrl = options.source.sourceUrl ?? null;
       const extraction = await runExtraction(
         sourceUrl,

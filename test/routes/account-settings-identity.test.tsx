@@ -14,6 +14,7 @@ import { createUserSessionCookie } from "~/lib/session.server";
 import type { AccountSettingsActionResult, AccountSettingsLoaderData } from "~/lib/account-settings.server";
 import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { photoVariantKeys } from "~/lib/photo-variants";
 
 const PASSWORD = "testPassword123";
 const FORMAT_ERROR = "Username can only use letters, numbers, periods, underscores and hyphens";
@@ -245,8 +246,9 @@ describe("Account settings - identity", () => {
 
       expect(result).toMatchObject({ success: true, intent: "uploadPhoto" });
       expect(result.photoUrl).toMatch(new RegExp(`^/photos/profiles/${userId}/`));
-      expect(bucket.delete).toHaveBeenCalledWith(`profiles/${userId}/1-old.jpg`);
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expect(bucket.delete).toHaveBeenCalledTimes(2);
+      expect(bucket.delete).toHaveBeenNthCalledWith(1, `profiles/${userId}/1-old.jpg`);
+      expect(bucket.delete).toHaveBeenNthCalledWith(2, photoVariantKeys(`profiles/${userId}/1-old.jpg`));
       expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).photoUrl).toBe(result.photoUrl);
     });
 
