@@ -12,6 +12,34 @@ export const IMPORT_DAILY_CAP = 50;
 
 export type ImageGenKind = "placeholder" | "stylization" | "import";
 
+/**
+ * Default ceiling on AI generations per UTC day across every user and kind. The
+ * per-user caps above bound one account; this bounds the bill when many accounts
+ * (for example scripted signups) spend their caps at once. Override it with
+ * SPOONJOY_AI_DAILY_GENERATION_BUDGET.
+ */
+export const GLOBAL_DAILY_GENERATION_BUDGET = 200;
+
+/** Operator controls read from the Worker environment. */
+export interface ImageGenBudgetEnv {
+  /** Kill switch: "off" stops every AI generation as if the quota were spent. */
+  SPOONJOY_AI_IMAGE_GENERATION?: string;
+  /** Global per-UTC-day generation ceiling across all users and kinds. */
+  SPOONJOY_AI_DAILY_GENERATION_BUDGET?: string;
+}
+
+/** True when the operator kill switch has turned AI generation off. */
+export function aiGenerationDisabled(env: ImageGenBudgetEnv | null | undefined): boolean {
+  return env?.SPOONJOY_AI_IMAGE_GENERATION?.trim().toLowerCase() === "off";
+}
+
+/** The global daily budget: the env override when it is a non-negative integer, else the default. */
+export function globalDailyGenerationBudget(env: ImageGenBudgetEnv | null | undefined): number {
+  const raw = env?.SPOONJOY_AI_DAILY_GENERATION_BUDGET?.trim();
+  if (raw && /^\d+$/.test(raw)) return Number(raw);
+  return GLOBAL_DAILY_GENERATION_BUDGET;
+}
+
 export interface ConsumeQuotaDeps {
   now?: () => Date;
   /**
@@ -28,6 +56,8 @@ export interface ConsumeQuotaDeps {
   analyticsFetchImpl?: typeof fetch;
   /** The request's D1 binding: the consume is then one atomic D1 batch instead of Prisma. */
   d1?: D1ReadDatabase | null;
+  /** Kill switch and global daily budget. */
+  env?: ImageGenBudgetEnv | null;
 }
 
 /** Read a Prisma known-request-error code off an unknown throw, if present. */
@@ -89,13 +119,18 @@ async function tryConsumeImageGenQuotaOnD1(
   kind: ImageGenKind,
   bucketStart: Date,
   cap: number,
+  globalCap: number,
   at: Date,
 ): Promise<boolean> {
   const day = prismaD1Timestamp(bucketStart);
   const dayForms = [day, bucketStart.toISOString(), bucketStart.getTime()];
   const sameDay = `"userId" = ? AND "kind" = ? AND "bucketStart" IN (?, ?, ?)`;
+  const budgetDay = `"bucketStart" IN (?, ?, ?)`;
   const updatedAt = prismaD1Timestamp(at);
-  const [, increment] = await d1WriteBatch(d1, [
+  // Marks this consume's global-budget increment so the per-user increment can see whether
+  // it happened, inside the same transaction.
+  const consumeId = crypto.randomUUID();
+  const [, , , increment] = await d1WriteBatch(d1, [
     [
       `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt")
        SELECT ?, ?, ?, ?, 0, ?
@@ -113,14 +148,42 @@ async function tryConsumeImageGenQuotaOnD1(
       ...dayForms,
     ],
     [
+      `INSERT INTO "ImageGenDailyBudget" ("bucketStart", "count", "updatedAt")
+       SELECT ?, 0, ?
+       WHERE NOT EXISTS (SELECT 1 FROM "ImageGenDailyBudget" WHERE ${budgetDay})
+       ON CONFLICT ("bucketStart") DO NOTHING`,
+      day,
+      updatedAt,
+      ...dayForms,
+    ],
+    [
+      // Spend one unit of the global day only while it is under budget AND this user still
+      // has room under their own cap.
+      `UPDATE "ImageGenDailyBudget" SET "count" = "count" + 1, "lastConsumeId" = ?, "updatedAt" = ?
+       WHERE "bucketStart" = (SELECT "bucketStart" FROM "ImageGenDailyBudget" WHERE ${budgetDay} AND "count" < ? LIMIT 1)
+         AND EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ?)`,
+      consumeId,
+      updatedAt,
+      ...dayForms,
+      globalCap,
+      userId,
+      kind,
+      ...dayForms,
+      cap,
+    ],
+    [
       // One row only: a day stored in two forms by older writers must spend one unit, not two.
+      // It runs only when the global increment above was this consume's.
       `UPDATE "ImageGenLedger" SET "count" = "count" + 1, "updatedAt" = ?
-       WHERE "id" = (SELECT "id" FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ? LIMIT 1)`,
+       WHERE "id" = (SELECT "id" FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ? LIMIT 1)
+         AND EXISTS (SELECT 1 FROM "ImageGenDailyBudget" WHERE ${budgetDay} AND "lastConsumeId" = ?)`,
       updatedAt,
       userId,
       kind,
       ...dayForms,
       cap,
+      ...dayForms,
+      consumeId,
     ],
   ]);
   return increment!.changes >= 1;
@@ -128,8 +191,8 @@ async function tryConsumeImageGenQuotaOnD1(
 
 /**
  * Atomically reserve one unit of the daily image-gen budget for `(userId, kind, today)`.
- * Returns true when the budget was incremented, false when the cap is reached or the
- * user no longer exists. Safe to call concurrently — when two callers race on the very
+ * Returns true when the budget was incremented, false when the per-user cap or the global
+ * daily budget is reached, the operator kill switch is off, or the user no longer exists. Safe to call concurrently — when two callers race on the very
  * first consume of the day, both will succeed and the ledger ends at count=2. With a D1
  * binding it is one atomic batch; Prisma's version runs as separate queries on D1.
  */
@@ -143,10 +206,13 @@ export async function tryConsumeImageGenQuota(
   const at = now();
   const bucketStart = startOfUtcDay(at);
   const cap = capFor(kind);
+  // Kill switch: no ledger write and no generation; callers take their quota-exhausted path.
+  if (aiGenerationDisabled(deps.env)) return false;
+  const globalCap = globalDailyGenerationBudget(deps.env);
 
   if (deps.d1) {
     try {
-      return await tryConsumeImageGenQuotaOnD1(deps.d1, userId, kind, bucketStart, cap, at);
+      return await tryConsumeImageGenQuotaOnD1(deps.d1, userId, kind, bucketStart, cap, globalCap, at);
     } catch (error) {
       // A D1 fault must not read as "quota exhausted": capture it, then rethrow.
       if (deps.postHogConfig) {
@@ -160,8 +226,49 @@ export async function tryConsumeImageGenQuota(
     }
   }
 
-  // Prisma (no D1 binding). Each updateMany is one UPDATE whose WHERE re-checks the cap.
+  // Prisma (no D1 binding: unit tests and local scripts). Spend the global unit first and
+  // refund it if the per-user consume fails. This is not one transaction; production always
+  // takes the atomic D1 batch above.
+  if (!(await spendGlobalBudgetWithPrisma(db, bucketStart, globalCap))) return false;
+  let consumedForUser = false;
+  try {
+    consumedForUser = await tryConsumeUserQuotaWithPrisma(db, userId, kind, bucketStart, cap, deps);
+  } finally {
+    if (!consumedForUser) {
+      await db.imageGenDailyBudget.updateMany({
+        where: { bucketStart, count: { gt: 0 } },
+        data: { count: { decrement: 1 } },
+      });
+    }
+  }
+  return consumedForUser;
+}
 
+/** Prisma path: one unit of the global day, created at 1 on the day's first consume. */
+async function spendGlobalBudgetWithPrisma(db: PrismaClient, bucketStart: Date, globalCap: number): Promise<boolean> {
+  const spend = () => db.imageGenDailyBudget.updateMany({
+    where: { bucketStart, count: { lt: globalCap } },
+    data: { count: { increment: 1 } },
+  });
+  if ((await spend()).count > 0) return true;
+  if (globalCap < 1) return false;
+  try {
+    await db.imageGenDailyBudget.create({ data: { bucketStart, count: 1 } });
+    return true;
+  } catch (error) {
+    if (prismaErrorCode(error) !== "P2002") throw error;
+    return (await spend()).count > 0;
+  }
+}
+
+async function tryConsumeUserQuotaWithPrisma(
+  db: PrismaClient,
+  userId: string,
+  kind: ImageGenKind,
+  bucketStart: Date,
+  cap: number,
+  deps: ConsumeQuotaDeps,
+): Promise<boolean> {
   // 1) Try increment if a row already exists and we are under the cap.
   const updated = await db.imageGenLedger.updateMany({
     where: { userId, kind, bucketStart, count: { lt: cap } },

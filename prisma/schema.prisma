@@ -620,6 +620,17 @@ model ImageGenLedger {
   @@index([userId, bucketStart])
 }
 
+/// Global AI generations per UTC day across every user and kind. Not tied to a user, so
+/// deleting an account does not hand its spent units back.
+model ImageGenDailyBudget {
+  bucketStart   DateTime @id
+  count         Int      @default(0)
+  /// The consume that last spent a unit; lets the D1 batch tie the per-user increment to it.
+  lastConsumeId String?
+
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 model PushSubscription {
   id         String   @id @default(cuid())
   userId     String
