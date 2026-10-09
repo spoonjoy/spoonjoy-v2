@@ -79,11 +79,13 @@ export function buildSpoonjoyApiContext(params: {
   principal: ApiPrincipal | null;
   cloudflareEnv: CloudflareEnvLike | null | undefined;
   waitUntil?: (promise: Promise<unknown>) => void;
+  request?: Request | null;
 }): SpoonjoyApiContext {
   const { db, principal, cloudflareEnv, waitUntil } = params;
   return {
     db,
     principal,
+    requester: params.request ? requestNetworkDetails(params.request) : null,
     allowOwnerEmailFallback: false,
     waitUntil,
     env: cloudflareEnv
@@ -106,5 +108,19 @@ export function buildSpoonjoyApiContext(params: {
         }
       : null,
     bucket: cloudflareEnv?.PHOTOS ?? undefined,
+  };
+}
+
+/**
+ * The caller's IP, user agent and country as Cloudflare reports them, for showing to a chef on the
+ * agent connection approval page. These describe the network, not a verified identity.
+ */
+export function requestNetworkDetails(request: Request): { ip: string | null; userAgent: string | null; country: string | null } {
+  const cf = (request as Request & { cf?: { country?: unknown } }).cf;
+  const cfCountry = typeof cf?.country === "string" ? cf.country : null;
+  return {
+    ip: request.headers.get("CF-Connecting-IP"),
+    userAgent: request.headers.get("User-Agent"),
+    country: cfCountry ?? request.headers.get("CF-IPCountry"),
   };
 }
