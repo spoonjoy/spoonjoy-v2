@@ -54,7 +54,9 @@ export function defaultPhotoCache(): Cache | null {
 function cacheKeyFor(request: Request, key: string, width: PhotoVariantWidth | null): Request {
   const url = new URL(request.url);
   const search = width ? `?${PHOTO_VARIANT_QUERY_PARAMETER}=${width}` : "";
-  return new Request(`${url.origin}/photos/${key}${search}`, { method: "GET" });
+  // Re-encode each segment so a key containing "?", "#", "%" or ".." cannot name another photo's entry.
+  const path = key.split("/").map(encodeURIComponent).join("/");
+  return new Request(`${url.origin}/photos/${path}${search}`, { method: "GET" });
 }
 
 function etagMatches(ifNoneMatch: string | null, etag: string | null): boolean {
@@ -86,7 +88,12 @@ function forClient(response: Response, cacheState: "hit" | "miss", isHead: boole
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", isFallback ? PHOTO_FALLBACK_CACHE_CONTROL : PHOTO_IMMUTABLE_CACHE_CONTROL);
   headers.set(PHOTO_CACHE_HEADER, cacheState);
-  return new Response(isHead ? null : response.body, { status: response.status, headers });
+  if (isHead) {
+    // HEAD answers with headers only; release the unread body.
+    void response.body?.cancel();
+    return new Response(null, { status: response.status, headers });
+  }
+  return new Response(response.body, { status: response.status, headers });
 }
 
 interface StoredPhoto {
@@ -157,5 +164,10 @@ export async function deliverPhoto({ request, key, bucket, cache, waitUntil }: P
   }
 
   const response = forClient(edgeResponse, "miss", isHead, isFallback);
-  return etagMatches(ifNoneMatch, object.httpEtag) ? notModified(response.headers) : response;
+  if (etagMatches(ifNoneMatch, object.httpEtag)) {
+    // The client's copy is current; release the unread body instead of holding it in memory.
+    await response.body?.cancel();
+    return notModified(response.headers);
+  }
+  return response;
 }

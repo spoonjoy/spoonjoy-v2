@@ -54,8 +54,10 @@ export function photoKeysFromRows(rows) {
   for (const row of rows) {
     const url = typeof row?.url === "string" ? row.url : "";
     const key = url.slice("/photos/".length).split(/[?#]/)[0];
-    // Variants have no variants, and quarantined photos are never served, so neither gets any.
-    if (url.startsWith("/photos/") && key && !key.startsWith("variants/") && !key.startsWith("quarantine/")) {
+    // Variants have no variants, and quarantined photos are never served, so neither gets any. A key
+    // with an empty, "." or ".." segment could resolve outside its folder, so it is skipped.
+    const unsafe = key.split("/").some((segment) => segment === "" || segment === "." || segment === "..");
+    if (url.startsWith("/photos/") && key && !unsafe && !key.startsWith("variants/") && !key.startsWith("quarantine/")) {
       keys.add(key);
     }
   }
@@ -131,9 +133,9 @@ export async function renderVariants(original, { sharp }) {
  * photo is done; a photo whose read or write fails is reported and left for the next run.
  */
 export async function generateVariants({ keys, r2, sharp, apply, limit, io }) {
-  const summary = { checked: 0, missing: 0, generated: 0, unsupported: 0, failed: 0, originalBytes: 0, variantBytes: 0 };
+  const summary = { checked: 0, missing: 0, generated: 0, unsupported: 0, missingOriginal: 0, failed: 0, originalBytes: 0, variantBytes: 0 };
   for (const key of keys) {
-    if (summary.generated + summary.unsupported + summary.failed >= limit) break;
+    if (summary.generated + summary.unsupported + summary.missingOriginal + summary.failed >= limit) break;
     summary.checked += 1;
     if (await r2.exists(variantKey(key, VARIANT_WIDTHS[0]))) continue;
     summary.missing += 1;
@@ -144,7 +146,11 @@ export async function generateVariants({ keys, r2, sharp, apply, limit, io }) {
     try {
       const original = await r2.get(key);
       if (!original) {
-        throw new Error("the original is not in R2");
+        // A row that points at a photo no longer in R2 has nothing to make variants from. The next
+        // run cannot fix that either, so it is reported without failing the run.
+        summary.missingOriginal += 1;
+        io.log(`missing-original ${key}: the original is not in R2`);
+        continue;
       }
       let variants;
       try {

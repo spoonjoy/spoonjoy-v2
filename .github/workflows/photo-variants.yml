@@ -75,7 +75,8 @@ jobs:
   production:
     name: production
     needs: qa
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # Runs after QA even when QA failed, so a QA-only problem never holds back production variants.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production

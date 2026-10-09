@@ -75,6 +75,9 @@ describe("photoKeysFromRows", () => {
         { url: "/photos/covers/b.jpg" },
         { url: "/photos/variants/w256/covers/a.png.webp" },
         { url: "/photos/quarantine/covers/c.jpg" },
+        { url: "/photos/covers/../profiles/d.jpg" },
+        { url: "/photos/covers/./d.jpg" },
+        { url: "/photos/covers//d.jpg" },
         { url: "https://images.example.com/x.jpg" },
         { url: "/photos/" },
         { url: null },
@@ -197,15 +200,15 @@ describe("generateVariants", () => {
     expect(io.log).toHaveBeenCalledWith(expect.stringMatching(/^generated covers\/a\.png original=\d+ w1536=\d+ w1024=\d+ w512=\d+ w256=\d+$/));
   });
 
-  it("reports a missing original and a failed write, and carries on", async () => {
+  it("reports a missing original without failing, and a failed write as a failure, and carries on", async () => {
     const r2 = memoryR2({ "covers/b.png": await png(64, 64) });
     r2.put.mockRejectedValueOnce(new Error("R2 PUT failed"));
     const io = silentIo();
 
     const summary = await generateVariants({ keys: ["covers/a.png", "covers/b.png"], r2, sharp, apply: true, limit: Infinity, io });
 
-    expect(summary).toMatchObject({ failed: 2, generated: 0 });
-    expect(io.error).toHaveBeenCalledWith("failed covers/a.png: the original is not in R2");
+    expect(summary).toMatchObject({ missingOriginal: 1, failed: 1, generated: 0 });
+    expect(io.log).toHaveBeenCalledWith("missing-original covers/a.png: the original is not in R2");
     expect(io.error).toHaveBeenCalledWith("failed covers/b.png: R2 PUT failed");
   });
 

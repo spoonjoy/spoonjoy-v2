@@ -181,6 +181,16 @@ describe("deliverPhoto", () => {
     expect(cache.put).not.toHaveBeenCalled();
   });
 
+  it("keeps a key whose name contains URL syntax in its own edge entry", async () => {
+    const tricky = "covers/1-a.png?w=256";
+    const bucket = bucketWith({ [tricky]: storedObject("tricky") });
+    const cache = memoryCache();
+
+    await deliverPhoto({ request: request("/photos/covers/1-a.png%3Fw%3D256"), key: tricky, bucket, cache });
+
+    expect([...cache.entries.keys()]).toEqual(["https://spoonjoy.app/photos/covers/1-a.png%3Fw%3D256"]);
+  });
+
   it("answers 304 when the client already has the photo, from R2 and from the edge", async () => {
     const bucket = bucketWith({ [ORIGINAL]: storedObject("original") });
     const cache = memoryCache();
