@@ -188,6 +188,7 @@ export default function AgentConnect() {
   const connection = useLoaderData<typeof loader>() as LoaderData;
   const actionData = useActionData<typeof action>() as ActionData | undefined;
   const actionable = connection.status === "pending";
+  const connected = connection.status === "approved" || connection.status === "claimed";
   const scopes = connection.scopes ?? [];
   const writeScopes = AGENT_CONNECTION_WRITE_SCOPES.filter((scope) => scopes.includes(scope));
   const requester = connection.requester;
@@ -199,10 +200,10 @@ export default function AgentConnect() {
       <Text className="mt-5 text-lg/7">
         {actionable
           ? `A client calling itself "${connection.agentName}" wants permission to use Spoonjoy with these exact scopes.`
-          : connection.status === "approved" || connection.status === "claimed"
-            ? `${connection.agentName} can now use Spoonjoy on your behalf.`
+          : connected
+            ? `A client calling itself "${connection.agentName}" is now connected to your Spoonjoy kitchen.`
             : connection.status === "denied"
-              ? `${connection.agentName} was not given access to your Spoonjoy kitchen.`
+              ? `The client calling itself "${connection.agentName}" was not given access to your Spoonjoy kitchen.`
               : "This Spoonjoy connection link is no longer available."}
       </Text>
 
@@ -245,9 +246,9 @@ export default function AgentConnect() {
         </>
       ) : null}
 
-      {actionable && scopes.length > 0 ? (
+      {(actionable || connected) && scopes.length > 0 ? (
         <div className="mt-6 border-y border-[var(--sj-border)] py-5">
-          <p className={LABEL}>Requested scopes</p>
+          <p className={LABEL}>{connected ? "Access granted" : "Requested scopes"}</p>
           <ul className="mt-3 grid gap-2">
             {scopes.map((scope) => (
               <li key={scope} className="text-sm/6 text-[var(--sj-ink)]">
@@ -284,46 +285,58 @@ export default function AgentConnect() {
         </Text>
       ) : null}
 
+      {connected ? (
+        <>
+          <Text className="mt-5">
+            This access lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days from approval. You can revoke it at any time under API and app access in your account settings.
+          </Text>
+          <div className="mt-8 flex flex-col sm:flex-row">
+            <Button href="/account/settings" plain>
+              Manage connected apps and tokens
+            </Button>
+          </div>
+        </>
+      ) : null}
+
       {actionData?.error ? (
         <Text className="mt-5" role="alert">{actionData.error}</Text>
       ) : null}
 
       {actionable && (
-        <div className="mt-8 grid gap-3">
-          <Form method="post" className="grid gap-4">
-            {connection.confirmedCode ? (
-              <div className="border-y border-[var(--sj-border)] py-5">
-                <p className={LABEL}>Code you entered</p>
-                <p className="mt-2 font-sj-ui text-2xl font-semibold tracking-[0.12em] text-[var(--sj-ink)]">
-                  {connection.confirmedCode}
-                </p>
-              </div>
-            ) : (
-              <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-                Type the code your agent shows you
-                <input
-                  name="userCode"
-                  required
-                  autoComplete="off"
-                  autoCapitalize="characters"
-                  spellCheck={false}
-                  placeholder="ABCD-2345"
-                  className="min-h-12 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xl font-semibold tracking-[0.12em] text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-                />
-              </label>
-            )}
-            <div>
-              <Button type="submit" name="intent" value="approve">
-                Approve Access
-              </Button>
+        <Form method="post" className="mt-8 grid gap-4">
+          {connection.confirmedCode ? (
+            <div className="border-y border-[var(--sj-border)] py-5">
+              <p className={LABEL}>Code you entered</p>
+              <p className="mt-2 font-sj-ui text-2xl font-semibold tracking-[0.12em] text-[var(--sj-ink)]">
+                {connection.confirmedCode}
+              </p>
             </div>
-          </Form>
-          <Form method="post">
-            <Button type="submit" name="intent" value="deny" plain>
+          ) : (
+            <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+              Type the code your agent shows you
+              <input
+                name="userCode"
+                required
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="ABCD-2345"
+                className="min-h-12 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xl font-semibold tracking-[0.12em] text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
+              />
+            </label>
+          )}
+          {/* Full-width stacked buttons on phones, side by side from sm up, as on the other auth pages.
+              Deny skips validation, so it works without a code; the action ignores the code on deny. */}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button type="submit" name="intent" value="approve">
+              Approve Access
+            </Button>
+            <Button type="submit" name="intent" value="deny" formNoValidate plain>
               Deny
             </Button>
-          </Form>
-        </div>
+          </div>
+        </Form>
       )}
     </main>
   );

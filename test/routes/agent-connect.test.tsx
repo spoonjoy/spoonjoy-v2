@@ -410,8 +410,14 @@ describe("agent connect route", () => {
     const codeInput = screen.getByLabelText("Type the code your agent shows you");
     expect(codeInput).toHaveValue("");
     expect(codeInput).toBeRequired();
+    // Phones offer the code from a message, capitalize as the chef types, and never autocorrect it.
+    expect(codeInput).toHaveAttribute("autocomplete", "one-time-code");
+    expect(codeInput).toHaveAttribute("autocapitalize", "characters");
+    expect(codeInput).toHaveAttribute("autocorrect", "off");
+    expect(codeInput).toHaveAttribute("spellcheck", "false");
     expect(screen.getByRole("button", { name: "Approve Access" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
+    // Deny works without a code.
+    expect(screen.getByRole("button", { name: "Deny" })).toHaveAttribute("formnovalidate");
 
     cleanupDom();
     renderWithData({
@@ -451,19 +457,29 @@ describe("agent connect route", () => {
       agentName: "slugger",
       userEmail: null,
       expiresAt: "2026-05-26T12:10:00.000Z",
-      scopes: [],
+      scopes: ["kitchen:read", "kitchen:write"],
     });
     expect(await screen.findByRole("heading", { name: "Spoonjoy Connected" })).toBeInTheDocument();
-    expect(screen.getByText(/can now use Spoonjoy/)).toBeInTheDocument();
+    // The name is still only what the client called itself.
+    expect(screen.getByText('A client calling itself "slugger" is now connected to your Spoonjoy kitchen.')).toBeInTheDocument();
+    expect(screen.getByText("Access granted")).toBeInTheDocument();
+    expect(screen.getByText("Create, change, and delete your recipes, cookbooks, and shopping list")).toBeInTheDocument();
+    expect(screen.getByText(/lasts 90 days from approval/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage connected apps and tokens" })).toHaveAttribute("href", "/account/settings");
+    expect(screen.queryByText(/did not verify/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve Access" })).not.toBeInTheDocument();
 
     cleanupDom();
     renderWithData({ status: "claimed", agentName: "slugger", userEmail: null, expiresAt: null, scopes: [] });
     expect(await screen.findByRole("heading", { name: "Spoonjoy Connected" })).toBeInTheDocument();
+    expect(screen.queryByText("Access granted")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage connected apps and tokens" })).toBeInTheDocument();
 
     cleanupDom();
     renderWithData({ status: "denied", agentName: "slugger", userEmail: null, expiresAt: null, scopes: [] });
     expect(await screen.findByRole("heading", { name: "Connection Denied" })).toBeInTheDocument();
+    expect(screen.getByText('The client calling itself "slugger" was not given access to your Spoonjoy kitchen.')).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Manage connected apps and tokens" })).not.toBeInTheDocument();
 
     cleanupDom();
     renderWithData({ status: "expired", agentName: "slugger", userEmail: null, expiresAt: null });
