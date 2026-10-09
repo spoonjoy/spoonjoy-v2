@@ -1966,28 +1966,41 @@ export async function runProductionCanaryRelease(
       { env: workersEnv },
     );
 
-    if (releaseMode === "protocol-v1-canary") {
-      phase = "active_version_mapping";
+    if (releaseMode !== "atomic-bootstrap") {
+      // Production only moves forward: the release must contain the commit production runs now.
+      // Bootstrap is exempt because the Worker it replaces may predate source tagging.
+      // Atomic modes record these failures as version_snapshot so the artifact lifecycle stays unchanged.
+      const isCanaryRelease = releaseMode === "protocol-v1-canary";
+      if (isCanaryRelease) phase = "active_version_mapping";
       const previousVersion = await deps.runCommand(
         "pnpm",
         ["exec", "wrangler", "versions", "view", previousVersionId, "--json"],
         { env: workersEnv },
       );
       const previousSourceSha = selectExactVersionSourceSha(previousVersion.stdout, previousVersionId);
-      phase = "protocol_ancestry";
+      if (isCanaryRelease) {
+        phase = "protocol_ancestry";
+        await requireAncestor(
+          deps,
+          protocolV1BoundarySha!,
+          sourceSha,
+          cleanEnv,
+          "Release source is below the protocol-v1 boundary.",
+        );
+        await requireAncestor(
+          deps,
+          protocolV1BoundarySha!,
+          previousSourceSha,
+          cleanEnv,
+          "Active Worker source is below the protocol-v1 boundary.",
+        );
+      }
       await requireAncestor(
         deps,
-        protocolV1BoundarySha!,
+        previousSourceSha,
         sourceSha,
         cleanEnv,
-        "Release source is below the protocol-v1 boundary.",
-      );
-      await requireAncestor(
-        deps,
-        protocolV1BoundarySha!,
-        previousSourceSha,
-        cleanEnv,
-        "Active Worker source is below the protocol-v1 boundary.",
+        "Release source does not contain the commit production is running; refusing to move production backwards.",
       );
     }
 
