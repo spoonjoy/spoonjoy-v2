@@ -297,6 +297,17 @@ Rollback dispatches work in every release mode (`atomic-bootstrap`, `atomic-prod
 4. D1 is never rolled back. A code rollback is safe only when migrations since the target are additive (the release pipeline blocks destructive ones). If a column the old code needs was dropped, fix forward instead.
 5. A rollback leaves `main` unchanged, so the next merge deploys forward again. Revert or fix the bad commit on `main` promptly, or the next merge redeploys the defect.
 
+### Rehearsing a rollback on QA
+
+QA runs the same Worker code under the name `spoonjoy-v2-qa`, so the rollback sequence can be rehearsed there without touching production. Rehearsed on 2026-10-09: staged the previous QA version at 0%, confirmed through the version override that it served an enforced CSP while public traffic stayed on the current version, promoted it to 100%, confirmed `/health` reported it, then restored the original version. The whole run took about 13 seconds.
+
+Warning: after any local build, Wrangler silently reads `.wrangler/deploy/config.json`, which redirects to the built production config, and then ignores `--env qa`. Every manual QA Wrangler command must pass `-c wrangler.json --env qa --name spoonjoy-v2-qa`, and you should confirm that `wrangler deployments list` matches QA's public `X-Spoonjoy-Worker-Version` before any write.
+
+1. Read QA's current version: `curl -sI https://spoonjoy-v2-qa.mendelow-studio.workers.dev/health | grep -i x-spoonjoy-worker-version`, and pick an older target from `pnpm exec wrangler versions list -c wrangler.json --env qa --name spoonjoy-v2-qa --json`.
+2. Stage the target: `pnpm exec wrangler versions deploy <target>@0% <current>@100% -y -c wrangler.json --env qa --name spoonjoy-v2-qa`.
+3. Probe the target through the override: send `Cloudflare-Workers-Version-Overrides: spoonjoy-v2-qa="<target>"` to `/`, and check that the response's `X-Spoonjoy-Worker-Version` is the target and that it carries `Content-Security-Policy`. `readCandidateCspHeaders` takes the Worker name as its fourth argument, or reads it from `SPOONJOY_WORKER_NAME`.
+4. Promote the target with `<target>@100%`, confirm it on `/health`, then restore `<current>@100%` and confirm again.
+
 Fallback when GitHub Actions is down: with a Cloudflare token holding Workers edit, run `pnpm exec wrangler rollback <version-id> --message "manual rollback"`. This skips the CSP check and the release artifact, so record it in the incident notes.
 
 A source commit that intentionally changes Wrangler CSP mode to `report-only` uses the exact-SHA `CI` workflow dispatch before the protected production dispatch. Ordinary push and pull-request CI stay strict. Dispatch `ci.yml` on the exact branch head with `source_sha` and `csp_report_only_break_glass=ACK_REPORT_ONLY_CSP_ROLLBACK`; after merge, repeat that dispatch with `--ref main` and the exact `origin/main` SHA. Dispatch jobs are named `report-only-coverage`, `report-only-workers-coverage`, `report-only-e2e`, and `report-only-advisory`, so they cannot satisfy canonical required checks. The production validator accepts only that authenticated GitHub dispatch run with all four report-only jobs successful. See `docs/deployment.md` for the executable commands.
