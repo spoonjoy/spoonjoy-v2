@@ -3301,8 +3301,9 @@ describe("deployment preflight", () => {
     ["unit-changed runs outside pull requests", "    name: unit-changed\n    if: github.event_name == 'pull_request'\n", "    name: unit-changed\n    if: always()\n"],
     ["unit-changed interpolates a commit into its shell", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', "git fetch --quiet --no-tags --deepen=1 origin ${{ github.event.pull_request.head.sha }}"],
     ["unit-changed fetches the base commit without its history", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', 'git fetch --quiet --no-tags --depth=1 origin "$CI_SOURCE_SHA"'],
-    ["unit-changed reads its base from elsewhere", "        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}\n        run: pnpm run verify:clean:test:changed", "        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.head.ref }}\n        run: pnpm run verify:clean:test:changed"],
-    ["unit-changed runs an ungated test command", "        run: pnpm run verify:clean:test:changed", "        run: pnpm exec vitest run"],
+    ["unit-changed reads its base from the event payload", 'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', "SPOONJOY_CHANGED_SINCE=${{ github.event.pull_request.base.sha }} pnpm run verify:clean:test:changed"],
+    ["unit-changed takes its base from env", '        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', '        env:\n          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}\n        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed'],
+    ["unit-changed runs an ungated test command", '        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', "        run: pnpm exec vitest run"],
     ["unit-changed drops the generated contract check", "        run: pnpm run verify:clean:typecheck\n\n      - name: 🔐 Verify generated API contract\n        run: pnpm run verify:clean:generated-contract\n\n      # The checkout", "        run: pnpm run verify:clean:typecheck\n\n      # The checkout"],
     ["unit-changed is removed", "\n  unit-changed:\n", "\n  unit-changed-removed:\n"],
   ])("rejects a CI workflow where %s", (_label, expected, replacement) => {

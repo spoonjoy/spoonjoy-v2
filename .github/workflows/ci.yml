@@ -241,10 +241,10 @@ jobs:
       - name: 📥 Fetch the pull request's base commit
         run: node scripts/warning-gate.ts -- git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"
 
+      # The base is the merge commit's first parent, which is exactly what this pull request is
+      # merged onto, so the affected tests are always computed from history the checkout has.
       - name: 🧪 Tests affected by this change
-        env:
-          SPOONJOY_CHANGED_SINCE: ${{ github.event.pull_request.base.sha }}
-        run: pnpm run verify:clean:test:changed
+        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed
 
       - name: 🧹 Cleanup local disposable data
         if: always()

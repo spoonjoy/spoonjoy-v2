@@ -457,6 +457,11 @@ function commandStepSignature(...commands: string[]): string {
   return `run:${commands.join("\u0000")}`;
 }
 
+// unit-changed's base is the merge commit's first parent, read from the checkout, never from the
+// event payload, so it is always in the job's shallow history.
+const CI_CHANGED_TESTS_COMMAND =
+  'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed';
+
 const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
   ["advisory", [
     actionStepSignature(PINNED_CHECKOUT_ACTION),
@@ -531,7 +536,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"`),
-    commandStepSignature("pnpm run verify:clean:test:changed"),
+    commandStepSignature(CI_CHANGED_TESTS_COMMAND),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],
   ["workers-coverage", [
@@ -647,9 +652,6 @@ function ungatedCoverageSteps(steps: Record<string, unknown>[]): Record<string, 
   return ungated;
 }
 
-const CI_CHANGED_SINCE_ENV = Object.freeze({
-  SPOONJOY_CHANGED_SINCE: "${{ github.event.pull_request.base.sha }}",
-});
 
 const CI_OSV_SCANNER_ENV = Object.freeze({
   OSV_SCANNER_VERSION: "v2.3.8",
@@ -778,20 +780,16 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
         commands.includes(`${WARNING_GATE_COMMAND_PREFIX}mkdir -p .cache/osv-scanner`);
       const isDisposableCleanupStep =
         commands.length === 1 && commands[0] === CI_DISPOSABLE_CLEANUP_COMMAND;
-      // unit-changed's affected-tests step reads the base SHA from the event through env, never by
-      // interpolating it into the shell.
-      const isChangedSinceStep = jobName === "unit-changed" && step.env !== undefined;
       if (
         !exactObjectKeys(
           step,
-          isOsvInstallStep || isChangedSinceStep
+          isOsvInstallStep
             ? ["name", "env", "run"]
             : isDisposableCleanupStep
               ? ["name", "if", "run"]
               : ["name", "run"],
         ) ||
         (isOsvInstallStep && !exactWorkflowRecord(step.env, CI_OSV_SCANNER_ENV)) ||
-        (isChangedSinceStep && !exactWorkflowRecord(step.env, CI_CHANGED_SINCE_ENV)) ||
         (isDisposableCleanupStep && (
           step.name !== "🧹 Cleanup local disposable data" || step.if !== "always()"
         )) ||
