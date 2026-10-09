@@ -24,7 +24,8 @@
 // while it runs, and a copy would let cleanup delete R2 objects shared QA still references.
 //
 // How the rest of the workflow follows: `prepare` rewrites this CI checkout's wrangler.json
-// `env.qa` (Worker name, D1 binding, SPOONJOY_BASE_URL) and the generated build/server/wrangler.json
+// `env.qa` (Worker name, D1 binding, SPOONJOY_BASE_URL, plus SPOONJOY_QA_ERROR_LOGS=1, which only a
+// per-run Worker carries) and the generated build/server/wrangler.json
 // to the run's identity, after the QA preflight has checked both against the shared QA identity.
 // Every later `--env qa` command (migrations, deploy, seed, rotate, cleanup) then targets the
 // run's own stack with no other change. Only identity fields change; anything else differing is
@@ -179,10 +180,18 @@ function assertCanonicalQa(section, where) {
   }
 }
 
+// The run's own Worker writes each loader or action error as one scrubbed console.error line
+// (app/lib/qa-error-logs.server.ts) for the Journeys tail summary. Only this rewrite sets it, so
+// shared QA and production never log errors to the console.
+export const QA_ERROR_LOGS_VAR = "SPOONJOY_QA_ERROR_LOGS";
+
 function withRunIdentity(section, identity, databaseId) {
+  if (section.vars && QA_ERROR_LOGS_VAR in section.vars) {
+    throw new Error(`The shared QA config already sets ${QA_ERROR_LOGS_VAR}; only a per-run Worker may set it.`);
+  }
   const next = structuredClone(section);
   next.name = identity.workerName;
-  next.vars = { ...next.vars, SPOONJOY_BASE_URL: identity.baseUrl };
+  next.vars = { ...next.vars, SPOONJOY_BASE_URL: identity.baseUrl, [QA_ERROR_LOGS_VAR]: "1" };
   const db = d1Binding(next, "rewritten config");
   db.database_name = identity.databaseName;
   db.database_id = databaseId;
@@ -193,7 +202,10 @@ function withRunIdentity(section, identity, databaseId) {
 function withoutIdentity(section) {
   const copy = structuredClone(section);
   delete copy.name;
-  if (copy.vars) delete copy.vars.SPOONJOY_BASE_URL;
+  if (copy.vars) {
+    delete copy.vars.SPOONJOY_BASE_URL;
+    delete copy.vars[QA_ERROR_LOGS_VAR];
+  }
   for (const entry of copy.d1_databases ?? []) {
     if (entry?.binding === "DB") {
       delete entry.database_name;

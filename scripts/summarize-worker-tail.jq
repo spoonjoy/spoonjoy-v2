@@ -37,6 +37,8 @@ def request_path:
 # query strings and fragments (a URL keeps its host and path), email addresses, cookie-shaped
 # name=value pairs and long base64- or hex-looking strings. Line breaks become spaces. Capped at
 # $cap characters, after scrubbing, so a cut can never expose part of a secret.
+# app/lib/qa-error-logs.server.ts repeats these rules in TypeScript for the QA Worker's own error
+# log line; test/lib/qa-error-logs.server.test.ts keeps the two identical.
 def scrub($cap):
   tostring
   | gsub("\"[^\"]+\""; "\"[redacted]\"")
