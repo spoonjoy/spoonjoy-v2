@@ -1,4 +1,5 @@
 const SERVER_ONLY_ROUTE_CHUNKS = new Set([
+  "account.export",
   "api._",
   "api.developer",
   "api.developer._",
