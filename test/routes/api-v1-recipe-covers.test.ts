@@ -9,6 +9,8 @@ import {
   FOOD_IMAGE_TYPE_MESSAGE,
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
+import * as recipeCoverModule from "~/lib/recipe-cover.server";
+import * as recipeCoverServiceModule from "~/lib/recipe-cover-service.server";
 import * as recipeSpoonModule from "~/lib/recipe-spoon.server";
 import { SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -883,6 +885,135 @@ describe("API v1 recipe cover management", () => {
       await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
     } finally {
       db.recipeCover.deleteMany = originalDeleteMany;
+    }
+  });
+
+  // A Worker that dies mid-upload never cleans up and never releases its key, so every retry
+  // used to wait out the key's 24-hour lifetime. Past the abandonment cutoff, a retry undoes
+  // what the dead upload left and releases the key; the next retry uploads afresh.
+  it.each([
+    ["storing the photo", "photo"],
+    ["posting the spoon", "spoon"],
+    ["activating the cover", "activation"],
+  ] as const)("releases an upload abandoned while %s, so a later retry uploads afresh", async (_step, deathPoint) => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    // The first upload's Worker "dies" at this step: it never continues.
+    let reached = false;
+    const hang = () => {
+      reached = true;
+      return new Promise<never>(() => undefined);
+    };
+    if (deathPoint === "photo") vi.mocked(photoBucket.bucket.put).mockImplementationOnce(hang);
+    if (deathPoint === "spoon") vi.spyOn(recipeSpoonModule, "createSpoon").mockImplementationOnce(hang);
+    if (deathPoint === "activation") vi.spyOn(recipeCoverModule, "setActiveRecipeCover").mockImplementationOnce(hang);
+    const body = {
+      clientMutationId: `upload-abandoned-at-${deathPoint}`,
+      photo: photoFile(`abandoned-${deathPoint}.png`),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+      note: "Posted dinner",
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    void upload(`req_upload_abandoned_${deathPoint}_first`);
+    await vi.waitFor(() => expect(reached).toBe(true));
+    const leftCovers = await db.recipeCover.findMany({ where: { recipeId: fixture.recipe.id }, select: { id: true } });
+    expect(leftCovers).toHaveLength(deathPoint === "photo" ? 0 : 1);
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(deathPoint === "activation" ? 1 : 0);
+
+    // Still young: the retry waits.
+    const young = await upload(`req_upload_abandoned_${deathPoint}_young`);
+    expect(young.status).toBe(409);
+
+    await db.apiIdempotencyKey.updateMany({
+      where: { key: body.clientMutationId },
+      data: { createdAt: new Date(Date.now() - 6 * 60_000) },
+    });
+    const release = await upload(`req_upload_abandoned_${deathPoint}_release`);
+    expect(release.status).toBe(409);
+    await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    await expect(db.apiIdempotencyKey.count({ where: { key: body.clientMutationId } })).resolves.toBe(0);
+    // The dead upload's stored photo is deleted too.
+    await vi.waitFor(() => expect(photoBucket.keys.size).toBe(0));
+
+    const fresh = await upload(`req_upload_abandoned_${deathPoint}_fresh`);
+    expect(fresh.status).toBe(201);
+    const payload = await readJson(fresh);
+    expect(payload.data).toMatchObject({ spoon: { id: expect.any(String) }, activeCover: { id: payload.data.createdCover.id } });
+    expect(leftCovers.map((cover) => cover.id)).not.toContain(payload.data.createdCover.id);
+  });
+
+  it("does not answer an upload as committed when a step after its marker fails and its cleanup fails too", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const queueError = new Error("queue failed");
+    vi.spyOn(recipeCoverServiceModule, "scheduleRecipeCoverStylization").mockRejectedValue(queueError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_upload_after_marker_fails",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: { name: queueError.name, message: queueError.message, stack: queueError.stack },
+    });
+    const originalDeleteMany = db.recipeCover.deleteMany;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValue(new Error("cleanup failed")) as unknown as typeof db.recipeCover.deleteMany;
+    const body = {
+      clientMutationId: "upload-after-marker-fails",
+      photo: photoFile("after-marker.png"),
+      activate: true,
+      generateEditorial: true,
+      postAsSpoon: true,
+    };
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_upload_after_marker_fails", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(db.apiMutationTombstone.count()).resolves.toBe(0);
+    } finally {
+      db.recipeCover.deleteMany = originalDeleteMany;
+    }
+  });
+
+  it("keeps the upload whole, and answers it as done, when a step after its marker fails and the marker cannot be removed", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    vi.spyOn(recipeCoverServiceModule, "scheduleRecipeCoverStylization").mockRejectedValue(new Error("queue failed"));
+    expectConsoleError("[api-v1] write_finished_unmark_failed", { operation: "recipes.image.upload", error: "unmark failed" });
+    const originalDeleteMany = db.apiMutationTombstone.deleteMany;
+    db.apiMutationTombstone.deleteMany = vi.fn().mockRejectedValue(new Error("unmark failed")) as unknown as typeof db.apiMutationTombstone.deleteMany;
+    const body = {
+      clientMutationId: "upload-unmark-fails",
+      photo: photoFile("unmark-fails.png"),
+      activate: true,
+      generateEditorial: true,
+      postAsSpoon: true,
+    };
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_upload_unmark_fails", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(201);
+      const payload = await readJson(response);
+      expect(payload.data).toMatchObject({ spoon: { id: expect.any(String) }, activeCover: { id: payload.data.createdCover.id } });
+      await expect(db.recipeCover.count({ where: { id: payload.data.createdCover.id } })).resolves.toBe(1);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+    } finally {
+      db.apiMutationTombstone.deleteMany = originalDeleteMany;
     }
   });
 

@@ -2370,12 +2370,18 @@ async function recoverRecipeImageUpload(
     recipeId: string;
     clientMutationId: string;
     record: ApiIdempotencyKey;
+    attempt: ApiV1RecoveryAttempt;
   },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
   // Without the marker the upload may have stopped (or may still be running) before its spoon,
   // activation or job: the cover row alone is not an upload.
-  if (!await writeFinished(input.db, input.record, WRITE_FINISHED_RESOURCE.recipeImageUpload, input.record.id)) return null;
+  if (!await writeFinished(input.db, input.record, WRITE_FINISHED_RESOURCE.recipeImageUpload, input.record.id)) {
+    const abandoned = !input.attempt.stopped
+      && Date.now() - input.record.createdAt.getTime() >= ABANDONED_UPLOAD_AFTER_MS;
+    if (abandoned) await releaseAbandonedRecipeImageUpload(args, input);
+    return null;
+  }
   const cover = await input.db.recipeCover.findFirst({
     where: {
       id: input.record.id,
@@ -2398,6 +2404,31 @@ async function recoverRecipeImageUpload(
       previousActiveCover: null,
     }),
   };
+}
+
+/**
+ * An upload that stopped before its marker and never cleaned up after itself (its Worker died)
+ * would hold its key in flight for the key's whole lifetime. Undo what it left, as its own
+ * cleanup would have, and release the key, so the client's next retry runs the upload afresh.
+ * Its cover id is the key's id. The recipe's earlier active cover is not known here, so if the
+ * stopped upload had activated its cover, the recipe is left with no active cover.
+ */
+async function releaseAbandonedRecipeImageUpload(
+  args: ApiV1RouteArgs,
+  input: { db: ApiV1Db; principal: ApiPrincipal; recipeId: string; record: ApiIdempotencyKey },
+) {
+  const cover = await input.db.recipeCover.findFirst({
+    where: { id: input.record.id, recipeId: input.recipeId, createdById: input.principal.id },
+    select: { imageUrl: true, sourceSpoonId: true },
+  });
+  if (cover) {
+    await input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } }).catch(() => undefined);
+    if (cover.sourceSpoonId) {
+      await input.db.recipeSpoon.deleteMany({ where: { id: cover.sourceSpoonId, recipeId: input.recipeId } }).catch(() => undefined);
+    }
+    await cleanupUploadedRecipeImageObject(args, input.principal, cover.imageUrl);
+  }
+  await input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } });
 }
 
 async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
@@ -2453,6 +2484,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
     let uploadedImageUrl: string | null = null;
     let createdCoverId: string | null = null;
     let createdSpoonId: string | null = null;
+    let finishedMarked = false;
 
     try {
       uploadedImageUrl = await storeImage({
@@ -2509,7 +2541,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
 
       // Last, just before the job is queued: queueing hands the job to waitUntil without I/O, and
       // a marker written after it would let the job run ahead of the response's read of the cover.
-      await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeImageUpload, createdCover.id);
+      finishedMarked = await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeImageUpload, createdCover.id);
       if (generateEditorial) {
         await queueApiRecipeCoverStylization(args, {
           db,
@@ -2543,6 +2575,11 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         }),
       };
     } catch (error) {
+      // A step after the marker failed. Undo the marker before undoing the upload; if the marker
+      // cannot be removed, keep the upload whole, so recovery's answer that it is done stays true.
+      if (finishedMarked && !await unmarkWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeImageUpload)) {
+        throw error;
+      }
       if (uploadedImageUrl) {
         await cleanupRecipeImageUploadRows(db, { recipe, coverId: createdCoverId, spoonId: createdSpoonId });
         await cleanupUploadedRecipeImageObject(args, principal, uploadedImageUrl);
@@ -2550,12 +2587,13 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
       throw error;
     }
   }, {
-    recoverInFlight: async (db, record) => recoverRecipeImageUpload(args, {
+    recoverInFlight: async (db, record, attempt) => recoverRecipeImageUpload(args, {
       db,
       principal,
       recipeId,
       clientMutationId,
       record,
+      attempt,
     }),
   });
 }
@@ -5482,6 +5520,17 @@ const WRITE_FINISHED_RESOURCE = {
 export const UNFINISHED_WRITE_STOPPED_AFTER_MS = 30_000;
 
 /**
+ * How long after its reservation an unfinished upload is taken to be abandoned. An upload runs
+ * inside its request, not in waitUntil, so it gets far longer than 30 seconds before its rows are
+ * undone: releasing a live upload would let its own later cleanup overwrite the retry's cover.
+ */
+export const ABANDONED_UPLOAD_AFTER_MS = 5 * 60_000;
+
+function markerErrorLine(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).split("\n")[0];
+}
+
+/**
  * Records that a multi-step write finished. A failed marker never fails the write: every step
  * has happened, so the answer is still true. Recovery, needed only if saving the response fails
  * as well, then treats the write as unfinished.
@@ -5491,7 +5540,7 @@ async function markWriteFinished(
   reservation: ApiIdempotencyKey,
   marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
   resourceId: string,
-) {
+): Promise<boolean> {
   try {
     await db.apiMutationTombstone.create({
       data: {
@@ -5501,11 +5550,68 @@ async function markWriteFinished(
         resourceId,
       },
     });
+    return true;
   } catch (error) {
     console.error("[api-v1] write_finished_mark_failed", {
       operation: marker.operation,
-      error: (error instanceof Error ? error.message : String(error)).split("\n")[0],
+      error: markerErrorLine(error),
     });
+    return false;
+  }
+}
+
+/**
+ * Removes a finished marker when a step after it failed and the write is being undone, so
+ * recovery does not answer the undone write as done. Returns false, and logs, if it could not.
+ */
+async function unmarkWriteFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+): Promise<boolean> {
+  try {
+    await db.apiMutationTombstone.deleteMany({
+      where: { idempotencyKeyId: reservation.id, operation: marker.operation, resourceType: marker.resourceType },
+    });
+    return true;
+  } catch (error) {
+    console.error("[api-v1] write_finished_unmark_failed", {
+      operation: marker.operation,
+      error: markerErrorLine(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Claims the finished marker for a recovery that is about to finish the write itself. Only one
+ * claim can succeed, because the marker is unique per key, resource type and resource: a
+ * recovery that loses the race leaves the work to the winner. A claim that fails for any other
+ * reason is logged, and recovery goes ahead without the marker.
+ */
+async function claimWriteFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+): Promise<"claimed" | "taken" | "unmarked"> {
+  try {
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: reservation.id,
+        operation: marker.operation,
+        resourceType: marker.resourceType,
+        resourceId,
+      },
+    });
+    return "claimed";
+  } catch (error) {
+    if (isPrismaErrorCode(error, "P2002")) return "taken";
+    console.error("[api-v1] write_finished_mark_failed", {
+      operation: marker.operation,
+      error: markerErrorLine(error),
+    });
+    return "unmarked";
   }
 }
 
@@ -5557,10 +5663,12 @@ async function recoverNativeRecipeCreate(
   if (!await writeFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id)) {
     // The recipe committed, but its placeholder may never have been scheduled. While the first
     // attempt may still be running (it schedules right after its commit), the retry waits; once
-    // it has stopped, recovery schedules the placeholder itself, so the answer is true.
+    // it has stopped, recovery schedules the placeholder itself, so the answer is true. Recovery
+    // claims the marker first, so two late retries never both schedule (each run spends quota).
     const stopped = attempt.stopped || Date.now() - reservation.createdAt.getTime() >= UNFINISHED_WRITE_STOPPED_AFTER_MS;
     if (!stopped) return null;
-    const placeholder = await db.recipeCover.findFirst({
+    const claim = await claimWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id);
+    const placeholder = claim === "taken" ? null : await db.recipeCover.findFirst({
       where: { recipeId: reservation.id, sourceType: "ai-placeholder", generationStatus: "processing" },
       select: { id: true },
     });
@@ -5573,7 +5681,6 @@ async function recoverNativeRecipeCreate(
         description: input.description,
       });
     }
-    await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id);
   }
   return {
     status: 201,

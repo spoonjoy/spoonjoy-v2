@@ -524,6 +524,22 @@ describe("API v1 recipe write mutations", () => {
       expect(placeholder).toHaveBeenCalledTimes(1);
     });
 
+    it("schedules the placeholder once when two retries recover the same stopped create at the same time", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const { body, reservation } = await committedCreateWithoutSchedule(fixture, "recipe-create-two-recoveries");
+      await db.apiIdempotencyKey.update({ where: { id: reservation.id }, data: { createdAt: new Date(Date.now() - 60_000) } });
+
+      const [one, two] = await Promise.all([
+        action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_two_recoveries_one", body), "recipes")),
+        action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_two_recoveries_two", body), "recipes")),
+      ]);
+
+      expect([one.status, two.status]).toEqual([201, 201]);
+      // Each run spends a quota unit and a provider call, so only one recovery may schedule.
+      expect(placeholder).toHaveBeenCalledTimes(1);
+    });
+
     it("recovers a finished create without scheduling its placeholder again", async () => {
       const fixture = await createRecipeWriteFixture(db);
       const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
