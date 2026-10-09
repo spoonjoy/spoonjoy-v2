@@ -40,6 +40,7 @@ export const RECIPE_COVER_DISPLAY_SELECT = {
   createdById: true,
   sourceImageUrl: true,
   generationStatus: true,
+  generationStartedAt: true,
   failureReason: true,
   promptVersion: true,
   styleVersion: true,

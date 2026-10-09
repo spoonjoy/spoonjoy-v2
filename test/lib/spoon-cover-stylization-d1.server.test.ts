@@ -55,6 +55,8 @@ async function state(seeded: Awaited<ReturnType<typeof seed>>) {
     promptAddition: cover.promptAddition,
     parentCoverId: cover.parentCoverId === null ? null : "set",
     archived: cover.archivedAt !== null,
+    // Marking the cover processing restarts the clock that decides when it counts as stopped.
+    generationStarted: cover.generationStartedAt !== null && cover.generationStartedAt.getTime() > OLD.getTime(),
     recipeTouched: recipe.updatedAt.getTime() > OLD.getTime(),
     cookbookTouched: cookbook.updatedAt.getTime() > OLD.getTime(),
   };
@@ -123,6 +125,7 @@ describe("cover stylization on a D1 binding", () => {
       stylized: "/photos/covers/1234-<uuid>.png",
       promptAddition: "keep the plate",
       parentCoverId: "set",
+      generationStarted: true,
       recipeTouched: true,
       cookbookTouched: true,
     });

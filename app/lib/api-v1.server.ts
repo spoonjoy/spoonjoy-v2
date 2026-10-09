@@ -1,4 +1,5 @@
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
+import { prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
 import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
@@ -1582,9 +1583,9 @@ function coverMutationError(error: unknown, coverId: string): ApiV1Error {
 
 async function activeFullCoverPayload(db: ApiV1Db, recipe: RecipeCoverOwnerRow, origin: string) {
   if (!recipe.activeCoverId) return null;
-  const cover = await db.recipeCover.findFirst({
+  const [cover] = await settleStuckCoverGenerations(prismaStuckCoverStore(db), recipe.id, [await db.recipeCover.findFirst({
     where: { id: recipe.activeCoverId, recipeId: recipe.id },
-  });
+  })]);
   return cover ? fullCoverPayload(cover, recipe, origin) : null;
 }
 
@@ -2556,7 +2557,8 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
   const limit = parseListLimit(url);
   const offset = parseCoverOffset(url);
   const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-  const covers = await db.recipeCover.findMany({
+  // A generation whose job died reads as failed, not processing forever.
+  const covers = await settleStuckCoverGenerations(prismaStuckCoverStore(db), recipeId, await db.recipeCover.findMany({
     where: {
       recipeId,
       ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
@@ -2564,7 +2566,7 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     skip: offset,
-  });
+  }));
   const page = covers.slice(0, limit);
   const spoonImages = await db.recipeSpoon.findMany({
     where: {
@@ -2863,6 +2865,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
       data: {
         status: "processing",
         generationStatus: "processing",
+        generationStartedAt: new Date(),
         failureReason: null,
         sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
         promptAddition,

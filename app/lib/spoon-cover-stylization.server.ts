@@ -239,6 +239,7 @@ type StylizationCoverFields = {
   generationStatus: string;
   failureReason: string | null;
   stylizedImageUrl?: string;
+  generationStartedAt?: Date;
 };
 
 // Prisma's `status: { not: "archived" }, archivedAt: null` on the cover.
@@ -264,6 +265,7 @@ async function updateStylizationCoverOnD1(
     ...(fields.stylizedImageUrl !== undefined ? { stylizedImageUrl: fields.stylizedImageUrl } : {}),
     status: fields.status,
     generationStatus: fields.generationStatus,
+    ...(fields.generationStartedAt !== undefined ? { generationStartedAt: d1Timestamp(fields.generationStartedAt) } : {}),
     failureReason: fields.failureReason,
     promptVersion: STYLIZATION_PROMPT_VERSION,
     styleVersion: STYLIZATION_STYLE_VERSION,
@@ -337,6 +339,7 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
   return updateStylizationCover(input, {
     status: "processing",
     generationStatus: "processing",
+    generationStartedAt: new Date(),
     failureReason: null,
   });
 }

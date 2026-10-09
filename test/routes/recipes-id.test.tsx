@@ -482,6 +482,8 @@ describe("Recipes $id Route", () => {
           status: "processing",
           generationStatus: "processing",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          // Regenerated just now, so it is still a live generation rather than a stuck one.
+          generationStartedAt: new Date(),
         },
       });
       await db.recipe.update({
@@ -510,6 +512,45 @@ describe("Recipes $id Route", () => {
       });
     });
 
+    it("shows an active cover whose generation stopped long ago as failed, not processing", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const headers = new Headers({ Cookie: setCookieHeader.split(";")[0] });
+      // Its job's Worker died: the editorial pass started an hour ago and never finished.
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          sourceImageUrl: "/photos/detail-raw.jpg",
+          sourceType: "spoon",
+          status: "processing",
+          generationStatus: "processing",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          generationStartedAt: new Date(Date.now() - 60 * 60_000),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: activeCover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      // The raw photo stays the cover; only the editorial pass failed.
+      expect(result.coverImageUrl).toBe("/photos/detail-raw.jpg");
+      expect(result.activeCoverProcessing).toBeNull();
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: activeCover.id } })).resolves.toMatchObject({
+        status: "ready",
+        generationStatus: "failed",
+        failureReason: "Generation stopped before it finished.",
+      });
+    });
+
     it("tracks generation-status-only processing and omits ready active covers", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
@@ -524,6 +565,8 @@ describe("Recipes $id Route", () => {
           status: "ready",
           generationStatus: "processing",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          // Regenerated just now, so it is still a live generation rather than a stuck one.
+          generationStartedAt: new Date(),
         },
       });
       await db.recipe.update({
@@ -1813,6 +1856,8 @@ describe("Recipes $id Route", () => {
           failureReason: null,
           promptAddition: "less shadow more basil",
           parentCoverId: cover.id,
+          // Regeneration restarts the clock that decides when a generation counts as stopped.
+          generationStartedAt: expect.any(Date),
         });
       await expect(
         db.recipe.findUniqueOrThrow({
