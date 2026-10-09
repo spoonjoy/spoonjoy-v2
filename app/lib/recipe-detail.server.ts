@@ -240,15 +240,12 @@ export interface RecipeNotFoundData {
 // A recipe link can outlive its recipe. The page says whether the recipe was deleted (product audit
 // 2026-10-09, finding 20). It reads only the deletion time: naming the chef would need to know the
 // recipe was public when it was deleted, and nothing records that yet.
-async function recipeNotFoundResponse(context: RecipeDetailRouteArgs["context"], id: string | undefined): Promise<Response> {
-  let deleted = false;
-  if (id) {
-    const d1 = requestD1(context);
-    const row = d1
-      ? ((await d1ReadBatch(d1, [['SELECT "deletedAt" FROM "Recipe" WHERE "id" = ? LIMIT 1', id]]))[0][0] as { deletedAt: unknown } | undefined)
-      : await (await getRequestDb(context)).recipe.findUnique({ where: { id }, select: { deletedAt: true } });
-    deleted = row !== undefined && row !== null && row.deletedAt !== null && row.deletedAt !== undefined;
-  }
+async function recipeNotFoundResponse(context: RecipeDetailRouteArgs["context"], id: string): Promise<Response> {
+  const d1 = requestD1(context);
+  const row = d1
+    ? ((await d1ReadBatch(d1, [['SELECT "deletedAt" FROM "Recipe" WHERE "id" = ? LIMIT 1', id]]))[0][0] as { deletedAt: unknown } | undefined)
+    : await (await getRequestDb(context)).recipe.findUnique({ where: { id }, select: { deletedAt: true } });
+  const deleted = row !== undefined && row !== null && row.deletedAt !== null && row.deletedAt !== undefined;
   const body: RecipeNotFoundData = { message: "Recipe not found", deleted };
   return Response.json(body, { status: 404 });
 }
