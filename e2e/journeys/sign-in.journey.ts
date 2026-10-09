@@ -12,7 +12,7 @@ test.describe("Sign-in", () => {
     await expectAccessible();
     await page.getByLabel("Username or email").fill(chef.username);
     await fillSecret(page.getByLabel("Password"), chef.password);
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
     await expectAccessible();
     await verifyAfterReload(async () => {
@@ -27,7 +27,7 @@ test.describe("Sign-in", () => {
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(chef.email.toUpperCase());
     await fillSecret(page.getByLabel("Password"), chef.password);
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
   });
 
@@ -46,7 +46,7 @@ test.describe("Sign-in", () => {
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(persona("friend").username);
     await fillSecret(page.getByLabel("Password"), new Secret("definitely-not-the-password"));
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page.getByText("Invalid username, email, or password")).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
   });

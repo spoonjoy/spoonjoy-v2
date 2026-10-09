@@ -241,7 +241,7 @@ test.describe("Account settings", () => {
     await waitForHydration(page);
     await page.getByLabel("Username or email", { exact: true }).fill(newName);
     await fillSecret(page.getByLabel("Password", { exact: true }), newPassword);
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(pathUrl(SETTINGS));
     await expect(userInfo(page)).toContainText(newName);
 
