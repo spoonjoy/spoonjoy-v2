@@ -1,4 +1,5 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { env } from "cloudflare:test";
+import { trackedExecutionContext } from "./execution-contexts";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -131,7 +132,7 @@ function routeContext(DB: D1Database = database()) {
   const routeEnv = new Proxy(env as object, {
     get: (target, property, receiver) => (property === "DB" ? DB : Reflect.get(target, property, receiver)),
   });
-  return { cloudflare: { env: routeEnv, ctx: createExecutionContext() } };
+  return { cloudflare: { env: routeEnv, ctx: trackedExecutionContext() } };
 }
 
 async function webAddRecipe(recipeId: string, scaleFactor: string, DB?: D1Database) {

@@ -1,4 +1,5 @@
-import { SELF, createExecutionContext, env } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
+import { trackedExecutionContext } from "./helpers/execution-contexts";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { action as legacyApiAction } from "../../app/routes/api.$";
@@ -295,7 +296,7 @@ function routeContext(databaseOverride?: TestD1Database) {
         },
       })
     : env;
-  return { cloudflare: { env: routeEnv, ctx: createExecutionContext() } };
+  return { cloudflare: { env: routeEnv, ctx: trackedExecutionContext() } };
 }
 
 async function expectRetryHeaders(response: Response) {
