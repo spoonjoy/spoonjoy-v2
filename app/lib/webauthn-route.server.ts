@@ -28,6 +28,8 @@ import {
 } from "~/lib/webauthn.server";
 import type { AuthTelemetry } from "~/lib/auth-telemetry.server";
 import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 
 const WEBAUTHN_FAILURE_EVENT = "spoonjoy.webauthn.failure";
 
@@ -247,12 +249,81 @@ export async function startAuthentication(
   }
 }
 
+interface SignInWrite {
+  userId: string;
+  credentialId: string;
+  /** The exact challenge the assertion was verified against. */
+  challenge: string;
+  newCounter: number;
+}
+
+/**
+ * The counter rule from WebAuthn: a signature counter only moves forward, except that an
+ * authenticator that does not count reports 0 every time.
+ */
+const COUNTER_ADVANCES = `("counter" < ? OR (? = 0 AND "counter" = 0))`;
+
+/**
+ * One D1 batch, so the counter rotation and the challenge clear apply together or not at
+ * all. The guards stop the batch when the challenge was already consumed (or replaced) or
+ * the stored counter has caught up with this assertion's; returns false then.
+ */
+async function completeSignInOnD1(d1: D1ReadDatabase, write: SignInWrite): Promise<boolean> {
+  try {
+    await d1WriteBatch(d1, [
+      d1Guard(`EXISTS (SELECT 1 FROM "User" WHERE "id" = ? AND "webAuthnChallenge" = ?)`, write.userId, write.challenge),
+      d1Guard(
+        `EXISTS (SELECT 1 FROM "UserCredential" WHERE "id" = ? AND "userId" = ? AND ${COUNTER_ADVANCES})`,
+        write.credentialId,
+        write.userId,
+        write.newCounter,
+        write.newCounter,
+      ),
+      [`UPDATE "UserCredential" SET "counter" = ? WHERE "id" = ?`, write.newCounter, write.credentialId],
+      [
+        `UPDATE "User" SET "webAuthnChallenge" = NULL, "updatedAt" = ? WHERE "id" = ? AND "webAuthnChallenge" = ?`,
+        d1Timestamp(new Date()),
+        write.userId,
+        write.challenge,
+      ],
+    ]);
+    return true;
+  } catch (error) {
+    if (isD1GuardFailure(error)) return false;
+    throw error;
+  }
+}
+
+/**
+ * Without a D1 binding (unit tests, scripts) the two writes cannot share a transaction.
+ * Each is conditional on the same rules, and the challenge is consumed first, so a
+ * failure in between leaves the challenge spent and the sign-in failed rather than a
+ * challenge that can be presented again.
+ */
+async function completeSignInWithPrisma(db: PrismaClient, write: SignInWrite): Promise<boolean> {
+  const consumed = await db.user.updateMany({
+    where: { id: write.userId, webAuthnChallenge: write.challenge },
+    data: { webAuthnChallenge: null },
+  });
+  if (consumed.count !== 1) return false;
+  const rotated = await db.userCredential.updateMany({
+    where: {
+      id: write.credentialId,
+      userId: write.userId,
+      counter: write.newCounter === 0 ? 0n : { lt: BigInt(write.newCounter) },
+    },
+    data: { counter: BigInt(write.newCounter) },
+  });
+  return rotated.count === 1;
+}
+
 export async function finishAuthentication(
   db: PrismaClient,
   email: string,
   config: WebAuthnConfig,
   response: AuthenticationResponseJSON,
   telemetry?: AuthTelemetry,
+  d1?: D1ReadDatabase | null,
 ): Promise<{ verified: true; userId: string; sessionVersion: number }> {
   let user;
   let credentialRow;
@@ -315,21 +386,32 @@ export async function finishAuthentication(
     throw new WebAuthnError("Authentication could not be verified", 400);
   }
 
-  // Rotate the signature counter and clear the one-time challenge.
+  // Rotate the signature counter and consume the one-time challenge, only if the
+  // challenge is still the one this assertion was verified against and the counter
+  // still moves forward. Otherwise a concurrent submission of the same assertion (or
+  // another sign-in with this authenticator) got there first: fail this sign-in.
+  const signIn = {
+    userId: user.id,
+    credentialId: credentialRow.id,
+    challenge: user.webAuthnChallenge,
+    newCounter: verification.authenticationInfo.newCounter,
+  };
+  let applied: boolean;
   try {
-    await db.userCredential.update({
-      where: { id: credentialRow.id },
-      data: { counter: BigInt(verification.authenticationInfo.newCounter) },
-    });
-    await db.user.update({
-      where: { id: user.id },
-      data: { webAuthnChallenge: null },
-    });
+    applied = d1 ? await completeSignInOnD1(d1, signIn) : await completeSignInWithPrisma(db, signIn);
   } catch (error) {
     // The assertion verified but rotating the counter / clearing the challenge
     // failed — a silent fault that can replay-block or strand the login.
     captureWebAuthnUnexpected(telemetry, error, "authenticate_verify", distinctId);
     throw error;
+  }
+  if (!applied) {
+    telemetry?.captureEvent(WEBAUTHN_FAILURE_EVENT, distinctId, {
+      surface: "webauthn",
+      phase: "authenticate_verify",
+      outcome: "challenge_or_counter_stale",
+    });
+    throw new WebAuthnError("Authentication could not be completed", 400);
   }
 
   return { verified: true, userId: user.id, sessionVersion: user.sessionVersion };
