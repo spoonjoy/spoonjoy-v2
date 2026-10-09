@@ -38,8 +38,8 @@
       "packageName": "sprintf-js",
       "version": "1.0.3",
       "ecosystem": "npm",
-      "reason": "Tooling-only residual through argparse 1 and js-yaml 3 in the Jest and coverage test graph; no fixed sprintf-js release exists yet (1.1.3 is the latest and is still affected), and the production Worker neither bundles this package nor formats user-supplied precision specifiers with it.",
-      "expiresOn": "2026-10-14"
+      "reason": "Tooling-only residual through @istanbuljs/load-nyc-config -> js-yaml 3 -> argparse 1 in the Jest coverage graph; no fixed sprintf-js release exists (OSV marks 1.1.3, the latest, as last affected; re-checked 2026-10-09). js-yaml 4 cannot be forced because load-nyc-config calls safeLoad, which js-yaml 4 removed. The production Worker neither bundles this package nor formats user-supplied precision specifiers with it.",
+      "expiresOn": "2026-10-24"
     }
   ]
 }
