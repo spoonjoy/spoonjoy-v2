@@ -86,7 +86,7 @@ expect.extend({
 });
 import { mockAnimationsApi } from "jsdom-testing-mocks";
 import { getLocalDb } from "~/lib/db.server";
-import { workerDatabaseUrl } from "./support/worker-db";
+import { prepareWorkerDb, workerDatabaseUrl } from "./support/worker-db";
 
 // Mock animations API for HeadlessUI components when a DOM is available.
 if (typeof window !== "undefined") {
@@ -106,7 +106,7 @@ global.ResizeObserver = MockResizeObserver;
 global.confirm = vi.fn(() => true);
 
 // Mock environment variables
-process.env.DATABASE_URL = workerDatabaseUrl();
+process.env.DATABASE_URL = workerDatabaseUrl(prepareWorkerDb());
 process.env.SESSION_SECRET = "test-secret";
 
 // Mock Cloudflare context

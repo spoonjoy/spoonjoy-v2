@@ -1,13 +1,10 @@
-import { copyFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { rmSync } from "node:fs";
 
-// Copy the schema-initialised prisma/test.db into one file per worker slot before the run,
-// so every worker starts from the same empty schema and never shares a SQLite file.
-export default function setup(): void {
-  const template = resolve(__dirname, "../../prisma/test.db");
-  if (!existsSync(template)) return;
-  const workers = Number(process.env.VITEST_DB_WORKERS ?? 8);
-  for (let id = 1; id <= workers; id += 1) {
-    copyFileSync(template, resolve(__dirname, `../../prisma/test-${id}.db`));
-  }
+// vitest.config.ts creates SPOONJOY_TEST_DB_DIR for this run's per-process database copies
+// (see test/support/worker-db.ts); remove it once every worker has exited.
+export default function setup(): () => void {
+  return () => {
+    const dir = process.env.SPOONJOY_TEST_DB_DIR;
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  };
 }

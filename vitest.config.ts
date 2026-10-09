@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig } from "vitest/config";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
@@ -56,7 +59,9 @@ const hasFocusedTestFilter = process.argv.some((arg) =>
 const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 
 const dbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
-process.env.VITEST_DB_WORKERS = String(dbWorkers);
+// One temporary directory per run for each worker process's own copy of prisma/test.db
+// (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly.
+process.env.SPOONJOY_TEST_DB_DIR ??= mkdtempSync(join(tmpdir(), "spoonjoy-vitest-db-"));
 
 export default defineConfig({
   test: {
@@ -64,8 +69,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./test/setup.ts"],
     pool: "forks",
-    // DB-backed tests run in parallel: test/support/global-setup.ts copies prisma/test.db to
-    // prisma/test-<n>.db and test/setup.ts points each worker at its own file (VITEST_POOL_ID).
+    // DB-backed tests run in parallel: test/setup.ts gives each worker process its own copy of
+    // prisma/test.db (test/support/worker-db.ts); the global setup removes the copies afterwards.
     globalSetup: ["./test/support/global-setup.ts"],
     maxWorkers: dbWorkers,
     fileParallelism: true,
