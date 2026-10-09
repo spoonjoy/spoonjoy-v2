@@ -137,6 +137,7 @@
         "COOK_SESSION_BOOTSTRAP_MODE": "1",
         "COOK_SESSION_PROTOCOL": "v1",
         "SPOONJOY_CSP_MODE": "enforce",
+        "SPOONJOY_EMAIL_MODE": "capture",
         "VITE_POSTHOG_HOST": "https://us.i.posthog.com"
       }
     }
