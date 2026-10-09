@@ -362,11 +362,9 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
     token_type: "Bearer",
+    expires_in: tokens.expiresIn,
     scope: tokens.scope,
   };
-  if (tokens.expiresIn !== null) {
-    payload.expires_in = tokens.expiresIn;
-  }
 
   return Response.json(payload, {
     headers: {

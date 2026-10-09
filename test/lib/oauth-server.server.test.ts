@@ -780,10 +780,21 @@ describe("connector token issuance + rotation", () => {
         .rejects.toMatchObject({ refusal: "grace_replay" });
       await expect(accessWorks(attacker.accessToken, at(native))).resolves.toBe(true);
 
-      // After it, the replay is reuse and the attacker's session ends.
-      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: nativeClientId, now: at(native + 2) }))
+      // The first token was rotated at at(1): a replay exactly at the end of the window is still
+      // a race, and one second later it is reuse that ends the attacker's session. (The attacker's
+      // 15-minute access token has run out by then, so the grant and refresh token show it.)
+      const attackerRefresh = { tokenHash: await hashOAuthOpaqueToken(attacker.refreshToken) };
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: nativeClientId, now: at(1 + native) }))
+        .rejects.toMatchObject({ refusal: "grace_replay" });
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } })).resolves.toMatchObject({ status: "active" });
+      await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: attackerRefresh })).resolves.toMatchObject({ revokedAt: null });
+
+      await expect(rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId: nativeClientId, now: at(2 + native) }))
         .rejects.toMatchObject({ refusal: "reuse_revoked" });
-      await expect(accessWorks(attacker.accessToken, at(native + 2))).resolves.toBe(false);
+      await expect(db.oAuthGrant.findFirstOrThrow({ where: { userId } }))
+        .resolves.toMatchObject({ status: "compromised", statusReason: "refresh_reuse" });
+      await expect(db.oAuthRefreshToken.findUniqueOrThrow({ where: attackerRefresh }))
+        .resolves.toMatchObject({ revokedAt: expect.any(Date) });
     });
 
     it("does not give a client merely named Spoonjoy Apple the longer grace", async () => {

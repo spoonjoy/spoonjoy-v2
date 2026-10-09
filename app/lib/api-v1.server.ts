@@ -6617,8 +6617,8 @@ async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authen
   try {
     expiresAt = resolvePersonalTokenExpiry(body.expiresInDays);
   } catch (error) {
-    if (error instanceof ApiAuthError) throw normalizeApiV1AuthError(error);
-    throw error;
+    // The expiry check throws only ApiAuthError.
+    throw normalizeApiV1AuthError(error as ApiAuthError);
   }
   const normalizedScopes = normalizeCreateTokenScopes(body.scopes);
   const storedScopes = normalizedScopes ?? (
