@@ -12,8 +12,8 @@ const styles = {
     '*:data-[slot=icon]:-mx-0.5 *:data-[slot=icon]:my-0.5 *:data-[slot=icon]:size-5 *:data-[slot=icon]:shrink-0 *:data-[slot=icon]:self-center *:data-[slot=icon]:text-(--btn-icon) sm:*:data-[slot=icon]:my-1 sm:*:data-[slot=icon]:size-4 forced-colors:[--btn-icon:ButtonText] forced-colors:data-hover:[--btn-icon:ButtonText]',
   ],
   default: [
-    'border-[var(--sj-action)] bg-[var(--sj-action)] text-[var(--sj-on-photo)] data-active:bg-[var(--sj-action-deep)] data-hover:border-[var(--sj-action-deep)] data-hover:bg-[var(--sj-action-deep)]',
-    '[--btn-icon:var(--sj-paper)] data-active:[--btn-icon:var(--sj-paper)] data-hover:[--btn-icon:var(--sj-paper)]',
+    'border-[var(--sj-action)] bg-[var(--sj-action)] text-[var(--sj-on-action)] data-active:bg-[var(--sj-action-deep)] data-hover:border-[var(--sj-action-deep)] data-hover:bg-[var(--sj-action-deep)]',
+    '[--btn-icon:var(--sj-on-action)] data-active:[--btn-icon:var(--sj-on-action)] data-hover:[--btn-icon:var(--sj-on-action)]',
   ],
   destructive: [
     'border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_12%,var(--sj-panel-solid))] text-[var(--sj-tomato)] data-active:bg-[color-mix(in_srgb,var(--sj-tomato)_22%,var(--sj-panel-solid))] data-hover:bg-[var(--sj-tomato)] data-hover:text-[var(--sj-paper)]',

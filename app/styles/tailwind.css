@@ -18,6 +18,8 @@
   --sj-brass: #9b6834;
   --sj-action: #28231d;
   --sj-action-deep: #1f1b17;
+  /* Text and icons on an --sj-action fill (primary buttons). */
+  --sj-on-action: var(--sj-bone);
   --sj-tomato: #a24a38;
   --sj-herb: #596a4f;
   --sj-ink: var(--sj-charcoal);
@@ -57,7 +59,11 @@
   --sj-charcoal-soft: #c8c0b4;
   --sj-brass: #c4945c;
   --sj-action: #b9854b;
-  --sj-action-deep: #95683a;
+  /* Hover and press lift toward the light in the dark scheme, so charcoal text keeps its contrast. */
+  --sj-action-deep: #c99a62;
+  /* Charcoal, not bone, on the brass fill: bone on #b9854b was 2.6:1 (axe, 2026-10-09); charcoal is
+   * 5.2:1 at rest and above 6:1 on hover. */
+  --sj-on-action: var(--sj-charcoal);
   /* Bumped from #d26850 (4.24:1 on --sj-panel-solid) to pass WCAG AA (≥4.5:1)
    * — it's the error-text color, so it has to be readable. */
   --sj-tomato: #e58263;

@@ -161,7 +161,7 @@ function ActionLink({
 }) {
   const tone = plain
     ? "border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] hover:border-[var(--sj-border-strong)] hover:bg-[var(--sj-flour)]"
-    : "border-[var(--sj-action)] bg-[var(--sj-action)] text-[var(--sj-on-photo)] hover:border-[var(--sj-action-deep)] hover:bg-[var(--sj-action-deep)]";
+    : "border-[var(--sj-action)] bg-[var(--sj-action)] text-[var(--sj-on-action)] hover:border-[var(--sj-action-deep)] hover:bg-[var(--sj-action-deep)]";
 
   return (
     <a

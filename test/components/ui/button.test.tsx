@@ -44,7 +44,7 @@ describe('Button', () => {
       expect(button).toHaveClass('rounded-[var(--sj-radius-control)]')
       expect(button).toHaveClass('border-[var(--sj-action)]')
       expect(button).toHaveClass('bg-[var(--sj-action)]')
-      expect(button).toHaveClass('text-[var(--sj-on-photo)]')
+      expect(button).toHaveClass('text-[var(--sj-on-action)]')
       expect(button?.className).not.toContain('linear-gradient')
     })
 
