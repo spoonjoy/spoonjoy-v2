@@ -33,6 +33,8 @@
 // Commands (node scripts/qa-run-scope.mjs <command>):
 //   prepare   sweep stale run stacks, create this run's empty D1, rewrite the configs, write the
 //             per-run secrets file, export the run's base URL.
+//   deploy    deploy this build to the run's Worker with the run's secrets, retrying when
+//             Cloudflare does not yet know the brand-new script (code 10007).
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
 //             and the URL serves /health and a hashed asset.
 //   teardown  delete this run's Worker and D1 (always; a failure only warns, and a later sweep
@@ -86,6 +88,12 @@ export const MAX_RETRY_AFTER_MS = 5 * 60_000;
 // Workers Paid allows 500 scripts per account. Far more run Workers than concurrent runs means
 // teardown and the sweep are failing, so fail loudly long before the account limit.
 export const MAX_RUN_WORKERS = 100;
+// `wrangler deploy` uploads a brand-new script, then enables its workers.dev subdomain. Right
+// after the upload Cloudflare can still answer "This Worker does not exist on your account.
+// [code: 10007]" (seen on run 37917989293). Deploying again is idempotent (assets already
+// uploaded are skipped), so the deploy is retried after these delays.
+export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
+const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MIGRATION_FILE_PATTERN = /^\d{4}_[A-Za-z0-9_.-]+\.sql$/;
@@ -463,6 +471,30 @@ export async function prepare({ env, fs, api, now, log, secrets }) {
   return state;
 }
 
+function outputOf(error) {
+  return `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
+}
+
+export async function deploy({ env, exec, fs, sleep, log }) {
+  requireGitHubActions(env);
+  const state = readState(fs);
+  assertWranglerIsRunScoped(fs, state);
+  const args = ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const { stdout, stderr } = await exec("pnpm", args, { maxBuffer: 64 * 1024 * 1024 });
+      log(`${stdout}${stderr}`);
+      return attempt + 1;
+    } catch (error) {
+      log(outputOf(error));
+      if (!SCRIPT_NOT_FOUND_PATTERN.test(outputOf(error)) || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
+      const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
+      log(`::warning::Cloudflare did not yet know ${state.workerName} (code 10007); deploying again in ${delay / 1000} s.`);
+      await sleep(delay);
+    }
+  }
+}
+
 function readState(fs) {
   const state = readJson(fs, STATE_FILE);
   assertRunNames(state);
@@ -599,10 +631,11 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   const [command] = argv;
   const api = () => deps.api ?? createCloudflareApi({ env, fetchImpl, sleep });
   if (command === "prepare") return prepare({ env, fs, api: api(), now, log, secrets });
+  if (command === "deploy") return deploy({ env, exec, fs, sleep, log });
   if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log });
   if (command === "teardown") return teardown({ env, fs, api: api(), log });
   if (command === "sweep") return sweep({ api: api(), now, log });
-  throw new Error("Usage: qa-run-scope.mjs <prepare|verify|teardown|sweep>");
+  throw new Error("Usage: qa-run-scope.mjs <prepare|deploy|verify|teardown|sweep>");
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {

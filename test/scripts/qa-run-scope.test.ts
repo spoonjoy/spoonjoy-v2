@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import {
   API_RETRY_DELAYS_MS,
+  DEPLOY_RETRY_DELAYS_MS,
   GENERATED_BUILD_CONFIG,
   MASKED_RUN_SECRETS,
   MAX_RETRY_AFTER_MS,
@@ -24,6 +25,7 @@ import {
   defaultCliErrorHandler,
   defaultFs,
   defaultSleep,
+  deploy,
   generateVapidKeys,
   isCliEntry,
   main,
@@ -683,6 +685,63 @@ describe("verify", () => {
   });
 });
 
+describe("deploy", () => {
+  const notFound = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
+    stdout: "Uploaded 127 of 127 assets\n",
+    stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2/subdomain) failed.\n  This Worker does not exist on your account. [code: 10007]\n",
+  });
+
+  it("deploys the build to this run's Worker with the run's secrets", async () => {
+    const exec = vi.fn(async () => ({ stdout: "Deployed spoonjoy-v2-qa-run-1001-2\n", stderr: "" }));
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep: vi.fn(), log })).toBe(1);
+    expect(exec).toHaveBeenCalledWith(
+      "pnpm",
+      ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE],
+      { maxBuffer: 64 * 1024 * 1024 },
+    );
+    expect(log).toHaveBeenCalledWith("Deployed spoonjoy-v2-qa-run-1001-2\n");
+  });
+
+  it("deploys again when Cloudflare does not yet know the brand-new script (code 10007)", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(notFound)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "warning\n" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+    expect(log).toHaveBeenCalledWith(`${notFound.stdout}${notFound.stderr}`);
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare did not yet know ${IDENTITY.workerName} (code 10007); deploying again in 5 s.`);
+    expect(log).toHaveBeenLastCalledWith("Deployed\nwarning\n");
+  });
+
+  it("gives up after the last retry, and never retries any other failure", async () => {
+    const always = vi.fn().mockRejectedValue(notFound);
+    const sleep = vi.fn(async () => {});
+    await expect(deploy({ env: RUN_ENV, exec: always, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(notFound);
+    expect(always).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
+
+    const other = Object.assign(new Error("build failed"), { stderr: "Authentication error [code: 10000]" });
+    const once = vi.fn().mockRejectedValue(other);
+    await expect(deploy({ env: RUN_ENV, exec: once, fs: scopedFiles().fs, sleep: vi.fn(), log: vi.fn() })).rejects.toBe(other);
+    expect(once).toHaveBeenCalledTimes(1);
+
+    const bare = vi.fn().mockRejectedValue(undefined);
+    await expect(deploy({ env: RUN_ENV, exec: bare, fs: scopedFiles().fs, sleep: vi.fn(), log: vi.fn() })).rejects.toBeUndefined();
+  });
+
+  it("deploys only to this run's own stack, and only in GitHub Actions", async () => {
+    const files = scopedFiles();
+    files.store.set(WRANGLER_CONFIG, JSON.stringify(REAL_WRANGLER));
+    const exec = vi.fn();
+    await expect(deploy({ env: RUN_ENV, exec, fs: files.fs, sleep: vi.fn(), log: vi.fn() })).rejects.toThrow(/does not name this run's QA stack/);
+    await expect(deploy({ env: { ...RUN_ENV, GITHUB_ACTIONS: undefined }, exec, fs: scopedFiles().fs, sleep: vi.fn(), log: vi.fn() })).rejects.toThrow(/GitHub Actions/);
+    expect(exec).not.toHaveBeenCalled();
+  });
+});
+
 describe("teardown", () => {
   it("deletes this run's Worker and the database prepare recorded, by id, and its local state", async () => {
     const api = fakeApi();
@@ -766,6 +825,7 @@ describe("main and the CLI guard", () => {
     await main(["prepare"], { env: RUN_ENV, fs: files.fs, api, log, secrets, now: Date.now });
     expect(api.createDatabase).toHaveBeenCalled();
 
+    expect(await main(["deploy"], { env: RUN_ENV, exec: vi.fn(async () => ({ stdout: "", stderr: "" })), fs: files.fs, log })).toBe(1);
     await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
@@ -863,7 +923,7 @@ describe("Journeys workflow", () => {
     expect(step("Check the generated QA build").run).toContain("SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1");
     expect(step("Create this run's QA stack").id).toBe("qa-run");
     expect(step("Create this run's QA stack").run).toBe("node scripts/qa-run-scope.mjs prepare");
-    expect(step("Deploy this build to this run's QA Worker").run).toBe(`pnpm exec wrangler deploy --env qa --secrets-file ${SECRETS_FILE}`);
+    expect(step("Deploy this build to this run's QA Worker").run).toBe("node scripts/qa-run-scope.mjs deploy");
     expect(step("Check this run's QA Worker is live").run).toBe("node scripts/qa-run-scope.mjs verify");
     expect(step("Start QA Worker tail").run).toContain('wrangler tail "$SPOONJOY_QA_RUN_WORKER"');
   });

@@ -146,7 +146,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
           SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
-        run: pnpm exec wrangler deploy --env qa --secrets-file .qa-run/secrets.json
+        run: node scripts/qa-run-scope.mjs deploy
 
       # Secrets set, no pending migration, and /health plus a hashed script served from the run's
       # URL, so the suite never starts against a Worker that is not live yet.
