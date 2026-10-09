@@ -144,11 +144,11 @@ describe("Account settings - revocable sessions", () => {
       const db = await getLocalDb();
       const personal = await createApiCredential(db, userId, "Laptop script");
       // A real device-flow token, approved and collected.
-      const started = await startAgentConnection(db, { agentName: "Ouro agent", scopes: "account:read" });
+      const started = await startAgentConnection(db, { agentName: "Ouro agent", scopes: "kitchen:read" });
       await approveAgentConnectionRequest(db, started.request.id, userId);
       const delegated = await pollAgentConnection(db, { deviceCode: started.deviceCode });
       // Approved but not collected yet: collecting it later must not mint a token.
-      const pendingStart = await startAgentConnection(db, { agentName: "Uncollected agent", scopes: "account:read" });
+      const pendingStart = await startAgentConnection(db, { agentName: "Uncollected agent", scopes: "kitchen:read" });
       await approveAgentConnectionRequest(db, pendingStart.request.id, userId);
       const client = await registerOAuthClient(db, { clientName: "Some agent", redirectUris: ["https://agent.example/cb"], issuer: ISSUER });
       const oauth = await issueConnectorTokens(db, { userId, clientId: client.clientId, scope: "kitchen:read", issuer: ISSUER });
