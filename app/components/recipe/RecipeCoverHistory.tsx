@@ -173,7 +173,7 @@ export function RecipeCoverHistory({
                   {failedAttempt ? (
                     <div
                       data-testid="recipe-cover-failed-thumbnail"
-                      className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-paper)]"
+                      className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-on-photo)]"
                     >
                       {failedAttempt}
                     </div>
@@ -186,7 +186,7 @@ export function RecipeCoverHistory({
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-paper)]">
+                    <div className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-on-photo)]">
                       No image
                     </div>
                   )}
