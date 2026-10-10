@@ -1,7 +1,7 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Boolean, d1Count, d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
@@ -381,16 +381,18 @@ export async function authenticateApiToken(
   // on the account, revokes the grant first; a refresh that raced it and inserted an access token
   // after the token sweep must still mint nothing usable.
   if (credential.oauthClientId && (credential.oauthGrantId || credential.oauthConnectionKey)) {
-    const grant = await db.oAuthGrant.findFirst({
+    // Any grant the token names, by id or by connection key, that is not active refuses it.
+    const inactiveGrant = await db.oAuthGrant.findFirst({
       where: {
         OR: [
           ...(credential.oauthGrantId ? [{ id: credential.oauthGrantId }] : []),
           ...(credential.oauthConnectionKey ? [{ connectionKey: credential.oauthConnectionKey }] : []),
         ],
+        status: { not: "active" },
       },
-      select: { status: true },
+      select: { id: true },
     });
-    if (grant && grant.status !== "active") throw new ApiAuthError("Invalid API token", 401);
+    if (inactiveGrant) throw new ApiAuthError("Invalid API token", 401);
   }
 
   let oauthIssuer = credential.oauthIssuer;
@@ -516,14 +518,14 @@ async function authenticateApiTokenOnD1(
   if (
     d1NullableDateTime(row.revokedAt, "revokedAt") ||
     (effectiveCredentialExpiry({ expiresAt, oauthClientId })?.getTime() ?? Infinity) <= Date.now() ||
-    (oauthClientId && row.grantInactive)
+    (oauthClientId && d1Boolean(row.grantInactive, "grantInactive"))
   ) {
     throw new ApiAuthError("Invalid API token", 401);
   }
 
   if (oauthClientId) {
     if (oauthIssuer !== null && oauthIssuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
-    if (!row.clientCount) throw new ApiAuthError("Invalid API token", 401);
+    if (d1Count(row.clientCount, "clientCount") === 0) throw new ApiAuthError("Invalid API token", 401);
     const clientIssuer = nullableText(row.clientIssuer, "clientIssuer");
     if (clientIssuer === null || oauthIssuer === null) return NEEDS_ISSUER_BINDING;
     if (clientIssuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);

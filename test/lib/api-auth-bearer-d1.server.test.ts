@@ -166,6 +166,64 @@ describe("bearer tokens on a D1 binding", () => {
     expect(getPrisma).toHaveBeenCalledTimes(2);
   });
 
+  it("stops an OAuth token issued without an expiry at the 2027-01-07 cutover, but not a personal one", async () => {
+    const oauth = await oauthToken(ISSUER, ISSUER);
+    await db.apiCredential.update({ where: { id: oauth.credential.id }, data: { expiresAt: null } });
+    const personal = await createApiCredential(db, userId, "Script", { expiresAt: null });
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2027-01-06T23:59:00.000Z"));
+      await expect(bearer(oauth.token)).resolves.toMatchObject({ id: userId });
+      vi.setSystemTime(new Date("2027-01-07T00:00:00.000Z"));
+      await expect(bearer(oauth.token)).rejects.toMatchObject({ status: 401 });
+      await expect(bearer(personal.token)).resolves.toMatchObject({ id: userId });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(getPrisma).not.toHaveBeenCalled();
+  });
+
+  it("returns the same OAuth principal as the Prisma path, resource included", async () => {
+    const oauth = await oauthToken(ISSUER, ISSUER, { oauthResource: `${ISSUER}/mcp` });
+    const principal = await bearer(oauth.token);
+    expect(principal).toMatchObject({ oauthClientId: oauth.client.id, oauthIssuer: ISSUER, oauthResource: `${ISSUER}/mcp` });
+    expect(principal).toEqual(await authenticateApiToken(db, oauth.token, ISSUER));
+  });
+
+  it("refuses, through the Prisma fallback, an unbound credential of a client bound elsewhere", async () => {
+    const elsewhere = await oauthToken("https://other.example", null);
+    await expect(bearer(elsewhere.token)).rejects.toMatchObject({ status: 401 });
+    expect(getPrisma).toHaveBeenCalledTimes(1);
+    expect(await credential(elsewhere.credential.id)).toMatchObject({ oauthIssuer: null, lastUsedAt: null });
+  });
+
+  it("refuses a token when either grant it names is inactive, on D1 and through Prisma", async () => {
+    const client = await db.oAuthClient.create({ data: { clientName: "Two grants", redirectUris: "https://example.com/cb", issuer: ISSUER } });
+    const grant = (status: string) => db.oAuthGrant.create({
+      data: {
+        userId,
+        clientId: client.id,
+        issuer: ISSUER,
+        scope: "kitchen:read",
+        connectionKey: `key-${faker.string.alphanumeric(12)}`,
+        status,
+        statusChangedAt: new Date(),
+      },
+    });
+    const [active, revoked] = [await grant("active"), await grant("revoked")];
+    const mixed = await createApiCredential(db, userId, "Mixed", { oauthClientId: client.id, oauthIssuer: ISSUER });
+    await db.apiCredential.update({
+      where: { id: mixed.credential.id },
+      data: { oauthGrantId: active.id, oauthConnectionKey: revoked.connectionKey },
+    });
+    await expect(bearer(mixed.token)).rejects.toMatchObject({ status: 401 });
+    await expect(authenticateApiToken(db, mixed.token, ISSUER)).rejects.toMatchObject({ status: 401 });
+
+    await db.apiCredential.update({ where: { id: mixed.credential.id }, data: { oauthConnectionKey: active.connectionKey } });
+    await expect(bearer(mixed.token)).resolves.toMatchObject({ id: userId });
+    await expect(authenticateApiToken(db, mixed.token, ISSUER)).resolves.toMatchObject({ id: userId });
+  });
+
   it("hands the usage write to waitUntil, and logs instead of failing when it fails", async () => {
     const created = await createApiCredential(db, userId, "Background");
     const deferred: Promise<unknown>[] = [];
@@ -209,6 +267,9 @@ describe("bearer tokens on a D1 binding", () => {
         .rejects.toThrow("D1 credential row is missing its id, user, email, username or session version");
     }
     await expect(bearer(created.token, { binding: corrupt({ scopes: 7 }) })).rejects.toThrow("D1 credential row has a non-text scopes");
+    const oauth = await oauthToken(ISSUER, ISSUER);
+    await expect(bearer(oauth.token, { binding: corrupt({ grantInactive: "no" }) })).rejects.toThrow("D1 column grantInactive is not a Boolean");
+    await expect(bearer(oauth.token, { binding: corrupt({ clientCount: null }) })).rejects.toThrow("D1 column clientCount is not a count");
     expect(getPrisma).not.toHaveBeenCalled();
   });
 });
