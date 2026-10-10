@@ -1437,16 +1437,45 @@ async function waitForBootstrapProbe(
   }
 }
 
+function uploadedVersionCandidates(beforePayload: string, afterPayload: string, releaseSha: string) {
+  requireReleaseSha(releaseSha);
+  const beforeIds = new Set(parseWorkerVersions(beforePayload).map((version) => version.id));
+  return parseWorkerVersions(afterPayload).filter((version) => (
+    !beforeIds.has(version.id) && version.tag === releaseSha
+  ));
+}
+
+/**
+ * The version list can lag just behind an upload (production deploy for 98300c25 listed every
+ * version but the one it had uploaded a moment earlier), so while the tagged version is missing
+ * the list is read again. Two or more new tagged versions still fail at once.
+ */
+async function lookUpUploadedVersion(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand" | "sleep" | "verificationAttempts">,
+  beforePayload: string,
+  releaseSha: string,
+  workersEnv: NodeJS.ProcessEnv,
+): Promise<string> {
+  const attempts = requireVerificationAttempts(deps.verificationAttempts);
+  for (let attempt = 1; ; attempt += 1) {
+    const versions = await deps.runCommand(
+      "pnpm",
+      ["exec", "wrangler", "versions", "list", "--json"],
+      { env: workersEnv },
+    );
+    if (attempt >= attempts || uploadedVersionCandidates(beforePayload, versions.stdout, releaseSha).length > 0) {
+      return selectUploadedVersion(beforePayload, versions.stdout, releaseSha);
+    }
+    await deps.sleep(VERIFICATION_DELAY_MS);
+  }
+}
+
 export function selectUploadedVersion(
   beforePayload: string,
   afterPayload: string,
   releaseSha: string,
 ): string {
-  requireReleaseSha(releaseSha);
-  const beforeIds = new Set(parseWorkerVersions(beforePayload).map((version) => version.id));
-  const candidates = parseWorkerVersions(afterPayload).filter((version) => (
-    !beforeIds.has(version.id) && version.tag === releaseSha
-  ));
+  const candidates = uploadedVersionCandidates(beforePayload, afterPayload, releaseSha);
   if (candidates.length !== 1) {
     throw new Error(`Expected exactly one new Worker version tagged ${releaseSha}.`);
   }
@@ -2293,12 +2322,7 @@ export async function runProductionCanaryRelease(
         "--message", `Spoonjoy source ${sourceSha}`,
       ], { env: workersEnv });
       phase = "version_lookup";
-      const versions = await deps.runCommand(
-        "pnpm",
-        ["exec", "wrangler", "versions", "list", "--json"],
-        { env: workersEnv },
-      );
-      candidateVersionId = selectUploadedVersion(versionsBefore.stdout, versions.stdout, sourceSha);
+      candidateVersionId = await lookUpUploadedVersion(deps, versionsBefore.stdout, sourceSha, workersEnv);
 
       phase = "stage_revalidation";
       const preStageDeployments = await deps.runCommand(
@@ -2421,12 +2445,7 @@ export async function runProductionCanaryRelease(
         "--message", `Spoonjoy ${releaseMode} ${sourceSha}`,
       ], { env: workersEnv });
       phase = "version_lookup";
-      const versions = await deps.runCommand(
-        "pnpm",
-        ["exec", "wrangler", "versions", "list", "--json"],
-        { env: workersEnv },
-      );
-      candidateVersionId = selectUploadedVersion(versionsBefore.stdout, versions.stdout, sourceSha);
+      candidateVersionId = await lookUpUploadedVersion(deps, versionsBefore.stdout, sourceSha, workersEnv);
       phase = "verify_promotion";
       const atomicOutcome = await observeDeploymentMutation(
         deps,

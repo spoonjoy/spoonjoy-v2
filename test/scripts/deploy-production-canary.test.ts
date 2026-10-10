@@ -3504,6 +3504,62 @@ describe("production canary release orchestration", () => {
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
   });
 
+  it("lists versions again while the uploaded candidate has not appeared yet", async () => {
+    const before = JSON.stringify([
+      workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA, "2026-07-14T00:00:00Z"),
+    ]);
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler versions list --json": [
+        before,
+        before,
+        JSON.stringify([
+          workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA, "2026-07-14T00:00:00Z"),
+          workerVersion(CANDIDATE_VERSION, RELEASE_SHA, "2026-07-15T00:00:00Z", 2),
+        ]),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({
+      status: "promoted",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+    const commands = recordedCommands(runCommand);
+    const afterUpload = commands.slice(commands.indexOf(CANARY_UPLOAD_COMMAND) + 1);
+    expect(afterUpload.slice(0, 3)).toEqual([
+      "pnpm exec wrangler versions list --json",
+      "pnpm exec wrangler versions list --json",
+      "pnpm exec wrangler deployments list --json",
+    ]);
+    expect(deps.sleep).toHaveBeenCalledWith(1_000);
+  });
+
+  it("stops looking for the uploaded candidate after the verification attempts", async () => {
+    const before = JSON.stringify([
+      workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA, "2026-07-14T00:00:00Z"),
+    ]);
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler versions list --json": [before, before, before, before],
+    });
+    const deps = releaseDeps(runCommand);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow(
+      `Expected exactly one new Worker version tagged ${RELEASE_SHA}.`,
+    );
+    const commands = recordedCommands(runCommand);
+    // verificationAttempts is 3 in releaseDeps: one listing before the upload, three after it.
+    expect(commands.filter((command) => command === "pnpm exec wrangler versions list --json")).toHaveLength(4);
+    expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
+      CANARY_UPLOAD_COMMAND,
+    ]);
+    // The fixture's migration already applied, so a failed lookup needs a forward repair.
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "forward_repair_required",
+      phase: "version_lookup",
+    }));
+  });
+
   it("refuses to stage when production changes after candidate upload", async () => {
     const replacementVersion = "33333333-3333-4333-8333-333333333333";
     const runCommand = successfulRunner({
