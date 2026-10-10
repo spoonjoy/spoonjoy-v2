@@ -50,6 +50,9 @@ export async function handleNativePasswordSignIn(
     db,
     options.issuer,
   );
+  // The version is read with the password check, so a password change or sign out everywhere
+  // that lands before the grant exists refuses this sign-in (an OAuthError with reason
+  // `revoked_by_user`, which the API answers as a failed sign-in).
   const tokens = await issueConnectorTokens(db, {
     userId: user.id,
     clientId,
@@ -57,6 +60,7 @@ export async function handleNativePasswordSignIn(
     resource: null,
     issuer: options.issuer,
     now: options.now,
+    sessionVersion: user.sessionVersion,
   });
 
   return { action: "user_logged_in", userId: user.id, clientId, tokens };

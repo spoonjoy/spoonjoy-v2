@@ -117,6 +117,7 @@ describe("API v1 native account settings", () => {
       data: { clientName: "Durable connector", redirectUris: "https://client.example/callback", issuer },
     });
     await issueConnectorTokens(db, {
+      sessionVersion: 0,
       userId,
       clientId: client.id,
       issuer,

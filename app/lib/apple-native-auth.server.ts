@@ -4,7 +4,12 @@ import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import type { AppleUser } from "~/lib/apple-oauth.server";
 import type { AppleNativeAuthConfig } from "~/lib/env.server";
-import { issueConnectorTokens, SPOONJOY_APPLE_NATIVE_CLIENT_ID, type IssuedConnectorTokens } from "~/lib/oauth-server.server";
+import {
+  issueConnectorTokens,
+  requireSessionVersionFence,
+  SPOONJOY_APPLE_NATIVE_CLIENT_ID,
+  type IssuedConnectorTokens,
+} from "~/lib/oauth-server.server";
 
 type Database = PrismaClientType;
 
@@ -256,10 +261,13 @@ export async function handleNativeAppleSignIn(
   }
 
   const action = callback.action === "user_created" ? "user_created" : "user_logged_in";
+  const sessionVersion = await requireSessionVersionFence(db, callback.userId);
   const clientId = await ensureNativeAppleOAuthClient(
     db,
     options.issuer,
   );
+  // Sign out everywhere or a password change that lands part way through refuses this sign-in
+  // (an OAuthError with reason `revoked_by_user`, which the API asks the chef to retry).
   const tokens = await issueConnectorTokens(db, {
     userId: callback.userId,
     clientId,
@@ -267,6 +275,7 @@ export async function handleNativeAppleSignIn(
     resource: null,
     issuer: options.issuer,
     now: options.now,
+    sessionVersion,
   });
 
   return { action, userId: callback.userId, clientId, tokens };

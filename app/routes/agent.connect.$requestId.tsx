@@ -1,7 +1,7 @@
 import type { Route } from "./+types/agent.connect.$requestId";
 import { Form, data, redirect, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { getUserId } from "~/lib/session.server";
+import { getCurrentSessionIdentity, getUserId } from "~/lib/session.server";
 import {
   approveAgentConnectionRequest,
   denyAgentConnectionRequest,
@@ -129,8 +129,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 
 export async function action({ request, context, params }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
-  const userId = await getUserId(request, env);
-  if (!userId) throw redirect(loginRedirect(request));
+  const identity = await getCurrentSessionIdentity(request, env);
+  if (!identity) throw redirect(loginRedirect(request));
   if (!isSameSiteFormPost(request, env)) {
     return data({ error: "Approve or deny this connection from this page." } satisfies ActionData, { status: 403 });
   }
@@ -177,7 +177,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     );
   }
 
-  await approveAgentConnectionRequest(db, params.requestId, userId);
+  await approveAgentConnectionRequest(db, params.requestId, identity);
   throw redirect(`/agent/connect/${params.requestId}`);
 }
 

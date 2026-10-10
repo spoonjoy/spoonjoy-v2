@@ -219,7 +219,8 @@ test.describe("Account settings", () => {
     await fillSecret(passwordSection.getByLabel("New Password", { exact: true }), newPassword);
     await fillSecret(passwordSection.getByLabel("Confirm Password", { exact: true }), newPassword);
     await passwordSection.getByRole("button", { name: "Change Password", exact: true }).click();
-    await expect(confirmation(page, "Your password has been changed.")).toBeVisible();
+    // The disconnect box is ticked by default, so the change also disconnects apps and tokens.
+    await expect(confirmation(page, "Your password has been changed. Other browsers have been signed out, and apps, agents and API tokens have been disconnected.")).toBeVisible();
     // The form closes, so the typed passwords don't stay on screen.
     await expect(currentPasswordField).toBeHidden();
 
