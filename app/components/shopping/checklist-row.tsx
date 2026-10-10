@@ -93,7 +93,9 @@ export function ChecklistRow({
   // A checked row is shown by its soft ink and the strike, not by dimming: soft ink is already at
   // the edge of WCAG AA on the page, so any opacity on top drops it below 4.5:1.
   const rowBaseClassName = "grid min-h-14 items-center gap-3 py-2";
-  const rowClassName = clsx(rowBaseClassName, "grid-cols-[2rem_minmax(0,1fr)]");
+  // `sj-checklist-row` marks the grid whose first column holds the tick box, so print can drop
+  // the column with the box.
+  const rowClassName = clsx(rowBaseClassName, "sj-checklist-row grid-cols-[2rem_minmax(0,1fr)]");
 
   if (onToggle) {
     if (action) {
@@ -102,7 +104,7 @@ export function ChecklistRow({
           <button
             type="button"
             onClick={onToggle}
-            className="grid min-h-11 min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-left"
+            className="sj-checklist-row grid min-h-11 min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-left"
             role="checkbox"
             aria-checked={checked}
             aria-label={name}

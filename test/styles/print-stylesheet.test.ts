@@ -80,6 +80,12 @@ describe("print stylesheet", () => {
     );
   });
 
+  it("prints a checklist row as one column once its tick box is gone", () => {
+    // The screen row is `2rem minmax(0,1fr)` with the box in the first column; with the box hidden, the
+    // name and amount would fall into that 2rem column and the name would get no width.
+    expect(declarations("#steps .sj-checklist-row", rules).get("grid-template-columns")).toBe("minmax(0, 1fr)");
+  });
+
   it("sets page margins for paper", () => {
     let margin: string | undefined;
     sheet.walkAtRules("page", (page) => {

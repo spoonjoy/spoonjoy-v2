@@ -147,6 +147,12 @@
     display: none !important;
   }
 
+  /* Without its box, a row is one column. Left at the screen's 2rem box column, the name and amount
+   * would be squeezed into it and the name would print at no width at all. */
+  #steps .sj-checklist-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   #steps .sj-checklist-name {
     color: var(--sj-ink) !important;
   }

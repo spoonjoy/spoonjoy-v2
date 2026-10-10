@@ -8,7 +8,7 @@ import { waitForHydration } from "./support/navigation";
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
 test.describe("Printing a recipe", () => {
-  test("the printed page is the recipe, without the screen controls", async ({ page }) => {
+  test("the printed page is the recipe, without the screen controls", async ({ page }, testInfo) => {
     await page.goto(LEMON_RICE);
     await waitForHydration(page);
     await page.emulateMedia({ media: "print" });
@@ -26,6 +26,11 @@ test.describe("Printing a recipe", () => {
     await expect(page.getByText("Tap ingredients as you go", { exact: true })).toBeHidden();
     await expect(page.locator("#steps .sj-checklist-box").first()).toBeHidden();
     await expect(page.locator(".sj-skip-link")).toBeHidden();
+    // The printed page, for review: the whole recipe as print media lays it out.
+    await testInfo.attach("printed-recipe", {
+      body: await page.screenshot({ fullPage: true, animations: "disabled" }),
+      contentType: "image/png",
+    });
 
     // Back on screen, everything returns.
     await page.emulateMedia({ media: "screen" });
