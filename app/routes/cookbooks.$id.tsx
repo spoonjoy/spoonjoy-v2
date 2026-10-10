@@ -2,6 +2,8 @@ import type { Route } from "./+types/cookbooks.$id";
 import { redirect, useLoaderData, useActionData, Form, data, useSubmit, type AppLoadContext } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readCookbookPageFromD1, readCookbookPageWithPrisma } from "~/lib/cookbook-page-reads.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
@@ -15,6 +17,7 @@ import { formatServingsLabel } from "~/lib/quantity";
 import { useEffect, useState } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { listImageProps } from "~/lib/image-loading";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -123,48 +126,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
 
-  const database = await getRequestDb(context);
-
-  const cookbook = await database.cookbook.findUnique({
-    where: { id },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-        },
-      },
-      recipes: {
-        where: {
-          recipe: {
-            deletedAt: null,
-          },
-        },
-        include: {
-          recipe: {
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              servings: true,
-              activeCoverId: true,
-              activeCoverVariant: true,
-              coverMode: true,
-              covers: {
-                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-              },
-              chef: {
-                select: {
-                  username: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      },
-    },
-  });
+  const d1 = requestD1(context);
+  const readInput = { cookbookId: id, viewerId: userId };
+  const { cookbook, availableRecipes } = d1
+    ? await readCookbookPageFromD1(d1, readInput)
+    : await readCookbookPageWithPrisma(await getRequestDb(context), readInput);
 
   if (!cookbook) {
     throw new Response("Cookbook not found", { status: 404 });
@@ -172,30 +138,6 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   // Check if user owns this cookbook
   const isOwner = userId !== null && cookbook.authorId === userId;
-
-  // Get user's recipes that aren't in this cookbook
-  const availableRecipes = isOwner
-    ? await database.recipe.findMany({
-        where: {
-          chefId: userId,
-          deletedAt: null,
-          NOT: {
-            cookbooks: {
-              some: {
-                cookbookId: id,
-              },
-            },
-          },
-        },
-        select: {
-          id: true,
-          title: true,
-        },
-        orderBy: {
-          title: "asc",
-        },
-      })
-    : [];
 
   const cookbookWithCovers = {
     ...cookbook,
@@ -455,6 +397,7 @@ export default function CookbookDetail() {
             recipeCount={cookbook.recipes.length}
             recipeImages={recipeImages}
             className="mx-auto w-full max-w-56 lg:max-w-none"
+            priority
             // The page's own <h1> (in CookbookHeader, just above) already is this exact
             // title, and it renders before the "Recipes" <h2> below — a second <h3> here
             // would skip past that <h2> and trip heading-order.
@@ -511,7 +454,7 @@ export default function CookbookDetail() {
                       </span>
                       <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
                         {item.recipe.coverImageUrl ? (
-                          <img src={item.recipe.coverImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+                          <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
                         ) : (
                           <span className="block h-full w-full bg-[linear-gradient(135deg,color-mix(in_srgb,var(--sj-flour)_82%,var(--sj-panel-solid)),var(--sj-panel-solid))]" />
                         )}

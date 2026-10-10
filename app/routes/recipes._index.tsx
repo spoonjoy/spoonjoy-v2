@@ -19,6 +19,7 @@ import {
 } from "~/lib/collection-reads.server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { RecipesSectionNav } from "~/components/navigation";
+import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const PUBLIC_RECIPE_LIMIT = 48;
 
@@ -123,7 +124,7 @@ export default function RecipesIndex() {
             <ol className="border-y border-[var(--sj-border-strong)]">
               {recipes.map((recipe, index) => (
                 <li key={recipe.id} className="border-b border-[var(--sj-border)] last:border-b-0">
-                  <RecipeRow recipe={recipe} ordinal={index + 1} />
+                  <RecipeRow recipe={recipe} ordinal={index + 1} imageProps={listImageProps(index)} />
                 </li>
               ))}
             </ol>
@@ -145,7 +146,7 @@ export default function RecipesIndex() {
   );
 }
 
-function RecipeRow({ recipe, ordinal }: { recipe: PublicRecipe; ordinal: number }) {
+function RecipeRow({ recipe, ordinal, imageProps }: { recipe: PublicRecipe; ordinal: number; imageProps: ImageLoadingProps }) {
   const servingsLabel = formatServingsLabel(recipe.servings);
   const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0
     ? recipe.coverImageUrl
@@ -162,7 +163,7 @@ function RecipeRow({ recipe, ordinal }: { recipe: PublicRecipe; ordinal: number 
       </span>
       <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_62%,var(--sj-panel-solid))]">
         {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
+          <img src={displayImageUrl} alt="" {...imageProps} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
         ) : (
           <ChefHat className="size-6 text-[var(--sj-brass)]" aria-hidden="true" />
         )}

@@ -1,7 +1,7 @@
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
 import type { StepReference } from './StepOutputUseCallout'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
-import { formatQuantity, scaleQuantity } from '~/lib/quantity'
+import { formatAmount, scaleQuantity } from '~/lib/quantity'
 import { ChecklistRow } from '~/components/shopping/checklist-row'
 
 export interface Ingredient {
@@ -175,9 +175,8 @@ function IngredientRow({
 function getScaledAmountLabel(ingredient: Ingredient, scaleFactor: number) {
   const hasQuantity = ingredient.quantity != null && !Number.isNaN(ingredient.quantity)
   const scaledQuantity = hasQuantity ? scaleQuantity(ingredient.quantity as number, scaleFactor) : null
-  const formattedQuantity = scaledQuantity != null ? formatQuantity(scaledQuantity) : ''
 
-  return [formattedQuantity, ingredient.unit].filter(Boolean).join(' ').trim()
+  return formatAmount(scaledQuantity, ingredient.unit)
 }
 
 export function formatStepReferenceName(reference: StepReference) {

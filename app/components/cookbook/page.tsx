@@ -2,6 +2,7 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { ChefHat } from "lucide-react";
 import { Link } from "~/components/ui/link";
+import { HERO_IMAGE_PROPS, LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
 export function CookbookPage({
   children,
@@ -87,7 +88,7 @@ export function FoodHero({
     <figure className={clsx("sj-food-photo relative -mx-5 overflow-hidden sm:-mx-6 lg:mx-0", className)}>
       <div className="aspect-[5/4] sm:aspect-[16/9] lg:aspect-[16/10]">
         {imageUrl ? (
-          <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
+          <img src={imageUrl} alt={title} {...HERO_IMAGE_PROPS} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-[var(--sj-photo-charcoal)]">
             <ChefHat className="size-10 text-[var(--sj-on-photo-muted)]" aria-hidden="true" />
@@ -149,7 +150,7 @@ export function ObjectRow({
   return (
     <Link href={href} className="group grid min-h-17 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 py-3 no-underline">
       <div className="aspect-square overflow-hidden border border-[var(--sj-border)] bg-[var(--sj-flour)]">
-        {imageUrl ? <img src={imageUrl} alt="" className="h-full w-full object-cover" /> : null}
+        {imageUrl ? <img src={imageUrl} alt="" {...LAZY_IMAGE_PROPS} className="h-full w-full object-cover" /> : null}
       </div>
       <div className="min-w-0">
         <span className="line-clamp-2 font-sj-ui text-base/5 font-bold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">

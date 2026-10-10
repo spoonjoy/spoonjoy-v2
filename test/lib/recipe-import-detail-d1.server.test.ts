@@ -116,6 +116,47 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
       await expect(db.recipe.findUniqueOrThrow({ where: { id: imported.recipeId! } })).resolves.toMatchObject({ title: "Soup (imported)" });
     });
 
+    it("leaves no new unit or ingredient name behind when the recipe batch fails or loses every title race", async () => {
+      const tag = crypto.randomUUID().slice(0, 8);
+      const lookupRows = async () => ({
+        units: await db.unit.count({ where: { name: { startsWith: `residue ${tag}` } } }),
+        names: await db.ingredientRef.count({ where: { name: { startsWith: `residue ${tag}` } } }),
+      });
+      const importWith = (name: string, DB: D1ReadDatabase) => importRecipeFromSource(
+        { chefId, source: { type: "json-ld", jsonLd: jsonLd(name), sourceUrl: `https://example.com/${tag}/${encodeURIComponent(name)}` } },
+        {
+          db,
+          env: { DB },
+          ingredientParser: async (text) => [{ quantity: 1, unit: `Residue ${tag} unit`, ingredientName: `Residue ${tag} ${text}` }],
+        },
+      );
+      const failing: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          if (isRecipeBatch(statements)) throw new Error("D1 is down");
+          return d1.binding.batch(statements as never);
+        },
+      };
+      const alwaysRacing: D1ReadDatabase = {
+        prepare: (sql) => d1.binding.prepare(sql),
+        async batch(statements) {
+          if (isRecipeBatch(statements)) {
+            const taken = (statements as unknown as Array<{ params: unknown[] }>)[0]!.params[1] as string;
+            await db.recipe.create({ data: { title: taken, chefId } });
+          }
+          return d1.binding.batch(statements as never);
+        },
+      };
+
+      await expect(importWith("Residue Down", failing)).rejects.toThrow("D1 is down");
+      await expect(importWith("Residue Race", alwaysRacing)).rejects.toMatchObject({ code: "title-conflict" });
+      expect(await lookupRows()).toEqual({ units: 0, names: 0 });
+
+      // A successful import creates each name once, in its recipe batch.
+      await importWith("Residue Kept", d1.binding);
+      expect(await lookupRows()).toEqual({ units: 1, names: 2 });
+    });
+
     it("gives up after three lost title races, and rethrows other failures", async () => {
       let races = 0;
       const alwaysRacing: D1ReadDatabase = {

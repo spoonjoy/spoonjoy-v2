@@ -1,7 +1,7 @@
 // Round trips on iPhone (read-only, chef session): home -> recipe -> the recipe's Back link -> home, browser Back and Forward, the Recipes tab and its Everyone switch, and the recipe's Back link from a public recipe. Each tab or link tap
-// happens exactly once and the very next assertion must pass: nothing needs a second tap. QA also
-// holds unrelated data, so seeded recipes are located by their ids, the public list's recipe is
-// whichever it shows first, and nothing asserts counts.
+// happens exactly once and the very next assertion must pass: nothing needs a second tap. Other
+// journeys in the same run add and delete their own recipes, so seeded recipes are located by their
+// ids, the public list's recipe is a seeded one, and nothing asserts counts.
 import { test, expect } from "./support/journey";
 import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
@@ -70,10 +70,12 @@ test.describe("Round trips on iPhone", () => {
     await expect(allPublicRecipes).toBeVisible();
     await expectAccessible();
 
-    // A public recipe opened from the list: the recipe's Back link returns to the list. The list
-    // shows only the most recent public recipes, and other journeys on QA keep adding their own,
-    // so a seeded recipe can fall off it; open whichever recipe the list shows first.
-    const firstListed = main.locator('li a[href^="/recipes/"]').first();
+    // A public recipe opened from the list: the recipe's Back link returns to the list. Open a
+    // seeded recipe, not whichever the list shows first: journeys running alongside this one create
+    // public recipes and delete them, so the first card can be gone by the time it is tapped. Each
+    // run's QA stack starts from the seed, so its seeded recipes stay on the list and are never
+    // deleted.
+    const firstListed = main.locator('li a[href^="/recipes/qa-kitchen-recipe-"]').first();
     const firstHref = await firstListed.getAttribute("href");
     expect(firstHref).toMatch(/^\/recipes\/[^/]+$/);
     const cardText = await firstListed.innerText();

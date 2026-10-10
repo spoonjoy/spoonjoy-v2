@@ -567,7 +567,7 @@ describe('ParsedIngredientList', () => {
         />
       )
 
-      expect(screen.getByText('0.125')).toBeInTheDocument()
+      expect(screen.getByText('⅛')).toBeInTheDocument()
     })
 
     it('preserves ingredient order', () => {

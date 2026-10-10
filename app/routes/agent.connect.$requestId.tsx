@@ -143,25 +143,30 @@ export async function action({ request, context, params }: Route.ActionArgs) {
     return data({ error: "This connection request was not found or has expired." } satisfies ActionData, { status: 404 });
   }
 
-  if (intent === "deny") {
-    await denyAgentConnectionRequest(db, params.requestId);
-    throw redirect(`/agent/connect/${params.requestId}`);
-  }
-
-  if (intent !== "approve") {
+  if (intent !== "approve" && intent !== "deny") {
     return data({ error: "Choose approve or deny" } satisfies ActionData, { status: 400 });
   }
 
-  // The code must come from the chef: typed into this page, or typed earlier on the lookup page
-  // (remembered in a signed cookie for this request only). It is never read from the link.
+  // Approve and deny both need the code from the chef: typed into this page, or typed earlier on
+  // the lookup page (remembered in a signed cookie for this request only). It is never read from
+  // the link, so a leaked link or a guessed request can neither connect nor cancel a connection.
   const typedCode = normalizeUserCode(formData.get("userCode")?.toString() ?? "")
     || (await typedCodeFor(env, request, connection.id))
     || "";
   if (typedCode !== connection.userCode) {
     return data(
-      { error: "That code doesn't match. Type the code your agent shows you." } satisfies ActionData,
+      {
+        error: intent === "deny"
+          ? "That code doesn't match. To deny, type the code your agent shows you."
+          : "That code doesn't match. Type the code your agent shows you.",
+      } satisfies ActionData,
       { status: 400 },
     );
+  }
+
+  if (intent === "deny") {
+    await denyAgentConnectionRequest(db, params.requestId);
+    throw redirect(`/agent/connect/${params.requestId}`);
   }
 
   // A request started before account scopes were refused can't be approved with them.
@@ -210,7 +215,7 @@ export default function AgentConnect() {
       {actionable ? (
         <>
           <Text className="mt-5" role="alert">
-            Spoonjoy did not verify who made this request; the name above is whatever the client chose. Deny it unless you just started this connection from your own agent, device, or app.
+            Spoonjoy did not verify who made this request; the name above is whatever the client chose. If you didn't just start this connection from your own agent, device, or app, close this page. Without its code, nobody can approve it, and it expires on its own.
           </Text>
 
           {requester ? (
@@ -247,7 +252,12 @@ export default function AgentConnect() {
       ) : null}
 
       {(actionable || connected) && scopes.length > 0 ? (
-        <div className="mt-6 border-y border-[var(--sj-border)] py-5">
+        // Directly under "Request details", share its bottom rule instead of drawing a second one.
+        <div
+          className={actionable && requester
+            ? "border-b border-[var(--sj-border)] py-5"
+            : "mt-6 border-y border-[var(--sj-border)] py-5"}
+        >
           <p className={LABEL}>{connected ? "Access granted" : "Requested scopes"}</p>
           <ul className="mt-3 grid gap-2">
             {scopes.map((scope) => (
@@ -327,12 +337,13 @@ export default function AgentConnect() {
             </label>
           )}
           {/* Full-width stacked buttons on phones, side by side from sm up, as on the other auth pages.
-              Deny skips validation, so it works without a code; the action ignores the code on deny. */}
+              Deny needs the code too, so a leaked link or a guessed request can't cancel a connection;
+              the browser asks for the code before either button submits. */}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="submit" name="intent" value="approve">
               Approve Access
             </Button>
-            <Button type="submit" name="intent" value="deny" formNoValidate plain>
+            <Button type="submit" name="intent" value="deny" plain>
               Deny
             </Button>
           </div>
