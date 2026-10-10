@@ -14,10 +14,12 @@ import {
   normalizeCredentialScopes,
   generateApiToken,
   hashApiToken,
+  LAST_USED_AT_WRITE_INTERVAL_MS,
   principalFromUserEmail,
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleWarning } from "../warning-policy";
 
 const authenticateApiToken = (db: any, token: string, issuer = "https://spoonjoy.app") => (
   authenticateApiTokenRaw(db, token, issuer)
@@ -44,6 +46,26 @@ describe("API authentication helpers", () => {
 
   afterEach(async () => {
     await cleanupDatabase();
+  });
+
+  it("stops OAuth access tokens issued without an expiry at the 2027-01-07 cutover, but not personal tokens", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("legacy"), username: faker.internet.username() } });
+    await db.oAuthClient.create({ data: { id: "legacy-client", clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" } });
+    const oauth = await createApiCredential(db, user.id, "Claude (OAuth)", { oauthClientId: "legacy-client", oauthIssuer: "https://spoonjoy.app" });
+    const personal = await createApiCredential(db, user.id, "Script", { expiresAt: null });
+    expect(oauth.credential.expiresAt).toBeNull();
+
+    try {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2027-01-06T23:59:00.000Z"));
+      await expect(authenticateApiToken(db, oauth.token)).resolves.toMatchObject({ id: user.id });
+
+      vi.setSystemTime(new Date("2027-01-07T00:00:00.000Z"));
+      await expect(authenticateApiToken(db, oauth.token)).rejects.toMatchObject({ status: 401 });
+      await expect(authenticateApiToken(db, personal.token)).resolves.toMatchObject({ id: user.id });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("extracts bearer tokens and reports malformed authorization headers", () => {
@@ -266,19 +288,153 @@ describe("API authentication helpers", () => {
           scopes: "kitchen:read",
           user: { id: "user-race", email: "race@example.com", username: "race" },
         }),
-        updateMany: async () => ({ count: 0 }),
+        updateMany: updateLastUsed.mockResolvedValue({ count: 0 }),
         findUniqueOrThrow: async () => ({ oauthIssuer: "https://issuer-b.example" }),
-        update: updateLastUsed,
       },
       oAuthClient: {
         updateMany: async () => ({ count: 1 }),
-        findFirst: async () => ({ id: "client-race" }),
+        findFirst: async () => ({ id: "client-race", issuer: "https://issuer-a.example" }),
       },
     } as never;
 
     await expect(authenticateApiTokenRaw(stub, "sj_race", "https://issuer-a.example"))
       .rejects.toMatchObject({ status: 401 });
-    expect(updateLastUsed).not.toHaveBeenCalled();
+    // Only the issuer-promotion write ran; usage was never recorded.
+    expect(updateLastUsed).toHaveBeenCalledTimes(1);
+    expect(updateLastUsed).toHaveBeenCalledWith({
+      where: { id: "credential-race", oauthIssuer: null },
+      data: { oauthIssuer: "https://issuer-a.example" },
+    });
+  });
+
+  it("does no issuer write on the request path once a client is bound", async () => {
+    const issuer = "https://spoonjoy.app";
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Bound App", redirectUris: "https://example.com/cb", issuer },
+    });
+    const created = await createApiCredential(db, user.id, "Bound token", {
+      oauthClientId: client.id,
+      oauthIssuer: issuer,
+      scopes: ["kitchen:read"],
+    });
+    const clientWrites = vi.spyOn(db.oAuthClient, "updateMany");
+    try {
+      await expect(authenticateApiToken(db, created.token, issuer)).resolves.toMatchObject({ oauthIssuer: issuer });
+      expect(clientWrites).not.toHaveBeenCalled();
+    } finally {
+      clientWrites.mockRestore();
+    }
+  });
+
+  it("writes lastUsedAt at most once every five minutes per credential", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Busy native client");
+    const writes = vi.spyOn(db.apiCredential, "update");
+    try {
+      await authenticateApiToken(db, created.token);
+      const first = (await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt;
+      expect(first).toBeInstanceOf(Date);
+      expect(writes).toHaveBeenCalledTimes(1);
+
+      await authenticateApiToken(db, created.token);
+      await authenticateApiToken(db, created.token);
+      expect(writes).toHaveBeenCalledTimes(1);
+      await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
+        .resolves.toMatchObject({ lastUsedAt: first });
+
+      const stale = new Date(Date.now() - LAST_USED_AT_WRITE_INTERVAL_MS - 1_000);
+      await db.apiCredential.update({ where: { id: created.credential.id }, data: { lastUsedAt: stale } });
+      // Count only the writes authentication makes, not the setup write above.
+      writes.mockClear();
+      await authenticateApiToken(db, created.token);
+      expect(writes).toHaveBeenCalledTimes(1);
+      const refreshed = (await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt;
+      expect(refreshed!.getTime()).toBeGreaterThan(stale.getTime());
+    } finally {
+      writes.mockRestore();
+    }
+  });
+
+  it("hands the lastUsedAt write to waitUntil instead of awaiting it", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Background usage");
+    const deferred: Promise<unknown>[] = [];
+
+    await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+      headers: { Authorization: `Bearer ${created.token}` },
+    }) as unknown as Request, null, { waitUntil: (promise) => deferred.push(promise) }))
+      .resolves.toMatchObject({ source: "bearer" });
+
+    expect(deferred).toHaveLength(1);
+    await Promise.all(deferred);
+    await expect(db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } }))
+      .resolves.toMatchObject({ lastUsedAt: expect.any(Date) });
+  });
+
+  it("logs instead of failing the request when the background lastUsedAt write fails", async () => {
+    const deferred: Promise<unknown>[] = [];
+    const failure = new Error("D1 write failed");
+    expectConsoleWarning("[api-auth] lastUsedAt update failed", failure);
+    const stub = {
+      apiCredential: {
+        findUnique: async () => ({
+          id: "credential-bg",
+          revokedAt: null,
+          expiresAt: null,
+          lastUsedAt: null,
+          oauthClientId: null,
+          oauthIssuer: null,
+          oauthResource: null,
+          scopes: "kitchen:read",
+          user: { id: "user-bg", email: "bg@example.com", username: "bg" },
+        }),
+        update: async () => { throw failure; },
+      },
+    } as never;
+    await expect(authenticateApiTokenRaw(stub, "sj_bg", "https://spoonjoy.app", { waitUntil: (p) => deferred.push(p) }))
+      .resolves.toMatchObject({ credentialId: "credential-bg" });
+    // The warning policy fails the test unless exactly this warning was logged.
+    await Promise.all(deferred);
+  });
+
+  it("still authenticates when the credential is deleted before the awaited lastUsedAt write", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Deleted mid-request");
+    const realFindUnique = db.apiCredential.findUnique.bind(db.apiCredential);
+    const read = vi.spyOn(db.apiCredential, "findUnique").mockImplementationOnce((async (args: never) => {
+      const found = await realFindUnique(args);
+      // Another request revokes and deletes the credential between our read and our write.
+      await db.apiCredential.delete({ where: { id: created.credential.id } });
+      return found;
+    }) as never);
+    try {
+      await expect(authenticateApiToken(db, created.token)).resolves.toMatchObject({ credentialId: created.credential.id });
+      await expect(db.apiCredential.findUnique({ where: { id: created.credential.id } })).resolves.toBeNull();
+    } finally {
+      read.mockRestore();
+    }
+  });
+
+  it("fails the request when the awaited lastUsedAt write fails for any other reason", async () => {
+    const failure = Object.assign(new Error("D1 write failed"), { code: "P1001" });
+    const stub = {
+      apiCredential: {
+        findUnique: async () => ({
+          id: "credential-fg",
+          revokedAt: null,
+          expiresAt: null,
+          lastUsedAt: null,
+          oauthClientId: null,
+          oauthIssuer: null,
+          oauthResource: null,
+          scopes: "kitchen:read",
+          user: { id: "user-fg", email: "fg@example.com", username: "fg" },
+        }),
+        update: async () => { throw failure; },
+      },
+    } as never;
+    await expect(authenticateApiTokenRaw(stub, "sj_fg", "https://spoonjoy.app")).rejects.toBe(failure);
   });
 
   it("rejects issuer metadata on a credential that has no OAuth client", async () => {

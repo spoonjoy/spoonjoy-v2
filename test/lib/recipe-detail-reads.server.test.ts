@@ -67,6 +67,8 @@ async function seedRecipe() {
       status: "processing",
       generationStatus: "processing",
       createdAt: at(4),
+      // Regenerated just now, so the page reads it as a live generation, not a stuck one.
+      generationStartedAt: new Date(),
     },
   });
   await db.recipe.update({ where: { id: recipe.id }, data: { activeCoverId: cover.id, activeCoverVariant: "image" } });
@@ -295,5 +297,31 @@ describe("recipe detail loader on a D1 binding", () => {
         context: { cloudflare: { env: { DB: d1.binding } } },
       } as never),
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("fails a generation that stopped long ago through D1, still without a Prisma client", async () => {
+    const { owner, recipe, cover } = await seedRecipe();
+    // The active cover's editorial pass started an hour ago and its job never finished.
+    await db.recipeCover.update({ where: { id: cover.id }, data: { generationStartedAt: new Date(Date.now() - 60 * 60_000) } });
+
+    vi.resetModules();
+    const getRequestDb = vi.fn();
+    vi.doMock("~/lib/route-platform.server", () => ({ getRequestDb }));
+    const { loadRecipeDetail } = await import("~/lib/recipe-detail.server");
+    const headers = { Cookie: (await createUserSessionCookie(owner.id)).split(";")[0]! };
+
+    const page = await loadRecipeDetail({
+      request: new UndiciRequest(`http://localhost:3000/recipes/${recipe.id}`, { headers }),
+      params: { id: recipe.id },
+      context: { cloudflare: { env: { DB: d1.binding } } },
+    } as never);
+
+    expect(page.activeCoverProcessing).toBeNull();
+    expect(getRequestDb).not.toHaveBeenCalled();
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } })).resolves.toMatchObject({
+      status: "ready",
+      generationStatus: "failed",
+      failureReason: "Generation stopped before it finished.",
+    });
   });
 });

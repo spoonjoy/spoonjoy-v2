@@ -82,10 +82,10 @@ describe("RecipePhotoStudio", () => {
       captured = formData;
     });
 
-    expect(await screen.findByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
     expect(screen.getByText("Add first photo")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Post as Spoon" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Editorialize cover" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Also log this as a cook" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Make a styled cover" })).toBeChecked();
     expect(screen.getByRole("button", { name: "Save photo" })).toBeDisabled();
 
     await user.upload(screen.getByLabelText("Recipe photo"), makeFile("finished-pasta.png", "image/png"));
@@ -120,7 +120,7 @@ describe("RecipePhotoStudio", () => {
     });
 
     expect(await screen.findByText("Add cover photo")).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Post as Spoon" }));
+    await user.click(screen.getByRole("checkbox", { name: "Also log this as a cook" }));
 
     expect(screen.queryByRole("button", { name: "Optional Spoon details" })).toBeNull();
     await user.upload(screen.getByLabelText("Recipe photo"), makeFile("cover-only.png", "image/png"));
@@ -145,8 +145,8 @@ describe("RecipePhotoStudio", () => {
       },
     });
 
-    expect(await screen.findByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Editorializing cover");
+    expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Styling cover");
   });
 
   it("blocks empty submits and rejects invalid photo files inline", async () => {
@@ -192,7 +192,7 @@ describe("RecipePhotoStudio", () => {
     });
 
     await user.upload(await screen.findByLabelText("Recipe photo"), makeFile("verbatim.png", "image/png"));
-    await user.click(screen.getByRole("checkbox", { name: "Editorialize cover" }));
+    await user.click(screen.getByRole("checkbox", { name: "Make a styled cover" }));
     expect(screen.getByRole("button", { name: "Save Spoon photo" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Save Spoon photo" }));
 
@@ -209,8 +209,8 @@ describe("RecipePhotoStudio", () => {
       captured = formData;
     });
 
-    await user.click(await screen.findByRole("checkbox", { name: "Post as Spoon" }));
-    await user.click(screen.getByRole("checkbox", { name: "Editorialize cover" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Also log this as a cook" }));
+    await user.click(screen.getByRole("checkbox", { name: "Make a styled cover" }));
     await user.upload(screen.getByLabelText("Recipe photo"), makeFile("plain-cover.png", "image/png"));
 
     expect(screen.getByRole("button", { name: "Save cover photo" })).toBeEnabled();
