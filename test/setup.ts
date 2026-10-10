@@ -108,10 +108,14 @@ const databaseTurn = (() => {
   let holder: object | null = null;
   let depth = 0;
   const waiting: Array<() => void> = [];
-  async function acquire(owner: object) {
-    while (holder !== null && holder !== owner) await new Promise<void>((resolve) => waiting.push(resolve));
+  function tryAcquire(owner: object) {
+    if (holder !== null && holder !== owner) return false;
     holder = owner;
     depth += 1;
+    return true;
+  }
+  async function acquire(owner: object) {
+    while (!tryAcquire(owner)) await new Promise<void>((resolve) => waiting.push(resolve));
   }
   function release(owner: object) {
     if (holder !== owner) return;
@@ -121,15 +125,23 @@ const databaseTurn = (() => {
       for (const resolve of waiting.splice(0)) resolve();
     }
   }
-  async function run<T>(owner: object, task: () => Promise<T>): Promise<T> {
-    await acquire(owner);
-    try {
-      return await task();
-    } finally {
-      release(owner);
-    }
+  // A statement whose turn is free starts at once, without a single extra await, so a test with one
+  // client keeps exactly the statement order it had before turns existed (login-session-version
+  // fires an update mid-login and relies on it reaching the database first).
+  function run<T>(owner: object, task: () => Promise<T>): Promise<T> {
+    const start = () => {
+      let pending: Promise<T>;
+      try {
+        pending = task();
+      } catch (error) {
+        release(owner);
+        return Promise.reject(error);
+      }
+      return pending.finally(() => release(owner));
+    };
+    return tryAcquire(owner) ? start() : acquire(owner).then(start);
   }
-  return { acquire, release, run };
+  return { tryAcquire, acquire, release, run };
 })();
 
 function takingDatabaseTurns(factory: TestAdapterFactory): TestAdapterFactory {
@@ -140,7 +152,7 @@ function takingDatabaseTurns(factory: TestAdapterFactory): TestAdapterFactory {
       executeRaw: (query: Parameters<TestAdapter['executeRaw']>[0]) => databaseTurn.run(owner, () => adapter.executeRaw(query)),
       executeScript: (script: string) => databaseTurn.run(owner, () => adapter.executeScript(script)),
       async startTransaction(isolationLevel?: Parameters<TestAdapter['startTransaction']>[0]): Promise<TestTransaction> {
-        await databaseTurn.acquire(owner);
+        if (!databaseTurn.tryAcquire(owner)) await databaseTurn.acquire(owner);
         let transaction: TestTransaction;
         try {
           transaction = await adapter.startTransaction(isolationLevel);
