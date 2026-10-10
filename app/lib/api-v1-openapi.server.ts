@@ -1163,6 +1163,10 @@ const schemas = {
     title: { type: "string", minLength: 1, maxLength: 200 },
     description: { type: ["string", "null"], maxLength: 2000 },
     servings: { type: ["string", "null"], maxLength: 100 },
+    expectedUpdatedAt: {
+      ...dateTimeSchema,
+      description: "Optional precondition: the recipe's updatedAt as the client last read it. When given and the recipe has changed since, nothing is updated and the answer is 409 edit_conflict with the current recipe in error.details.recipe. Omit it to update whatever changed in between.",
+    },
   }),
   DeleteRecipeRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
@@ -1621,7 +1625,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
-    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
+    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "edit_conflict", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
     DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteRecipeRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/fork": {
@@ -2913,6 +2917,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   method_not_allowed: "Method not allowed",
   idempotency_conflict: "Idempotency key was already used for a different request",
   idempotency_in_progress: "Idempotency key is already in progress; retry shortly",
+  edit_conflict: "The recipe changed after expectedUpdatedAt; nothing was updated",
   rate_limited: "Too many requests",
   upstream_error: "Upstream import provider failed",
   product_activation_pending: PRODUCT_ACTIVATION_PENDING_MESSAGE,

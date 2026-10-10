@@ -1,7 +1,7 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
@@ -331,7 +331,31 @@ export const LAST_USED_AT_WRITE_INTERVAL_MS = 5 * 60 * 1000;
 export type ApiAuthOptions = {
   /** Runs the throttled `lastUsedAt` write after the response instead of before it. */
   waitUntil?: (promise: Promise<unknown>) => void;
+  /**
+   * The request's D1 binding. A browser session's user is then read from it, so a cookie request
+   * never needs a Prisma client.
+   */
+  d1?: D1ReadDatabase | null;
 };
+
+/** A Prisma client, or a function that builds one only when a read needs it. */
+export type ApiAuthDatabase = PrismaClientType | (() => Promise<PrismaClientType>);
+
+const SESSION_USER_SQL = 'SELECT "id", "email", "username", "sessionVersion" FROM "User" WHERE "id" = ?';
+
+/** The browser session's user, read from D1 in one statement; null when the user is gone. */
+async function readSessionUserFromD1(
+  d1: D1ReadDatabase,
+  userId: string,
+): Promise<Pick<User, "id" | "email" | "username" | "sessionVersion"> | null> {
+  const [[row]] = await d1ReadBatch(d1, [[SESSION_USER_SQL, userId]]);
+  if (!row) return null;
+  const { id, email, username, sessionVersion } = row;
+  if (typeof id !== "string" || typeof email !== "string" || typeof username !== "string" || typeof sessionVersion !== "number") {
+    throw new Error("D1 user row is missing its id, email, username or session version");
+  }
+  return { id, email, username, sessionVersion };
+}
 
 export async function authenticateApiToken(
   db: PrismaClientType,
@@ -443,15 +467,16 @@ export async function authenticateApiToken(
 }
 
 export async function authenticateApiRequest(
-  db: PrismaClientType,
+  db: ApiAuthDatabase,
   request: Request,
   env?: (SessionEnv & { SPOONJOY_BASE_URL?: string }) | null,
   options: ApiAuthOptions = {},
 ): Promise<ApiPrincipal | null> {
+  const prisma = () => (typeof db === "function" ? db() : Promise.resolve(db));
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
     return authenticateApiToken(
-      db,
+      await prisma(),
       bearerToken,
       resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
       options,
@@ -468,10 +493,12 @@ export async function authenticateApiRequest(
   const identity = await getSessionIdentity(request, env);
   if (!identity) return null;
 
-  const user = await db.user.findUnique({
-    where: { id: identity.userId },
-    select: { id: true, email: true, username: true, sessionVersion: true },
-  });
+  const user = options.d1
+    ? await readSessionUserFromD1(options.d1, identity.userId)
+    : await (await prisma()).user.findUnique({
+      where: { id: identity.userId },
+      select: { id: true, email: true, username: true, sessionVersion: true },
+    });
   return user && isCurrentSession(identity, user.sessionVersion) ? toPrincipal(user, "session") : null;
 }
 
