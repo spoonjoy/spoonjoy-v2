@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/oauth.token";
 import { captureEvent } from "~/lib/analytics-server";
-import { createAuthorizationCode, registerOAuthClient } from "~/lib/oauth-server.server";
+import { createAuthorizationCode, hashOAuthOpaqueToken, registerOAuthClient } from "~/lib/oauth-server.server";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
@@ -242,6 +242,58 @@ describe("OAuth token telemetry", () => {
     expectCaptureScheduled(refreshArgs);
   });
 
+  it("records why a refresh was refused, with its own event when a connection is revoked as compromised", async () => {
+    const { client, code } = await setupGrant();
+    const exchange = await invokeAction(formRequest({
+      grant_type: "authorization_code", code, client_id: client.clientId, redirect_uri: REDIRECT_URI, code_verifier: VERIFIER,
+    }).request);
+    const first = await exchange.response.json() as { refresh_token: string };
+    const rotated = await invokeAction(formRequest({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: client.clientId }).request);
+    const second = await rotated.response.json() as { refresh_token: string };
+    const refreshFields = (refreshToken: string) => ({ grant_type: "refresh_token", refresh_token: refreshToken, client_id: client.clientId });
+    const refusalOf = () => (oauthTokenInputs().filter((input) => input.event === "spoonjoy.oauth.token").at(-1)?.properties as Record<string, unknown>).refresh_refusal;
+    const compromisedEvents = () => oauthTokenInputs().filter((input) => input.event === "spoonjoy.oauth.grant_compromised");
+
+    // Replayed straight away: a race inside the grace window.
+    vi.mocked(captureEvent).mockClear();
+    const race = await invokeAction(formRequest(refreshFields(first.refresh_token)).request);
+    expect(race.response.status).toBe(400);
+    expectOAuthTokenEvent({ status: 400, outcome: "error", grantType: "refresh_token", errorCode: "invalid_grant", clientId: client.clientId });
+    expect(refusalOf()).toBe("grace_replay");
+    expect(compromisedEvents()).toHaveLength(0);
+
+    // Replayed two minutes after rotation: the connection is revoked as compromised.
+    await db.oAuthRefreshToken.update({
+      where: { tokenHash: await hashOAuthOpaqueToken(first.refresh_token) },
+      data: { revokedAt: new Date(Date.now() - 2 * 60 * 1000) },
+    });
+    vi.mocked(captureEvent).mockClear();
+    const reuse = await invokeAction(formRequest(refreshFields(first.refresh_token)).request);
+    expect(reuse.response.status).toBe(400);
+    expect(refusalOf()).toBe("reuse_revoked");
+    expect(compromisedEvents()).toEqual([expect.objectContaining({
+      distinctId: client.clientId,
+      properties: expect.objectContaining({ client_id: client.clientId, reason: "refresh_reuse" }),
+    })]);
+    expect(JSON.stringify(compromisedEvents())).not.toContain("ort_");
+    expect(reuse.args.waitUntil).toHaveBeenCalledTimes(2);
+
+    // An expired refresh token says so.
+    const third = await setupGrant();
+    const thirdExchange = await invokeAction(formRequest({
+      grant_type: "authorization_code", code: third.code, client_id: third.client.clientId, redirect_uri: REDIRECT_URI, code_verifier: VERIFIER,
+    }).request);
+    const thirdTokens = await thirdExchange.response.json() as { refresh_token: string };
+    await db.oAuthRefreshToken.update({
+      where: { tokenHash: await hashOAuthOpaqueToken(thirdTokens.refresh_token) },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    vi.mocked(captureEvent).mockClear();
+    await invokeAction(formRequest({ grant_type: "refresh_token", refresh_token: thirdTokens.refresh_token, client_id: third.client.clientId }).request);
+    expect(refusalOf()).toBe("expired");
+    expect(second.refresh_token).toMatch(/^ort_/);
+  });
+
   it("captures safe token error and rate-limit telemetry", async () => {
     const { client, codeChallenge } = await setupGrant();
 
@@ -294,6 +346,7 @@ describe("OAuth token telemetry", () => {
       outcome: "error",
       grantType: "authorization_code",
       errorCode: "invalid_grant",
+      clientId: client.clientId,
       forbidden: [
         "oac_raw_secret_code",
         codeChallenge,

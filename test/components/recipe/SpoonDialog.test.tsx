@@ -79,7 +79,7 @@ describe("SpoonDialog", () => {
 
   it("disables submit until at least one of {photo, note, nextTime} is non-empty", async () => {
     renderDialog();
-    const submit = await screen.findByRole("button", { name: /save spoon/i });
+    const submit = await screen.findByRole("button", { name: /^log cook$/i });
     expect(submit).toBeDisabled();
     await userEvent.type(screen.getByLabelText(/note/i), "tasted great");
     expect(submit).not.toBeDisabled();
@@ -87,7 +87,7 @@ describe("SpoonDialog", () => {
 
   it("enables submit when only nextTime is filled", async () => {
     renderDialog();
-    const submit = await screen.findByRole("button", { name: /save spoon/i });
+    const submit = await screen.findByRole("button", { name: /^log cook$/i });
     expect(submit).toBeDisabled();
     await userEvent.type(screen.getByLabelText(/next time/i), "more salt");
     expect(submit).not.toBeDisabled();
@@ -116,7 +116,7 @@ describe("SpoonDialog", () => {
   it("shows the first-chef cover prompt without requiring a photo", async () => {
     renderDialog({ isOriginCookCandidate: true, coverPromptMode: "first-photo" });
     expect(await screen.findByText("Add a photo to create the recipe cover")).toBeInTheDocument();
-    const submit = screen.getByRole("button", { name: /save spoon/i });
+    const submit = screen.getByRole("button", { name: /^log cook$/i });
     expect(submit).toBeDisabled();
     await userEvent.type(screen.getByLabelText(/note/i), "first cook, no photo");
     expect(submit).not.toBeDisabled();
@@ -204,7 +204,7 @@ describe("SpoonDialog", () => {
     await userEvent.type(await screen.findByLabelText(/note/i), "tasted ok");
     await userEvent.upload(screen.getByLabelText(/photo/i), makeFile("cover.png", "image/png"));
     await userEvent.click(screen.getByRole("checkbox", { name: /use this photo as recipe cover/i }));
-    await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
     await waitFor(() => expect(captured).not.toBeNull());
     expect(captured!.get("intent")).toBe("createSpoon");
     expect(captured!.get("note")).toBe("tasted ok");
@@ -234,7 +234,7 @@ describe("SpoonDialog", () => {
     if (typed !== null) {
       await userEvent.type(screen.getByLabelText(/cooked at/i), typed);
     }
-    await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
     await waitFor(() => expect(captured).not.toBeNull());
     return captured!;
   }
@@ -285,7 +285,7 @@ describe("SpoonDialog", () => {
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     await userEvent.upload(fileInput, makeFile("cook.png", "image/png"));
 
-    const submit = screen.getByRole("button", { name: /save spoon/i });
+    const submit = screen.getByRole("button", { name: /^log cook$/i });
     const form = submit.closest("form");
     await userEvent.click(submit);
 

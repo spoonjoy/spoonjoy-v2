@@ -115,6 +115,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/mcp.tsx", "/mcp", "api-or-oauth"),
   route("routes/csp-report.ts", "/csp-report", "api-or-oauth"),
   route("routes/health.ts", "/health", "platform-asset"),
+  route("routes/health.ready.ts", "/health/ready", "platform-asset"),
   route("routes/oauth.register.ts", "/oauth/register", "api-or-oauth"),
   route("routes/oauth.authorize.tsx", "/oauth/authorize", "secure-web-handoff"),
   route("routes/oauth.callback.tsx", "/oauth/callback", "secure-web-handoff", { universalLink: true }),

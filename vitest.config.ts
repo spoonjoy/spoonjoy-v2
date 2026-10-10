@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { claimRunDbDir } from "./test/support/worker-db";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
@@ -13,6 +14,7 @@ const coverageInclude = [
   "scripts/script-environment.mjs",
   "scripts/cleanup-local-qa-data.mjs",
   "scripts/seed-qa-kitchen.mjs",
+  "scripts/generate-photo-variants.mjs",
   "scripts/smoke-live-helpers.mjs",
   "scripts/smoke-live-oauth.mjs",
   "scripts/smoke-live-runtime.mjs",
@@ -27,6 +29,8 @@ const coverageInclude = [
   "scripts/sanitize-journey-traces.mjs",
   "scripts/count-cloudflare-requests.mjs",
   "scripts/qa-run-scope.mjs",
+  "scripts/d1-logical-export.mjs",
+  "scripts/journeys-scope.mjs",
   "test/warning-policy.ts",
   "e2e/warning-policy.ts",
   "e2e/fixtures.ts",
@@ -55,16 +59,24 @@ const hasFocusedTestFilter = process.argv.some((arg) =>
 // should not fail because unrelated imported helpers are partially covered.
 const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 
+// One temporary directory per run for each worker process's own copy of prisma/test.db
+// (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly; that
+// shares one file, so the run is then serial.
+const runDbDir = claimRunDbDir();
+const requestedDbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
+const dbWorkers = runDbDir && Number.isInteger(requestedDbWorkers) && requestedDbWorkers > 0 ? requestedDbWorkers : 1;
+
 export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
     setupFiles: ["./test/setup.ts"],
     pool: "forks",
-    // DB-backed route/model tests share test.db and destructive cleanup helpers.
-    // Keep files serial until the suite has per-worker database isolation.
-    maxWorkers: 1,
-    fileParallelism: false,
+    // DB-backed tests run in parallel: test/setup.ts gives each worker process its own copy of
+    // prisma/test.db (test/support/worker-db.ts); the global setup removes the copies afterwards.
+    globalSetup: ["./test/support/global-setup.ts"],
+    maxWorkers: dbWorkers,
+    fileParallelism: dbWorkers > 1,
     sequence: {
       shuffle: false,
     },

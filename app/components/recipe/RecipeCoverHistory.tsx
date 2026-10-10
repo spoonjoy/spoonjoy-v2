@@ -17,6 +17,8 @@ export type RecipeCoverHistoryItem = {
   generationStatus: string;
   sourceType: string;
   sourceImageUrl?: string | null;
+  /** Set on a cover made by regenerating another one. */
+  parentCoverId?: string | null;
   archivedAt?: string | null;
   createdAt: string;
   isActive: boolean;
@@ -32,12 +34,21 @@ export type RecipeCoverSpoonImage = {
 };
 
 function statusLabel(status: string, generationStatus: string, archivedAt?: string | null) {
+  // A failed, unarchived cover is labelled by failedAttemptLabel before this is reached.
   if (status === "archived" || archivedAt) return "Archived";
-  if (status === "failed") return "Failed";
   if (status === "processing" || generationStatus === "processing") return "Processing";
   if (generationStatus === "failed") return "Editorial failed";
   if (status !== "ready") return "Unavailable";
   return "Ready";
+}
+
+/**
+ * A generation attempt that produced no image. Its row still carries the photo it was made
+ * from, but that photo cannot be used from this cover, so the card shows the failure instead.
+ */
+function failedAttemptLabel(cover: RecipeCoverHistoryItem): string | null {
+  if (cover.status !== "failed" || cover.archivedAt) return null;
+  return cover.parentCoverId ? "Regeneration failed" : "Generation failed";
 }
 
 function variantName(variant: "image" | "stylized") {
@@ -139,7 +150,8 @@ export function RecipeCoverHistory({
       ) : (
         <div className="divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]">
           {covers.map((cover) => {
-            const thumbnail = cover.variants[0]?.imageUrl;
+            const failedAttempt = failedAttemptLabel(cover);
+            const thumbnail = failedAttempt ? undefined : cover.variants[0]?.imageUrl;
             const canQueueGeneration = coverCanMutate(cover);
             const canArchive = coverCanMutate(cover);
             const canActivate = coverCanActivate(cover);
@@ -158,7 +170,14 @@ export function RecipeCoverHistory({
                 className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3 py-4 sm:gap-4"
               >
                 <div className="aspect-square overflow-hidden bg-[var(--sj-photo-charcoal)]">
-                  {thumbnail ? (
+                  {failedAttempt ? (
+                    <div
+                      data-testid="recipe-cover-failed-thumbnail"
+                      className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-on-photo)]"
+                    >
+                      {failedAttempt}
+                    </div>
+                  ) : thumbnail ? (
                     <img
                       src={thumbnail}
                       alt=""
@@ -167,7 +186,7 @@ export function RecipeCoverHistory({
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-paper)]">
+                    <div className="grid h-full place-items-center px-2 text-center font-sj-ui text-xs text-[var(--sj-on-photo)]">
                       No image
                     </div>
                   )}
@@ -180,14 +199,18 @@ export function RecipeCoverHistory({
                       </span>
                     ) : null}
                     <span className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-                      {statusLabel(cover.status, cover.generationStatus, cover.archivedAt)}
+                      {failedAttempt ?? statusLabel(cover.status, cover.generationStatus, cover.archivedAt)}
                     </span>
                     <span className="font-sj-ui text-xs text-[var(--sj-ink-soft)]">
                       {createdDateLabel(cover.createdAt)}
                     </span>
                   </div>
 
-                  {cover.variants.length === 0 ? (
+                  {failedAttempt ? (
+                    <p className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">
+                      No image was made. Try again with a direction, or archive this attempt.
+                    </p>
+                  ) : cover.variants.length === 0 ? (
                     <p className="font-sj-ui text-sm text-[var(--sj-ink-soft)]">
                       No usable image variants.
                     </p>
@@ -354,9 +377,9 @@ export function RecipeCoverHistory({
                       type="submit"
                       plain
                       className="mt-2"
-                      aria-label={`Editorialize spoon photo by ${spoon.chef.username}`}
+                      aria-label={`Make a styled cover from the cook photo by ${spoon.chef.username}`}
                     >
-                      Editorialize cover
+                      Make a styled cover
                     </Button>
                   </Form>
                 </div>

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  formatAmount,
   formatServingsLabel,
+  isCountUnit,
   formatQuantity,
   scaleQuantity,
   scaleServingsText,
@@ -452,5 +454,56 @@ describe('quantity utilities', () => {
       expect(formatServingsLabel(null)).toBe('')
       expect(formatServingsLabel(undefined)).toBe('')
     })
+  })
+})
+
+describe('formatAmount', () => {
+  it.each([
+    [0.3125, 'cup', {}, '⅓ cup'],
+    [0.25, 'cup', {}, '¼ cup'],
+    [1, 'cup', {}, '1 cup'],
+    [2, 'cup', {}, '2 cups'],
+    [2.5, 'cup', {}, '2 ½ cups'],
+    [1.01, 'cup', {}, '1 cup'],
+    [2, 'Cup', {}, '2 Cups'],
+    [2, 'cups', {}, '2 cups'],
+    [3, 'tsp', {}, '3 tsp'],
+    [2, 'whole', {}, '2'],
+    [2, 'Whole', {}, '2'],
+    [null, 'whole', {}, ''],
+    [1.25, 'whole', {}, '1 ¼'],
+    [1.25, 'whole', { roundCountsUp: true }, '2'],
+    [2, 'whole', { roundCountsUp: true }, '2'],
+    [2.0000000001, 'clove', { roundCountsUp: true }, '2 cloves'],
+    [2.5, 'cloves', { roundCountsUp: true }, '3 cloves'],
+    [0.5, 'cup', { roundCountsUp: true }, '½ cup'],
+    [0, 'whole', { roundCountsUp: true }, '0'],
+    ['0.3125', 'cup', {}, '⅓ cup'],
+    ['not a number', 'pinch', {}, 'pinch'],
+    [null, 'pinch', {}, 'pinch'],
+    [undefined, undefined, {}, ''],
+    [2, null, {}, '2'],
+    [2, '  cup  ', {}, '2 cups'],
+    [Number.NaN, 'cup', {}, 'cup'],
+  ] as const)('formatAmount(%s, %s, %o) is %s', (quantity, unit, options, expected) => {
+    expect(formatAmount(quantity, unit, options)).toBe(expected)
+  })
+
+  it('treats a missing options argument as no rounding', () => {
+    expect(formatAmount(1.5, 'whole')).toBe('1 ½')
+  })
+})
+
+describe('isCountUnit', () => {
+  it.each([
+    ['whole', true],
+    ['clove', true],
+    ['Cloves', true],
+    ['cup', false],
+    ['tsp', false],
+    [null, false],
+    [undefined, false],
+  ] as const)('isCountUnit(%s) is %s', (unit, expected) => {
+    expect(isCountUnit(unit)).toBe(expected)
   })
 })

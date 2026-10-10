@@ -69,7 +69,7 @@ export default function Chefs() {
           </div>
         ) : (
           <RuledEmptyState title="No chef activity yet">
-            <Text>Cook, fork, or save another chef's recipe to start building your kitchen graph.</Text>
+            <Text>Cook, fork or save another chef's recipe, and that chef shows up here.</Text>
           </RuledEmptyState>
         )}
       </section>

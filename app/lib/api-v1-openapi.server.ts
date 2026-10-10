@@ -5,7 +5,7 @@ import {
   API_V1_SCOPE_REQUIREMENTS,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
-import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
+import { OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN_SOURCE } from "~/lib/username";
 import { SEARCH_SCOPES } from "~/lib/search.server";
 import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
@@ -382,8 +382,8 @@ const schemas = {
     token_type: { const: "Bearer" },
     expires_in: {
       type: "integer",
-      const: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
-      description: "Present for expiring non-MCP OAuth credentials. Omitted for MCP-bound connections that remain active until revocation.",
+      enum: [OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS],
+      description: "Seconds until the access token expires: 900 (15 minutes) for generic OAuth clients and 7776000 (90 days) for MCP-bound connections. Refresh before it runs out; each refresh_token is accepted for 180 days after it was issued.",
     },
     scope: { type: "string" },
   }),
@@ -530,7 +530,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -546,7 +546,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -661,7 +661,15 @@ const schemas = {
   }),
   UpdateAccountProfileRequest: objectSchema(["clientMutationId", "email", "username"], {
     clientMutationId: shortTextSchema,
-    email: { type: "string", format: "email", description: EMAIL_REQUEST_DESCRIPTION },
+    email: {
+      type: "string",
+      format: "email",
+      description:
+        "The API never changes the email. A different address is refused with 403 email_change_requires_web " +
+        "when the username is unchanged, and ignored when the username changes in the same request. " +
+        "Email changes happen only in Account settings on the website, and a new address starts unverified. " +
+        EMAIL_REQUEST_DESCRIPTION,
+    },
     // Describes what the server accepts, not only the rule for a new username: the caller's
     // current username is accepted unchanged even when it predates the rule (app/lib/username.ts).
     username: {
@@ -1037,6 +1045,14 @@ const schemas = {
         arrayOf({ type: "string" }),
       ],
     },
+    expiresInDays: {
+      description: "Days until the token expires, from 1 to 365. Omit it for the 90-day default; send null or \"never\" for a token that never expires.",
+      oneOf: [
+        { type: "integer", minimum: 1, maximum: 365 },
+        { type: "null" },
+        { type: "string", enum: ["never"] },
+      ],
+    },
   }),
   CreateShoppingItemRequest: objectSchema(["clientMutationId", "name"], {
     clientMutationId: shortTextSchema,
@@ -1061,7 +1077,7 @@ const schemas = {
   ClearShoppingListRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
-  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "auth"], {
+  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "photoVariants", "auth"], {
     app: { const: "spoonjoy" },
     version: { const: "v1" },
     status: { const: "ok" },
@@ -1070,6 +1086,12 @@ const schemas = {
     sdkOpenapiUrl: { type: "string" },
     connectorOpenapiUrl: { type: "string" },
     resources: arrayOf({ type: "object" }),
+    photoVariants: objectSchema(["queryParameter", "widths", "contentType", "note"], {
+      queryParameter: { const: "w", description: "Query parameter that asks a Spoonjoy-hosted /photos/ URL for a size variant." },
+      widths: { ...arrayOf({ type: "integer" }), description: "Stored variant widths in pixels. A requested width rounds up to the next one and is capped at the largest." },
+      contentType: { const: "image/webp" },
+      note: { type: "string" },
+    }),
     auth: { type: "object" },
   }),
   BuildDeployment: objectSchema(["id", "tag", "timestamp"], {
@@ -1666,7 +1688,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
-    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account username (the email cannot be changed through the API)", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "email_change_requires_web", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
     DELETE: { operationId: "deleteApiV1Me", tags: ["Account"], summary: "Permanently delete the authenticated account after re-authentication", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountDeletionEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "DeleteAccountRequest" },
   },
   "/api/v1/me/export": {
@@ -2881,6 +2903,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   authentication_required: "Authentication required",
   invalid_token: "Invalid API token",
   insufficient_scope: "Missing required scope",
+  email_change_requires_web: "Your email can only be changed in Account settings on the Spoonjoy website.",
   not_found: "Resource not found",
   method_not_allowed: "Method not allowed",
   idempotency_conflict: "Idempotency key was already used for a different request",
@@ -3482,13 +3505,13 @@ const agentStartResponseExample = {
   data: {
     deviceCode: "sjdc_...",
     userCode: "ABCD-2345",
-    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123",
     verificationUri: "https://spoonjoy.app/agent/connect",
-    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123",
     expiresAt: exampleTimestamp,
     expiresIn: 600,
     interval: 2,
-    message: "Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
+    message: "Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
   },
 };
 const agentPollRequestExample = { deviceCode: "sjdc_..." };
@@ -3497,11 +3520,11 @@ const agentPollPendingExample = {
   data: {
     status: "pending",
     expiresAt: exampleTimestamp,
-    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    authorizationUrl: "https://spoonjoy.app/agent/connect/acr_123",
     verificationUri: "https://spoonjoy.app/agent/connect",
-    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345",
+    verificationUriComplete: "https://spoonjoy.app/agent/connect/acr_123",
     userCode: "ABCD-2345",
-    message: "Waiting for the user to approve this Spoonjoy connection.",
+    message: "Waiting for the user to approve this Spoonjoy connection. Show them authorizationUrl and, separately, userCode: they type the code on that page to approve.",
   },
 };
 const agentPollApprovedExample = {
@@ -3516,7 +3539,7 @@ const agentPollApprovedExample = {
 	      tokenPrefix: "sj_abc123456",
 	      scopes: ["shopping_list:read", "shopping_list:write"],
 	      createdAt: exampleTimestamp,
-	      expiresAt: null,
+	      expiresAt: "2026-08-30T00:00:00.000Z",
 	    },
     message: "Connection approved. Cache this token locally and use it for future Spoonjoy calls.",
   },
@@ -3647,7 +3670,7 @@ function authOperationPaths() {
         summary: "Start a delegated approval connection",
         "x-auth": "optional",
         "x-scopes": [],
-        "x-grantable-scopes": ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        "x-grantable-scopes": ["public:read", "recipes:read", "cookbooks:read", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         "x-credential-modes": ["anonymous"],
         security: [{}],
         requestBody: {
@@ -3910,13 +3933,16 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         eyebrow: "Agent, appliance, no callback",
         audience: "Use for agents, CLIs, kitchen displays, and constrained devices that can show a chef an approval URL but cannot run an OAuth callback.",
         endpoints: ["/api/tools/start_agent_connection", "/api/tools/poll_agent_connection", "/api/v1/tokens/{credentialId}"],
-        scopes: ["account:read", "account:write", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
+        scopes: ["public:read", "recipes:read", "cookbooks:read", "kitchen:read", "kitchen:write", "shopping_list:read", "shopping_list:write"],
         notes: [
+          "Delegated approval never grants account:* or tokens:* scopes; requests for them fail with 400.",
+          "The approval link never carries the code: the chef opens it, signs in, and types userCode, so show both.",
+          "Approved delegated tokens expire after 90 days; start a new connection after that.",
           "The device code expires after 10 minutes.",
           "Poll no faster than the returned interval, currently 2 seconds.",
           "A pending poll returns pending plus authorizationUrl, verificationUri, verificationUriComplete, and userCode.",
           "Pass scopes such as shopping_list:read shopping_list:write to request a least-privilege delegated token; omitted scopes default to shopping_list:read shopping_list:write.",
-          "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl.",
+          "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl; verificationUriComplete is the same link as authorizationUrl and also needs the typed code.",
           "An approved poll returns the sj_... token once, plus token metadata.",
           "The token is a normal bearer credential. A device can revoke its own credential id with DELETE /api/v1/tokens/{credentialId}; revoking any other credential requires tokens:write.",
         ],
