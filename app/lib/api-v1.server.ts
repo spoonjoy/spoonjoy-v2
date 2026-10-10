@@ -170,6 +170,7 @@ import {
   archiveRecipeCover,
   clearActiveRecipeCover,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
@@ -2933,24 +2934,13 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
     if (!rawPhotoUrl.trim()) {
       throw new ApiV1Error("validation_error", "Cover has no source image");
     }
-    await db.recipeCover.update({
-      where: { id: cover.id },
-      data: {
-        status: "processing",
-        generationStatus: "processing",
-        generationStartedAt: new Date(),
-        failureReason: null,
-        sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-        promptAddition,
-        parentCoverId: cover.id,
-      },
-    });
+    const regeneration = await startRecipeCoverRegeneration(db, cover, { createdById: principal.id, rawPhotoUrl, promptAddition });
     await queueApiRecipeCoverStylization(args, {
       db,
       userId: principal.id,
       recipeId,
-      coverId: cover.id,
-      parentCoverId: cover.id,
+      coverId: regeneration.coverId,
+      parentCoverId: regeneration.parentCoverId,
       promptAddition,
       rawPhotoUrl,
       recipeTitle: recipe.title,
@@ -2964,7 +2954,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
       } : undefined,
     });
     const nextRecipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const regeneratedCover = await db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId } });
+    const regeneratedCover = await db.recipeCover.findFirstOrThrow({ where: { id: regeneration.coverId, recipeId } });
     return {
       status: 200,
       data: {

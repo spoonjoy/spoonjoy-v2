@@ -353,6 +353,8 @@ export default function NewStep() {
   const usesStepsErrorId = "new-step-uses-steps-error";
   const descriptionErrorId = "new-step-description-error";
 
+  const parsedListShown = ingredientInputMode !== "manual" && parsedIngredients.length > 0;
+
   const handleModeChange = (mode: IngredientInputMode) => {
     setIngredientInputMode(mode);
   };
@@ -493,7 +495,7 @@ export default function NewStep() {
                       onParsed={handleParsed}
                       onSwitchToManual={() => setIngredientInputMode("manual")}
                     />
-                    {parsedIngredients.length > 0 && (
+                    {parsedListShown && (
                       <ParsedIngredientList
                         ingredients={parsedIngredients}
                         onEdit={handleEditParsed}
@@ -524,7 +526,8 @@ export default function NewStep() {
               <input type="hidden" name="ingredientsJson" value={JSON.stringify(ingredients)} />
 
               {ingredients.length === 0 ? (
-                <RuledEmptyState title="No ingredients added yet" />
+                // Parsed ingredients waiting for "Add All" are not "none yet".
+                !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
               ) : (
                 <ul className="sj-list-ruled mt-4 list-none p-0">
                   {ingredients.map((ingredient, index) => (
