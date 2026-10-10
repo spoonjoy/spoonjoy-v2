@@ -890,9 +890,9 @@ describe("Recipes New Route", () => {
       const recipe = await db.recipe.findFirstOrThrow({
         where: { chefId: testUserId, title: "WaitUntil Recipe" },
       });
-      await expectAwaitingPlaceholderCover(recipe.id, testUserId);
-      // Allow the captured promise to resolve so cleanup is clean.
+      // The handed-off task is what records the generation's outcome, so let it finish first.
       await Promise.all(captured);
+      await expectAwaitingPlaceholderCover(recipe.id, testUserId);
     });
 
     it("should delete uploaded recipe image when database creation fails", async () => {

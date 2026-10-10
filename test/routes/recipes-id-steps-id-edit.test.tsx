@@ -3909,6 +3909,35 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         });
       });
 
+      it("does not say no ingredients were added while parsed ones are waiting to be added", async () => {
+        const mockData = {
+          recipe: { id: "recipe-1", title: "Test Recipe" },
+          step: { id: "step-1", stepNum: 1, stepTitle: null, description: "A step", ingredients: [] },
+          availableSteps: [],
+        };
+        const Stub = createTestRoutesStub([
+          {
+            path: "/recipes/:id/steps/:stepId/edit",
+            Component: EditStep,
+            loader: () => mockData,
+            action: async () => ({ parsedIngredients: [{ quantity: 2, unit: "cups", ingredientName: "flour" }] }),
+          },
+        ]);
+
+        render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
+
+        expect(await screen.findByText("No ingredients added yet")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), { target: { value: "2 cups flour" } });
+        expect(await screen.findByRole("button", { name: /Add all/ }, { timeout: 3000 })).toBeInTheDocument();
+        expect(screen.queryByText("No ingredients added yet")).not.toBeInTheDocument();
+
+        // Closing the form hides the parsed list, so the empty state is true again.
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+        expect(screen.queryByRole("button", { name: /Add all/ })).not.toBeInTheDocument();
+        expect(screen.getByText("No ingredients added yet")).toBeInTheDocument();
+      });
+
       // A rejected batch (say, one ingredient is already in the recipe) must leave the parsed
       // list in place so it can be fixed; it used to be cleared before the server answered.
       it("keeps the parsed list when Add All is rejected, and clears it only after success", async () => {
