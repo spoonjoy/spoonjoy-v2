@@ -403,6 +403,48 @@ describe("cleanup-local-qa-data", () => {
     ).toThrow(/QA target mismatch/);
   });
 
+  it("names the run's own database when qa-run-scope has rewritten the QA binding", () => {
+    const { target } = cleanup.parseCleanupArgs(["--target-env", "qa"]);
+    const runConfig = {
+      env: {
+        qa: {
+          vars: { SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev" },
+          d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-1-1", database_id: "run-id" }],
+        },
+      },
+    };
+
+    expect(cleanup.formatCleanupTargetSummary(cleanup.resolveRunScopedQaTarget(target, "DB", runConfig))).toEqual([
+      "Target environment: qa",
+      "Base URL: https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev",
+      "D1 target: QA run D1 spoonjoy-qa-run-1-1 (--remote --env qa, rewritten by qa-run-scope)",
+      "R2 target: QA R2 spoonjoy-photos-qa (--remote)",
+      "Destructive scope: QA disposable test data only",
+    ]);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-1-1" }] } } }))
+      .toMatchObject({ baseUrl: target.baseUrl, d1Target: "QA run D1 spoonjoy-qa-run-1-1 (--remote --env qa, rewritten by qa-run-scope)" });
+    expect(cleanup.resolveRunScopedQaTarget(target, "OTHER_DB", runConfig)).toBe(target);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa" }] } } })).toBe(target);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", {})).toBe(target);
+    const local = cleanup.parseCleanupArgs([]).target;
+    expect(cleanup.resolveRunScopedQaTarget(local, "DB", runConfig)).toBe(local);
+  });
+
+  it("prints the run database from wrangler.json before a QA cleanup", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    const readWranglerConfig = vi.fn(() => ({
+      env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-9-1" }] } },
+    }));
+
+    await cleanup.runCleanupCli({ argv: ["--target-env", "qa"], runCommand, stdout: stdout.stream, stderr: stderr.stream, readWranglerConfig });
+
+    expect(readWranglerConfig).toHaveBeenCalledTimes(1);
+    expect(stdout.text()).toContain("D1 target: QA run D1 spoonjoy-qa-run-9-1 (--remote --env qa, rewritten by qa-run-scope)\n");
+    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa ");
+  });
+
   it("formats the target summary printed before cleanup commands", () => {
     const options = cleanup.parseCleanupArgs(["--target-env", "qa"]);
 
