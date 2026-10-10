@@ -3201,6 +3201,29 @@ describe("Shopping List Route", () => {
       });
     });
 
+    it.each([
+      ["1 bell pepper", "1", "whole", "bell pepper"],
+      ["1 red onion", "1", "whole", "red onion"],
+      ["1 green chile", "1", "whole", "green chile"],
+      ["2 cloves garlic", "2", "cloves", "garlic"],
+      ["3 large eggs", "3", "large", "eggs"],
+      ["1 pinch of salt", "1", "pinch", "salt"],
+      ["2 Tbsp. olive oil", "2", "Tbsp", "olive oil"],
+      ["1 can of chickpeas", "1", "can", "chickpeas"],
+      ["4 sweet potatoes", "4", "whole", "sweet potatoes"],
+    ])("keeps a word that isn't a unit in the name: %j", (text, quantity, unitName, ingredientName) => {
+      expect(parseShoppingItemFallback(text)).toMatchObject({ quantity, unitName, ingredientName, isAmbiguous: false });
+    });
+
+    it("leaves a unit with nothing after it as the name", () => {
+      expect(parseShoppingItemFallback("2 cups")).toMatchObject({
+        quantity: "2",
+        unitName: "whole",
+        ingredientName: "cups",
+        isAmbiguous: false,
+      });
+    });
+
     it("should flag empty and invalid quantity text as ambiguous", () => {
       expect(parseShoppingItemFallback("   ")).toMatchObject({
         quantity: "",
