@@ -2938,12 +2938,13 @@ describe("deployment preflight", () => {
     const workflow = validCiWorkflow();
     const coverageStart = workflow.indexOf("  coverage:");
     const stepsStart = workflow.indexOf("    steps:", coverageStart);
-    const workersCoverageStart = workflow.indexOf("  workers-coverage:");
+    // The next job after coverage, so only coverage's steps are replaced.
+    const nextJobStart = workflow.indexOf("  unit-changed:");
     const inputs = validInputs();
     inputs.ciWorkflow = [
       workflow.slice(0, stepsStart),
       "    steps: " + stepsValue + "\n\n",
-      workflow.slice(workersCoverageStart),
+      workflow.slice(nextJobStart),
     ].join("");
 
     const result = validateDeploymentConfig(inputs);
@@ -3421,6 +3422,11 @@ describe("deployment preflight", () => {
     ["a canonical job drops its dependency on queue-tested", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n${CANONICAL_CI_JOB_IF_LINE}\n`],
     ["a canonical job depends on something else", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: advisory\n${CANONICAL_CI_JOB_IF_LINE}\n`],
     ["queue-tested is removed", "\n  queue-tested:\n", "\n  queue-tested-removed:\n"],
+    [
+      "a job gains a step that neither runs a command nor uses an action",
+      "      - name: 📥 Install advisory dependencies without lifecycle scripts\n",
+      "      - name: 🫥 Placeholder\n        with:\n          note: nothing\n\n      - name: 📥 Install advisory dependencies without lifecycle scripts\n",
+    ],
   ])("rejects a CI workflow where %s", (_label, expected, replacement) => {
     const inputs = validInputs();
     inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
