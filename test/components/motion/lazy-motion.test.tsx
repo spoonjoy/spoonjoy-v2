@@ -3,8 +3,8 @@ import { join, resolve } from 'node:path'
 import { render, screen, waitFor } from '@testing-library/react'
 import { m, motion } from 'motion/react'
 import { Component, type ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
-import { LazyLayoutGroup } from '~/components/motion/lazy-motion'
+import { describe, expect, it, vi } from 'vitest'
+import { LazyLayoutGroup, loadMotionFeatures } from '~/components/motion/lazy-motion'
 
 const ROOT = resolve(__dirname, '../../..')
 
@@ -54,6 +54,22 @@ describe('Motion loading', () => {
     expect(screen.getByTestId('lazy-list').tagName).toBe('UL')
     const features = await import('~/components/motion/motion-features')
     await waitFor(() => expect(features.default).toBeDefined())
+  })
+
+  it('retries a features chunk that fails once', async () => {
+    const features = { renderer: () => null }
+    const load = vi.fn().mockRejectedValueOnce(new TypeError('Importing a module script failed.')).mockResolvedValue(features)
+    await expect(loadMotionFeatures(load)).resolves.toBe(features)
+    expect(load).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves the features unloaded, without an error, when the chunk keeps failing', async () => {
+    const load = vi.fn().mockRejectedValue(new TypeError('Importing a module script failed.'))
+    const pending = Symbol('pending')
+    const settled = loadMotionFeatures(load).then(() => 'resolved', () => 'rejected')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await expect(Promise.race([settled, Promise.resolve(pending)])).resolves.toBe(pending)
+    expect(load).toHaveBeenCalledTimes(2)
   })
 
   it('refuses a full motion component inside the group', () => {
