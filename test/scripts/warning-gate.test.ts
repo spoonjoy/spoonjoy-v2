@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -88,6 +88,18 @@ describe("warning gate", () => {
       "✓ warning dependency fallback used",
     ]);
     expect(findUnexpectedWarnings("✓ should keep warning copy in a passing test name")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ requires warning-clean CI workflow setup 333ms")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ accepts a single-job warning-clean Storybook deploy workflow  512ms")).toEqual([]);
+    expect(findUnexpectedWarnings("× surfaces remote-migration auth errors as warnings only 401ms")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ DeprecationWarning: emitted by a dependency")).toEqual([
+      "✓ DeprecationWarning: emitted by a dependency",
+    ]);
+    expect(findUnexpectedWarnings("✓ warning-gates every command 400ms")).toEqual([
+      "✓ warning-gates every command 400ms",
+    ]);
+    expect(findUnexpectedWarnings("✓ checks output (warn: leaked)")).toEqual([
+      "✓ checks output (warn: leaked)",
+    ]);
 
     expect(findUnexpectedWarnings("▲ [WARNING] bundle contains dynamic import")).toEqual([
       "▲ [WARNING] bundle contains dynamic import",
@@ -444,5 +456,31 @@ describe("warning gate", () => {
     expect(result.exitCode).toBe(1);
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("Warning: default CLI path"));
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe("repository test titles", () => {
+  // vitest prints a slow test as "✓ <title>  <n>ms". If a title reads as a warning, CI then fails
+  // only when that test happens to run slowly, so every title must pass the gate in that form.
+  it("never trip the warning gate when vitest reports them as slow", () => {
+    const roots = ["test", "app"].map((dir) => path.resolve(__dirname, "../..", dir));
+    const titlePattern = /\b(?:it|test)(?:\.each\([^)]*\))?\(\s*(["'`])((?:(?!\1)[^\\\n]|\\.)*)\1/g;
+    const flagged: string[] = [];
+    const visit = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          visit(full);
+        } else if (/\.test\.[cm]?[jt]sx?$/.test(entry.name)) {
+          for (const match of readFileSync(full, "utf8").matchAll(titlePattern)) {
+            if (findUnexpectedWarnings(`✓ ${match[2]}  333ms`).length > 0) {
+              flagged.push(`${path.relative(process.cwd(), full)}: ${match[2]}`);
+            }
+          }
+        }
+      }
+    };
+    roots.forEach(visit);
+    expect(flagged).toEqual([]);
   });
 });

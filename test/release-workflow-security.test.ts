@@ -465,7 +465,7 @@ describe("CI warning suppression at source", () => {
     expect(ci).not.toMatch(/sudo[^\n]*(?:node|pnpm|corepack|node_modules|\.js)/);
   });
 
-  it("warning-gates every Corepack command in canonical CI", () => {
+  it("routes every Corepack command in canonical CI through the warning gate", () => {
     expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(4);
     expect(ci).not.toMatch(/^\s*corepack\s/m);
   });
