@@ -19,7 +19,9 @@ import {
   hashOAuthOpaqueToken,
   issueConnectorTokens,
   normalizeScope,
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS,
   OAuthError,
+  type OAuthRefreshRefusal,
   registerOAuthClient,
   revokeConnectorRefreshToken,
   rotateConnectorTokens,
@@ -360,11 +362,9 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
     token_type: "Bearer",
+    expires_in: tokens.expiresIn,
     scope: tokens.scope,
   };
-  if (tokens.expiresIn !== null) {
-    payload.expires_in = tokens.expiresIn;
-  }
 
   return Response.json(payload, {
     headers: {
@@ -374,8 +374,10 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
   });
 }
 
+// "persistent" names the long-lived MCP-bound access token (90 days), as distinct from a
+// generic client's 15-minute one. The telemetry value predates MCP tokens having an expiry.
 function tokenLifetime(tokens: IssuedConnectorTokens): "expiring" | "persistent" {
-  return tokens.expiresIn === null ? "persistent" : "expiring";
+  return tokens.expiresIn > OAUTH_ACCESS_TOKEN_TTL_SECONDS ? "persistent" : "expiring";
 }
 
 /**
@@ -481,7 +483,9 @@ export async function handleOAuthToken(
         {
           outcome: "error",
           grantType: safeGrantType,
+          clientId,
           errorCode: error.code,
+          ...(error.refusal ? { refusal: error.refusal } : {}),
         },
       );
     }
@@ -641,6 +645,8 @@ export interface OAuthTokenTelemetryMetadata {
   scope?: string;
   resource?: string;
   tokenLifetime?: "expiring" | "persistent";
+  /** Why a refresh was refused: a replay in the grace window, reuse that revoked the connection, or expiry. */
+  refusal?: OAuthRefreshRefusal;
 }
 
 const oauthTokenTelemetrySymbol = Symbol("spoonjoy.oauth.token.telemetry");

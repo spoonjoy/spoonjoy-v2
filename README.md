@@ -87,7 +87,6 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 | `pnpm test:ui` | Tests with visual UI |
 | `pnpm test:coverage` | Coverage report |
 | `pnpm test:e2e` | Run Playwright e2e tests |
-| `pnpm test:storybook` | Run Storybook interaction tests |
 | `pnpm prisma:generate` | Regenerate Prisma client |
 | `pnpm db:seed` | Replace prior disposable local data, then seed D1 with an explicit local-only target |
 | `pnpm dev:sync` | Generate Prisma client, run the legacy option2 idempotent migration helper, then start dev |
@@ -273,13 +272,9 @@ Key models:
 - `ShoppingList` - Personal shopping lists
 - `ApiCredential` - Hashed owner-scoped API tokens for REST and MCP clients
 
-## Feedback
-
-Ongoing feedback is tracked in `feedback/YYYY-MM-DD.md` files. Check there for known issues and planned improvements.
-
 ## Backlog
 
-The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Historical task snapshots under `.tasks/` are not the source of truth unless they explicitly reference a current `SJ-*` backlog item.
+The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Agent task logs and evidence do not live in this repository; the `.tasks/templates/` folder holds the only task templates.
 
 ## License
 

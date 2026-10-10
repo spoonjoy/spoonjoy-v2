@@ -29,7 +29,7 @@ function ingredient(page: Page, name: string) {
 }
 
 async function openMaintenance(page: Page) {
-  await page.getByRole("button", { name: /^Recipe maintenance/ }).click();
+  await page.getByRole("button", { name: /^Manage recipe/ }).click();
   return page.locator("#recipe-owner-maintenance");
 }
 
@@ -199,7 +199,7 @@ test.describe("Recipe create and edit", () => {
     // --- Delete the recipe.
     await waitForHydration(page);
     await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
-    const deleteRecipeDialog = page.getByRole("alertdialog", { name: "Delete this recipe?" });
+    const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
 

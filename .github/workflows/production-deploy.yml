@@ -36,17 +36,52 @@ env:
   GIT_CONFIG_VALUE_0: main
   SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.source_sha }}
   ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}
-  SPOONJOY_RELEASE_MODE: atomic-product-activation
-  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""
+  SPOONJOY_RELEASE_MODE: protocol-v1-canary
+  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "7e115e4a6f8d7971f391b8167e42c1e8be350836"
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
+  # Chooses the commit this run releases (scripts/workflow-security.mjs choose-release-target): for a
+  # CI completion, the newest main commit with green canonical CI (a push run, or the merge-queue run
+  # that tested the same commit), so a deploy that waited while main moved ships the newest tested
+  # commit instead of refusing; for a dispatch, exactly source_sha. It runs the trusted workflow
+  # tooling with only a read token, and fails closed. When it fails, deploy and report-canary skip,
+  # so the failed run itself is the only signal: GitHub notifies on the failed workflow run, and
+  # production keeps running the commit it had.
+  release-target:
+    name: release-target
+    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      source_sha: ${{ steps.target.outputs.source_sha }}
+      release: ${{ steps.target.outputs.release }}
+
+    steps:
+      - name: Checkout trusted release tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Choose the newest green main commit
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs choose-release-target
+
+  # Skips, with report-canary, when release-target finds production already runs the chosen commit
+  # or a newer one: a superseded run is green with a notice, not a failure.
   deploy:
     name: deploy
-    if: (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    needs: release-target
+    if: ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && needs.release-target.outputs.release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: production
+    env:
+      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}
 
     steps:
       - name: Checkout approved source SHA
@@ -75,6 +110,9 @@ jobs:
           WORKFLOW_RUN_PATH: ${{ github.event.workflow_run.path }}
         run: |
           set -euo pipefail
+          # Every check below names itself in the log when it fails, instead of ending the step
+          # with only "Process completed with exit code 1".
+          trap 'echo "::error title=Release source refused::Check failed: $BASH_COMMAND" >&2' ERR
 
           if ! printf '%s' "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
             echo "source_sha must be an exact 40-character lowercase Git SHA" >&2
@@ -82,7 +120,7 @@ jobs:
           fi
           case "$SPOONJOY_RELEASE_MODE" in
             atomic-bootstrap|atomic-product-activation|protocol-v1-canary) ;;
-            *) exit 1 ;;
+            *) echo "::error title=Release source refused::Unknown SPOONJOY_RELEASE_MODE: $SPOONJOY_RELEASE_MODE" >&2; exit 1 ;;
           esac
           if [ "$SPOONJOY_RELEASE_MODE" = "protocol-v1-canary" ]; then
             protocol_boundary_marker=workers/cook-session-protocol-v1-boundary
@@ -97,9 +135,6 @@ jobs:
           else
             test -z "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA"
           fi
-          if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then
-            exit 1
-          fi
           if [ -n "$ROLLBACK_VERSION_ID" ] && ! printf '%s' "$ROLLBACK_VERSION_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
             echo "rollback_version_id must be an exact Worker version UUID" >&2
             exit 1
@@ -111,14 +146,17 @@ jobs:
             exit 1
           fi
 
-          test "$WORKFLOW_RUN_PATH" = '.github/workflows/ci.yml' || test "$GITHUB_EVENT_NAME" = 'workflow_dispatch'
+          if [ "$WORKFLOW_RUN_PATH" != '.github/workflows/ci.yml' ] && [ "$GITHUB_EVENT_NAME" != 'workflow_dispatch' ]; then
+            echo "::error title=Release source refused::The triggering run came from $WORKFLOW_RUN_PATH, not .github/workflows/ci.yml" >&2
+            exit 1
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
             test -z "$ROLLBACK_VERSION_ID"
             test "$WORKFLOW_RUN_CONCLUSION" = "success"
             test "$WORKFLOW_RUN_EVENT" = "push"
             test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"
-            test "$WORKFLOW_RUN_HEAD_SHA" = "$SOURCE_SHA"
-            test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+            printf '%s' "$WORKFLOW_RUN_HEAD_SHA" | grep -Eq '^[0-9a-f]{40}$'
+            git merge-base --is-ancestor "$WORKFLOW_RUN_HEAD_SHA" "$SOURCE_SHA"
             test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           else
             if [ -z "$ROLLBACK_VERSION_ID" ]; then
@@ -178,9 +216,9 @@ jobs:
           mkdir -p mcp-oauth-canary-artifacts
           artifact_path=mcp-oauth-canary-artifacts/production-release.json
           artifact_valid=0
-          if [ -f "$artifact_path" ] && jq -e --arg source_sha "$SOURCE_SHA" --arg release_mode "$SPOONJOY_RELEASE_MODE" --arg protocol_boundary_sha "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" 'type == "object" and ((keys - ["candidateVersionId", "databaseRollbackSupported", "deploymentStrategy", "failure", "migrationApply", "phase", "previousVersionId", "protocolV1BoundarySha", "releaseMode", "reviewedMigrations", "rollbackFailure", "sourceSha", "status", "treeHash"]) | length == 0) and ((["databaseRollbackSupported", "deploymentStrategy", "migrationApply", "phase", "releaseMode", "reviewedMigrations", "sourceSha", "status"] - keys) | length == 0) and (.sourceSha == $source_sha) and (.releaseMode == $release_mode) and (.deploymentStrategy == (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)) and (.databaseRollbackSupported == false) and (if $protocol_boundary_sha == "" then has("protocolV1BoundarySha") | not else .protocolV1BoundarySha == $protocol_boundary_sha end)' "$artifact_path" >/dev/null; then
+          if [ -f "$artifact_path" ] && jq -e --arg source_sha "$SOURCE_SHA" --arg release_mode "$SPOONJOY_RELEASE_MODE" --arg protocol_boundary_sha "$SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA" 'type == "object" and ((keys - ["candidateVersionId", "databaseRollbackSupported", "deploymentStrategy", "failure", "migrationApply", "phase", "preMigrationBookmark", "previousVersionId", "protocolV1BoundarySha", "releaseMode", "reviewedMigrations", "rollbackFailure", "sourceSha", "status", "treeHash"]) | length == 0) and ((["databaseRollbackSupported", "deploymentStrategy", "migrationApply", "phase", "releaseMode", "reviewedMigrations", "sourceSha", "status"] - keys) | length == 0) and (.sourceSha == $source_sha) and (.releaseMode == $release_mode) and (.deploymentStrategy == (if $release_mode == "protocol-v1-canary" then "gradual" else "atomic" end)) and (.databaseRollbackSupported == false) and (if $protocol_boundary_sha == "" then has("protocolV1BoundarySha") | not else .protocolV1BoundarySha == $protocol_boundary_sha end)' "$artifact_path" >/dev/null; then
             if jq -e 'def sanitized_failure: . as $failure | type == "string" and (length > 0 and length <= 500) and test("^\\S(?:.*\\S)?$") and (test("\\s{2,}") | not) and (test("[\u0000-\u001f\u007f]") | not) and (test("Bearer\\s+\\S+"; "i") | not) and (test("\\b(token|secret|password|authorization|api[_-]?key)\\s*[=:]\\s*\\S+"; "i") | not) and (test("\\b[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\.[A-Za-z0-9_-]{16,}\\b") | not) and all([($ENV.CLOUDFLARE_D1_API_TOKEN // ""), ($ENV.CLOUDFLARE_WORKERS_API_TOKEN // "")][]; . as $credential | length == 0 or ($failure | contains($credential) | not)); (.status | IN("promoted", "rollback_promoted", "failed_before_stage", "rolled_back", "rollback_failed", "forward_repair_required")) and (.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "migration_apply", "full_preflight", "current_deployment", "deployment_revalidation", "version_snapshot", "version_upload", "version_lookup", "stage_revalidation", "promotion_revalidation", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "protocol_ancestry", "rollback_protocol_ancestry", "active_version_mapping", "rollback_active_version_mapping", "stage", "canary", "candidate_csp", "promote", "atomic_deploy", "verify_promotion", "verify_rollback", "bootstrap_probe", "artifact", "complete")) and (.sourceSha | type == "string" and test("^[0-9a-f]{40}$")) and (if has("treeHash") then (.treeHash | type == "string" and test("^[0-9a-f]{40}$")) else true end) and (if has("previousVersionId") then (.previousVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (if has("candidateVersionId") then (.candidateVersionId | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) else true end) and (.migrationApply | IN("not_started", "not_needed", "attempted", "succeeded", "failed")) and (.reviewedMigrations | type == "array") and (all(.reviewedMigrations[]; type == "string")) and (if has("failure") then (.failure | sanitized_failure) else true end) and (if has("rollbackFailure") then (.rollbackFailure | sanitized_failure) else true end)' "$artifact_path" >/dev/null; then
-              if jq -e '(all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))) and ((.reviewedMigrations | unique | length) == (.reviewedMigrations | length)) and (if (has("previousVersionId") and has("candidateVersionId")) then (if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end) and (if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0 elif (.migrationApply | IN("attempted", "succeeded", "failed")) then (.reviewedMigrations | length) > 0 else true end)' "$artifact_path" >/dev/null; then
+              if jq -e '(if has("preMigrationBookmark") then ((.preMigrationBookmark | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{32}$")) and (.migrationApply | IN("attempted", "succeeded", "failed"))) else true end) and (all(.reviewedMigrations[]; (test("^[0-9]{4}_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$") and (contains("..") | not)))) and ((.reviewedMigrations | unique | length) == (.reviewedMigrations | length)) and (if (has("previousVersionId") and has("candidateVersionId")) then (if .phase == "rollback_already_active" then .previousVersionId == .candidateVersionId else .previousVersionId != .candidateVersionId end) else true end) and (if .migrationApply == "not_needed" then (.reviewedMigrations | length) == 0 elif (.migrationApply | IN("attempted", "succeeded", "failed")) then (.reviewedMigrations | length) > 0 else true end)' "$artifact_path" >/dev/null; then
                 if jq -e --arg release_mode "$SPOONJOY_RELEASE_MODE" '
                   (
                     if $release_mode == "protocol-v1-canary" then
@@ -192,9 +230,8 @@ jobs:
                       else true
                       end
                     else
-                      (.status | IN("rollback_promoted", "rolled_back", "rollback_failed") | not) and
                       (if .status == "failed_before_stage" then
-                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot")) or
+                        ((.phase | IN("validate", "provenance", "initial_preflight", "build", "post_build_posthog", "post_build_provenance", "migration_list", "migration_review", "current_deployment", "version_snapshot", "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active", "rollback_active_version_mapping", "rollback_protocol_ancestry")) or
                           (.phase == "full_preflight" and .migrationApply == "not_needed") or
                           (.phase == "deployment_revalidation" and (.migrationApply | IN("not_started", "not_needed"))))
                       else true end) and

@@ -3,6 +3,7 @@ import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
 import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import {
+  ingredientNamesFreeGuard,
   nameUpsertStatements,
   namedIngredientInsertStatement,
   recipeUpdateStatement,
@@ -12,6 +13,7 @@ import {
   stepNumUpdateStatement,
   stepOutputUseInsertStatement,
   stepOutputUsesDeleteStatement,
+  stepReorderDependencyFreeGuard,
 } from "~/lib/recipe-d1-writes.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { checkStepUsage } from "~/lib/step-output-use-queries.server";
@@ -673,14 +675,7 @@ function namedIngredientStatements(
 
 /** Fails the batch if any of the named ingredients is already in the recipe. */
 function noRecipeIngredientConflictsGuard(recipeId: string, ingredients: NativeRecipeStepIngredientInput[]): D1Query {
-  return d1Guard(
-    `NOT EXISTS (
-       SELECT 1 FROM "Ingredient" JOIN "IngredientRef" ON "IngredientRef"."id" = "Ingredient"."ingredientRefId"
-       WHERE "Ingredient"."recipeId" = ? AND "IngredientRef"."name" IN (SELECT "value" FROM json_each(?))
-     )`,
-    recipeId,
-    JSON.stringify(ingredients.map((ingredient) => normalizeName(ingredient.ingredientName))),
-  );
+  return ingredientNamesFreeGuard(recipeId, ingredients.map((ingredient) => normalizeName(ingredient.ingredientName)));
 }
 
 /**
@@ -1290,8 +1285,9 @@ async function reorderNativeRecipeStepOnce(
 
   if (options.d1) {
     // One atomic batch: every step renumbered (through negative numbers, so no two steps
-    // share a number at any point), the tombstone and the recipe touch. The guard re-checks
-    // that the recipe still has exactly the steps read above, at the same numbers.
+    // share a number at any point), the tombstone and the recipe touch. The guards re-check
+    // that the recipe still has exactly the steps read above, at the same numbers, and that
+    // no step output use the move would break was added after the dependency check.
     const now = new Date();
     await d1WriteBatch(options.d1, [
       d1Guard(
@@ -1304,6 +1300,7 @@ async function reorderNativeRecipeStepOnce(
         JSON.stringify(steps.map((candidate) => `${candidate.id}:${candidate.stepNum}`)),
         steps.length,
       ),
+      stepReorderDependencyFreeGuard(recipeId, step.data.stepNum, input.toStepNum),
       ...reorderedSteps.map((candidate, index) => stepNumUpdateStatement(candidate.id, -(index + 1), now)),
       ...reorderedSteps.map((candidate, index) => stepNumUpdateStatement(candidate.id, index + 1, now)),
       ...(options.tombstone

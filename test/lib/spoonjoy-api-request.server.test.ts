@@ -165,5 +165,26 @@ describe("spoonjoy-api-request shared helper", () => {
         message: "scopes must be a string or string array",
       });
     });
+
+    it("gives an agent-created token a 90-day expiry unless the agent asks for another", async () => {
+      const principal = await makePrincipal(["tokens:write"]);
+      const context: SpoonjoyApiContext = { db, principal };
+      const day = 24 * 60 * 60 * 1000;
+
+      const byDefault = await callSpoonjoyApiOperation("create_api_token", { name: "default" }, context) as { credential: { id: string } };
+      const week = await callSpoonjoyApiOperation("create_api_token", { name: "week", expiresInDays: 7 }, context) as { credential: { id: string } };
+      const forever = await callSpoonjoyApiOperation("create_api_token", { name: "forever", expiresInDays: null }, context) as { credential: { id: string } };
+
+      const expiresIn = async (id: string) => {
+        const row = await db.apiCredential.findUniqueOrThrow({ where: { id } });
+        return row.expiresAt ? Math.round((row.expiresAt.getTime() - Date.now()) / day) : null;
+      };
+      await expect(expiresIn(byDefault.credential.id)).resolves.toBe(90);
+      await expect(expiresIn(week.credential.id)).resolves.toBe(7);
+      await expect(expiresIn(forever.credential.id)).resolves.toBeNull();
+      await expect(
+        callSpoonjoyApiOperation("create_api_token", { name: "too long", expiresInDays: 366 }, context),
+      ).rejects.toMatchObject({ status: 400 });
+    });
   });
 });

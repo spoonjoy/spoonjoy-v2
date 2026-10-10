@@ -186,7 +186,7 @@ describe("Shopping List Route", () => {
     }
 
     it("adds a cleared item back at the amount just typed, not on top of the cleared amount", async () => {
-      const name = `lemon_${faker.string.alphanumeric(6).toLowerCase()}`;
+      const name = `lemon_${faker.string.numeric(10).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `1 ${name}` });
       await post({ intent: "clearAll" });
       expect(await activeItems()).toEqual([]);
@@ -197,7 +197,7 @@ describe("Shopping List Route", () => {
     });
 
     it("adds a removed item back at the amount just typed", async () => {
-      const name = `onion_${faker.string.alphanumeric(6).toLowerCase()}`;
+      const name = `onion_${faker.string.numeric(10).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `2 ${name}` });
       const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
       await post({ intent: "removeItem", itemId: item.id });
@@ -208,12 +208,12 @@ describe("Shopping List Route", () => {
     });
 
     it("adds a cleared-checked item back from a recipe at the recipe's amount", async () => {
-      const name = `garlic_${faker.string.alphanumeric(6).toLowerCase()}`;
+      const name = `garlic_${faker.string.numeric(10).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `4 clove ${name}` });
       const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
       await post({ intent: "toggleCheck", itemId: item.id, nextChecked: "true" });
       await post({ intent: "clearCompleted" });
-      const recipe = await db.recipe.create({ data: { title: `Garlic ${faker.string.alphanumeric(6)}`, chefId: testUserId } });
+      const recipe = await db.recipe.create({ data: { title: `Garlic ${faker.string.numeric(10)}`, chefId: testUserId } });
       await db.recipeStep.create({ data: { recipeId: recipe.id, stepNum: 1, description: "Peel" } });
       await db.ingredient.create({
         data: { recipeId: recipe.id, stepNum: 1, quantity: 2, unitId: item.unitId, ingredientRefId: item.ingredientRefId },
@@ -257,7 +257,7 @@ describe("Shopping List Route", () => {
     }
 
     it("keeps both amounts when two adds race on an item that is on the list", async () => {
-      const name = `pear_${faker.string.alphanumeric(6).toLowerCase()}`;
+      const name = `pear_${faker.string.numeric(10).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `1 ${name}` });
 
       await raceTwoAdds(name, "active", "3", "2");
@@ -266,7 +266,7 @@ describe("Shopping List Route", () => {
     });
 
     it("keeps both amounts when two adds race to bring back a cleared item", async () => {
-      const name = `plum_${faker.string.alphanumeric(6).toLowerCase()}`;
+      const name = `plum_${faker.string.numeric(10).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `5 ${name}` });
       await post({ intent: "clearAll" });
 
@@ -276,7 +276,7 @@ describe("Shopping List Route", () => {
     });
 
     it("still adds to an item that is on the list, checked or not", async () => {
-      const name = `carrot_${faker.string.alphanumeric(6).toLowerCase()}`;
+      const name = `carrot_${faker.string.numeric(10).toLowerCase()}`;
       await post({ intent: "addItem", ingredientText: `3 ${name}` });
       const [item] = await db.shoppingListItem.findMany({ where: { ingredientRef: { name } } });
       await post({ intent: "toggleCheck", itemId: item.id, nextChecked: "true" });
@@ -558,7 +558,7 @@ describe("Shopping List Route", () => {
       const shoppingList = await db.shoppingList.create({
         data: { authorId: testUserId },
       });
-      const ingredientName = `compat_manual_active_${faker.string.alphanumeric(6)}`.toLowerCase();
+      const ingredientName = `compat_manual_active_${faker.string.numeric(10)}`.toLowerCase();
       const ingredientRef = await db.ingredientRef.create({
         data: { name: ingredientName },
       });
@@ -638,7 +638,7 @@ describe("Shopping List Route", () => {
       try {
         await installActiveIdentityIndex();
         const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
-        const ingredientName = `compat_manual_migrated_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const ingredientName = `compat_manual_migrated_${faker.string.numeric(10)}`.toLowerCase();
         const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
         const tombstone = await db.shoppingListItem.create({
           data: {
@@ -685,7 +685,7 @@ describe("Shopping List Route", () => {
         data: { authorId: testUserId },
         });
         const anchorRef = await db.ingredientRef.create({
-        data: { name: `compat_manual_anchor_${faker.string.alphanumeric(6)}`.toLowerCase() },
+        data: { name: `compat_manual_anchor_${faker.string.numeric(10)}`.toLowerCase() },
         });
         await db.shoppingListItem.create({
         data: {
@@ -695,7 +695,7 @@ describe("Shopping List Route", () => {
         },
       });
 
-        const ingredientName = `compat_manual_tombstone_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const ingredientName = `compat_manual_tombstone_${faker.string.numeric(10)}`.toLowerCase();
         const ingredientRef = await db.ingredientRef.create({
         data: { name: ingredientName },
       });
@@ -774,7 +774,7 @@ describe("Shopping List Route", () => {
 
       const outcome = await action({
         request: await createFormRequest(
-          { intent: "addItem", ingredientName: `vanished_list_${faker.string.alphanumeric(6)}`, unitName: "cup", quantity: "1" },
+          { intent: "addItem", ingredientName: `vanished_list_${faker.string.numeric(10)}`, unitName: "cup", quantity: "1" },
           testUserId,
         ),
         context: { cloudflare: { env: null } },
@@ -788,8 +788,8 @@ describe("Shopping List Route", () => {
 
     it("adds to the item another request creates between the read and the conditional insert", async () => {
       const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
-      const ingredientName = `compat_manual_race_${faker.string.alphanumeric(6)}`.toLowerCase();
-      const unitName = `compat_manual_race_unit_${faker.string.alphanumeric(6)}`.toLowerCase();
+      const ingredientName = `compat_manual_race_${faker.string.numeric(10)}`.toLowerCase();
+      const unitName = `compat_manual_race_unit_${faker.string.numeric(10)}`.toLowerCase();
       const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
       const unit = await db.unit.create({ data: { name: unitName } });
       // Another request creates the item between this one's read and its conditional
@@ -849,8 +849,8 @@ describe("Shopping List Route", () => {
       try {
         await installActiveIdentityIndex();
         const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
-        const ingredientName = `compat_manual_restore_race_${faker.string.alphanumeric(6)}`.toLowerCase();
-        const unitName = `compat_manual_restore_unit_${faker.string.alphanumeric(6)}`.toLowerCase();
+        const ingredientName = `compat_manual_restore_race_${faker.string.numeric(10)}`.toLowerCase();
+        const unitName = `compat_manual_restore_unit_${faker.string.numeric(10)}`.toLowerCase();
         const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
         const unit = await db.unit.create({ data: { name: unitName } });
         const tombstone = await db.shoppingListItem.create({
@@ -983,9 +983,9 @@ describe("Shopping List Route", () => {
       });
 
       const [a, b, c] = await Promise.all([
-        db.ingredientRef.create({ data: { name: `item_a_${faker.string.alphanumeric(5)}` } }),
-        db.ingredientRef.create({ data: { name: `item_b_${faker.string.alphanumeric(5)}` } }),
-        db.ingredientRef.create({ data: { name: `item_c_${faker.string.alphanumeric(5)}` } }),
+        db.ingredientRef.create({ data: { name: `item_a_${faker.string.numeric(10)}` } }),
+        db.ingredientRef.create({ data: { name: `item_b_${faker.string.numeric(10)}` } }),
+        db.ingredientRef.create({ data: { name: `item_c_${faker.string.numeric(10)}` } }),
       ]);
 
       const [itemA, itemB, itemC] = await Promise.all([
@@ -1048,11 +1048,11 @@ describe("Shopping List Route", () => {
       });
 
       const ingredientRef1 = await db.ingredientRef.create({
-        data: { name: "item1_" + faker.string.alphanumeric(6) },
+        data: { name: "item1_" + faker.string.numeric(10) },
       });
 
       const ingredientRef2 = await db.ingredientRef.create({
-        data: { name: "item2_" + faker.string.alphanumeric(6) },
+        data: { name: "item2_" + faker.string.numeric(10) },
       });
 
       await db.shoppingListItem.create({
@@ -1097,7 +1097,7 @@ describe("Shopping List Route", () => {
       });
 
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "legacy_checked_" + faker.string.alphanumeric(6) },
+        data: { name: "legacy_checked_" + faker.string.numeric(10) },
       });
 
       const legacyItem = await db.shoppingListItem.create({
@@ -1161,7 +1161,7 @@ describe("Shopping List Route", () => {
       });
 
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "removable_" + faker.string.alphanumeric(6) },
+        data: { name: "removable_" + faker.string.numeric(10) },
       });
 
       const item = await db.shoppingListItem.create({
@@ -1199,14 +1199,14 @@ describe("Shopping List Route", () => {
       const otherUser = await createUser(
         db,
         faker.internet.email(),
-        faker.internet.username() + "_" + faker.string.alphanumeric(8),
+        faker.internet.username() + "_" + faker.string.numeric(10),
         "testPassword123"
       );
       const otherShoppingList = await db.shoppingList.create({
         data: { authorId: otherUser.id },
       });
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "other_remove_" + faker.string.alphanumeric(6) },
+        data: { name: "other_remove_" + faker.string.numeric(10) },
       });
       const otherItem = await db.shoppingListItem.create({
         data: {
@@ -1291,11 +1291,11 @@ describe("Shopping List Route", () => {
       });
 
       const ingredientRef1 = await db.ingredientRef.create({
-        data: { name: "clearall1_" + faker.string.alphanumeric(6) },
+        data: { name: "clearall1_" + faker.string.numeric(10) },
       });
 
       const ingredientRef2 = await db.ingredientRef.create({
-        data: { name: "clearall2_" + faker.string.alphanumeric(6) },
+        data: { name: "clearall2_" + faker.string.numeric(10) },
       });
 
       await db.shoppingListItem.create({
@@ -1379,11 +1379,11 @@ describe("Shopping List Route", () => {
       });
 
       const unit = await db.unit.create({
-        data: { name: "cup_" + faker.string.alphanumeric(6) },
+        data: { name: "cup_" + faker.string.numeric(10) },
       });
 
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "flour_" + faker.string.alphanumeric(6) },
+        data: { name: "flour_" + faker.string.numeric(10) },
       });
 
       await db.ingredient.create({
@@ -1442,10 +1442,10 @@ describe("Shopping List Route", () => {
       });
 
       const unit = await db.unit.create({
-        data: { name: "cup_scaled_" + faker.string.alphanumeric(6) },
+        data: { name: "cup_scaled_" + faker.string.numeric(10) },
       });
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "milk_scaled_" + faker.string.alphanumeric(6) },
+        data: { name: "milk_scaled_" + faker.string.numeric(10) },
       });
 
       await db.ingredient.create({
@@ -1514,19 +1514,19 @@ describe("Shopping List Route", () => {
       });
 
       const unit1 = await db.unit.create({
-        data: { name: "tsp_" + faker.string.alphanumeric(6) },
+        data: { name: "tsp_" + faker.string.numeric(10) },
       });
 
       const unit2 = await db.unit.create({
-        data: { name: "tbsp_" + faker.string.alphanumeric(6) },
+        data: { name: "tbsp_" + faker.string.numeric(10) },
       });
 
       const ingredientRef1 = await db.ingredientRef.create({
-        data: { name: "salt_" + faker.string.alphanumeric(6) },
+        data: { name: "salt_" + faker.string.numeric(10) },
       });
 
       const ingredientRef2 = await db.ingredientRef.create({
-        data: { name: "pepper_" + faker.string.alphanumeric(6) },
+        data: { name: "pepper_" + faker.string.numeric(10) },
       });
 
       await db.ingredient.create({
@@ -1578,11 +1578,11 @@ describe("Shopping List Route", () => {
       });
 
       const unit = await db.unit.create({
-        data: { name: "cup_existing_" + faker.string.alphanumeric(6) },
+        data: { name: "cup_existing_" + faker.string.numeric(10) },
       });
 
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "sugar_existing_" + faker.string.alphanumeric(6) },
+        data: { name: "sugar_existing_" + faker.string.numeric(10) },
       });
 
       await db.shoppingListItem.create({
@@ -1652,10 +1652,10 @@ describe("Shopping List Route", () => {
         data: { authorId: testUserId },
       });
       const unit = await db.unit.create({
-        data: { name: "piece_icon_refresh_" + faker.string.alphanumeric(6) },
+        data: { name: "piece_icon_refresh_" + faker.string.numeric(10) },
       });
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "bananas_icon_refresh_" + faker.string.alphanumeric(6) },
+        data: { name: "bananas_icon_refresh_" + faker.string.numeric(10) },
       });
       const existing = await db.shoppingListItem.create({
         data: {
@@ -1706,7 +1706,7 @@ describe("Shopping List Route", () => {
       });
 
       const activeRef = await db.ingredientRef.create({
-        data: { name: "recipe_restore_anchor_" + faker.string.alphanumeric(6) },
+        data: { name: "recipe_restore_anchor_" + faker.string.numeric(10) },
       });
       await db.shoppingListItem.create({
         data: {
@@ -1717,10 +1717,10 @@ describe("Shopping List Route", () => {
       });
 
       const unit = await db.unit.create({
-        data: { name: "cup_recipe_restore_" + faker.string.alphanumeric(6) },
+        data: { name: "cup_recipe_restore_" + faker.string.numeric(10) },
       });
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "beans_recipe_restore_" + faker.string.alphanumeric(6) },
+        data: { name: "beans_recipe_restore_" + faker.string.numeric(10) },
       });
       const deletedItem = await db.shoppingListItem.create({
         data: {
@@ -1791,10 +1791,10 @@ describe("Shopping List Route", () => {
           data: { authorId: testUserId },
         });
         const unit = await db.unit.create({
-          data: { name: `compat_recipe_active_unit_${faker.string.alphanumeric(6)}` },
+          data: { name: `compat_recipe_active_unit_${faker.string.numeric(10)}` },
         });
         const ingredientRef = await db.ingredientRef.create({
-          data: { name: `compat_recipe_active_ref_${faker.string.alphanumeric(6)}` },
+          data: { name: `compat_recipe_active_ref_${faker.string.numeric(10)}` },
         });
         const tombstone = await db.shoppingListItem.create({
           data: {
@@ -1875,10 +1875,10 @@ describe("Shopping List Route", () => {
           data: { authorId: testUserId },
         });
         const unit = await db.unit.create({
-          data: { name: `compat_recipe_tombstone_unit_${faker.string.alphanumeric(6)}` },
+          data: { name: `compat_recipe_tombstone_unit_${faker.string.numeric(10)}` },
         });
         const ingredientRef = await db.ingredientRef.create({
-          data: { name: `compat_recipe_tombstone_ref_${faker.string.alphanumeric(6)}` },
+          data: { name: `compat_recipe_tombstone_ref_${faker.string.numeric(10)}` },
         });
         const laterBySort = await db.shoppingListItem.create({
           data: {
@@ -1989,22 +1989,22 @@ describe("Shopping List Route", () => {
       });
 
       const repeatedUnit = await db.unit.create({
-        data: { name: `compat_coalesce_repeated_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_coalesce_repeated_unit_${faker.string.numeric(10)}` },
       });
       const secondUnit = await db.unit.create({
-        data: { name: `compat_coalesce_second_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_coalesce_second_unit_${faker.string.numeric(10)}` },
       });
       const thirdUnit = await db.unit.create({
-        data: { name: `compat_coalesce_third_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_coalesce_third_unit_${faker.string.numeric(10)}` },
       });
       const repeatedRef = await db.ingredientRef.create({
-        data: { name: `compat_coalesce_repeated_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_coalesce_repeated_ref_${faker.string.numeric(10)}` },
       });
       const secondRef = await db.ingredientRef.create({
-        data: { name: `compat_coalesce_second_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_coalesce_second_ref_${faker.string.numeric(10)}` },
       });
       const thirdRef = await db.ingredientRef.create({
-        data: { name: `compat_coalesce_third_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_coalesce_third_ref_${faker.string.numeric(10)}` },
       });
 
       await db.ingredient.create({
@@ -2135,16 +2135,16 @@ describe("Shopping List Route", () => {
         data: { recipeId: recipe.id, stepNum: 1, description: "Overflow product" },
       });
       const finiteUnit = await db.unit.create({
-        data: { name: `compat_product_finite_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_product_finite_unit_${faker.string.numeric(10)}` },
       });
       const overflowUnit = await db.unit.create({
-        data: { name: `compat_product_overflow_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_product_overflow_unit_${faker.string.numeric(10)}` },
       });
       const finiteRef = await db.ingredientRef.create({
-        data: { name: `compat_product_finite_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_product_finite_ref_${faker.string.numeric(10)}` },
       });
       const overflowRef = await db.ingredientRef.create({
-        data: { name: `compat_product_overflow_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_product_overflow_ref_${faker.string.numeric(10)}` },
       });
       await db.ingredient.create({
         data: {
@@ -2200,10 +2200,10 @@ describe("Shopping List Route", () => {
         data: { recipeId: recipe.id, stepNum: 1, description: "Overflow sum" },
       });
       const unit = await db.unit.create({
-        data: { name: `compat_sum_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_sum_unit_${faker.string.numeric(10)}` },
       });
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: `compat_sum_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_sum_ref_${faker.string.numeric(10)}` },
       });
       await db.ingredient.create({
         data: {
@@ -2262,16 +2262,16 @@ describe("Shopping List Route", () => {
         data: { recipeId: recipe.id, stepNum: 1, description: "Fail atomically" },
       });
       const firstUnit = await db.unit.create({
-        data: { name: `compat_failure_first_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_failure_first_unit_${faker.string.numeric(10)}` },
       });
       const secondUnit = await db.unit.create({
-        data: { name: `compat_failure_second_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_failure_second_unit_${faker.string.numeric(10)}` },
       });
       const firstRef = await db.ingredientRef.create({
-        data: { name: `compat_failure_first_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_failure_first_ref_${faker.string.numeric(10)}` },
       });
       const secondRef = await db.ingredientRef.create({
-        data: { name: `compat_failure_second_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_failure_second_ref_${faker.string.numeric(10)}` },
       });
       await db.ingredient.create({
         data: {
@@ -2343,16 +2343,16 @@ describe("Shopping List Route", () => {
         data: { recipeId: recipe.id, stepNum: 1, description: "Race atomically" },
       });
       const firstUnit = await db.unit.create({
-        data: { name: `compat_web_race_first_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_web_race_first_unit_${faker.string.numeric(10)}` },
       });
       const secondUnit = await db.unit.create({
-        data: { name: `compat_web_race_second_unit_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_web_race_second_unit_${faker.string.numeric(10)}` },
       });
       const firstRef = await db.ingredientRef.create({
-        data: { name: `compat_web_race_first_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_web_race_first_ref_${faker.string.numeric(10)}` },
       });
       const secondRef = await db.ingredientRef.create({
-        data: { name: `compat_web_race_second_ref_${faker.string.alphanumeric(6)}` },
+        data: { name: `compat_web_race_second_ref_${faker.string.numeric(10)}` },
       });
       await db.ingredient.createMany({
         data: [
@@ -2506,13 +2506,13 @@ describe("Shopping List Route", () => {
     }
 
     it("should add item with unit", async () => {
-      const ingredientName = "eggs_" + faker.string.alphanumeric(6);
+      const ingredientName = "eggs_" + faker.string.numeric(10);
       const request = await createFormRequest(
         {
           intent: "addItem",
           ingredientName: ingredientName,
           quantity: "12",
-          unitName: "pieces_" + faker.string.alphanumeric(6),
+          unitName: "pieces_" + faker.string.numeric(10),
         },
         testUserId
       );
@@ -2538,8 +2538,8 @@ describe("Shopping List Route", () => {
     });
 
     it("should add item without quantity (but with unit)", async () => {
-      const ingredientName = "avocados_" + faker.string.alphanumeric(6);
-      const unitName = "whole_" + faker.string.alphanumeric(6);
+      const ingredientName = "avocados_" + faker.string.numeric(10);
+      const unitName = "whole_" + faker.string.numeric(10);
       const request = await createFormRequest(
         {
           intent: "addItem",
@@ -2604,8 +2604,8 @@ describe("Shopping List Route", () => {
         data: { authorId: testUserId },
       });
 
-      const ingredientName = ("tomatoes_" + faker.string.alphanumeric(6)).toLowerCase();
-      const unitName = ("lbs_" + faker.string.alphanumeric(6)).toLowerCase();
+      const ingredientName = ("tomatoes_" + faker.string.numeric(10)).toLowerCase();
+      const unitName = ("lbs_" + faker.string.numeric(10)).toLowerCase();
 
       const ingredientRef = await db.ingredientRef.create({
         data: { name: ingredientName },
@@ -2655,8 +2655,8 @@ describe("Shopping List Route", () => {
         data: { authorId: testUserId },
       });
 
-      const ingredientName = ("checked_restore_" + faker.string.alphanumeric(6)).toLowerCase();
-      const unitName = ("bunch_" + faker.string.alphanumeric(6)).toLowerCase();
+      const ingredientName = ("checked_restore_" + faker.string.numeric(10)).toLowerCase();
+      const unitName = ("bunch_" + faker.string.numeric(10)).toLowerCase();
       const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
       const unit = await db.unit.create({ data: { name: unitName } });
 
@@ -2705,7 +2705,7 @@ describe("Shopping List Route", () => {
       });
 
       const activeRef = await db.ingredientRef.create({
-        data: { name: "active_restore_anchor_" + faker.string.alphanumeric(6) },
+        data: { name: "active_restore_anchor_" + faker.string.numeric(10) },
       });
       await db.shoppingListItem.create({
         data: {
@@ -2715,8 +2715,8 @@ describe("Shopping List Route", () => {
         },
       });
 
-      const ingredientName = ("deleted_restore_" + faker.string.alphanumeric(6)).toLowerCase();
-      const unitName = ("bag_" + faker.string.alphanumeric(6)).toLowerCase();
+      const ingredientName = ("deleted_restore_" + faker.string.numeric(10)).toLowerCase();
+      const unitName = ("bag_" + faker.string.numeric(10)).toLowerCase();
       const ingredientRef = await db.ingredientRef.create({ data: { name: ingredientName } });
       const unit = await db.unit.create({ data: { name: unitName } });
 
@@ -2839,14 +2839,14 @@ describe("Shopping List Route", () => {
       const otherUser = await createUser(
         db,
         faker.internet.email(),
-        faker.internet.username() + "_" + faker.string.alphanumeric(8),
+        faker.internet.username() + "_" + faker.string.numeric(10),
         "testPassword123"
       );
       const otherShoppingList = await db.shoppingList.create({
         data: { authorId: otherUser.id },
       });
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "other_toggle_" + faker.string.alphanumeric(6) },
+        data: { name: "other_toggle_" + faker.string.numeric(10) },
       });
       const otherItem = await db.shoppingListItem.create({
         data: {
@@ -2886,7 +2886,7 @@ describe("Shopping List Route", () => {
       });
 
       const ingredientRef = await db.ingredientRef.create({
-        data: { name: "toggle_back_" + faker.string.alphanumeric(6) },
+        data: { name: "toggle_back_" + faker.string.numeric(10) },
       });
 
       const item = await db.shoppingListItem.create({
@@ -3005,9 +3005,9 @@ describe("Shopping List Route", () => {
       const request = await createFormRequest(
         {
           intent: "addItem",
-          ingredientName: "new_list_item_" + faker.string.alphanumeric(6),
+          ingredientName: "new_list_item_" + faker.string.numeric(10),
           quantity: "1",
-          unitName: "unit_" + faker.string.alphanumeric(6),
+          unitName: "unit_" + faker.string.numeric(10),
         },
         testUserId
       );

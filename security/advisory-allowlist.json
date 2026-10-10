@@ -1,45 +1,4 @@
 {
   "policy": "Every advisory allowlist entry must name the vulnerability ID, exact package, exact version, ecosystem, human review reason, and future expiresOn date. Expired, malformed, broad, package-less, or version-less entries fail before the scanner runs.",
-  "allowedVulnerabilities": [
-    {
-      "id": "GHSA-ggr8-5vv4-36mx",
-      "packageName": "deepmerge-ts",
-      "version": "7.1.5",
-      "ecosystem": "npm",
-      "reason": "Tooling-only residual through Prisma 6 configuration; the fix requires deepmerge-ts 8 and cannot be forced across Prisma's major-version contract. Application request data is not merged by this package.",
-      "expiresOn": "2026-10-24"
-    },
-    {
-      "id": "GHSA-g7r4-m6w7-qqqr",
-      "packageName": "esbuild",
-      "version": "0.27.3",
-      "ecosystem": "npm",
-      "reason": "Tooling-only residual in the Vite, Wrangler, and Storybook build graph; the advisory concerns the esbuild development server on Windows, while production runs a prebuilt Cloudflare Worker.",
-      "expiresOn": "2026-10-24"
-    },
-    {
-      "id": "GHSA-w5hq-g745-h8pq",
-      "packageName": "uuid",
-      "version": "8.3.2",
-      "ecosystem": "npm",
-      "reason": "Tooling-only residual under the legacy Storybook test runner and coverage utilities; application code neither imports this copy nor supplies buffers to UUID generation.",
-      "expiresOn": "2026-10-24"
-    },
-    {
-      "id": "GHSA-vfj7-8cjw-p6xm",
-      "packageName": "braces",
-      "version": "3.0.3",
-      "ecosystem": "npm",
-      "reason": "Tooling-only residual through micromatch in the Jest and Storybook test-runner graph; no fixed braces release exists yet (3.0.3 is the last affected and latest version), and the production Worker neither bundles this package nor expands user-supplied brace patterns.",
-      "expiresOn": "2026-10-24"
-    },
-    {
-      "id": "GHSA-hp3w-g68c-fv3c",
-      "packageName": "sprintf-js",
-      "version": "1.0.3",
-      "ecosystem": "npm",
-      "reason": "Tooling-only residual through @istanbuljs/load-nyc-config -> js-yaml 3 -> argparse 1 in the Jest coverage graph; no fixed sprintf-js release exists (OSV marks 1.1.3, the latest, as last affected; re-checked 2026-10-09). js-yaml 4 cannot be forced because load-nyc-config calls safeLoad, which js-yaml 4 removed. The production Worker neither bundles this package nor formats user-supplied precision specifiers with it.",
-      "expiresOn": "2026-10-24"
-    }
-  ]
+  "allowedVulnerabilities": []
 }
