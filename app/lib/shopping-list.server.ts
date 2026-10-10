@@ -3,6 +3,8 @@ import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readShoppingListFromD1, readShoppingListWithPrisma } from "~/lib/shopping-list-reads.server";
 import { IngredientParseError, parseIngredients } from "~/lib/ingredient-parse.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import {
@@ -69,62 +71,11 @@ async function normalizeShoppingListOrdering(
 export async function loadShoppingList({ request, context }: ShoppingListRouteArgs) {
   const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
 
-  const database = await getRequestDb(context);
-
-  // Get or create shopping list
-  let shoppingList = await database.shoppingList.findUnique({
-    where: { authorId: userId },
-    include: {
-      items: {
-        where: { deletedAt: null },
-        include: {
-          unit: true,
-          ingredientRef: true,
-        },
-        orderBy: [
-          { sortIndex: "asc" },
-          {
-            ingredientRef: {
-              name: "asc",
-            },
-          },
-        ],
-      },
-    },
-  });
-
-  if (!shoppingList) {
-    shoppingList = await database.shoppingList.create({
-      data: {
-        authorId: userId,
-      },
-      include: {
-        items: {
-          include: {
-            unit: true,
-            ingredientRef: true,
-          },
-        },
-      },
-    });
-  }
-
-  // Get user's recipes for adding ingredients
-  const recipes = await database.recipe.findMany({
-    where: {
-      chefId: userId,
-      deletedAt: null,
-    },
-    select: {
-      id: true,
-      title: true,
-    },
-    orderBy: {
-      title: "asc",
-    },
-  });
-
-  return { shoppingList, recipes };
+  // With a D1 binding the page reads in one batch and never builds a Prisma client.
+  const d1 = requestD1(context);
+  return d1
+    ? readShoppingListFromD1(d1, userId)
+    : readShoppingListWithPrisma(await getRequestDb(context), userId);
 }
 
 export async function handleShoppingListAction({ request, context }: ShoppingListRouteArgs) {
