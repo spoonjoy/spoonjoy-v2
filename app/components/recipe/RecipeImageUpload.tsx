@@ -219,7 +219,7 @@ export function RecipeImageUpload({
               disabled={isDisabled}
             >
               <Upload data-slot="icon" aria-hidden="true" />
-              Change Image
+              Change image
             </Button>
             <Button
               type="button"
@@ -239,13 +239,13 @@ export function RecipeImageUpload({
             disabled={isDisabled}
           >
             <Upload data-slot="icon" aria-hidden="true" />
-            Upload Image
+            Upload image
           </Button>
         )}
       </div>
 
       <p className="text-sm text-[var(--sj-ink-soft)]">
-        JPG, PNG, or WebP. Max 5MB.
+        JPG, PNG, or WebP. 5 MB max.
       </p>
 
       {error && (

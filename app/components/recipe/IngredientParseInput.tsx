@@ -210,7 +210,7 @@ export function IngredientParseInput({
                 aria-label="Try parsing ingredients again"
               >
                 <RefreshCw data-slot="icon" aria-hidden="true" />
-                Try Again
+                Try again
               </Button>
             )}
             {onSwitchToManual && (
@@ -221,7 +221,7 @@ export function IngredientParseInput({
                 data-testid="switch-to-manual-button"
                 aria-label="Switch to manual ingredient entry"
               >
-                Add Manually
+                Add manually
               </Button>
             )}
           </div>

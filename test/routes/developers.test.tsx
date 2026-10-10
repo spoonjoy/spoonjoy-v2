@@ -220,9 +220,9 @@ describe("/developers route", () => {
     expect(screen.getAllByText(/tombstones/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/rate limited by IP and credential/i)).toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: /Full Spec/i })).toHaveAttribute("href", "/api/v1/openapi.json");
-    expect(screen.getByRole("link", { name: /SDK Spec/i })).toHaveAttribute("href", "/api/v1/openapi.sdk.json");
-    expect(screen.getByRole("link", { name: /Connector Spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
+    expect(screen.getByRole("link", { name: /Full spec/i })).toHaveAttribute("href", "/api/v1/openapi.json");
+    expect(screen.getByRole("link", { name: /SDK spec/i })).toHaveAttribute("href", "/api/v1/openapi.sdk.json");
+    expect(screen.getByRole("link", { name: /Connector spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
 
     for (const resource of API_V1_RESOURCES) {
       expect(screen.getAllByText(resource.path).length).toBeGreaterThan(0);

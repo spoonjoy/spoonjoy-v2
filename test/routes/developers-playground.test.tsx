@@ -441,7 +441,7 @@ describe("/developers/playground", () => {
     expect(screen.getAllByText("/api/v1/openapi.json").length).toBeGreaterThan(0);
     expect(screen.getByText("Omits cookies and Authorization for public-only requests.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/recipes?limit=20", {
@@ -456,7 +456,7 @@ describe("/developers/playground", () => {
     expect(screen.getByText(/"app": "spoonjoy"/)).toBeInTheDocument();
 
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
     expect(await screen.findByText("0 NETWORK ERROR")).toBeInTheDocument();
     expect(screen.getByText("offline")).toBeInTheDocument();
   });
@@ -497,7 +497,7 @@ describe("/developers/playground", () => {
     await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
     posthogCapture.mockClear();
     fireEvent.change(screen.getByLabelText(/Query/), { target: { value: "private pasta" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
       "spoonjoy.developer.playground.request_submitted",
@@ -538,7 +538,7 @@ describe("/developers/playground", () => {
       target: { value: "{\"name\":\"Kitchen secret token\",\"clientMutationId\":\"secret-mutation\",\"scopes\":[\"recipes:read\"]}" },
     });
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
       "spoonjoy.developer.playground.request_submitted",
@@ -596,7 +596,7 @@ describe("/developers/playground", () => {
     expect(screen.getByText("You are signed in, but Anonymous mode intentionally omits your Spoonjoy session for this request.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "Session" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/recipes?limit=20", {
@@ -665,7 +665,7 @@ describe("/developers/playground", () => {
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-limit")!, { target: { value: "5" } });
     fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
     fireEvent.change(screen.getByLabelText("Bearer token"), { target: { value: "sj_test_token" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/recipes?query=pasta&limit=5", {
@@ -685,7 +685,7 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: /Discover the Spoonjoy API/i }));
     fireEvent.click(screen.getByRole("radio", { name: "Connector" }));
     expect(screen.getByRole("radio", { name: "Connector" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("link", { name: /Open Spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
+    expect(screen.getByRole("link", { name: /Open spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
     expect(screen.getByRole("button", { name: /Search public recipes/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: /Exchange or refresh an OAuth token/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Search public recipes/i })).toBeInTheDocument();
@@ -729,9 +729,9 @@ describe("/developers/playground", () => {
     fireEvent.change(screen.getByLabelText("JSON body"), {
       target: { value: "{\"name\":\"External client\",\"scopes\":[\"recipes:read\"]}" },
     });
-    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/tokens", {
@@ -770,9 +770,9 @@ describe("/developers/playground", () => {
     expect(photoInput).toBeRequired();
     expect(photoInput).toHaveAccessibleDescription("multipart required - (binary image file)");
     expect(screen.getAllByText("Select client mutation id before sending.").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
     fireEvent.change(photoInput, { target: { files: [] } });
-    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
 
     const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
     fireEvent.click(riskCheckbox);
@@ -784,9 +784,9 @@ describe("/developers/playground", () => {
     await waitFor(() => expect(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i)).not.toBeChecked());
     expect(screen.getByText("Confirm this real-data operation before sending.")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Send Request" })).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send request" })).not.toBeDisabled());
 
-    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Send request" }).closest("form")!);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/me/photo", {
@@ -887,7 +887,7 @@ describe("/developers/playground", () => {
 
     expect(await screen.findByLabelText(/Client Mutation Id/)).toHaveValue("text-only-mutation");
     posthogCapture.mockClear();
-    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Send request" }).closest("form")!);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const options = fetchMock.mock.calls[0][1] as RequestInit;
@@ -913,7 +913,7 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
 
     expect(screen.getAllByText("Paste a bearer token before sending in Bearer mode.").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -921,13 +921,13 @@ describe("/developers/playground", () => {
     await renderPlayground();
 
     fireEvent.click(await screen.findByRole("button", { name: /Read one public recipe/i }));
-    fireEvent.submit(screen.getByRole("button", { name: "Send Request" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Send request" }).closest("form")!);
 
     expect(await screen.findByText(/path required/i)).toBeInTheDocument();
     expect(document.querySelector<HTMLInputElement>("#param-path-id")).toHaveAttribute("placeholder", "recipe_1");
     expect(screen.getAllByText(/REPLACE_id/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Set required parameters before sending/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Send Request" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
   });
 
   it("can intentionally omit auth for public requests", async () => {
@@ -936,7 +936,7 @@ describe("/developers/playground", () => {
 
     await renderPlayground();
     fireEvent.click(await screen.findByRole("radio", { name: "Anonymous" }));
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/recipes?limit=20", {
@@ -1018,7 +1018,7 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: /Create a bearer credential/i }));
     fireEvent.change(screen.getByLabelText("JSON body"), { target: { value: "{\"name\":\"Client\"}" } });
     fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
-    fireEvent.click(screen.getByRole("button", { name: "Send Request" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     expect(await screen.findByText("Secret values hidden in response body")).toBeInTheDocument();
     expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");

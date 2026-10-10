@@ -2415,7 +2415,7 @@ describe("Recipes $id Route", () => {
     const closeSaveModal = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.keyboard("{Escape}");
       await waitFor(() => {
-        expect(screen.queryByRole("dialog", { name: "Save to Cookbook" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("dialog", { name: "Save to cookbook" })).not.toBeInTheDocument();
       });
       await settleBrowserTasks();
     };
@@ -2457,7 +2457,7 @@ describe("Recipes $id Route", () => {
 
       await openSaveModalFromHeader();
 
-      expect(await screen.findByRole("dialog", { name: "Save to Cookbook" })).toBeInTheDocument();
+      expect(await screen.findByRole("dialog", { name: "Save to cookbook" })).toBeInTheDocument();
       await settleBrowserTasks();
       expect(screen.getByLabelText("Create new cookbook")).toBeInTheDocument();
 
@@ -2481,7 +2481,7 @@ describe("Recipes $id Route", () => {
       expect(modalFooter).toHaveClass("sticky", "bottom-0", "shrink-0");
       expect(modalFooter.contains(screen.getByTestId("create-cookbook-button"))).toBe(true);
 
-      expect(document.activeElement).toHaveTextContent("Save to Cookbook");
+      expect(document.activeElement).toHaveTextContent("Save to cookbook");
       expect(scrollToSpy).not.toHaveBeenCalled();
 
       await closeSaveModal(user);
@@ -2518,13 +2518,13 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
       await openSaveModalFromHeader();
-      await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      await screen.findByRole("dialog", { name: "Save to cookbook" });
 
       await user.type(screen.getByLabelText("Create new cookbook"), "Fresh Saves");
       await user.click(screen.getByRole("button", { name: "Create & Save" }));
 
       await waitFor(() => {
-        expect(screen.getByRole("dialog", { name: "Save to Cookbook" })).toBeInTheDocument();
+        expect(screen.getByRole("dialog", { name: "Save to cookbook" })).toBeInTheDocument();
       });
       const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
       expect(createdCookbook).toBeInTheDocument();
@@ -2562,18 +2562,18 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
       await openSaveModalFromHeader();
-      const dialog = await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
       await settleBrowserTasks();
 
       const closeButton = within(dialog).getByRole("button", { name: "Close", exact: true });
       expect(closeButton).toHaveAttribute("type", "button");
       expect(closeButton).toHaveClass("size-11");
       // The title keeps initial focus; Close is not focused on open.
-      expect(document.activeElement).toHaveTextContent("Save to Cookbook");
+      expect(document.activeElement).toHaveTextContent("Save to cookbook");
 
       await user.click(closeButton);
       await waitFor(() => {
-        expect(screen.queryByRole("dialog", { name: "Save to Cookbook" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("dialog", { name: "Save to cookbook" })).not.toBeInTheDocument();
       });
       await settleBrowserTasks();
     });
@@ -2611,7 +2611,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
       await openSaveModalFromHeader();
-      const dialog = await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
 
       const titleInput = screen.getByLabelText("Create new cookbook");
       await user.type(titleInput, "Weeknights");
@@ -2632,7 +2632,7 @@ describe("Recipes $id Route", () => {
 
       // Reopening starts clean.
       await openSaveModalFromHeader();
-      const reopened = await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      const reopened = await screen.findByRole("dialog", { name: "Save to cookbook" });
       expect(within(reopened).queryByRole("alert")).not.toBeInTheDocument();
       await closeSaveModal(user);
     });
@@ -2678,7 +2678,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Toggle Cookbook Recipe" });
 
       await openSaveModalFromHeader();
-      await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      await screen.findByRole("dialog", { name: "Save to cookbook" });
 
       await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
       expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveTextContent("✓");
@@ -2732,7 +2732,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Blank Cookbook Recipe" });
 
       await openSaveModalFromHeader();
-      await screen.findByRole("dialog", { name: "Save to Cookbook" });
+      await screen.findByRole("dialog", { name: "Save to cookbook" });
 
       const form = screen.getByTestId("create-cookbook-button").closest("form");
       expect(form).not.toBeNull();
@@ -3746,7 +3746,7 @@ describe("Recipes $id Route", () => {
       // Servings display with new component format
       expect(screen.getByText("4")).toBeInTheDocument();
       expect(screen.getByText("No steps added yet")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Add Steps" })).toHaveAttribute("href", "/recipes/recipe-1/edit");
+      expect(screen.getByRole("link", { name: "Add steps" })).toHaveAttribute("href", "/recipes/recipe-1/edit");
       expect(screen.getByTestId("recipe-masthead")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/recipes");
       expect(screen.getByTestId("recipe-header-actions")).toBeInTheDocument();
@@ -3870,7 +3870,7 @@ describe("Recipes $id Route", () => {
       // Non-owner should not see edit/delete buttons
       expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Add Steps" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Add steps" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-header-fork-action")).toHaveAccessibleName("Fork");
       expect(screen.queryByTestId("recipe-owner-tools")).not.toBeInTheDocument();
     });

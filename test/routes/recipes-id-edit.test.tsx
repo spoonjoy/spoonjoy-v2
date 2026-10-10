@@ -1983,7 +1983,7 @@ describe("Recipes $id Edit Route", () => {
   describe("component", () => {
     async function waitForSaveToSettle() {
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "Save Recipe" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Save recipe" })).toBeEnabled();
       });
     }
 
@@ -2048,7 +2048,7 @@ describe("Recipes $id Edit Route", () => {
 
       expect(await screen.findByRole("heading", { name: "No steps yet." })).toBeInTheDocument();
       expect(screen.getByText("Add the first step when you are ready to turn the dish into a cooking path.")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "+ Add Step" })).toHaveAttribute("href", "/recipes/recipe-1/steps/new");
+      expect(screen.getByRole("link", { name: "+ Add step" })).toHaveAttribute("href", "/recipes/recipe-1/steps/new");
     });
 
     it("should render recipe steps with title and description", async () => {
@@ -2283,7 +2283,7 @@ describe("Recipes $id Edit Route", () => {
 
       // Wait for form to render by finding the Title input first
       await screen.findByLabelText(/Title/);
-      // Save Recipe button (matches "Save Recipe" in edit mode)
+      // Save recipe button (matches "Save recipe" in edit mode)
       expect(screen.getByRole("button", { name: /save recipe/i })).toBeInTheDocument();
       // Cancel is now a button that navigates programmatically, not a link
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
@@ -2410,11 +2410,11 @@ describe("Recipes $id Edit Route", () => {
       await screen.findByText("Step to delete");
 
       await user.click(screen.getByRole("button", { name: "Delete" }));
-      expect(await screen.findByRole("alertdialog", { name: "Delete Step" })).toBeInTheDocument();
+      expect(await screen.findByRole("alertdialog", { name: "Delete step" })).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Cancel" }));
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete Step" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: "Delete step" })).not.toBeInTheDocument();
       });
       await act(async () => {
         await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -2430,7 +2430,7 @@ describe("Recipes $id Edit Route", () => {
         expect(submittedStepIds).toEqual(["step-delete"]);
       });
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete Step" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: "Delete step" })).not.toBeInTheDocument();
       });
       await act(async () => {
         await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -2481,12 +2481,12 @@ describe("Recipes $id Edit Route", () => {
       await screen.findByText("Escape Step");
 
       await user.click(screen.getByRole("button", { name: "Delete" }));
-      expect(await screen.findByRole("alertdialog", { name: "Delete Step" })).toBeInTheDocument();
+      expect(await screen.findByRole("alertdialog", { name: "Delete step" })).toBeInTheDocument();
 
       await user.keyboard("{Escape}");
 
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete Step" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: "Delete step" })).not.toBeInTheDocument();
       });
     });
 
@@ -2575,7 +2575,7 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      await screen.findByRole("button", { name: "Save Recipe" });
+      await screen.findByRole("button", { name: "Save recipe" });
 
       // Clear and type new values
       const titleInput = screen.getByLabelText(/^Title$/i);
@@ -2590,7 +2590,7 @@ describe("Recipes $id Edit Route", () => {
       await user.type(servingsInput, "8");
 
       // Click Save Recipe to trigger handleSave
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
@@ -2628,14 +2628,14 @@ describe("Recipes $id Edit Route", () => {
       ]);
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
-      await user.click(await screen.findByRole("button", { name: "Save Recipe" }));
+      await user.click(await screen.findByRole("button", { name: "Save recipe" }));
 
       expect(await screen.findByText(conflict)).toBeInTheDocument();
       await waitForSaveToSettle();
       // The cook's edits are still in the form.
       expect(screen.getByLabelText(/^Title$/i)).toHaveValue("Original Title");
 
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
       await waitFor(() => {
         expect(sent).toEqual(["2026-03-01T10:00:00.123Z", "2026-03-01T10:05:00.456Z"]);
       });
@@ -2683,7 +2683,7 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      await screen.findByRole("button", { name: "Save Recipe" });
+      await screen.findByRole("button", { name: "Save recipe" });
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
 
       const titleInput = screen.getByLabelText(/^Title$/i);
@@ -2697,7 +2697,7 @@ describe("Recipes $id Edit Route", () => {
       await user.clear(servingsInput);
       await user.type(servingsInput, "6");
 
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
@@ -2742,7 +2742,7 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      await screen.findByRole("button", { name: "Save Recipe" });
+      await screen.findByRole("button", { name: "Save recipe" });
 
       // Upload an image file via RecipeImageUpload's file input
       const fileInput = screen.getByLabelText("Upload recipe image");
@@ -2750,7 +2750,7 @@ describe("Recipes $id Edit Route", () => {
       await user.upload(fileInput, testFile);
 
       // Click Save Recipe to trigger handleSave which should use DataTransfer
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
@@ -2794,13 +2794,13 @@ describe("Recipes $id Edit Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      await screen.findByRole("button", { name: "Save Recipe" });
+      await screen.findByRole("button", { name: "Save recipe" });
       await user.upload(
         screen.getByLabelText("Upload recipe image"),
         new File(["image-data"], "test.jpg", { type: "image/jpeg" }),
       );
 
-      const submitButton = screen.getByRole("button", { name: "Save Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Save recipe" });
       fireEvent.click(submitButton);
       fireEvent.click(submitButton);
 
@@ -2892,7 +2892,7 @@ describe("Recipes $id Edit Route", () => {
       await user.click(screen.getByRole("button", { name: /remove/i }));
 
       // Click Save Recipe
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
       await waitFor(() => {
         expect(submittedData).not.toBeNull();
@@ -2930,8 +2930,8 @@ describe("Recipes $id Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
       // Wait for form to render and submit to trigger action data
-      await screen.findByRole("button", { name: "Save Recipe" });
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await screen.findByRole("button", { name: "Save recipe" });
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
 
       // Wait for the reorder error to appear
       await waitFor(() => {

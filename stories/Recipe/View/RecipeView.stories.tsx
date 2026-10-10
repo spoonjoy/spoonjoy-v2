@@ -167,7 +167,7 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
         {recipe.steps.length === 0 ? (
           <div className="sj-card rounded-[var(--sj-radius-surface)] p-8 text-center">
             <Text className="mb-4">No steps added yet</Text>
-            {isOwner ? <Button href={`/recipes/${recipe.id}/edit`}>Add Steps</Button> : null}
+            {isOwner ? <Button href={`/recipes/${recipe.id}/edit`}>Add steps</Button> : null}
           </div>
         ) : (
           <div className="overflow-hidden rounded-[var(--sj-radius-surface)] border border-[var(--sj-border)] bg-[var(--sj-panel)] shadow-[var(--sj-shadow-soft)] backdrop-blur-xl">
