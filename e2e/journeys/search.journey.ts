@@ -25,8 +25,10 @@ test.describe("Search", () => {
     await expect(page.getByRole("heading", { name: 'Results for "saffron"', exact: true })).toBeVisible();
     const results = page.getByRole("region", { name: "Search results" });
     await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toBeVisible();
-    // The result's link is named by what the card shows, chef included, not by its title alone.
-    await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toHaveAccessibleName(/^Recipe\b.*Saffron Risotto.*qa_kitchen_chef/);
+    // The result's link is named by the card's type, title and byline, not by its title alone, and
+    // described by the matching text.
+    await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toHaveAccessibleName("Recipe Saffron Risotto Recipe by qa_kitchen_friend");
+    await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toHaveAccessibleDescription(/saffron/i);
     await expectAccessible();
 
     await seededRecipeLink(results, "Saffron Risotto", RISOTTO).click();

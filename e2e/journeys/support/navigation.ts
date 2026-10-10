@@ -30,9 +30,8 @@ export function recipeLink(scope: Locator, title: string, recipePath: string): L
 }
 
 // A link to one seeded recipe where it is listed once (search results, the /recipes list), matched
-// by its href and a name that contains `name` as whole words. A list or search row's link is named by
-// everything it shows (title, chef, yield, snippet), not by its title alone, so the name is matched as
-// a part, not exactly. Another recipe can share the seeded title (a journey's throwaway fork of Lemon
+// by its href and a name that contains `name` as whole words. A search result's link is named by its
+// type, title and byline, not by its title alone, so the name is matched as a part, not exactly. Another recipe can share the seeded title (a journey's throwaway fork of Lemon
 // Herb Rice lives until the run's cleanup, and journeys run in parallel), so the name alone is not
 // enough; the href is the seeded id.
 export function seededRecipeLink(scope: Locator, name: string, recipePath: string): Locator {
