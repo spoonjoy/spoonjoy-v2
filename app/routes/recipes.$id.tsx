@@ -743,7 +743,7 @@ export default function RecipeDetail() {
         Recipes
       </Link>
       <div
-        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-y border-[var(--sj-border)] py-1 sm:border-y-0 sm:py-0"
+        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-[var(--sj-border)] py-1 sm:border-t-0 sm:py-0"
         data-testid="recipe-header-actions"
       >
         <Link

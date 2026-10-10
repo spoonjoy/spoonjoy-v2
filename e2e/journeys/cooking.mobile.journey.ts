@@ -11,7 +11,7 @@ const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 test.describe("Recipe list action on iPhone", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("Add to list adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
+  test("Add to list adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
     const user = createDisposableJourneyUser();
     const listAction = page.getByTestId("recipe-header-list-action");
     const scaleDisplay = page.getByTestId("scale-display");
@@ -34,6 +34,11 @@ test.describe("Recipe list action on iPhone", () => {
     await page.goto(LEMON_RICE);
     await waitForHydration(page);
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
+    // The back link and action row, closed by a single rule on a phone.
+    await testInfo.attach("recipe-masthead-phone", {
+      body: await page.getByTestId("recipe-masthead").screenshot(),
+      contentType: "image/png",
+    });
     await page.getByTestId("recipe-header-fork-action").click();
     const forkDialog = page.getByRole("dialog", { name: 'Fork "Lemon Herb Rice"?' });
     await expect(forkDialog).toBeVisible();
