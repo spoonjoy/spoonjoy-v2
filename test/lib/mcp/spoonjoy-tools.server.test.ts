@@ -2911,6 +2911,26 @@ describe("spoonjoy MCP tools", () => {
     expect(result.shoppingList.items[0]).toEqual(expect.objectContaining({ quantity: null, unit: null, sortIndex: 1 }));
   });
 
+  it("unchecks an item without writing back the position it read, which a renumbering may have changed", async () => {
+    const added = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", { name: `leeks-${faker.string.alphanumeric(5).toLowerCase()}`, quantity: 1 }, context));
+    const itemId = added.shoppingList.items[0].id;
+    parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", { itemId, checked: true }, context));
+
+    const findFirst = context.db.shoppingListItem.findFirst.bind(context.db.shoppingListItem);
+    const spy = vi.spyOn(context.db.shoppingListItem, "findFirst").mockImplementationOnce((async (args: any) => {
+      const row = await findFirst(args);
+      // Another request renumbers the list after this one read the row.
+      await context.db.shoppingListItem.update({ where: { id: itemId }, data: { sortIndex: 7 } });
+      return row;
+    }) as any);
+    try {
+      const unchecked = parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", { itemId, checked: false }, context));
+      expect(unchecked.shoppingList.items[0]).toMatchObject({ id: itemId, checked: false, sortIndex: 7 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("manages direct shopping-list item adds, checks, removes, and restores", async () => {
     const first = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", {
       name: "Milk",
