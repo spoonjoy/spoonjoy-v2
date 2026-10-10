@@ -53,6 +53,12 @@ export interface AllowlistEntry {
 export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
   // --- intentional swallows / parse fallbacks (no user-facing failure) ---
   {
+    file: "app/lib/qa-error-logs.server.ts",
+    category: "swallow",
+    reason:
+      "describeValue falls back to String(value) when JSON.stringify throws on a non-Error thrown value; the line it builds is itself the per-run QA error log, written beside handleError's PostHog capture.",
+  },
+  {
     file: "app/lib/db.server.ts",
     category: "swallow",
     reason:
