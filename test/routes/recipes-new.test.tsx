@@ -18,6 +18,8 @@ import * as stylizationModule from "~/lib/spoon-cover-stylization.server";
 import * as recipeCreateModule from "~/lib/recipe-create.server";
 import { IngredientParseError } from "~/lib/ingredient-parse.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { oversizedMultipartUpload } from "../helpers/oversized-upload";
+import { RECIPE_IMAGE_SIZE_MESSAGE } from "~/lib/recipe-image";
 import { faker } from "@faker-js/faker";
 
 // Helper to extract data from React Router's data() response
@@ -195,6 +197,26 @@ describe("Recipes New Route", () => {
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
       expect(data.errors.title).toBe("Title is required");
+    });
+
+    it("refuses an oversized upload with 413 before buffering the whole body", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookie = (await sessionStorage.commitSession(session)).split(";")[0];
+      const upload = oversizedMultipartUpload("http://localhost:3000/recipes/new", cookie);
+      const before = await db.recipe.count({ where: { chefId: testUserId } });
+
+      const response = await action({
+        request: upload.request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(413);
+      expect(data.errors.image).toBe(RECIPE_IMAGE_SIZE_MESSAGE);
+      expect(upload.pulled()).toBeLessThanOrEqual(upload.readLimit);
+      expect(await db.recipe.count({ where: { chefId: testUserId } })).toBe(before);
     });
 
     it("should create recipe and redirect on success", async () => {

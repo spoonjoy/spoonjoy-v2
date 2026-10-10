@@ -16,12 +16,12 @@ describe('AuthLayout', () => {
     it('renders multiple children', () => {
       render(
         <AuthLayout>
-          <h1>Sign Up</h1>
+          <h1>Sign up</h1>
           <p>Create your account</p>
           <button>Submit</button>
         </AuthLayout>
       )
-      expect(screen.getByRole('heading', { name: 'Sign Up' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Sign up' })).toBeInTheDocument()
       expect(screen.getByText('Create your account')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument()
     })
