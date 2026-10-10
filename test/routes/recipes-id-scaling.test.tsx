@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import RecipeDetail from "~/routes/recipes.$id";
@@ -97,7 +97,7 @@ describe("Recipe View Scaling Integration", () => {
       await screen.findByRole("heading", { name: "Test Recipe" });
 
       // Initial servings should show "Serves 4"
-      expect(screen.getByText(/serves 4/i)).toBeInTheDocument();
+      expect(within(screen.getByTestId("recipe-header-controls")).getByText(/serves 4/i)).toBeInTheDocument();
 
       // Click plus button 4 times to get to 2× scale
       const plusButton = screen.getByTestId("scale-plus");
@@ -110,7 +110,9 @@ describe("Recipe View Scaling Integration", () => {
       expect(screen.getByTestId("scale-display")).toHaveTextContent("Serves 8");
 
       // Servings should now show "Serves 8"
-      expect(screen.getByText(/serves 8/i)).toBeInTheDocument();
+      expect(within(screen.getByTestId("recipe-header-controls")).getByText(/serves 8/i)).toBeInTheDocument();
+      // The printed page carries the scaled yield, since paper has no scale control.
+      expect(screen.getByTestId("recipe-print-yield")).toHaveTextContent(/^Yield: serves 8 · Quantities at 2× the recipe$/i);
     });
 
     it("should scale ingredient quantities across all steps", async () => {
@@ -540,7 +542,7 @@ describe("Recipe View Scaling Integration", () => {
       await screen.findByRole("heading", { name: "Recipe with Range Servings" });
 
       // Initial servings
-      expect(screen.getByText(/feeds 2-4 people/i)).toBeInTheDocument();
+      expect(within(screen.getByTestId("recipe-header-controls")).getByText(/feeds 2-4 people/i)).toBeInTheDocument();
 
       // Scale to 2×
       const plusButton = screen.getByTestId("scale-plus");
@@ -550,7 +552,7 @@ describe("Recipe View Scaling Integration", () => {
       fireEvent.click(plusButton);
 
       // Range should be doubled: 2-4 becomes 4-8
-      expect(screen.getByText(/feeds 4-8 people/i)).toBeInTheDocument();
+      expect(within(screen.getByTestId("recipe-header-controls")).getByText(/feeds 4-8 people/i)).toBeInTheDocument();
     });
   });
 });
