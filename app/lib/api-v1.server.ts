@@ -5991,7 +5991,14 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context)));
+    const result = await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context));
+    if (!result.ok && result.code === "edit_conflict") {
+      // The recipe changed after the client's expectedUpdatedAt. Nothing was written; the
+      // answer carries the recipe as it is now, so the client can merge and retry.
+      const current = await serializedRecipeOrThrow(db, recipeId, origin);
+      throw new ApiV1Error(result.code, result.message, { ...(result.details as object), recipe: current });
+    }
+    const updated = recipeWriteResultOrThrow(result);
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,
