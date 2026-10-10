@@ -267,24 +267,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 
   try {
-    const rows = [];
-    for (const ingredient of ingredients) {
-      const unitName = ingredient.unit.toLowerCase();
-      const ingredientName = ingredient.ingredientName.toLowerCase();
-      const unit = await database.unit.upsert({
-        where: { name: unitName },
-        update: {},
-        create: { name: unitName },
-      });
-      const ingredientRef = await database.ingredientRef.upsert({
-        where: { name: ingredientName },
-        update: {},
-        create: { name: ingredientName },
-      });
-      rows.push({ quantity: ingredient.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
-    }
+    const rows = ingredients.map((ingredient) => ({
+      quantity: ingredient.quantity,
+      unitName: ingredient.unit.toLowerCase(),
+      ingredientName: ingredient.ingredientName.toLowerCase(),
+    }));
+    const ingredientNames = rows.map((row) => row.ingredientName);
 
-    const taken = await ingredientAlreadyInRecipe(database, id, rows.map((row) => row.ingredientRefId));
+    const taken = await ingredientAlreadyInRecipe(database, id, ingredientNames);
     if (taken) {
       return data(
         { errors: { ingredientName: `${taken} is already in the recipe` } },
@@ -311,12 +301,24 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         // Another request added a step or one of these ingredients in between; nothing was
         // written.
         if (!isD1GuardFailure(error)) throw error;
-        const raced = await ingredientAlreadyInRecipe(database, id, rows.map((row) => row.ingredientRefId));
+        const raced = await ingredientAlreadyInRecipe(database, id, ingredientNames);
         return raced
           ? data({ errors: { ingredientName: `${raced} is already in the recipe` } }, { status: 400 })
           : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
       }
     } else {
+      // Without a binding (unit tests, scripts) Prisma's transaction is real; the names are
+      // created first so the ingredients can point at them.
+      const resolved = [];
+      for (const row of rows) {
+        const unit = await database.unit.upsert({ where: { name: row.unitName }, update: {}, create: { name: row.unitName } });
+        const ingredientRef = await database.ingredientRef.upsert({
+          where: { name: row.ingredientName },
+          update: {},
+          create: { name: row.ingredientName },
+        });
+        resolved.push({ quantity: row.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
+      }
       await database.$transaction([
         database.recipeStep.create({
           data: {
@@ -332,7 +334,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
             data: usesSteps.map((outputStepNum) => ({ recipeId: id, inputStepNum: nextStepNum, outputStepNum })),
           })]
           : []),
-        ...rows.map((row) => database.ingredient.create({
+        ...resolved.map((row) => database.ingredient.create({
           data: { recipeId: id, stepNum: nextStepNum, ...row },
         })),
         touchNativeSyncRecipeOperation(database, id),

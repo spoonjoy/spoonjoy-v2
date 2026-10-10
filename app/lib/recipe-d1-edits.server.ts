@@ -190,10 +190,11 @@ export async function addStepIngredientsOnD1(
 }
 
 /**
- * The new-step page's save: the step, its step output uses and its ingredients, then the
- * recipe touch, all or none. The guards re-check that the recipe is still live, that
- * `stepNum` is still the next step number and that none of the ingredients is in the recipe
- * yet; the action validated all of that before writing anything.
+ * The new-step page's save: the step, its step output uses and its ingredients, with their
+ * units and ingredient names created in the same batch when they are new, then the recipe
+ * touch, all or none. The guards re-check that the recipe is still live, that `stepNum` is
+ * still the next step number and that none of the ingredients is in the recipe yet; the
+ * action validated all of that before writing anything.
  */
 export async function createRecipeStepOnD1(
   d1: D1ReadDatabase,
@@ -204,10 +205,11 @@ export async function createRecipeStepOnD1(
     stepTitle: string | null;
     description: string;
     usesSteps: readonly number[];
-    rows: ReadonlyArray<{ quantity: number; unitId: string; ingredientRefId: string }>;
+    rows: ReadonlyArray<{ quantity: number; unitName: string; ingredientName: string }>;
   },
 ): Promise<void> {
   const now = new Date();
+  const named = input.rows.map((row) => ({ ...row, recipeId: input.recipeId, stepNum: input.stepNum, now }));
   await d1WriteBatch(d1, [
     recipeActiveGuard(input.recipeId),
     d1Guard(
@@ -215,13 +217,7 @@ export async function createRecipeStepOnD1(
       input.recipeId,
       input.stepNum,
     ),
-    // The ids go in as one JSON array: D1 allows at most 100 bound values per statement.
-    d1Guard(
-      `NOT EXISTS (SELECT 1 FROM "Ingredient"
-         WHERE "recipeId" = ? AND "ingredientRefId" IN (SELECT "value" FROM json_each(?)))`,
-      input.recipeId,
-      JSON.stringify(input.rows.map((row) => row.ingredientRefId)),
-    ),
+    ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
     stepInsertStatement({
       id: input.stepId,
       recipeId: input.recipeId,
@@ -233,12 +229,8 @@ export async function createRecipeStepOnD1(
     }),
     ...[...new Set(input.usesSteps)].map((outputStepNum) =>
       stepOutputUseInsertStatement(input.recipeId, input.stepNum, outputStepNum, now)),
-    ...input.rows.map((row) => ingredientInsertStatement({
-      recipeId: input.recipeId,
-      stepNum: input.stepNum,
-      ...row,
-      now,
-    })),
+    ...nameUpsertStatements(named, now),
+    ...named.map(namedIngredientInsertStatement),
     recipeUpdateStatement(input.recipeId, {}, now),
   ]);
 }

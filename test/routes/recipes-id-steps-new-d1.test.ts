@@ -143,9 +143,15 @@ describe("adding a step on a D1 binding", () => {
       .toEqual([{ outputStepNum: 1, inputStepNum: 2 }]);
     expect((await db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).updatedAt.getTime()).toBeGreaterThan(OLD.getTime());
     const writes = d1.statements.slice(before).filter((statement) => /^\s*(INSERT|UPDATE)/.test(statement.sql));
+    // The units and ingredient names are created in the same batch, so a stopped batch leaves
+    // none of them behind either.
     expect(writes.map((statement) => statement.sql.trim().split(/\s+/).slice(0, 3).join(" "))).toEqual([
       'INSERT INTO "RecipeStep"',
       'INSERT INTO "StepOutputUse"',
+      'INSERT INTO "Unit"',
+      'INSERT INTO "Unit"',
+      'INSERT INTO "IngredientRef"',
+      'INSERT INTO "IngredientRef"',
       'INSERT INTO "Ingredient"',
       'INSERT INTO "Ingredient"',
       'UPDATE "Recipe" SET',
