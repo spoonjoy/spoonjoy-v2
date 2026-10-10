@@ -411,7 +411,7 @@ describe("oauth.authorize route", () => {
     expect(screen.getAllByText("https://claude.ai")).toHaveLength(2);
     expect(screen.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeInTheDocument();
     expect(screen.getByText(/add, edit, and remove kitchen data/i)).toBeInTheDocument();
-    expect(screen.getByText(/stays active until you disconnect/i)).toBeInTheDocument();
+    expect(screen.getByText(/stays active while claude keeps using it/i)).toHaveTextContent(/unused for 180 days/i);
     expect(screen.getByText(/connection details/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve access" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /allow access/i })).not.toBeInTheDocument();

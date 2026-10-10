@@ -91,17 +91,9 @@ function gifBytes(): Uint8Array {
 }
 
 function makeIngredientParser(): ImportRecipeDeps["ingredientParser"] {
-  // Deterministic: yields one parsed ingredient per input string.
-  return vi.fn(async (text: string): Promise<ParsedIngredient[]> => {
-    if (!text.trim()) return [];
-    return [
-      {
-        quantity: 1,
-        unit: "whole",
-        ingredientName: text.trim(),
-      },
-    ];
-  });
+  // Deterministic: yields one parsed ingredient per input line, like the real parser.
+  return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+    text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ quantity: 1, unit: "whole", ingredientName: line })));
 }
 
 function makeLlmRunner(
@@ -2288,6 +2280,178 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ),
       ).rejects.toMatchObject({ code: "title-conflict", status: 409 });
     });
+  });
+});
+
+describe("importRecipeFromSource — photos", () => {
+  const recipe = {
+    title: "Card Scones",
+    description: null,
+    servings: "8",
+    ingredients: ["2 cups flour"],
+    steps: ["Rub in the butter."],
+  };
+
+  function photoRunner(read: RecipeLlmRunner["extractFromPhoto"] = vi.fn(async () => recipe)): RecipeLlmRunner {
+    return { extract: vi.fn(), extractFromPhoto: read };
+  }
+
+  function photoSource(contentType = "image/png", photo = new Uint8Array([1, 2, 3])) {
+    return { type: "photo" as const, photo, contentType };
+  }
+
+  it("reads a large photo whole, as one data URL", async () => {
+    const chef = await makeChef();
+    const runner = photoRunner();
+    const photo = new Uint8Array(100_000).map((_, i) => i % 251);
+    const result = await importRecipeFromSource(
+      { chefId: chef.id, source: photoSource("image/webp", photo) },
+      baseDeps({ llmRunner: runner }),
+    );
+    expect(runner.extractFromPhoto).toHaveBeenCalledWith({
+      dataUrl: `data:image/webp;base64,${Buffer.from(photo).toString("base64")}`,
+    });
+    expect(result).toMatchObject({ source: "llm", confidence: "low", existingRecipeId: null });
+    await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+      title: "Card Scones",
+      servings: "8",
+      sourceUrl: null,
+    });
+  });
+
+  it.each([
+    ["a type the model can't read", photoSource("image/heic"), 415],
+    ["an empty photo", photoSource("image/png", new Uint8Array()), 413],
+    ["a photo over the limit", photoSource("image/png", new Uint8Array(10 * 1024 * 1024 + 1)), 413],
+  ])("refuses %s before spending a photo import", async (_name, source, status) => {
+    const chef = await makeChef();
+    const runner = photoRunner();
+    const error = await importRecipeFromSource({ chefId: chef.id, source }, baseDeps({ llmRunner: runner })).catch((e) => e);
+    expect(error).toBeInstanceOf(ImportRecipeError);
+    expect(error).toMatchObject({ code: "bad-image", status });
+    expect(runner.extractFromPhoto).not.toHaveBeenCalled();
+    await expect(db.imageGenLedger.count({ where: { userId: chef.id } })).resolves.toBe(0);
+  });
+
+  it("reports a model failure as llm-failed", async () => {
+    const chef = await makeChef();
+    const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+    const runner = photoRunner(vi.fn(async () => {
+      throw new RecipeLlmError("vision down");
+    }));
+    await expect(importRecipeFromSource({ chefId: chef.id, source: photoSource() }, baseDeps({ llmRunner: runner })))
+      .rejects.toMatchObject({ code: "llm-failed", status: 502, message: "vision down" });
+  });
+
+  it("lets an unexpected failure through", async () => {
+    const chef = await makeChef();
+    const runner = photoRunner(vi.fn(async () => {
+      throw new TypeError("bad bytes");
+    }));
+    await expect(importRecipeFromSource({ chefId: chef.id, source: photoSource() }, baseDeps({ llmRunner: runner })))
+      .rejects.toThrow("bad bytes");
+  });
+
+  it("needs a model key, like every other import", async () => {
+    const chef = await makeChef();
+    await expect(importRecipeFromSource(
+      { chefId: chef.id, source: photoSource() },
+      baseDeps({ llmRunner: undefined, env: {} }),
+    )).rejects.toMatchObject({ code: "llm-failed", message: "Photo reading is not configured" });
+  });
+
+  it("spends a photo import on a dry run, because the model still reads the photo, but writes nothing", async () => {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource(
+      { chefId: chef.id, source: photoSource(), dryRun: true },
+      baseDeps({ llmRunner: photoRunner() }),
+    );
+    expect(result.recipeId).toBeNull();
+    const ledger = await db.imageGenLedger.findMany({ where: { userId: chef.id } });
+    expect(ledger.map((row) => [row.kind, row.count])).toEqual([["import-photo", 1]]);
+    await expect(db.recipe.count({ where: { chefId: chef.id } })).resolves.toBe(0);
+  });
+});
+
+describe("importRecipeFromSource — ingredient parsing and placement", () => {
+  // Strips a leading quantity and unit, as the real parser does, so names read like the
+  // ingredient the steps talk about.
+  function namingParser() {
+    return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+      text.split("\n").map((line) => ({
+        quantity: 1,
+        unit: "whole",
+        ingredientName: line.replace(/^[\d/]+\s+(cups?|tbsp|tsp|cloves?)?\s*/, "").trim(),
+      })));
+  }
+
+  async function importText(ingredients: string[], steps: string[], parser = namingParser()) {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      source: { type: "text", text: "a card", sourceUrl: null },
+    }, baseDeps({
+      ingredientParser: parser,
+      llmRunner: makeLlmRunner({ title: "Placement Soup", ingredients, steps }),
+    }));
+    const rows = await db.ingredient.findMany({
+      where: { recipeId: result.recipeId! },
+      include: { ingredientRef: true },
+    });
+    const stepOf = Object.fromEntries(rows.map((row) => [row.ingredientRef.name, row.stepNum]));
+    return { parser, stepOf };
+  }
+
+  it("parses every ingredient line in one call per recipe", async () => {
+    const { parser } = await importText(
+      ["2 cups flour", "1 tsp\nsalt", "3 eggs"],
+      ["Whisk the eggs.", "Fold in the flour and salt."],
+    );
+    expect(parser).toHaveBeenCalledTimes(1);
+    expect(parser).toHaveBeenCalledWith("2 cups flour\n1 tsp salt\n3 eggs", expect.anything());
+  });
+
+  it("puts each ingredient on the first step that mentions it", async () => {
+    const { stepOf } = await importText(
+      ["3 eggs", "2 cups flour", "1 tsp salt"],
+      ["Whisk the eggs until pale.", "Sift the flour over the eggs.", "Season with salt."],
+    );
+    expect(stepOf).toEqual({ eggs: 1, flour: 2, salt: 3 });
+  });
+
+  it("matches singular and plural, prep notes and the ingredient's last words", async () => {
+    const { stepOf } = await importText(
+      [
+        "1 onion, finely diced",
+        "2 tomatoes",
+        "1 cup fresh blueberries",
+        "4 cloves garlic",
+        "1 yellow bell pepper",
+        "1 cup extra virgin olive oil",
+      ],
+      [
+        "Warm the olive oil.",
+        "Soften the onions and garlic.",
+        "Add the tomato and the pepper.",
+        "Scatter over a blueberry or two.",
+      ],
+    );
+    expect(stepOf).toEqual({
+      "onion, finely diced": 2,
+      tomatoes: 3,
+      "fresh blueberries": 4,
+      garlic: 2,
+      "yellow bell pepper": 3,
+      "extra virgin olive oil": 1,
+    });
+  });
+
+  it("keeps ingredients no step names, or named only inside another word, on step 1", async () => {
+    const { stepOf } = await importText(
+      ["1 tsp salt", "1 egg", "1 pinch of sumac", "2 cups rice", "!!"],
+      ["Boil the water.", "Stir in the eggplant.", "Cook the riced cauliflower.", "Serve."],
+    );
+    expect(stepOf).toEqual({ salt: 1, egg: 1, "pinch of sumac": 1, rice: 1, "!!": 1 });
   });
 });
 

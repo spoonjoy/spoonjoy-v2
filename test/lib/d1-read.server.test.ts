@@ -1,10 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 import {
   d1Boolean,
   d1Count,
   d1DateTime,
   d1NullableDateTime,
+  d1EpochMsSql,
   d1ReadBatch,
   groupRows,
   requestD1,
@@ -32,6 +34,23 @@ function stubDb(results: Array<{ results?: unknown[] }>): D1ReadDatabase & { bou
     batch: async () => results,
   };
 }
+
+describe("d1EpochMsSql", () => {
+  it("reads every saved DateTime form as the same epoch milliseconds", async () => {
+    const d1 = sqliteD1(":memory:");
+    try {
+      const at = Date.UTC(2026, 9, 10, 8, 30, 15, 123);
+      const [{ results }] = await d1.binding.batch([
+        d1.binding.prepare(
+          `SELECT ${d1EpochMsSql("v")} AS "ms" FROM (SELECT ? AS v UNION ALL SELECT ? UNION ALL SELECT ? UNION ALL SELECT ?)`,
+        ).bind(at, "2026-10-10T08:30:15.123Z", "2026-10-10T08:30:15.123+00:00", "2026-10-10T10:30:15.123+02:00"),
+      ] as never);
+      expect((results as Array<{ ms: number }>).map((row) => row.ms)).toEqual([at, at, at, at]);
+    } finally {
+      d1.close();
+    }
+  });
+});
 
 describe("requestD1", () => {
   it("returns the binding when the request context carries a D1-shaped DB", () => {

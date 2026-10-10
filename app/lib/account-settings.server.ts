@@ -24,6 +24,7 @@ import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { saveAccountIdentity } from "~/lib/account-identity.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import {
   oauthAccessConnectionOwnership,
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
@@ -785,10 +786,21 @@ export async function handleAccountSettingsAction({
       select: { sessionVersion: true },
     });
 
+    // A password change is usually account recovery, so by default it also disconnects every
+    // app, agent and API token. The form can opt out: it marks that it offers the choice, and an
+    // unticked box then sends no `revokeConnections` value.
+    const offersChoice = formData.has("connectionsChoice");
+    const revokeConnections = !offersChoice || formData.has("revokeConnections");
+    if (revokeConnections) {
+      await revokeAllAccountAccess(database, userId, { reason: "password_change" });
+    }
+
     return withSessionForVersion({
       success: true,
       intent: "changePassword",
-      message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
+      message: revokeConnections
+        ? "Your password has been changed. Other browsers have been signed out, and apps, agents and API tokens have been disconnected."
+        : "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
     }, sessionVersion);
   }
 
@@ -798,10 +810,13 @@ export async function handleAccountSettingsAction({
       data: { sessionVersion: { increment: 1 } },
       select: { sessionVersion: true },
     });
+    // Everywhere includes bearer credentials: the iPhone app, connected agents, OAuth apps and
+    // personal API tokens. Otherwise a stolen token outlives the sign-out meant to stop it.
+    await revokeAllAccountAccess(database, userId, { reason: "sign_out_everywhere" });
 
     return withSessionForVersion({
       success: true,
-      message: "You've been signed out everywhere else. You're still signed in here.",
+      message: "You've been signed out everywhere else, and apps, agents and API tokens have been disconnected. You're still signed in here.",
     }, sessionVersion);
   }
 

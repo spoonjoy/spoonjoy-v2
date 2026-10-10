@@ -2,6 +2,7 @@ import type { Route } from "./+types/api.push.subscriptions";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
+import { isAllowedPushEndpoint } from "~/lib/web-push.server";
 
 function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
@@ -71,6 +72,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     const p256dh = keys && typeof keys.p256dh === "string" ? keys.p256dh : "";
     const auth = keys && typeof keys.auth === "string" ? keys.auth : "";
     if (!p256dh || !auth) return jsonError(400, "keys.p256dh and keys.auth are required");
+    if (!isAllowedPushEndpoint(endpoint)) {
+      return jsonError(400, "endpoint must be an https URL on a known Web Push service");
+    }
     const userAgent = typeof body.userAgent === "string" ? body.userAgent : null;
 
     const db = await getRequestDb(context);

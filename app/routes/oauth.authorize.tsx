@@ -327,7 +327,8 @@ export default function OAuthAuthorize() {
         </Text>
       ) : null}
       <Text className="mt-4">
-        This connection stays active until you disconnect it in Account settings or from {appName}.
+        This connection stays active while {appName} keeps using it. It ends when you disconnect it, sign out
+        everywhere, or leave it unused for 180 days.
       </Text>
 
       <details className="mt-5 border-y border-[var(--sj-border)] py-4 text-sm text-[var(--sj-ink)]">

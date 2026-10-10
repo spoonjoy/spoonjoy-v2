@@ -103,6 +103,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch only recovers a unique-constraint idempotency race or re-throws; the API route layer (api-v1.server.ts) captures the surfaced exception.",
   },
   {
+    file: "app/lib/recipe-write-dedupe.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch only releases the idempotency reservation of a failed import or fork and re-throws; the MCP route and the web fork route capture the surfaced exception.",
+  },
+  {
     file: "app/lib/cookbook-membership-compat.server.ts",
     category: "rethrow",
     reason:

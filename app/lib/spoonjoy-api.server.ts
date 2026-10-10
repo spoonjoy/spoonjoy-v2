@@ -1,4 +1,4 @@
-import { prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
+import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -37,6 +37,12 @@ import {
   planRecipeStepsUpdate,
   type StepUpdate,
 } from "~/lib/recipe-steps-update.server";
+import {
+  RecipeWriteInFlightError,
+  type DedupedRecipeWriteRequest,
+  RecipeWriteKeyConflictError,
+  runDedupedRecipeWrite,
+} from "~/lib/recipe-write-dedupe.server";
 import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
@@ -639,7 +645,7 @@ async function activeFullCoverPayload(
   recipe: { id: string; activeCoverId: string | null; activeCoverVariant: string | null },
 ): Promise<FullCoverPayload | null> {
   if (!recipe.activeCoverId) return null;
-  const [cover] = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipe.id, [await context.db.recipeCover.findFirstOrThrow({
+  const [cover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, [await context.db.recipeCover.findFirstOrThrow({
     where: { id: recipe.activeCoverId, recipeId: recipe.id },
   })]);
   return fullCoverPayload(cover, recipe);
@@ -1191,11 +1197,11 @@ async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps:
     ingredientRefIds.set(name, (await getOrCreateIngredientRef(db, name)).id);
   }
 
-  // Atomic swap as a single D1 batch: clear-then-rebuild as one transaction so
-  // a mid-sequence failure rolls back the deletes instead of permanently
-  // gutting the recipe. D1 doesn't support Prisma's interactive
-  // `$transaction(async tx => ...)` form, but it does support the batched
-  // PrismaPromise[] form, which is what we use here.
+  // Clear-then-rebuild as one Prisma array transaction, so a mid-sequence failure rolls back
+  // the deletes. This is atomic only without a D1 binding (SQLite in tests and scripts):
+  // Prisma's D1 adapter runs both the array and the interactive `$transaction` forms as
+  // separate statements. Production callers with a binding replace the steps with
+  // recipeStepsReplaceStatements in one d1WriteBatch instead.
   const ops: Prisma.PrismaPromise<unknown>[] = [
     db.stepOutputUse.deleteMany({ where: { recipeId } }),
     db.ingredient.deleteMany({ where: { recipeId } }),
@@ -1707,7 +1713,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
 
     const canReadFullHistory = recipe.chefId === principal.id && principal.scopes.includes("kitchen:write");
     // Settled first, so the history read below already sees it failed.
-    const [activeCover] = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipe.id, [
+    const [activeCover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, [
       recipe.activeCoverId
         ? await context.db.recipeCover.findFirst({
             where: { id: recipe.activeCoverId, recipeId: recipe.id },
@@ -1727,7 +1733,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
 
     const includeArchived = args.includeArchived === true;
     // A generation whose job died reads as failed, not processing forever.
-    const covers = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipe.id, await context.db.recipeCover.findMany({
+    const covers = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, await context.db.recipeCover.findMany({
       where: {
         recipeId: recipe.id,
         ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
@@ -2266,7 +2272,7 @@ const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
     const found = await context.db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
     if (!found) throw new ApiAuthError("Cover not found", 404);
     // A generation whose job died reads as failed, so a client polling this stops.
-    const [cover] = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipeId, [found]);
+    const [cover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipeId, [found]);
     return json({
       cover: fullCoverPayload(cover, recipe),
       activeCover: await activeFullCoverPayload(context, recipe),
@@ -3761,13 +3767,16 @@ const deleteSpoonTool: SpoonjoyApiOperation = {
 const importRecipeFromUrlTool: SpoonjoyApiOperation = {
   name: "import_recipe_from_url",
   description:
-    "Import a recipe from a public web URL into the authenticated principal's library.",
+    "Import a recipe from a public web URL into the authenticated principal's library. Retrying the same import "
+    + "(the same idempotencyKey, or the same url without a key) within 24 hours returns the first import's recipe "
+    + "instead of creating another, unless that recipe was deleted.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
       url: { type: "string" },
       dryRun: { type: "boolean", default: false },
+      idempotencyKey: { type: "string", description: "Stable key for a replay-safe import; reuse it when retrying." },
     },
     required: ["url"],
     additionalProperties: false,
@@ -3776,28 +3785,55 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
     rejectOwnerEmail(args);
     const url = requiredString(args, "url");
     const dryRun = args.dryRun === true;
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
     const chefId = await resolveImportChefId(context);
-    const result = await recipeImport.importRecipeFromUrl(
-      { url, chefId, dryRun },
-      {
-        db: context.db,
-        env: context.env ?? undefined,
-        bucket: context.bucket,
-        waitUntil: context.waitUntil,
-        imageGenRunner: context.imageGenRunner,
-        logger: context.logger,
-      },
-    );
-    return json({
-      recipe: result.recipe,
-      recipeId: result.recipeId,
-      confidence: result.confidence,
-      source: result.source,
-      existingRecipeId: result.existingRecipeId,
-      coverPending: result.coverPending,
+    const runImport = async () => {
+      const result = await recipeImport.importRecipeFromUrl(
+        { url, chefId, dryRun },
+        {
+          db: context.db,
+          env: context.env ?? undefined,
+          bucket: context.bucket,
+          waitUntil: context.waitUntil,
+          imageGenRunner: context.imageGenRunner,
+          logger: context.logger,
+        },
+      );
+      return {
+        recipe: result.recipe,
+        recipeId: result.recipeId,
+        confidence: result.confidence,
+        source: result.source,
+        existingRecipeId: result.existingRecipeId,
+        coverPending: result.coverPending,
+      };
+    };
+    if (dryRun) return json(await runImport());
+    const { value, replayed } = await dedupedMcpRecipeWrite(context.db, {
+      chefId,
+      operation: "mcp.import_recipe_from_url",
+      key: idempotencyKey,
+      request: { url },
+      write: runImport,
     });
+    return json({ ...value, mutation: { idempotencyKey, replayed } });
   },
 };
+
+/** runDedupedRecipeWrite, with its key errors answered as MCP errors. */
+async function dedupedMcpRecipeWrite<T extends { recipeId: string | null }>(
+  db: PrismaClientType,
+  input: DedupedRecipeWriteRequest<T>,
+): Promise<{ value: T; replayed: boolean }> {
+  try {
+    return await runDedupedRecipeWrite({ db, ...input });
+  } catch (error) {
+    if (error instanceof RecipeWriteKeyConflictError || error instanceof RecipeWriteInFlightError) {
+      throw new ApiAuthError(error.message, 409);
+    }
+    throw error;
+  }
+}
 
 async function resolveImportChefId(context: SpoonjoyApiContext): Promise<string> {
   if (context.principal) return context.principal.id;
@@ -3818,7 +3854,8 @@ async function resolveImportChefId(context: SpoonjoyApiContext): Promise<string>
 const forkRecipeTool: SpoonjoyApiOperation = {
   name: "fork_recipe",
   description:
-    "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe.",
+    "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe. "
+    + "Retrying the same fork (the same idempotencyKey, or the same source and title without a key) within 24 hours returns the first fork instead of creating another, unless that fork was deleted.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
@@ -3829,6 +3866,7 @@ const forkRecipeTool: SpoonjoyApiOperation = {
         description:
           "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title.",
       },
+      idempotencyKey: { type: "string", description: "Stable key for a replay-safe fork; reuse it when retrying." },
     },
     required: ["sourceRecipeId"],
     additionalProperties: false,
@@ -3838,45 +3876,17 @@ const forkRecipeTool: SpoonjoyApiOperation = {
     const principal = requireApiPrincipal(context.principal);
     const sourceRecipeId = requiredString(args, "sourceRecipeId");
     const titleOverride = optionalString(args.title) ?? null;
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
 
     try {
-      const result = await forkRecipe(context.db, {
-        sourceRecipeId,
-        viewerId: principal.id,
-        titleOverride,
-      }, d1Binding(context.env?.DB));
-
-      // Fire-and-forget: notify the source chef when someone else forked.
-      try {
-        const env = context.env ?? {};
-        const vapid = getVapidConfig(env as VapidEnv);
-        const notifyTask = notifyForkOfMyRecipe(
-          context.db,
-          {
-            forkedRecipeId: result.recipe.id,
-            sourceRecipeId: result.attribution.sourceRecipeId,
-            forkerId: principal.id,
-            sourceChefId: result.attribution.sourceChef.id,
-            appliedTitle: result.appliedTitle,
-          },
-          {
-            vapid,
-            waitUntil: context.waitUntil,
-            postHogConfig: resolvePostHogServerConfig(env),
-          },
-        );
-        await runOrSchedule(context, notifyTask);
-      } catch {
-        // VAPID not configured — skip silently.
-      }
-
-      return json({
-        recipeId: result.recipe.id,
-        recipe: formatRecipe(result.recipe),
-        attribution: result.attribution,
-        appliedTitle: result.appliedTitle,
-        titleWasSuffixed: result.titleWasSuffixed,
+      const { value, replayed } = await dedupedMcpRecipeWrite(context.db, {
+        chefId: principal.id,
+        operation: "mcp.fork_recipe",
+        key: idempotencyKey,
+        request: { sourceRecipeId, titleOverride },
+        write: () => forkAndNotify(context, principal.id, sourceRecipeId, titleOverride),
       });
+      return json({ ...value, mutation: { idempotencyKey, replayed } });
     } catch (err) {
       if (err instanceof ForkSourceNotFoundError) {
         throw new ApiAuthError("Source recipe not found", 404);
@@ -3891,6 +3901,52 @@ const forkRecipeTool: SpoonjoyApiOperation = {
     }
   },
 };
+
+/** Forks the recipe and notifies the source chef, as fork_recipe answers it. */
+async function forkAndNotify(
+  context: SpoonjoyApiContext,
+  viewerId: string,
+  sourceRecipeId: string,
+  titleOverride: string | null,
+) {
+  const result = await forkRecipe(context.db, {
+    sourceRecipeId,
+    viewerId,
+    titleOverride,
+  }, d1Binding(context.env?.DB));
+
+  // Fire-and-forget: notify the source chef when someone else forked.
+  try {
+    const env = context.env ?? {};
+    const vapid = getVapidConfig(env as VapidEnv);
+    const notifyTask = notifyForkOfMyRecipe(
+      context.db,
+      {
+        forkedRecipeId: result.recipe.id,
+        sourceRecipeId: result.attribution.sourceRecipeId,
+        forkerId: viewerId,
+        sourceChefId: result.attribution.sourceChef.id,
+        appliedTitle: result.appliedTitle,
+      },
+      {
+        vapid,
+        waitUntil: context.waitUntil,
+        postHogConfig: resolvePostHogServerConfig(env),
+      },
+    );
+    await runOrSchedule(context, notifyTask);
+  } catch {
+    // VAPID not configured — skip silently.
+  }
+
+  return {
+    recipeId: result.recipe.id,
+    recipe: formatRecipe(result.recipe),
+    attribution: result.attribution,
+    appliedTitle: result.appliedTitle,
+    titleWasSuffixed: result.titleWasSuffixed,
+  };
+}
 
 const tools: SpoonjoyApiOperation[] = [
   healthTool,

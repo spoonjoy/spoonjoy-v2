@@ -20,6 +20,7 @@ import {
 } from "~/lib/collection-reads.server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { RecipesSectionNav } from "~/components/navigation";
+import { ShowMore, useAppendingList, useFocusFirstNew } from "~/components/ui/show-more";
 import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const PUBLIC_RECIPE_LIMIT = 48;
@@ -38,21 +39,50 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // On the Worker the page reads from D1 in one batch (after the search, when there is a
   // query); Prisma is only the fallback where there is no binding.
   const d1 = requestD1(context);
-  const input = { query, limit: PUBLIC_RECIPE_LIMIT };
-  const recipes = d1
+  // Browsing pages through every public recipe, PUBLIC_RECIPE_LIMIT at a time, after the last
+  // recipe of the previous page. One extra row says whether there is another page.
+  const after = query ? null : parsePublicRecipeCursor(url.searchParams.get("after"));
+  const input = { query, limit: PUBLIC_RECIPE_LIMIT + 1, after };
+  const rows = d1
     ? await readPublicRecipesFromD1(d1, input)
     : await readPublicRecipesWithPrisma(await getRequestDb(context), input);
+  const hasMore = !query && rows.length > PUBLIC_RECIPE_LIMIT;
+  const recipes = rows.slice(0, PUBLIC_RECIPE_LIMIT);
 
   return {
     query,
     isAuthenticated: Boolean(userId),
     recipes,
+    after,
+    nextCursor: hasMore ? recipes[recipes.length - 1]!.id : null,
   };
 }
 
+// Recipe ids are cuids; anything else is ignored rather than sent to the database.
+export function parsePublicRecipeCursor(raw: string | null): string | null {
+  return raw && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : null;
+}
+
+export function publicRecipesPageHref(cursor: string): string {
+  return `/recipes?after=${encodeURIComponent(cursor)}`;
+}
+
+type PublicRecipesData = Awaited<ReturnType<typeof loader>>;
+const selectPublicRecipesPage = (data: PublicRecipesData) => ({ items: data.recipes, nextCursor: data.nextCursor });
+const loadPublicRecipesPage = (cursor: string) => `/recipes?index&after=${encodeURIComponent(cursor)}`;
+
 export default function RecipesIndex() {
-  const { query, isAuthenticated, recipes } = useLoaderData<typeof loader>();
+  const { query, isAuthenticated, recipes: firstPage, after, nextCursor } = useLoaderData<typeof loader>();
   const hasQuery = query.length > 0;
+  const list = useAppendingList({
+    page: { items: firstPage, nextCursor },
+    resetKey: `${query}|${after ?? ""}|${firstPage[0]?.id ?? ""}`,
+    loadHref: loadPublicRecipesPage,
+    select: selectPublicRecipesPage,
+    noun: "recipes",
+  });
+  const recipes = list.items;
+  const firstNewRef = useFocusFirstNew<HTMLAnchorElement>(list.firstNewIndex);
   const searchInputRef = useUrlSyncedInput(query);
 
   return (
@@ -111,13 +141,13 @@ export default function RecipesIndex() {
         <div className="py-8">
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="sj-eyebrow">{hasQuery ? "Matches" : "Recently cooked and saved"}</p>
+              <p className="sj-eyebrow">{hasQuery ? "Matches" : after ? "Older recipes" : "Recently cooked and saved"}</p>
               <Subheading level={2} className="mt-1 text-3xl/9">
                 {hasQuery ? `Recipes for "${query}"` : "All public recipes"}
               </Subheading>
             </div>
             <Text className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em]">
-              {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"}
+              {list.nextCursor ? `${recipes.length} shown` : `${recipes.length} ${recipes.length === 1 ? "recipe" : "recipes"}`}
             </Text>
           </div>
 
@@ -125,19 +155,37 @@ export default function RecipesIndex() {
             <ol className="border-y border-[var(--sj-border-strong)]">
               {recipes.map((recipe, index) => (
                 <li key={recipe.id} className="border-b border-[var(--sj-border)] last:border-b-0">
-                  <RecipeRow recipe={recipe} ordinal={index + 1} imageProps={listImageProps(index)} />
+                  <RecipeRow
+                    recipe={recipe}
+                    ordinal={index + 1}
+                    imageProps={listImageProps(index)}
+                    linkRef={index === list.firstNewIndex ? firstNewRef : undefined}
+                  />
                 </li>
               ))}
             </ol>
+          ) : null}
+          {recipes.length > 0 ? (
+            <ShowMore
+              list={list}
+              href={list.nextCursor ? publicRecipesPageHref(list.nextCursor) : null}
+              label="Show more recipes"
+            />
           ) : (
             <RuledEmptyState
-              title={hasQuery ? "No matching recipes yet" : "No public recipes yet"}
-              action={hasQuery ? <Button href="/recipes" plain>Clear Search</Button> : null}
+              title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
+              action={hasQuery ? (
+                <Button href="/recipes" plain>Clear Search</Button>
+              ) : after ? (
+                <Button href="/recipes" plain>Back to the newest</Button>
+              ) : null}
             >
               <Text className="mx-auto mt-2 max-w-xl">
                 {hasQuery
                   ? "Try a broader ingredient, dish name, or chef."
-                  : "The public recipe box will fill as kitchens publish their first recipes."}
+                  : after
+                    ? "You've reached the oldest public recipe."
+                    : "The public recipe box will fill as kitchens publish their first recipes."}
               </Text>
             </RuledEmptyState>
           )}
@@ -147,7 +195,17 @@ export default function RecipesIndex() {
   );
 }
 
-function RecipeRow({ recipe, ordinal, imageProps }: { recipe: PublicRecipe; ordinal: number; imageProps: ImageLoadingProps }) {
+function RecipeRow({
+  recipe,
+  ordinal,
+  imageProps,
+  linkRef,
+}: {
+  recipe: PublicRecipe;
+  ordinal: number;
+  imageProps: ImageLoadingProps;
+  linkRef?: React.Ref<HTMLAnchorElement>;
+}) {
   const servingsLabel = formatServingsLabel(recipe.servings);
   const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0
     ? recipe.coverImageUrl
@@ -155,6 +213,7 @@ function RecipeRow({ recipe, ordinal, imageProps }: { recipe: PublicRecipe; ordi
 
   return (
     <Link
+      ref={linkRef}
       href={`/recipes/${recipe.id}`}
       className="group grid min-h-28 grid-cols-[2.5rem_5.25rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_7rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
       aria-label={recipe.title}
@@ -170,15 +229,15 @@ function RecipeRow({ recipe, ordinal, imageProps }: { recipe: PublicRecipe; ordi
         )}
       </span>
       <span className="min-w-0 self-center">
-        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)] sm:text-3xl/8">
+        <span className="font-sj-display block text-2xl/7 font-semibold [overflow-wrap:anywhere] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)] sm:text-3xl/8">
           {recipe.title}
         </span>
         <CoverProvenanceBadge label={recipe.coverProvenanceLabel} className="mt-2" />
-        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
+        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)] [overflow-wrap:anywhere]">
           {recipe.description ?? `By ${chefDisplayName(recipe.chef.username)}`}
         </span>
       </span>
-      <span className="font-sj-ui col-start-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:block sm:justify-self-end sm:text-right">
+      <span className="font-sj-ui col-start-3 flex min-w-0 flex-wrap [overflow-wrap:anywhere] gap-x-3 gap-y-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:block sm:justify-self-end sm:text-right">
         <span>By {chefDisplayName(recipe.chef.username)}</span>
         {servingsLabel ? <span className="sm:mt-1 sm:block">{servingsLabel}</span> : null}
       </span>
