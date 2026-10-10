@@ -56,7 +56,8 @@ function secureProductionDeployWorkflow(
 
 const COVERAGE_JOB_NAME_LINE =
   "    name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}";
-const COVERAGE_JOB_HEAD = `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n`;
+const CANONICAL_CI_JOB_IF_LINE = "    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}";
+const COVERAGE_JOB_HEAD = `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n${CANONICAL_CI_JOB_IF_LINE}\n`;
 // Every coverage step carries this condition, so the job reports `coverage` on a pull request
 // without running anything.
 const COVERAGE_STEP_IF = "        if: github.event_name != 'pull_request'\n";
@@ -297,7 +298,7 @@ function validInputs(): DeploymentPreflightInputs {
         "qa:seed": "node scripts/seed-qa.mjs --target-env qa",
         typecheck: "react-router typegen && tsc",
         "typecheck:scripts": "tsc -p tsconfig.scripts.json",
-        "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false",
+        "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage",
         "test:changed": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then node scripts/test-changed.mjs",
         "test:e2e": "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
         "smoke:api": "node scripts/smoke-api-live.mjs --target-env production",
@@ -2089,6 +2090,55 @@ describe("deployment preflight", () => {
     }
   }, 120_000);
 
+  it("keeps a valid pre-migration restore point and distrusts a malformed or impossible one", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-restore-point-artifact-"));
+    const artifactPath = path.join(root, "mcp-oauth-canary-artifacts/production-release.json");
+    const sourceSha = "a".repeat(40);
+    const complete = {
+      status: "promoted",
+      sourceSha,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase: "complete",
+      treeHash: "b".repeat(40),
+      reviewedMigrations: ["0024_add_release_marker.sql"],
+      migrationApply: "succeeded",
+      databaseRollbackSupported: false,
+      preMigrationBookmark: "000002d3-000002e9-000050ff-b5a760ef72525d4e6c502f1a227d77da",
+      previousVersionId: "11111111-1111-4111-8111-111111111111",
+      candidateVersionId: "22222222-2222-4222-8222-222222222222",
+    };
+    const script = workflowRunScript(
+      secureProductionDeployWorkflow("atomic-product-activation", ""),
+      "Ensure release artifact exists",
+      "Upload MCP OAuth canary artifacts",
+    );
+    const env = { ...process.env, SOURCE_SHA: sourceSha, SPOONJOY_RELEASE_MODE: "atomic-product-activation", SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "" };
+
+    try {
+      await mkdir(path.dirname(artifactPath), { recursive: true });
+      await writeFile(artifactPath, JSON.stringify(complete));
+      await execFile("bash", ["-c", script], { cwd: root, env });
+      expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(complete);
+
+      for (const invalid of [
+        { ...complete, preMigrationBookmark: "latest" },
+        { ...complete, preMigrationBookmark: 7 },
+        { ...complete, reviewedMigrations: [], migrationApply: "not_needed" },
+      ]) {
+        await writeFile(artifactPath, JSON.stringify(invalid));
+        await execFile("bash", ["-c", script], { cwd: root, env });
+        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toMatchObject({
+          status: "forward_repair_required",
+          phase: "unknown",
+          failure: "Release workflow failed without a trustworthy orchestrator artifact.",
+        });
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it.each(["atomic-bootstrap", "atomic-product-activation", "protocol-v1-canary"] as const)(
     "does not block a rollback dispatch in %s mode",
     (releaseMode) => {
@@ -2366,6 +2416,12 @@ describe("deployment preflight", () => {
       "    invalid_if: (github.event_name == 'workflow_run'",
     ],
     ["the deploy steps block", "    steps:\n", "    invalid_steps:\n"],
+    // Present but malformed: a step list holding something other than step mappings.
+    [
+      "well-formed report steps",
+      "    steps:\n      - name: Checkout released source SHA",
+      "    steps:\n      - not-a-step\n      - name: Checkout released source SHA",
+    ],
   ])("rejects a secure-looking workflow without %s", (_name, expected, replacement) => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = replaceRequired(secureProductionDeployWorkflow(), expected, replacement);
@@ -2396,11 +2452,32 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  it("requires the release-target job to choose what the deploy job releases", () => {
+    const productionErrors = (workflow: string) => {
+      const inputs = validInputs();
+      inputs.productionDeployWorkflow = workflow;
+      return validateDeploymentConfig(inputs).errors.map((item) => item.name);
+    };
+    const valid = secureProductionDeployWorkflow();
+    expect(productionErrors(valid)).not.toContain("production deploy workflow");
+    for (const [expected, replacement] of [
+      ["    needs: release-target\n", ""],
+      ["      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}\n", "      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}\n"],
+      ["        run: node scripts/workflow-security.mjs choose-release-target", "        run: echo \"source_sha=$SOURCE_SHA\" >> \"$GITHUB_OUTPUT\""],
+      ["      source_sha: ${{ steps.target.outputs.source_sha }}", "      source_sha: ${{ github.event.workflow_run.head_sha }}"],
+      ["          GH_TOKEN: ${{ github.token }}\n        run: node scripts/workflow-security.mjs choose-release-target", "          GH_TOKEN: ${{ github.token }}\n          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}\n        run: node scripts/workflow-security.mjs choose-release-target"],
+      ["    timeout-minutes: 10\n    outputs:", "    timeout-minutes: 10\n    permissions:\n      contents: write\n    outputs:"],
+      ["            git merge-base --is-ancestor \"$WORKFLOW_RUN_HEAD_SHA\" \"$SOURCE_SHA\"\n", ""],
+    ]) {
+      expect(productionErrors(replaceRequired(valid, expected, replacement))).toContain("production deploy workflow");
+    }
+  });
+
   it("rejects extra production jobs without warning-clean setup", () => {
     const inputs = validInputs();
     inputs.productionDeployWorkflow = secureProductionDeployWorkflow().replace(
-      "jobs:\n  deploy:",
-      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  deploy:",
+      "jobs:\n",
+      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n",
     );
 
     const result = validateDeploymentConfig(inputs);
@@ -2428,6 +2505,18 @@ describe("deployment preflight", () => {
     const result = validateDeploymentConfig(inputs);
 
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("requires the CI workflow token to be read-only", () => {
+    const readOnly = "permissions:\n  contents: read\n";
+    const errorsFor = (ciWorkflow: string) =>
+      validateDeploymentConfig({ ...validInputs(), ciWorkflow }).errors.map((error) => error.name);
+
+    expect(errorsFor(validCiWorkflow())).not.toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, ""))).toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, "permissions:\n  contents: write\n"))).toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, "permissions: write-all\n"))).toContain("CI workflow");
+    expect(errorsFor(replaceRequired(validCiWorkflow(), readOnly, readOnly + "  pull-requests: write\n"))).toContain("CI workflow");
   });
 
   it("requires merge-queue CI and cancels only superseded pull-request runs", () => {
@@ -2866,7 +2955,7 @@ describe("deployment preflight", () => {
     [
       "job if false",
       `${COVERAGE_JOB_HEAD}    runs-on:`,
-      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    if: false\n    runs-on:`,
+      `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n    if: false\n    runs-on:`,
     ],
     [
       "required step if false",
@@ -2938,6 +3027,21 @@ describe("deployment preflight", () => {
         `      - name: 🧪 Test & Coverage\n${COVERAGE_STEP_IF}        env:\n          PATH: /tmp/attacker\n        run: pnpm run verify:clean:test:coverage`,
       ),
     ],
+    // queue-tested comes first in ci.yml and is compared whole, so these target a canonical job's
+    // own checkout and setup-node steps rather than the first match in the file.
+    ...([
+      ["canonical job checkout with persisted credentials", "          persist-credentials: false", "          persist-credentials: true"],
+      ["canonical job checkout with an extra key", `      - uses: ${CHECKOUT_ACTION} # v6\n`, `      - uses: ${CHECKOUT_ACTION} # v6\n        id: checkout\n`],
+      ["canonical job setup-node on another Node version", "          node-version: '22'", "          node-version: '20'"],
+      ["canonical job setup-node without a name", "      - name: 📦 Setup Node.js\n        uses:", "      - uses:"],
+    ] as const).map(([label, expected, replacement]) => [
+      label,
+      (workflow: string) => {
+        const start = workflow.indexOf("\n  advisory:\n");
+        const end = workflow.indexOf("\n  coverage:\n");
+        return workflow.slice(0, start) + replaceRequired(workflow.slice(start, end), expected, replacement) + workflow.slice(end);
+      },
+    ] as const),
     [
       "removed advisory job",
       (workflow: string) => replaceRequired(
@@ -3044,8 +3148,8 @@ describe("deployment preflight", () => {
     ],
     [
       "inline dangerous environment",
-      "  deploy:\n    name: deploy\n    if:",
-      "  deploy:\n    name: deploy\n    env: {NODE_OPTIONS: --require=/tmp/preload.cjs}\n    if:",
+      "    env:\n      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}\n",
+      "    env:\n      SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}\n      NODE_OPTIONS: --require=/tmp/preload.cjs\n",
     ],
   ])("rejects parsed production mutation: %s", (_label, expected, replacement) => {
     const inputs = validInputs();
@@ -3297,8 +3401,10 @@ describe("deployment preflight", () => {
     ["a coverage step skips in the merge queue", `      - name: 🏗️ Build\n${COVERAGE_STEP_IF}`, "      - name: 🏗️ Build\n        if: github.event_name != 'merge_group'\n"],
     ["a coverage step skips everywhere", `      - name: 🔍 Typecheck\n${COVERAGE_STEP_IF}`, "      - name: 🔍 Typecheck\n        if: github.event_name == 'pull_request'\n"],
     ["coverage's cleanup runs on pull requests", "        if: always() && github.event_name != 'pull_request'\n", "        if: always()\n"],
-    ["coverage is skipped as a whole job, which never reports the required check", COVERAGE_JOB_HEAD, `${COVERAGE_JOB_HEAD}    if: github.event_name != 'pull_request'\n`],
-    ["unit-changed runs outside pull requests", "    name: unit-changed\n    if: github.event_name == 'pull_request'\n", "    name: unit-changed\n    if: always()\n"],
+    ["coverage is skipped as a whole job, which never reports the required check", COVERAGE_JOB_HEAD, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n    if: \${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && github.event_name != 'pull_request' }}\n`],
+    ["unit-changed runs outside pull requests", "    name: unit-changed\n    needs: queue-tested\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n", "    name: unit-changed\n    needs: queue-tested\n    if: always()\n"],
+    ["unit-changed is skipped whenever queue-tested is", "    name: unit-changed\n    needs: queue-tested\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n", "    name: unit-changed\n    needs: queue-tested\n    if: github.event_name == 'pull_request'\n"],
+    ["unit-changed drops its dependency on queue-tested", "    name: unit-changed\n    needs: queue-tested\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n", "    name: unit-changed\n    if: ${{ !cancelled() && github.event_name == 'pull_request' }}\n"],
     ["unit-changed interpolates a commit into its shell", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', "git fetch --quiet --no-tags --deepen=1 origin ${{ github.event.pull_request.head.sha }}"],
     ["unit-changed fetches the base commit without its history", 'git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"', 'git fetch --quiet --no-tags --depth=1 origin "$CI_SOURCE_SHA"'],
     ["unit-changed reads its base from the event payload", 'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', "SPOONJOY_CHANGED_SINCE=${{ github.event.pull_request.base.sha }} pnpm run verify:clean:test:changed"],
@@ -3306,6 +3412,15 @@ describe("deployment preflight", () => {
     ["unit-changed runs an ungated test command", '        run: SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed', "        run: pnpm exec vitest run"],
     ["unit-changed drops the generated contract check", "        run: pnpm run verify:clean:typecheck\n\n      - name: 🔐 Verify generated API contract\n        run: pnpm run verify:clean:generated-contract\n\n      # The checkout", "        run: pnpm run verify:clean:typecheck\n\n      # The checkout"],
     ["unit-changed is removed", "\n  unit-changed:\n", "\n  unit-changed-removed:\n"],
+    ["queue-tested runs on every event", "  queue-tested:\n    if: github.event_name == 'push'\n", "  queue-tested:\n    if: always()\n"],
+    ["queue-tested gains write access", "    permissions:\n      actions: read\n      contents: read\n    outputs:\n      tested:", "    permissions:\n      actions: write\n      contents: read\n    outputs:\n      tested:"],
+    ["queue-tested answers without looking", "        run: node scripts/workflow-security.mjs queue-tested-ci", "        run: echo tested=true >> \"$GITHUB_OUTPUT\""],
+    ["queue-tested reads another workflow's result", "        run: node scripts/workflow-security.mjs queue-tested-ci", "        run: node scripts/workflow-security.mjs queue-tested-journeys"],
+    ["queue-tested's output comes from elsewhere", "      tested: ${{ steps.lookup.outputs.tested }}", "      tested: 'true'"],
+    ["a canonical job skips whatever queue-tested says", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: queue-tested\n    if: \${{ needs.queue-tested.result == 'success' }}\n`],
+    ["a canonical job drops its dependency on queue-tested", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n${CANONICAL_CI_JOB_IF_LINE}\n`],
+    ["a canonical job depends on something else", `${COVERAGE_JOB_HEAD}`, `  coverage:\n${COVERAGE_JOB_NAME_LINE}\n    needs: advisory\n${CANONICAL_CI_JOB_IF_LINE}\n`],
+    ["queue-tested is removed", "\n  queue-tested:\n", "\n  queue-tested-removed:\n"],
   ])("rejects a CI workflow where %s", (_label, expected, replacement) => {
     const inputs = validInputs();
     inputs.ciWorkflow = replaceRequired(validCiWorkflow(), expected, replacement);
@@ -3328,8 +3443,8 @@ describe("deployment preflight", () => {
     const inputs = validInputs();
     inputs.ciWorkflow = replaceRequired(
       validCiWorkflow(),
-      "jobs:\n  advisory:",
-      "jobs:\n  metadata:\n    runs-on: ubuntu-latest\n  advisory:",
+      "\n  advisory:\n",
+      "\n  metadata:\n    runs-on: ubuntu-latest\n  advisory:\n",
     );
 
     const result = validateDeploymentConfig(inputs);

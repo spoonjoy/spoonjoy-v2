@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
@@ -101,8 +102,10 @@ describe("production release provenance", () => {
     );
     expect(workflowSecurity).toContain("const SHA_PATTERN = /^[0-9a-f]{40}$/");
     expect(workflowSecurity).toContain('await run("git", ["merge-base", "--is-ancestor", release.sourceSha, "origin/main"])');
-    expect(workflowSecurity).toContain('"--workflow", ".github/workflows/ci.yml"');
-    expect(workflowSecurity).toContain('const ciEvent = requiresAuthorizedDispatch ? "workflow_dispatch" : "push"');
+    expect(workflowSecurity).toContain('const CI_WORKFLOW_PATH = ".github/workflows/ci.yml"');
+    expect(workflowSecurity).toContain('"--workflow", CI_WORKFLOW_PATH');
+    expect(workflowSecurity).toContain('"--event", "workflow_dispatch"');
+    expect(workflowSecurity).toContain('workflowPath: CI_WORKFLOW_PATH,\n    sha: release.sourceSha,\n    jobs: CANONICAL_CI_JOB_NAMES,');
     expect(workflowSecurity).toContain('const originMainSha = (await run("git", ["rev-parse", "origin/main"])).trim()');
     expect(production).toContain("ROLLBACK_VERSION_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.rollback_version_id || '' }}");
     expect(deploySteps.filter((step) => step.run === "node scripts/workflow-security.mjs run-production-deploy"))
@@ -147,12 +150,12 @@ describe("production release provenance", () => {
       "Upload MCP OAuth canary artifacts",
     ]);
     expect(sha256(normalizedStepRun(production, "Validate release source", "Setup Node.js")))
-      .toBe("c95499e715c882b89cbdb467d525c80669fadadcd7d758a9c776685f07b1405a");
+      .toBe("283e04140eb920c5e5080311dd43d8d772606fc024f23ff5e2d67f8f4433e4b8");
     expect(sha256(normalizedStepRun(
       production,
       "Ensure release artifact exists",
       "Upload MCP OAuth canary artifacts",
-    ))).toBe("6a407c0d5a265942889c49a3f39ecea4185630f612d5fac8392b43bc57b791d8");
+    ))).toBe("41ecb18082678011e76875d3b6433f01e50bb5169722e6bc1b6aac078b78b0f8");
   });
 
   it("derives release recovery only from required canary evidence", () => {
@@ -164,9 +167,20 @@ describe("production release provenance", () => {
     expect(reportJob).not.toContain("--allow-recovery");
   });
 
-  it("pins the product-activation lifecycle phase in source and refuses cross-boundary rollback", () => {
-    const modeLine = "  SPOONJOY_RELEASE_MODE: atomic-product-activation";
-    const boundaryLine = '  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: ""';
+  it("pins the gradual protocol-v1-canary lifecycle in source and refuses cross-boundary rollback", () => {
+    // Product activation (#358) introduced the boundary marker; releases now stage at 0% and promote.
+    const markerCommit = "7e115e4a6f8d7971f391b8167e42c1e8be350836";
+    // A shallow CI checkout reports every file as added in its root commit, so compare with Git
+    // history only when the full history is present. The production workflow re-checks it with fetch-depth 0.
+    if (execFileSync("git", ["rev-parse", "--is-shallow-repository"], { encoding: "utf8" }).trim() === "false") {
+      expect(execFileSync(
+        "git",
+        ["log", "--diff-filter=A", "--format=%H", "--reverse", "--", "workers/cook-session-protocol-v1-boundary"],
+        { encoding: "utf8" },
+      ).trim()).toBe(markerCommit);
+    }
+    const modeLine = "  SPOONJOY_RELEASE_MODE: protocol-v1-canary";
+    const boundaryLine = `  SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: "${markerCommit}"`;
     const rollbackGuard =
       'if [ -n "$ROLLBACK_VERSION_ID" ] && [ "$SPOONJOY_RELEASE_MODE" != "protocol-v1-canary" ]; then';
     const ancestryCheck =
@@ -464,7 +478,7 @@ describe("CI warning suppression at source", () => {
     expect(ci).not.toMatch(/sudo[^\n]*(?:node|pnpm|corepack|node_modules|\.js)/);
   });
 
-  it("warning-gates every Corepack command in canonical CI", () => {
+  it("routes every Corepack command in canonical CI through the warning gate", () => {
     // advisory, coverage, unit-changed, workers-coverage and e2e.
     expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(5);
     expect(ci).not.toMatch(/^\s*corepack\s/m);

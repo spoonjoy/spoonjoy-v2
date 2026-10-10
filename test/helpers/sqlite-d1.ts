@@ -1,5 +1,5 @@
-import { resolve } from "node:path";
 import Database from "better-sqlite3";
+import { workerDbPath } from "../support/worker-db";
 
 // A fake D1 binding over the real unit-test database (prisma/test.db), so raw D1 read
 // paths run their exact SQL against the real schema without Prisma. It implements the
@@ -32,7 +32,7 @@ export interface SqliteD1 {
   close(): void;
 }
 
-export function sqliteD1(path = resolve(__dirname, "../../prisma/test.db")): SqliteD1 {
+export function sqliteD1(path = workerDbPath()): SqliteD1 {
   const sqlite = new Database(path);
   const statements: RecordedStatement[] = [];
   let roundTrips = 0;

@@ -17,6 +17,10 @@ on:
         required: true
         type: string
 
+# Every CI job only reads the repository; nothing here needs a write-scoped GITHUB_TOKEN.
+permissions:
+  contents: read
+
 defaults:
   run:
     shell: bash
@@ -38,8 +42,46 @@ env:
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
+  # After a merge-queue merge, main's new commit is exactly the commit the queue's CI run already
+  # tested, with this same workflow file. On a push to main, queue-tested asks GitHub whether that
+  # merge-queue run passed every canonical job; if it did, the four jobs below skip on this push and
+  # the production deploy uses the queue's run as its evidence. A push that bypassed the queue, a
+  # missing, failed or partly skipped queue run, or any lookup error runs full CI. Pull requests,
+  # merge-queue groups and dispatches skip queue-tested and always run full CI.
+  queue-tested:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tested: ${{ steps.lookup.outputs.tested }}
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
+      - name: 🔎 Ask whether the merge queue already tested this commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs queue-tested-ci
+
   advisory:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -93,6 +135,8 @@ jobs:
   # `unit-changed` below gives a pull request fast feedback from the tests its changes affect.
   coverage:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -191,7 +235,8 @@ jobs:
   # Full coverage runs in the merge queue before anything lands.
   unit-changed:
     name: unit-changed
-    if: github.event_name == 'pull_request'
+    needs: queue-tested
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -252,6 +297,8 @@ jobs:
 
   workers-coverage:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-workers-coverage' || 'workers-coverage' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -282,6 +329,8 @@ jobs:
 
   e2e:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -350,4 +399,13 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 30
+
+      # Full-page captures from e2e/screens.spec.ts, for reviewing a visual change from this build.
+      - name: 📸 Upload screens
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: screens
+          path: screens/
           retention-days: 30

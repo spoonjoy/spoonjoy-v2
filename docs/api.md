@@ -109,7 +109,7 @@ done
 export SPOONJOY_TOKEN="$(jq -r '.data.token' "$state_dir/poll.json")"
 ```
 
-The delegated approval files contain `deviceCode` and, once approved, a bearer token. Keep them in a private temp directory, delete them after export, and never commit them. Personal and delegated bearer tokens do not expire unless their returned `expiresAt` is non-null; rerun approval or create a new token when a stored token starts returning `401 invalid_token`.
+The delegated approval files contain `deviceCode` and, once approved, a bearer token. Keep them in a private temp directory, delete them after export, and never commit them. Check the returned `expiresAt`: a delegated token from approval expires 90 days after it is issued, and stops working once that time passes. (Personal tokens you create yourself also default to 90 days; pass `expiresInDays` from 1 to 365, or `null` or `"never"` for one that never expires.) Rerun approval or create a new token when a stored token starts returning `401 invalid_token`. Signing out everywhere, or changing the password with the default box ticked, revokes every personal, delegated and OAuth token on the account.
 
 ## API v1 REST Response Shape
 
@@ -158,7 +158,7 @@ Supported entry points:
 - Delegated agent connection: `POST /api/tools/start_agent_connection` and `POST /api/tools/poll_agent_connection`
 - MCP clients: `POST /mcp`
 
-Generic OAuth access tokens are short-lived Spoonjoy API credentials. MCP-bound OAuth access tokens stay active until disconnect so remote assistants do not require surprise re-authorization. OAuth token responses also include a rotating `refresh_token`; each refresh-token grant rotates the presented token and rejects replay. Native apps, browser extensions, and other OAuth clients disconnect by revoking their stored refresh token with `POST /oauth/revoke`.
+Generic OAuth access tokens last 15 minutes. MCP-bound OAuth access tokens last 90 days, so remote assistants rarely need to refresh. OAuth token responses also include a rotating `refresh_token`, accepted for 180 days after it was issued; each refresh-token grant rotates the presented token and issues a fresh 180-day one. Presenting a refresh token that was already rotated is refused; if it comes back more than 60 seconds after its rotation (15 minutes for Spoonjoy's own iPhone app), Spoonjoy treats it as stolen and revokes the whole connection, so the client must sign in again. Rotation does not revoke the access token issued with the old refresh token: it stays valid until its own expiry, so requests already in flight from another process of the same client do not fail. A client that has several processes should share one refresh at a time. Native apps, browser extensions, and other OAuth clients disconnect by revoking their stored refresh token with `POST /oauth/revoke`.
 
 Signed-in chefs can also open Account settings to see active personal/delegated bearer credentials and OAuth app connections, then revoke or disconnect them without seeing token secrets again.
 
@@ -222,7 +222,7 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...
 ```
 
-For generic OAuth clients, the token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in: 900`, `scope`, and a rotating `refresh_token`. MCP-bound token responses omit `expires_in` because that access credential remains active until disconnect.
+For generic OAuth clients, the token response contains `access_token: "sj_..."`, `token_type: "Bearer"`, `expires_in: 900`, `scope`, and a rotating `refresh_token`. MCP-bound token responses carry `expires_in: 7776000` (90 days).
 
 Registration can validate optional `scope` metadata, but it does not grant or remember that scope. Always send the requested scope on `/oauth/authorize`. Blank OAuth authorize scope defaults to kitchen:read.
 
@@ -336,7 +336,7 @@ Content-Type: application/x-www-form-urlencoded
 grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...
 ```
 
-For generic OAuth clients, the returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). For MCP-bound clients, the returned `access_token` is a durable `sj_...` Bearer credential and the token response omits `expires_in`; it remains active until the connection is disconnected. The returned refresh_token rotates on every refresh grant as an `ort_...` token, and a replayed refresh token is rejected. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. A server-revoked OAuth client cannot authorize, exchange or rotate grants, or authenticate an OAuth-backed access credential. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes. OAuth kitchen scopes do not grant tokens:read or tokens:write.
+For generic OAuth clients, the returned `access_token` is a normal `sj_...` Bearer credential that expires after 15 minutes (`expires_in: 900`). For MCP-bound clients, the returned `access_token` is a `sj_...` Bearer credential that expires after 90 days (`expires_in: 7776000`). The returned refresh_token rotates on every refresh grant as an `ort_...` token and is accepted for 180 days after it was issued. A replayed refresh token is rejected, and a replay more than 60 seconds after its rotation revokes the whole connection. Refresh tokens are stored server-side only as hashes. Disconnect by revoking the stored refresh token with `POST /oauth/revoke`; Spoonjoy revokes live OAuth access credentials for that client/resource at the same time. A server-revoked OAuth client cannot authorize, exchange or rotate grants, or authenticate an OAuth-backed access credential. OAuth never grants `tokens:read` or `tokens:write`; token management is for signed-in sessions or personal bearer credentials with explicit token scopes. OAuth kitchen scopes do not grant tokens:read or tokens:write.
 
 `client_id` is recommended on `/oauth/revoke` and Spoonjoy checks it when present. Possession of the refresh token is sufficient to revoke it, so a client can still disconnect if its local `client_id` storage was lost.
 
@@ -364,7 +364,7 @@ Public recipe and cookbook endpoints can be called anonymously. If you send cred
 
 Omit `Authorization` on public calls unless you require authenticated behavior. A stale bearer token on an optional public endpoint returns `401 invalid_token`; Spoonjoy does not silently ignore a bad credential and fall back to anonymous.
 
-Treat `authentication_required` and `invalid_token` as `401` responses. Treat `insufficient_scope` as `403`. A malformed `Authorization` header returns `validation_error`. Send your own `X-Request-Id` when you have one, and log the response `requestId` so failures can be traced.
+Treat `authentication_required` and `invalid_token` as `401` responses. Treat `insufficient_scope` as `403`. `PATCH /api/v1/me` never changes the email: a request that changes only the email returns `403 email_change_requires_web` (send the person to Account settings on the website), and a request that also changes the username saves the username and ignores the email. A malformed `Authorization` header returns `validation_error`. Send your own `X-Request-Id` when you have one, and log the response `requestId` so failures can be traced.
 
 ## OAuth And Delegated Flows
 

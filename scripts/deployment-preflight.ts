@@ -162,6 +162,13 @@ const STORYBOOK_REQUIRED_JOB_NAME =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+// The only artifacts canonical CI may upload: the Playwright report, and the full-page captures
+// e2e/screens.spec.ts writes for reviewing a visual change. Any other path could carry secrets.
+const CI_ARTIFACT_UPLOADS = [
+  { name: "playwright-report", path: "playwright-report/", "retention-days": 30 },
+  { name: "screens", path: "screens/", "retention-days": 30 },
+] as const;
+
 const PINNED_SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1";
 const PINNED_UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const PINNED_DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
@@ -181,8 +188,8 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Ensure release artifact exists",
   "Upload MCP OAuth canary artifacts",
 ] as const;
-const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "f493d2830d4c2c1bb31dd19bc88a4c289dd480448cea94ee9923b04f434037f6";
-const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "3b9febef9ea2e91192eebabb3947a73257bc5df5b03db1a30ba1a4f7a472c721";
+const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "a7cb6362694e1491a024317adecffd7a4d8c4fe8a74266f91cc28e64b75c3de5";
+const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "badae675ff339cc466f30e07564ff2e2874adae02b0b41bd0fef1a25f2c09242";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -578,6 +585,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:test:e2e"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
     actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
+    actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
   ]],
 ]);
 
@@ -613,7 +621,9 @@ const CI_JOB_CONTRACTS = Object.freeze({
   // Pull requests only, not required: typecheck and the tests the change affects.
   "unit-changed": Object.freeze({
     name: "unit-changed",
-    if: "github.event_name == 'pull_request'",
+    // queue-tested runs only on main pushes, so on a pull request it is skipped and `!cancelled()`
+    // lets this job run anyway.
+    if: "${{ !cancelled() && github.event_name == 'pull_request' }}",
     timeoutMinutes: 30,
     env: undefined,
   }),
@@ -673,11 +683,48 @@ export const CI_WORKFLOW_CONCURRENCY = {
   "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
 } as const;
 
+// On a push to main, queue-tested reports whether the merge queue already passed every canonical
+// job on this exact commit (scripts/workflow-security.mjs queue-tested-ci); the four canonical jobs
+// skip only when it says so. It alone gets actions: read, to look the queue's run up.
+export const CI_QUEUE_TESTED_JOB = Object.freeze({
+  if: "github.event_name == 'push'",
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": 5,
+  permissions: { actions: "read", contents: "read" },
+  outputs: { tested: "${{ steps.lookup.outputs.tested }}" },
+  steps: [
+    {
+      uses: PINNED_CHECKOUT_ACTION,
+      with: { ref: "${{ env.CI_SOURCE_SHA }}", "persist-credentials": false },
+    },
+    {
+      name: "📦 Setup Node.js",
+      uses: PINNED_SETUP_NODE_ACTION,
+      with: { "node-version": "22" },
+    },
+    {
+      name: "🔐 Validate CI invocation",
+      run: "node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation",
+    },
+    {
+      name: "🔎 Ask whether the merge queue already tested this commit",
+      id: "lookup",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs queue-tested-ci",
+    },
+  ],
+});
+export const CI_CANONICAL_JOB_NEEDS = "queue-tested";
+export const CI_CANONICAL_JOB_CONDITION = "${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}";
+
 function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   const root = parsedWorkflow(workflow);
-  if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "concurrency", "env", "jobs"])) return false;
+  if (!root || !exactObjectKeys(root, ["name", "on", "permissions", "defaults", "concurrency", "env", "jobs"])) return false;
   if (root.name !== "CI" || !exactWorkflowRecord(root.env, CI_WORKFLOW_ENV)) return false;
   if (!exactWorkflowRecord(root.concurrency, CI_WORKFLOW_CONCURRENCY)) return false;
+  // CI runs pull request code, so its GITHUB_TOKEN may only read the repository.
+  const permissions = objectRecord(root.permissions);
+  if (!exactObjectKeys(permissions, ["contents"]) || permissions.contents !== "read") return false;
 
   const triggers = objectRecord(root.on);
   const push = objectRecord(triggers.push);
@@ -704,23 +751,21 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   }
 
   const jobs = objectRecord(root.jobs);
-  if (!exactObjectKeys(jobs, Object.keys(CI_JOB_CONTRACTS))) return false;
+  if (!exactObjectKeys(jobs, ["queue-tested", ...Object.keys(CI_JOB_CONTRACTS)])) return false;
+  if (JSON.stringify(jobs["queue-tested"]) !== JSON.stringify(CI_QUEUE_TESTED_JOB)) return false;
 
   for (const [jobName, rawJob] of Object.entries(jobs)) {
+    if (jobName === "queue-tested") continue;
     const job = objectRecord(rawJob);
     const contract: { name: string; if?: string; timeoutMinutes: number; env?: Record<string, string> } =
       CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
-    const expectedJobKeys = [
-      "name",
-      ...(contract.if === undefined ? [] : ["if"]),
-      "runs-on",
-      "timeout-minutes",
-      ...(contract.env ? ["env"] : []),
-      "steps",
-    ];
+    const expectedJobKeys = contract.env
+      ? ["name", "needs", "if", "runs-on", "timeout-minutes", "env", "steps"]
+      : ["name", "needs", "if", "runs-on", "timeout-minutes", "steps"];
     if (
       !exactObjectKeys(job, expectedJobKeys) ||
-      job.if !== contract.if ||
+      job.needs !== CI_CANONICAL_JOB_NEEDS ||
+      job.if !== (contract.if ?? CI_CANONICAL_JOB_CONDITION) ||
       job.name !== contract.name ||
       job["runs-on"] !== "ubuntu-latest" ||
       job["timeout-minutes"] !== contract.timeoutMinutes ||
@@ -765,11 +810,7 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
             !exactObjectKeys(step, ["name", "uses", "if", "with"]) ||
             typeof step.name !== "string" ||
             step.if !== "${{ !cancelled() }}" ||
-            !exactWorkflowRecord(withValues, {
-              name: "playwright-report",
-              path: "playwright-report/",
-              "retention-days": 30,
-            })
+            !CI_ARTIFACT_UPLOADS.some((upload) => exactWorkflowRecord(withValues, upload))
           ) return false;
         }
         continue;
@@ -803,9 +844,45 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
 
 const PRODUCTION_DEPLOY_JOB_CONDITION =
   "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/ci.yml') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')";
+// The deploy job also needs release-target to have chosen something to release: a run superseded
+// by an earlier deploy of the same or a newer commit skips deploy and report-canary and stays green.
+const PRODUCTION_DEPLOY_RELEASE_CONDITION =
+  `(${PRODUCTION_DEPLOY_JOB_CONDITION}) && needs.release-target.outputs.release == 'true'`;
 const PRODUCTION_VALIDATION_COMMAND =
   "node scripts/workflow-security.mjs validate-production-deploy-source";
 const PRODUCTION_DEPLOY_COMMAND = "node scripts/workflow-security.mjs run-production-deploy";
+// The release-target job chooses the commit the deploy job releases; see choose-release-target in
+// scripts/workflow-security.mjs.
+export const PRODUCTION_RELEASE_TARGET_JOB = Object.freeze({
+  name: "release-target",
+  if: PRODUCTION_DEPLOY_JOB_CONDITION,
+  "runs-on": "ubuntu-latest",
+  "timeout-minutes": 10,
+  outputs: {
+    source_sha: "${{ steps.target.outputs.source_sha }}",
+    release: "${{ steps.target.outputs.release }}",
+  },
+  steps: [
+    {
+      name: "Checkout trusted release tooling",
+      uses: PINNED_CHECKOUT_ACTION,
+      with: {
+        ref: "${{ github.workflow_sha }}",
+        "fetch-depth": 0,
+        "persist-credentials": false,
+      },
+    },
+    {
+      name: "Choose the newest green main commit",
+      id: "target",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs choose-release-target",
+    },
+  ],
+});
+export const PRODUCTION_DEPLOY_JOB_ENV = Object.freeze({
+  SOURCE_SHA: "${{ needs.release-target.outputs.source_sha }}",
+});
 const PRODUCTION_WORKFLOW_ENV = Object.freeze({
   GIT_CONFIG_COUNT: "1",
   GIT_CONFIG_KEY_0: "init.defaultBranch",
@@ -1055,13 +1132,16 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
   ) return false;
 
   const jobs = objectRecord(root.jobs);
-  if (!exactObjectKeys(jobs, ["deploy", "report-canary"])) return false;
+  if (!exactObjectKeys(jobs, ["release-target", "deploy", "report-canary"])) return false;
+  if (JSON.stringify(jobs["release-target"]) !== JSON.stringify(PRODUCTION_RELEASE_TARGET_JOB)) return false;
   const deploy = objectRecord(jobs.deploy);
   const report = objectRecord(jobs["report-canary"]);
   if (
-    !exactObjectKeys(deploy, ["name", "if", "runs-on", "timeout-minutes", "environment", "steps"]) ||
+    !exactObjectKeys(deploy, ["name", "needs", "if", "runs-on", "timeout-minutes", "environment", "env", "steps"]) ||
     deploy.name !== "deploy" ||
-    deploy.if !== PRODUCTION_DEPLOY_JOB_CONDITION ||
+    deploy.needs !== "release-target" ||
+    !exactWorkflowRecord(deploy.env, PRODUCTION_DEPLOY_JOB_ENV) ||
+    deploy.if !== PRODUCTION_DEPLOY_RELEASE_CONDITION ||
     deploy["runs-on"] !== "ubuntu-latest" ||
     deploy["timeout-minutes"] !== 40 ||
     deploy.environment !== "production" ||
@@ -1797,7 +1877,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "output gate scripts",
-      scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false" &&
+      scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage" &&
         scripts["test:changed"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then node scripts/test-changed.mjs" &&
         scripts["test:e2e"] === "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
       "package.json test:coverage, test:changed and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI."
@@ -1810,12 +1890,12 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "CI workflow",
       ciWorkflowIsCanonical,
-      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, skip every coverage step on pull requests (and nowhere else) and run the changed-files unit job only on pull requests, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
+      ".github/workflows/ci.yml.must validate pushes, pull requests and merge-queue groups for main, cancel only superseded pull-request runs, skip every coverage step on pull requests (and nowhere else), run the changed-files unit job only on pull requests, skip the canonical jobs on a main push only when its queue-tested job finds the merge queue's green run of the same commit, with checkout output suppression, Corepack pnpm activation, and output-gated seed/typecheck/build/test paths."
     ),
     check(
       "production deploy workflow",
       parsedProductionWorkflowIsCanonical(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must deploy only an exact successful main-branch CI SHA, validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
+      ".github/workflows/production-deploy.yml must deploy only the newest main commit with green canonical CI, from a push run or the merge queue's run of the same commit (chosen by its release-target job), validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
     ),
     check(
       "QA image-cover smoke workflow",

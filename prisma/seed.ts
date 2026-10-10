@@ -867,7 +867,7 @@ const RECIPES: RecipeData[] = [
     description:
       "Brunch classic with poached eggs, Canadian bacon, and silky hollandaise on an English muffin.",
     servings: "4 servings",
-    imageUrl: "https://images.unsplash.com/photo-1608039829572-9b0ba489e6ea?w=800&q=80",
+    imageUrl: "https://images.unsplash.com/photo-1671522635398-a2443699d32e?w=800&q=80",
     steps: [
       {
         stepTitle: "Make hollandaise",

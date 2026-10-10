@@ -381,3 +381,42 @@ describe("RecipeLlmError", () => {
     expect(e.status).toBe(404);
   });
 });
+
+describe("createOpenAIRecipeLlmRunner — photos", () => {
+  const env: RecipeLlmEnv = { OPENAI_API_KEY: "sk-test" };
+  const payload = {
+    title: "Card Scones",
+    description: null,
+    servings: "8",
+    ingredients: ["2 cups flour"],
+    steps: ["Rub in the butter."],
+  };
+
+  it("sends the photo to the model with the recipe schema and returns what it read", async () => {
+    const create = vi.fn(async () => ok(JSON.stringify(payload)));
+    const runner = createOpenAIRecipeLlmRunner(env, { clientFactory: () => makeClient(create) });
+    await expect(runner.extractFromPhoto!({ dataUrl: "data:image/png;base64,AQID" })).resolves.toEqual(payload);
+    expect(create).toHaveBeenCalledWith({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: expect.stringContaining("Read the recipe in the photo") },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Read the recipe in this photo." },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AQID", detail: "high" } },
+          ],
+        },
+      ],
+      response_format: { type: "json_schema", json_schema: expect.objectContaining({ name: "recipe_response" }) },
+    });
+  });
+
+  it("maps a model failure on a photo the same way as on text", async () => {
+    const create = vi.fn(async () => {
+      throw Object.assign(new Error("rate"), { status: 429 });
+    });
+    const runner = createOpenAIRecipeLlmRunner(env, { clientFactory: () => makeClient(create) });
+    await expect(runner.extractFromPhoto!({ dataUrl: "data:image/png;base64,AQID" })).rejects.toThrow("OpenAI rate limit exceeded");
+  });
+});

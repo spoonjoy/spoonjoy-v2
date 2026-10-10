@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
+// Ingredient names get digit-only random suffixes: the shopping list picks an icon and category by matching words such as "cod" or "egg" inside the name, and a random letter suffix can contain one.
 import { action, loader } from "~/routes/api.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { captureEvent, captureException } from "~/lib/analytics-server";
@@ -441,6 +442,28 @@ describe("Spoonjoy REST API route", () => {
       .resolves.toMatchObject({ ok: true, data: { recipe: { id: recipeId, title: "REST Pasta" } } });
     await expect(readJson(await loader(routeArgs(new UndiciRequest("http://localhost/api/recipes?query=Pasta&limit=1"), "recipes"))))
       .resolves.toMatchObject({ ok: true, data: { recipes: [{ id: recipeId }] } });
+    // Anyone may filter by a public username; only the account itself may filter by its email.
+    const recipeIds = async (query: string, init?: RequestInit) =>
+      ((await readJson(await loader(routeArgs(new UndiciRequest(`http://localhost/api/recipes?query=Pasta&${query}`, init), "recipes")))).data.recipes as { id: string }[]).map((recipe) => recipe.id);
+    await expect(recipeIds(`chefUsername=${encodeURIComponent(user.username)}`)).resolves.toEqual([recipeId]);
+    await expect(recipeIds(`chefEmail=${encodeURIComponent(user.email)}`)).resolves.toEqual([]);
+    await expect(recipeIds(`chefEmail=${encodeURIComponent(user.email)}`, { headers })).resolves.toEqual([recipeId]);
+    // ownerEmail never looks the address up: an anonymous caller gets the same answer for a real
+    // account's email as for a made-up one, and a signed-in caller can name only their own.
+    const answer = async (path: string, init?: RequestInit) => {
+      const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/${path}`, init), path.split("?")[0]!));
+      return { status: response.status, body: await readJson(response) };
+    };
+    for (const path of ["cookbooks", "search", "shopping-list"]) {
+      const known = await answer(`${path}?ownerEmail=${encodeURIComponent(user.email)}`);
+      const unknown = await answer(`${path}?ownerEmail=${encodeURIComponent(uniqueEmail("nobody"))}`);
+      expect(known).toEqual(unknown);
+    }
+    const otherAccount = await db.user.create({ data: { email: uniqueEmail("other"), username: faker.internet.username() } });
+    const forOther = await answer(`cookbooks?ownerEmail=${encodeURIComponent(otherAccount.email)}`, { headers });
+    const forNobody = await answer(`cookbooks?ownerEmail=${encodeURIComponent(uniqueEmail("nobody"))}`, { headers });
+    expect(forOther.status).toBe(403);
+    expect(forOther).toEqual(forNobody);
 
     const cookbookResponse = await action(routeArgs(new UndiciRequest("http://localhost/api/cookbooks", {
       method: "POST",
@@ -528,9 +551,9 @@ describe("Spoonjoy REST API route", () => {
     await db.recipeStep.create({
       data: { recipeId: recipe.id, stepNum: 1, description: "Add beans" },
     });
-    const recipeUnit = await db.unit.create({ data: { name: `shape-can-${faker.string.alphanumeric(6).toLowerCase()}` } });
+    const recipeUnit = await db.unit.create({ data: { name: `shape-can-${faker.string.numeric(10)}` } });
     const recipeIngredient = await db.ingredientRef.create({
-      data: { name: `shape-beans-${faker.string.alphanumeric(6).toLowerCase()}` },
+      data: { name: `shape-beans-${faker.string.numeric(10)}` },
     });
     await db.ingredient.create({
       data: {
