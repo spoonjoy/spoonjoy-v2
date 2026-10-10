@@ -89,11 +89,13 @@ describe("summarize-worker-tail.jq", () => {
       "complete",
       "firstEventTimestamp",
       "firstExceptions",
+      "hungInvocations",
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
       "serverErrorInvocations",
       "slowest",
+      "stalledInvocations",
       "tailAliveAtStop",
       "totalInvocations",
     ]);
@@ -168,6 +170,8 @@ describe("summarize-worker-tail.jq", () => {
       outcomes: {},
       nonOkInvocations: [],
       serverErrorInvocations: [],
+      hungInvocations: 0,
+      stalledInvocations: 0,
       firstExceptions: [],
       slowest: [],
       byPath: [],
@@ -291,6 +295,56 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.serverErrorInvocations.map((entry: { status: number }) => entry.status)).not.toContain(404);
   });
 
+  it("counts the requests the Workers runtime canceled as hung (Error 1101), whatever their outcome", () => {
+    // Journeys runs 37942328703 and 37912555692 had 13 such 500s; the summary showed them only as
+    // "exception" entries among the other non-ok invocations, with no count to compare runs by.
+    const HUNG =
+      "The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/";
+    const at = (outcome: string, message?: string) => ({
+      outcome,
+      cpuTime: 12,
+      wallTime: 20,
+      event: { request: { url: "https://qa.example/api/cook-sessions/x", method: "GET" }, response: { status: 500 } },
+      exceptions: message === undefined ? [] : [{ name: "Error", message }],
+    });
+
+    const { summary } = summarize([
+      at("exception", HUNG),
+      at("exception", HUNG),
+      at("canceled", HUNG),
+      at("exception", "memory access out of bounds"),
+      at("exception", "Network connection lost."),
+      at("ok"),
+    ]);
+
+    expect(summary.hungInvocations).toBe(3);
+    expect(summarize([at("exception", "unreachable")]).summary.hungInvocations).toBe(0);
+  });
+
+  it("counts requests that waited over 2 s on under 5 ms of CPU, the shape of a request stuck on a promise", () => {
+    // Runs 37956171261 (/recipes/:id.data, 1 ms CPU, 4,273 ms wall) and 37935772167 (/_root.data,
+    // 1 ms CPU, 6,288 ms wall) each had one, canceled when Playwright gave up.
+    const timed = (cpuTime: unknown, wallTime: unknown, outcome = "canceled") => ({
+      outcome,
+      cpuTime,
+      wallTime,
+      event: { request: { url: "https://qa.example/_root.data", method: "GET" } },
+    });
+
+    const { summary } = summarize([
+      timed(1, 6288),
+      timed(4, 2001, "ok"),
+      timed(5, 4000),
+      timed(33, 5146),
+      timed(1, 2000),
+      timed(1, 1500),
+      timed(undefined, 9000),
+      timed(1, undefined),
+    ]);
+
+    expect(summary.stalledInvocations).toBe(2);
+  });
+
   it("tolerates events without a request", () => {
     const { summary } = summarize([{ outcome: "exceededCpu", exceptions: [] }]);
 
@@ -343,6 +397,22 @@ describe("Journeys workflow tail wiring", () => {
     ]);
     expect(execFileSync("jq", ["-r", filter!], { input: JSON.stringify({ budget: { cpuTimeP95Ms: 10, overBudget: [] } }), encoding: "utf8" }))
       .toBe("");
+  });
+
+  it("prints the hang and stall counts in the step log and warns, without failing, when any request hung", () => {
+    const summarise = step("Stop QA Worker tail and summarise it") as { run?: string; "continue-on-error"?: boolean };
+    const run = summarise.run ?? "";
+    expect(summarise["continue-on-error"]).toBe(true);
+    expect(run).toMatch(/jq '\{[^']*hungInvocations, stalledInvocations[^']*\}'/);
+
+    const filter = /jq -r '(select\(\.hungInvocations[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(warn({ hungInvocations: 11, stalledInvocations: 1 }).trimEnd()).toBe(
+      "::warning::Worker hangs: 11 request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json.",
+    );
+    expect(warn({ hungInvocations: 0, stalledInvocations: 3 })).toBe("");
+    expect(warn({})).toBe("");
   });
 
   it("waits for late tail events before stopping the tail, bounded, so the last failures are kept", () => {

@@ -88,6 +88,11 @@ def by_path: group_by(path_pattern)
   # Every 5xx response, whatever the outcome: React Router answers a loader or action error with
   # a 500 while the invocation itself ends "ok", so nonOkInvocations alone misses it. First 50.
   serverErrorInvocations: ([.[] | select((.event.response.status // 0) >= 500) | invocation] | .[0:50]),
+  # Requests the Workers runtime canceled because the Worker's code "had hung and would never
+  # generate a response" (a 500 with Error 1101 to the browser), whatever the outcome.
+  hungInvocations: ([.[] | select(any((.exceptions // [])[]; (.message // "") | tostring | test("code had hung|would never generate a response")))] | length),
+  # Requests that waited over 2 s on under 5 ms of CPU: stuck on a promise or on I/O, not working.
+  stalledInvocations: ([.[] | select((.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000)] | length),
   firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20]),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
