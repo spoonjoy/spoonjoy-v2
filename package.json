@@ -42,7 +42,8 @@
       "source-map-js": "1.2.2",
       "undici": "7.29.1",
       "valibot": "1.4.2",
-      "ws@8": "8.21.0"
+      "ws@8": "8.21.0",
+      "@prisma/adapter-better-sqlite3>better-sqlite3": "13.0.0"
     },
     "patchedDependencies": {
       "@prisma/adapter-d1@6.19.2": "patches/@prisma__adapter-d1@6.19.2.patch",
@@ -160,6 +161,7 @@
     "@faker-js/faker": "^10.5.0",
     "@modelcontextprotocol/client": "2.2.0",
     "@playwright/test": "^1.58.1",
+    "@prisma/adapter-better-sqlite3": "6.19.2",
     "@storybook/addon-a11y": "10.2.10",
     "@storybook/addon-docs": "10.2.10",
     "@storybook/addon-onboarding": "10.2.10",
