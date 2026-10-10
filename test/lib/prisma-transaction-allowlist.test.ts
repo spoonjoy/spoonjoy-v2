@@ -21,6 +21,10 @@ interface Allowance {
 }
 
 export const TRANSACTION_ALLOWLIST: Record<string, Allowance> = {
+  "app/lib/account-revocation.server.ts": {
+    max: 1,
+    reason: `${NO_BINDING_FALLBACK} Both account-settings callers pass requestD1(context) as options.d1.`,
+  },
   "app/lib/api-v1-recipe-steps.server.ts": {
     max: 8,
     reason: `${NO_BINDING_FALLBACK} Each REST step write branches on options.d1 first.`,

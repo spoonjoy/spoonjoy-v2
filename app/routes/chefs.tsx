@@ -1,4 +1,5 @@
 import type { Route } from "./+types/chefs";
+import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Users } from "lucide-react";
 import { Link } from "~/components/ui/link";
@@ -96,7 +97,7 @@ function ChefList({
                 <Users className="size-4" aria-hidden="true" />
               </span>
               <span>
-                <span className="block font-sj-ui font-bold text-[var(--sj-ink)]">{chef.username}</span>
+                <span className="block font-sj-ui font-bold text-[var(--sj-ink)]">{chefDisplayName(chef.username)}</span>
                 <span className="text-sm text-[var(--sj-ink-soft)]">
                   Latest activity <LocalDate value={chef.latestInteractionAt} />
                 </span>

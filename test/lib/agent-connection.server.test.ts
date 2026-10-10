@@ -108,7 +108,7 @@ describe("agent connection requests", () => {
       where: { id: legacy.request.id },
       data: { scopes: "account:read account:write" },
     });
-    await expect(approveAgentConnectionRequest(db, legacy.request.id, user.id, now))
+    await expect(approveAgentConnectionRequest(db, legacy.request.id, { userId: user.id, sessionVersion: 0 }, now))
       .rejects.toMatchObject({ status: 400, message: expect.stringContaining("account access") });
     await expect(db.agentConnectionRequest.findUniqueOrThrow({ where: { id: legacy.request.id } }))
       .resolves.toMatchObject({ status: "pending" });
@@ -218,9 +218,9 @@ describe("agent connection requests", () => {
     const started = await startAgentConnection(db, { agentName: "slugger", now });
 
     expect(await getAgentConnectionRequest(db, "missing", now)).toBeNull();
-    const approved = await approveAgentConnectionRequest(db, started.request.id, user.id, now);
+    const approved = await approveAgentConnectionRequest(db, started.request.id, { userId: user.id, sessionVersion: 0 }, now);
     expect(approved.status).toBe("approved");
-    await expect(approveAgentConnectionRequest(db, "missing", user.id, now)).rejects.toThrow("not found");
+    await expect(approveAgentConnectionRequest(db, "missing", { userId: user.id, sessionVersion: 0 }, now)).rejects.toThrow("not found");
 
     const tokenResult = await pollAgentConnection(db, {
       deviceCode: started.deviceCode,
@@ -321,7 +321,7 @@ describe("agent connection requests", () => {
       data: { email: uniqueEmail("clean"), username: faker.internet.username() },
     });
     const started = await startAgentConnection(db, { now });
-    await approveAgentConnectionRequest(db, started.request.id, user.id, now);
+    await approveAgentConnectionRequest(db, started.request.id, { userId: user.id, sessionVersion: 0 }, now);
 
     const capture = vi.fn();
     const result = await pollAgentConnection(
@@ -340,7 +340,7 @@ describe("agent connection requests", () => {
     });
     const denied = await startAgentConnection(db, { now });
     await denyAgentConnectionRequest(db, denied.request.id, now);
-    await expect(approveAgentConnectionRequest(db, denied.request.id, user.id, now))
+    await expect(approveAgentConnectionRequest(db, denied.request.id, { userId: user.id, sessionVersion: 0 }, now))
       .resolves.toMatchObject({ status: "denied" });
     await expect(denyAgentConnectionRequest(db, denied.request.id, now))
       .resolves.toMatchObject({ status: "denied" });

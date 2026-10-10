@@ -390,6 +390,11 @@ const schemas = {
   OAuthErrorResponse: objectSchema(["error", "error_description"], {
     error: { type: "string" },
     error_description: { type: "string" },
+    reason: {
+      type: "string",
+      enum: ["revoked_by_user"],
+      description: "Present on a refused refresh when the chef ended the session (sign out everywhere, a password change, or a disconnect). Sign out quietly instead of reporting an error.",
+    },
   }),
   RateLimitResponse: objectSchema(["error", "message", "retryAfterSeconds"], {
     error: { type: "string", const: "rate_limited" },

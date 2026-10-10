@@ -1,6 +1,7 @@
 import type { AgentConnectionRequest, PrismaClient as PrismaClientType } from "@prisma/client";
 import { ApiAuthError, createApiCredential, hashApiToken } from "~/lib/api-auth.server";
 import { normalizeScope, OAuthError } from "~/lib/oauth-server.server";
+import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import {
   captureEvent,
   type PostHogServerConfig,
@@ -279,10 +280,15 @@ export async function getAgentConnectionRequest(
   return request ? expirePendingRequest(db, request, now) : null;
 }
 
+/**
+ * Approve a pending request for the signed-in chef. `sessionVersion` is the version of the
+ * session that made the request: if sign out everywhere or a password change lands while this
+ * runs, the approval is undone, and a token a poll already collected for it is revoked.
+ */
 export async function approveAgentConnectionRequest(
   db: Database,
   id: string,
-  userId: string,
+  approver: { userId: string; sessionVersion: number },
   now: Date = new Date(),
 ): Promise<AgentConnectionRequest> {
   const request = await getAgentConnectionRequest(db, id, now);
@@ -296,14 +302,36 @@ export async function approveAgentConnectionRequest(
     );
   }
 
-  return db.agentConnectionRequest.update({
-    where: { id },
+  // Approve only a request that is still pending, so a concurrent denial or approval wins.
+  await db.agentConnectionRequest.updateMany({
+    where: { id, status: "pending" },
     data: {
       status: "approved",
-      approvedById: userId,
+      approvedById: approver.userId,
       approvedAt: now,
     },
   });
+  // The session-version fence. A revocation that landed before this check ran its sweep while
+  // the request was still pending, so undo the approval here: deny it if no poll has collected
+  // it yet, or revoke the token a poll collected in between. One that lands after this check
+  // finds the approval or the token and revokes it itself. (This read is consistent with the
+  // revocation's write because D1 read replication is off; the fence would need a D1 session
+  // if it were turned on.)
+  if (!(await sessionVersionUnchanged(db, approver.userId, approver.sessionVersion))) {
+    await db.agentConnectionRequest.updateMany({
+      where: { id, status: "approved", approvedById: approver.userId },
+      data: { status: "denied", deniedAt: now },
+    });
+    const settled = await db.agentConnectionRequest.findUniqueOrThrow({ where: { id } });
+    if (settled.status === "claimed" && settled.approvedById === approver.userId && settled.credentialId) {
+      await db.apiCredential.updateMany({
+        where: { id: settled.credentialId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    }
+    return settled;
+  }
+  return db.agentConnectionRequest.findUniqueOrThrow({ where: { id } });
 }
 
 export async function denyAgentConnectionRequest(

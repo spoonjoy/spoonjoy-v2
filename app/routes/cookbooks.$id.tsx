@@ -1,4 +1,5 @@
 import type { Route } from "./+types/cookbooks.$id";
+import { chefDisplayName } from "~/lib/username";
 import { redirect, useLoaderData, useActionData, Form, data, useSubmit, type AppLoadContext } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
@@ -465,7 +466,7 @@ export default function CookbookDetail() {
                         </span>
                         <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} className="mt-2" />
                         <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
-                          {item.recipe.description ?? `By ${item.recipe.chef.username}`}
+                          {item.recipe.description ?? `By ${chefDisplayName(item.recipe.chef.username)}`}
                         </span>
                       </span>
                       {servingsLabel ? (
