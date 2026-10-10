@@ -4,6 +4,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { m, motion } from 'motion/react'
 import { Component, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+
+// The shared setup hands LazyMotion its features synchronously; this file tests the real lazy load.
+vi.mock('motion/react', async () => vi.importActual('motion/react'))
 import { LazyLayoutGroup, loadMotionFeatures } from '~/components/motion/lazy-motion'
 
 const ROOT = resolve(__dirname, '../../..')
