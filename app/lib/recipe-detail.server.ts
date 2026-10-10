@@ -40,6 +40,7 @@ import {
   SpoonValidationError,
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import { createSpoonOnD1 } from "~/lib/recipe-spoon-d1.server";
 import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib/ai-placeholder-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
@@ -373,6 +374,87 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   };
 }
 
+function spoonFormFields(formData: FormData) {
+  const photoEntry = formData.get("photo");
+  const noteRaw = formData.get("note");
+  const nextTimeRaw = formData.get("nextTime");
+  return {
+    photoFile: photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : undefined,
+    note: typeof noteRaw === "string" ? noteRaw : undefined,
+    nextTime: typeof nextTimeRaw === "string" ? nextTimeRaw : undefined,
+    cookedAt: parseOptionalCookedAt(formData.get("cookedAt")),
+    useAsRecipeCover: formData.get("useAsRecipeCover") === "true",
+  };
+}
+
+// Logging a cook on D1: the spoon (and a cover from its photo) is written without Prisma. The
+// notifications and the cover's stylization run after the answer, each building the request's
+// Prisma client only when it starts; without waitUntil (tests) they run before the answer.
+async function handleCreateSpoonOnD1(
+  d1: D1ReadDatabase,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+  context: AppLoadContext,
+) {
+  const { useAsRecipeCover, ...fields } = spoonFormFields(formData);
+  const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
+  // The D1 binding comes from the environment, so it is always present here.
+  const postHogConfig = resolvePostHogServerConfig(env as NonNullable<typeof env>);
+  const result = await createSpoonOnD1(d1, { chefId: userId, recipeId, useAsRecipeCover, ...fields }, { bucket })
+    .catch(spoonErrorToResponse);
+
+  // One Prisma client for all of this cook's background work, built when the first task starts.
+  let database: ReturnType<typeof getRequestDb> | undefined;
+  const later = (task: (database: Awaited<ReturnType<typeof getRequestDb>>) => Promise<unknown>): Promise<unknown> => {
+    const run = async () => task(await (database ??= getRequestDb(context)));
+    if (!waitUntil) return run();
+    waitUntil(deferBackgroundTask(run));
+    return Promise.resolve();
+  };
+
+  try {
+    const vapid = getVapidConfig(vapidEnv);
+    await later((database) => notifySpoonOnMyRecipe(database, { recipeId, spoonerId: userId }, { vapid, waitUntil, postHogConfig }));
+  } catch {
+    // VAPID not configured locally — skip silently.
+  }
+
+  const { cover, spoon, recipe, spoonerUsername } = result;
+  if (cover && spoon.photoUrl) {
+    const rawPhotoUrl = spoon.photoUrl;
+    await later((database) =>
+      scheduleSpoonCoverStylization({
+        db: database,
+        userId,
+        recipeId,
+        coverId: cover.id,
+        rawPhotoUrl,
+        recipeTitle: recipe.title,
+        env,
+        bucket,
+      }),
+    );
+  }
+
+  if (result.isOriginCook && spoonerUsername) {
+    try {
+      const vapid = getVapidConfig(vapidEnv);
+      await later((database) =>
+        fanoutFellowChefOriginCook(
+          database,
+          { spoonerId: userId, recipeId: recipe.id, recipeTitle: recipe.title, spoonerUsername },
+          { vapid, waitUntil, postHogConfig },
+        ),
+      );
+    } catch {
+      // VAPID not configured locally — skip silently.
+    }
+  }
+
+  return { success: true, intent: "createSpoon", spoon: { id: spoon.id }, isOriginCook: result.isOriginCook };
+}
+
 async function handleCreateSpoon(
   database: Awaited<ReturnType<typeof getRequestDb>>,
   userId: string,
@@ -380,14 +462,7 @@ async function handleCreateSpoon(
   formData: FormData,
   context: AppLoadContext,
 ) {
-  const photoEntry = formData.get("photo");
-  const photoFile = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : undefined;
-  const noteRaw = formData.get("note");
-  const nextTimeRaw = formData.get("nextTime");
-  const useAsRecipeCover = formData.get("useAsRecipeCover") === "true";
-  const note = typeof noteRaw === "string" ? noteRaw : undefined;
-  const nextTime = typeof nextTimeRaw === "string" ? nextTimeRaw : undefined;
-  const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
+  const { photoFile, note, nextTime, cookedAt, useAsRecipeCover } = spoonFormFields(formData);
 
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
   // Resolve once: threaded into both the spoon notify and the origin-cook
@@ -888,6 +963,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   // With a D1 binding, the everyday actions run as one D1 batch each and never build a Prisma
   // client (a request's Prisma client can hang in a poisoned isolate).
   const d1 = requestD1(context);
+  if (d1 && intent === "createSpoon") {
+    return handleCreateSpoonOnD1(d1, userId, id, formData, context);
+  }
   if (d1) {
     const answered = await handleRecipeDetailActionOnD1(d1, intent, userId, id, formData);
     if (answered?.kind === "success") return { success: true };
