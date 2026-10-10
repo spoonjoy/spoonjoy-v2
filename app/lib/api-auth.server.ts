@@ -183,6 +183,46 @@ export async function principalFromUserEmail(
   return user ? toPrincipal(user, source) : null;
 }
 
+/**
+ * OAuth access credentials issued before MCP tokens had an expiry (migration 0031) have
+ * `expiresAt` NULL. They stop working at this cutover, 90 days after the change shipped, and the
+ * client refreshes. Personal and delegated tokens (no OAuth client) keep a NULL expiry as chosen.
+ */
+export const LEGACY_OAUTH_ACCESS_EXPIRES_AT = new Date("2027-01-07T00:00:00.000Z");
+
+/** When a credential stops working, or null when it never does. */
+export function effectiveCredentialExpiry(credential: { expiresAt: Date | null; oauthClientId: string | null }): Date | null {
+  if (credential.expiresAt) return credential.expiresAt;
+  return credential.oauthClientId ? LEGACY_OAUTH_ACCESS_EXPIRES_AT : null;
+}
+
+/** Personal API tokens expire after this many days unless the caller chooses otherwise. */
+export const DEFAULT_PERSONAL_API_TOKEN_TTL_DAYS = 90;
+export const MAX_PERSONAL_API_TOKEN_TTL_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When a new personal API token expires. Omitted means the 90-day default; a whole number of
+ * days from 1 to 365 sets it; `null` or "never" makes a non-expiring token, which callers must
+ * ask for explicitly so a leaked token does not work forever by default.
+ */
+export function resolvePersonalTokenExpiry(value: unknown, now: Date = new Date()): Date | null {
+  if (value === undefined) return new Date(now.getTime() + DEFAULT_PERSONAL_API_TOKEN_TTL_DAYS * DAY_MS);
+  if (value === null || value === "never") return null;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_PERSONAL_API_TOKEN_TTL_DAYS
+  ) {
+    throw new ApiAuthError(
+      `expiresInDays must be a whole number of days from 1 to ${MAX_PERSONAL_API_TOKEN_TTL_DAYS}, or null or "never" for a token that never expires`,
+      400,
+    );
+  }
+  return new Date(now.getTime() + value * DAY_MS);
+}
+
 export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
@@ -210,10 +250,23 @@ export async function createApiCredential(
   return { token, credential };
 }
 
+function isRecordNotFound(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2025";
+}
+
+/** `lastUsedAt` is advisory, so it is refreshed at most this often per credential. */
+export const LAST_USED_AT_WRITE_INTERVAL_MS = 5 * 60 * 1000;
+
+export type ApiAuthOptions = {
+  /** Runs the throttled `lastUsedAt` write after the response instead of before it. */
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
+
 export async function authenticateApiToken(
   db: PrismaClientType,
   token: string,
   expectedOAuthIssuer: string,
+  options: ApiAuthOptions = {},
 ): Promise<ApiPrincipal> {
   const tokenHash = await hashApiToken(token);
   const credential = await db.apiCredential.findUnique({
@@ -224,7 +277,7 @@ export async function authenticateApiToken(
   if (
     !credential ||
     credential.revokedAt ||
-    (credential.expiresAt !== null && credential.expiresAt.getTime() <= Date.now())
+    (effectiveCredentialExpiry(credential)?.getTime() ?? Infinity) <= Date.now()
   ) {
     throw new ApiAuthError("Invalid API token", 401);
   }
@@ -234,15 +287,24 @@ export async function authenticateApiToken(
     if (oauthIssuer !== null && oauthIssuer !== expectedOAuthIssuer) {
       throw new ApiAuthError("Invalid API token", 401);
     }
-    await db.oAuthClient.updateMany({
-      where: { id: credential.oauthClientId, issuer: null, revokedAt: null },
-      data: { issuer: expectedOAuthIssuer },
+    // Legacy clients registered before issuers existed are bound to the first
+    // issuer that uses them. Read first so a bound client (every client after
+    // its first use) costs one read and no write on the request path.
+    let client = await db.oAuthClient.findFirst({
+      where: { id: credential.oauthClientId, revokedAt: null },
+      select: { id: true, issuer: true },
     });
-    const client = await db.oAuthClient.findFirst({
-      where: { id: credential.oauthClientId, issuer: expectedOAuthIssuer, revokedAt: null },
-      select: { id: true },
-    });
-    if (!client) throw new ApiAuthError("Invalid API token", 401);
+    if (client && client.issuer === null) {
+      await db.oAuthClient.updateMany({
+        where: { id: credential.oauthClientId, issuer: null, revokedAt: null },
+        data: { issuer: expectedOAuthIssuer },
+      });
+      client = await db.oAuthClient.findFirst({
+        where: { id: credential.oauthClientId, revokedAt: null },
+        select: { id: true, issuer: true },
+      });
+    }
+    if (!client || client.issuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
 
     if (oauthIssuer === null) {
       await db.apiCredential.updateMany({
@@ -259,10 +321,28 @@ export async function authenticateApiToken(
     throw new ApiAuthError("Invalid API token", 401);
   }
 
-  await db.apiCredential.update({
-    where: { id: credential.id },
-    data: { lastUsedAt: new Date() },
-  });
+  const now = Date.now();
+  if (credential.lastUsedAt === null || now - credential.lastUsedAt.getTime() >= LAST_USED_AT_WRITE_INTERVAL_MS) {
+    // `update`, not `updateMany`: Prisma's D1 adapter runs updateMany as an
+    // implicit transaction and warns that D1 cannot do one.
+    const touch = db.apiCredential.update({
+      where: { id: credential.id },
+      data: { lastUsedAt: new Date(now) },
+    });
+    if (options.waitUntil) {
+      options.waitUntil(touch.catch((error: unknown) => {
+        console.warn("[api-auth] lastUsedAt update failed", error);
+      }));
+    } else {
+      try {
+        await touch;
+      } catch (error) {
+        // P2025: the credential was deleted after we read it. The request was
+        // already authenticated, and there is nothing left to record.
+        if (!isRecordNotFound(error)) throw error;
+      }
+    }
+  }
 
   return toPrincipal(
     credential.user,
@@ -279,6 +359,7 @@ export async function authenticateApiRequest(
   db: PrismaClientType,
   request: Request,
   env?: (SessionEnv & { SPOONJOY_BASE_URL?: string }) | null,
+  options: ApiAuthOptions = {},
 ): Promise<ApiPrincipal | null> {
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
@@ -286,6 +367,7 @@ export async function authenticateApiRequest(
       db,
       bearerToken,
       resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
+      options,
     );
   }
 

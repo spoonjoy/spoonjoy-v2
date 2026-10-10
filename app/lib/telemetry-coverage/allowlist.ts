@@ -53,6 +53,12 @@ export interface AllowlistEntry {
 export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
   // --- intentional swallows / parse fallbacks (no user-facing failure) ---
   {
+    file: "app/lib/qa-error-logs.server.ts",
+    category: "swallow",
+    reason:
+      "describeValue falls back to String(value) when JSON.stringify throws on a non-Error thrown value; the line it builds is itself the per-run QA error log, written beside handleError's PostHog capture.",
+  },
+  {
     file: "app/lib/db.server.ts",
     category: "swallow",
     reason:
@@ -82,6 +88,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Cycle-safe error recognizer treats a throwing adapter-wrapper getter as an absent field; recognized cutover errors and all non-matches still return to the instrumented request boundary.",
   },
+  {
+    file: "app/lib/api-auth.server.ts",
+    category: "swallow",
+    reason:
+      "Both catches guard the advisory lastUsedAt write after the token is already authenticated: the awaited branch swallows only P2025 (credential deleted between read and write) and rethrows everything else, and the waitUntil branch logs a failed best-effort background write. No user-facing failure is hidden.",
+  },
 
   // --- pure rethrow / race recovery (surfaced to instrumented callers) ---
   {
@@ -89,6 +101,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "rethrow",
     reason:
       "Catch only recovers a unique-constraint idempotency race or re-throws; the API route layer (api-v1.server.ts) captures the surfaced exception.",
+  },
+  {
+    file: "app/lib/recipe-write-dedupe.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch only releases the idempotency reservation of a failed import or fork and re-throws; the MCP route and the web fork route capture the surfaced exception.",
   },
   {
     file: "app/lib/cookbook-membership-compat.server.ts",

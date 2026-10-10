@@ -126,6 +126,44 @@ describe("POST /api/push/subscriptions", () => {
     expect(response.status).toBe(400);
   });
 
+  it.each([
+    ["an unknown host", "https://attacker.example/collect"],
+    ["plain http", "http://fcm.googleapis.com/fcm/send/abc"],
+    ["a cloud metadata address", "https://169.254.169.254/latest/meta-data"],
+  ])("returns 400 and saves nothing for an endpoint on %s", async (_label, endpoint) => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ endpoint, keys: { p256dh: "p", auth: "a" } }),
+    });
+    const response = await action(routeArgs(request));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "endpoint must be an https URL on a known Web Push service",
+    });
+    const db = await getLocalDb();
+    expect(await db.pushSubscription.count({ where: { userId: user.id } })).toBe(0);
+  });
+
+  it("still lets a user delete a subscription saved before endpoints were checked", async () => {
+    const user = await createUser();
+    const cookie = await sessionCookie(user.id);
+    const db = await getLocalDb();
+    await db.pushSubscription.create({
+      data: { userId: user.id, endpoint: "https://attacker.example/legacy", p256dh: "p", authSecret: "a" },
+    });
+    const request = new UndiciRequest("http://localhost/api/push/subscriptions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({ endpoint: "https://attacker.example/legacy" }),
+    });
+    const response = await action(routeArgs(request));
+    expect(response.status).toBe(204);
+    expect(await db.pushSubscription.count({ where: { userId: user.id } })).toBe(0);
+  });
+
   it("creates the subscription row and returns 201 on first POST", async () => {
     const user = await createUser();
     const cookie = await sessionCookie(user.id);
@@ -133,7 +171,7 @@ describe("POST /api/push/subscriptions", () => {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({
-        endpoint: "https://push.example/abc",
+        endpoint: "https://fcm.googleapis.com/fcm/send/abc",
         keys: { p256dh: "p", auth: "a" },
         userAgent: "Mozilla/5.0 (X11) test",
       }),
@@ -144,7 +182,7 @@ describe("POST /api/push/subscriptions", () => {
     const db = await getLocalDb();
     const rows = await db.pushSubscription.findMany({ where: { userId: user.id } });
     expect(rows).toHaveLength(1);
-    expect(rows[0].endpoint).toBe("https://push.example/abc");
+    expect(rows[0].endpoint).toBe("https://fcm.googleapis.com/fcm/send/abc");
     expect(rows[0].userAgent).toBe("Mozilla/5.0 (X11) test");
   });
 
@@ -153,7 +191,7 @@ describe("POST /api/push/subscriptions", () => {
     const cookie = await sessionCookie(user.id);
 
     const body = JSON.stringify({
-      endpoint: "https://push.example/idem",
+      endpoint: "https://fcm.googleapis.com/fcm/send/idem",
       keys: { p256dh: "p", auth: "a" },
     });
     const first = await action(
@@ -194,7 +232,7 @@ describe("POST /api/push/subscriptions", () => {
     const row = await db.pushSubscription.create({
       data: {
         userId: owner.id,
-        endpoint: "https://push.example/reassign",
+        endpoint: "https://web.push.apple.com/reassign",
         p256dh: "old",
         authSecret: "old-auth",
         userAgent: "old agent",
@@ -205,7 +243,7 @@ describe("POST /api/push/subscriptions", () => {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({
-        endpoint: "https://push.example/reassign",
+        endpoint: "https://web.push.apple.com/reassign",
         keys: { p256dh: "new", auth: "new-auth" },
         userAgent: 123,
       }),

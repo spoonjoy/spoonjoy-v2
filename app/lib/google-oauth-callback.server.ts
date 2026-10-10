@@ -15,6 +15,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  markEmailVerifiedByProvider,
   linkOAuthAccountByVerifiedEmail,
 } from "./oauth-user.server";
 
@@ -96,6 +97,8 @@ export async function handleGoogleOAuthCallback(
       };
     }
 
+    await markEmailVerifiedByProvider(db, currentUserId, googleUser.email, googleUser.emailVerified);
+
     return {
       success: true,
       userId: currentUserId,
@@ -112,6 +115,9 @@ export async function handleGoogleOAuthCallback(
   );
 
   if (existingOAuthAccount) {
+    // A returning sign-in whose provider vouches for the account's own address verifies it, so
+    // accounts made before verification existed become verified as people sign in.
+    await markEmailVerifiedByProvider(db, existingOAuthAccount.userId, googleUser.email, googleUser.emailVerified);
     return {
       success: true,
       userId: existingOAuthAccount.userId,
@@ -164,6 +170,7 @@ export async function handleGoogleOAuthCallback(
     providerUsername: googleUser.name ?? googleUser.email,
     email: googleUser.email,
     name: googleUser.name,
+    emailVerified: googleUser.emailVerified,
   }, d1);
 
   if (!createResult.success) {

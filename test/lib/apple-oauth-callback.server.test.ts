@@ -89,6 +89,21 @@ describe("apple-oauth-callback.server", () => {
         expect(user?.OAuth).toHaveLength(1);
         expect(user?.OAuth[0].provider).toBe("apple");
         expect(user?.OAuth[0].providerUserId).toBe(mockAppleUser.id);
+        // Apple verified this address, so the new account starts verified.
+        expect(user?.emailVerifiedAt).toBeInstanceOf(Date);
+      });
+
+      it("should create an unverified account when Apple does not vouch for the email", async () => {
+        const result = await handleAppleOAuthCallback({
+          db,
+          appleUser: createMockAppleUser({ emailVerified: false }),
+          currentUserId: null,
+          redirectTo: null,
+        });
+        if (result.userId) testUserIds.push(result.userId);
+
+        expect(result.action).toBe("user_created");
+        expect((await db.user.findUniqueOrThrow({ where: { id: result.userId! } })).emailVerifiedAt).toBeNull();
       });
 
       it("should generate username from Apple user name", async () => {
@@ -298,6 +313,8 @@ describe("apple-oauth-callback.server", () => {
         });
         expect(oauth).not.toBeNull();
         expect(oauth?.providerUserId).toBe(mockAppleUser.id);
+        // Apple vouched for the account's own address, so linking it verifies the account.
+        expect((await db.user.findUniqueOrThrow({ where: { id: existingUser.id } })).emailVerifiedAt).toBeInstanceOf(Date);
       });
 
       it("should link Apple OAuth even when email differs from existing user", async () => {
@@ -324,6 +341,8 @@ describe("apple-oauth-callback.server", () => {
 
         expect(result.success).toBe(true);
         expect(result.action).toBe("account_linked");
+        // A different address proves nothing about the account's own email.
+        expect((await db.user.findUniqueOrThrow({ where: { id: existingUser.id } })).emailVerifiedAt).toBeNull();
       });
 
       it("should use email as providerUsername when linking without fullName", async () => {
@@ -789,5 +808,30 @@ describe("apple-oauth-callback.server", () => {
         expect(result.action).toBeUndefined();
       });
     });
+  });
+  // Accounts made before email verification existed become verified when they sign in again
+  // through a provider that vouches for the account's own address, and only then.
+  it("verifies a returning apple account whose email the provider vouches for", async () => {
+    const existingUser = await db.user.create({ data: { ...createTestUser(), email: "returning.apple@example.com" } });
+    testUserIds.push(existingUser.id);
+    const providerUserId = faker.string.numeric(10);
+    await db.oAuth.create({
+      data: { userId: existingUser.id, provider: "apple", providerUserId, providerUsername: "returning" },
+    });
+    const signIn = (email: string, emailVerified: boolean) =>
+      handleAppleOAuthCallback({
+        db,
+        appleUser: createMockAppleUser({ id: providerUserId, email, emailVerified }),
+        currentUserId: null,
+        redirectTo: null,
+      });
+    const verifiedAt = async () => (await db.user.findUniqueOrThrow({ where: { id: existingUser.id } })).emailVerifiedAt;
+
+    await expect(signIn("returning.apple@example.com", false)).resolves.toMatchObject({ action: "user_logged_in" });
+    await expect(signIn("someone.else@example.com", true)).resolves.toMatchObject({ action: "user_logged_in" });
+    expect(await verifiedAt()).toBeNull();
+
+    await expect(signIn("Returning.apple@Example.com", true)).resolves.toMatchObject({ action: "user_logged_in" });
+    expect(await verifiedAt()).toBeInstanceOf(Date);
   });
 });

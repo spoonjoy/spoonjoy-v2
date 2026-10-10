@@ -77,14 +77,22 @@ describe("MCP recipe tools on a D1 binding", () => {
   });
 
   it("creates a recipe with its steps in one batch, as the Prisma path does", async () => {
-    const args = (title: string) => ({ title, description: "Hearty", servings: "4", sourceUrl: "https://example.com/beans", steps });
-    const viaPrisma = await createdId(await callSpoonjoyApiOperation("create_recipe", args("Prisma Beans"), context()));
-    const before = d1.roundTrips();
-    const viaD1 = await createdId(await callSpoonjoyApiOperation("create_recipe", args("D1 Beans"), context(d1.binding)));
+    // The placeholder job runs inline here (no waitUntil) and writes its own D1 batch when it
+    // fails without an image key. It has its own tests, so stub it to count only the create.
+    const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+    try {
+      const args = (title: string) => ({ title, description: "Hearty", servings: "4", sourceUrl: "https://example.com/beans", steps });
+      const viaPrisma = await createdId(await callSpoonjoyApiOperation("create_recipe", args("Prisma Beans"), context()));
+      const before = d1.roundTrips();
+      const viaD1 = await createdId(await callSpoonjoyApiOperation("create_recipe", args("D1 Beans"), context(d1.binding)));
 
-    expect(d1.statements.filter((statement) => statement.sql.startsWith("SELECT json(")).length).toBe(1);
-    expect(d1.roundTrips() - before).toBe(1);
-    expect(await graph(viaD1)).toEqual(await graph(viaPrisma));
+      expect(d1.statements.filter((statement) => statement.sql.startsWith("SELECT json(")).length).toBe(1);
+      expect(d1.roundTrips() - before).toBe(1);
+      expect(placeholder).toHaveBeenLastCalledWith(expect.objectContaining({ recipeId: viaD1 }));
+      expect(await graph(viaD1)).toEqual(await graph(viaPrisma));
+    } finally {
+      placeholder.mockRestore();
+    }
   });
 
   it("reports a title taken between the check and the write, and rethrows other failures", async () => {

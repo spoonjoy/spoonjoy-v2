@@ -46,6 +46,7 @@ import {
   sweepStaleRunStacks,
   teardown,
   verify,
+  QA_ERROR_LOGS_VAR,
 } from "../../scripts/qa-run-scope.mjs";
 import { QA_BASE_URL, QA_D1_DATABASE_ID } from "../../scripts/script-environment.mjs";
 import { expectConsoleError } from "../warning-policy";
@@ -152,6 +153,24 @@ describe("requireGitHubActions", () => {
     expect(() => requireGitHubActions({})).toThrow(/only inside GitHub Actions/);
     expect(() => requireGitHubActions({ GITHUB_ACTIONS: "true" })).not.toThrow();
   });
+
+  it("runs on a developer machine only with the explicit SPOONJOY_QA_LOCAL_RUN=1 opt-in", () => {
+    expect(() => requireGitHubActions({ SPOONJOY_QA_LOCAL_RUN: "1" })).not.toThrow();
+  });
+
+  it("accepts no other spelling of the local-run opt-in", () => {
+    for (const value of ["", "0", "true", "yes", "TRUE", " 1", "1 "]) {
+      expect(() => requireGitHubActions({ SPOONJOY_QA_LOCAL_RUN: value })).toThrow(/only inside GitHub Actions/);
+    }
+    expect(() => requireGitHubActions({ GITHUB_ACTIONS: "false", SPOONJOY_QA_LOCAL_RUN: "0" })).toThrow(
+      /SPOONJOY_QA_LOCAL_RUN=1/,
+    );
+  });
+
+  it("still needs a numeric run identity on a local run, so the stack keeps a sweepable per-run name", () => {
+    expect(() => runIdentity({ SPOONJOY_QA_LOCAL_RUN: "1" })).toThrow(/whole numbers/);
+    expect(runIdentity({ SPOONJOY_QA_LOCAL_RUN: "1", GITHUB_RUN_ID: "1001", GITHUB_RUN_ATTEMPT: "2" })).toEqual(IDENTITY);
+  });
 });
 
 describe("scopeWranglerConfig", () => {
@@ -173,6 +192,22 @@ describe("scopeWranglerConfig", () => {
     expect(scopedTop).toEqual(realTop);
     // The input is not mutated.
     expect(REAL_WRANGLER.env.qa.d1_databases[0].database_id).toBe(QA_D1_DATABASE_ID);
+  });
+
+  it("turns on the QA error log line for the run's own Worker only, never for shared QA or production", () => {
+    const scoped = scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID);
+    const generated = scopeGeneratedBuildConfig(generatedBuildConfig(), IDENTITY, RUN_DB_ID);
+
+    expect(QA_ERROR_LOGS_VAR).toBe("SPOONJOY_QA_ERROR_LOGS");
+    expect(scoped.env.qa.vars[QA_ERROR_LOGS_VAR]).toBe("1");
+    expect(generated.vars[QA_ERROR_LOGS_VAR]).toBe("1");
+    expect(scoped.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    expect(REAL_WRANGLER.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    expect(REAL_WRANGLER.env.qa.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    // A shared QA config that already carried the switch would be more than an identity change.
+    const sharedWithSwitch = structuredClone(REAL_WRANGLER);
+    sharedWithSwitch.env.qa.vars[QA_ERROR_LOGS_VAR] = "1";
+    expect(() => scopeWranglerConfig(sharedWithSwitch, IDENTITY, RUN_DB_ID)).toThrow(/already sets SPOONJOY_QA_ERROR_LOGS/);
   });
 
   it("refuses a config whose env.qa does not name shared QA", () => {
@@ -935,6 +970,44 @@ describe("teardown", () => {
   });
 });
 
+describe("local runs (SPOONJOY_QA_LOCAL_RUN=1)", () => {
+  const LOCAL_ENV = {
+    SPOONJOY_QA_LOCAL_RUN: "1",
+    GITHUB_RUN_ID: "1001",
+    GITHUB_RUN_ATTEMPT: "2",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  };
+  const secrets = () => ({ SESSION_SECRET: "s3cret", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_SUBJECT: IDENTITY.baseUrl, POSTHOG_DISABLED: "1" });
+
+  it("prepares and tears down the same per-run stack it would in CI, and exports nothing to GITHUB_ENV", async () => {
+    const files = fakeFs(preparedFiles());
+    const api = fakeApi();
+    const state = await prepare({ env: LOCAL_ENV, fs: files.fs, api, now: Date.now, log: vi.fn(), secrets });
+
+    expect(state).toEqual({ ...IDENTITY, databaseId: RUN_DB_ID });
+    expect(files.json(WRANGLER_CONFIG).env.qa.name).toBe(IDENTITY.workerName);
+    expect(files.appended).toEqual([]);
+
+    expect(await teardown({ env: LOCAL_ENV, fs: files.fs, api, log: vi.fn() })).toBe(true);
+    expect(api.deleteWorker).toHaveBeenCalledWith(IDENTITY.workerName);
+    expect(api.deleteDatabase).toHaveBeenCalledWith(RUN_DB_ID);
+  });
+
+  it("still refuses a config that does not name shared QA, and a run id that is not a number", async () => {
+    const production = structuredClone(REAL_WRANGLER);
+    production.env.qa.vars.SPOONJOY_BASE_URL = "https://spoonjoy.app";
+    const api = fakeApi();
+    await expect(
+      prepare({ env: LOCAL_ENV, fs: fakeFs({ ...preparedFiles(), [WRANGLER_CONFIG]: JSON.stringify(production) }).fs, api, now: Date.now, log: vi.fn(), secrets }),
+    ).rejects.toThrow(/does not target/);
+    await expect(
+      prepare({ env: { ...LOCAL_ENV, GITHUB_RUN_ID: "mine" }, fs: fakeFs(preparedFiles()).fs, api, now: Date.now, log: vi.fn(), secrets }),
+    ).rejects.toThrow(/whole numbers/);
+    expect(api.createDatabase).not.toHaveBeenCalled();
+  });
+});
+
 describe("main and the CLI guard", () => {
   it("dispatches each command and rejects anything else", async () => {
     const api = fakeApi();
@@ -1019,8 +1092,9 @@ describe("Journeys workflow", () => {
   const step = (name: string) => steps[index(name)];
 
   it("no longer queues runs for one shared QA Worker", () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["deploy-shared-qa", "fork-notice", "journeys"]);
-    expect(journeys.needs).toBeUndefined();
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["changes", "deploy-shared-qa", "fork-notice", "journeys", "queue-tested"]);
+    // The only jobs journeys waits for are the cheap scope and merge-queue lookups, never a QA turn or lock.
+    expect(journeys.needs).toEqual(["queue-tested", "changes"]);
     const text = JSON.stringify(steps);
     expect(text).not.toMatch(/qa-lock|wait-for-qa-turn|deploy:qa/);
     expect(workflow.env.SPOONJOY_JOURNEYS_BASE_URL).toBeUndefined();
@@ -1092,12 +1166,71 @@ describe("Journeys workflow", () => {
     }
   });
 
+  it("skips a pull request's suite only on an explicit no from the scope check, which never runs outside pull requests", () => {
+    // `!= 'false'`: a failed or missing scope answer runs the suite.
+    expect(journeys.if).toContain("needs.changes.outputs.journeys != 'false'");
+    const changes = workflow.jobs.changes;
+    expect(changes.if).toBe("github.event_name == 'pull_request'");
+    expect(changes.permissions).toEqual({ contents: "read", "pull-requests": "read" });
+    expect(changes.outputs).toEqual({ journeys: "${{ steps.scope.outputs.journeys }}" });
+    // The base branch's copy of the script decides, so a pull request cannot widen the list for its
+    // own run, and the job never sees a secret.
+    expect(changes.steps).toEqual([
+      {
+        uses: "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+        with: {
+          ref: "${{ github.event.pull_request.base.sha }}",
+          "sparse-checkout": "scripts/journeys-scope.mjs",
+          "sparse-checkout-cone-mode": false,
+          "persist-credentials": false,
+        },
+      },
+      { uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38", with: { "node-version": "22" } },
+      {
+        name: "Decide whether this pull request needs the suite",
+        id: "scope",
+        env: { GH_TOKEN: "${{ github.token }}", PR_NUMBER: "${{ github.event.pull_request.number }}" },
+        run: "node scripts/journeys-scope.mjs",
+      },
+    ]);
+    expect(JSON.stringify(changes)).not.toMatch(/secrets\./);
+    // A job skipped by its own `if` never evaluates an expression name, so the required check's
+    // name must stay a plain string.
+    expect(journeys.name).toBe("journeys");
+  });
+
+  it("cancels only a superseded pull-request run, whose teardown still runs", () => {
+    expect(workflow.concurrency).toEqual({
+      group: "journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+      "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    });
+    expect(step("Delete this run's QA stack").if).toBe("always()");
+    // Bounded, so a hung teardown cannot hold a cancelled run for the whole job timeout.
+    for (const name of ["Rotate persona passwords", "Clean up disposable QA data", "Delete this run's QA stack"]) {
+      expect([name, step(name)["timeout-minutes"]]).toEqual([name, 5]);
+    }
+  });
+
+  it("skips main's journeys only when the merge queue's Journeys run of the same commit passed", () => {
+    expect(journeys.if).toBe("${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}");
+    const queueTested = workflow.jobs["queue-tested"];
+    expect(queueTested.if).toBe("github.event_name == 'push'");
+    expect(queueTested.permissions).toEqual({ actions: "read", contents: "read" });
+    expect(queueTested.outputs).toEqual({ tested: "${{ steps.lookup.outputs.tested }}" });
+    expect(queueTested.steps.at(-1)).toEqual({
+      name: "Ask whether the merge queue already tested this commit",
+      id: "lookup",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs queue-tested-journeys",
+    });
+  });
+
   it("keeps shared QA a mirror of main: deployed only after main's journeys pass, one deploy at a time", () => {
     const deploy = workflow.jobs["deploy-shared-qa"];
-    expect(deploy.needs).toBe("journeys");
-    expect(deploy.if).toContain("github.event_name == 'push'");
-    expect(deploy.if).toContain("github.ref == 'refs/heads/main'");
-    expect(deploy.if).toContain("needs.journeys.result == 'success'");
+    expect(deploy.needs).toEqual(["queue-tested", "journeys"]);
+    // After a queue merge, main's journeys skip because the queue's run of the same commit passed;
+    // shared QA still mirrors main then, and never after a journeys failure.
+    expect(deploy.if).toBe("${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.journeys.result == 'success' || (needs.journeys.result == 'skipped' && needs.queue-tested.outputs.tested == 'true')) }}");
     expect(deploy.concurrency).toEqual({ group: "journeys-shared-qa-deploy", "cancel-in-progress": false });
     const deploySteps: Array<{ name?: string; id?: string; if?: string; run?: string; env?: Record<string, string> }> = deploy.steps;
     expect(deploySteps.at(-1)).toMatchObject({

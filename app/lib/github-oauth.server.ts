@@ -195,21 +195,25 @@ export async function verifyGitHubCallback(
       accessToken,
     );
 
-    let email = profile.email ?? null;
-    if (!email) {
-      const emails = await fetchGitHubJson<GitHubEmailResponse[]>(
-        "https://api.github.com/user/emails",
-        accessToken,
-      );
-      email = primaryVerifiedEmail(emails);
-    }
+    // The public profile email is whatever the person typed into their profile, and GitHub does
+    // not say whether it is verified. Only an address GitHub lists as verified on /user/emails
+    // counts, because a verified email lets Spoonjoy create a verified account or link to one.
+    const emails = await fetchGitHubJson<GitHubEmailResponse[]>(
+      "https://api.github.com/user/emails",
+      accessToken,
+    );
+    // The public address is kept when GitHub lists it as verified, so a returning person keeps the
+    // address they chose to show; otherwise the primary verified one.
+    const verifiedEmail =
+      emails.find((entry) => entry.verified && entry.email === profile.email)?.email ?? primaryVerifiedEmail(emails);
+    const email = verifiedEmail ?? profile.email ?? null;
 
     return {
       success: true,
       githubUser: {
         id: String(profile.id),
         email,
-        emailVerified: Boolean(email),
+        emailVerified: verifiedEmail !== null,
         login: profile.login,
         name: profile.name ?? null,
         avatarUrl: profile.avatar_url ?? null,
