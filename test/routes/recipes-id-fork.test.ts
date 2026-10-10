@@ -125,7 +125,7 @@ describe("recipes.$id.fork action", () => {
     expect(forkRecipeMock).toHaveBeenCalledWith(mockDb, {
       sourceRecipeId: "abc",
       viewerId: "viewer-1",
-    }, null);
+    });
   });
 
   it("throws a 404 Response when params.id is missing", async () => {

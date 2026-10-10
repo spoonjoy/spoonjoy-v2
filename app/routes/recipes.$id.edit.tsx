@@ -26,6 +26,7 @@ import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
@@ -55,6 +56,30 @@ interface ActionData {
     stepDeletion?: string;
   };
   success?: boolean;
+  /** On a 409 edit conflict: the recipe's updatedAt now, so saving again keeps this version. */
+  currentUpdatedAt?: string;
+}
+
+/** Shown when the recipe changed after the page loaded it, so the save was not applied. */
+const RECIPE_EDIT_CONFLICT_MESSAGE =
+  "This recipe changed after you opened it, maybe in another tab or the app. Nothing was saved. Save again to keep your version, or reload the page to see the other changes.";
+
+/** The form's expectedUpdatedAt: the recipe's updatedAt as the page loaded it. */
+function parseExpectedUpdatedAt(value: FormDataEntryValue | null): Date | undefined {
+  const parsed = typeof value === "string" && value ? new Date(value) : undefined;
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : undefined;
+}
+
+/** The loaded recipe's updatedAt for the form; empty (no precondition) if the loader gave none. */
+function loadedUpdatedAt(updatedAt: Date | string | undefined): string {
+  return updatedAt ? new Date(updatedAt).toISOString() : "";
+}
+
+function editConflict(currentUpdatedAt: Date) {
+  return data(
+    { errors: { general: RECIPE_EDIT_CONFLICT_MESSAGE }, currentUpdatedAt: currentUpdatedAt.toISOString() },
+    { status: 409 },
+  );
 }
 
 export function meta({ data }: Route.MetaArgs) {
@@ -130,7 +155,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 export async function action({ request, params, context }: Route.ActionArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
-  const formData = await request.formData();
+  // The recipe image is the only large field, so the body is read through the image upload
+  // limit: an oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    return data({ errors: { image: RECIPE_IMAGE_SIZE_MESSAGE } }, { status: 413 });
+  }
   const intent = formData.get("intent")?.toString();
 
   const database = await getRequestDb(context);
@@ -141,6 +171,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     select: {
       chefId: true,
       deletedAt: true,
+      updatedAt: true,
     },
   });
 
@@ -279,6 +310,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   const imageEntry = formData.get("image");
   const imageFile = hasUploadedImageFile(imageEntry) ? imageEntry : null;
   const clearImage = formData.get("clearImage")?.toString() === "true";
+  // Sent by the page, so a save never silently overwrites a change made after the page loaded.
+  // Without it (an older page, a scripted post) the save applies as it always has.
+  const expectedUpdatedAt = parseExpectedUpdatedAt(formData.get("expectedUpdatedAt"));
 
   const errors: ActionData["errors"] = {};
 
@@ -326,6 +360,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     return data({ errors: { title: titleUniquenessResult.error } }, { status: 400 });
   }
 
+  if (expectedUpdatedAt && recipe.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+    return editConflict(recipe.updatedAt);
+  }
+
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
   const updateData: { title: string; description: string | null; servings: string | null } = {
@@ -361,6 +399,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         recipeId: id,
         chefId: userId,
         fields: updateData,
+        expectedUpdatedAt,
         cover: uploadedImageUrl
           ? { kind: "upload", coverId, imageUrl: uploadedImageUrl, createdById: userId }
           : clearImage ? { kind: "clear" } : null,
@@ -431,13 +470,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     };
     // The save lost a race, so nothing was written. Nothing else would ever remove the upload,
     // so it is deleted; this is an expected outcome, not a server fault, so nothing is captured.
-    // Answer as the checks above now do: the recipe was deleted in between, or another recipe
-    // took the title.
+    // Answer as the checks above now do: the recipe was deleted in between, someone else
+    // changed it, or another recipe took the title.
     if (isD1GuardFailure(error)) {
       await deleteUpload();
-      const current = await database.recipe.findUnique({ where: { id }, select: { deletedAt: true } });
+      const current = await database.recipe.findUnique({ where: { id }, select: { deletedAt: true, updatedAt: true } });
       if (!current || current.deletedAt) {
         throw new Response("Recipe not found", { status: 404 });
+      }
+      if (expectedUpdatedAt && current.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+        return editConflict(current.updatedAt);
       }
       return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
     }
@@ -592,6 +634,11 @@ export default function EditRecipe() {
       <div className="mt-8 max-w-5xl">
         <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden" aria-hidden="true">
           <input type="hidden" name="id" value={recipe.id} />
+          <input
+            type="hidden"
+            name="expectedUpdatedAt"
+            value={actionData?.currentUpdatedAt ?? loadedUpdatedAt(recipe.updatedAt)}
+          />
           <input type="hidden" name="title" />
           <textarea name="description" className="hidden" />
           <input type="hidden" name="servings" />

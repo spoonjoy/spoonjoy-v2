@@ -103,7 +103,7 @@ function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
     <Headless.Menu as="div" className="relative">
       <Headless.MenuButton className="sj-desktop-nav-link">
-        Login
+        Log in
       </Headless.MenuButton>
       <Headless.MenuItems
         anchor="bottom end"
@@ -166,8 +166,8 @@ export function AppNavbar({
             <ThemeToggle />
             <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
             <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-              <button type="submit" className={navLinkClass} aria-label="Log out">
-                Logout
+              <button type="submit" className={navLinkClass}>
+                Log out
               </button>
             </Form>
           </div>
@@ -182,7 +182,7 @@ export function AppNavbar({
           <div className="sj-desktop-nav-actions">
             <ThemeToggle />
             <LoginMenu oauthProviders={oauthProviders} />
-            <Button href="/signup">Sign Up</Button>
+            <Button href="/signup">Sign up</Button>
           </div>
         </>
       )}

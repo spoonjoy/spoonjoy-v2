@@ -63,6 +63,7 @@ import type { RecipeCover } from "@prisma/client";
 import type { ScheduleSpoonStylizationInput } from "~/lib/spoon-cover-stylization.server";
 import {
   deleteStoredImage,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
@@ -721,7 +722,12 @@ async function handleDeleteSpoon(
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
-  const formData = await request.formData();
+  // A spoon photo is the only large field, so the body is read through the image upload limit: an
+  // oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    throw new Response(FOOD_IMAGE_SIZE_MESSAGE, { status: 413 });
+  }
   const intent = formData.get("intent");
 
   const database = await getRequestDb(context);

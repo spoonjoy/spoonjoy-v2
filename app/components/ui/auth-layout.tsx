@@ -22,7 +22,7 @@ export function AuthLayout({
   // Wrap in <div>, not <main>: root.tsx already renders a single <main id="main">
   // around every page. Nesting another <main> here breaks landmark navigation.
   // The marketing title is <h2> so the page's actual <h1> (the form title like
-  // "Log In") stays at level 1, preserving a single h1 per page.
+  // "Log in") stays at level 1, preserving a single h1 per page.
   return (
     <div className="sj-page min-h-dvh">
       <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]">
@@ -41,7 +41,7 @@ export function AuthLayout({
             </p>
           </div>
           <p className="hidden border-t border-[var(--sj-border)] pt-4 text-sm text-[var(--sj-ink-soft)] sm:block">
-            Bone paper, charcoal ink, and a kitchen that follows you from phone to table.
+            Your recipes, cookbooks and shopping list, on your phone and at the table.
           </p>
         </section>
         <section className="flex items-center border-t border-[var(--sj-border)] px-5 py-8 sm:px-8 lg:border-l lg:border-t-0 lg:px-12">

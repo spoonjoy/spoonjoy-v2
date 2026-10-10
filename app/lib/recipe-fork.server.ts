@@ -1,5 +1,13 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, groupRows, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import {
+  INGREDIENT_COLUMNS,
+  mapModel,
+  RECIPE_COLUMNS,
+  RECIPE_COVER_COLUMNS,
+  RECIPE_STEP_COLUMNS,
+  selectColumns,
+} from "~/lib/d1-models.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
   activeRecipeTitleFreeGuard,
@@ -144,17 +152,17 @@ function copiedCoverInput(source: ForkSource, recipeId: string) {
  * recipe took it in between, the title is resolved again.
  */
 async function writeForkOnD1(
-  db: PrismaClientType,
   d1: D1ReadDatabase,
   source: ForkSource,
   stepOutputUses: ForkStepOutputUse[],
   input: ForkRecipeInput,
   baseTitle: string,
-): Promise<string> {
+  chooseTitle: (attempt: number) => Promise<string>,
+): Promise<{ recipeId: string; title: string }> {
   const recipeId = input.recipeId ?? crypto.randomUUID();
   const activeVariant = source.coverMode === "none" ? null : copyableActiveVariant(source);
   for (let attempt = 1; ; attempt++) {
-    const { title } = await resolveTitle(db, input.viewerId, baseTitle);
+    const title = await chooseTitle(attempt);
     const now = new Date();
     const coverId = crypto.randomUUID();
     try {
@@ -199,7 +207,7 @@ async function writeForkOnD1(
           ]
           : []),
       ]);
-      return recipeId;
+      return { recipeId, title };
     } catch (error) {
       if (!isD1GuardFailure(error)) throw error;
       if (attempt === D1_TITLE_RACE_ATTEMPTS) throw new ForkTitleExhaustedError(baseTitle);
@@ -317,7 +325,9 @@ export async function forkRecipe(
   const baseTitle = override && override.length > 0 ? override : source.title;
 
   const createdId = d1
-    ? await writeForkOnD1(db, d1, source, stepOutputUses, input, baseTitle)
+    ? (await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async () => (
+      (await resolveTitle(db, input.viewerId, baseTitle)).title
+    ))).recipeId
     : await writeForkWithPrisma(db, source, stepOutputUses, input, baseTitle);
 
   const recipe = await db.recipe.findUniqueOrThrow({
@@ -333,5 +343,123 @@ export async function forkRecipe(
     },
     appliedTitle: recipe.title,
     titleWasSuffixed: recipe.title !== baseTitle,
+  };
+}
+
+export interface ForkedRecipeSummary {
+  recipeId: string;
+  attribution: ForkedRecipeResult["attribution"];
+  appliedTitle: string;
+  titleWasSuffixed: boolean;
+}
+
+const VARIATION_PREFIX = " (variation ";
+
+/**
+ * The first free title for the chef from the titles they already use: the base title, then
+ * "<base> (variation 2)" and on, as `resolveTitle` picks it one query at a time.
+ */
+function firstFreeTitle(baseTitle: string, taken: ReadonlySet<string>): string {
+  for (let n = 1; n <= MAX_VARIATION_ATTEMPTS; n++) {
+    const candidate = variationTitle(baseTitle, n);
+    if (!taken.has(candidate)) return candidate;
+  }
+  throw new ForkTitleExhaustedError(baseTitle);
+}
+
+/**
+ * The chef's active titles that a fork titled `base` could collide with: the base itself and
+ * its variations. `base` is the bound title, or the source recipe's title when it is null.
+ */
+function takenTitlesQuery(chefId: string, base: string | null, sourceRecipeId: string): D1Query {
+  return [
+    `WITH "base"("title") AS (SELECT COALESCE(?, (SELECT "title" FROM "Recipe" WHERE "id" = ?)))
+     SELECT r."title" FROM "Recipe" r, "base" b
+     WHERE r."chefId" = ? AND r."deletedAt" IS NULL
+       AND (r."title" = b."title" OR substr(r."title", 1, length(b."title") + ${VARIATION_PREFIX.length}) = b."title" || '${VARIATION_PREFIX}')`,
+    base,
+    sourceRecipeId,
+    chefId,
+  ];
+}
+
+function titleSet(rows: ReadonlyArray<Record<string, unknown>>): Set<string> {
+  return new Set(rows.map((row) => row.title as string));
+}
+
+/**
+ * The source recipe as `forkRecipe` reads it through Prisma (its chef, active cover, steps and
+ * their ingredients), its step output uses, and the chef's taken titles, in one D1 batch.
+ */
+export async function readForkSourceFromD1(
+  d1: D1ReadDatabase,
+  input: Pick<ForkRecipeInput, "sourceRecipeId" | "viewerId" | "titleOverride">,
+): Promise<{ source: ForkSource; stepOutputUses: ForkStepOutputUse[]; takenTitles: Set<string> } | null> {
+  const override = input.titleOverride?.trim() || null;
+  const [[recipeRow], stepRows, ingredientRows, useRows, titleRows] = await d1ReadBatch(d1, [
+    [
+      `SELECT ${selectColumns(RECIPE_COLUMNS, "r")}, u."id" AS "chef_id", u."username" AS "chef_username",
+         ${selectColumns(RECIPE_COVER_COLUMNS, "c", "cover_")}
+       FROM "Recipe" r
+       JOIN "User" u ON u."id" = r."chefId"
+       LEFT JOIN "RecipeCover" c ON c."id" = r."activeCoverId"
+       WHERE r."id" = ?`,
+      input.sourceRecipeId,
+    ],
+    [`SELECT ${selectColumns(RECIPE_STEP_COLUMNS, "s")} FROM "RecipeStep" s WHERE s."recipeId" = ? ORDER BY s."stepNum"`, input.sourceRecipeId],
+    [`SELECT ${selectColumns(INGREDIENT_COLUMNS, "i")} FROM "Ingredient" i WHERE i."recipeId" = ? ORDER BY i."rowid"`, input.sourceRecipeId],
+    [`SELECT "outputStepNum", "inputStepNum" FROM "StepOutputUse" WHERE "recipeId" = ? ORDER BY "rowid"`, input.sourceRecipeId],
+    takenTitlesQuery(input.viewerId, override, input.sourceRecipeId),
+  ]);
+  if (!recipeRow) return null;
+
+  const ingredientsByStep = groupRows(ingredientRows, (row) => String(row.stepNum));
+  const source: ForkSource = {
+    ...mapModel(RECIPE_COLUMNS, recipeRow),
+    chef: { id: recipeRow.chef_id as string, username: recipeRow.chef_username as string },
+    activeCover: recipeRow.cover_id === null ? null : mapModel(RECIPE_COVER_COLUMNS, recipeRow, "cover_"),
+    steps: stepRows.map((row) => {
+      const step = mapModel(RECIPE_STEP_COLUMNS, row);
+      return {
+        ...step,
+        ingredients: (ingredientsByStep.get(String(step.stepNum)) ?? []).map((ingredient) => mapModel(INGREDIENT_COLUMNS, ingredient)),
+      };
+    }),
+  };
+  const stepOutputUses = useRows.map((row) => ({
+    outputStepNum: row.outputStepNum as number,
+    inputStepNum: row.inputStepNum as number,
+  }));
+  return { source, stepOutputUses, takenTitles: titleSet(titleRows) };
+}
+
+/**
+ * `forkRecipe` entirely on D1, for a caller that needs only the new recipe's id and title (the
+ * web fork). One batch reads the source and the chef's taken titles, and one batch writes the
+ * fork. If another recipe takes the title in between, the titles are read again.
+ */
+export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput): Promise<ForkedRecipeSummary> {
+  const read = await readForkSourceFromD1(d1, input);
+  if (!read || read.source.deletedAt) {
+    throw new ForkSourceNotFoundError(input.sourceRecipeId);
+  }
+  const { source, stepOutputUses } = read;
+  const override = input.titleOverride?.trim();
+  const baseTitle = override && override.length > 0 ? override : source.title;
+
+  const { recipeId, title } = await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async (attempt) => {
+    if (attempt === 1) return firstFreeTitle(baseTitle, read.takenTitles);
+    const [rows] = await d1ReadBatch(d1, [takenTitlesQuery(input.viewerId, baseTitle, source.id)]);
+    return firstFreeTitle(baseTitle, titleSet(rows));
+  });
+
+  return {
+    recipeId,
+    attribution: {
+      sourceRecipeId: source.id,
+      sourceChef: { id: source.chef.id, username: source.chef.username },
+    },
+    appliedTitle: title,
+    titleWasSuffixed: title !== baseTitle,
   };
 }

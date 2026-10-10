@@ -1116,6 +1116,43 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures account deletion and export operation names on authentication failures", async () => {
+    const deleteRequest = apiJsonRequest("DELETE", "me", "req_account_delete_missing_auth_operation", {}, {
+      confirmUsername: "raw-confirm-username",
+      password: "raw-delete-password",
+    });
+    const deleteResponse = await action(routeArgs(deleteRequest.request, "me").args);
+
+    expect(deleteResponse.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_delete_missing_auth_operation",
+      operation: "account.delete",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      privacyClass: "private",
+      forbidden: ["raw-confirm-username", "raw-delete-password", deleteRequest.bodyText],
+    });
+
+    const exportResponse = await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/me/export",
+      "req_account_export_missing_auth_operation",
+    ), "me/export").args);
+
+    expect(exportResponse.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/me/export",
+      requestId: "req_account_export_missing_auth_operation",
+      operation: "account.export",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      privacyClass: "private",
+      forbidden: [],
+    });
+  });
+
   it("captures recipe spoon operations without recipe ids, spoon ids, mutation ids, or body values", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Telemetry Spoon Writer", {

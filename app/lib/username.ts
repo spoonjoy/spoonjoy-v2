@@ -7,6 +7,9 @@
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 50;
 
+// The rule in a sentence, shown under the sign-up field before anyone gets it wrong.
+export const USERNAME_HINT = `${USERNAME_MIN_LENGTH} to ${USERNAME_MAX_LENGTH} letters, numbers, periods, underscores or hyphens.`;
+
 // Also the OpenAPI schema's pattern for UpdateAccountProfileRequest.username.
 export const USERNAME_PATTERN_SOURCE = "^[A-Za-z0-9._-]+$";
 const USERNAME_PATTERN = new RegExp(USERNAME_PATTERN_SOURCE);
@@ -14,6 +17,16 @@ const HAS_LETTER_OR_DIGIT = /[A-Za-z0-9]/;
 // Prisma's cuid() account IDs: "c" and 24 more lowercase letters or digits. /users/<identifier>
 // falls back to an ID lookup, so a username shaped like one would be confusing at best.
 const ACCOUNT_ID_SHAPE = /^c[a-z0-9]{24}$/i;
+
+// Usernames no person can take. "deleted-chef" is the account that keeps the recipes other cooks
+// built on after their chef deletes their account (account-deletion.server.ts).
+export const DELETED_CHEF_USERNAME = "deleted-chef";
+const RESERVED_USERNAMES = new Set([DELETED_CHEF_USERNAME]);
+
+// True for a username reserved for Spoonjoy itself, in any letter case. It counts as taken.
+export function isReservedUsername(username: string): boolean {
+  return RESERVED_USERNAMES.has(username.toLowerCase());
+}
 
 // The submitted username without leading or trailing whitespace. A missing field, a file where
 // text was expected, or a non-string JSON value is an empty username.
