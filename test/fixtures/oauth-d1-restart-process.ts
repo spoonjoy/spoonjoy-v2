@@ -103,6 +103,7 @@ async function main() {
         },
       });
       const tokens = await issueConnectorTokens(database, {
+        sessionVersion: 0,
         userId: USER_ID,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
@@ -113,6 +114,7 @@ async function main() {
       });
       if (mode === "issue-legacy") {
         await issueConnectorTokens(database, {
+          sessionVersion: 0,
           userId: USER_ID,
           clientId: CLIENT_ID,
           scope: "account:read",

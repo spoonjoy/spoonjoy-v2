@@ -18,6 +18,7 @@ import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
+import { AccountDataSection } from "~/components/account/AccountDataSection";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
@@ -126,7 +127,7 @@ export default function AccountSettings() {
 
       {/* Success/Error Messages (only show global banner when there are no field-level errors; a
           photo upload's error shows next to the photo instead) */}
-      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && (
+      {actionData?.message && !actionData?.fieldErrors && actionData.intent !== "uploadPhoto" && actionData.intent !== "deleteAccount" && (
         <div
           role={actionData.success ? "status" : "alert"}
           className={`mt-4 border-y py-4 ${
@@ -665,6 +666,14 @@ export default function AccountSettings() {
       <NotificationsSection
         initiallySubscribed={notifications.pushSubscribed}
         initialPreferences={notifications.preferences}
+      />
+
+      <AccountDataSection
+        // A new failed attempt re-opens the form with its error.
+        key={actionData?.intent === "deleteAccount" ? `delete-${actionData.error}-${actionData.message}` : "account-data"}
+        username={user.username}
+        hasPassword={user.hasPassword}
+        deleteError={actionData?.intent === "deleteAccount" ? actionData : null}
       />
       </div>
     </CookbookPage>

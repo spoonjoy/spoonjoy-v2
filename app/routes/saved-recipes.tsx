@@ -1,4 +1,5 @@
 import type { Route } from "./+types/saved-recipes";
+import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
@@ -72,7 +73,7 @@ export default function SavedRecipes() {
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              subtitle={`By ${recipe.chef.username} - ${recipe.savedCookbookTitles.join(", ")}`}
+              subtitle={`By ${chefDisplayName(recipe.chef.username)} - ${recipe.savedCookbookTitles.join(", ")}`}
               stamp={recipe.servings ?? undefined}
             />
           ))}

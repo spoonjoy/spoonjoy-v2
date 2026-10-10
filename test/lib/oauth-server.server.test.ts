@@ -44,7 +44,7 @@ const registerOAuthClient = (db: any, input: any) => registerOAuthClientRaw(db, 
 const getOAuthClient = (db: any, clientId: string, issuer = ISSUER) => getOAuthClientRaw(db, clientId, issuer);
 const createAuthorizationCode = (db: any, input: any) => createAuthorizationCodeRaw(db, { issuer: ISSUER, ...input });
 const consumeAuthorizationCode = (db: any, input: any) => consumeAuthorizationCodeRaw(db, { issuer: ISSUER, ...input });
-const issueConnectorTokens = (db: any, input: any) => issueConnectorTokensRaw(db, { issuer: ISSUER, ...input });
+const issueConnectorTokens = (db: any, input: any) => issueConnectorTokensRaw(db, { issuer: ISSUER, sessionVersion: 0, ...input });
 const rotateConnectorTokens = (db: any, input: any) => rotateConnectorTokensRaw(db, { issuer: ISSUER, ...input });
 
 describe("verifyPkceS256", () => {
@@ -389,6 +389,7 @@ describe("authorization code lifecycle", () => {
     });
     expect(grant).toEqual({
       userId,
+      sessionVersion: 0,
       scope: "kitchen:read kitchen:write",
       resource: "https://spoonjoy.app/mcp",
     });
@@ -530,6 +531,7 @@ describe("authorization code lifecycle", () => {
         }),
         updateMany: async () => ({ count: 0 }),
       },
+      user: { findUnique: async () => ({ sessionVersion: 0 }) },
     } as never;
 
     await expect(
@@ -684,6 +686,51 @@ describe("connector token issuance + rotation", () => {
     await expect(
       rotateConnectorTokens(db, { refreshToken: first.refreshToken, clientId }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+
+  it("says revoked_by_user on a refused refresh only when the chef ended the session", async () => {
+    const refusal = async (refreshToken: string, client = clientId, issuer = ISSUER) => {
+      const error = await rotateConnectorTokensRaw(db, { refreshToken, clientId: client, issuer }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(OAuthError);
+      return { code: (error as OAuthError).code, message: (error as OAuthError).message, reason: (error as OAuthError).reason };
+    };
+    const plain = { code: "invalid_grant", message: "Unknown or revoked refresh token", reason: undefined };
+
+    // The chef disconnected the app: the app is told so.
+    const disconnected = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await expect(revokeConnectorRefreshToken(db, { refreshToken: disconnected.refreshToken, issuer: ISSUER })).resolves.toBe(true);
+    await expect(refusal(disconnected.refreshToken))
+      .resolves.toEqual({ code: "invalid_grant", message: "Session revoked", reason: "revoked_by_user" });
+    // ...but not another client presenting that token.
+    await db.oAuthClient.create({ data: { id: "client-other", clientName: "Other", redirectUris: "https://other.example/cb" } });
+    await expect(refusal(disconnected.refreshToken, "client-other")).resolves.toEqual(plain);
+    // ...nor the right client at another issuer.
+    await expect(refusal(disconnected.refreshToken, clientId, "https://other-issuer.example")).resolves.toEqual(plain);
+
+    // A token that was simply rotated is an ordinary refusal.
+    const rotatedAway = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await rotateConnectorTokens(db, { refreshToken: rotatedAway.refreshToken, clientId });
+    await expect(refusal(rotatedAway.refreshToken)).resolves.toEqual(plain);
+
+    // A grant revoked for a reason that is not the chef's is an ordinary refusal.
+    const byServer = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    const serverRow = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { tokenHash: await hashOAuthOpaqueToken(byServer.refreshToken) } });
+    await db.oAuthRefreshToken.update({ where: { id: serverRow.id }, data: { revokedAt: new Date() } });
+    await db.oAuthGrant.update({
+      where: { id: serverRow.grantId! },
+      data: { status: "revoked", statusReason: "administrative", statusChangedAt: new Date() },
+    });
+    await expect(refusal(byServer.refreshToken)).resolves.toEqual(plain);
+
+    // A token from before grants existed cannot say why it was revoked.
+    const legacy = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read" });
+    await db.oAuthRefreshToken.update({
+      where: { tokenHash: await hashOAuthOpaqueToken(legacy.refreshToken) },
+      data: { grantId: null, revokedAt: new Date() },
+    });
+    await expect(refusal(legacy.refreshToken)).resolves.toEqual(plain);
+
+    await expect(refusal("ort_unknown")).resolves.toEqual(plain);
   });
 
   describe("refresh token reuse and expiry", () => {
@@ -935,6 +982,7 @@ describe("connector token issuance + rotation", () => {
     const issuerB = "https://issuer-b.example";
     await db.oAuthClient.update({ where: { id: clientId }, data: { issuer: issuerA } });
     const first = await issueConnectorTokensRaw(db, {
+      sessionVersion: 0,
       userId,
       clientId,
       scope: "kitchen:read",
@@ -967,6 +1015,7 @@ describe("connector token issuance + rotation", () => {
     const issuerB = "https://issuer-b.example";
     await db.oAuthClient.update({ where: { id: clientId }, data: { issuer: issuerA } });
     const first = await issueConnectorTokensRaw(db, {
+      sessionVersion: 0,
       userId,
       clientId,
       scope: "kitchen:read",
@@ -1349,6 +1398,7 @@ describe("connector token issuance + rotation", () => {
     const issuerB = "https://issuer-b.example";
     await db.oAuthClient.update({ where: { id: clientId }, data: { issuer: issuerA } });
     const first = await issueConnectorTokensRaw(db, {
+      sessionVersion: 0,
       userId,
       clientId,
       scope: "kitchen:read",
@@ -1428,6 +1478,7 @@ describe("connector token issuance + rotation", () => {
         findUnique: async () => ({ id: "race", revokedAt: null, clientId, userId, scope: "kitchen:read", resource: null, issuer: ISSUER }),
         updateMany: async () => ({ count: 0 }),
       },
+      user: { findUnique: async () => ({ sessionVersion: 0 }) },
     } as never;
     await expect(
       rotateConnectorTokensRaw(
