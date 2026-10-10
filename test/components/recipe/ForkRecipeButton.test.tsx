@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createTestRoutesStub } from "../../utils";
@@ -115,5 +115,22 @@ describe("ForkRecipeButton", () => {
     const submit = await screen.findByRole("button", { name: /make variation/i });
     expect(submit).toBeInTheDocument();
     expect(submit.getAttribute("type")).toBe("submit");
+  });
+
+  it("sends one fork token per opening of the dialog, so a double submit makes one fork", async () => {
+    renderButton({ isOwner: false });
+    const token = () => (document.querySelector("form input[name='forkToken']") as HTMLInputElement).value;
+
+    await userEvent.click(await screen.findByRole("button", { name: /^fork$/i }));
+    await screen.findByRole("dialog");
+    const first = token();
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+
+    await userEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: /^fork$/i }));
+    await screen.findByRole("dialog");
+    expect(token()).toMatch(/^[0-9a-f-]{36}$/);
+    expect(token()).not.toBe(first);
   });
 });

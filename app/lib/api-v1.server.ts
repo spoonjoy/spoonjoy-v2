@@ -21,6 +21,7 @@ import {
   type NotificationPreferenceFlags,
 } from "~/lib/account-settings.server";
 import { saveAccountIdentity } from "~/lib/account-identity.server";
+import { sampleApiEvent } from "~/lib/api-v1-event-sampling.server";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import {
@@ -747,6 +748,12 @@ function observeApiV1Response(
     ?? responseMetadata.idempotencyOutcome
     ?? defaultIdempotencyOutcome(operation, errorCode);
   const rateLimitScope = input.telemetry?.rateLimitScope ?? responseMetadata.rateLimitScope;
+  const latencyMs = Math.max(0, Date.now() - input.startedAt);
+  const sample = sampleApiEvent(
+    { method: args.request.method, status: input.response.status, errorCode, latencyMs },
+    env,
+  );
+  if (!sample.send) return input.response;
   waitUntil(
     captureEvent(postHogConfig, {
       event: "spoonjoy.api_v1.request",
@@ -773,7 +780,9 @@ function observeApiV1Response(
         user_agent_family: userAgentFamily(args.request.headers.get("User-Agent")),
         idempotency_outcome: idempotencyOutcome,
         rate_limit_scope: rateLimitScope,
-        latency_ms: Math.max(0, Date.now() - input.startedAt),
+        latency_ms: latencyMs,
+        sample_rate: sample.sampleRate,
+        sample_reason: sample.reason,
       },
     }),
   );
