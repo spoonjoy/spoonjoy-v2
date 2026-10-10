@@ -1,4 +1,4 @@
-import { prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
+import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -639,7 +639,7 @@ async function activeFullCoverPayload(
   recipe: { id: string; activeCoverId: string | null; activeCoverVariant: string | null },
 ): Promise<FullCoverPayload | null> {
   if (!recipe.activeCoverId) return null;
-  const [cover] = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipe.id, [await context.db.recipeCover.findFirstOrThrow({
+  const [cover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, [await context.db.recipeCover.findFirstOrThrow({
     where: { id: recipe.activeCoverId, recipeId: recipe.id },
   })]);
   return fullCoverPayload(cover, recipe);
@@ -1707,7 +1707,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
 
     const canReadFullHistory = recipe.chefId === principal.id && principal.scopes.includes("kitchen:write");
     // Settled first, so the history read below already sees it failed.
-    const [activeCover] = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipe.id, [
+    const [activeCover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, [
       recipe.activeCoverId
         ? await context.db.recipeCover.findFirst({
             where: { id: recipe.activeCoverId, recipeId: recipe.id },
@@ -1727,7 +1727,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
 
     const includeArchived = args.includeArchived === true;
     // A generation whose job died reads as failed, not processing forever.
-    const covers = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipe.id, await context.db.recipeCover.findMany({
+    const covers = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, await context.db.recipeCover.findMany({
       where: {
         recipeId: recipe.id,
         ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
@@ -2266,7 +2266,7 @@ const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
     const found = await context.db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
     if (!found) throw new ApiAuthError("Cover not found", 404);
     // A generation whose job died reads as failed, so a client polling this stops.
-    const [cover] = await settleStuckCoverGenerations(prismaStuckCoverStore(context.db), recipeId, [found]);
+    const [cover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipeId, [found]);
     return json({
       cover: fullCoverPayload(cover, recipe),
       activeCover: await activeFullCoverPayload(context, recipe),

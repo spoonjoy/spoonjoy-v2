@@ -41,6 +41,10 @@ export const TRANSACTION_ALLOWLIST: Record<string, Allowance> = {
     max: 2,
     reason: `${NO_BINDING_FALLBACK} setActiveRecipeCover and clearActiveRecipeCover take the guarded batch when d1 is passed, and every production caller passes it.`,
   },
+  "app/lib/recipe-cover-stuck.server.ts": {
+    max: 1,
+    reason: `${NO_BINDING_FALLBACK} stuckCoverStore picks the D1 store whenever the request has a binding.`,
+  },
   "app/lib/recipe-detail.server.ts": {
     max: 2,
     reason: `${NO_BINDING_FALLBACK} Clearing the cover and deleting the recipe branch on requestD1(context) first.`,
@@ -48,6 +52,10 @@ export const TRANSACTION_ALLOWLIST: Record<string, Allowance> = {
   "app/lib/recipe-import.server.ts": {
     max: 1,
     reason: `${NO_BINDING_FALLBACK} Imports write the recipe graph as one guarded batch when the binding is present.`,
+  },
+  "app/lib/recipe-steps-update.server.ts": {
+    max: 1,
+    reason: `${NO_BINDING_FALLBACK} The steps update plan runs as one guarded batch when the binding is present.`,
   },
   "app/lib/shopping-list-mutations.server.ts": {
     max: 2,
