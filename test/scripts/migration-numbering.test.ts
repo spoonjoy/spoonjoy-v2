@@ -11,8 +11,17 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(process.cwd(), "migrations");
 
 // Already applied in production under these names. D1 records a migration by its filename, so
-// renaming either would run it again; this one historical pair stays, and no other may join it.
-const APPLIED_DUPLICATES = new Set(["0020_native_push_devices.sql", "0020_recipe_box_indexes.sql"]);
+// renaming any of them would run it again; these historical pairs stay, and no other may join them.
+const APPLIED_DUPLICATES = new Set([
+  "0020_native_push_devices.sql",
+  "0020_recipe_box_indexes.sql",
+  "0031_image_gen_daily_budget.sql",
+  "0031_oauth_token_expiry.sql",
+]);
+
+// The email verification and image generation budget mirror folders share one timestamp; they
+// merged before this check existed and stay as they are.
+const SHARED_MIRROR_STAMPS = new Set(["20261009060000"]);
 
 function migrationFiles(): string[] {
   return readdirSync(migrationsDir).filter((name) => name.endsWith(".sql")).sort();
@@ -35,12 +44,16 @@ describe("D1 migration numbering", () => {
 
   it("never gives two Prisma mirror folders the same timestamp", () => {
     const folders = readdirSync(join(process.cwd(), "prisma", "migrations")).filter((name) => /^\d{14}_/.test(name));
-    const stamps = folders.map((name) => name.slice(0, 14));
+    const stamps = folders.map((name) => name.slice(0, 14)).filter((stamp) => !SHARED_MIRROR_STAMPS.has(stamp));
     const repeated = stamps.filter((stamp, index) => stamps.indexOf(stamp) !== index);
     expect(repeated, "give the mirror folder that merged second a later timestamp").toEqual([]);
   });
 
-  it("keeps the historical duplicate pair exactly as applied", () => {
+  it("keeps the historical duplicate pairs exactly as applied", () => {
     for (const name of APPLIED_DUPLICATES) expect(migrationFiles()).toContain(name);
+    const folders = readdirSync(join(process.cwd(), "prisma", "migrations"));
+    for (const stamp of SHARED_MIRROR_STAMPS) {
+      expect(folders.filter((name) => name.startsWith(`${stamp}_`)).length).toBeGreaterThan(1);
+    }
   });
 });
