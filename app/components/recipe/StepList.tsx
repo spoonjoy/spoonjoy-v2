@@ -277,7 +277,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
           href={`/recipes/${recipeId}/steps/new`}
           className="sj-link inline-flex min-h-11 items-center gap-2"
         >
-          + Add Step
+          + Add step
         </Link>
       ) : (
         <Button
@@ -287,13 +287,13 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
           plain
         >
           <Plus data-slot="icon" />
-          Add Step
+          Add step
         </Button>
       )}
 
       {/* Confirmation dialog for step removal */}
       <Dialog open={stepToRemove !== null} onClose={cancelRemove} role="alertdialog">
-        <DialogTitle>Remove Step</DialogTitle>
+        <DialogTitle>Remove step</DialogTitle>
         <DialogDescription>
           Are you sure you want to remove this step? This action cannot be undone.
         </DialogDescription>

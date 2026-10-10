@@ -298,7 +298,7 @@ export function StepEditorCard({
             disabled={disabled || !canMoveUp}
           >
             <ArrowUp data-slot="icon" aria-hidden="true" />
-            Move Up
+            Move up
           </Button>
         )}
 
@@ -310,7 +310,7 @@ export function StepEditorCard({
             disabled={disabled || !canMoveDown}
           >
             <ArrowDown data-slot="icon" aria-hidden="true" />
-            Move Down
+            Move down
           </Button>
         )}
       </div>

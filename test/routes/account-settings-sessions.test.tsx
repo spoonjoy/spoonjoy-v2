@@ -518,10 +518,10 @@ describe("Account settings - revocable sessions", () => {
     }
 
     async function fillPasswordForm(user: ReturnType<typeof userEvent.setup>) {
-      await user.click(await screen.findByRole("button", { name: "Change Password" }));
-      await user.type(screen.getByLabelText("Current Password"), "oldPassword123!");
-      await user.type(screen.getByLabelText("New Password"), "newPassword456!");
-      await user.type(screen.getByLabelText("Confirm Password"), "newPassword456!");
+      await user.click(await screen.findByRole("button", { name: "Change password" }));
+      await user.type(screen.getByLabelText("Current password"), "oldPassword123!");
+      await user.type(screen.getByLabelText("New password"), "newPassword456!");
+      await user.type(screen.getByLabelText("Confirm password"), "newPassword456!");
     }
 
     it("disconnects other devices, apps, agents and API tokens unless the chef unticks it", async () => {
@@ -532,7 +532,7 @@ describe("Account settings - revocable sessions", () => {
       await fillPasswordForm(user);
       const choice = screen.getByRole("checkbox", { name: /also sign out other devices and disconnect apps, agents and api tokens/i });
       expect(choice).toBeChecked();
-      await user.click(screen.getByRole("button", { name: "Change Password" }));
+      await user.click(screen.getByRole("button", { name: "Change password" }));
 
       await waitFor(() => expect(forms).toHaveLength(1));
       expect(forms[0].get("intent")).toBe("changePassword");
@@ -549,7 +549,7 @@ describe("Account settings - revocable sessions", () => {
 
       await fillPasswordForm(user);
       await user.click(screen.getByRole("checkbox", { name: /also sign out other devices/i }));
-      await user.click(screen.getByRole("button", { name: "Change Password" }));
+      await user.click(screen.getByRole("button", { name: "Change password" }));
 
       await waitFor(() => expect(forms).toHaveLength(1));
       expect(forms[0].get("connectionsChoice")).toBe("1");

@@ -130,7 +130,7 @@ export default function RecipesIndex() {
                   {isAuthenticated ? (
                     <Button href="/recipes/new" plain>
                       <Plus data-slot="icon" aria-hidden="true" />
-                      Create Recipe
+                      Create recipe
                     </Button>
                   ) : null}
                 </div>
@@ -176,7 +176,7 @@ export default function RecipesIndex() {
             <RuledEmptyState
               title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
               action={hasQuery ? (
-                <Button href="/recipes" plain>Clear Search</Button>
+                <Button href="/recipes" plain>Clear search</Button>
               ) : after ? (
                 <Button href="/recipes" plain>Back to the newest</Button>
               ) : null}

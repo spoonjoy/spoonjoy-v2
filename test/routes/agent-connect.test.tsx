@@ -464,7 +464,7 @@ describe("agent connect route", () => {
     // On its own, the scopes section draws its own top and bottom rules.
     expect(screen.getByText("Requested scopes").parentElement).toHaveClass("mt-6", "border-y");
     fireEvent.change(codeInput, { target: { value: "WRNG-0000" } });
-    fireEvent.click(screen.getByRole("button", { name: "Approve Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve access" }));
     expect(await screen.findByText("That code doesn't match. Type the code your agent shows you.")).toBeInTheDocument();
   });
 
@@ -516,7 +516,7 @@ describe("agent connect route", () => {
     expect(codeInput).toHaveAttribute("autocapitalize", "characters");
     expect(codeInput).toHaveAttribute("autocorrect", "off");
     expect(codeInput).toHaveAttribute("spellcheck", "false");
-    expect(screen.getByRole("button", { name: "Approve Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve access" })).toBeInTheDocument();
     // Deny needs the code too, so the browser asks for it before either button submits.
     expect(screen.getByRole("button", { name: "Deny" })).not.toHaveAttribute("formnovalidate");
 
@@ -568,7 +568,7 @@ describe("agent connect route", () => {
     expect(screen.getByText(/lasts 90 days from approval/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage connected apps and tokens" })).toHaveAttribute("href", "/account/settings");
     expect(screen.queryByText(/did not verify/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Approve Access" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve access" })).not.toBeInTheDocument();
 
     cleanupDom();
     renderWithData({ status: "claimed", agentName: "slugger", userEmail: null, expiresAt: null, scopes: [] });

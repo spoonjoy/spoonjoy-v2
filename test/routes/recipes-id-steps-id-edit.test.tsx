@@ -2483,7 +2483,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
       expect(await screen.findByText("No ingredients added yet")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "+ Add Ingredient" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "+ Add ingredient" })).toBeInTheDocument();
     });
 
     it("should render step with ingredients", async () => {
@@ -2559,7 +2559,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
       // Click add ingredient button
-      const addButton = await screen.findByRole("button", { name: "+ Add Ingredient" });
+      const addButton = await screen.findByRole("button", { name: "+ Add ingredient" });
       fireEvent.click(addButton);
 
       // Now form should be visible with AI mode (default)
@@ -2597,7 +2597,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
       // Show form
-      const addButton = await screen.findByRole("button", { name: "+ Add Ingredient" });
+      const addButton = await screen.findByRole("button", { name: "+ Add ingredient" });
       fireEvent.click(addButton);
 
       // AI mode is default - check for AI parse input
@@ -2609,8 +2609,8 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
       // Form should be hidden
       expect(screen.queryByPlaceholderText(/Enter ingredients/)).not.toBeInTheDocument();
-      // Button should be back to "+ Add Ingredient"
-      expect(screen.getByRole("button", { name: "+ Add Ingredient" })).toBeInTheDocument();
+      // Button should be back to "+ Add ingredient"
+      expect(screen.getByRole("button", { name: "+ Add ingredient" })).toBeInTheDocument();
     });
 
     it("should render empty step title when null", async () => {
@@ -2922,7 +2922,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await screen.findByRole("heading", { name: /Edit Step/i });
 
         // Label should be shown but without "(optional)" suffix
-        expect(screen.getByText("Uses Output From")).toBeInTheDocument();
+        expect(screen.getByText("Uses output from")).toBeInTheDocument();
         // Should not have the dropdown selector
         expect(screen.queryByRole("button", { name: /Select previous steps/i })).not.toBeInTheDocument();
       });
@@ -3696,7 +3696,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         // Click add ingredient button
-        const addButton = await screen.findByRole("button", { name: "+ Add Ingredient" });
+        const addButton = await screen.findByRole("button", { name: "+ Add ingredient" });
         fireEvent.click(addButton);
 
         // Type in the AI input to trigger parsing
@@ -3765,7 +3765,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         // Click add ingredient button
-        const addButton = await screen.findByRole("button", { name: "+ Add Ingredient" });
+        const addButton = await screen.findByRole("button", { name: "+ Add ingredient" });
         fireEvent.click(addButton);
 
         // Verify we're in AI mode initially
@@ -3837,7 +3837,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         // Click add ingredient button
-        const addButton = await screen.findByRole("button", { name: "+ Add Ingredient" });
+        const addButton = await screen.findByRole("button", { name: "+ Add ingredient" });
         fireEvent.click(addButton);
 
         // Type in the AI input to trigger parsing
@@ -3892,7 +3892,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.click(await screen.findByRole("button", { name: "+ Add ingredient" }));
         fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), {
           target: { value: "2 cups flour, 1 tsp salt, 3 eggs" },
         });
@@ -3927,7 +3927,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         expect(await screen.findByText("No ingredients added yet")).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.click(screen.getByRole("button", { name: "+ Add ingredient" }));
         fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), { target: { value: "2 cups flour" } });
         expect(await screen.findByRole("button", { name: /Add all/ }, { timeout: 3000 })).toBeInTheDocument();
         expect(screen.queryByText("No ingredients added yet")).not.toBeInTheDocument();
@@ -3972,7 +3972,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
-        fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.click(await screen.findByRole("button", { name: "+ Add ingredient" }));
         fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), {
           target: { value: "2 cups flour, 1 cup rice" },
         });
@@ -4012,7 +4012,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         try {
-          fireEvent.click(await screen.findByRole("button", { name: "+ Add Ingredient" }));
+          fireEvent.click(await screen.findByRole("button", { name: "+ Add ingredient" }));
           fireEvent.change(await screen.findByRole("spinbutton", { name: "Quantity" }), { target: { value: "1" } });
           fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "cup" } });
           fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "rice" } });
@@ -4094,7 +4094,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         // Click add ingredient button
-        const addButton = await screen.findByRole("button", { name: "+ Add Ingredient" });
+        const addButton = await screen.findByRole("button", { name: "+ Add ingredient" });
         fireEvent.click(addButton);
 
         // Switch to manual mode by clicking the toggle
@@ -4116,7 +4116,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         fireEvent.change(ingredientInput, { target: { value: "olive oil" } });
 
         // Click the Add Ingredient button
-        const addIngredientButton = screen.getByRole("button", { name: /Add Ingredient/i });
+        const addIngredientButton = screen.getByRole("button", { name: /Add ingredient/i });
         fireEvent.click(addIngredientButton);
 
         // Verify the action was called with correct data

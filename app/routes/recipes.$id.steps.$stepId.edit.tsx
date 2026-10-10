@@ -718,12 +718,12 @@ export default function EditStep() {
 
           {step.stepNum === 1 ? (
             <Field>
-              <Label>Uses Output From</Label>
+              <Label>Uses output from</Label>
               <Text className="italic">No previous steps available</Text>
             </Field>
           ) : availableSteps.length > 0 && (
             <Field>
-              <Label>Uses Output From (optional)</Label>
+              <Label>Uses output from (optional)</Label>
               <Listbox
                 multiple
                 value={selectedSteps}
@@ -795,7 +795,7 @@ export default function EditStep() {
           title="Ingredients"
           action={
             <Button onClick={() => setShowIngredientForm(!showIngredientForm)}>
-              {showIngredientForm ? "Cancel" : "+ Add Ingredient"}
+              {showIngredientForm ? "Cancel" : "+ Add ingredient"}
             </Button>
           }
         >

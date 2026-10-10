@@ -63,7 +63,7 @@ export default function CookbooksIndexRedirect() {
         action={(
           <Button href="/cookbooks/new">
             <Plus data-slot="icon" className="size-4" />
-            New Cookbook
+            New cookbook
           </Button>
         )}
       >
@@ -87,7 +87,7 @@ export default function CookbooksIndexRedirect() {
       ) : (
         <RuledEmptyState
           title={query ? "No matching cookbooks" : "No cookbooks yet"}
-          action={<Button href="/cookbooks/new">Create Cookbook</Button>}
+          action={<Button href="/cookbooks/new">Create cookbook</Button>}
         >
           <Text>
             {query

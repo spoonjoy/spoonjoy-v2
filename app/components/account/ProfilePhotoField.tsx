@@ -16,7 +16,7 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const currentPhotoUrl = resolveChefAvatarUrl(actionData?.photoUrl || photoUrl);
-  const buttonText = photoUrl ? "Change Photo" : "Upload Photo";
+  const buttonText = photoUrl ? "Change photo" : "Upload photo";
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -86,13 +86,13 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
             <Form method="post">
               <input type="hidden" name="intent" value="removePhoto" />
               <Button type="submit" variant="destructive">
-                Remove Photo
+                Remove photo
               </Button>
             </Form>
           )}
         </div>
         {errorMessage && <Text className="text-sm text-[var(--sj-tomato)]">{errorMessage}</Text>}
-        <Text className="text-sm">JPG, PNG, GIF, or WebP. Max 5MB.</Text>
+        <Text className="text-sm">JPG, PNG, GIF, or WebP. 5 MB max.</Text>
       </div>
 
       {cropFile && <ProfilePhotoCropper file={cropFile} onConfirm={handleConfirm} onCancel={handleCancel} />}

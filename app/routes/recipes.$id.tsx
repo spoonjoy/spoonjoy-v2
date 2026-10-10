@@ -1126,7 +1126,7 @@ export default function RecipeDetail() {
       >
         <div className="flex max-h-full flex-col" data-testid="save-modal">
           <div className="flex items-start justify-between gap-3">
-            <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to Cookbook</DialogTitle>
+            <DialogTitle ref={saveModalTitleRef} tabIndex={-1}>Save to cookbook</DialogTitle>
             {/* Escape and a tap outside also close it; this is the visible, touch-sized way. */}
             <button
               type="button"
@@ -1256,7 +1256,7 @@ export default function RecipeDetail() {
             {/* istanbul ignore next -- @preserve owner-only UI rendering */}
             {isOwner && (
               <Button href={`/recipes/${recipe.id}/edit`}>
-                Add Steps
+                Add steps
               </Button>
             )}
           </div>

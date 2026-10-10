@@ -503,7 +503,7 @@ export default function AccountSettings() {
               <Form method="post" className="space-y-4">
                 <input type="hidden" name="intent" value="changePassword" />
                 <Field>
-                  <Label>Current Password</Label>
+                  <Label>Current password</Label>
                   <Input
                     type="password"
                     name="currentPassword"
@@ -511,7 +511,7 @@ export default function AccountSettings() {
                   />
                 </Field>
                 <Field>
-                  <Label>New Password</Label>
+                  <Label>New password</Label>
                   <Input
                     type="password"
                     name="newPassword"
@@ -526,7 +526,7 @@ export default function AccountSettings() {
                   </Text>
                 </Field>
                 <Field>
-                  <Label>Confirm Password</Label>
+                  <Label>Confirm password</Label>
                   <Input
                     type="password"
                     name="confirmPassword"
@@ -543,7 +543,7 @@ export default function AccountSettings() {
                 </CheckboxField>
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit">
-                    Change Password
+                    Change password
                   </Button>
                   <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
                     Cancel
@@ -556,7 +556,7 @@ export default function AccountSettings() {
                 <Form method="post" className="space-y-4">
                   <input type="hidden" name="intent" value="removePassword" />
                   <Field>
-                    <Label>Current Password</Label>
+                    <Label>Current password</Label>
                     <Input
                       type="password"
                       name="currentPassword"
@@ -576,11 +576,11 @@ export default function AccountSettings() {
             ) : (
               <div className="flex flex-wrap gap-3">
                 <Button type="button" plain onClick={() => setPasswordFormState("change")}>
-                  Change Password
+                  Change password
                 </Button>
                 {canRemovePassword && (
                   <Button type="button" variant="destructive" onClick={() => setPasswordFormState("removeConfirm")}>
-                    Remove Password
+                    Remove password
                   </Button>
                 )}
               </div>
@@ -590,7 +590,7 @@ export default function AccountSettings() {
               <Form method="post" className="space-y-4">
                 <input type="hidden" name="intent" value="setPassword" />
                 <Field>
-                  <Label>New Password</Label>
+                  <Label>New password</Label>
                   <Input
                     type="password"
                     name="newPassword"
@@ -605,7 +605,7 @@ export default function AccountSettings() {
                   </Text>
                 </Field>
                 <Field>
-                  <Label>Confirm Password</Label>
+                  <Label>Confirm password</Label>
                   <Input
                     type="password"
                     name="confirmPassword"
@@ -614,7 +614,7 @@ export default function AccountSettings() {
                 </Field>
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit">
-                    Set Password
+                    Set password
                   </Button>
                   <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
                     Cancel
@@ -627,7 +627,7 @@ export default function AccountSettings() {
                   You don't have a password set. Set one to enable email/password login.
                 </Text>
                 <Button type="button" plain onClick={() => setPasswordFormState("set")}>
-                  Set Password
+                  Set password
                 </Button>
               </div>
             )
