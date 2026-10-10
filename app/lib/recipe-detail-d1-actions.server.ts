@@ -1,10 +1,10 @@
 // The recipe page's everyday actions on D1, without Prisma in the request: saving a recipe to a
 // cookbook (an existing one, or a new one made from the Save dialog), taking it out again, and
-// deleting a cook's log entry. Each is one batch, which D1 runs as one transaction: the batch reads
+// deleting a cook's log entry, plus the owner check ahead of the cover choices. Each is one batch, which D1 runs as one transaction: the batch reads
 // what the checks need and its writes are guarded by the same conditions, so a request that fails
 // a check changes nothing, and the answer comes from the rows read in that same transaction.
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { SpoonAuthError, SpoonNotFoundError } from "~/lib/recipe-spoon.server";
 
 const ACTIVE_RECIPE = `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL)`;
@@ -120,4 +120,15 @@ export async function deleteSpoonOnD1(d1: D1ReadDatabase, input: { userId: strin
   if (!row) throw new SpoonNotFoundError(`Spoon ${input.spoonId} not found`);
   if (row.deletedAt != null) throw new SpoonNotFoundError(`Spoon ${input.spoonId} is deleted`);
   if (row.chefId !== input.userId) throw new SpoonAuthError("Spoon is not owned by requesting user");
+}
+
+/** The recipe owner's checks for the cover choices: 404 for a missing or deleted recipe, then 403. */
+export async function assertOwnedActiveRecipeOnD1(
+  d1: D1ReadDatabase,
+  input: { recipeId: string; userId: string },
+): Promise<void> {
+  const [recipe] = await d1ReadBatch(d1, [[`SELECT "chefId", "deletedAt" FROM "Recipe" WHERE "id" = ?`, input.recipeId]]);
+  const row = recipe[0];
+  if (!row || row.deletedAt != null) throw recipeNotFound();
+  if (row.chefId !== input.userId) throw unauthorized();
 }

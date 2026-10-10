@@ -6,6 +6,7 @@ import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.serv
 import {
   addRecipeToCookbookOnD1,
   assertActiveRecipeOnD1,
+  assertOwnedActiveRecipeOnD1,
   createCookbookWithRecipeOnD1,
   deleteSpoonOnD1,
   removeRecipeFromCookbookOnD1,
@@ -20,6 +21,8 @@ import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe
 import { d1StuckCoverStore, prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
 import {
   archiveRecipeCover,
+  archiveRecipeCoverOnD1,
+  activateRecipeCoverOnD1,
   createCover,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
@@ -729,11 +732,88 @@ async function handleDeleteSpoon(
 // What a D1-handled intent answered. The action turns these into the same object literals the
 // Prisma path returns, so the route's inferred action type (and the page's narrowing of it) is
 // unchanged.
+type CoverIntent = "setRecipeCover" | "setRecipeNoCover" | "archiveRecipeCover";
+
 type RecipeDetailD1Answer =
   | { kind: "success" }
+  | { kind: "coverChanged"; intent: CoverIntent }
   | { kind: "newCookbook"; newCookbook: { id: string; title: string } }
   | { kind: "response"; response: ReturnType<typeof data<{ error: string; intent: string }>> }
   | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> };
+
+function activeCoverChoice(formData: FormData, recipeId: string) {
+  const coverId = formData.get("coverId");
+  const variant = formData.get("variant");
+  if (typeof coverId !== "string" || !coverId) {
+    throw new Response("coverId is required", { status: 400 });
+  }
+  if (variant !== "image" && variant !== "stylized") {
+    throw new Response("Invalid cover variant", { status: 400 });
+  }
+  return { recipeId, coverId, variant: variant as RecipeCoverVariant };
+}
+
+function assertNoCoverConfirmed(formData: FormData): void {
+  if (formData.get("confirmNoCover") !== "true") {
+    throw new Response("confirmNoCover is required", { status: 400 });
+  }
+}
+
+function archiveCoverChoice(formData: FormData, recipeId: string) {
+  const coverId = formData.get("coverId");
+  if (typeof coverId !== "string" || !coverId) {
+    throw new Response("coverId is required", { status: 400 });
+  }
+  const replacementCoverId = formData.get("replacementCoverId");
+  const replacementVariant = formData.get("replacementVariant");
+  if (
+    typeof replacementCoverId === "string" &&
+    replacementCoverId &&
+    replacementVariant !== "image" &&
+    replacementVariant !== "stylized"
+  ) {
+    throw new Response("replacementVariant is required", { status: 400 });
+  }
+  return {
+    recipeId,
+    coverId,
+    replacementCoverId: typeof replacementCoverId === "string" && replacementCoverId ? replacementCoverId : null,
+    replacementVariant: replacementVariant === "image" || replacementVariant === "stylized" ? replacementVariant : null,
+    confirmNoCover: formData.get("confirmNoCover") === "true",
+  } as const;
+}
+
+// The recipe owner's cover choices on D1, after the same owner checks as the Prisma path.
+async function handleCoverChoiceOnD1(
+  d1: D1ReadDatabase,
+  intent: CoverIntent,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+): Promise<RecipeDetailD1Answer> {
+  await assertOwnedActiveRecipeOnD1(d1, { recipeId, userId });
+  if (intent === "setRecipeCover") {
+    await activateRecipeCoverOnD1(d1, activeCoverChoice(formData, recipeId));
+  } else if (intent === "setRecipeNoCover") {
+    assertNoCoverConfirmed(formData);
+    // One atomic batch: the cleared cover (with the recipe touch) and the cookbook touch.
+    const updatedAt = new Date();
+    await writeExistingRecipeOnD1(d1, recipeId, [
+      recipeUpdateStatement(recipeId, { activeCoverId: null, activeCoverVariant: null, coverMode: "none" }, updatedAt),
+      cookbooksForRecipeTouchStatement(recipeId, updatedAt),
+    ]);
+  } else {
+    const input = archiveCoverChoice(formData, recipeId);
+    try {
+      await archiveRecipeCoverOnD1(d1, input);
+    } catch (error) {
+      throw new Response((error as Error).message, { status: 400 });
+    }
+  }
+  return { kind: "coverChanged", intent };
+}
+
+const COVER_INTENTS: ReadonlySet<unknown> = new Set<CoverIntent>(["setRecipeCover", "setRecipeNoCover", "archiveRecipeCover"]);
 
 // The intents that run on D1 alone. Anything else (or a cookbook intent without a cookbook id,
 // which falls through to the owner checks below as before) returns null.
@@ -744,6 +824,10 @@ async function handleRecipeDetailActionOnD1(
   recipeId: string,
   formData: FormData,
 ): Promise<RecipeDetailD1Answer | null> {
+  if (COVER_INTENTS.has(intent)) {
+    return handleCoverChoiceOnD1(d1, intent as CoverIntent, userId, recipeId, formData);
+  }
+
   if (intent === "deleteSpoon") {
     const spoonId = formData.get("spoonId");
     if (typeof spoonId !== "string" || !spoonId) {
@@ -806,6 +890,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   if (d1) {
     const answered = await handleRecipeDetailActionOnD1(d1, intent, userId, id, formData);
     if (answered?.kind === "success") return { success: true };
+    if (answered?.kind === "coverChanged") return { success: true, intent: answered.intent };
     if (answered?.kind === "newCookbook") {
       return { success: true, newCookbook: { id: answered.newCookbook.id, title: answered.newCookbook.title } };
     }
@@ -932,37 +1017,15 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     return handleCreateFirstPhotoCover(database, userId, id, recipe, formData, context);
   }
 
+  // With a D1 binding the cover choices were answered on D1 above; these are the fallbacks.
   if (intent === "setRecipeCover") {
-    const coverId = formData.get("coverId");
-    const variant = formData.get("variant");
-    if (typeof coverId !== "string" || !coverId) {
-      throw new Response("coverId is required", { status: 400 });
-    }
-    if (variant !== "image" && variant !== "stylized") {
-      throw new Response("Invalid cover variant", { status: 400 });
-    }
-    await setActiveRecipeCover(database, {
-      recipeId: id,
-      coverId,
-      variant: variant as RecipeCoverVariant,
-    }, requestD1(context));
+    await setActiveRecipeCover(database, activeCoverChoice(formData, id));
     return { success: true, intent: "setRecipeCover" };
   }
 
   if (intent === "setRecipeNoCover") {
-    if (formData.get("confirmNoCover") !== "true") {
-      throw new Response("confirmNoCover is required", { status: 400 });
-    }
+    assertNoCoverConfirmed(formData);
     const updatedAt = new Date();
-    const d1 = requestD1(context);
-    if (d1) {
-      // One atomic batch: the cleared cover (with the recipe touch) and the cookbook touch.
-      await writeExistingRecipeOnD1(d1, id, [
-        recipeUpdateStatement(id, { activeCoverId: null, activeCoverVariant: null, coverMode: "none" }, updatedAt),
-        cookbooksForRecipeTouchStatement(id, updatedAt),
-      ]);
-      return { success: true, intent: "setRecipeNoCover" };
-    }
     await database.$transaction(async (tx) => {
       await tx.recipe.update({
         where: { id },
@@ -1132,35 +1195,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   }
 
   if (intent === "archiveRecipeCover") {
-    const coverId = formData.get("coverId");
-    if (typeof coverId !== "string" || !coverId) {
-      throw new Response("coverId is required", { status: 400 });
-    }
-    const replacementCoverId = formData.get("replacementCoverId");
-    const replacementVariant = formData.get("replacementVariant");
-    if (
-      typeof replacementCoverId === "string" &&
-      replacementCoverId &&
-      replacementVariant !== "image" &&
-      replacementVariant !== "stylized"
-    ) {
-      throw new Response("replacementVariant is required", { status: 400 });
-    }
-
+    const input = archiveCoverChoice(formData, id);
     try {
-      await archiveRecipeCover(database, {
-        recipeId: id,
-        coverId,
-        replacementCoverId:
-          typeof replacementCoverId === "string" && replacementCoverId
-            ? replacementCoverId
-            : null,
-        replacementVariant:
-          replacementVariant === "image" || replacementVariant === "stylized"
-            ? replacementVariant
-            : null,
-        confirmNoCover: formData.get("confirmNoCover") === "true",
-      }, requestD1(context));
+      await archiveRecipeCover(database, input);
     } catch (error) {
       throw new Response((error as Error).message, { status: 400 });
     }

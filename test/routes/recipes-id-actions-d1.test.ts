@@ -1,7 +1,7 @@
 // @vitest-environment node
 // The recipe page's action with a D1 binding: saving to a cookbook, taking a recipe out, making a
-// cookbook from the Save dialog and deleting a cook all answer from D1, even when the request's
-// Prisma client never answers (as in a poisoned isolate).
+// cookbook from the Save dialog, deleting a cook and the owner's cover choices all answer from
+// D1, even when the request's Prisma client never answers (as in a poisoned isolate).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
@@ -55,16 +55,20 @@ describe("recipes.$id action on a D1 binding", () => {
     await cleanupDatabase();
   });
 
-  async function post(fields: Record<string, string>, binding: unknown = d1.binding): Promise<ActionResult> {
+  async function post(
+    fields: Record<string, string>,
+    binding: unknown = d1.binding,
+    id: string = recipeId,
+  ): Promise<ActionResult> {
     const body = new UndiciFormData();
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     return action({
-      request: new UndiciRequest(`http://localhost/recipes/${recipeId}`, {
+      request: new UndiciRequest(`http://localhost/recipes/${id}`, {
         method: "POST",
         headers: { cookie: await sessionCookie(chefId) },
         body,
       }) as unknown as Request,
-      params: { id: recipeId },
+      params: { id },
       context: { cloudflare: { env: { DB: binding } } } as never,
     } as never) as Promise<ActionResult>;
   }
@@ -136,11 +140,58 @@ describe("recipes.$id action on a D1 binding", () => {
     await expect(post({ intent: "createCookbookAndSave", title: "Breads" }, broken)).rejects.toThrow("disk I/O error");
   });
 
+  it("sets, archives and clears the owner's cover without a Prisma client", async () => {
+    const ownId = (await db.recipe.create({ data: { title: "Soup", chefId } })).id;
+    const [first, second] = await Promise.all(["one", "two"].map((name) =>
+      db.recipeCover.create({ data: { recipeId: ownId, imageUrl: `https://example.com/${name}.jpg`, sourceType: "chef-upload" } })));
+    await db.recipe.update({ where: { id: ownId }, data: { activeCoverId: first!.id, activeCoverVariant: "image", coverMode: "manual" } });
+    const recipe = () => db.recipe.findUniqueOrThrow({ where: { id: ownId } });
+
+    expect(await post({ intent: "setRecipeCover", coverId: second!.id, variant: "image" }, d1.binding, ownId))
+      .toEqual({ success: true, intent: "setRecipeCover" });
+    expect(await recipe()).toMatchObject({ activeCoverId: second!.id, activeCoverVariant: "image" });
+
+    expect(await post({
+      intent: "archiveRecipeCover", coverId: second!.id, replacementCoverId: first!.id, replacementVariant: "image",
+    }, d1.binding, ownId)).toEqual({ success: true, intent: "archiveRecipeCover" });
+    expect((await recipe()).activeCoverId).toBe(first!.id);
+    expect((await db.recipeCover.findUniqueOrThrow({ where: { id: second!.id } })).status).toBe("archived");
+
+    expect(await post({ intent: "setRecipeNoCover", confirmNoCover: "true" }, d1.binding, ownId))
+      .toEqual({ success: true, intent: "setRecipeNoCover" });
+    expect(await recipe()).toMatchObject({ activeCoverId: null, activeCoverVariant: null, coverMode: "none" });
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
+  it("answers the cover choices' 400, 403 and 404 as the Prisma path does", async () => {
+    const ownId = (await db.recipe.create({ data: { title: "Soup", chefId } })).id;
+    const cover = await db.recipeCover.create({ data: { recipeId: ownId, imageUrl: "https://example.com/c.jpg", sourceType: "chef-upload" } });
+    await db.recipe.update({ where: { id: ownId }, data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" } });
+    const answer = (fields: Record<string, string>, id = ownId) =>
+      post(fields, d1.binding, id).then(() => null, (error: Response) => error.status);
+
+    expect(await answer({ intent: "setRecipeCover", variant: "image" })).toBe(400);
+    expect(await answer({ intent: "setRecipeCover", coverId: cover.id, variant: "poster" })).toBe(400);
+    expect(await answer({ intent: "setRecipeNoCover" })).toBe(400);
+    expect(await answer({ intent: "archiveRecipeCover" })).toBe(400);
+    expect(await answer({ intent: "archiveRecipeCover", coverId: cover.id, replacementCoverId: "other" })).toBe(400);
+    const refused = await post({ intent: "archiveRecipeCover", coverId: cover.id }, d1.binding, ownId).catch((error: Response) => error);
+    expect(await (refused as Response).text()).toBe("Archiving the active cover requires a replacement or confirmNoCover");
+
+    // Someone else's recipe answers 403; a missing or deleted one answers 404.
+    expect(await answer({ intent: "setRecipeNoCover", confirmNoCover: "true" }, recipeId)).toBe(403);
+    expect(await answer({ intent: "setRecipeNoCover", confirmNoCover: "true" }, "missing")).toBe(404);
+    await db.recipe.update({ where: { id: ownId }, data: { deletedAt: new Date() } });
+    expect(await answer({ intent: "setRecipeNoCover", confirmNoCover: "true" })).toBe(404);
+    expect(await db.recipeCover.count({ where: { recipeId: ownId, status: "archived" } })).toBe(0);
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
   it("leaves other intents, and a cookbook intent without a cookbook, to the Prisma path", async () => {
     platform.getRequestDb.mockImplementation(async () => db);
     // The chef does not own the recipe, so the owner check answers 403.
     await expect(post({ intent: "addToCookbook" })).rejects.toMatchObject({ status: 403 });
-    await expect(post({ intent: "setRecipeNoCover" })).rejects.toMatchObject({ status: 403 });
+    await expect(post({ intent: "createCoverFromSpoon", spoonId: "any" })).rejects.toMatchObject({ status: 403 });
     expect(platform.getRequestDb).toHaveBeenCalledTimes(2);
   });
 });
