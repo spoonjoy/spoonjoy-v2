@@ -2221,13 +2221,15 @@ describe("spoonjoy MCP tools", () => {
     });
     const unit = await context.db.unit.create({ data: { name: `finite-unit-${suffix}` } });
     const ingredientRef = await context.db.ingredientRef.create({ data: { name: `finite-ref-${suffix}` } });
+    // Each quantity is finite; their sum (2e308) overflows to Infinity. Number.MAX_VALUE itself
+    // would not do: Prisma hands a driver adapter that one double as NULL.
     await context.db.ingredient.createMany({
       data: [
         {
           id: `finite-a-${suffix}`,
           recipeId: recipe.id,
           stepNum: step.stepNum,
-          quantity: Number.MAX_VALUE,
+          quantity: 1e308,
           unitId: unit.id,
           ingredientRefId: ingredientRef.id,
         },
@@ -2235,7 +2237,7 @@ describe("spoonjoy MCP tools", () => {
           id: `finite-b-${suffix}`,
           recipeId: recipe.id,
           stepNum: step.stepNum,
-          quantity: Number.MAX_VALUE,
+          quantity: 1e308,
           unitId: unit.id,
           ingredientRefId: ingredientRef.id,
         },
