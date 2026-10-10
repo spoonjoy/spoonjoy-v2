@@ -1,0 +1,367 @@
+name: QA Hang Repro
+
+# Reproduces the Cloudflare 1101 "Worker's code had hung" failure on run-scoped QA stacks and
+# compares candidate fixes against a baseline in one shared load session.
+#
+# One job, so every variant is loaded at the same time from the same runner:
+#   1. check the inputs and name every variant's run scope (`<run id>-<attempt><index>`, a
+#      per-run name, so the hourly QA Run Sweep deletes anything a run leaves behind);
+#   2. fetch, install and build each ref for QA (no Cloudflare token);
+#   3. give each ref its own QA stack through scripts/qa-run-scope.mjs, the same way Journeys
+#      does (empty D1, migrations, deploy, verify), and seed the QA kitchen personas;
+#   4. start one Worker tail per stack, run the load phases (with client aborts, without, or
+#      both) against every stack at once, then stop the tails;
+#   5. reduce each tail to counts in the job and upload only those counts and the client's
+#      per-request records; raw tails and credentials never leave the runner;
+#   6. stop the tails (again, if still running) and delete every stack, whatever happened.
+#
+# Manual dispatch only. It deploys only run-scoped QA Workers and D1 databases; it never touches
+# shared QA or production.
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Baseline ref (branch, tag or commit)
+        type: string
+        default: main
+      variant_refs:
+        description: Up to three variant refs, separated by spaces
+        type: string
+        required: true
+      aborts:
+        description: Which load phases to run
+        type: choice
+        options:
+          - both
+          - with-aborts
+          - without-aborts
+        default: both
+      loops:
+        description: Concurrent request loops per stack
+        type: string
+        default: "24"
+      duration_seconds:
+        description: Seconds per load phase
+        type: string
+        default: "300"
+      abort_share:
+        description: Share of requests the client aborts in the with-aborts phase (0 to 1)
+        type: string
+        default: "0.4"
+      abort_window_ms:
+        description: Aborted requests are aborted at a random time up to this many milliseconds
+        type: string
+        default: "150"
+      write_share:
+        description: Share of requests that are writes (0 to 1)
+        type: string
+        default: "0.15"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-hang-repro
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PRISMA_HIDE_UPDATE_MESSAGE: "1"
+  # Credentials, raw tails and variant checkouts live here, outside the workspace and every
+  # uploaded path.
+  REPRO_PRIVATE: ${{ github.workspace }}/../qa-hang-repro-private
+  # Only this directory is uploaded.
+  REPRO_RESULTS: ${{ github.workspace }}/qa-hang-repro-results
+
+jobs:
+  repro:
+    if: github.repository == 'spoonjoy/spoonjoy-v2'
+    name: hang repro
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Require Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required."
+            exit 1
+          fi
+
+      # Inputs reach the shell only as environment variables, and are checked before use.
+      # variants.tsv (index, label, ref) is written first, so teardown knows every run scope
+      # even if a later step fails.
+      - name: Check the inputs
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+          VARIANT_REFS: ${{ inputs.variant_refs }}
+          ABORTS: ${{ inputs.aborts }}
+          LOOPS: ${{ inputs.loops }}
+          DURATION_SECONDS: ${{ inputs.duration_seconds }}
+          ABORT_SHARE: ${{ inputs.abort_share }}
+          ABORT_WINDOW_MS: ${{ inputs.abort_window_ms }}
+          WRITE_SHARE: ${{ inputs.write_share }}
+        run: |
+          set -euo pipefail
+          ref_pattern='^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$'
+          read -r -a variants <<< "$VARIANT_REFS"
+          if [ "${#variants[@]}" -lt 1 ] || [ "${#variants[@]}" -gt 3 ]; then
+            echo "::error::variant_refs must name one to three refs."; exit 1
+          fi
+          for ref in "$BASELINE_REF" "${variants[@]}"; do
+            if ! [[ "$ref" =~ $ref_pattern ]] || [[ "$ref" == *..* ]]; then
+              echo "::error::Not a plain git ref: $ref"; exit 1
+            fi
+          done
+          [[ "$LOOPS" =~ ^[0-9]{1,2}$ ]] && [ "$LOOPS" -ge 1 ] && [ "$LOOPS" -le 64 ] || { echo "::error::loops must be 1 to 64."; exit 1; }
+          [[ "$DURATION_SECONDS" =~ ^[0-9]{1,4}$ ]] && [ "$DURATION_SECONDS" -ge 30 ] && [ "$DURATION_SECONDS" -le 900 ] || { echo "::error::duration_seconds must be 30 to 900."; exit 1; }
+          [[ "$ABORT_WINDOW_MS" =~ ^[0-9]{1,5}$ ]] && [ "$ABORT_WINDOW_MS" -ge 1 ] && [ "$ABORT_WINDOW_MS" -le 10000 ] || { echo "::error::abort_window_ms must be 1 to 10000."; exit 1; }
+          for share in "$ABORT_SHARE" "$WRITE_SHARE"; do
+            [[ "$share" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] || { echo "::error::abort_share and write_share must be between 0 and 1."; exit 1; }
+          done
+          case "$ABORTS" in
+            both) phases="with-aborts without-aborts" ;;
+            with-aborts|without-aborts) phases="$ABORTS" ;;
+            *) echo "::error::aborts must be both, with-aborts or without-aborts."; exit 1 ;;
+          esac
+          mkdir -p "$REPRO_PRIVATE" "$REPRO_RESULTS"
+          : > "$REPRO_RESULTS/variants.tsv"
+          index=0
+          for ref in "$BASELINE_REF" "${variants[@]}"; do
+            label="$index-$(basename "$ref" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n-' '-' | cut -c1-40)"
+            printf '%s\t%s\t%s\n' "$index" "$label" "$ref" >> "$REPRO_RESULTS/variants.tsv"
+            index=$((index + 1))
+          done
+          {
+            echo "REPRO_PHASES=$phases"
+            echo "REPRO_LOOPS=$LOOPS"
+            echo "REPRO_SECONDS=$DURATION_SECONDS"
+            echo "REPRO_ABORT_SHARE=$ABORT_SHARE"
+            echo "REPRO_ABORT_WINDOW_MS=$ABORT_WINDOW_MS"
+            echo "REPRO_WRITE_SHARE=$WRITE_SHARE"
+          } >> "$GITHUB_ENV"
+          cat "$REPRO_RESULTS/variants.tsv"
+
+      - name: Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      # No Cloudflare token here: `pnpm install` runs dependency install scripts from each ref's
+      # lockfile.
+      - name: Fetch and build every ref for QA
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          : > "$REPRO_PRIVATE/shas.tsv"
+          while IFS=$'\t' read -r index label ref <&3; do
+            dir="$REPRO_PRIVATE/variants/$index"
+            echo "::group::$label ($ref)"
+            git fetch --no-tags --depth=1 origin "$ref"
+            git worktree add --detach "$dir" FETCH_HEAD
+            printf '%s\t%s\t%s\t%s\n' "$index" "$label" "$ref" "$(git -C "$dir" rev-parse HEAD)" >> "$REPRO_PRIVATE/shas.tsv"
+            (
+              cd "$dir"
+              pnpm install --frozen-lockfile
+              pnpm prisma:generate
+              SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight
+              CLOUDFLARE_ENV=qa pnpm run build
+              SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight
+            )
+            echo "::endgroup::"
+          done 3< "$REPRO_RESULTS/variants.tsv"
+          cp "$REPRO_PRIVATE/shas.tsv" "$REPRO_RESULTS/variants.tsv"
+
+      # Each ref gets the stack Journeys would give it, under run scope <run id>-<attempt><index>.
+      # GITHUB_ENV is unset for these commands, so no ref's URL is exported to later steps.
+      - name: Create, deploy and seed every stack
+        id: stacks
+        timeout-minutes: 30
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPRO_PRIVATE/credentials"
+          : > "$REPRO_PRIVATE/targets.tsv"
+          while IFS=$'\t' read -r index label ref sha <&3; do
+            echo "::group::$label ($ref $sha)"
+            (
+              cd "$REPRO_PRIVATE/variants/$index"
+              export GITHUB_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}${index}"
+              env -u GITHUB_ENV node scripts/qa-run-scope.mjs prepare
+              pnpm run qa:migrate
+              env -u GITHUB_ENV node scripts/qa-run-scope.mjs deploy
+              env -u GITHUB_ENV node scripts/qa-run-scope.mjs verify
+              credentials="$REPRO_PRIVATE/credentials/$index.json"
+              pnpm run seed:qa:kitchen -- --credentials-out "$credentials"
+              for p in chef friend newbie; do
+                echo "::add-mask::$(jq -r ".${p}.password" "$credentials")"
+              done
+              while IFS= read -r password; do
+                echo "::add-mask::$password"
+              done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$credentials")
+              printf '%s\t%s\t%s\t%s\n' "$index" "$label" "$(jq -r .workerName .qa-run/scope.json)" "$(jq -r .baseUrl .qa-run/scope.json)" >> "$REPRO_PRIVATE/targets.tsv"
+            )
+            echo "::endgroup::"
+          done 3< "$REPRO_RESULTS/variants.tsv"
+          cut -f2-4 "$REPRO_PRIVATE/targets.tsv"
+
+      # One tail per stack, each in its own process group (setsid) so stopping it also stops
+      # wrangler's child process. The group ids are kept in tail-pgids for the stop steps.
+      - name: Start the Worker tails
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPRO_PRIVATE/tails"
+          : > "$REPRO_PRIVATE/tail-pgids"
+          while IFS=$'\t' read -r index label worker _ <&3; do
+            (
+              cd "$REPRO_PRIVATE/variants/$index"
+              setsid ./node_modules/.bin/wrangler tail "$worker" --format json \
+                > "$REPRO_PRIVATE/tails/$label.json" 2> "$REPRO_PRIVATE/tails/$label.err" < /dev/null &
+              echo $! >> "$REPRO_PRIVATE/tail-pgids"
+            )
+          done 3< "$REPRO_PRIVATE/targets.tsv"
+          # The JSON format prints no "connected" line; give the sockets a moment to open.
+          sleep 15
+
+      # Every stack is loaded at the same time in each phase. Phases run one after another with
+      # a 40 s gap, so each phase's tail window holds only its own invocations.
+      - name: Run the load phases
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          : > "$REPRO_RESULTS/phases.tsv"
+          first=true
+          for phase in $REPRO_PHASES; do
+            if [ "$first" = false ]; then sleep 40; fi
+            first=false
+            share=0
+            if [ "$phase" = with-aborts ]; then share="$REPRO_ABORT_SHARE"; fi
+            mkdir -p "$REPRO_RESULTS/$phase"
+            since="$(date +%s%3N)"
+            pids=()
+            while IFS=$'\t' read -r index label _ url <&3; do
+              node scripts/qa-hang-repro-load.mjs "$label" "$url" "$REPRO_PRIVATE/credentials/$index.json" "$REPRO_RESULTS/$phase" \
+                "$REPRO_SECONDS" "$REPRO_LOOPS" "$share" "$REPRO_ABORT_WINDOW_MS" "$REPRO_WRITE_SHARE" < /dev/null &
+              pids+=("$!")
+            done 3< "$REPRO_PRIVATE/targets.tsv"
+            failed=0
+            for pid in "${pids[@]}"; do wait "$pid" || failed=1; done
+            printf '%s\t%s\t%s\n' "$phase" "$since" "$(date +%s%3N)" >> "$REPRO_RESULTS/phases.tsv"
+            if [ "$failed" -ne 0 ]; then echo "::error::A load client failed in phase $phase."; exit 1; fi
+          done
+
+      # Stops every tail, then reduces each raw tail to counts: per phase with
+      # scripts/qa-hang-repro-analyze.mjs (outcomes, hung invocations, exception classes,
+      # stalls, client 5xx matched by ray id) and for the whole session with
+      # scripts/summarize-worker-tail.jq, the allowlist Journeys uses. Neither copies a header,
+      # cookie, body or query string. The raw tails are deleted in the next step.
+      - name: Stop the Worker tails and summarise them
+        if: always()
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          if [ -f "$REPRO_PRIVATE/tail-pgids" ]; then
+            while read -r pgid; do kill -TERM -- "-$pgid" 2>/dev/null || true; done < "$REPRO_PRIVATE/tail-pgids"
+            sleep 3
+            while read -r pgid; do kill -KILL -- "-$pgid" 2>/dev/null || true; done < "$REPRO_PRIVATE/tail-pgids"
+          fi
+          [ -f "$REPRO_PRIVATE/targets.tsv" ] || exit 0
+          mkdir -p "$REPRO_RESULTS/analysis" "$REPRO_RESULTS/worker-tail"
+          while IFS=$'\t' read -r _ label _ _ <&3; do
+            raw="$REPRO_PRIVATE/tails/$label.json"
+            events="$REPRO_PRIVATE/tails/$label.events.ndjson"
+            : > "$events"
+            if [ -f "$raw" ]; then sed -n '/^{/,$p' "$raw" | jq -c '.' > "$events" 2>/dev/null || true; fi
+            jq -s --argjson tailAliveAtStop false -f scripts/summarize-worker-tail.jq "$events" \
+              > "$REPRO_RESULTS/worker-tail/$label.worker-tail-summary.json" || true
+            if [ -f "$REPRO_RESULTS/phases.tsv" ]; then
+              while IFS=$'\t' read -r phase since until <&4; do
+                requests="$REPRO_RESULTS/$phase/$label.requests.ndjson"
+                [ -f "$requests" ] || continue
+                node scripts/qa-hang-repro-analyze.mjs analyze "$label" "$phase" "$events" "$requests" \
+                  "$since" "$((until + 35000))" "$REPRO_RESULTS/analysis/$label.$phase.analysis.json" || true
+              done 4< "$REPRO_RESULTS/phases.tsv"
+            fi
+            if [ -s "$REPRO_PRIVATE/tails/$label.err" ]; then tail -n 5 "$REPRO_PRIVATE/tails/$label.err" || true; fi
+          done 3< "$REPRO_PRIVATE/targets.tsv"
+
+      - name: Compare the variants
+        if: always()
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          [ -d "$REPRO_RESULTS/analysis" ] || exit 0
+          node scripts/qa-hang-repro-analyze.mjs report "$REPRO_RESULTS/analysis" "$REPRO_RESULTS/variants.tsv" \
+            "$REPRO_RESULTS/report.md" "$REPRO_RESULTS/verdict.json" && cat "$REPRO_RESULTS/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove credentials and raw tails
+        if: always()
+        run: rm -rf "$REPRO_PRIVATE/credentials" "$REPRO_PRIVATE/tails"
+
+      # Uploads only qa-hang-repro-results/: variants.tsv, phases.tsv, the client's per-request
+      # records and summaries (method, path, status, timing, abort time, ray id, error class),
+      # the per-phase analyses, the worker-tail summaries and the report. Credentials and raw
+      # tails were written outside the workspace and are already deleted.
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: qa-hang-repro-results
+          path: qa-hang-repro-results/
+          retention-days: 30
+          include-hidden-files: false
+          if-no-files-found: warn
+
+      # Stops any tail still running (a stopped tail must never outlive its Worker), then deletes
+      # every ref's Worker and D1 by its run scope, whether or not it was created. A failure only
+      # warns; the hourly QA Run Sweep deletes any run stack older than three hours.
+      - name: Delete every stack
+        if: always()
+        timeout-minutes: 15
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: |
+          set -uo pipefail
+          if [ -f "$REPRO_PRIVATE/tail-pgids" ]; then
+            while read -r pgid; do kill -KILL -- "-$pgid" 2>/dev/null || true; done < "$REPRO_PRIVATE/tail-pgids"
+          fi
+          [ -f "$REPRO_RESULTS/variants.tsv" ] || exit 0
+          while IFS=$'\t' read -r index label rest <&3; do
+            dir="$REPRO_PRIVATE/variants/$index"
+            [ -f "$dir/scripts/qa-run-scope.mjs" ] || dir="$GITHUB_WORKSPACE"
+            (
+              cd "$dir"
+              GITHUB_RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT}${index}" env -u GITHUB_ENV node scripts/qa-run-scope.mjs teardown
+            ) || echo "::warning::Teardown of $label failed; the QA Run Sweep deletes it after three hours."
+          done 3< "$REPRO_RESULTS/variants.tsv"
+
+      - name: Report Cloudflare API requests
+        if: always()
+        continue-on-error: true
+        run: node scripts/count-cloudflare-requests.mjs summary "$RUNNER_TEMP/cloudflare-requests.log" | tee -a "$GITHUB_STEP_SUMMARY"

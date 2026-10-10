@@ -51,7 +51,7 @@ test.describe("Sign-in", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("logging out ends the session", async ({ browser }) => {
+  test("opening /logout keeps the session; the Log out button ends it", async ({ browser }) => {
     // A fresh context signed in through the real form, not the stored newbie storage state,
     // so this test owns the session it logs out and neither depends on nor disturbs the
     // stored persona sessions that signed-in journeys start from.
@@ -65,8 +65,16 @@ test.describe("Sign-in", () => {
     const consoleWatcher = watchConsole(page);
     try {
       await signInThroughForm(page, "newbie");
+      // Opening /logout (as a link or an image tag on another site would) must not sign out.
+      // A signed-in visitor sees a confirm page instead.
       await page.goto("/logout");
-      await expect(page).not.toHaveURL(/\/recipes/);
+      await expect(page.getByRole("heading", { name: "Log out of Spoonjoy?" })).toBeVisible();
+      await page.goto("/account/settings");
+      await expect(page).toHaveURL(/\/account\/settings/);
+      // The Log out button posts the sign-out: the top navigation on desktop, the settings
+      // header on a phone. Only the one for this viewport is visible.
+      await page.getByRole("button", { name: "Log out" }).click();
+      await expect(page).toHaveURL(/\/login/);
       await page.goto("/account/settings");
       await expect(page).toHaveURL(/\/login/);
     } catch (error) {

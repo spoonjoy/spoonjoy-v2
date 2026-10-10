@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
+// Ingredient names get digit-only random suffixes: the shopping list picks an icon and category by matching words such as "cod" or "egg" inside the name, and a random letter suffix can contain one.
 import { Request as UndiciRequest } from "undici";
 import { action } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
@@ -190,7 +191,7 @@ describe("API v1 shopping-list mutations", () => {
 
     const addBody = {
       clientMutationId: "client-add-1",
-      name: `Eggs ${faker.string.alphanumeric(6)}`,
+      name: `Eggs ${faker.string.numeric(10)}`,
       quantity: 12,
       unit: "Each",
       categoryKey: "dairy",
@@ -267,7 +268,7 @@ describe("API v1 shopping-list mutations", () => {
     const legacyAdd = await action(routeArgs(
       mutationRequest("POST", "shopping-list/items", fixture.legacyCredential.token, "req_add_item_legacy", {
         clientMutationId: "client-add-legacy",
-        name: `Milk ${faker.string.alphanumeric(6)}`,
+        name: `Milk ${faker.string.numeric(10)}`,
       }),
       "shopping-list/items",
     ));
@@ -279,7 +280,7 @@ describe("API v1 shopping-list mutations", () => {
       headers: { Cookie: cookie, "Content-Type": "application/json", "X-Request-Id": "req_add_item_session" },
       body: JSON.stringify({
         clientMutationId: "client-add-session",
-        name: `Bread ${faker.string.alphanumeric(6)}`,
+        name: `Bread ${faker.string.numeric(10)}`,
         categoryKey: null,
         iconKey: null,
       }),
@@ -289,9 +290,9 @@ describe("API v1 shopping-list mutations", () => {
 
   it("accepts DELETE clientMutationId from the JSON body, query string, or header", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const bodyItem = await createExistingItem(db, fixture.user.id, `Body delete eggs ${faker.string.alphanumeric(6)}`);
-    const queryItem = await createExistingItem(db, fixture.user.id, `Query delete milk ${faker.string.alphanumeric(6)}`);
-    const headerItem = await createExistingItem(db, fixture.user.id, `Header delete bread ${faker.string.alphanumeric(6)}`);
+    const bodyItem = await createExistingItem(db, fixture.user.id, `Body delete eggs ${faker.string.numeric(10)}`);
+    const queryItem = await createExistingItem(db, fixture.user.id, `Query delete milk ${faker.string.numeric(10)}`);
+    const headerItem = await createExistingItem(db, fixture.user.id, `Header delete bread ${faker.string.numeric(10)}`);
 
     const bodyDelete = await action(routeArgs(
       mutationRequest("DELETE", `shopping-list/items/${bodyItem.id}`, fixture.credential.token, "req_delete_body_id", {
@@ -356,8 +357,8 @@ describe("API v1 shopping-list mutations", () => {
 
   it("restores matching items, rejects unknown fields, and requires clientMutationId", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const unit = await getOrCreateUnit(db, `box ${faker.string.alphanumeric(6)}`.toLowerCase());
-    const ingredientRef = await getOrCreateIngredientRef(db, `restored ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const unit = await getOrCreateUnit(db, `box ${faker.string.numeric(10)}`.toLowerCase());
+    const ingredientRef = await getOrCreateIngredientRef(db, `restored ${faker.string.numeric(10)}`.toLowerCase());
     const existing = await db.shoppingListItem.create({
       data: {
         shoppingListId: fixture.list.id,
@@ -458,7 +459,7 @@ describe("API v1 shopping-list mutations", () => {
 
   it("uses the active null-unit identity and leaves its tombstone under the post-0025 index", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const ingredientRef = await getOrCreateIngredientRef(db, `active first ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const ingredientRef = await getOrCreateIngredientRef(db, `active first ${faker.string.numeric(10)}`.toLowerCase());
     await withPost0025ShoppingIdentityIndex(db, async () => {
       const tombstone = await db.shoppingListItem.create({
         data: {
@@ -526,7 +527,7 @@ describe("API v1 shopping-list mutations", () => {
 
   it("restores the earliest sortIndex then BINARY id tombstone under the post-0025 index", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const ingredientRef = await getOrCreateIngredientRef(db, `tombstone first ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const ingredientRef = await getOrCreateIngredientRef(db, `tombstone first ${faker.string.numeric(10)}`.toLowerCase());
     await withPost0025ShoppingIdentityIndex(db, async () => {
       const tiedBinaryLater = await db.shoppingListItem.create({
         data: {
@@ -616,7 +617,7 @@ describe("API v1 shopping-list mutations", () => {
 
   it("adds to the item another request creates between the read and the conditional insert", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const ingredientRef = await getOrCreateIngredientRef(db, `conflict reread ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const ingredientRef = await getOrCreateIngredientRef(db, `conflict reread ${faker.string.numeric(10)}`.toLowerCase());
     // Another request creates the item between this one's read and its conditional insert,
     // so the insert writes nothing and the add goes to the winner instead.
     const client = db as any;
@@ -690,7 +691,7 @@ describe("API v1 shopping-list mutations", () => {
 
   it("creates the item again when it is deleted between the read and the addition", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const existing = await createExistingItem(db, fixture.user.id, `vanishing ${faker.string.alphanumeric(6)}`.toLowerCase());
+    const existing = await createExistingItem(db, fixture.user.id, `vanishing ${faker.string.numeric(10)}`.toLowerCase());
     const name = (await db.ingredientRef.findUniqueOrThrow({ where: { id: existing.ingredientRefId } })).name;
     const client = db as any;
     const originalExecuteRaw = client.$executeRaw.bind(client);
@@ -727,7 +728,7 @@ describe("API v1 shopping-list mutations", () => {
     const response = await action(routeArgs(
       mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_vanished_list", {
         clientMutationId: "vanished-list",
-        name: `vanished list ${faker.string.alphanumeric(6)}`,
+        name: `vanished list ${faker.string.numeric(10)}`,
         quantity: 1,
       }),
       "shopping-list/items",
@@ -740,7 +741,7 @@ describe("API v1 shopping-list mutations", () => {
 
   it("covers mutation validation, duplicate text, false checks, and missing item boundaries", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const duplicateName = `Duplicate Pears ${faker.string.alphanumeric(6)}`;
+    const duplicateName = `Duplicate Pears ${faker.string.numeric(10)}`;
     const firstAdd = await action(routeArgs(
       mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_duplicate_first", {
         clientMutationId: "duplicate-first",
@@ -772,7 +773,7 @@ describe("API v1 shopping-list mutations", () => {
       mutation: { clientMutationId: "duplicate-second", replayed: false },
     });
 
-    const nullQuantityName = `Null Quantity Plums ${faker.string.alphanumeric(6)}`;
+    const nullQuantityName = `Null Quantity Plums ${faker.string.numeric(10)}`;
     const nullQuantityFirst = await action(routeArgs(
       mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_null_quantity_first", {
         clientMutationId: "null-quantity-first",
@@ -917,7 +918,7 @@ describe("API v1 shopping-list mutations", () => {
     const fixture = await createShoppingMutationFixture(db);
     const addBody = {
       clientMutationId: "idem-add",
-      name: `Replay Apples ${faker.string.alphanumeric(6)}`,
+      name: `Replay Apples ${faker.string.numeric(10)}`,
       quantity: 2,
     };
     const first = await action(routeArgs(
@@ -965,7 +966,7 @@ describe("API v1 shopping-list mutations", () => {
     expectEnvelopeHeaders(differentOperation, "req_idem_operation_conflict");
     expectErrorEnvelope(await readJson(differentOperation), "req_idem_operation_conflict", "idempotency_conflict", 409);
 
-    const secondItem = await createExistingItem(db, fixture.user.id, `Replay Bananas ${faker.string.alphanumeric(6)}`);
+    const secondItem = await createExistingItem(db, fixture.user.id, `Replay Bananas ${faker.string.numeric(10)}`);
     const checkBody = { clientMutationId: "idem-check-path", checked: true };
     const checkFirst = await action(routeArgs(
       mutationRequest("PATCH", `shopping-list/items/${firstPayload.data.item.id}`, fixture.credential.token, "req_idem_check_first", checkBody),
@@ -988,7 +989,7 @@ describe("API v1 shopping-list mutations", () => {
     const reuseAfterExpiry = await action(routeArgs(
       mutationRequest("POST", "shopping-list/items", fixture.credential.token, "req_idem_expired_reuse", {
         clientMutationId: "idem-add",
-        name: `Expired Key Grapes ${faker.string.alphanumeric(6)}`,
+        name: `Expired Key Grapes ${faker.string.numeric(10)}`,
       }),
       "shopping-list/items",
     ));
@@ -1001,7 +1002,7 @@ describe("API v1 shopping-list mutations", () => {
 
   it("enforces shopping_list:write before mutation body handling", async () => {
     const fixture = await createShoppingMutationFixture(db);
-    const item = await createExistingItem(db, fixture.user.id, `Scoped Oranges ${faker.string.alphanumeric(6)}`);
+    const item = await createExistingItem(db, fixture.user.id, `Scoped Oranges ${faker.string.numeric(10)}`);
 
     const missingAuth = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/shopping-list/items", {
       method: "POST",

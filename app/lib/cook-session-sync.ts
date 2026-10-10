@@ -217,9 +217,9 @@ export function clearCookProgressCache(): void {
 
 /**
  * Removes signed-in cook progress cached for anyone but `currentUserId` (everyone when signed
- * out). This covers the ways a session ends without the logout form: visiting /logout directly,
- * "Sign out everywhere" or a password change on another device, and session expiry. Signed-out
- * progress stays: it belongs to whoever is using the browser now.
+ * out). This covers the ways a session ends without the logout form: "Sign out everywhere" or a
+ * password change on another device, and session expiry. Signed-out progress stays: it belongs to
+ * whoever is using the browser now.
  */
 export function clearOtherUsersCookProgressCache(currentUserId: string | null): void {
   const keep = currentUserId === null ? null : `${SIGNED_IN_COOK_PROGRESS_KEY_PREFIX}${currentUserId}:`;

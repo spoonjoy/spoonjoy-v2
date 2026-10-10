@@ -1,11 +1,14 @@
 import type { Route } from "./+types/photos.$";
+import { defaultPhotoCache, deliverPhoto } from "~/lib/photo-delivery.server";
 import { getCloudflareEnv } from "~/lib/route-platform.server";
 
 /**
  * Resource route to serve photos from Cloudflare R2 storage.
- * Matches URLs like /photos/profiles/userId/timestamp-randomId.jpg
+ * Matches URLs like /photos/profiles/userId/timestamp-randomId.jpg, optionally with `?w=<width>`
+ * for a size variant. In the deployed Worker, `workers/app.ts` answers these before React Router;
+ * this route covers the same URLs wherever that fast path does not run.
  */
-export async function loader({ params, context }: Route.LoaderArgs) {
+export async function loader({ params, context, request }: Route.LoaderArgs) {
   const key = params["*"];
 
   if (!key) {
@@ -19,15 +22,17 @@ export async function loader({ params, context }: Route.LoaderArgs) {
     throw new Response("Photo storage not available", { status: 503 });
   }
 
-  const object = await r2Bucket.get(key);
+  const response = await deliverPhoto({
+    request,
+    key,
+    bucket: r2Bucket,
+    cache: defaultPhotoCache(),
+    waitUntil: context.cloudflare?.ctx?.waitUntil?.bind(context.cloudflare.ctx),
+  });
 
-  if (!object) {
+  if (response.status === 404) {
     throw new Response("Photo not found", { status: 404 });
   }
 
-  const headers = new Headers();
-  headers.set("Content-Type", object.httpMetadata?.contentType || "image/jpeg");
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
-
-  return new Response(object.body, { headers });
+  return response;
 }

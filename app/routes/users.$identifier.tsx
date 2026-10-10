@@ -13,13 +13,10 @@ import { CookbookCard } from "~/components/pantry/CookbookCard";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { listSpoonsByChef } from "~/lib/recipe-spoon.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { LocalDate } from "~/components/ui/local-date";
-import {
-  countFellowChefs,
-  countKitchenVisitors,
-} from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
@@ -69,88 +66,29 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     throw new Response("User not found", { status: 404 });
   }
 
-  const database = await getRequestDb(context);
   const currentUserId = await getUserId(request, context.cloudflare?.env);
 
-  const userByUsername = await database.user.findUnique({
-    where: { username: identifier },
-    select: {
-      id: true,
-      username: true,
-      photoUrl: true,
-      createdAt: true,
-    },
-  });
-
-  const profileUser = userByUsername ?? await database.user.findUnique({
-    where: { id: identifier },
-    select: {
-      id: true,
-      username: true,
-      photoUrl: true,
-      createdAt: true,
-    },
-  });
+  const d1 = requestD1(context);
+  const readInput = { identifier, recipeLimit: null, recipeOffset: 0 };
+  const {
+    profileUser,
+    matchedBy,
+    recipes,
+    cookbooks,
+    recentSpoons: recentSpoonsRaw,
+    fellowChefsCount,
+    kitchenVisitorsCount,
+  } = d1
+    ? await readChefProfileFromD1(d1, readInput)
+    : await readChefProfileWithPrisma(await getRequestDb(context), readInput);
 
   if (!profileUser) {
     throw new Response("User not found", { status: 404 });
   }
 
-  if (!userByUsername && identifier === profileUser.id) {
+  if (matchedBy === "id") {
     return redirect(`/users/${profileUser.username}`);
   }
-
-  const [recipes, cookbooks, recentSpoonsRaw, fellowChefsCount, kitchenVisitorsCount] = await Promise.all([
-    database.recipe.findMany({
-      where: {
-        chefId: profileUser.id,
-        deletedAt: null,
-      },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        servings: true,
-        activeCoverId: true,
-        activeCoverVariant: true,
-        coverMode: true,
-        covers: {
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        },
-      },
-    }),
-    database.cookbook.findMany({
-      where: { authorId: profileUser.id },
-      orderBy: { updatedAt: "desc" },
-      include: {
-        _count: {
-          select: { recipes: true },
-        },
-        recipes: {
-          take: 4,
-          orderBy: { createdAt: "desc" },
-          include: {
-            recipe: {
-              select: {
-                id: true,
-                title: true,
-                activeCoverId: true,
-                activeCoverVariant: true,
-                coverMode: true,
-                covers: {
-                  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-                },
-              },
-            },
-          },
-        },
-      },
-    }),
-    listSpoonsByChef(database, profileUser.id, { limit: 10 }),
-    countFellowChefs(database, profileUser.id),
-    countKitchenVisitors(database, profileUser.id),
-  ]);
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);

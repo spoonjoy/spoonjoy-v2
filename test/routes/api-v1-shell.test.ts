@@ -512,6 +512,7 @@ describe("/api/v1 shell", () => {
       authentication_required: 401,
       invalid_token: 401,
       insufficient_scope: 403,
+      email_change_requires_web: 403,
       not_found: 404,
       method_not_allowed: 405,
       idempotency_conflict: 409,

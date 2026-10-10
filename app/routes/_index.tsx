@@ -14,6 +14,7 @@ import { Heading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
 
 const LANDING_FOOD_PHOTOS = [
   {
@@ -152,6 +153,7 @@ export default function Index() {
           <img
             src={LANDING_FOOD_PHOTOS[2].src}
             alt={LANDING_FOOD_PHOTOS[2].alt}
+            {...HERO_IMAGE_PROPS}
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(34,32,28,0.82),rgba(34,32,28,0.34)_58%,rgba(34,32,28,0.10)),linear-gradient(0deg,rgba(34,32,28,0.56),transparent_42%)]" />

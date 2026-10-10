@@ -1,0 +1,7 @@
+# Cloudflare Workers static asset headers.
+# Vite fingerprints every file under /assets/ with a content hash, so a URL there
+# never changes meaning. Let browsers and the edge keep them for a year without
+# revalidating. Unhashed files (sw.js, manifest, icons, images) keep the default
+# revalidating policy.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

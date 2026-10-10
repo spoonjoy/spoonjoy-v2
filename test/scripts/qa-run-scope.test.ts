@@ -6,11 +6,18 @@ import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import {
   API_RETRY_DELAYS_MS,
+  DEPLOY_RETRY_DELAYS_MS,
   GENERATED_BUILD_CONFIG,
   MASKED_RUN_SECRETS,
   MAX_RETRY_AFTER_MS,
   MAX_RUN_WORKERS,
   READY_TIMEOUT_MS,
+  READY_POLL_MS,
+  ASSETS_READY_TIMEOUT_MS,
+  ASSET_FETCH_CONCURRENCY,
+  CLIENT_ASSETS_DIR,
+  builtAssetPaths,
+  waitForBuiltAssets,
   REQUIRED_RUN_SECRETS,
   SECRETS_FILE,
   STALE_AFTER_MS,
@@ -24,6 +31,7 @@ import {
   defaultCliErrorHandler,
   defaultFs,
   defaultSleep,
+  deploy,
   generateVapidKeys,
   isCliEntry,
   main,
@@ -38,6 +46,7 @@ import {
   sweepStaleRunStacks,
   teardown,
   verify,
+  QA_ERROR_LOGS_VAR,
 } from "../../scripts/qa-run-scope.mjs";
 import { QA_BASE_URL, QA_D1_DATABASE_ID } from "../../scripts/script-environment.mjs";
 import { expectConsoleError } from "../warning-policy";
@@ -85,7 +94,9 @@ function fakeFs(files: Record<string, string> = {}) {
     chmod: vi.fn((path: string, mode: number) => {
       modes.set(path, mode);
     }),
-    exists: vi.fn((path: string) => store.has(path)),
+    exists: vi.fn((path: string) => store.has(path) || [...store.keys()].some((key) => key.startsWith(`${path}/`))),
+    listDir: vi.fn((path: string) =>
+      [...store.keys()].filter((key) => key.startsWith(`${path}/`)).map((key) => key.slice(path.length + 1).split("/")[0])),
     mkdir: vi.fn(),
     remove: vi.fn((path: string) => {
       removed.push(path);
@@ -142,6 +153,24 @@ describe("requireGitHubActions", () => {
     expect(() => requireGitHubActions({})).toThrow(/only inside GitHub Actions/);
     expect(() => requireGitHubActions({ GITHUB_ACTIONS: "true" })).not.toThrow();
   });
+
+  it("runs on a developer machine only with the explicit SPOONJOY_QA_LOCAL_RUN=1 opt-in", () => {
+    expect(() => requireGitHubActions({ SPOONJOY_QA_LOCAL_RUN: "1" })).not.toThrow();
+  });
+
+  it("accepts no other spelling of the local-run opt-in", () => {
+    for (const value of ["", "0", "true", "yes", "TRUE", " 1", "1 "]) {
+      expect(() => requireGitHubActions({ SPOONJOY_QA_LOCAL_RUN: value })).toThrow(/only inside GitHub Actions/);
+    }
+    expect(() => requireGitHubActions({ GITHUB_ACTIONS: "false", SPOONJOY_QA_LOCAL_RUN: "0" })).toThrow(
+      /SPOONJOY_QA_LOCAL_RUN=1/,
+    );
+  });
+
+  it("still needs a numeric run identity on a local run, so the stack keeps a sweepable per-run name", () => {
+    expect(() => runIdentity({ SPOONJOY_QA_LOCAL_RUN: "1" })).toThrow(/whole numbers/);
+    expect(runIdentity({ SPOONJOY_QA_LOCAL_RUN: "1", GITHUB_RUN_ID: "1001", GITHUB_RUN_ATTEMPT: "2" })).toEqual(IDENTITY);
+  });
 });
 
 describe("scopeWranglerConfig", () => {
@@ -163,6 +192,22 @@ describe("scopeWranglerConfig", () => {
     expect(scopedTop).toEqual(realTop);
     // The input is not mutated.
     expect(REAL_WRANGLER.env.qa.d1_databases[0].database_id).toBe(QA_D1_DATABASE_ID);
+  });
+
+  it("turns on the QA error log line for the run's own Worker only, never for shared QA or production", () => {
+    const scoped = scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID);
+    const generated = scopeGeneratedBuildConfig(generatedBuildConfig(), IDENTITY, RUN_DB_ID);
+
+    expect(QA_ERROR_LOGS_VAR).toBe("SPOONJOY_QA_ERROR_LOGS");
+    expect(scoped.env.qa.vars[QA_ERROR_LOGS_VAR]).toBe("1");
+    expect(generated.vars[QA_ERROR_LOGS_VAR]).toBe("1");
+    expect(scoped.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    expect(REAL_WRANGLER.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    expect(REAL_WRANGLER.env.qa.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    // A shared QA config that already carried the switch would be more than an identity change.
+    const sharedWithSwitch = structuredClone(REAL_WRANGLER);
+    sharedWithSwitch.env.qa.vars[QA_ERROR_LOGS_VAR] = "1";
+    expect(() => scopeWranglerConfig(sharedWithSwitch, IDENTITY, RUN_DB_ID)).toThrow(/already sets SPOONJOY_QA_ERROR_LOGS/);
   });
 
   it("refuses a config whose env.qa does not name shared QA", () => {
@@ -585,6 +630,10 @@ function scopedFiles(overrides: Record<string, unknown> = {}) {
   return fakeFs({
     [STATE_FILE]: JSON.stringify(state),
     [WRANGLER_CONFIG]: JSON.stringify(scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID)),
+    [`${CLIENT_ASSETS_DIR}/entry.client-AbC_1.js`]: "",
+    [`${CLIENT_ASSETS_DIR}/createLucideIcon-Xy9.js`]: "",
+    [`${CLIENT_ASSETS_DIR}/root-Q1.css`]: "",
+    [`${CLIENT_ASSETS_DIR}/nested/ignored.txt`]: "",
   });
 }
 
@@ -595,20 +644,28 @@ function verifyExec({ secrets = REQUIRED_RUN_SECRETS, migrations = "✅ No migra
   });
 }
 
-function site(routes: Record<string, { status: number; body?: string } | Error>) {
+type Route = { status: number; body?: string; type?: string };
+
+function site(routes: Record<string, Route | Error>) {
   return vi.fn(async (url: string) => {
     const path = url.slice(IDENTITY.baseUrl.length);
     const route = routes[path] ?? { status: 404 };
     if (route instanceof Error) throw route;
-    return { status: route.status, text: async () => route.body ?? "" };
+    const headers = new Headers(route.type === undefined ? {} : { "content-type": route.type });
+    return { status: route.status, headers, text: async () => route.body ?? "" };
   });
 }
 
-const LIVE = {
+const JS = "application/javascript; charset=utf-8";
+const LIVE: Record<string, Route> = {
   "/health": { status: 200 },
   "/": { status: 200, body: '<link rel="modulepreload" href="/assets/entry.client-AbC_1.js">' },
-  "/assets/entry.client-AbC_1.js": { status: 200 },
+  "/assets/entry.client-AbC_1.js": { status: 200, type: JS },
+  "/assets/createLucideIcon-Xy9.js": { status: 200, type: JS },
+  "/assets/root-Q1.css": { status: 200, type: "text/css; charset=utf-8" },
 };
+const ASSET_URLS = ["/assets/createLucideIcon-Xy9.js", "/assets/entry.client-AbC_1.js", "/assets/root-Q1.css"]
+  .map((path) => `${IDENTITY.baseUrl}${path}`);
 
 describe("verify", () => {
   it("passes once the run's Worker has its secrets, no pending migration, and serves /health and a hashed asset", async () => {
@@ -622,7 +679,65 @@ describe("verify", () => {
       `${IDENTITY.baseUrl}/health`,
       `${IDENTITY.baseUrl}/`,
       `${IDENTITY.baseUrl}/assets/entry.client-AbC_1.js`,
+      ...ASSET_URLS,
     ]);
+  });
+
+  it("waits until every built asset is live, re-fetching only the ones still missing", async () => {
+    let lucideTries = 0;
+    const live = site(LIVE);
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/assets/createLucideIcon-Xy9.js") && ++lucideTries < 3) {
+        if (lucideTries === 1) throw new Error("socket hang up");
+        throw "connection reset";
+      }
+      return live(url, init);
+    });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    await verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep, log });
+
+    expect(sleep).toHaveBeenCalledTimes(2);
+    const assetFetches = fetchImpl.mock.calls.map(([url]) => url).slice(3);
+    expect(assetFetches).toEqual([...ASSET_URLS, ASSET_URLS[0], ASSET_URLS[0]]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("all 3 hashed assets live"));
+  });
+
+  it.each([
+    ["a lazily loaded chunk keeps returning 404", { "/assets/createLucideIcon-Xy9.js": { status: 404 } }, "/assets/createLucideIcon-Xy9.js returned 404"],
+    ["a script is served as HTML", { "/assets/createLucideIcon-Xy9.js": { status: 200, type: "text/html" } }, "/assets/createLucideIcon-Xy9.js was served as text/html"],
+    ["a stylesheet has no content-type", { "/assets/root-Q1.css": { status: 200 } }, "/assets/root-Q1.css was served as no content-type"],
+  ])("fails with a clear assets-not-live message when %s", async (_name, broken, reason) => {
+    let clock = 0;
+    const sleep = vi.fn(async (ms: number) => {
+      clock += ms;
+    });
+    await expect(verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl: site({ ...LIVE, ...broken }), now: () => clock, sleep, log: vi.fn() }))
+      .rejects.toThrow(`1 of 3 built assets not live on ${IDENTITY.baseUrl} after ${ASSETS_READY_TIMEOUT_MS / 1000} s: ${reason}.`);
+    expect(clock).toBe(ASSETS_READY_TIMEOUT_MS);
+  });
+
+  it("lists at most five problems, fetches in bounded batches, and refuses a missing build", async () => {
+    const files = scopedFiles();
+    const routes: Record<string, Route> = { ...LIVE };
+    for (let index = 0; index < 9; index += 1) files.store.set(`${CLIENT_ASSETS_DIR}/chunk-${index}.js`, "");
+    let inFlight = 0;
+    let peak = 0;
+    const live = site(routes);
+    const fetchImpl = vi.fn(async (url: string) => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return live(url);
+    });
+    await expect(waitForBuiltAssets({ fs: files.fs, fetchImpl, now: () => 0, sleep: vi.fn(), baseUrl: IDENTITY.baseUrl, timeoutMs: 0 }))
+      .rejects.toThrow(/^9 of 12 built assets not live .*chunk-4\.js returned 404; …\.$/);
+    expect(peak).toBeLessThanOrEqual(ASSET_FETCH_CONCURRENCY);
+
+    const empty = fakeFs();
+    expect(() => builtAssetPaths(empty.fs)).toThrow(`${CLIENT_ASSETS_DIR} has no built assets; run the QA build before verify.`);
+    expect(() => builtAssetPaths(fakeFs({ [`${CLIENT_ASSETS_DIR}/only-a-dir/x.js`]: "" }).fs)).toThrow(/no built assets/);
   });
 
   it("waits for a new hostname to come up", async () => {
@@ -631,8 +746,7 @@ describe("verify", () => {
       calls += 1;
       if (calls === 1) throw new Error("ENOTFOUND");
       if (calls === 2) throw "reset";
-      const route = LIVE[url.slice(IDENTITY.baseUrl.length) as keyof typeof LIVE];
-      return { status: route.status, text: async () => ("body" in route ? route.body : "") };
+      return site(LIVE)(url);
     });
     const sleep = vi.fn(async () => {});
     await verify({ env: RUN_ENV, exec: verifyExec().exec, fs: scopedFiles().fs, fetchImpl, now: Date.now, sleep, log: vi.fn() });
@@ -654,16 +768,59 @@ describe("verify", () => {
       .rejects.toThrow(`${IDENTITY.baseUrl} did not become ready within ${READY_TIMEOUT_MS / 1000} s: ${reason}.`);
   });
 
+  it("retries a brand-new Worker that Cloudflare does not know yet, then carries on", async () => {
+    const notFound = Object.assign(new Error("Command failed: pnpm exec wrangler secret list"), {
+      stderr: `✘ [ERROR] Worker "${IDENTITY.workerName}" (env: qa) not found.\n`,
+    });
+    const answers = verifyExec();
+    const exec = vi.fn(answers.exec)
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce("This Worker does not exist on your account. [code: 10007]");
+    const sleep = vi.fn(async () => {});
+    await verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() });
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(READY_POLL_MS);
+    expect(exec.mock.calls.map(([, args]) => args.slice(2, 4).join(" "))).toEqual([
+      "secret list", "secret list", "secret list", "d1 migrations",
+    ]);
+  });
+
+  it("fails as a setup error when Cloudflare still does not know the Worker after the readiness window", async () => {
+    let clock = 0;
+    const sleep = vi.fn(async (ms: number) => {
+      clock += ms;
+    });
+    const exec = vi.fn(async (_file: string, args: string[]) => {
+      if (args.includes("migrations")) {
+        throw Object.assign(new Error("Command failed"), { stdout: "", stderr: `Worker "${IDENTITY.workerName}" (env: qa) not found.\n` });
+      }
+      return verifyExec().exec(_file, args);
+    });
+    await expect(verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: () => clock, sleep, log: vi.fn() }))
+      .rejects.toThrow(`Setup error, not a test failure: Cloudflare still did not know ${IDENTITY.workerName} ${READY_TIMEOUT_MS / 1000} s after deploy: Worker "${IDENTITY.workerName}" (env: qa) not found.`);
+    expect(clock).toBe(READY_TIMEOUT_MS);
+  });
+
+  it("never retries a Cloudflare failure that is not a not-found", async () => {
+    const exec = vi.fn(async () => {
+      throw new Error("Authentication error [code: 10000]");
+    });
+    const sleep = vi.fn();
+    await expect(verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() }))
+      .rejects.toThrow("Authentication error [code: 10000]");
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it("fails on a missing secret or a pending migration", async () => {
-    await expect(verify({ env: RUN_ENV, exec: verifyExec({ secrets: ["SESSION_SECRET"] }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: verifyExec({ secrets: ["SESSION_SECRET"] }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow("The run's Worker is missing secret(s): VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT.");
-    await expect(verify({ env: RUN_ENV, exec: verifyExec({ migrations: "0029_x.sql pending" }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: verifyExec({ migrations: "0029_x.sql pending" }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/still has pending migrations/);
     const noJson = fakeExec({ "secret list": "Authentication error" });
-    await expect(verify({ env: RUN_ENV, exec: noJson.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: noJson.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/no JSON results/);
     const nullRows = fakeExec({ "secret list": "[null]" });
-    await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/missing secret/);
   });
 
@@ -680,6 +837,63 @@ describe("verify", () => {
     const shared = scopedFiles({ workerName: "spoonjoy-v2-qa" });
     await expect(verify({ env: RUN_ENV, exec: verifyExec().exec, fs: shared.fs, fetchImpl: site(LIVE), log: vi.fn() }))
       .rejects.toThrow(/Refusing to touch spoonjoy-v2-qa/);
+  });
+});
+
+describe("deploy", () => {
+  const notFound = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
+    stdout: "Uploaded 127 of 127 assets\n",
+    stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2/subdomain) failed.\n  This Worker does not exist on your account. [code: 10007]\n",
+  });
+
+  it("deploys the build to this run's Worker with the run's secrets", async () => {
+    const exec = vi.fn(async () => ({ stdout: "Deployed spoonjoy-v2-qa-run-1001-2\n", stderr: "" }));
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep: vi.fn(), log })).toBe(1);
+    expect(exec).toHaveBeenCalledWith(
+      "pnpm",
+      ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE],
+      { maxBuffer: 64 * 1024 * 1024 },
+    );
+    expect(log).toHaveBeenCalledWith("Deployed spoonjoy-v2-qa-run-1001-2\n");
+  });
+
+  it("deploys again when Cloudflare does not yet know the brand-new script (code 10007)", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(notFound)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "warning\n" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+    expect(log).toHaveBeenCalledWith(`${notFound.stdout}${notFound.stderr}`);
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare did not yet know ${IDENTITY.workerName} (code 10007); deploying again in 5 s.`);
+    expect(log).toHaveBeenLastCalledWith("Deployed\nwarning\n");
+  });
+
+  it("gives up after the last retry, and never retries any other failure", async () => {
+    const always = vi.fn().mockRejectedValue(notFound);
+    const sleep = vi.fn(async () => {});
+    await expect(deploy({ env: RUN_ENV, exec: always, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(notFound);
+    expect(always).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
+
+    const other = Object.assign(new Error("build failed"), { stderr: "Authentication error [code: 10000]" });
+    const once = vi.fn().mockRejectedValue(other);
+    await expect(deploy({ env: RUN_ENV, exec: once, fs: scopedFiles().fs, sleep: vi.fn(), log: vi.fn() })).rejects.toBe(other);
+    expect(once).toHaveBeenCalledTimes(1);
+
+    const bare = vi.fn().mockRejectedValue(undefined);
+    await expect(deploy({ env: RUN_ENV, exec: bare, fs: scopedFiles().fs, sleep: vi.fn(), log: vi.fn() })).rejects.toBeUndefined();
+  });
+
+  it("deploys only to this run's own stack, and only in GitHub Actions", async () => {
+    const files = scopedFiles();
+    files.store.set(WRANGLER_CONFIG, JSON.stringify(REAL_WRANGLER));
+    const exec = vi.fn();
+    await expect(deploy({ env: RUN_ENV, exec, fs: files.fs, sleep: vi.fn(), log: vi.fn() })).rejects.toThrow(/does not name this run's QA stack/);
+    await expect(deploy({ env: { ...RUN_ENV, GITHUB_ACTIONS: undefined }, exec, fs: scopedFiles().fs, sleep: vi.fn(), log: vi.fn() })).rejects.toThrow(/GitHub Actions/);
+    expect(exec).not.toHaveBeenCalled();
   });
 });
 
@@ -756,6 +970,44 @@ describe("teardown", () => {
   });
 });
 
+describe("local runs (SPOONJOY_QA_LOCAL_RUN=1)", () => {
+  const LOCAL_ENV = {
+    SPOONJOY_QA_LOCAL_RUN: "1",
+    GITHUB_RUN_ID: "1001",
+    GITHUB_RUN_ATTEMPT: "2",
+    CLOUDFLARE_API_TOKEN: "token",
+    CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+  };
+  const secrets = () => ({ SESSION_SECRET: "s3cret", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_SUBJECT: IDENTITY.baseUrl, POSTHOG_DISABLED: "1" });
+
+  it("prepares and tears down the same per-run stack it would in CI, and exports nothing to GITHUB_ENV", async () => {
+    const files = fakeFs(preparedFiles());
+    const api = fakeApi();
+    const state = await prepare({ env: LOCAL_ENV, fs: files.fs, api, now: Date.now, log: vi.fn(), secrets });
+
+    expect(state).toEqual({ ...IDENTITY, databaseId: RUN_DB_ID });
+    expect(files.json(WRANGLER_CONFIG).env.qa.name).toBe(IDENTITY.workerName);
+    expect(files.appended).toEqual([]);
+
+    expect(await teardown({ env: LOCAL_ENV, fs: files.fs, api, log: vi.fn() })).toBe(true);
+    expect(api.deleteWorker).toHaveBeenCalledWith(IDENTITY.workerName);
+    expect(api.deleteDatabase).toHaveBeenCalledWith(RUN_DB_ID);
+  });
+
+  it("still refuses a config that does not name shared QA, and a run id that is not a number", async () => {
+    const production = structuredClone(REAL_WRANGLER);
+    production.env.qa.vars.SPOONJOY_BASE_URL = "https://spoonjoy.app";
+    const api = fakeApi();
+    await expect(
+      prepare({ env: LOCAL_ENV, fs: fakeFs({ ...preparedFiles(), [WRANGLER_CONFIG]: JSON.stringify(production) }).fs, api, now: Date.now, log: vi.fn(), secrets }),
+    ).rejects.toThrow(/does not target/);
+    await expect(
+      prepare({ env: { ...LOCAL_ENV, GITHUB_RUN_ID: "mine" }, fs: fakeFs(preparedFiles()).fs, api, now: Date.now, log: vi.fn(), secrets }),
+    ).rejects.toThrow(/whole numbers/);
+    expect(api.createDatabase).not.toHaveBeenCalled();
+  });
+});
+
 describe("main and the CLI guard", () => {
   it("dispatches each command and rejects anything else", async () => {
     const api = fakeApi();
@@ -766,6 +1018,8 @@ describe("main and the CLI guard", () => {
     await main(["prepare"], { env: RUN_ENV, fs: files.fs, api, log, secrets, now: Date.now });
     expect(api.createDatabase).toHaveBeenCalled();
 
+    expect(await main(["deploy"], { env: RUN_ENV, exec: vi.fn(async () => ({ stdout: "", stderr: "" })), fs: files.fs, log })).toBe(1);
+    files.store.set(`${CLIENT_ASSETS_DIR}/entry.client-AbC_1.js`, "");
     await main(["verify"], { env: RUN_ENV, exec: verifyExec().exec, fs: files.fs, fetchImpl: site(LIVE), log });
     expect(await main(["teardown"], { env: RUN_ENV, fs: files.fs, api, log })).toBe(true);
     expect(await main(["sweep"], { env: RUN_ENV, api, log })).toEqual({ swept: 0, remainingRunWorkers: 0 });
@@ -838,8 +1092,9 @@ describe("Journeys workflow", () => {
   const step = (name: string) => steps[index(name)];
 
   it("no longer queues runs for one shared QA Worker", () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(["deploy-shared-qa", "fork-notice", "journeys"]);
-    expect(journeys.needs).toBeUndefined();
+    expect(Object.keys(workflow.jobs).sort()).toEqual(["changes", "deploy-shared-qa", "fork-notice", "journeys", "queue-tested"]);
+    // The only jobs journeys waits for are the cheap scope and merge-queue lookups, never a QA turn or lock.
+    expect(journeys.needs).toEqual(["queue-tested", "changes"]);
     const text = JSON.stringify(steps);
     expect(text).not.toMatch(/qa-lock|wait-for-qa-turn|deploy:qa/);
     expect(workflow.env.SPOONJOY_JOURNEYS_BASE_URL).toBeUndefined();
@@ -863,7 +1118,7 @@ describe("Journeys workflow", () => {
     expect(step("Check the generated QA build").run).toContain("SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1");
     expect(step("Create this run's QA stack").id).toBe("qa-run");
     expect(step("Create this run's QA stack").run).toBe("node scripts/qa-run-scope.mjs prepare");
-    expect(step("Deploy this build to this run's QA Worker").run).toBe(`pnpm exec wrangler deploy --env qa --secrets-file ${SECRETS_FILE}`);
+    expect(step("Deploy this build to this run's QA Worker").run).toBe("node scripts/qa-run-scope.mjs deploy");
     expect(step("Check this run's QA Worker is live").run).toBe("node scripts/qa-run-scope.mjs verify");
     expect(step("Start QA Worker tail").run).toContain('wrangler tail "$SPOONJOY_QA_RUN_WORKER"');
   });
@@ -911,12 +1166,71 @@ describe("Journeys workflow", () => {
     }
   });
 
+  it("skips a pull request's suite only on an explicit no from the scope check, which never runs outside pull requests", () => {
+    // `!= 'false'`: a failed or missing scope answer runs the suite.
+    expect(journeys.if).toContain("needs.changes.outputs.journeys != 'false'");
+    const changes = workflow.jobs.changes;
+    expect(changes.if).toBe("github.event_name == 'pull_request'");
+    expect(changes.permissions).toEqual({ contents: "read", "pull-requests": "read" });
+    expect(changes.outputs).toEqual({ journeys: "${{ steps.scope.outputs.journeys }}" });
+    // The base branch's copy of the script decides, so a pull request cannot widen the list for its
+    // own run, and the job never sees a secret.
+    expect(changes.steps).toEqual([
+      {
+        uses: "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+        with: {
+          ref: "${{ github.event.pull_request.base.sha }}",
+          "sparse-checkout": "scripts/journeys-scope.mjs",
+          "sparse-checkout-cone-mode": false,
+          "persist-credentials": false,
+        },
+      },
+      { uses: "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38", with: { "node-version": "22" } },
+      {
+        name: "Decide whether this pull request needs the suite",
+        id: "scope",
+        env: { GH_TOKEN: "${{ github.token }}", PR_NUMBER: "${{ github.event.pull_request.number }}" },
+        run: "node scripts/journeys-scope.mjs",
+      },
+    ]);
+    expect(JSON.stringify(changes)).not.toMatch(/secrets\./);
+    // A job skipped by its own `if` never evaluates an expression name, so the required check's
+    // name must stay a plain string.
+    expect(journeys.name).toBe("journeys");
+  });
+
+  it("cancels only a superseded pull-request run, whose teardown still runs", () => {
+    expect(workflow.concurrency).toEqual({
+      group: "journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+      "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    });
+    expect(step("Delete this run's QA stack").if).toBe("always()");
+    // Bounded, so a hung teardown cannot hold a cancelled run for the whole job timeout.
+    for (const name of ["Rotate persona passwords", "Clean up disposable QA data", "Delete this run's QA stack"]) {
+      expect([name, step(name)["timeout-minutes"]]).toEqual([name, 5]);
+    }
+  });
+
+  it("skips main's journeys only when the merge queue's Journeys run of the same commit passed", () => {
+    expect(journeys.if).toBe("${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}");
+    const queueTested = workflow.jobs["queue-tested"];
+    expect(queueTested.if).toBe("github.event_name == 'push'");
+    expect(queueTested.permissions).toEqual({ actions: "read", contents: "read" });
+    expect(queueTested.outputs).toEqual({ tested: "${{ steps.lookup.outputs.tested }}" });
+    expect(queueTested.steps.at(-1)).toEqual({
+      name: "Ask whether the merge queue already tested this commit",
+      id: "lookup",
+      env: { GH_TOKEN: "${{ github.token }}" },
+      run: "node scripts/workflow-security.mjs queue-tested-journeys",
+    });
+  });
+
   it("keeps shared QA a mirror of main: deployed only after main's journeys pass, one deploy at a time", () => {
     const deploy = workflow.jobs["deploy-shared-qa"];
-    expect(deploy.needs).toBe("journeys");
-    expect(deploy.if).toContain("github.event_name == 'push'");
-    expect(deploy.if).toContain("github.ref == 'refs/heads/main'");
-    expect(deploy.if).toContain("needs.journeys.result == 'success'");
+    expect(deploy.needs).toEqual(["queue-tested", "journeys"]);
+    // After a queue merge, main's journeys skip because the queue's run of the same commit passed;
+    // shared QA still mirrors main then, and never after a journeys failure.
+    expect(deploy.if).toBe("${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.journeys.result == 'success' || (needs.journeys.result == 'skipped' && needs.queue-tested.outputs.tested == 'true')) }}");
     expect(deploy.concurrency).toEqual({ group: "journeys-shared-qa-deploy", "cancel-in-progress": false });
     const deploySteps: Array<{ name?: string; id?: string; if?: string; run?: string; env?: Record<string, string> }> = deploy.steps;
     expect(deploySteps.at(-1)).toMatchObject({

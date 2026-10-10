@@ -24,15 +24,19 @@
 // while it runs, and a copy would let cleanup delete R2 objects shared QA still references.
 //
 // How the rest of the workflow follows: `prepare` rewrites this CI checkout's wrangler.json
-// `env.qa` (Worker name, D1 binding, SPOONJOY_BASE_URL) and the generated build/server/wrangler.json
+// `env.qa` (Worker name, D1 binding, SPOONJOY_BASE_URL, plus SPOONJOY_QA_ERROR_LOGS=1, which only a
+// per-run Worker carries) and the generated build/server/wrangler.json
 // to the run's identity, after the QA preflight has checked both against the shared QA identity.
 // Every later `--env qa` command (migrations, deploy, seed, rotate, cleanup) then targets the
 // run's own stack with no other change. Only identity fields change; anything else differing is
-// an error. It refuses to run outside GitHub Actions, so it never rewrites a developer's config.
+// an error. It refuses to run outside GitHub Actions, so it never rewrites a developer's config
+// by accident; SPOONJOY_QA_LOCAL_RUN=1 is the explicit opt-in for a local run (see below).
 //
 // Commands (node scripts/qa-run-scope.mjs <command>):
 //   prepare   sweep stale run stacks, create this run's empty D1, rewrite the configs, write the
 //             per-run secrets file, export the run's base URL.
+//   deploy    deploy this build to the run's Worker with the run's secrets, retrying when
+//             Cloudflare does not yet know the brand-new script (code 10007).
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
 //             and the URL serves /health and a hashed asset.
 //   teardown  delete this run's Worker and D1 (always; a failure only warns, and a later sweep
@@ -42,6 +46,16 @@
 //
 // Environment (set by GitHub Actions): GITHUB_ACTIONS, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
 // GITHUB_ENV, CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+//
+// Local run: prepare, deploy, verify and teardown also run outside GitHub Actions when
+// SPOONJOY_QA_LOCAL_RUN=1 (exactly "1"). Use a throwaway worktree, because prepare rewrites
+// wrangler.json and the generated build config in place. Set GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT
+// to whole numbers of your own (pick a run id no CI run uses, such as 9 followed by nine digits),
+// plus CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; leave GITHUB_ENV unset. For example:
+//   SPOONJOY_QA_LOCAL_RUN=1 GITHUB_RUN_ID=9200000001 GITHUB_RUN_ATTEMPT=1 \
+//     node scripts/qa-run-scope.mjs prepare
+// Always run teardown with the same values when you are done; the scheduled sweep deletes a
+// forgotten stack once it is STALE_AFTER_MS old.
 import { execFile as nodeExecFile } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import {
@@ -49,6 +63,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -77,6 +92,14 @@ export const REQUIRED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PUBLIC_KEY", "VAPI
 export const MASKED_RUN_SECRETS = ["SESSION_SECRET", "VAPID_PRIVATE_KEY"];
 export const READY_TIMEOUT_MS = 3 * 60_000;
 export const READY_POLL_MS = 5_000;
+// Every hashed file the build will serve from /assets/, and how long a fresh Worker gets to serve
+// them all. A brand-new Worker can answer /health while some static assets still 404 (seen on a
+// lazily loaded chunk), so the journeys would fail on their first page load for a reason that is
+// not the PR's.
+export const CLIENT_ASSETS_DIR = join("build", "client", "assets");
+export const ASSETS_READY_TIMEOUT_MS = 2 * 60_000;
+export const ASSET_FETCH_CONCURRENCY = 8;
+export const EXPECTED_ASSET_TYPES = { ".js": /javascript/, ".css": /^text\/css/ };
 // Cloudflare's API allows 1,200 requests per 5 minutes per user, shared by every concurrent run.
 // A rate-limited request backs off for up to about 4 minutes in all (each delay jittered between
 // half and one and a half times its base, and never shorter than the response's Retry-After), so a
@@ -86,6 +109,12 @@ export const MAX_RETRY_AFTER_MS = 5 * 60_000;
 // Workers Paid allows 500 scripts per account. Far more run Workers than concurrent runs means
 // teardown and the sweep are failing, so fail loudly long before the account limit.
 export const MAX_RUN_WORKERS = 100;
+// `wrangler deploy` uploads a brand-new script, then enables its workers.dev subdomain. Right
+// after the upload Cloudflare can still answer "This Worker does not exist on your account.
+// [code: 10007]" (seen on run 37917989293). Deploying again is idempotent (assets already
+// uploaded are skipped), so the deploy is retried after these delays.
+export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
+const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MIGRATION_FILE_PATTERN = /^\d{4}_[A-Za-z0-9_.-]+\.sql$/;
@@ -109,9 +138,18 @@ export function runIdentity(env) {
   };
 }
 
+// A developer can run the per-run commands on purpose, from a throwaway checkout, by setting
+// exactly SPOONJOY_QA_LOCAL_RUN=1. Nothing else changes for a local run: the run still needs a
+// numeric GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT (so its stack keeps a per-run name the scheduled
+// sweep deletes), the configs must still name shared QA before anything is rewritten, and only
+// that run's own Worker and D1 are created or deleted.
+export const LOCAL_RUN_FLAG = "SPOONJOY_QA_LOCAL_RUN";
+
 export function requireGitHubActions(env) {
-  if (env.GITHUB_ACTIONS !== "true") {
-    throw new Error("qa-run-scope rewrites wrangler.json in place, so it runs only inside GitHub Actions.");
+  if (env.GITHUB_ACTIONS !== "true" && env[LOCAL_RUN_FLAG] !== "1") {
+    throw new Error(
+      `qa-run-scope rewrites wrangler.json in place, so it runs only inside GitHub Actions, or locally from a throwaway checkout with ${LOCAL_RUN_FLAG}=1.`,
+    );
   }
 }
 
@@ -142,10 +180,18 @@ function assertCanonicalQa(section, where) {
   }
 }
 
+// The run's own Worker writes each loader or action error as one scrubbed console.error line
+// (app/lib/qa-error-logs.server.ts) for the Journeys tail summary. Only this rewrite sets it, so
+// shared QA and production never log errors to the console.
+export const QA_ERROR_LOGS_VAR = "SPOONJOY_QA_ERROR_LOGS";
+
 function withRunIdentity(section, identity, databaseId) {
+  if (section.vars && QA_ERROR_LOGS_VAR in section.vars) {
+    throw new Error(`The shared QA config already sets ${QA_ERROR_LOGS_VAR}; only a per-run Worker may set it.`);
+  }
   const next = structuredClone(section);
   next.name = identity.workerName;
-  next.vars = { ...next.vars, SPOONJOY_BASE_URL: identity.baseUrl };
+  next.vars = { ...next.vars, SPOONJOY_BASE_URL: identity.baseUrl, [QA_ERROR_LOGS_VAR]: "1" };
   const db = d1Binding(next, "rewritten config");
   db.database_name = identity.databaseName;
   db.database_id = databaseId;
@@ -156,7 +202,10 @@ function withRunIdentity(section, identity, databaseId) {
 function withoutIdentity(section) {
   const copy = structuredClone(section);
   delete copy.name;
-  if (copy.vars) delete copy.vars.SPOONJOY_BASE_URL;
+  if (copy.vars) {
+    delete copy.vars.SPOONJOY_BASE_URL;
+    delete copy.vars[QA_ERROR_LOGS_VAR];
+  }
   for (const entry of copy.d1_databases ?? []) {
     if (entry?.binding === "DB") {
       delete entry.database_name;
@@ -401,6 +450,7 @@ export const defaultFs = {
   exists: existsSync,
   mkdir: mkdirSync,
   remove: rmSync,
+  listDir: readdirSync,
 };
 
 // Creates the run's database. A create retried after a 5xx can find that the first try worked,
@@ -463,6 +513,30 @@ export async function prepare({ env, fs, api, now, log, secrets }) {
   return state;
 }
 
+function outputOf(error) {
+  return `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
+}
+
+export async function deploy({ env, exec, fs, sleep, log }) {
+  requireGitHubActions(env);
+  const state = readState(fs);
+  assertWranglerIsRunScoped(fs, state);
+  const args = ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const { stdout, stderr } = await exec("pnpm", args, { maxBuffer: 64 * 1024 * 1024 });
+      log(`${stdout}${stderr}`);
+      return attempt + 1;
+    } catch (error) {
+      log(outputOf(error));
+      if (!SCRIPT_NOT_FOUND_PATTERN.test(outputOf(error)) || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
+      const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
+      log(`::warning::Cloudflare did not yet know ${state.workerName} (code 10007); deploying again in ${delay / 1000} s.`);
+      await sleep(delay);
+    }
+  }
+}
+
 function readState(fs) {
   const state = readJson(fs, STATE_FILE);
   assertRunNames(state);
@@ -495,18 +569,95 @@ async function waitFor(check, { now, sleep, timeoutMs, describe }) {
   }
 }
 
+export function builtAssetPaths(fs) {
+  const names = fs.exists(CLIENT_ASSETS_DIR) ? fs.listDir(CLIENT_ASSETS_DIR).map(String) : [];
+  const paths = names.filter((name) => /^[^/]+\.[A-Za-z0-9]+$/.test(name)).sort().map((name) => `/assets/${name}`);
+  if (paths.length === 0) throw new Error(`${CLIENT_ASSETS_DIR} has no built assets; run the QA build before verify.`);
+  return paths;
+}
+
+async function assetProblem(fetchImpl, url, path) {
+  try {
+    const response = await fetchImpl(url, { redirect: "manual" });
+    if (response.status !== 200) return `${path} returned ${response.status}`;
+    const expected = EXPECTED_ASSET_TYPES[/\.[A-Za-z0-9]+$/.exec(path)[0]];
+    const type = response.headers?.get?.("content-type") ?? "";
+    if (expected && !expected.test(type)) return `${path} was served as ${type || "no content-type"}`;
+    return null;
+  } catch (error) {
+    return `${path} failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+// Polls every built asset until each returns 200 with the right content-type, re-checking only the
+// ones still missing, and fails with a clear message (not a test failure) after the bound.
+export async function waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl, timeoutMs = ASSETS_READY_TIMEOUT_MS }) {
+  const all = builtAssetPaths(fs);
+  let pending = all;
+  const started = now();
+  for (;;) {
+    const problems = [];
+    for (let index = 0; index < pending.length; index += ASSET_FETCH_CONCURRENCY) {
+      const batch = pending.slice(index, index + ASSET_FETCH_CONCURRENCY);
+      const results = await Promise.all(batch.map((path) => assetProblem(fetchImpl, `${baseUrl}${path}`, path)));
+      results.forEach((problem, offset) => {
+        if (problem) problems.push({ path: batch[offset], problem });
+      });
+    }
+    if (problems.length === 0) return all.length;
+    pending = problems.map(({ path }) => path);
+    if (now() - started >= timeoutMs) {
+      const shown = problems.slice(0, 5).map(({ problem }) => problem).join("; ");
+      throw new Error(
+        `${problems.length} of ${all.length} built assets not live on ${baseUrl} after ${Math.round(timeoutMs / 1000)} s: ${shown}${problems.length > 5 ? "; …" : ""}.`,
+      );
+    }
+    await sleep(READY_POLL_MS);
+  }
+}
+
+// Right after deploy, Cloudflare's API can still say a brand-new script does not exist (seen 1.6 s
+// after "Deployed ... triggers" on #403). Every Cloudflare call verify makes retries a not-found
+// within the readiness window, then fails as a setup error rather than as a suite failure.
+export const CLOUDFLARE_NOT_FOUND_PATTERN = /not found|does not exist|\[code: 10007\]/i;
+
+async function untilCloudflareKnows(task, { now, sleep, deadline, workerName }) {
+  for (;;) {
+    try {
+      return await task();
+    } catch (error) {
+      const text = `${error instanceof Error ? error.message : String(error)}\n${outputOf(error)}`;
+      if (!CLOUDFLARE_NOT_FOUND_PATTERN.test(text)) throw error;
+      if (now() >= deadline) {
+        const reason = text.split("\n").find((line) => CLOUDFLARE_NOT_FOUND_PATTERN.test(line)).trim();
+        throw new Error(
+          `Setup error, not a test failure: Cloudflare still did not know ${workerName} ${Math.round(READY_TIMEOUT_MS / 1000)} s after deploy: ${reason}`,
+        );
+      }
+      await sleep(READY_POLL_MS);
+    }
+  }
+}
+
 export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
   requireGitHubActions(env);
   const state = readState(fs);
   assertWranglerIsRunScoped(fs, state);
+  const known = { now, sleep, deadline: now() + READY_TIMEOUT_MS, workerName: state.workerName };
 
   const secretNames = new Set(
-    parseJsonResults(await runWrangler(exec, ["secret", "list", "--env", "qa", "--format", "json"])).map((row) => row?.name),
+    parseJsonResults(await untilCloudflareKnows(
+      () => runWrangler(exec, ["secret", "list", "--env", "qa", "--format", "json"]),
+      known,
+    )).map((row) => row?.name),
   );
   const missing = REQUIRED_RUN_SECRETS.filter((name) => !secretNames.has(name));
   if (missing.length > 0) throw new Error(`The run's Worker is missing secret(s): ${missing.join(", ")}.`);
 
-  const migrations = await runWrangler(exec, ["d1", "migrations", "list", "DB", "--remote", "--env", "qa"]);
+  const migrations = await untilCloudflareKnows(
+    () => runWrangler(exec, ["d1", "migrations", "list", "DB", "--remote", "--env", "qa"]),
+    known,
+  );
   if (!NO_PENDING_MIGRATIONS_PATTERN.test(migrations)) {
     throw new Error("The run's database still has pending migrations.");
   }
@@ -524,7 +675,9 @@ export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
     return script.status === 200 ? true : `${asset} returned ${script.status}`;
   }, { now, sleep, timeoutMs: READY_TIMEOUT_MS, describe: `${state.baseUrl} did not become ready` });
 
-  log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and hashed assets live.`);
+  const served = await waitForBuiltAssets({ fs, fetchImpl, now, sleep, baseUrl: state.baseUrl });
+
+  log(`${state.baseUrl} serves this build: secrets set, no pending migrations, /health and all ${served} hashed assets live.`);
   return state;
 }
 
@@ -599,10 +752,11 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   const [command] = argv;
   const api = () => deps.api ?? createCloudflareApi({ env, fetchImpl, sleep });
   if (command === "prepare") return prepare({ env, fs, api: api(), now, log, secrets });
+  if (command === "deploy") return deploy({ env, exec, fs, sleep, log });
   if (command === "verify") return verify({ env, exec, fs, fetchImpl, now, sleep, log });
   if (command === "teardown") return teardown({ env, fs, api: api(), log });
   if (command === "sweep") return sweep({ api: api(), now, log });
-  throw new Error("Usage: qa-run-scope.mjs <prepare|verify|teardown|sweep>");
+  throw new Error("Usage: qa-run-scope.mjs <prepare|deploy|verify|teardown|sweep>");
 }
 
 export function isCliEntry(moduleUrl, argv1 = process.argv[1]) {

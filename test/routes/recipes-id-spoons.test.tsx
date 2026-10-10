@@ -432,7 +432,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     render(<Stub initialEntries={["/recipes/r1"]} />);
     await userEvent.click(await screen.findByRole("button", { name: /log cook/i }));
     await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
-    await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
 
     await waitFor(() => {
       expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull();

@@ -44,8 +44,20 @@ describe('Button', () => {
       expect(button).toHaveClass('rounded-[var(--sj-radius-control)]')
       expect(button).toHaveClass('border-[var(--sj-action)]')
       expect(button).toHaveClass('bg-[var(--sj-action)]')
+      // The label has its own token so the dark theme can put a dark label on the amber
+      // (test/styles/primary-button-contrast.test.ts checks every state's contrast).
       expect(button).toHaveClass('text-[var(--sj-on-action)]')
       expect(button?.className).not.toContain('linear-gradient')
+    })
+
+    it('gives a disabled primary button its own colours instead of fading it', () => {
+      const { container } = render(<Button disabled>Save</Button>)
+      const button = container.querySelector('button')
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('data-disabled')
+      expect(button).toHaveClass('data-disabled:bg-[var(--sj-action-disabled)]')
+      expect(button).toHaveClass('data-disabled:text-[var(--sj-on-action-disabled)]')
+      expect(button?.className).not.toContain('opacity')
     })
 
     it('applies destructive styles when destructive variant is used', () => {
