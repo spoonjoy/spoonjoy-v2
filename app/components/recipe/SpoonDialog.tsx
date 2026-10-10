@@ -259,7 +259,7 @@ export function SpoonDialog({
               {isPosting ? (
                 <Loader2 className="size-4 animate-spin" data-slot="icon" aria-hidden="true" />
               ) : null}
-              {isPosting ? submitStatus : "Save spoon"}
+              {isPosting ? submitStatus : "Log cook"}
             </Button>
           </DialogActions>
         </Form>

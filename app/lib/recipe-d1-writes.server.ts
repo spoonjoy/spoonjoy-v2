@@ -153,6 +153,19 @@ export function nameUpsertStatements(
   ];
 }
 
+/** Fails the batch if an ingredient with any of these (normalized) names is already in the recipe. */
+export function ingredientNamesFreeGuard(recipeId: string, ingredientNames: readonly string[]): D1Query {
+  // The names go in as one JSON array: D1 allows at most 100 bound values per statement.
+  return d1Guard(
+    `NOT EXISTS (
+       SELECT 1 FROM "Ingredient" JOIN "IngredientRef" ON "IngredientRef"."id" = "Ingredient"."ingredientRefId"
+       WHERE "Ingredient"."recipeId" = ? AND "IngredientRef"."name" IN (SELECT "value" FROM json_each(?))
+     )`,
+    recipeId,
+    JSON.stringify(ingredientNames),
+  );
+}
+
 /**
  * An ingredient whose unit and ingredient ref are given by name. With the names' upserts
  * earlier in the same batch, both resolve to exactly one row and this inserts exactly one
@@ -256,6 +269,29 @@ export function stepAtGuard(stepId: string, recipeId: string, stepNum: number): 
     recipeId,
     stepNum,
   );
+}
+
+/**
+ * Fails the batch if the recipe now has a step output use that moving step `fromStepNum` to
+ * position `toStepNum` would break, as `validateStepReorderComplete` checks: a step at or
+ * before the new position that uses the moved step's output (moving later), or a step at or
+ * after the new position whose output the moved step uses (moving earlier). The step-number
+ * guards beside it keep those numbers the ones the check read.
+ */
+export function stepReorderDependencyFreeGuard(recipeId: string, fromStepNum: number, toStepNum: number): D1Query {
+  return toStepNum > fromStepNum
+    ? d1Guard(
+      `NOT EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "outputStepNum" = ? AND "inputStepNum" <= ?)`,
+      recipeId,
+      fromStepNum,
+      toStepNum,
+    )
+    : d1Guard(
+      `NOT EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "inputStepNum" = ? AND "outputStepNum" >= ?)`,
+      recipeId,
+      fromStepNum,
+      toStepNum,
+    );
 }
 
 /** `recipeStep.update({ where: { id }, data: { stepNum } })`, which also sets `updatedAt`. */

@@ -4,9 +4,9 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
   deleteRecipeStepOnD1,
-  RECIPE_CHANGED_MESSAGE,
   saveRecipeEditOnD1,
   stepDeletionRaceAnswer,
+  stepSwapRaceAnswer,
   swapRecipeStepsOnD1,
 } from "~/lib/recipe-d1-edits.server";
 import { isD1GuardFailure } from "~/lib/d1-write.server";
@@ -191,9 +191,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
               targetStepNum,
             });
           } catch (error) {
-            // The steps moved in between; nothing was swapped.
+            // A step moved or went away, or the step gained an output dependency the move
+            // would break, in between; nothing was swapped.
             if (!isD1GuardFailure(error)) throw error;
-            return data({ errors: { reorder: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+            const answer = await stepSwapRaceAnswer(database, id, stepId, direction);
+            return data({ errors: { reorder: answer.error } }, { status: answer.status });
           }
 
           return data({ success: true });

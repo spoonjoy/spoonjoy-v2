@@ -1,4 +1,5 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { env } from "cloudflare:test";
+import { trackedExecutionContext } from "./execution-contexts";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -491,6 +492,29 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(await recipeUpdatedAt("atomic-swap")).not.toBe(OLD);
     });
 
+    it("swaps nothing when the moved step gained an output dependency the swap would break after the check", async () => {
+      await seedRecipe("atomic-swap-dependency");
+      const swap = {
+        recipeId: "atomic-swap-dependency",
+        stepId: "atomic-swap-dependency-step-2",
+        stepNum: 2,
+        targetStepId: "atomic-swap-dependency-step-1",
+        targetStepNum: 1,
+      };
+      // Another request makes step 2 use step 1's output between the editor's check and its batch.
+      const dependencyAdded = interleaved(() => run(
+        `INSERT INTO "StepOutputUse" ("id", "recipeId", "outputStepNum", "inputStepNum", "updatedAt")
+         VALUES ('atomic-swap-dependency-late-use', 'atomic-swap-dependency', 1, 2, ?)`,
+        OLD,
+      ));
+
+      expect(isD1GuardFailure(await rejection(swapRecipeStepsOnD1(dependencyAdded, swap)))).toBe(true);
+      const unchanged = await recipeGraph("atomic-swap-dependency");
+      expect(unchanged.steps.map((step) => step.stepTitle)).toEqual(["Mix", "Rest", "Bake"]);
+      expect(unchanged.uses).toEqual([{ outputStepNum: 1, inputStepNum: 2 }, { outputStepNum: 1, inputStepNum: 3 }]);
+      expect(await recipeUpdatedAt("atomic-swap-dependency")).toBe(OLD);
+    });
+
     it("deletes a step only while no other step uses it, with the recipe touch", async () => {
       await seedRecipe("atomic-delete-step");
       const used = { recipeId: "atomic-delete-step", stepId: "atomic-delete-step-step-1", stepNum: 1 };
@@ -509,24 +533,33 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(after.ingredients.map((row) => row.ingredient)).toEqual(["atomic flour", "atomic milk"]);
     });
 
-    it("adds all of a batch of ingredients or none of them", async () => {
+    it("adds all of a batch of ingredients, with their new units and names, or none of them", async () => {
       await seedRecipe("atomic-add");
       const rowsToAdd = [
-        { quantity: 1, unitId: "atomic-tbsp", ingredientRefId: "atomic-salt" },
-        { quantity: 2, unitId: "atomic-tbsp", ingredientRefId: "atomic-sugar" },
+        { quantity: 1, unitName: "atomic tbsp", ingredientName: "atomic salt" },
+        { quantity: 2, unitName: "atomic tbsp", ingredientName: "atomic sugar" },
+        { quantity: 3, unitName: "atomic dash", ingredientName: "atomic pepper" },
       ];
       const add = { recipeId: "atomic-add", stepId: "atomic-add-step-3", stepNum: 3, rows: rowsToAdd };
+      const newLookupRows = async () => ({
+        units: await count(`SELECT COUNT(*) AS count FROM "Unit" WHERE "name" = 'atomic dash'`),
+        names: await count(`SELECT COUNT(*) AS count FROM "IngredientRef" WHERE "name" = 'atomic pepper'`),
+      });
       await failOn("INSERT", "Ingredient", `NEW."ingredientRefId" = 'atomic-sugar'`);
 
       expect(String(await rejection(addStepIngredientsOnD1(database(), add)))).toContain(FAILURE);
       expect((await recipeGraph("atomic-add")).ingredients).toHaveLength(3);
+      // The new unit and ingredient name were written earlier in the batch, and rolled back with it.
+      expect(await newLookupRows()).toEqual({ units: 0, names: 0 });
 
       await run(`DROP TRIGGER "${TRIGGER}"`);
       await addStepIngredientsOnD1(database(), add);
       expect((await recipeGraph("atomic-add")).ingredients.filter((row) => row.stepNum === 3)).toEqual([
+        { stepNum: 3, quantity: 3, unit: "atomic dash", ingredient: "atomic pepper" },
         { stepNum: 3, quantity: 1, unit: "atomic tbsp", ingredient: "atomic salt" },
         { stepNum: 3, quantity: 2, unit: "atomic tbsp", ingredient: "atomic sugar" },
       ]);
+      expect(await newLookupRows()).toEqual({ units: 1, names: 1 });
       // An ingredient already in the recipe (added in between) stops the whole batch.
       expect(isD1GuardFailure(await rejection(addStepIngredientsOnD1(database(), { ...add, rows: [rowsToAdd[0]!] })))).toBe(true);
     });
@@ -578,7 +611,7 @@ describe("atomic recipe writes on Wrangler D1", () => {
       return handleRecipeDetailAction({
         request: new Request(`${ORIGIN}/recipes/${recipeId}`, { method: "POST", headers: { Cookie: cookie }, body }),
         params: { id: recipeId },
-        context: { cloudflare: { env, ctx: createExecutionContext() } },
+        context: { cloudflare: { env, ctx: trackedExecutionContext() } },
       } as never).catch((error: unknown) => error);
     }
 
@@ -1037,6 +1070,32 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(reordered.uses).toEqual([{ outputStepNum: 2, inputStepNum: 3 }]);
     });
 
+    it.each([
+      ["up", "atomic-api-reorder-up", 2, 1, [1], "Cannot move Step 2 to position 1 because it uses output from Step 1"],
+      ["down", "atomic-api-reorder-down", 1, 2, [2], "Cannot move Step 1 to position 2 because Step 2 uses its output"],
+    ] as const)("renumbers nothing and answers the dependency error when a dependency the move %s would break lands after the check", async (
+      _direction, recipeId, fromStepNum, toStepNum, blockingStepNums, message,
+    ) => {
+      await seedRecipe(recipeId);
+      const input = { clientMutationId: `${recipeId}-mutation`, stepId: `${recipeId}-step-${fromStepNum}`, toStepNum };
+      // Another request makes step 2 use step 1's output between the reorder's check and its batch.
+      const dependencyAdded = interleaved(() => run(
+        `INSERT INTO "StepOutputUse" ("id", "recipeId", "outputStepNum", "inputStepNum", "updatedAt") VALUES (?, ?, 1, 2, ?)`,
+        `${recipeId}-late-use`, recipeId, OLD,
+      ));
+
+      await expect(reorderNativeRecipeStep(prisma, CHEF, recipeId, input, { d1: dependencyAdded })).resolves.toEqual({
+        ok: false,
+        code: "validation_error",
+        message,
+        details: { reason: "step_output_dependency", blockingStepNums },
+      });
+      const unchanged = await recipeGraph(recipeId);
+      expect(unchanged.steps.map((step) => step.stepTitle)).toEqual(["Mix", "Rest", "Bake"]);
+      expect(unchanged.uses).toEqual([{ outputStepNum: 1, inputStepNum: 2 }, { outputStepNum: 1, inputStepNum: 3 }]);
+      expect(await recipeUpdatedAt(recipeId)).toBe(OLD);
+    });
+
     it("replaces a step's output uses or keeps the old ones", async () => {
       await seedRecipe("atomic-api-uses");
       const input = { clientMutationId: "atomic-uses", inputStepId: "atomic-api-uses-step-3", outputStepNums: [2] };
@@ -1083,7 +1142,7 @@ describe("atomic recipe writes on Wrangler D1", () => {
           }),
         }),
         params: { "*": "recipes" },
-        context: { cloudflare: { env: routeEnv(DB), ctx: createExecutionContext() } },
+        context: { cloudflare: { env: routeEnv(DB), ctx: trackedExecutionContext() } },
       } as never);
       await failOn("INSERT", "Ingredient", `NEW."quantity" = 3`);
       expectConsoleError("[api-v1] internal_error", {
@@ -1138,6 +1197,36 @@ describe("atomic recipe writes on Wrangler D1", () => {
       expect(updated.steps).toEqual([{ stepNum: 1, stepTitle: "Only", description: "One step now", duration: null }]);
       expect(updated.ingredients).toEqual([{ stepNum: 1, quantity: 1, unit: "atomic tbsp", ingredient: "atomic salt" }]);
       expect(updated.uses).toEqual([]);
+    });
+
+    it("updates steps in place on real D1: ids, ingredient ids and output links survive a reorder", async () => {
+      await seedRecipe("atomic-mcp-reorder");
+      const id = "atomic-mcp-reorder";
+      await callSpoonjoyApiOperation("update_recipe", {
+        id,
+        steps: [
+          { id: `${id}-step-2`, title: "Rest", description: "Rest it longer", ingredients: [{ name: "atomic egg", quantity: 2, unit: "atomic cup" }] },
+          {
+            id: `${id}-step-1`,
+            title: "Mix",
+            description: "Mix it",
+            ingredients: [{ name: "atomic flour", quantity: 2, unit: "atomic cup" }, { name: "atomic milk", quantity: 1, unit: "atomic cup" }],
+          },
+          { id: `${id}-step-3`, title: "Bake", description: "Bake it", ingredients: [] },
+        ],
+      }, context());
+
+      expect(await rows(`SELECT "id", "stepNum", "description" FROM "RecipeStep" WHERE "recipeId" = ? ORDER BY "stepNum"`, id)).toEqual([
+        { id: `${id}-step-2`, stepNum: 1, description: "Rest it longer" },
+        { id: `${id}-step-1`, stepNum: 2, description: "Mix it" },
+        { id: `${id}-step-3`, stepNum: 3, description: "Bake it" },
+      ]);
+      expect(await rows(`SELECT "id", "stepNum", "quantity" FROM "Ingredient" WHERE "recipeId" = ? ORDER BY "id"`, id)).toEqual([
+        { id: `${id}-ingredient-egg`, stepNum: 1, quantity: 2 },
+        { id: `${id}-ingredient-flour`, stepNum: 2, quantity: 2 },
+        { id: `${id}-ingredient-milk`, stepNum: 2, quantity: 1 },
+      ]);
+      expect((await recipeGraph(id)).uses).toEqual([{ outputStepNum: 2, inputStepNum: 3 }]);
     });
 
     it("soft-deletes a recipe with its sync tombstone, updatedAt bump and cookbook touch together, or none of them", async () => {

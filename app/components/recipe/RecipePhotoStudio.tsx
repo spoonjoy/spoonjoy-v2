@@ -92,11 +92,11 @@ export function RecipePhotoStudio({
     navigation.formData?.get("intent") === "createFirstPhotoCover";
   const isPosting = submitStarted || isRouterPostingPhoto;
   const statusLabel = activeCoverProcessing
-    ? "Editorializing cover"
+    ? "Styling cover"
     : generateEditorial
-      ? "Editorializing cover"
+      ? "Styling cover"
       : postAsSpoon
-        ? "Saving Spoon photo"
+        ? "Saving cook photo"
         : "Saving cover photo";
   const showProgressStatus = isPosting || activeCoverProcessing !== null;
   const canSubmit = photoFile !== null && photoError === null && !isPosting;
@@ -176,7 +176,7 @@ export function RecipePhotoStudio({
             id="recipe-photo-studio-heading"
             className="font-sj-display text-xl font-semibold leading-7 text-[var(--sj-ink)]"
           >
-            Photo studio
+            Photos
           </h3>
           <p className="font-sj-ui text-sm font-semibold text-[var(--sj-brass)]">
             {titleLabel}
@@ -260,8 +260,8 @@ export function RecipePhotoStudio({
               onChange={setPostAsSpoon}
               disabled={isPosting}
             />
-            <Label>Post as Spoon</Label>
-            <Description>Keeps the true photo with the cook note.</Description>
+            <Label>Also log this as a cook</Label>
+            <Description>Keeps the photo as you took it, with your cook note.</Description>
           </CheckboxField>
           <CheckboxField className="border-y border-[var(--sj-border)] py-3 sm:border">
             <Checkbox
@@ -271,8 +271,8 @@ export function RecipePhotoStudio({
               onChange={setGenerateEditorial}
               disabled={isPosting}
             />
-            <Label>Editorialize cover</Label>
-            <Description>Makes a polished cover from the original photo.</Description>
+            <Label>Make a styled cover</Label>
+            <Description>Makes a polished cover from your photo.</Description>
           </CheckboxField>
         </div>
 
