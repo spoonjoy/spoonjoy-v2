@@ -19,6 +19,7 @@ import {
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 import { expectConsoleWarning } from "../warning-policy";
 
 const authenticateApiToken = (db: any, token: string, issuer = "https://spoonjoy.app") => (
@@ -491,6 +492,79 @@ describe("API authentication helpers", () => {
 
     await db.user.delete({ where: { id: user.id } });
     await expect(sessionRequest(await sessionCookie(user.id, 2))).resolves.toBeNull();
+  });
+
+  it("checks a browser session on D1 without building a Prisma client, as the Prisma read does", async () => {
+    const user = await db.user.create({
+      data: { email: uniqueEmail("d1"), username: faker.internet.username(), sessionVersion: 2 },
+    });
+    const d1 = sqliteD1();
+    const getPrisma = vi.fn(async () => db);
+    const sessionRequest = async (cookie: string) => authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: cookie },
+    }), null, { d1: d1.binding });
+
+    try {
+      const current = await sessionCookie(user.id, 2);
+      const before = d1.roundTrips();
+      const principal = await sessionRequest(current);
+      expect(d1.roundTrips() - before).toBe(1);
+      expect(principal).toEqual(await authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+        headers: { Cookie: current },
+      })));
+      expect(principal).toMatchObject({ source: "session", id: user.id, email: user.email, username: user.username });
+
+      await expect(sessionRequest(await sessionCookie(user.id, 1))).resolves.toBeNull();
+      await expect(sessionRequest(await sessionCookie(user.id))).resolves.toBeNull();
+      await db.user.delete({ where: { id: user.id } });
+      await expect(sessionRequest(current)).resolves.toBeNull();
+      expect(getPrisma).not.toHaveBeenCalled();
+    } finally {
+      d1.close();
+    }
+  });
+
+  it("builds the Prisma client from the getter only for a bearer token", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("lazy"), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Script");
+    const getPrisma = vi.fn(async () => db);
+
+    await expect(authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: "other=1" },
+    }))).resolves.toBeNull();
+    expect(getPrisma).not.toHaveBeenCalled();
+
+    await expect(authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: await sessionCookie(user.id) },
+    }))).resolves.toMatchObject({ source: "session", id: user.id });
+    expect(getPrisma).toHaveBeenCalledTimes(1);
+
+    await expect(authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Authorization: `Bearer ${created.token}` },
+    }), null, { d1: null })).resolves.toMatchObject({ source: "bearer", id: user.id });
+    expect(getPrisma).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed on a D1 user row missing a field", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("bad"), username: faker.internet.username() } });
+    const cookie = await sessionCookie(user.id);
+    for (const field of ["id", "email", "username", "sessionVersion"]) {
+      const d1 = sqliteD1();
+      const corrupt = {
+        prepare: d1.binding.prepare.bind(d1.binding),
+        batch: async (statements: never) => (await d1.binding.batch(statements)).map((result) => ({
+          ...result,
+          results: (result.results as Array<Record<string, unknown>>).map((row) => ({ ...row, [field]: null })),
+        })),
+      };
+      try {
+        await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+          headers: { Cookie: cookie },
+        }), null, { d1: corrupt as never })).rejects.toThrow("D1 user row is missing its id, email, username or session version");
+      } finally {
+        d1.close();
+      }
+    }
   });
 
   it("accepts a browser session cookie issued before session versions existed as version 0", async () => {

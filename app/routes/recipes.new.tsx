@@ -17,6 +17,7 @@ import { requestD1 } from "~/lib/d1-read.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
@@ -29,13 +30,16 @@ import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.ser
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import {
   IngredientParseError,
-  parseIngredients,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
+import { parseIngredientsWithRulesFallback } from "~/lib/ingredient-parse-fallback.server";
 import { useEffect, useRef, useState } from "react";
+import { importRecipeForSession, parseSessionImportForm } from "~/lib/recipe-import-session.server";
+import { RecipeImportPanel, type RecipeImportActionData } from "~/components/recipe/RecipeImportPanel";
 
 interface ActionData {
   parsedIngredients?: ParsedIngredient[];
+  importResult?: RecipeImportActionData;
   errors?: {
     title?: string;
     description?: string;
@@ -64,13 +68,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export async function action({ request, context }: Route.ActionArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  const formData = await request.formData();
+  // The recipe image is the only large field, so the body is read through the image upload
+  // limit: an oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    return data({ errors: { image: RECIPE_IMAGE_SIZE_MESSAGE } }, { status: 413 });
+  }
   const intent = formData.get("intent")?.toString();
 
   if (intent === "parseIngredients") {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
     try {
-      const parsedIngredients = await parseIngredients(
+      const parsedIngredients = await parseIngredientsWithRulesFallback(
         ingredientText,
         getIngredientParserEnv(context),
         { distinctId: userId }
@@ -90,6 +99,30 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 500 }
       );
     }
+  }
+
+  if (intent === "import") {
+    const parsed = parseSessionImportForm(formData);
+    if (!parsed.ok) {
+      return data({ importResult: { kind: parsed.kind, message: parsed.message } }, { status: 400 });
+    }
+    const outcome = await importRecipeForSession({
+      db: await getRequestDb(context),
+      userId,
+      input: parsed.input,
+      request,
+      context,
+    });
+    if (outcome.ok) {
+      return redirect(`/recipes/${outcome.recipeId}/edit?imported=1`);
+    }
+    return data({
+      importResult: {
+        kind: outcome.kind,
+        message: outcome.message,
+        existingRecipe: outcome.existingRecipe,
+      },
+    });
   }
 
   const title = formData.get("title")?.toString() || "";
@@ -377,7 +410,7 @@ export default function NewRecipe() {
         action={<Link href="/recipes" className="sj-link inline-flex min-h-11 items-center">← Back to recipes</Link>}
       >
         <Text>
-          Start with the story and the photo, then shape the method into steps when the dish is ready.
+          Bring in a recipe you already have, or start with the story and the photo and shape the method into steps.
         </Text>
       </CookbookHeader>
 
@@ -392,6 +425,10 @@ export default function NewRecipe() {
       </Form>
 
       <div className="mt-8 max-w-5xl">
+        <RecipeImportPanel result={actionData?.importResult} />
+      </div>
+
+      <div className="max-w-5xl">
         <RecipeBuilder
           onSave={handleSave}
           onCancel={handleCancel}

@@ -211,7 +211,7 @@ describe("route-action telemetry backfill — unexpected-failure captures", () =
           "POST",
           cookie,
           JSON.stringify({
-            endpoint: "https://push.example/abc",
+            endpoint: "https://fcm.googleapis.com/fcm/send/abc",
             keys: { p256dh: "p", auth: "a" },
           }),
           {},
@@ -687,7 +687,7 @@ describe("route-action telemetry backfill — unexpected-failure captures", () =
           "http://localhost/api/push/subscriptions",
           "POST",
           cookie,
-          JSON.stringify({ endpoint: "https://push.example/abc", keys: { p256dh: "p", auth: "a" } }),
+          JSON.stringify({ endpoint: "https://fcm.googleapis.com/fcm/send/abc", keys: { p256dh: "p", auth: "a" } }),
           {},
           PH,
           null,

@@ -662,7 +662,8 @@ describe("atomic recipe writes on Wrangler D1", () => {
       }, {
         db: prisma,
         env: { DB: database() },
-        ingredientParser: async (text) => [{ quantity: 1, unit: "atomic whole", ingredientName: `atomic ${text}` }],
+        // The import parses every ingredient line in one call.
+        ingredientParser: async (text) => text.split("\n").map((line) => ({ quantity: 1, unit: "atomic whole", ingredientName: `atomic ${line}` })),
       });
       await failOn("INSERT", "Ingredient", `NEW."ingredientRefId" IN (SELECT "id" FROM "IngredientRef" WHERE "name" = 'atomic lemon')`);
 
@@ -914,6 +915,36 @@ describe("atomic recipe writes on Wrangler D1", () => {
       await expect(updateNativeRecipe(prisma, CHEF, "atomic-api-update", patch, database())).resolves.toMatchObject({ ok: true });
       expect((await recipeGraph("atomic-api-update")).recipe).toMatchObject({ title: "Atomic API Title" });
       expect(await cookbookUpdatedAt()).not.toBe(OLD);
+    });
+
+    it("applies a recipe update with expectedUpdatedAt only while the recipe is unchanged, on real D1", async () => {
+      await seedRecipe("atomic-api-precondition");
+      const id = "atomic-api-precondition";
+      const patch = (expectedUpdatedAt: string, title: string) => ({
+        clientMutationId: `atomic-precondition-${title}`,
+        fields: { title },
+        expectedUpdatedAt: new Date(expectedUpdatedAt),
+      });
+
+      // Seeded with updatedAt OLD as ISO text; the batch's guard compares it as the same instant.
+      await expect(updateNativeRecipe(prisma, CHEF, id, patch(OLD, "Atomic Fresh"), database())).resolves.toMatchObject({ ok: true });
+      const after = await recipeUpdatedAt(id);
+      expect(after).not.toBe(OLD);
+
+      // Another save moved updatedAt on (in Prisma's +00:00 format) between this client's read and its batch.
+      const racing: D1ReadDatabase = {
+        prepare: (sql) => database().prepare(sql),
+        async batch(statements) {
+          await run(`UPDATE "Recipe" SET "title" = 'Atomic Theirs', "updatedAt" = '2026-05-01T00:00:00.000+00:00' WHERE "id" = ?`, id);
+          return database().batch(statements as never);
+        },
+      };
+      await expect(updateNativeRecipe(prisma, CHEF, id, patch(after, "Atomic Stale"), racing)).resolves.toMatchObject({
+        ok: false,
+        code: "edit_conflict",
+        details: { currentUpdatedAt: "2026-05-01T00:00:00.000Z" },
+      });
+      expect((await recipeGraph(id)).recipe).toMatchObject({ title: "Atomic Theirs" });
     });
 
     it("creates a recipe with its steps' output uses together, or nothing", async () => {

@@ -18,6 +18,8 @@ import * as stylizationModule from "~/lib/spoon-cover-stylization.server";
 import * as recipeCreateModule from "~/lib/recipe-create.server";
 import { IngredientParseError } from "~/lib/ingredient-parse.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { oversizedMultipartUpload } from "../helpers/oversized-upload";
+import { RECIPE_IMAGE_SIZE_MESSAGE } from "~/lib/recipe-image";
 import { faker } from "@faker-js/faker";
 
 // Helper to extract data from React Router's data() response
@@ -197,6 +199,26 @@ describe("Recipes New Route", () => {
       expect(data.errors.title).toBe("Title is required");
     });
 
+    it("refuses an oversized upload with 413 before buffering the whole body", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookie = (await sessionStorage.commitSession(session)).split(";")[0];
+      const upload = oversizedMultipartUpload("http://localhost:3000/recipes/new", cookie);
+      const before = await db.recipe.count({ where: { chefId: testUserId } });
+
+      const response = await action({
+        request: upload.request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(413);
+      expect(data.errors.image).toBe(RECIPE_IMAGE_SIZE_MESSAGE);
+      expect(upload.pulled()).toBeLessThanOrEqual(upload.readLimit);
+      expect(await db.recipe.count({ where: { chefId: testUserId } })).toBe(before);
+    });
+
     it("should create recipe and redirect on success", async () => {
       const request = await createFormRequest(
         { title: "My New Recipe", description: "A delicious recipe", servings: "4" },
@@ -272,12 +294,37 @@ describe("Recipes New Route", () => {
       expect(data.errors.parse).toBe("Ingredient text is required");
     });
 
-    it("should return a generic parse error for unexpected parser failures", async () => {
+    it("parses typed ingredients by rules when AI parsing is unavailable", async () => {
+      vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValueOnce(new IngredientParseError("OpenAI API key is required"));
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "1 lb spaghetti\n2 tbsp kosher salt" },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(200);
+      expect(data).toEqual({
+        parsedIngredients: [
+          { quantity: 1, unit: "lb", ingredientName: "spaghetti" },
+          { quantity: 2, unit: "tbsp", ingredientName: "kosher salt" },
+        ],
+      });
+    });
+
+    it("should return a generic parse error for unexpected parser failures on text the rules cannot parse either", async () => {
       vi
         .spyOn(ingredientParseModule, "parseIngredients")
         .mockRejectedValueOnce(new Error("network down"));
       const request = await createFormRequest(
-        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        { intent: "parseIngredients", ingredientText: "2 cups" },
         testUserId
       );
 
@@ -868,9 +915,9 @@ describe("Recipes New Route", () => {
       const recipe = await db.recipe.findFirstOrThrow({
         where: { chefId: testUserId, title: "WaitUntil Recipe" },
       });
-      await expectAwaitingPlaceholderCover(recipe.id, testUserId);
-      // Allow the captured promise to resolve so cleanup is clean.
+      // The handed-off task is what records the generation's outcome, so let it finish first.
       await Promise.all(captured);
+      await expectAwaitingPlaceholderCover(recipe.id, testUserId);
     });
 
     it("should delete uploaded recipe image when database creation fails", async () => {

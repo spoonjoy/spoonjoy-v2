@@ -13,16 +13,18 @@
 // signup and OAuth sign-up, and a single guarded UPDATE for renames, which checks and writes in
 // one statement so two renames can't both win.
 import type { PrismaClient } from "@prisma/client";
+import { isReservedUsername } from "~/lib/username";
 
 type IdentityDb = Pick<PrismaClient, "$queryRaw" | "$executeRaw" | "user">;
 
 // True when another account (not exceptUserId) holds this username in any letter case, or has it
-// as its ID.
+// as its ID, or the username is reserved (username.ts).
 export async function findUsernameConflict(
   db: Pick<PrismaClient, "$queryRaw">,
   username: string,
   exceptUserId = "",
 ): Promise<boolean> {
+  if (isReservedUsername(username)) return true;
   const rows = await db.$queryRaw<{ id: string }[]>`
     SELECT "id" FROM "User"
     WHERE (lower("username") = lower(${username}) OR "id" = ${username}) AND "id" != ${exceptUserId}
@@ -46,6 +48,7 @@ export type AccountIdentityResult = "saved" | "email_taken" | "username_taken";
 
 export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentityChange): Promise<AccountIdentityResult> {
   const { userId, email, username, emailChanged, usernameChanged } = change;
+  if (usernameChanged && isReservedUsername(username)) return "username_taken";
   // The guards are switched by SQL parameters rather than composed with `Prisma.sql`, so this module
   // needs only types from "@prisma/client" and never imports its runtime (which db.server.ts loads
   // dynamically for the Worker bundle).

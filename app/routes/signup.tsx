@@ -5,15 +5,15 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists } from "~/lib/auth.server";
 import { findUsernameConflict } from "~/lib/account-identity.server";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
-import { createUserSession, getUserId } from "~/lib/session.server";
+import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
-import { normalizeUsername, usernameFormatError } from "~/lib/username";
+import { normalizeUsername, USERNAME_HINT, usernameFormatError } from "~/lib/username";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
-import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
+import { Field, Label, Description, ErrorMessage } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Text, TextLink } from "~/components/ui/text";
@@ -129,8 +129,16 @@ export async function action({ request, context }: Route.ActionArgs) {
   // Create user
   const user = await createUser(database, email, username, password);
 
-  // Create session and redirect. A new account starts at session version 0.
-  return createUserSession(user.id, "/recipes", context.cloudflare?.env, request, { sessionVersion: 0 });
+  // A new account lands where it came from (the recipe someone tapped Save on, an app asking for
+  // access), sanitised as log-in does, or else in its own Kitchen, which starts with what to do
+  // first. A new account starts at session version 0.
+  const redirectTo = sanitizeSessionRedirect(new URL(request.url).searchParams.get("redirectTo"), "/");
+  const response = await createUserSession(user.id, redirectTo, context.cloudflare?.env, request, { sessionVersion: 0 });
+  // The connector consent screen must load as a document, as after log-in.
+  if (new URL(redirectTo, "https://spoonjoy.app").pathname === "/oauth/authorize") {
+    response.headers.set("X-Remix-Reload-Document", "true");
+  }
+  return response;
 }
 
 export default function Signup() {
@@ -155,7 +163,7 @@ export default function Signup() {
       description="Create your account to cook, fork, save, and remember the recipes that actually make it to your table."
     >
       <div className="w-full max-w-sm">
-        <Heading>Sign Up</Heading>
+        <Heading>Sign up</Heading>
 
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
@@ -182,6 +190,9 @@ export default function Signup() {
               id="email"
               name="email"
               defaultValue={actionData?.values?.email}
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
               required
               invalid={!!actionData?.errors?.email}
             />
@@ -197,10 +208,15 @@ export default function Signup() {
               id="username"
               name="username"
               defaultValue={actionData?.values?.username}
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               required
               minLength={3}
               invalid={!!actionData?.errors?.username}
             />
+            <Description>{USERNAME_HINT}</Description>
             {actionData?.errors?.username && (
               <ErrorMessage>{actionData.errors.username}</ErrorMessage>
             )}
@@ -212,21 +228,24 @@ export default function Signup() {
               type="password"
               id="password"
               name="password"
+              autoComplete="new-password"
               required
               minLength={8}
               invalid={!!actionData?.errors?.password}
             />
+            <Description>At least 8 characters.</Description>
             {actionData?.errors?.password && (
               <ErrorMessage>{actionData.errors.password}</ErrorMessage>
             )}
           </Field>
 
           <Field>
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Label htmlFor="confirmPassword">Confirm password</Label>
             <Input
               type="password"
               id="confirmPassword"
               name="confirmPassword"
+              autoComplete="new-password"
               required
               minLength={8}
               invalid={!!actionData?.errors?.confirmPassword}
@@ -237,13 +256,13 @@ export default function Signup() {
           </Field>
 
           <Button type="submit" className="w-full">
-            Sign Up
+            Sign up
           </Button>
         </Form>
 
         <Text className="mt-6 text-center">
           Already have an account?{" "}
-          <TextLink href="/login">Log in</TextLink>
+          <TextLink href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}>Log in</TextLink>
         </Text>
       </div>
     </AuthLayout>

@@ -1015,6 +1015,130 @@ describe("Shopping List Route", () => {
     });
   });
 
+  // Shopping list journey, run 37920386776: two rows unchecked back to back both answered 200, but
+  // after reload one was still checked. Each toggle used to renumber the whole list, rewriting
+  // every row's `checked` from the `checkedAt` it had read; a toggle that read the other row before
+  // that row's own toggle landed wrote the old state back over it.
+  describe("concurrent writes keep every toggle (shopping list journey, run 37920386776)", () => {
+    async function post(fields: Record<string, string>) {
+      const formData = new UndiciFormData();
+      for (const [key, value] of Object.entries(fields)) formData.append(key, value);
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const headers = new Headers({ Cookie: (await sessionStorage.commitSession(session)).split(";")[0] });
+      const request = new UndiciRequest("http://localhost:3000/shopping-list", { method: "POST", body: formData, headers });
+      return action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+    }
+
+    async function listWithItems(count: number, checked: boolean) {
+      const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+      const items = [];
+      for (let index = 0; index < count; index += 1) {
+        const ref = await db.ingredientRef.create({ data: { name: `row_${index}_${faker.string.alphanumeric(6).toLowerCase()}` } });
+        items.push(await db.shoppingListItem.create({
+          data: {
+            shoppingListId: shoppingList.id,
+            ingredientRefId: ref.id,
+            sortIndex: index,
+            checked,
+            checkedAt: checked ? new Date() : null,
+          },
+        }));
+      }
+      return { shoppingList, items };
+    }
+
+    // Runs `first`; the moment it reads the whole list, runs `second` to completion before the
+    // read returns, so `first` acts on what it read before `second` wrote. If `first` never reads
+    // the whole list, `second` runs after it.
+    async function interleave(first: () => Promise<unknown>, second: () => Promise<unknown>) {
+      const findMany = db.shoppingListItem.findMany.bind(db.shoppingListItem);
+      let secondRun: Promise<unknown> | null = null;
+      const spy = vi.spyOn(db.shoppingListItem, "findMany").mockImplementation((async (args: any) => {
+        const rows = await findMany(args);
+        if (!secondRun) {
+          spy.mockRestore();
+          secondRun = second();
+          await secondRun;
+        }
+        return rows;
+      }) as any);
+      await first();
+      spy.mockRestore();
+      if (!secondRun) await second();
+    }
+
+    async function rows(ids: string[]) {
+      const found = await db.shoppingListItem.findMany({ where: { id: { in: ids } } });
+      return ids.map((id) => {
+        const row = found.find((item) => item.id === id)!;
+        return { checked: row.checked, hasCheckedAt: row.checkedAt !== null, deleted: row.deletedAt !== null };
+      });
+    }
+
+    it("keeps both rows unchecked when two unchecks land back to back", async () => {
+      const { items: [carrots, onions] } = await listWithItems(2, true);
+
+      await interleave(
+        () => post({ intent: "toggleCheck", itemId: onions.id, nextChecked: "false" }),
+        () => post({ intent: "toggleCheck", itemId: carrots.id, nextChecked: "false" }),
+      );
+
+      expect(await rows([carrots.id, onions.id])).toEqual([
+        { checked: false, hasCheckedAt: false, deleted: false },
+        { checked: false, hasCheckedAt: false, deleted: false },
+      ]);
+    });
+
+    it("keeps both rows checked when two checks land back to back", async () => {
+      const { items: [carrots, onions] } = await listWithItems(2, false);
+
+      await interleave(
+        () => post({ intent: "toggleCheck", itemId: onions.id, nextChecked: "true" }),
+        () => post({ intent: "toggleCheck", itemId: carrots.id, nextChecked: "true" }),
+      );
+
+      expect(await rows([carrots.id, onions.id])).toEqual([
+        { checked: true, hasCheckedAt: true, deleted: false },
+        { checked: true, hasCheckedAt: true, deleted: false },
+      ]);
+    });
+
+    it.each([
+      ["removing a row", (id: string) => ({ intent: "removeItem", itemId: id })],
+      ["clearing checked rows", (_id: string) => ({ intent: "clearCompleted" })],
+    ])("keeps a toggle that lands while %s renumbers the list", async (_name, renumber) => {
+      const { items: [first, carrots, onions] } = await listWithItems(3, false);
+      await db.shoppingListItem.update({ where: { id: first.id }, data: { checked: true, checkedAt: new Date() } });
+
+      await interleave(
+        () => post(renumber(first.id)),
+        () => post({ intent: "toggleCheck", itemId: carrots.id, nextChecked: "true" }),
+      );
+
+      const [, carrotsRow, onionsRow] = await rows([first.id, carrots.id, onions.id]);
+      expect(carrotsRow).toEqual({ checked: true, hasCheckedAt: true, deleted: false });
+      expect(onionsRow).toEqual({ checked: false, hasCheckedAt: false, deleted: false });
+    });
+
+    it("renumbers only rows whose position changed, and writes nothing but the position", async () => {
+      const { shoppingList, items: [first, second, third] } = await listWithItems(3, false);
+      const update = vi.spyOn(db.shoppingListItem, "update");
+
+      await post({ intent: "removeItem", itemId: first.id });
+
+      expect(update.mock.calls.map(([args]) => args)).toEqual([
+        { where: { id: second.id }, data: { sortIndex: 0 } },
+        { where: { id: third.id }, data: { sortIndex: 1 } },
+      ]);
+      update.mockClear();
+      await post({ intent: "removeItem", itemId: third.id });
+      expect(update).not.toHaveBeenCalled();
+      const remaining = await db.shoppingListItem.findMany({ where: { shoppingListId: shoppingList.id, deletedAt: null } });
+      expect(remaining.map((item) => [item.id, item.sortIndex])).toEqual([[second.id, 0]]);
+    });
+  });
+
   describe("action - clearCompleted", () => {
     async function createFormRequest(
       formFields: Record<string, string>,
@@ -3073,6 +3197,29 @@ describe("Shopping List Route", () => {
         quantity: "2",
         unitName: "whole",
         ingredientName: "apples",
+        isAmbiguous: false,
+      });
+    });
+
+    it.each([
+      ["1 bell pepper", "1", "whole", "bell pepper"],
+      ["1 red onion", "1", "whole", "red onion"],
+      ["1 green chile", "1", "whole", "green chile"],
+      ["2 cloves garlic", "2", "cloves", "garlic"],
+      ["3 large eggs", "3", "large", "eggs"],
+      ["1 pinch of salt", "1", "pinch", "salt"],
+      ["2 Tbsp. olive oil", "2", "Tbsp", "olive oil"],
+      ["1 can of chickpeas", "1", "can", "chickpeas"],
+      ["4 sweet potatoes", "4", "whole", "sweet potatoes"],
+    ])("keeps a word that isn't a unit in the name: %j", (text, quantity, unitName, ingredientName) => {
+      expect(parseShoppingItemFallback(text)).toMatchObject({ quantity, unitName, ingredientName, isAmbiguous: false });
+    });
+
+    it("leaves a unit with nothing after it as the name", () => {
+      expect(parseShoppingItemFallback("2 cups")).toMatchObject({
+        quantity: "2",
+        unitName: "whole",
+        ingredientName: "cups",
         isAmbiguous: false,
       });
     });

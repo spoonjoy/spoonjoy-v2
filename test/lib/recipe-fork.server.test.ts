@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type { Prisma } from "@prisma/client";
 import { db } from "~/lib/db.server";
 import {
   forkRecipe,
+  forkRecipeOnD1,
+  readForkSourceFromD1,
+  type ForkedRecipeResult,
+  type ForkRecipeInput,
   ForkSourceNotFoundError,
   ForkTitleExhaustedError,
 } from "~/lib/recipe-fork.server";
@@ -11,6 +16,32 @@ import {
   getOrCreateIngredientRef,
 } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+
+// The fork's detail as forkRecipe reads it back, for comparing the D1 fork with the Prisma one.
+const forkedDetailInclude = {
+  chef: { select: { id: true, email: true, username: true } },
+  covers: { orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }] },
+  steps: {
+    orderBy: { stepNum: "asc" as const },
+    include: { ingredients: { include: { unit: true, ingredientRef: true } } },
+  },
+} satisfies Prisma.RecipeInclude;
+
+type ForkPath = "prisma" | "d1";
+let d1: SqliteD1 | null = null;
+let forkPath: ForkPath = "prisma";
+
+/**
+ * Forks through the path under test. The D1 fork answers only a summary, so its recipe is read
+ * back here with the include forkRecipe uses, and the two paths answer the same shape.
+ */
+async function fork(input: ForkRecipeInput): Promise<ForkedRecipeResult> {
+  if (forkPath === "prisma") return forkRecipe(db, input);
+  const summary = await forkRecipeOnD1(d1!.binding, input);
+  const recipe = await db.recipe.findUniqueOrThrow({ where: { id: summary.recipeId }, include: forkedDetailInclude });
+  return { ...summary, recipe };
+}
 
 async function makeUser() {
   return db.user.create({ data: createTestUser() });
@@ -146,12 +177,16 @@ async function seedSourceRecipe(
   return recipe;
 }
 
-describe("recipe-fork.server", () => {
+describe.each<ForkPath>(["prisma", "d1"])("recipe-fork.server (%s)", (path) => {
   beforeEach(async () => {
     await cleanupDatabase();
+    forkPath = path;
+    d1 = path === "d1" ? sqliteD1() : null;
   });
 
   afterEach(async () => {
+    d1?.close();
+    d1 = null;
     await cleanupDatabase();
   });
 
@@ -185,7 +220,7 @@ describe("recipe-fork.server", () => {
       ],
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.id).not.toBe(source.id);
     expect(result.recipe.chefId).toBe(chefB.id);
@@ -231,7 +266,7 @@ describe("recipe-fork.server", () => {
       ],
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     const sous = await db.stepOutputUse.findMany({
       where: { recipeId: result.recipe.id },
@@ -250,7 +285,7 @@ describe("recipe-fork.server", () => {
     await seedSourceRecipe(chefB.id, { title: "Pasta" });
     const source = await seedSourceRecipe(chefA.id, { title: "Pasta" });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.appliedTitle).toBe("Pasta (variation 2)");
     expect(result.titleWasSuffixed).toBe(true);
@@ -265,7 +300,7 @@ describe("recipe-fork.server", () => {
     await seedSourceRecipe(chefB.id, { title: "Pasta (variation 3)" });
     const source = await seedSourceRecipe(chefA.id, { title: "Pasta" });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.appliedTitle).toBe("Pasta (variation 4)");
     expect(result.titleWasSuffixed).toBe(true);
@@ -276,7 +311,7 @@ describe("recipe-fork.server", () => {
     const chefB = await makeUser();
     const source = await seedSourceRecipe(chefA.id, { title: "Pasta" });
 
-    const result = await forkRecipe(db, {
+    const result = await fork({
       sourceRecipeId: source.id,
       viewerId: chefB.id,
       titleOverride: "My Fork",
@@ -293,7 +328,7 @@ describe("recipe-fork.server", () => {
     await seedSourceRecipe(chefB.id, { title: "My Fork" });
     const source = await seedSourceRecipe(chefA.id, { title: "Pasta" });
 
-    const result = await forkRecipe(db, {
+    const result = await fork({
       sourceRecipeId: source.id,
       viewerId: chefB.id,
       titleOverride: "My Fork",
@@ -313,14 +348,14 @@ describe("recipe-fork.server", () => {
     const source = await seedSourceRecipe(chefA.id, { title: "X" });
 
     await expect(
-      forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id }),
+      fork({ sourceRecipeId: source.id, viewerId: chefB.id }),
     ).rejects.toBeInstanceOf(ForkTitleExhaustedError);
   });
 
   it("throws ForkSourceNotFoundError when the source recipe does not exist", async () => {
     const chef = await makeUser();
     await expect(
-      forkRecipe(db, { sourceRecipeId: "nonexistent-id", viewerId: chef.id }),
+      fork({ sourceRecipeId: "nonexistent-id", viewerId: chef.id }),
     ).rejects.toBeInstanceOf(ForkSourceNotFoundError);
   });
 
@@ -333,7 +368,7 @@ describe("recipe-fork.server", () => {
     });
 
     await expect(
-      forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id }),
+      fork({ sourceRecipeId: source.id, viewerId: chefB.id }),
     ).rejects.toBeInstanceOf(ForkSourceNotFoundError);
   });
 
@@ -358,7 +393,7 @@ describe("recipe-fork.server", () => {
       coverMode: "manual",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(1);
     const cover = result.recipe.covers[0];
@@ -391,7 +426,7 @@ describe("recipe-fork.server", () => {
       coverMode: "auto",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(1);
     expect(result.recipe.covers[0].imageUrl).toBe("https://r2/old.jpg");
@@ -409,7 +444,7 @@ describe("recipe-fork.server", () => {
       coverMode: "none",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(0);
     expect(result.recipe.activeCoverId).toBeNull();
@@ -435,7 +470,7 @@ describe("recipe-fork.server", () => {
       coverMode: "auto",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(1);
     expect(result.recipe.covers[0].stylizedImageUrl).toBe("https://r2/editorial.jpg");
@@ -455,7 +490,7 @@ describe("recipe-fork.server", () => {
       coverMode: "auto",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(1);
     expect(result.recipe.covers[0].imageUrl).toBe("https://r2/raw.jpg");
@@ -479,7 +514,7 @@ describe("recipe-fork.server", () => {
         coverMode: "manual",
       });
 
-      const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+      const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
       expect(result.recipe.covers).toHaveLength(0);
       expect(result.recipe.activeCoverId).toBeNull();
@@ -510,7 +545,7 @@ describe("recipe-fork.server", () => {
       },
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(0);
     expect(result.recipe.activeCoverId).toBeNull();
@@ -523,7 +558,7 @@ describe("recipe-fork.server", () => {
     const chefB = await makeUser();
     const source = await seedSourceRecipe(chefA.id, { title: "NoCover" });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.covers).toHaveLength(0);
   });
@@ -532,7 +567,7 @@ describe("recipe-fork.server", () => {
     const chefA = await makeUser();
     const source = await seedSourceRecipe(chefA.id, { title: "Pasta" });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefA.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefA.id });
 
     expect(result.recipe.chefId).toBe(chefA.id);
     expect(result.recipe.sourceRecipeId).toBe(source.id);
@@ -548,7 +583,7 @@ describe("recipe-fork.server", () => {
       sourceUrl: "https://example.com/recipe",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.sourceUrl).toBeNull();
   });
@@ -558,7 +593,7 @@ describe("recipe-fork.server", () => {
     const chefB = await makeUser();
     const source = await seedSourceRecipe(chefA.id, { title: "Empty", steps: [] });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.steps).toHaveLength(0);
   });
@@ -573,7 +608,7 @@ describe("recipe-fork.server", () => {
       ],
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.steps).toHaveLength(1);
     expect(result.recipe.steps[0].ingredients).toHaveLength(0);
@@ -588,9 +623,187 @@ describe("recipe-fork.server", () => {
       servings: "4",
     });
 
-    const result = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+    const result = await fork({ sourceRecipeId: source.id, viewerId: chefB.id });
 
     expect(result.recipe.description).toBe("tasty");
     expect(result.recipe.servings).toBe("4");
   });
 });
+
+describe("forkRecipeOnD1", () => {
+  let binding: SqliteD1;
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    binding = sqliteD1();
+  });
+
+  afterEach(async () => {
+    binding.close();
+    await cleanupDatabase();
+  });
+
+  async function richSource(chefId: string, title = "Braised Short Ribs") {
+    return seedSourceRecipe(chefId, {
+      title,
+      description: "Low and slow",
+      servings: "6",
+      steps: [
+        { stepNum: 1, stepTitle: "Sear", description: "Brown the ribs", duration: 15, ingredients: [
+          { ingredientRefName: "short ribs", unitName: "lb", quantity: 3 },
+          { ingredientRefName: "salt", unitName: "tsp", quantity: 2 },
+        ] },
+        { stepNum: 2, description: "Make the braise", ingredients: [{ ingredientRefName: "red wine", unitName: "cup", quantity: 2 }] },
+        { stepNum: 3, stepTitle: "Braise", description: "Combine and braise", duration: 180 },
+      ],
+      stepOutputUses: [{ outputStepNum: 1, inputStepNum: 3 }, { outputStepNum: 2, inputStepNum: 3 }],
+      covers: [
+        { imageUrl: "https://img.example/old.jpg", createdAt: new Date("2026-01-01T00:00:00Z") },
+        { imageUrl: "https://img.example/active.jpg", stylizedImageUrl: "https://img.example/active-s.jpg", promptVersion: "p1" },
+      ],
+      activeCoverIndex: 1,
+      activeCoverVariant: "stylized",
+    });
+  }
+
+  it("reads the source exactly as the Prisma read does, in one round trip", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await richSource(chefA.id);
+    const viaPrisma = await db.recipe.findUniqueOrThrow({
+      where: { id: source.id },
+      include: {
+        chef: { select: { id: true, username: true } },
+        activeCover: true,
+        steps: { orderBy: { stepNum: "asc" }, include: { ingredients: true } },
+      },
+    });
+    const prismaUses = await db.stepOutputUse.findMany({ where: { recipeId: source.id }, select: { outputStepNum: true, inputStepNum: true } });
+    const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+
+    const before = binding.roundTrips();
+    const read = await readForkSourceFromD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id });
+    expect(binding.roundTrips() - before).toBe(1);
+
+    const sorted = <T extends { steps: Array<{ ingredients: Array<{ id: string }> }> }>(recipe: T) => ({
+      ...recipe,
+      steps: recipe.steps.map((step) => ({ ...step, ingredients: [...step.ingredients].sort(byId) })),
+    });
+    expect(sorted(read!.source)).toEqual(sorted(viaPrisma));
+    expect(read!.stepOutputUses).toEqual(expect.arrayContaining(prismaUses));
+    expect(read!.stepOutputUses).toHaveLength(prismaUses.length);
+    await expect(readForkSourceFromD1(binding.binding, { sourceRecipeId: "missing", viewerId: chefB.id })).resolves.toBeNull();
+  });
+
+  it("forks in two round trips however many variations the chef already has", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await richSource(chefA.id, "Stew");
+    await seedSourceRecipe(chefB.id, { title: "Stew" });
+    for (let n = 2; n <= 6; n++) await seedSourceRecipe(chefB.id, { title: `Stew (variation ${n})` });
+
+    const before = binding.roundTrips();
+    const result = await forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+    expect(binding.roundTrips() - before).toBe(2);
+    expect(result).toEqual({
+      recipeId: expect.any(String),
+      attribution: { sourceRecipeId: source.id, sourceChef: { id: chefA.id, username: chefA.username } },
+      appliedTitle: "Stew (variation 7)",
+      titleWasSuffixed: true,
+    });
+  });
+
+  it("matches titles exactly, whatever characters they hold", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const other = await makeUser();
+    const cases: Array<{ base: string; taken: string[]; deleted?: string[]; others?: string[]; expected: string }> = [
+      // LIKE and GLOB wildcards in a title must not match other titles.
+      { base: "50% Rye_Loaf", taken: ["50% Rye_Loaf", "50X Rye-Loaf (variation 2)", "50% Rye_Loaf (variation 3)"], expected: "50% Rye_Loaf (variation 2)" },
+      { base: "Crème brûlée", taken: ["Crème brûlée", "Crème brûlée (variation 2)"], expected: "Crème brûlée (variation 3)" },
+      { base: "Pie", taken: ["pie", "Pie (Variation 2)", "Pie (variation 2) deluxe"], expected: "Pie" },
+      { base: "Soup", taken: [], deleted: ["Soup"], others: ["Soup"], expected: "Soup" },
+      { base: "Bread's \"best\"", taken: ["Bread's \"best\""], expected: "Bread's \"best\" (variation 2)" },
+    ];
+    for (const { base, taken, deleted = [], others = [], expected } of cases) {
+      await cleanupForChef(chefB.id);
+      for (const title of taken) await seedSourceRecipe(chefB.id, { title });
+      for (const title of deleted) {
+        const gone = await seedSourceRecipe(chefB.id, { title });
+        await db.recipe.update({ where: { id: gone.id }, data: { deletedAt: new Date() } });
+      }
+      for (const title of others) await seedSourceRecipe(other.id, { title });
+      const source = await seedSourceRecipe(chefA.id, { title: base });
+
+      const onD1 = await forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id });
+      expect(onD1.appliedTitle).toBe(expected);
+      await db.recipe.update({ where: { id: onD1.recipeId }, data: { deletedAt: new Date() } });
+      const viaPrisma = await forkRecipe(db, { sourceRecipeId: source.id, viewerId: chefB.id });
+      expect(viaPrisma.appliedTitle).toBe(expected);
+    }
+  });
+
+  async function cleanupForChef(chefId: string) {
+    await db.recipe.deleteMany({ where: { chefId } });
+  }
+
+  it("uses the title override, trimmed, and falls back to the source title when it is blank", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await richSource(chefA.id, "Ribs");
+    await seedSourceRecipe(chefB.id, { title: "My Ribs" });
+
+    await expect(forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id, titleOverride: "  My Ribs  " }))
+      .resolves.toMatchObject({ appliedTitle: "My Ribs (variation 2)", titleWasSuffixed: true });
+    await expect(forkRecipeOnD1(binding.binding, { sourceRecipeId: source.id, viewerId: chefB.id, titleOverride: "   " }))
+      .resolves.toMatchObject({ appliedTitle: "Ribs", titleWasSuffixed: false });
+  });
+
+  it("picks the next free title when another recipe takes it while the fork writes", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await richSource(chefA.id, "Stew");
+    let raced = 0;
+    const racing = racingBinding(binding, async () => {
+      raced++;
+      if (raced <= 1) await seedSourceRecipe(chefB.id, { title: "Stew" });
+    });
+
+    const before = binding.roundTrips();
+    const result = await forkRecipeOnD1(racing as never, { sourceRecipeId: source.id, viewerId: chefB.id });
+
+    // Read, refused write, titles read again, write.
+    expect(binding.roundTrips() - before).toBe(4);
+    expect(result).toMatchObject({ appliedTitle: "Stew (variation 2)", titleWasSuffixed: true });
+    const titles = (await db.recipe.findMany({ where: { chefId: chefB.id }, select: { title: true } })).map((r) => r.title).sort();
+    expect(titles).toEqual(["Stew", "Stew (variation 2)"]);
+  });
+
+  it("gives up after three races for the title", async () => {
+    const chefA = await makeUser();
+    const chefB = await makeUser();
+    const source = await richSource(chefA.id, "Stew");
+    let raced = 0;
+    const racing = racingBinding(binding, async () => {
+      raced++;
+      await seedSourceRecipe(chefB.id, { title: raced === 1 ? "Stew" : `Stew (variation ${raced})` });
+    });
+
+    await expect(forkRecipeOnD1(racing as never, { sourceRecipeId: source.id, viewerId: chefB.id }))
+      .rejects.toBeInstanceOf(ForkTitleExhaustedError);
+    expect(raced).toBe(3);
+    expect(await db.recipe.count({ where: { chefId: chefB.id, sourceRecipeId: source.id } })).toBe(0);
+  });
+});
+
+/** A binding that runs `beforeWrite` before each batch that inserts a recipe. */
+function racingBinding(d1: SqliteD1, beforeWrite: () => Promise<void>) {
+  return {
+    prepare: d1.binding.prepare.bind(d1.binding),
+    batch: async (statements: Parameters<SqliteD1["binding"]["batch"]>[0]) => {
+      if (statements.some((statement) => /^\s*INSERT INTO "Recipe"/.test(statement.sql))) await beforeWrite();
+      return d1.binding.batch(statements);
+    },
+  };
+}
