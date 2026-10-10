@@ -85,6 +85,9 @@ def by_path: group_by(path_pattern)
   totalInvocations: length,
   outcomes: (map(.outcome // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
   nonOkInvocations: [.[] | select((.outcome // "unknown") != "ok") | invocation],
+  # Every 5xx response, whatever the outcome: React Router answers a loader or action error with
+  # a 500 while the invocation itself ends "ok", so nonOkInvocations alone misses it. First 50.
+  serverErrorInvocations: ([.[] | select((.event.response.status // 0) >= 500) | invocation] | .[0:50]),
   firstExceptions: ([.[] | select(((.exceptions // []) | length) > 0) | invocation] | .[0:20]),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,

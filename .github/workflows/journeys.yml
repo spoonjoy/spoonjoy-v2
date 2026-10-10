@@ -237,7 +237,8 @@ jobs:
       # report) with scripts/summarize-worker-tail.jq, an allowlist locked by
       # test/scripts/summarize-worker-tail.test.ts. Per invocation it keeps the outcome, the
       # path without its query, method, status, CPU and wall time and redacted exception
-      # messages, for non-ok invocations, the first 20 with exceptions and the 25 slowest,
+      # messages, for non-ok invocations, the first 50 5xx responses (whatever the outcome), the
+      # first 20 with exceptions and the 25 slowest,
       # plus p50/p95/max wall and CPU time per path pattern, and the routes whose p95 CPU time is
       # over the 10 ms per-request budget (printed as warnings). No header, cookie, body or log line
       # is copied. If the tail had already exited when the suite finished, or recorded nothing,
@@ -251,6 +252,17 @@ jobs:
           tail_alive=false
           if [ -f .worker-tail/pid ]; then
             if kill -0 "$(cat .worker-tail/pid)" 2>/dev/null; then tail_alive=true; fi
+            # Tail events reach the stream seconds after their request ends, so stopping at once
+            # loses the last ones (often the failing request). Wait until the stream has not
+            # grown for 5 s, at most 30 s.
+            quiet=0; last_size=""
+            for _ in $(seq 1 30); do
+              size=$(wc -c < .worker-tail/tail.json 2>/dev/null || echo 0)
+              if [ "$size" = "$last_size" ]; then quiet=$((quiet + 1)); else quiet=0; fi
+              last_size=$size
+              if [ "$quiet" -ge 5 ]; then break; fi
+              sleep 1 || true
+            done
             kill "$(cat .worker-tail/pid)" 2>/dev/null || true
             sleep 2 || true
             kill -9 "$(cat .worker-tail/pid)" 2>/dev/null || true
@@ -268,7 +280,7 @@ jobs:
           if [ "$(jq -r '.complete' test-results/worker-tail-summary.json 2>/dev/null)" != "true" ]; then
             echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, or recorded no events). Treat worker-tail-summary.json as no evidence, not as a run without Worker-side failures."
           fi
-          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' \
+          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), slowestPaths: (.byPath | .[0:5]) }' \
             test-results/worker-tail-summary.json || true
           # One warning per route whose p95 CPU time is over the per-request budget (the Workers
           # Free plan's 10 ms CPU limit). Non-fatal for now. A path is reduced to URL-safe

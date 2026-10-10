@@ -92,11 +92,12 @@ describe("summarize-worker-tail.jq", () => {
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
+      "serverErrorInvocations",
       "slowest",
       "tailAliveAtStop",
       "totalInvocations",
     ]);
-    for (const invocation of [...summary.nonOkInvocations, ...summary.firstExceptions, ...summary.slowest]) {
+    for (const invocation of [...summary.nonOkInvocations, ...summary.firstExceptions, ...summary.slowest, ...summary.serverErrorInvocations]) {
       expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
     }
@@ -166,6 +167,7 @@ describe("summarize-worker-tail.jq", () => {
       lastEventTimestamp: null,
       outcomes: {},
       nonOkInvocations: [],
+      serverErrorInvocations: [],
       firstExceptions: [],
       slowest: [],
       byPath: [],
@@ -257,6 +259,38 @@ describe("summarize-worker-tail.jq", () => {
     });
   });
 
+  it("lists every 5xx response, including ones the Worker returned normally, so an app-level 500 is on record", () => {
+    // React Router turns a loader or action error into a 500 response and the invocation still
+    // ends "ok", so nonOkInvocations misses it; Journeys run 37942328703 failed on such a
+    // /login.data 500 that the summary did not show.
+    const load = (path: string, status: number | undefined, outcome = "ok", eventTimestamp = 1) => ({
+      outcome,
+      eventTimestamp,
+      wallTime: 40,
+      cpuTime: 9,
+      event: { request: { url: `https://qa.example${path}?x=1`, method: "POST" }, response: status === undefined ? undefined : { status } },
+    });
+    const events = [
+      load("/login.data", 500, "ok", 3),
+      load("/recipes/cmg1abcdefghijklmnopqrstu.data", 502, "ok", 4),
+      load("/shopping-list.data", 500, "exception", 5),
+      load("/missing", 404),
+      load("/recipes", 200),
+      load("/canceled", undefined, "canceled"),
+      ...Array.from({ length: 60 }, (_, index) => load("/burst", 503, "ok", 100 + index)),
+    ];
+
+    const { summary } = summarize(events);
+
+    expect(summary.serverErrorInvocations).toHaveLength(50);
+    expect(summary.serverErrorInvocations.slice(0, 3)).toEqual([
+      { outcome: "ok", path: "/login.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 3, exceptions: [] },
+      { outcome: "ok", path: "/recipes/cmg1abcdefghijklmnopqrstu.data", method: "POST", status: 502, cpuTime: 9, wallTime: 40, eventTimestamp: 4, exceptions: [] },
+      { outcome: "exception", path: "/shopping-list.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 5, exceptions: [] },
+    ]);
+    expect(summary.serverErrorInvocations.map((entry: { status: number }) => entry.status)).not.toContain(404);
+  });
+
   it("tolerates events without a request", () => {
     const { summary } = summarize([{ outcome: "exceededCpu", exceptions: [] }]);
 
@@ -309,6 +343,22 @@ describe("Journeys workflow tail wiring", () => {
     ]);
     expect(execFileSync("jq", ["-r", filter!], { input: JSON.stringify({ budget: { cpuTimeP95Ms: 10, overBudget: [] } }), encoding: "utf8" }))
       .toBe("");
+  });
+
+  it("waits for late tail events before stopping the tail, bounded, so the last failures are kept", () => {
+    // Tail events arrive seconds after their request ends. Stopping the tail as soon as the suite
+    // finished lost the last ~6 s of events in runs 37934997247 and 37912555692, including the
+    // failing request itself.
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const waitAt = run.indexOf("wc -c < .worker-tail/tail.json");
+    const killAt = run.indexOf('kill "$(cat .worker-tail/pid)"');
+
+    expect(waitAt).toBeGreaterThan(-1);
+    expect(waitAt).toBeLessThan(killAt);
+    // Alive-at-stop is judged before the wait, so a tail that died during the suite stays incomplete.
+    expect(run.indexOf("tail_alive=true")).toBeLessThan(waitAt);
+    expect(run).toMatch(/for _ in \$\(seq 1 30\)/);
+    expect(run).toMatch(/quiet" -ge 5/);
   });
 
   it("keeps the raw tail stream out of every upload, behind the unchanged gates", () => {
