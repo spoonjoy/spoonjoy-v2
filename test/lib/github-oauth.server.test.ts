@@ -93,14 +93,19 @@ describe("github-oauth.server", () => {
     expect(githubMock.validateAuthorizationCode).not.toHaveBeenCalled();
   });
 
-  it("returns the profile email when GitHub exposes it on /user", async () => {
-    mockFetch.mockResolvedValueOnce(mockJsonResponse({
-      id: 123,
-      login: "spoonfan",
-      name: "Spoon Fan",
-      email: "spoonfan@example.com",
-      avatar_url: "https://avatars.githubusercontent.com/u/123",
-    }));
+  it("returns the profile email when GitHub lists it as verified", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({
+        id: 123,
+        login: "spoonfan",
+        name: "Spoon Fan",
+        email: "spoonfan@example.com",
+        avatar_url: "https://avatars.githubusercontent.com/u/123",
+      }))
+      .mockResolvedValueOnce(mockJsonResponse([
+        { email: "primary@example.com", primary: true, verified: true, visibility: "private" },
+        { email: "spoonfan@example.com", primary: false, verified: true, visibility: "public" },
+      ]));
 
     const result = await verifyGitHubCallback(config, redirectUri, callbackData());
 
@@ -115,7 +120,7 @@ describe("github-oauth.server", () => {
         avatarUrl: "https://avatars.githubusercontent.com/u/123",
       },
     });
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(githubMock.validateAuthorizationCode).toHaveBeenCalledWith("valid-code");
     expect(mockFetch).toHaveBeenCalledWith(
       "https://api.github.com/user",
@@ -183,6 +188,27 @@ describe("github-oauth.server", () => {
 
     expect(result.success).toBe(true);
     expect(result.githubUser?.email).toBe("verified@example.com");
+  });
+
+  // Review of audit finding 2: the public profile email is self-typed and unproven. Treating it as
+  // verified would create or link a Spoonjoy-verified account for an address nobody proved.
+  it("does not trust a public profile email that GitHub does not list as verified", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({
+        id: 789,
+        login: "squatter",
+        name: null,
+        email: "victim@example.com",
+        avatar_url: null,
+      }))
+      .mockResolvedValueOnce(mockJsonResponse([
+        { email: "victim@example.com", primary: false, verified: false, visibility: "public" },
+      ]));
+
+    const result = await verifyGitHubCallback(config, redirectUri, callbackData());
+
+    expect(result.success).toBe(true);
+    expect(result.githubUser).toMatchObject({ email: "victim@example.com", emailVerified: false });
   });
 
   it("allows an existing OAuth account to continue when GitHub has no verified email", async () => {
@@ -556,13 +582,17 @@ describe("github-oauth.server", () => {
 
     it("does NOT capture on the happy path", async () => {
       const capture = vi.fn();
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({
-        id: 123,
-        login: "spoonfan",
-        name: "Spoon Fan",
-        email: "spoonfan@example.com",
-        avatar_url: null,
-      }));
+      mockFetch
+        .mockResolvedValueOnce(mockJsonResponse({
+          id: 123,
+          login: "spoonfan",
+          name: "Spoon Fan",
+          email: "spoonfan@example.com",
+          avatar_url: null,
+        }))
+        .mockResolvedValueOnce(mockJsonResponse([
+          { email: "spoonfan@example.com", primary: true, verified: true, visibility: "public" },
+        ]));
 
       const result = await verifyGitHubCallback(config, redirectUri, callbackData(), capture);
 

@@ -1,0 +1,56 @@
+name: D1 Restore Point Check
+
+# Read-only proof that the production D1 token can read a Time Travel restore point (bookmark).
+# Manual dispatch only. It sends one GET request, writes the response body to a private temp file,
+# and prints only the HTTP status and whether a bookmark came back. It never prints the token,
+# the response body or the bookmark, and it makes no write.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: d1-restore-point-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: read production restore point
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Read production D1 Time Travel bookmark
+        env:
+          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_ID: 32cb0e04-c45b-4cd2-a798-556556ae288d
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Production D1 credentials are restricted to refs/heads/main."
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_D1_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Cloudflare D1 GitHub secrets are required for the restore point check."
+            exit 1
+          fi
+          body="$(mktemp)"
+          chmod 600 "$body"
+          trap ': > "$body"' EXIT
+          curl_exit=0
+          status="$(curl --silent --max-time 30 --request GET \
+            --output "$body" --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${CLOUDFLARE_D1_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${D1_DATABASE_ID}/time_travel/bookmark")" || curl_exit=$?
+          echo "curl exit: ${curl_exit}"
+          echo "HTTP status: ${status:-none}"
+          if jq -e '.success == true and (.result.bookmark | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{32}$"))' "$body" >/dev/null 2>&1; then
+            echo "bookmark returned: yes"
+          else
+            echo "bookmark returned: no"
+            exit 1
+          fi

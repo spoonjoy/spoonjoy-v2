@@ -5,7 +5,7 @@ import {
   API_V1_SCOPE_REQUIREMENTS,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
-import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
+import { OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN_SOURCE } from "~/lib/username";
 import { SEARCH_SCOPES } from "~/lib/search.server";
 import { PRODUCT_ACTIVATION_PENDING_MESSAGE } from "~/lib/saved-recipe-cutover.server";
@@ -382,8 +382,8 @@ const schemas = {
     token_type: { const: "Bearer" },
     expires_in: {
       type: "integer",
-      const: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
-      description: "Present for expiring non-MCP OAuth credentials. Omitted for MCP-bound connections that remain active until revocation.",
+      enum: [OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS],
+      description: "Seconds until the access token expires: 900 (15 minutes) for generic OAuth clients and 7776000 (90 days) for MCP-bound connections. Refresh before it runs out; each refresh_token is accepted for 180 days after it was issued.",
     },
     scope: { type: "string" },
   }),
@@ -530,7 +530,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -546,7 +546,7 @@ const schemas = {
     description: nullableStringSchema,
     servings: nullableStringSchema,
     chef: ref("ChefSummary"),
-    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
+    coverImageUrl: { ...nullableStringSchema, description: "Public cover image URL for transient display. Spoonjoy-hosted /photos/ URLs accept ?w=<pixels> for a smaller WebP; see photoVariants in the API root. API v1 does not provide image alt text or a license to copy/store photos outside Spoonjoy." },
     coverProvenanceLabel: { ...nullableStringSchema, description: "Human-readable active cover provenance label such as Original photo, Editorial photo, Imported photo, or AI generated." },
     coverSourceType: coverSourceTypeSchema,
     coverVariant: coverVariantSchema,
@@ -661,7 +661,15 @@ const schemas = {
   }),
   UpdateAccountProfileRequest: objectSchema(["clientMutationId", "email", "username"], {
     clientMutationId: shortTextSchema,
-    email: { type: "string", format: "email", description: EMAIL_REQUEST_DESCRIPTION },
+    email: {
+      type: "string",
+      format: "email",
+      description:
+        "The API never changes the email. A different address is refused with 403 email_change_requires_web " +
+        "when the username is unchanged, and ignored when the username changes in the same request. " +
+        "Email changes happen only in Account settings on the website, and a new address starts unverified. " +
+        EMAIL_REQUEST_DESCRIPTION,
+    },
     // Describes what the server accepts, not only the rule for a new username: the caller's
     // current username is accepted unchanged even when it predates the rule (app/lib/username.ts).
     username: {
@@ -936,6 +944,14 @@ const schemas = {
         arrayOf({ type: "string" }),
       ],
     },
+    expiresInDays: {
+      description: "Days until the token expires, from 1 to 365. Omit it for the 90-day default; send null or \"never\" for a token that never expires.",
+      oneOf: [
+        { type: "integer", minimum: 1, maximum: 365 },
+        { type: "null" },
+        { type: "string", enum: ["never"] },
+      ],
+    },
   }),
   CreateShoppingItemRequest: objectSchema(["clientMutationId", "name"], {
     clientMutationId: shortTextSchema,
@@ -960,7 +976,7 @@ const schemas = {
   ClearShoppingListRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
-  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "auth"], {
+  DiscoveryData: objectSchema(["app", "version", "status", "docsUrl", "openapiUrl", "sdkOpenapiUrl", "connectorOpenapiUrl", "resources", "photoVariants", "auth"], {
     app: { const: "spoonjoy" },
     version: { const: "v1" },
     status: { const: "ok" },
@@ -969,6 +985,12 @@ const schemas = {
     sdkOpenapiUrl: { type: "string" },
     connectorOpenapiUrl: { type: "string" },
     resources: arrayOf({ type: "object" }),
+    photoVariants: objectSchema(["queryParameter", "widths", "contentType", "note"], {
+      queryParameter: { const: "w", description: "Query parameter that asks a Spoonjoy-hosted /photos/ URL for a size variant." },
+      widths: { ...arrayOf({ type: "integer" }), description: "Stored variant widths in pixels. A requested width rounds up to the next one and is capped at the largest." },
+      contentType: { const: "image/webp" },
+      note: { type: "string" },
+    }),
     auth: { type: "object" },
   }),
   BuildDeployment: objectSchema(["id", "tag", "timestamp"], {
@@ -1563,7 +1585,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
-    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account email and username", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+    PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account username (the email cannot be changed through the API)", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "email_change_requires_web", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
   },
   "/api/v1/me/sync": {
     GET: { operationId: "getApiV1MeSync", tags: ["Account"], summary: "Bootstrap native offline account data", auth: "bearer", scopes: ["account:read", "kitchen:read"], success: { 200: "NativeAccountSyncEnvelope" }, errors: ["invalid_cursor", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.cursor, queryParameters.limit] },
@@ -2759,6 +2781,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   authentication_required: "Authentication required",
   invalid_token: "Invalid API token",
   insufficient_scope: "Missing required scope",
+  email_change_requires_web: "Your email can only be changed in Account settings on the Spoonjoy website.",
   not_found: "Resource not found",
   method_not_allowed: "Method not allowed",
   idempotency_conflict: "Idempotency key was already used for a different request",

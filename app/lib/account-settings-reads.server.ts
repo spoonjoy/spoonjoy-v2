@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
-import { d1Boolean, d1Count, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Boolean, d1Count, d1NullableDateTime, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { mapModel, type ColumnSpec } from "~/lib/d1-models.server";
-import { legacyOAuthIssuerPromotionStatements } from "~/lib/oauth-server.server";
+import { LEGACY_OAUTH_REFRESH_EXPIRES_AT, legacyOAuthIssuerPromotionStatements } from "~/lib/oauth-server.server";
 import { listUserPasskeys, type PasskeySummary } from "~/lib/webauthn-route.server";
 
 // Reads behind the account settings page. The Prisma reader is the original sequence of
@@ -60,6 +60,7 @@ export interface AccountSettingsReads {
 export async function readAccountSettingsWithPrisma(
   database: PrismaClient,
   userId: string,
+  now: Date = new Date(),
 ): Promise<AccountSettingsReads> {
   const user = await database.user.findUnique({
     where: { id: userId },
@@ -81,11 +82,15 @@ export async function readAccountSettingsWithPrisma(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { id: true, name: true, tokenPrefix: true, scopes: true, createdAt: true, lastUsedAt: true, expiresAt: true },
   });
-  const activeRefreshTokens = await database.oAuthRefreshToken.findMany({
+  // A refresh token past its expiry is not marked revoked until someone presents it, so the
+  // expiry check keeps a lapsed connection off the connected-apps list.
+  const activeRefreshTokens = (await database.oAuthRefreshToken.findMany({
     where: { userId, revokedAt: null },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { clientId: true, id: true, issuer: true, resource: true, scope: true, createdAt: true, connectionKey: true },
-  });
+    select: { clientId: true, id: true, issuer: true, resource: true, scope: true, createdAt: true, connectionKey: true, expiresAt: true },
+  }))
+    .filter((token) => refreshTokenIsLive(token.expiresAt, now))
+    .map(({ expiresAt: _expiresAt, ...token }) => token);
   const oauthClientIds = [...new Set(activeRefreshTokens.map((token) => token.clientId))];
   const oauthClients = oauthClientIds.length
     ? await database.oAuthClient.findMany({
@@ -196,8 +201,15 @@ const ACCESS_COUNT_COLUMNS: ColumnSpec<AccountSettingsReads["accessCredentialCou
   count: "int",
 };
 
-// The clients the user holds an active refresh token for.
+// The clients the user holds an unrevoked refresh token for. Expired ones are dropped after the
+// read (`refreshTokenIsLive`): Prisma and the D1 write paths store timestamps in different
+// formats, so SQL cannot compare them reliably.
 const ACTIVE_REFRESH_CLIENT_IDS = `SELECT "clientId" FROM "OAuthRefreshToken" WHERE "userId" = ? AND "revokedAt" IS NULL`;
+
+/** A refresh token past its expiry (or, without one, past the legacy cutover) no longer connects anything. */
+function refreshTokenIsLive(expiresAt: Date | null, now: Date): boolean {
+  return (expiresAt ?? LEGACY_OAUTH_REFRESH_EXPIRES_AT) > now;
+}
 
 /**
  * The account settings page as one D1 batch, every statement scoped to the signed-in user.
@@ -249,7 +261,7 @@ export async function readAccountSettingsFromD1(
       userId,
     ],
     [
-      `SELECT "clientId", "id", "issuer", "resource", "scope", "createdAt", "connectionKey" FROM "OAuthRefreshToken"
+      `SELECT "clientId", "id", "issuer", "resource", "scope", "createdAt", "connectionKey", "expiresAt" FROM "OAuthRefreshToken"
        WHERE "userId" = ? AND "revokedAt" IS NULL
        ORDER BY "createdAt" DESC, "id" DESC`,
       userId,
@@ -267,6 +279,10 @@ export async function readAccountSettingsFromD1(
 
   const userRow = userRows[0];
   const preferenceRow = preferenceRows[0];
+  const activeRefreshTokens = refreshTokenRows
+    .filter((row) => refreshTokenIsLive(d1NullableDateTime(row.expiresAt, "expiresAt"), now))
+    .map((row) => mapModel(REFRESH_TOKEN_COLUMNS, row));
+  const liveClientIds = new Set(activeRefreshTokens.map((token) => token.clientId));
   return {
     user: userRow
       ? {
@@ -279,8 +295,13 @@ export async function readAccountSettingsFromD1(
     pushSubscriptionCount: d1Count(pushRows[0]?.count, "count"),
     preferences: preferenceRow ? mapModel(PREFERENCE_COLUMNS, preferenceRow) : null,
     apiCredentials: apiCredentialRows.map((row) => mapModel(API_CREDENTIAL_COLUMNS, row)),
-    activeRefreshTokens: refreshTokenRows.map((row) => mapModel(REFRESH_TOKEN_COLUMNS, row)),
-    oauthClients: clientRows.map((row) => mapModel(OAUTH_CLIENT_COLUMNS, row)),
-    accessCredentialCounts: accessCountRows.map((row) => mapModel(ACCESS_COUNT_COLUMNS, row)),
+    activeRefreshTokens,
+    oauthClients: clientRows
+      .map((row) => mapModel(OAUTH_CLIENT_COLUMNS, row))
+      .filter((client) => liveClientIds.has(client.id)),
+    accessCredentialCounts: accessCountRows
+      .map((row) => mapModel(ACCESS_COUNT_COLUMNS, row))
+      // The SQL already limits counts to clients with an unrevoked refresh token, so the id is set.
+      .filter((row) => liveClientIds.has(row.oauthClientId!)),
   };
 }

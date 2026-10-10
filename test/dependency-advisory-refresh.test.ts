@@ -1,6 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { loadAdvisoryAllowlist } from "../scripts/advisory-scan";
 
 const projectRoot = process.cwd();
 const packageJson = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8"));
@@ -61,16 +63,37 @@ describe("dependency advisory refresh contract", () => {
     expect(packageJson.pnpm.patchedDependencies).not.toHaveProperty("react-router@7.18.1");
   });
 
-  it("keeps only exact short-lived reviewed tooling residuals", () => {
-    expect(allowlist.allowedVulnerabilities).toHaveLength(5);
-    expect(allowlist.allowedVulnerabilities.map((entry: { packageName: string }) => entry.packageName).sort())
-      .toEqual(["braces", "deepmerge-ts", "esbuild", "sprintf-js", "uuid"]);
+  it("keeps the allowlist well-formed, unexpired and short-lived", async () => {
+    const now = new Date();
+    // The scanner's own loader rejects malformed, broad, package-less, version-less and expired entries.
+    const validated = await loadAdvisoryAllowlist(join(projectRoot, "security/advisory-allowlist.json"), now);
+    expect(validated.allowedVulnerabilities).toHaveLength(allowlist.allowedVulnerabilities.length);
+    const horizonMs = 45 * 24 * 60 * 60 * 1000;
     for (const entry of allowlist.allowedVulnerabilities) {
-      expect(entry.id).toMatch(/^GHSA-/);
+      expect(entry.id).toMatch(/^(GHSA|CVE|OSV)-/);
       expect(entry.version).toMatch(/^\d+\.\d+\.\d+/);
       expect(entry.ecosystem).toBe("npm");
       expect(entry.reason).toMatch(/tooling-only/i);
-      expect(entry.expiresOn).toBe("2026-10-24");
+      const expiresAt = Date.parse(`${entry.expiresOn}T23:59:59Z`);
+      expect(expiresAt).toBeGreaterThan(now.getTime());
+      expect(expiresAt - now.getTime()).toBeLessThanOrEqual(horizonMs);
     }
+  });
+
+  it("the loader rejects an expired entry so a lapsed exception cannot pass silently", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "advisory-allowlist-"));
+    const file = join(dir, "allowlist.json");
+    const entry = {
+      id: "GHSA-aaaa-bbbb-cccc",
+      packageName: "example",
+      version: "1.0.0",
+      ecosystem: "npm",
+      reason: "Tooling-only residual used by this test",
+      expiresOn: "2020-01-01",
+    };
+    writeFileSync(file, JSON.stringify({ allowedVulnerabilities: [entry] }));
+    await expect(loadAdvisoryAllowlist(file, new Date())).rejects.toThrow(/expired/);
+    writeFileSync(file, JSON.stringify({ allowedVulnerabilities: [{ ...entry, expiresOn: "2999-01-01" }] }));
+    await expect(loadAdvisoryAllowlist(file, new Date())).resolves.toBeDefined();
   });
 });

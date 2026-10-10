@@ -1,0 +1,6 @@
+CREATE TABLE "ImageGenDailyBudget" (
+    "bucketStart" DATETIME NOT NULL PRIMARY KEY,
+    "count" INTEGER NOT NULL DEFAULT 0,
+    "lastConsumeId" TEXT,
+    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
