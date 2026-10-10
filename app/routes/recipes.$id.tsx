@@ -1217,7 +1217,7 @@ export default function RecipeDetail() {
       <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
         <div className="mb-6 flex flex-col gap-2 border-t border-[var(--sj-border-strong)] pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="sj-eyebrow print:hidden">Cook mode</p>
+            <p className="sj-eyebrow sj-print-hidden">Cook mode</p>
             <Heading level={2} className="mt-3 print:mt-0 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
               Steps
             </Heading>

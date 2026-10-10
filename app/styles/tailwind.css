@@ -156,6 +156,47 @@
   #steps .sj-checklist-name {
     color: var(--sj-ink) !important;
   }
+
+  /* The rules below are unlayered, so they beat Tailwind's layered utilities at every breakpoint. A
+   * print: utility can lose to a component class (.sj-eyebrow sets display) or to an lg: utility,
+   * and a desktop-width print still matches lg. */
+  .sj-print-hidden {
+    display: none !important;
+  }
+
+  /* The masthead is one column on paper: no screen-height minimum, which would leave the title
+   * centred in a tall empty box, and no photo column beside the text. */
+  .sj-recipe-header {
+    border-bottom: 0 !important;
+  }
+
+  .sj-recipe-header-layout {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .sj-recipe-header-body {
+    min-height: 0 !important;
+    padding: 0 0 1rem !important;
+  }
+
+  .sj-recipe-hero {
+    height: 3in !important;
+    min-height: 0 !important;
+    max-height: 3in !important;
+  }
+
+  /* Steps line up with the title, and each step's ingredients start at the left margin instead of
+   * sitting in a centred column. */
+  #steps .sj-step-card {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  #steps .sj-step-ingredients {
+    margin-left: 0 !important;
+    max-width: 32rem !important;
+  }
 }
 
 html {

@@ -5248,6 +5248,8 @@ describe("Recipes $id Route", () => {
       expect(source).toHaveClass("hidden", "print:block");
       expect(screen.getByTestId("recipe-cooks")).toHaveClass("print:hidden");
       expect(screen.getByText("Tap ingredients as you go")).toHaveClass("print:hidden");
+      // .sj-eyebrow sets display itself, so the eyebrow is hidden by the stylesheet's unlayered rule.
+      expect(screen.getByText("Cook mode", { selector: "p" })).toHaveClass("sj-print-hidden");
       expect(document.getElementById("step-1")).toHaveClass("print:break-inside-avoid");
     });
 

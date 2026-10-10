@@ -133,15 +133,15 @@ export function RecipeHeader({
   )
 
   return (
-    <header className="w-full overflow-hidden border-b border-[var(--sj-border-strong)]">
+    <header className="sj-recipe-header w-full overflow-hidden border-b border-[var(--sj-border-strong)]">
       <div
-        className="grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"
+        className="sj-recipe-header-layout grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"
         data-testid="recipe-header-layout"
       >
         {displayImageUrl ? (
           <div
             data-testid="recipe-image"
-            className="relative h-[36svh] min-h-[16rem] max-h-[20rem] bg-[var(--sj-photo-charcoal)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:h-[3in] print:min-h-0 print:max-h-[3in] print:bg-transparent"
+            className="sj-recipe-hero relative h-[36svh] min-h-[16rem] max-h-[20rem] bg-[var(--sj-photo-charcoal)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:h-[3in] print:min-h-0 print:max-h-[3in] print:bg-transparent"
           >
             <img
               src={displayImageUrl}
@@ -178,7 +178,7 @@ export function RecipeHeader({
           </div>
         )}
 
-        <div className="flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14 print:min-h-0 print:px-0 print:py-4">
+        <div className="sj-recipe-header-body flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14 print:min-h-0 print:px-0 print:py-4">
           {masthead ? (
             <div className="border-b border-[var(--sj-border)] pb-4 print:hidden" data-testid="recipe-masthead">
               {masthead}

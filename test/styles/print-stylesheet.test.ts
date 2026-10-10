@@ -86,6 +86,33 @@ describe("print stylesheet", () => {
     expect(declarations("#steps .sj-checklist-row", rules).get("grid-template-columns")).toBe("minmax(0, 1fr)");
   });
 
+  it("prints the masthead as one column without the screen-height minimum", () => {
+    // On screen the masthead is at least 34rem tall at lg, with the title centred and the photo in a
+    // column beside it; on paper that left about 200px of blank space above and below the title.
+    const layout = declarations(".sj-recipe-header-layout", rules);
+    expect(layout.get("display")).toBe("block");
+    expect(layout.get("min-height")).toBe("0");
+    expect(declarations(".sj-recipe-header-body", rules).get("min-height")).toBe("0");
+    expect(declarations(".sj-recipe-hero", rules).get("height")).toBe("3in");
+    expect(declarations("#steps .sj-step-ingredients", rules).get("margin-left")).toBe("0");
+    expect(declarations("#steps .sj-step-card", rules).get("padding-left")).toBe("0");
+  });
+
+  it("hides print-only-hidden elements even where a component class sets display", () => {
+    expect(declarations(".sj-print-hidden", rules).get("display")).toBe("none");
+  });
+
+  it("keeps the print rules unlayered, so lg: utilities and component classes cannot override them", () => {
+    sheet.walkAtRules("media", (media: AtRule) => {
+      if (media.params.trim() !== "print") return;
+      let parent = media.parent;
+      while (parent && parent.type !== "root") {
+        expect(parent.type === "atrule" && (parent as AtRule).name === "layer").toBe(false);
+        parent = parent.parent;
+      }
+    });
+  });
+
   it("sets page margins for paper", () => {
     let margin: string | undefined;
     sheet.walkAtRules("page", (page) => {

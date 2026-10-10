@@ -327,4 +327,13 @@ describe('RecipeHeader on paper', () => {
     expect(screen.getByTestId('recipe-masthead')).toHaveClass('print:hidden')
     expect(screen.getByTestId('recipe-image-placeholder')).toHaveClass('print:hidden')
   })
+
+  it('carries the classes the print stylesheet uses to make the masthead one short column', () => {
+    renderWithRouter(<RecipeHeader {...props} coverImageUrl="https://example.com/cover.jpg" />)
+    const layout = screen.getByTestId('recipe-header-layout')
+    expect(layout).toHaveClass('sj-recipe-header-layout')
+    expect(layout.closest('header')).toHaveClass('sj-recipe-header')
+    expect(screen.getByTestId('recipe-image')).toHaveClass('sj-recipe-hero')
+    expect(screen.getByRole('heading', { level: 1 }).closest('.sj-recipe-header-body')).not.toBeNull()
+  })
 })
