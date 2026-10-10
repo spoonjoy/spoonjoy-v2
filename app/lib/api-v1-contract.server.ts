@@ -141,6 +141,7 @@ export const API_V1_ERROR_STATUS = {
   method_not_allowed: 405,
   idempotency_conflict: 409,
   idempotency_in_progress: 409,
+  edit_conflict: 409,
   rate_limited: 429,
   upstream_error: 502,
   product_activation_pending: 503,

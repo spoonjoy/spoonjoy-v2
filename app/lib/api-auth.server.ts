@@ -1,6 +1,8 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
@@ -57,6 +59,11 @@ export interface ApiPrincipal {
   oauthIssuer?: string | null;
   oauthResource?: string | null;
   scopes: string[];
+  /**
+   * The account's session version when this request authenticated (a browser session, or a bearer
+   * token): the fence for a token it creates. Unset for an environment-configured owner.
+   */
+  sessionVersion?: number;
 }
 
 export interface CreatedApiCredential {
@@ -149,7 +156,7 @@ export function expandCredentialScopes(scopes: string | null | undefined): strin
 }
 
 function toPrincipal(
-  user: Pick<User, "id" | "email" | "username">,
+  user: Pick<User, "id" | "email" | "username"> & { sessionVersion?: number },
   source: ApiPrincipalSource,
   credentialId?: string,
   scopes: readonly string[] = ALL_FIRST_SLICE_SCOPES,
@@ -167,6 +174,7 @@ function toPrincipal(
     oauthIssuer,
     oauthResource,
     scopes: [...scopes],
+    ...(user.sessionVersion === undefined ? {} : { sessionVersion: user.sessionVersion }),
   };
 }
 
@@ -250,6 +258,69 @@ export async function createApiCredential(
   return { token, credential };
 }
 
+/**
+ * Create a personal API token for the chef `principal` authenticated as, fenced on how they
+ * authenticated: the insert only happens while the account's session version is still the one
+ * `principal` read and, for a bearer caller, while the calling token is still unrevoked.
+ *
+ * The check and the insert are one `INSERT ... SELECT ... WHERE` statement, so sign out
+ * everywhere or a password change lands either before it (nothing is inserted and the request
+ * is refused) or after it (the revocation's sweep finds the token). There is no insert-then-undo
+ * step that could fail and leave a token behind. Checking the calling token as well covers the
+ * bearer read itself: Prisma reads the token and its user in two queries, so a revocation in
+ * between hands the caller an unrevoked token and the new version, but the same atomic
+ * revocation also revoked the token, which the insert then sees.
+ *
+ * With a D1 binding the statement runs as a D1 batch; without one (unit tests, scripts) it runs
+ * through Prisma as the same single statement. Like the other fences, this relies on D1 read
+ * replication being off. An environment-configured owner carries neither a version nor a
+ * token, so nothing is fenced.
+ */
+export async function createApiCredentialForPrincipal(
+  db: PrismaClientType,
+  principal: Pick<ApiPrincipal, "id" | "sessionVersion" | "credentialId">,
+  name: string,
+  options: { expiresAt?: Date | null; scopes?: string | string[] | null; d1?: D1ReadDatabase | null } = {},
+): Promise<CreatedApiCredential> {
+  const guards: string[] = [];
+  const guardValues: unknown[] = [];
+  if (principal.sessionVersion !== undefined) {
+    guards.push(`EXISTS (SELECT 1 FROM "User" WHERE "id" = ? AND "sessionVersion" = ?)`);
+    guardValues.push(principal.id, principal.sessionVersion);
+  }
+  if (principal.credentialId) {
+    guards.push(`EXISTS (SELECT 1 FROM "ApiCredential" WHERE "id" = ? AND "userId" = ? AND "revokedAt" IS NULL)`);
+    guardValues.push(principal.credentialId, principal.id);
+  }
+  if (guards.length === 0) return createApiCredential(db, principal.id, name, options);
+
+  const token = generateApiToken();
+  const id = crypto.randomUUID();
+  const at = d1Timestamp(new Date());
+  const query: D1Query = [
+    `INSERT INTO "ApiCredential" ("id", "userId", "name", "tokenHash", "tokenPrefix", "scopes", "expiresAt", "createdAt", "updatedAt")
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guards.join(" AND ")}`,
+    id,
+    principal.id,
+    name.trim(),
+    await hashApiToken(token),
+    token.slice(0, 12),
+    normalizeCredentialScopes(options.scopes),
+    options.expiresAt ? d1Timestamp(options.expiresAt) : null,
+    at,
+    at,
+    ...guardValues,
+  ];
+  const [sql, ...values] = query;
+  const inserted = options.d1
+    ? (await d1WriteBatch(options.d1, [query]))[0].changes
+    : await db.$executeRawUnsafe(sql, ...values);
+  if (inserted !== 1) {
+    throw new ApiAuthError("Your session was signed out. Sign in again to create a token.", 401);
+  }
+  return { token, credential: await db.apiCredential.findUniqueOrThrow({ where: { id } }) };
+}
+
 function isRecordNotFound(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2025";
 }
@@ -260,7 +331,31 @@ export const LAST_USED_AT_WRITE_INTERVAL_MS = 5 * 60 * 1000;
 export type ApiAuthOptions = {
   /** Runs the throttled `lastUsedAt` write after the response instead of before it. */
   waitUntil?: (promise: Promise<unknown>) => void;
+  /**
+   * The request's D1 binding. A browser session's user is then read from it, so a cookie request
+   * never needs a Prisma client.
+   */
+  d1?: D1ReadDatabase | null;
 };
+
+/** A Prisma client, or a function that builds one only when a read needs it. */
+export type ApiAuthDatabase = PrismaClientType | (() => Promise<PrismaClientType>);
+
+const SESSION_USER_SQL = 'SELECT "id", "email", "username", "sessionVersion" FROM "User" WHERE "id" = ?';
+
+/** The browser session's user, read from D1 in one statement; null when the user is gone. */
+async function readSessionUserFromD1(
+  d1: D1ReadDatabase,
+  userId: string,
+): Promise<Pick<User, "id" | "email" | "username" | "sessionVersion"> | null> {
+  const [[row]] = await d1ReadBatch(d1, [[SESSION_USER_SQL, userId]]);
+  if (!row) return null;
+  const { id, email, username, sessionVersion } = row;
+  if (typeof id !== "string" || typeof email !== "string" || typeof username !== "string" || typeof sessionVersion !== "number") {
+    throw new Error("D1 user row is missing its id, email, username or session version");
+  }
+  return { id, email, username, sessionVersion };
+}
 
 export async function authenticateApiToken(
   db: PrismaClientType,
@@ -271,7 +366,7 @@ export async function authenticateApiToken(
   const tokenHash = await hashApiToken(token);
   const credential = await db.apiCredential.findUnique({
     where: { tokenHash },
-    include: { user: { select: { id: true, email: true, username: true } } },
+    include: { user: { select: { id: true, email: true, username: true, sessionVersion: true } } },
   });
 
   if (
@@ -280,6 +375,22 @@ export async function authenticateApiToken(
     (effectiveCredentialExpiry(credential)?.getTime() ?? Infinity) <= Date.now()
   ) {
     throw new ApiAuthError("Invalid API token", 401);
+  }
+
+  // An OAuth credential is only as live as its grant. Revoking a connection, or every connection
+  // on the account, revokes the grant first; a refresh that raced it and inserted an access token
+  // after the token sweep must still mint nothing usable.
+  if (credential.oauthClientId && (credential.oauthGrantId || credential.oauthConnectionKey)) {
+    const grant = await db.oAuthGrant.findFirst({
+      where: {
+        OR: [
+          ...(credential.oauthGrantId ? [{ id: credential.oauthGrantId }] : []),
+          ...(credential.oauthConnectionKey ? [{ connectionKey: credential.oauthConnectionKey }] : []),
+        ],
+      },
+      select: { status: true },
+    });
+    if (grant && grant.status !== "active") throw new ApiAuthError("Invalid API token", 401);
   }
 
   let oauthIssuer = credential.oauthIssuer;
@@ -356,15 +467,16 @@ export async function authenticateApiToken(
 }
 
 export async function authenticateApiRequest(
-  db: PrismaClientType,
+  db: ApiAuthDatabase,
   request: Request,
   env?: (SessionEnv & { SPOONJOY_BASE_URL?: string }) | null,
   options: ApiAuthOptions = {},
 ): Promise<ApiPrincipal | null> {
+  const prisma = () => (typeof db === "function" ? db() : Promise.resolve(db));
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
     return authenticateApiToken(
-      db,
+      await prisma(),
       bearerToken,
       resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
       options,
@@ -381,10 +493,12 @@ export async function authenticateApiRequest(
   const identity = await getSessionIdentity(request, env);
   if (!identity) return null;
 
-  const user = await db.user.findUnique({
-    where: { id: identity.userId },
-    select: { id: true, email: true, username: true, sessionVersion: true },
-  });
+  const user = options.d1
+    ? await readSessionUserFromD1(options.d1, identity.userId)
+    : await (await prisma()).user.findUnique({
+      where: { id: identity.userId },
+      select: { id: true, email: true, username: true, sessionVersion: true },
+    });
   return user && isCurrentSession(identity, user.sessionVersion) ? toPrincipal(user, "session") : null;
 }
 

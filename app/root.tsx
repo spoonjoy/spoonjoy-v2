@@ -38,6 +38,7 @@ import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Text } from "~/components/ui/text";
 import { SkipLink } from "~/components/navigation/skip-link";
+import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
 import "./styles/tailwind.css";
@@ -103,7 +104,7 @@ function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
     <Headless.Menu as="div" className="relative">
       <Headless.MenuButton className="sj-desktop-nav-link">
-        Login
+        Log in
       </Headless.MenuButton>
       <Headless.MenuItems
         anchor="bottom end"
@@ -166,8 +167,8 @@ export function AppNavbar({
             <ThemeToggle />
             <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
             <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-              <button type="submit" className={navLinkClass} aria-label="Log out">
-                Logout
+              <button type="submit" className={navLinkClass}>
+                Log out
               </button>
             </Form>
           </div>
@@ -182,7 +183,7 @@ export function AppNavbar({
           <div className="sj-desktop-nav-actions">
             <ThemeToggle />
             <LoginMenu oauthProviders={oauthProviders} />
-            <Button href="/signup">Sign Up</Button>
+            <Button href="/signup">Sign up</Button>
           </div>
         </>
       )}
@@ -234,6 +235,7 @@ export default function App() {
       <ToastProvider>
         <RouteTransitionIndicator />
         <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+          {userId ? null : <PhoneBrandBar />}
           <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </header>
@@ -243,7 +245,7 @@ export default function App() {
           <main
             id="main"
             tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0"
+            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
           >
             <Outlet />
           </main>

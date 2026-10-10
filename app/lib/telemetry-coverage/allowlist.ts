@@ -171,6 +171,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Validation/draft-parse catch maps to a 4xx form error returned to the user; not an unexpected server exception.",
   },
   {
+    file: "app/lib/account-settings.server.ts",
+    category: "rethrow",
+    reason:
+      "Sole catch recovers the race where the same account was deleted by a concurrent request (AccountDeletionError) and goes on to sign out; any other error is rethrown and captured by handleError in app/entry.server.tsx.",
+  },
+  {
     file: "app/lib/account-deletion.server.ts",
     category: "expected-4xx",
     reason:

@@ -55,6 +55,10 @@ describe("build output hygiene", () => {
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("warn", {
       code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "account.export".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "well-known.apple-app-site-association".',
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("warn", {

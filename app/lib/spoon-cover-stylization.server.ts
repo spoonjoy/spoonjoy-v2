@@ -83,8 +83,12 @@ function hasNonEmptyUrl(value: string | null | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function failureStatusFor(cover: { imageUrl: string | null }): "ready" | "failed" {
-  return hasNonEmptyUrl(cover.imageUrl) ? "ready" : "failed";
+// A failed stylization leaves a cover usable when it still has its own image. A regeneration's
+// cover (a child of the cover it regenerates) only copied that image, so it fails as failed rather
+// than leaving a duplicate of its parent in the history.
+function failureStatusFor(cover: { id: string; imageUrl: string | null; parentCoverId: string | null }): "ready" | "failed" {
+  const isRegeneration = cover.parentCoverId !== null && cover.parentCoverId !== cover.id;
+  return hasNonEmptyUrl(cover.imageUrl) && !isRegeneration ? "ready" : "failed";
 }
 
 function serializeError(error: unknown, depth = 0): Record<string, unknown> {
@@ -233,6 +237,7 @@ async function currentCoverForLifecycle(input: ScheduleSpoonStylizationInput) {
       status: true,
       generationStatus: true,
       archivedAt: true,
+      parentCoverId: true,
     },
   });
 }

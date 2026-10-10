@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -605,5 +605,21 @@ describe("nodeFileSystem", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+// The doc's summary table is read by people deciding what to backfill, so it has to match the
+// allowlist (2026-10-10: it said 42 entries while the allowlist held 47).
+describe("docs/telemetry-coverage.md", () => {
+  it("states the allowlist's current total and count per category", async () => {
+    const { TELEMETRY_GAP_ALLOWLIST } = await import("~/lib/telemetry-coverage/allowlist");
+    const doc = readFileSync(resolve("docs/telemetry-coverage.md"), "utf8");
+    expect(doc).toContain(`The allowlist now holds **${TELEMETRY_GAP_ALLOWLIST.length}** entries`);
+    const counts = new Map<string, number>();
+    for (const entry of TELEMETRY_GAP_ALLOWLIST) counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
+    const table = new Map(
+      [...doc.matchAll(/^\| `([a-z0-9-]+)` \| (\d+) \|/gm)].map((match) => [match[1], Number(match[2])]),
+    );
+    expect(table).toEqual(counts);
   });
 });

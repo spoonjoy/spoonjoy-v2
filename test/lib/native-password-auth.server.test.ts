@@ -313,4 +313,48 @@ describe("native username/password sign-in API", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
     expect(response.headers.get("Access-Control-Allow-Headers")).toBeNull();
   });
+
+  /** Sign out everywhere lands just before the sign-in's grant is written. */
+  function signOutEverywhereBeforeTheGrant() {
+    const create = db.oAuthGrant.create.bind(db.oAuthGrant);
+    return vi.spyOn(db.oAuthGrant, "create").mockImplementation((async (args: any) => {
+      await db.user.update({ where: { id: args.data.userId }, data: { sessionVersion: { increment: 1 } } });
+      return create(args);
+    }) as any);
+  }
+
+  it("asks the chef to retry when sign out everywhere lands before the sign-in's grant exists", async () => {
+    await createUser(db, "racer@example.com", "racer_chef", "correctHorseBatteryStaple");
+    signOutEverywhereBeforeTheGrant();
+
+    const response = await action(routeArgs(jsonRequest({ emailOrUsername: "racer@example.com", password: "correctHorseBatteryStaple" })));
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toMatchObject({ code: "validation_error", details: { providerCode: "sign_in_interrupted" } });
+    expect(await db.oAuthGrant.count({ where: { status: "active" } })).toBe(0);
+    expect(await db.oAuthRefreshToken.count({ where: { revokedAt: null } })).toBe(0);
+  });
+
+  it("answers as a failed sign-in when the password changes before the sign-in's grant exists", async () => {
+    const chef = await createUser(db, "racer@example.com", "racer_chef", "correctHorseBatteryStaple");
+    const other = await createUser(db, "other@example.com", "other_chef", "aDifferentPassword99");
+    const otherHash = await db.user.findUniqueOrThrow({ where: { id: other.id }, select: { hashedPassword: true, salt: true } });
+    const create = db.oAuthGrant.create.bind(db.oAuthGrant);
+    vi.spyOn(db.oAuthGrant, "create").mockImplementation((async (args: any) => {
+      // Another browser changes the password (to another chef's, for a known hash) and signs out everywhere.
+      await db.user.update({
+        where: { id: chef.id },
+        data: { ...otherHash, sessionVersion: { increment: 1 } },
+      });
+      return create(args);
+    }) as any);
+
+    const response = await action(routeArgs(jsonRequest({ emailOrUsername: "racer@example.com", password: "correctHorseBatteryStaple" })));
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(401);
+    expect(json.error).toMatchObject({ code: "invalid_token", details: { providerCode: "invalid_credentials" } });
+    expect(await db.oAuthGrant.count({ where: { userId: chef.id, status: "active" } })).toBe(0);
+  });
 });

@@ -375,6 +375,14 @@ describe("web dependency advisory gate", () => {
     expect(ci).toContain("osv-scanner_linux_amd64");
     expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
     expect(ci).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}");
+    // The tag lookup is authenticated with the job's read-only token, so it cannot hit the shared
+    // unauthenticated rate limit (2026-10-10: a 403 there failed a required advisory check).
+    for (const source of [ci, readFileSync(".github/workflows/advisory-scheduled.yml", "utf8")]) {
+      expect(source).toContain(
+        'curl -fsSL --retry 3 --retry-delay 2 -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}"',
+      );
+      expect(source).toContain("GITHUB_TOKEN: ${{ github.token }}");
+    }
     expect(ci).toContain(
       "node scripts/warning-gate.ts -- jq -e --arg expected \"$OSV_SCANNER_TAG_SHA\" '.object | select(.type == \"commit\" and .sha == $expected)' .cache/osv-scanner/tag.json",
     );
@@ -442,7 +450,8 @@ describe("CI warning suppression at source", () => {
 
     expect(envIndex).toBeGreaterThan(-1);
     expect(envIndex).toBeLessThan(jobsIndex);
-    expect(generateCommands).toHaveLength(2);
+    // coverage, unit-changed and e2e.
+    expect(generateCommands).toHaveLength(3);
     expect(generateCommands.every((index) => index > envIndex)).toBe(true);
     expect(packageJson.scripts.postinstall).toBe(
       "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
@@ -478,7 +487,8 @@ describe("CI warning suppression at source", () => {
   });
 
   it("routes every Corepack command in canonical CI through the warning gate", () => {
-    expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(4);
+    // advisory, coverage, unit-changed, workers-coverage and e2e.
+    expect(ci.match(/node scripts\/warning-gate\.ts -- corepack enable/g)).toHaveLength(5);
     expect(ci).not.toMatch(/^\s*corepack\s/m);
   });
 });

@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { expectConsoleError } from "../warning-policy";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
+import { data } from "react-router";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
@@ -2600,6 +2601,45 @@ describe("Recipes $id Edit Route", () => {
       expect(submittedData.description).toBe("Updated description");
       expect(submittedData.servings).toBe("8");
       expect(submittedData.steps).toBeDefined();
+    });
+
+    it("sends the loaded updatedAt with a save, shows an edit conflict, and saves again against the current updatedAt", async () => {
+      const user = userEvent.setup();
+      const sent: Array<string | null> = [];
+      const conflict = "This recipe changed after you opened it, maybe in another tab or the app. Nothing was saved. Save again to keep your version, or reload the page to see the other changes.";
+
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id/edit",
+          Component: EditRecipe,
+          loader: () => ({
+            recipe: { id: "recipe-1", title: "Original Title", description: null, servings: null, steps: [], updatedAt: new Date("2026-03-01T10:00:00.123Z") },
+            coverImageUrl: "",
+            formattedSteps: [],
+          }),
+          action: async ({ request }: { request: Request }) => {
+            const formData = await request.formData();
+            sent.push(formData.get("expectedUpdatedAt")?.toString() ?? null);
+            return sent.length === 1
+              ? data({ errors: { general: conflict }, currentUpdatedAt: "2026-03-01T10:05:00.456Z" }, { status: 409 })
+              : { success: true };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
+      await user.click(await screen.findByRole("button", { name: "Save Recipe" }));
+
+      expect(await screen.findByText(conflict)).toBeInTheDocument();
+      await waitForSaveToSettle();
+      // The cook's edits are still in the form.
+      expect(screen.getByLabelText(/^Title$/i)).toHaveValue("Original Title");
+
+      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await waitFor(() => {
+        expect(sent).toEqual(["2026-03-01T10:00:00.123Z", "2026-03-01T10:05:00.456Z"]);
+      });
+      await waitForSaveToSettle();
     });
 
     it("should keep the mobile dock off edit forms and submit from the in-flow Save Recipe button", async () => {
