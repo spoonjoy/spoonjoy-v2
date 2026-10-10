@@ -27,6 +27,7 @@ import {
   startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
+  coverInsertStatement,
   getScopedActiveCover,
   setActiveRecipeCover,
   type RecipeCoverVariant,
@@ -41,6 +42,7 @@ import {
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { createSpoonOnD1 } from "~/lib/recipe-spoon-d1.server";
+import { coverRegenerationStatement, readOwnedRecipeForCoverJobOnD1 } from "~/lib/recipe-cover-jobs-d1.server";
 import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib/ai-placeholder-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
@@ -407,6 +409,26 @@ function spoonFormFields(formData: FormData) {
   };
 }
 
+type BackgroundTask = (database: Awaited<ReturnType<typeof getRequestDb>>) => Promise<unknown>;
+
+/**
+ * Runs request work after the answer (through waitUntil) with one Prisma client, built when the
+ * first task starts, so the request itself never waits on Prisma. Without waitUntil (tests) each
+ * task runs before the answer.
+ */
+function backgroundWithRequestDb(
+  context: AppLoadContext,
+  waitUntil: ((promise: Promise<unknown>) => void) | undefined,
+): (task: BackgroundTask) => Promise<unknown> {
+  let database: ReturnType<typeof getRequestDb> | undefined;
+  return (task) => {
+    const run = async () => task(await (database ??= getRequestDb(context)));
+    if (!waitUntil) return run();
+    waitUntil(deferBackgroundTask(run));
+    return Promise.resolve();
+  };
+}
+
 // Logging a cook on D1: the spoon (and a cover from its photo) is written without Prisma. The
 // notifications and the cover's stylization run after the answer, each building the request's
 // Prisma client only when it starts; without waitUntil (tests) they run before the answer.
@@ -425,13 +447,7 @@ async function handleCreateSpoonOnD1(
     .catch(spoonErrorToResponse);
 
   // One Prisma client for all of this cook's background work, built when the first task starts.
-  let database: ReturnType<typeof getRequestDb> | undefined;
-  const later = (task: (database: Awaited<ReturnType<typeof getRequestDb>>) => Promise<unknown>): Promise<unknown> => {
-    const run = async () => task(await (database ??= getRequestDb(context)));
-    if (!waitUntil) return run();
-    waitUntil(deferBackgroundTask(run));
-    return Promise.resolve();
-  };
+  const later = backgroundWithRequestDb(context, waitUntil);
 
   try {
     const vapid = getVapidConfig(vapidEnv);
@@ -840,6 +856,152 @@ type RecipeDetailD1Answer =
   | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> }
   | { kind: "redirect"; response: Response };
 
+type CoverJobIntent = "createCoverFromSpoon" | "generateRecipeCoverPlaceholder" | "regenerateRecipeCover";
+const COVER_JOB_INTENTS: ReadonlySet<unknown> = new Set<CoverJobIntent>([
+  "createCoverFromSpoon",
+  "generateRecipeCoverPlaceholder",
+  "regenerateRecipeCover",
+]);
+
+function formId(formData: FormData, field: string): string | undefined {
+  const value = formData.get(field);
+  return typeof value === "string" && value ? value : undefined;
+}
+
+/**
+ * The owner's cover jobs on D1: the cover row is written in one guarded batch and its stylization
+ * or placeholder job runs after the answer, building the request's Prisma client only when it
+ * starts. Answers as the Prisma path does, in its order: 404 and 403 for the recipe, then the
+ * job's own 400 and 404.
+ */
+async function handleCoverJobOnD1(
+  d1: D1ReadDatabase,
+  intent: CoverJobIntent,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+  context: AppLoadContext,
+): Promise<{ success: true; intent: CoverJobIntent; coverId: string }> {
+  const spoonId = intent === "createCoverFromSpoon" ? formId(formData, "spoonId") : undefined;
+  const coverId = intent === "regenerateRecipeCover" ? formId(formData, "coverId") : undefined;
+  const { recipe, spoon, cover } = await readOwnedRecipeForCoverJobOnD1(d1, { recipeId, userId, spoonId, coverId });
+
+  const activateWhenReady = formData.get("activateWhenReady") === "true";
+  const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
+  const activationGuard = activateWhenReady
+    ? { activeCoverId: recipe.activeCoverId, activeCoverVariant: recipe.activeCoverVariant, coverMode: recipe.coverMode }
+    : undefined;
+  const { bucket, env, waitUntil } = getCloudflareCtx(context);
+  const later = backgroundWithRequestDb(context, waitUntil);
+  const now = new Date();
+
+  if (intent === "createCoverFromSpoon") {
+    if (!spoonId) throw new Response("spoonId is required", { status: 400 });
+    if (!spoon) throw new Response("Spoon photo not found", { status: 404 });
+    const newCoverId = crypto.randomUUID();
+    await writeExistingRecipeOnD1(d1, recipeId, [
+      coverInsertStatement(
+        {
+          id: newCoverId,
+          recipeId,
+          imageUrl: spoon.photoUrl,
+          sourceType: "spoon",
+          sourceSpoonId: spoon.id,
+          status: "processing",
+          createdById: userId,
+          sourceImageUrl: spoon.photoUrl,
+          generationStatus: "processing",
+          promptAddition,
+        },
+        now,
+      ),
+    ]);
+    await later((database) =>
+      scheduleSpoonCoverStylization({
+        db: database,
+        userId,
+        recipeId,
+        coverId: newCoverId,
+        rawPhotoUrl: spoon.photoUrl,
+        recipeTitle: recipe.title,
+        env,
+        bucket,
+        promptAddition,
+        activateWhenReady,
+        suppressAutoActivation: !activateWhenReady,
+        activationGuard,
+      }),
+    );
+    return { success: true, intent, coverId: newCoverId };
+  }
+
+  if (intent === "generateRecipeCoverPlaceholder") {
+    const newCoverId = crypto.randomUUID();
+    await writeExistingRecipeOnD1(d1, recipeId, [
+      coverInsertStatement(
+        {
+          id: newCoverId,
+          recipeId,
+          imageUrl: "",
+          sourceType: "ai-placeholder",
+          sourceSpoonId: null,
+          status: "processing",
+          createdById: userId,
+          sourceImageUrl: null,
+          generationStatus: "processing",
+          promptAddition,
+        },
+        now,
+      ),
+    ]);
+    await later((database) =>
+      scheduleAiPlaceholderCover({
+        db: database,
+        userId,
+        recipeId,
+        coverId: newCoverId,
+        title: recipe.title,
+        description: recipe.description,
+        env,
+        bucket,
+        promptAddition,
+        activateWhenReady,
+        activationGuard,
+      }),
+    );
+    return { success: true, intent, coverId: newCoverId };
+  }
+
+  if (!coverId) throw new Response("coverId is required", { status: 400 });
+  if (!cover) throw new Response("Cover not found", { status: 404 });
+  if (cover.status === "archived" || cover.archivedAt) {
+    throw new Response("Archived covers cannot be regenerated", { status: 400 });
+  }
+  const rawPhotoUrl = cover.sourceImageUrl || cover.imageUrl;
+  if (!rawPhotoUrl.trim()) throw new Response("Cover has no source image", { status: 400 });
+  const regeneration = coverRegenerationStatement(cover, { createdById: userId, rawPhotoUrl, promptAddition }, now);
+  await writeExistingRecipeOnD1(d1, recipeId, [regeneration.statement]);
+  await later((database) =>
+    scheduleSpoonCoverStylization({
+      db: database,
+      userId,
+      recipeId,
+      coverId: regeneration.coverId,
+      rawPhotoUrl,
+      recipeTitle: recipe.title,
+      env,
+      bucket,
+      sourceType: cover.sourceType === "spoon" ? "spoon" : "chef-upload",
+      parentCoverId: regeneration.parentCoverId,
+      promptAddition,
+      activateWhenReady,
+      suppressAutoActivation: !activateWhenReady,
+      activationGuard,
+    }),
+  );
+  return { success: true, intent, coverId: regeneration.coverId };
+}
+
 function activeCoverChoice(formData: FormData, recipeId: string) {
   const coverId = formData.get("coverId");
   const variant = formData.get("variant");
@@ -1007,6 +1169,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   if (d1 && intent === "createSpoon") {
     return handleCreateSpoonOnD1(d1, userId, id, formData, context);
   }
+  if (d1 && COVER_JOB_INTENTS.has(intent)) {
+    return handleCoverJobOnD1(d1, intent as CoverJobIntent, userId, id, formData, context);
+  }
   if (d1) {
     const answered = await handleRecipeDetailActionOnD1(d1, intent, userId, id, formData);
     if (answered?.kind === "success") return { success: true };
@@ -1161,6 +1326,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     return { success: true, intent: "setRecipeNoCover" };
   }
 
+  // With a D1 binding the cover jobs were answered on D1 above; these are the fallbacks.
   if (intent === "createCoverFromSpoon") {
     const spoonId = formData.get("spoonId");
     const activateWhenReady = formData.get("activateWhenReady") === "true";

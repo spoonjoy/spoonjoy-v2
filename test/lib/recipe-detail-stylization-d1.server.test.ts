@@ -84,9 +84,11 @@ describe("recipe page stylization on a D1 binding", () => {
     expect(captured).toHaveLength(1);
     await Promise.all(captured);
 
-    // Processing, then failed (no image provider is configured): each a D1 batch.
+    // The request's own regeneration write, then the job's processing and failed updates (no image
+    // provider is configured): each a D1 batch.
     const coverWrites = d1.statements.filter((statement) => statement.sql.includes('UPDATE "RecipeCover"'));
-    expect(coverWrites.length).toBe(2);
+    expect(coverWrites.length).toBe(3);
+    expect(coverWrites[0].sql).toContain('"generationStartedAt" = ?');
     await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } })).resolves.toMatchObject({
       generationStatus: "failed",
     });
