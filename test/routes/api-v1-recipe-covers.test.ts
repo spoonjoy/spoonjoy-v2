@@ -1339,6 +1339,52 @@ describe("API v1 recipe cover management", () => {
     expect(archivedPayload.data.covers.map((cover: { id: string }) => cover.id)).toContain(fixture.archivedCover.id);
   });
 
+  it("lists a cover whose generation stopped long ago as failed, and leaves a live one processing", async () => {
+    const fixture = await createCoverFixture(db);
+    // Its job's Worker died: created processing an hour ago, never finished.
+    const stuck = await db.recipeCover.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: fixture.owner.id,
+        createdAt: new Date(Date.now() - 60 * 60_000),
+      },
+    });
+    // Created as long ago, but regenerated a minute ago: still running.
+    const live = await db.recipeCover.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        imageUrl: "/photos/covers/live-raw.jpg",
+        sourceType: "spoon",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: fixture.owner.id,
+        createdAt: new Date(Date.now() - 60 * 60_000),
+        generationStartedAt: new Date(Date.now() - 60_000),
+      },
+    });
+    await db.recipe.update({ where: { id: fixture.recipe.id }, data: { activeCoverId: stuck.id, activeCoverVariant: "image" } });
+
+    const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/covers?limit=10`, {
+      headers: bearer(fixture.ownerKitchenWrite.token, "req_cover_list_stuck"),
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/covers`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    const byId = new Map(payload.data.covers.map((cover: { id: string }) => [cover.id, cover]));
+    expect(byId.get(stuck.id)).toMatchObject({
+      status: "failed",
+      generationStatus: "failed",
+      failureReason: "Generation stopped before it finished.",
+    });
+    expect(byId.get(live.id)).toMatchObject({ status: "processing", generationStatus: "processing" });
+    expect(payload.data.activeCover).toMatchObject({ id: stuck.id, status: "failed", generationStatus: "failed" });
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: stuck.id } })).resolves.toMatchObject({ status: "failed" });
+  });
+
   it("creates cover candidates from JSON image URLs without creating a Spoon", async () => {
     const fixture = await createCoverFixture(db);
     const url = `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`;
@@ -2023,10 +2069,12 @@ describe("API v1 recipe cover management", () => {
     });
     await expect(db.recipeCover.findUniqueOrThrow({
       where: { id: fixture.replacementCover.id },
-      select: { promptAddition: true, parentCoverId: true },
+      select: { promptAddition: true, parentCoverId: true, generationStartedAt: true },
     })).resolves.toEqual({
       promptAddition: `keep same plate ${"x".repeat(224)}`,
       parentCoverId: fixture.replacementCover.id,
+      // Regeneration restarts the clock that decides when a generation counts as stopped.
+      generationStartedAt: expect.any(Date),
     });
   });
 

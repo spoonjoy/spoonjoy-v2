@@ -10,6 +10,7 @@ import {
   recipeUpdateStatement,
 } from "~/lib/recipe-d1-writes.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
+import { d1StuckCoverStore, prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
 import {
   archiveRecipeCover,
   createCover,
@@ -251,6 +252,16 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
+  // A generation whose job died is failed here, for any viewer of its active cover and for
+  // the owner's history, so neither spins forever.
+  const [settledActiveCover, ...settledHistory] = await settleStuckCoverGenerations(
+    d1 ? d1StuckCoverStore(d1) : prismaStuckCoverStore(await getRequestDb(context)),
+    recipe.id,
+    [recipe.activeCover, ...reads.coverHistoryCovers],
+  );
+  recipe.activeCover = settledActiveCover;
+  // Only the first entry can be null: the history holds rows read from the table.
+  const coverHistoryCovers = settledHistory as typeof reads.coverHistoryCovers;
   const activeCover = getScopedActiveCover(recipe);
   const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
   const activeRealCover = hasActiveRealRecipeCover(recipe);
@@ -306,7 +317,6 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     nextTime: spoon.nextTime,
     chef: spoon.chef,
   }));
-  const coverHistoryCovers = reads.coverHistoryCovers;
   const spoonImages = reads.spoonImages;
   const { activeCover: _activeCover, ...recipeForClient } = recipe;
 
@@ -998,6 +1008,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       data: {
         status: "processing",
         generationStatus: "processing",
+        generationStartedAt: new Date(),
         failureReason: null,
         sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
         promptAddition,

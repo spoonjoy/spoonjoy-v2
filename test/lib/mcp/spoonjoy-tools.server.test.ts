@@ -904,10 +904,67 @@ describe("spoonjoy MCP tools", () => {
     );
     await expect(context.db.recipeCover.findUniqueOrThrow({
       where: { id: cover.id },
-      select: { promptAddition: true, parentCoverId: true },
+      select: { promptAddition: true, parentCoverId: true, generationStartedAt: true },
     })).resolves.toEqual({
       promptAddition: `keep same plate ${"x".repeat(224)}`,
       parentCoverId: cover.id,
+      // Regeneration restarts the clock that decides when a generation counts as stopped.
+      generationStartedAt: expect.any(Date),
+    });
+  });
+
+  it("reports a cover generation that stopped long ago as failed, so a polling client stops", async () => {
+    const chef = await context.db.user.create({
+      data: {
+        email: uniqueEmail("cover-stuck-chef"),
+        username: `cover_stuck_chef_${faker.string.alphanumeric(6).toLowerCase()}`,
+      },
+    });
+    const principal = {
+      id: chef.id,
+      email: chef.email,
+      username: chef.username,
+      source: "bearer" as const,
+      scopes: ["recipes:read", "kitchen:write"],
+    };
+    const recipe = await context.db.recipe.create({
+      data: { title: `MCP Stuck ${faker.string.alphanumeric(6)}`, chefId: chef.id },
+    });
+    // Its job's Worker died: created processing an hour ago, never finished.
+    const cover = await context.db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: chef.id,
+        createdAt: new Date(Date.now() - 60 * 60_000),
+      },
+    });
+    await context.db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+    });
+
+    const status = parseJson(await callSpoonjoyMcpTool(
+      "get_cover_generation_status",
+      { recipeId: recipe.id, coverId: cover.id },
+      { db: context.db, principal },
+    ));
+    expect(status).toMatchObject({
+      cover: { id: cover.id, status: "failed", generationStatus: "failed", failureReason: "Generation stopped before it finished." },
+      activeCover: { id: cover.id, generationStatus: "failed" },
+    });
+
+    const listed = parseJson(await callSpoonjoyMcpTool(
+      "list_recipe_covers",
+      { recipeId: recipe.id },
+      { db: context.db, principal },
+    ));
+    expect(listed).toMatchObject({
+      covers: [{ id: cover.id, status: "failed", generationStatus: "failed" }],
+      activeCover: { id: cover.id, generationStatus: "failed" },
     });
   });
 
