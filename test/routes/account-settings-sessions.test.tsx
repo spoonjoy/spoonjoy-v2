@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -10,6 +10,8 @@ import { createUserSessionCookie, getSessionIdentity, getUserId } from "~/lib/se
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
+import { issueConnectorTokens, registerOAuthClient } from "~/lib/oauth-server.server";
 
 interface DataResult {
   data: AccountSettingsActionResult;
@@ -71,7 +73,7 @@ describe("Account settings - revocable sessions", () => {
 
       expect(result.data).toEqual({
         success: true,
-        message: "You've been signed out everywhere else. You're still signed in here.",
+        message: "You've been signed out everywhere else, and apps, agents and API tokens have been disconnected. You're still signed in here.",
       });
       expect(await currentVersion(userId)).toBe(1);
 
@@ -118,6 +120,92 @@ describe("Account settings - revocable sessions", () => {
     });
   });
 
+  describe("bearer credentials", () => {
+    const ISSUER = "http://localhost:3000";
+
+    async function seedAccess() {
+      const db = await getLocalDb();
+      const personal = await createApiCredential(db, userId, "Laptop script");
+      const delegated = await createApiCredential(db, userId, "Spoonjoy for iPhone delegated token", { scopes: "account:read account:write" });
+      const client = await registerOAuthClient(db, { clientName: "Some agent", redirectUris: ["https://agent.example/cb"], issuer: ISSUER });
+      const oauth = await issueConnectorTokens(db, { userId, clientId: client.clientId, scope: "kitchen:read", issuer: ISSUER });
+      const pending = await db.agentConnectionRequest.create({
+        data: {
+          deviceCodeHash: `hash-${userId}`,
+          userCode: `CODE-${userId.slice(-4)}`,
+          agentName: "Approved but uncollected",
+          scopes: "kitchen:read",
+          status: "approved",
+          approvedById: userId,
+          approvedAt: new Date(),
+          expiresAt: new Date(Date.now() + 600_000),
+        },
+      });
+      return { db, personal, delegated, oauth, pending };
+    }
+
+    async function expectAllRevoked(seed: Awaited<ReturnType<typeof seedAccess>>, reason: string) {
+      for (const token of [seed.personal.token, seed.delegated.token, seed.oauth.accessToken]) {
+        await expect(authenticateApiToken(seed.db, token, ISSUER)).rejects.toMatchObject({ status: 401 });
+      }
+      expect(await seed.db.oAuthRefreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+      const grants = await seed.db.oAuthGrant.findMany({ where: { userId } });
+      expect(grants.map((grant) => [grant.status, grant.statusReason])).toEqual([["revoked", reason]]);
+      const request = await seed.db.agentConnectionRequest.findUniqueOrThrow({ where: { id: seed.pending.id } });
+      expect(request.status).toBe("denied");
+    }
+
+    it("sign out everywhere revokes API tokens, delegated tokens, OAuth connections and approved agent requests", async () => {
+      const seed = await seedAccess();
+      await expect(authenticateApiToken(seed.db, seed.personal.token, ISSUER)).resolves.toMatchObject({ id: userId });
+
+      await postAction(cookiePair(await createUserSessionCookie(userId)), { intent: "signOutEverywhere" });
+
+      await expectAllRevoked(seed, "security_event");
+    });
+
+    it("a password change revokes bearer credentials by default", async () => {
+      const seed = await seedAccess();
+
+      await postAction(cookiePair(await createUserSessionCookie(userId)), {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "newSecurePassword456!",
+        confirmPassword: "newSecurePassword456!",
+        connectionsChoice: "1",
+        revokeConnections: "on",
+      });
+
+      await expectAllRevoked(seed, "security_event");
+    });
+
+    it("a password change keeps bearer credentials when the chef unticks the box", async () => {
+      const seed = await seedAccess();
+
+      const result = (await postAction(cookiePair(await createUserSessionCookie(userId)), {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "newSecurePassword456!",
+        confirmPassword: "newSecurePassword456!",
+        connectionsChoice: "1",
+      })) as unknown as DataResult;
+
+      expect(result.data.message).toBe("Your password has been changed successfully. Other browsers signed in to your account have been signed out.");
+      await expect(authenticateApiToken(seed.db, seed.personal.token, ISSUER)).resolves.toMatchObject({ id: userId });
+      await expect(authenticateApiToken(seed.db, seed.oauth.accessToken, ISSUER)).resolves.toMatchObject({ id: userId });
+    });
+
+    it("does not touch another chef's credentials", async () => {
+      const db = await getLocalDb();
+      const other = await createUser(db, faker.internet.email(), `other_${faker.string.alphanumeric(8)}`, PASSWORD);
+      const otherToken = await createApiCredential(db, other.id, "Other chef");
+
+      await postAction(cookiePair(await createUserSessionCookie(userId)), { intent: "signOutEverywhere" });
+
+      await expect(authenticateApiToken(db, otherToken.token, ISSUER)).resolves.toMatchObject({ id: other.id });
+    });
+  });
+
   describe("action - change password", () => {
     it("revokes every other session and keeps this browser signed in", async () => {
       const thisBrowser = cookiePair(await createUserSessionCookie(userId));
@@ -133,7 +221,7 @@ describe("Account settings - revocable sessions", () => {
       expect(result.data).toEqual({
         success: true,
         intent: "changePassword",
-        message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
+        message: "Your password has been changed. Other browsers have been signed out, and apps, agents and API tokens have been disconnected.",
       });
       expect(await currentVersion(userId)).toBe(1);
       const db = await getLocalDb();
@@ -235,6 +323,82 @@ describe("Account settings - revocable sessions", () => {
       expect(intents).toEqual(["signOutEverywhere"]);
       expect(screen.getByRole("button", { name: "Sign out everywhere" })).toBeInTheDocument();
       expect(screen.queryByText("Are you sure?")).not.toBeInTheDocument();
+    });
+
+    it("says that apps, agents and API tokens are disconnected too", async () => {
+      renderSettings(() => {});
+
+      const section = await screen.findByTestId("sign-out-everywhere");
+      expect(section).toHaveTextContent(/disconnects every app, agent and API token/i);
+      expect(section).not.toHaveTextContent(/keep their access/i);
+    });
+  });
+
+  describe("component - password change disconnect choice", () => {
+    function renderPasswordForm(onSubmit: (form: FormData) => void) {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/account/settings",
+          Component: AccountSettings,
+          loader: () => ({
+            user: {
+              id: userId,
+              email: "chef@example.com",
+              username: "chef",
+              hasPassword: true,
+              oauthAccounts: [],
+              photoUrl: null,
+              passkeys: [],
+            },
+            notifications: { pushSubscribed: false },
+          }),
+          action: async ({ request }) => {
+            onSubmit(await request.formData());
+            return { success: true, message: "Your password has been changed." };
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/account/settings"]} />);
+    }
+
+    async function fillPasswordForm(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole("button", { name: "Change Password" }));
+      await user.type(screen.getByLabelText("Current Password"), "oldPassword123!");
+      await user.type(screen.getByLabelText("New Password"), "newPassword456!");
+      await user.type(screen.getByLabelText("Confirm Password"), "newPassword456!");
+    }
+
+    it("disconnects other devices, apps, agents and API tokens unless the chef unticks it", async () => {
+      const user = userEvent.setup();
+      const forms: FormData[] = [];
+      renderPasswordForm((form) => forms.push(form));
+
+      await fillPasswordForm(user);
+      const choice = screen.getByRole("checkbox", { name: /also sign out other devices and disconnect apps, agents and api tokens/i });
+      expect(choice).toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+      await waitFor(() => expect(forms).toHaveLength(1));
+      expect(forms[0].get("intent")).toBe("changePassword");
+      expect(forms[0].get("connectionsChoice")).toBe("1");
+      expect(forms[0].get("revokeConnections")).toBe("1");
+      // Let the action's result render, so its state update lands inside the test.
+      expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
+    });
+
+    it("keeps apps and tokens connected when the chef unticks the box", async () => {
+      const user = userEvent.setup();
+      const forms: FormData[] = [];
+      renderPasswordForm((form) => forms.push(form));
+
+      await fillPasswordForm(user);
+      await user.click(screen.getByRole("checkbox", { name: /also sign out other devices/i }));
+      await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+      await waitFor(() => expect(forms).toHaveLength(1));
+      expect(forms[0].get("connectionsChoice")).toBe("1");
+      expect(forms[0].has("revokeConnections")).toBe(false);
+      expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
     });
   });
 });

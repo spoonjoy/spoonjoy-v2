@@ -33,9 +33,12 @@ import {
 } from "~/lib/ingredient-parse.server";
 import { parseIngredientsWithRulesFallback } from "~/lib/ingredient-parse-fallback.server";
 import { useEffect, useRef, useState } from "react";
+import { importRecipeForSession, parseSessionImportForm } from "~/lib/recipe-import-session.server";
+import { RecipeImportPanel, type RecipeImportActionData } from "~/components/recipe/RecipeImportPanel";
 
 interface ActionData {
   parsedIngredients?: ParsedIngredient[];
+  importResult?: RecipeImportActionData;
   errors?: {
     title?: string;
     description?: string;
@@ -90,6 +93,30 @@ export async function action({ request, context }: Route.ActionArgs) {
         { status: 500 }
       );
     }
+  }
+
+  if (intent === "import") {
+    const parsed = parseSessionImportForm(formData);
+    if (!parsed.ok) {
+      return data({ importResult: { kind: parsed.kind, message: parsed.message } }, { status: 400 });
+    }
+    const outcome = await importRecipeForSession({
+      db: await getRequestDb(context),
+      userId,
+      input: parsed.input,
+      request,
+      context,
+    });
+    if (outcome.ok) {
+      return redirect(`/recipes/${outcome.recipeId}/edit?imported=1`);
+    }
+    return data({
+      importResult: {
+        kind: outcome.kind,
+        message: outcome.message,
+        existingRecipe: outcome.existingRecipe,
+      },
+    });
   }
 
   const title = formData.get("title")?.toString() || "";
@@ -377,7 +404,7 @@ export default function NewRecipe() {
         action={<Link href="/recipes" className="sj-link inline-flex min-h-11 items-center">← Back to recipes</Link>}
       >
         <Text>
-          Start with the story and the photo, then shape the method into steps when the dish is ready.
+          Bring in a recipe you already have, or start with the story and the photo and shape the method into steps.
         </Text>
       </CookbookHeader>
 
@@ -392,6 +419,10 @@ export default function NewRecipe() {
       </Form>
 
       <div className="mt-8 max-w-5xl">
+        <RecipeImportPanel result={actionData?.importResult} />
+      </div>
+
+      <div className="max-w-5xl">
         <RecipeBuilder
           onSave={handleSave}
           onCancel={handleCancel}

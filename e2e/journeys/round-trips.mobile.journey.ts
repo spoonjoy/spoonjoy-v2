@@ -1,14 +1,13 @@
 // Round trips on iPhone (read-only, chef session): home -> recipe -> the recipe's Back link -> home, browser Back and Forward, the Recipes tab and its Everyone switch, and the recipe's Back link from a public recipe. Each tab or link tap
-// happens exactly once and the very next assertion must pass: nothing needs a second tap. QA also
-// holds unrelated data, so recipes are located by their seeded ids and nothing asserts counts or
-// positions.
+// happens exactly once and the very next assertion must pass: nothing needs a second tap. Other
+// journeys in the same run add and delete their own recipes, so seeded recipes are located by their
+// ids, the public list's recipe is a seeded one, and nothing asserts counts.
 import { test, expect } from "./support/journey";
 import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 const TOMATO_SOUP = "/recipes/qa-kitchen-recipe-tomato-soup";
-const RISOTTO = "/recipes/qa-kitchen-recipe-risotto";
 
 test.describe("Round trips on iPhone", () => {
   // The stored session path, not persona("chef").storageState: persona() reads the per-run
@@ -71,10 +70,20 @@ test.describe("Round trips on iPhone", () => {
     await expect(allPublicRecipes).toBeVisible();
     await expectAccessible();
 
-    // A friend's public recipe opened from the list: the recipe's Back link returns to the list.
-    await recipeLink(main, "Saffron Risotto", RISOTTO).click();
-    await expect(page).toHaveURL(pathUrl(RISOTTO));
-    await expect(page.getByRole("heading", { level: 1, name: "Saffron Risotto", exact: true })).toBeVisible();
+    // A public recipe opened from the list: the recipe's Back link returns to the list. Open a
+    // seeded recipe, not whichever the list shows first: journeys running alongside this one create
+    // public recipes and delete them, so the first card can be gone by the time it is tapped. Each
+    // run's QA stack starts from the seed, so its seeded recipes stay on the list and are never
+    // deleted.
+    const firstListed = main.locator('li a[href^="/recipes/qa-kitchen-recipe-"]').first();
+    const firstHref = await firstListed.getAttribute("href");
+    expect(firstHref).toMatch(/^\/recipes\/[^/]+$/);
+    const cardText = await firstListed.innerText();
+    await firstListed.click();
+    await expect(page).toHaveURL(pathUrl(firstHref!));
+    const recipeTitle = page.getByRole("heading", { level: 1 });
+    await expect(recipeTitle).toBeVisible();
+    expect(cardText).toContain((await recipeTitle.innerText()).trim());
     await expectAccessible();
 
     await recipeBack.click();

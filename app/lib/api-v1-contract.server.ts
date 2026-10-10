@@ -1,3 +1,5 @@
+import { PHOTO_VARIANT_CONTENT_TYPE, PHOTO_VARIANT_QUERY_PARAMETER, PHOTO_VARIANT_WIDTHS } from "~/lib/photo-variants";
+
 export const API_V1_RESOURCES = [
   { name: "root", path: "/api/v1", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "health", path: "/api/v1/health", methods: ["GET"], auth: "optional", scopes: [] },
@@ -131,6 +133,7 @@ export const API_V1_ERROR_STATUS = {
   authentication_required: 401,
   invalid_token: 401,
   insufficient_scope: 403,
+  email_change_requires_web: 403,
   not_found: 404,
   method_not_allowed: 405,
   idempotency_conflict: 409,
@@ -153,6 +156,12 @@ export const API_V1_DISCOVERY_DATA = {
   sdkOpenapiUrl: "/api/v1/openapi.sdk.json",
   connectorOpenapiUrl: "/api/v1/openapi.connector.json",
   resources: API_V1_RESOURCES,
+  photoVariants: {
+    queryParameter: PHOTO_VARIANT_QUERY_PARAMETER,
+    widths: PHOTO_VARIANT_WIDTHS,
+    contentType: PHOTO_VARIANT_CONTENT_TYPE,
+    note: "Append ?w=<display width in pixels> to a Spoonjoy-hosted /photos/ URL to get the smallest stored WebP at least that wide (capped at the largest). Until a new photo's variants exist, the original is served with a short cache lifetime. Responses carry an ETag and answer If-None-Match with 304.",
+  },
   auth: {
     modes: ["anonymous", "session", "bearer", "oauth_pkce", "delegated_agent", "mcp"],
     tokenUrl: "/api/v1/tokens",

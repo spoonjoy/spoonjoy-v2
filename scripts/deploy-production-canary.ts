@@ -1,6 +1,6 @@
 import { execFile as nodeExecFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolvePostHogBuildHost } from "../app/lib/security-headers.server";
 import { validateCspHeaderSet } from "./production-readiness";
@@ -22,6 +22,10 @@ const MIGRATION_NAME_PATTERN = /^\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql$/;
 const MIGRATION_FILE_PATTERN = /\b\d{4}_[A-Za-z0-9][A-Za-z0-9_.-]*\.sql\b/g;
 const CLOUDFLARE_ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/;
 const CLOUDFLARE_API_TOKEN_PATTERN = /^[\x21-\x7e]{1,2048}$/;
+// A D1 Time Travel bookmark, as `wrangler d1 time-travel info` prints it.
+const D1_BOOKMARK_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{32}$/;
+// A hung bookmark request fails the release before migrating instead of stalling it.
+const D1_RESTORE_POINT_TIMEOUT_MS = 30_000;
 const D1_MIGRATIONS_TABLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const RFC3339_UTC_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/;
 const NO_PENDING_MIGRATIONS_PATTERN = /no migrations to apply/i;
@@ -31,6 +35,22 @@ const DEFAULT_VERIFICATION_ATTEMPTS = 60;
 const VERIFICATION_DELAY_MS = 1_000;
 const PROTOCOL_V1_BOUNDARY_MARKER = "workers/cook-session-protocol-v1-boundary";
 const GENERATED_WORKER_CONFIG_PATH = "build/server/wrangler.json";
+const CLIENT_ASSET_DIRECTORY = "build/client/assets";
+// Must match app/lib/release-assets.server.ts, which serves these keys for earlier releases.
+const RELEASE_ASSET_ARCHIVE_PREFIX = "release-assets/";
+const ARCHIVABLE_ASSET_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*\.(js|css|woff2|svg|png|webp|json|map)$/;
+const ARCHIVED_ASSET_CONTENT_TYPES: Record<string, string> = {
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  woff2: "font/woff2",
+  svg: "image/svg+xml",
+  png: "image/png",
+  webp: "image/webp",
+  json: "application/json",
+  map: "application/json",
+};
+const ARCHIVE_UPLOAD_CONCURRENCY = 8;
+const R2_BUCKET_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
 const CLOUDFLARE_SECRET_ENV_NAMES = [
   "CF_API_KEY",
   "CF_API_TOKEN",
@@ -112,6 +132,12 @@ export interface ReleaseArtifact {
   reviewedMigrations: string[];
   migrationApply: "not_started" | "not_needed" | "attempted" | "succeeded" | "failed";
   databaseRollbackSupported: false;
+  /**
+   * The D1 Time Travel bookmark taken just before the reviewed migrations were applied: the
+   * point to restore the database to if a migration damaged data (docs/d1-restore-runbook.md).
+   * Restoring is a manual decision; the release never restores the database itself.
+   */
+  preMigrationBookmark?: string;
   previousVersionId?: string;
   candidateVersionId?: string;
   failure?: string;
@@ -121,6 +147,8 @@ export interface ReleaseArtifact {
 interface RunProductionCanaryReleaseDeps {
   artifactDir: string;
   d1Fetch?: typeof fetch;
+  /** Reads the D1 Time Travel bookmark before migrating; separate from d1Fetch, which applies them. */
+  d1BookmarkFetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   postHogHost: string;
   readBootstrapProbe?: (
@@ -132,6 +160,8 @@ interface RunProductionCanaryReleaseDeps {
   readClientBundleSources?: () => Promise<readonly string[]>;
   readGeneratedWorkerConfig?: () => Promise<Record<string, unknown>>;
   readPublicWorkerVersion: (baseUrl: string) => Promise<string | null>;
+  verifyCandidatePages?: (baseUrl: string, candidateVersionId: string) => Promise<void>;
+  listClientAssets?: () => Promise<readonly string[]>;
   releaseSha: string;
   releaseMode: ReleaseMode;
   protocolV1BoundarySha?: string;
@@ -319,6 +349,8 @@ export async function readCandidateCspHeaders(
   baseUrl: string,
   candidateVersionId: string,
   fetchImpl: typeof fetch = fetch,
+  // Production is always "spoonjoy-v2"; the QA rehearsal in DEPLOY.md sets SPOONJOY_WORKER_NAME=spoonjoy-v2-qa.
+  workerName: string = process.env.SPOONJOY_WORKER_NAME || "spoonjoy-v2",
 ): Promise<Headers> {
   requireWorkerVersionId(candidateVersionId, "Candidate CSP verification");
   const verificationUrl = new URL("/", baseUrl);
@@ -327,7 +359,7 @@ export async function readCandidateCspHeaders(
     cache: "no-store",
     headers: {
       Accept: "text/html",
-      "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", candidateVersionId),
+      "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride(workerName, candidateVersionId),
     },
     redirect: "error",
   });
@@ -335,6 +367,67 @@ export async function readCandidateCspHeaders(
     throw new Error(`Candidate CSP verification failed with HTTP ${response.status}.`);
   }
   return response.headers;
+}
+
+// Public pages and endpoints the staged candidate must serve before promotion. They cover the
+// document shell, D1-backed lists, the auth surface and OAuth discovery for API clients.
+export const CANDIDATE_PAGE_PATHS = [
+  "/",
+  "/login",
+  "/recipes",
+  "/search",
+  "/privacy",
+  "/health",
+  "/.well-known/oauth-authorization-server",
+] as const;
+
+const HASHED_ASSET_PATTERN = /["'](\/assets\/[A-Za-z0-9._-]+\.(?:js|css))["']/;
+
+// Fetches each candidate page through the exact-version override and requires a 200 from the
+// candidate itself. From the first HTML page it also fetches one hashed asset, so a candidate
+// whose static assets are missing never reaches 100%.
+export async function verifyCandidatePages(
+  baseUrl: string,
+  candidateVersionId: string,
+  fetchImpl: typeof fetch = fetch,
+  workerName: string = process.env.SPOONJOY_WORKER_NAME || "spoonjoy-v2",
+): Promise<void> {
+  requireWorkerVersionId(candidateVersionId, "Candidate page verification");
+  const headers = {
+    "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride(workerName, candidateVersionId),
+  };
+  const failures: string[] = [];
+  let assetPath: string | null = null;
+  for (const path of CANDIDATE_PAGE_PATHS) {
+    const url = new URL(path, baseUrl);
+    url.searchParams.set("candidate_page_verification", "1");
+    let response: Response;
+    try {
+      response = await fetchImpl(url, { cache: "no-store", headers, redirect: "error" });
+    } catch (error) {
+      failures.push(`${path} request failed (${error instanceof Error ? error.message : String(error)})`);
+      continue;
+    }
+    const servedBy = response.headers.get("X-Spoonjoy-Worker-Version");
+    if (response.status !== 200) failures.push(`${path} returned HTTP ${response.status}`);
+    else if (servedBy?.toLowerCase() !== candidateVersionId.toLowerCase()) {
+      failures.push(`${path} was not served by the candidate`);
+    } else if (!assetPath && (response.headers.get("Content-Type") ?? "").includes("text/html")) {
+      assetPath = (await response.text()).match(HASHED_ASSET_PATTERN)?.[1] ?? null;
+    }
+  }
+  if (failures.length === 0) {
+    if (!assetPath) {
+      failures.push("no candidate HTML page referenced a hashed /assets/ file");
+    } else {
+      const asset = await fetchImpl(new URL(assetPath, baseUrl), { cache: "no-store", headers, redirect: "error" })
+        .catch(() => null);
+      if (asset?.status !== 200) failures.push(`${assetPath} returned ${asset ? `HTTP ${asset.status}` : "no response"}`);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`Candidate page verification failed: ${failures.join("; ")}.`);
+  }
 }
 
 function requireWorkerVersionId(value: unknown, context: string): string {
@@ -395,6 +488,61 @@ async function readJsonObjectFile(filePath: string, context: string): Promise<Re
 
 async function readDefaultGeneratedWorkerConfig(): Promise<Record<string, unknown>> {
   return readJsonObjectFile(GENERATED_WORKER_CONFIG_PATH, "Generated Worker config");
+}
+
+// Hashed client asset names from the build, filtered to what the Worker's archive fallback serves.
+export function selectArchivableAssets(names: readonly string[]): string[] {
+  return names.filter((name) => ARCHIVABLE_ASSET_NAME.test(name) && !name.includes("..")).sort();
+}
+
+function photosBucketName(config: Record<string, unknown>): string {
+  const buckets = Array.isArray(config.r2_buckets) ? config.r2_buckets : [];
+  const photos = buckets.find((bucket) => (
+    bucket && typeof bucket === "object" && (bucket as Record<string, unknown>).binding === "PHOTOS"
+  )) as Record<string, unknown> | undefined;
+  const name = photos?.bucket_name;
+  if (typeof name !== "string" || !R2_BUCKET_NAME_PATTERN.test(name)) {
+    throw new Error("Generated Worker config has no valid PHOTOS R2 bucket for the asset archive.");
+  }
+  return name;
+}
+
+export async function listClientAssetNames(directory: string = CLIENT_ASSET_DIRECTORY): Promise<readonly string[]> {
+  return readdir(directory);
+}
+
+// Copies this build's hashed assets into R2 before the version can serve traffic, so tabs still
+// running an earlier build keep loading their chunks after the promotion (asset skew).
+// Re-uploading an unchanged name writes identical bytes, so the step is idempotent.
+async function archiveReleaseAssets(
+  deps: Pick<RunProductionCanaryReleaseDeps, "readGeneratedWorkerConfig" | "runCommand"> & {
+    listClientAssets: () => Promise<readonly string[]>;
+  },
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const bucket = photosBucketName(
+    await (deps.readGeneratedWorkerConfig ?? readDefaultGeneratedWorkerConfig)(),
+  );
+  const names = selectArchivableAssets(await deps.listClientAssets());
+  if (names.length === 0) {
+    throw new Error("Production build has no hashed client assets to archive.");
+  }
+  let next = 0;
+  const upload = async () => {
+    while (next < names.length) {
+      const name = names[next];
+      next += 1;
+      const extension = name.slice(name.lastIndexOf(".") + 1);
+      await deps.runCommand("pnpm", [
+        "exec", "wrangler", "r2", "object", "put", `${bucket}/${RELEASE_ASSET_ARCHIVE_PREFIX}${name}`,
+        "--file", `${CLIENT_ASSET_DIRECTORY}/${name}`,
+        "--content-type", ARCHIVED_ASSET_CONTENT_TYPES[extension],
+        "--cache-control", "public, max-age=31536000, immutable",
+        "--remote",
+      ], { env });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(ARCHIVE_UPLOAD_CONCURRENCY, names.length) }, upload));
 }
 
 async function readDefaultClientBuildMetadata(): Promise<Record<string, unknown>> {
@@ -973,11 +1121,10 @@ function requireExactTaggedVersion(
   return version.id;
 }
 
-async function requireProtocolBoundaryMarker(
+async function readProtocolBoundaryMarkerCommit(
   deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
-  configuredBoundarySha: string,
   env: NodeJS.ProcessEnv,
-): Promise<void> {
+): Promise<string> {
   const result = await deps.runCommand("git", [
     "log",
     "--diff-filter=A",
@@ -990,7 +1137,15 @@ async function requireProtocolBoundaryMarker(
   if (lines.length !== 1 || !RELEASE_SHA_PATTERN.test(lines[0])) {
     throw new Error("Git did not return one exact protocol-v1 boundary marker commit.");
   }
-  if (lines[0] !== configuredBoundarySha) {
+  return lines[0];
+}
+
+async function requireProtocolBoundaryMarker(
+  deps: Pick<RunProductionCanaryReleaseDeps, "runCommand">,
+  configuredBoundarySha: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  if (await readProtocolBoundaryMarkerCommit(deps, env) !== configuredBoundarySha) {
     throw new Error("Configured protocol-v1 boundary marker commit does not match Git history.");
   }
 }
@@ -1154,6 +1309,44 @@ async function applyReviewedMigrations(
   ) {
     throw new Error("Cloudflare D1 migration query did not report complete success.");
   }
+}
+
+/**
+ * Reads the production database's current Time Travel bookmark, the restore point for the
+ * migrations about to run. The release stops before migrating when it cannot get one.
+ */
+async function readD1RestorePoint(
+  config: ProductionD1Config,
+  credentials: { accountId: string; token: string },
+  fetchImpl: typeof fetch,
+): Promise<string> {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${credentials.accountId}/d1/database/${config.databaseId}/time_travel/bookmark`;
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${credentials.token}` },
+      signal: AbortSignal.timeout(D1_RESTORE_POINT_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error("Cloudflare D1 restore point request failed; no migration was applied.");
+  }
+  if (!response.ok) {
+    throw new Error(`Cloudflare D1 restore point request failed with HTTP ${response.status}; no migration was applied.`);
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("Cloudflare D1 restore point request returned malformed JSON; no migration was applied.");
+  }
+  const bookmark = (payload as { success?: unknown; result?: { bookmark?: unknown } } | null)?.success === true
+    ? (payload as { result?: { bookmark?: unknown } }).result?.bookmark
+    : undefined;
+  if (typeof bookmark !== "string" || !D1_BOOKMARK_PATTERN.test(bookmark)) {
+    throw new Error("Cloudflare D1 restore point response had no valid bookmark; no migration was applied.");
+  }
+  return bookmark;
 }
 
 function migrationNamesMatch(
@@ -1502,13 +1695,12 @@ export async function runProductionRollback(
   deps: RunProductionRollbackDeps,
 ): Promise<ReleaseArtifact> {
   const releaseMode = requireReleaseMode(deps.releaseMode);
-  if (releaseMode !== "protocol-v1-canary") {
-    throw new Error("Production rollback is only available in protocol-v1-canary mode.");
-  }
+  // Rollback works in every release mode. Canary mode declares its protocol boundary; product
+  // activation reads it from Git (below), so no mode can roll back to the inert bootstrap Worker.
   const protocolV1BoundarySha = requireProtocolBoundary(
     releaseMode,
     deps.protocolV1BoundarySha,
-  )!;
+  );
   const sourceSha = requireReleaseSha(deps.releaseSha);
   const rollbackVersionId = requireWorkerVersionId(deps.rollbackVersionId, "Rollback version");
   const metadata = protocolFields(releaseMode, protocolV1BoundarySha);
@@ -1551,7 +1743,12 @@ export async function runProductionRollback(
     const provenanceTreeHash = requireTreeHash(
       (await deps.runCommand("git", ["rev-parse", "HEAD^{tree}"], { env: cleanEnv })).stdout.trim(),
     );
-    await requireProtocolBoundaryMarker(deps, protocolV1BoundarySha, cleanEnv);
+    let rollbackBoundarySha = protocolV1BoundarySha;
+    if (protocolV1BoundarySha) {
+      await requireProtocolBoundaryMarker(deps, protocolV1BoundarySha, cleanEnv);
+    } else if (releaseMode === "atomic-product-activation") {
+      rollbackBoundarySha = await readProtocolBoundaryMarkerCommit(deps, cleanEnv);
+    }
     treeHash = provenanceTreeHash;
 
     phase = "rollback_version_lookup";
@@ -1586,21 +1783,23 @@ export async function runProductionRollback(
       { env: workersEnv },
     );
     const previousSourceSha = selectExactVersionSourceSha(previousVersion.stdout, previousVersionId);
-    phase = "rollback_protocol_ancestry";
-    await requireAncestor(
-      deps,
-      protocolV1BoundarySha,
-      sourceSha,
-      cleanEnv,
-      "Rollback target source is below the protocol-v1 boundary.",
-    );
-    await requireAncestor(
-      deps,
-      protocolV1BoundarySha,
-      previousSourceSha,
-      cleanEnv,
-      "Current Worker source is below the protocol-v1 boundary.",
-    );
+    if (rollbackBoundarySha) {
+      phase = "rollback_protocol_ancestry";
+      await requireAncestor(
+        deps,
+        rollbackBoundarySha,
+        sourceSha,
+        cleanEnv,
+        "Rollback target source is below the protocol-v1 boundary.",
+      );
+      await requireAncestor(
+        deps,
+        rollbackBoundarySha,
+        previousSourceSha,
+        cleanEnv,
+        "Current Worker source is below the protocol-v1 boundary.",
+      );
+    }
 
     phase = "rollback_current_deployment";
     const currentDeployments = await deps.runCommand(
@@ -1863,6 +2062,10 @@ export async function runProductionCanaryRelease(
   let reviewedMigrations: string[] = [];
   let reviewedMigrationState: ReviewedMigration[] = [];
   let migrationApply: ReleaseArtifact["migrationApply"] = "not_started";
+  let preMigrationBookmark: string | undefined;
+  const restorePoint = (): Pick<ReleaseArtifact, "preMigrationBookmark"> => (
+    preMigrationBookmark ? { preMigrationBookmark } : {}
+  );
   let previousVersionId: string | undefined;
   let candidateVersionId: string | undefined;
   let previousDeployment: ProductionDeployment | undefined;
@@ -1951,28 +2154,41 @@ export async function runProductionCanaryRelease(
       { env: workersEnv },
     );
 
-    if (releaseMode === "protocol-v1-canary") {
-      phase = "active_version_mapping";
+    if (releaseMode !== "atomic-bootstrap") {
+      // Production only moves forward: the release must contain the commit production runs now.
+      // Bootstrap is exempt because the Worker it replaces may predate source tagging.
+      // Atomic modes record these failures as version_snapshot so the artifact lifecycle stays unchanged.
+      const isCanaryRelease = releaseMode === "protocol-v1-canary";
+      if (isCanaryRelease) phase = "active_version_mapping";
       const previousVersion = await deps.runCommand(
         "pnpm",
         ["exec", "wrangler", "versions", "view", previousVersionId, "--json"],
         { env: workersEnv },
       );
       const previousSourceSha = selectExactVersionSourceSha(previousVersion.stdout, previousVersionId);
-      phase = "protocol_ancestry";
+      if (isCanaryRelease) {
+        phase = "protocol_ancestry";
+        await requireAncestor(
+          deps,
+          protocolV1BoundarySha!,
+          sourceSha,
+          cleanEnv,
+          "Release source is below the protocol-v1 boundary.",
+        );
+        await requireAncestor(
+          deps,
+          protocolV1BoundarySha!,
+          previousSourceSha,
+          cleanEnv,
+          "Active Worker source is below the protocol-v1 boundary.",
+        );
+      }
       await requireAncestor(
         deps,
-        protocolV1BoundarySha!,
+        previousSourceSha,
         sourceSha,
         cleanEnv,
-        "Release source is below the protocol-v1 boundary.",
-      );
-      await requireAncestor(
-        deps,
-        protocolV1BoundarySha!,
-        previousSourceSha,
-        cleanEnv,
-        "Active Worker source is below the protocol-v1 boundary.",
+        "Release source does not contain, or this checkout cannot verify that it contains, the commit production is running; refusing to move production backwards.",
       );
     }
 
@@ -2007,6 +2223,12 @@ export async function runProductionCanaryRelease(
         "Active production version changed before D1 migration apply.",
       );
       const productionD1Credentials = requireProductionD1Credentials(d1Env);
+      preMigrationBookmark = await readD1RestorePoint(
+        productionD1Config,
+        productionD1Credentials,
+        deps.d1BookmarkFetch ?? fetch,
+      );
+      console.log(`D1 restore point before migrations: ${preMigrationBookmark}`);
 
       phase = "migration_apply";
       migrationApply = "attempted";
@@ -2063,6 +2285,9 @@ export async function runProductionCanaryRelease(
 
     if (releaseMode === "protocol-v1-canary") {
       phase = "version_upload";
+      // The CLI always supplies the lister; a direct caller without one has no build to archive.
+      if (!deps.listClientAssets) throw new Error("Release has no client asset lister for the asset archive.");
+      await archiveReleaseAssets({ ...deps, listClientAssets: deps.listClientAssets }, workersEnv);
       await deps.runCommand("pnpm", [
         "exec", "wrangler", "versions", "upload", "--tag", sourceSha,
         "--message", `Spoonjoy source ${sourceSha}`,
@@ -2117,12 +2342,24 @@ export async function runProductionCanaryRelease(
       stagedDeployment = stageOutcome.deployment;
 
       phase = "canary";
+      const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
       await deps.runCommand("pnpm", [
         "run", "smoke:mcp:oauth", "--", "--out", deps.artifactDir, "--worker-version-id", candidateVersionId,
       ], { env: d1Env });
+      // The exact-version override can lag the staging call by a few seconds (seen on QA), so the
+      // page probe gets the same bounded retries as the other override probes.
+      const pageAttempts = requireVerificationAttempts(deps.verificationAttempts);
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await (deps.verifyCandidatePages ?? verifyCandidatePages)(baseUrl, candidateVersionId);
+          break;
+        } catch (error) {
+          if (attempt >= pageAttempts) throw error;
+          await deps.sleep(VERIFICATION_DELAY_MS);
+        }
+      }
 
       phase = "candidate_csp";
-      const baseUrl = deps.env?.SPOONJOY_MCP_CANARY_BASE_URL ?? "https://spoonjoy.app";
       const candidateCspHeaders = await (
         deps.readCandidateCspHeaders ?? readCandidateCspHeaders
       )(baseUrl, candidateVersionId);
@@ -2226,6 +2463,7 @@ export async function runProductionCanaryRelease(
       reviewedMigrations,
       migrationApply,
       databaseRollbackSupported: false,
+      ...restorePoint(),
       previousVersionId,
       candidateVersionId,
     };
@@ -2308,6 +2546,7 @@ export async function runProductionCanaryRelease(
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...restorePoint(),
           previousVersionId,
           candidateVersionId,
           failure,
@@ -2347,6 +2586,7 @@ export async function runProductionCanaryRelease(
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...restorePoint(),
           previousVersionId,
           candidateVersionId,
           failure,
@@ -2371,6 +2611,7 @@ export async function runProductionCanaryRelease(
         reviewedMigrations,
         migrationApply,
         databaseRollbackSupported: false,
+        ...restorePoint(),
         previousVersionId,
         candidateVersionId,
         failure,
@@ -2388,6 +2629,7 @@ export async function runProductionCanaryRelease(
       reviewedMigrations,
       migrationApply,
       databaseRollbackSupported: false,
+      ...restorePoint(),
       ...(previousVersionId ? { previousVersionId } : {}),
       ...(candidateVersionId ? { candidateVersionId } : {}),
       failure,
@@ -2433,6 +2675,20 @@ export function createReleaseCommandRunner(
 }
 
 function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
+  assertReleaseLifecycleShape(artifact);
+  // Checked after the lifecycle shape, so every lifecycle check stays reachable on every status path:
+  // a restore point is recorded only once migrations were about to run, as a D1 Time Travel bookmark.
+  const { preMigrationBookmark, migrationApply } = artifact as unknown as Record<string, unknown>;
+  if (preMigrationBookmark === undefined) return;
+  if (
+    !D1_BOOKMARK_PATTERN.test(String(preMigrationBookmark)) ||
+    !(typeof migrationApply === "string" && ["attempted", "succeeded", "failed"].includes(migrationApply))
+  ) {
+    throw new Error("Release artifact lifecycle is invalid.");
+  }
+}
+
+function assertReleaseLifecycleShape(artifact: ReleaseArtifact): void {
   const value = artifact as unknown as Record<string, unknown>;
   const present = (key: string): boolean => value[key] !== undefined;
   const phase = value.phase;
@@ -2495,13 +2751,15 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
   ) fail();
 
   if (!isCanary) {
-    if (inSet(status, ["rollback_promoted", "rolled_back", "rollback_failed"])) fail();
     if (phase === "bootstrap_probe" && releaseMode !== "atomic-bootstrap") fail();
     if (status === "failed_before_stage") {
       const atomicEarly = [
         "validate", "provenance", "initial_preflight", "build", "post_build_provenance",
         "post_build_posthog", "migration_list", "migration_review", "current_deployment",
         "version_snapshot",
+        // Rollback dispatches run in every release mode and fail before staging in these phases.
+        "rollback_version_lookup", "rollback_current_deployment", "rollback_already_active",
+        "rollback_active_version_mapping", "rollback_protocol_ancestry",
       ];
       if (!(
         inSet(phase, atomicEarly) ||
@@ -2524,12 +2782,11 @@ function assertReleaseArtifactLifecycle(artifact: ReleaseArtifact): void {
     return;
   }
   if (status === "rollback_promoted") {
-    if (!isCanary || !completeFields() || migrationApply !== "not_needed" || reviewedMigrations.length !== 0) fail();
+    if (!completeFields() || migrationApply !== "not_needed" || reviewedMigrations.length !== 0) fail();
     return;
   }
   if (status === "rolled_back" || status === "rollback_failed") {
     if (
-      !isCanary ||
       !inSet(phase, [
         "stage", "canary", "candidate_csp", "promotion_revalidation", "promote",
         "verify_promotion", "artifact",
@@ -2655,6 +2912,7 @@ export async function writeReleaseArtifactFile(
     reviewedMigrations: [...artifact.reviewedMigrations],
     migrationApply: artifact.migrationApply,
     databaseRollbackSupported: false,
+    ...(artifact.preMigrationBookmark ? { preMigrationBookmark: artifact.preMigrationBookmark } : {}),
     ...(artifact.previousVersionId ? { previousVersionId: artifact.previousVersionId } : {}),
     ...(artifact.candidateVersionId ? { candidateVersionId: artifact.candidateVersionId } : {}),
     ...(artifact.failure ? { failure: sanitizedFailure(artifact.failure) } : {}),
@@ -2706,9 +2964,6 @@ export function parseReleaseCliOptions(argv: readonly string[], env: NodeJS.Proc
 
   const releaseMode = requireReleaseMode(releaseModeValue);
   const boundary = requireProtocolBoundary(releaseMode, protocolV1BoundarySha);
-  if (rollbackVersionId && releaseMode !== "protocol-v1-canary") {
-    throw new Error("Production rollback is forbidden in atomic release modes.");
-  }
   return {
     artifactDir,
     releaseMode,
@@ -2721,6 +2976,7 @@ export function parseReleaseCliOptions(argv: readonly string[], env: NodeJS.Proc
 interface ReleaseCliDeps {
   argv?: readonly string[];
   d1Fetch?: typeof fetch;
+  d1BookmarkFetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
   execFileImpl?: ExecFileLike;
   readBootstrapProbe?: (
@@ -2733,6 +2989,8 @@ interface ReleaseCliDeps {
   readWranglerConfig?: () => Promise<Record<string, unknown>>;
   readCandidateCspHeaders?: (baseUrl: string, candidateVersionId: string) => Promise<Headers>;
   readPublicWorkerVersion?: (baseUrl: string) => Promise<string | null>;
+  verifyCandidatePages?: (baseUrl: string, candidateVersionId: string) => Promise<void>;
+  listClientAssets?: () => Promise<readonly string[]>;
   runCommand?: ReleaseCommandRunner;
   sleep?: (milliseconds: number) => Promise<void>;
   verificationAttempts?: number;
@@ -2757,6 +3015,8 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
     readCandidateCspHeaders: deps.readCandidateCspHeaders ?? readCandidateCspHeaders,
     readGeneratedWorkerConfig: deps.readGeneratedWorkerConfig,
     readPublicWorkerVersion: deps.readPublicWorkerVersion ?? readPublicWorkerVersion,
+    verifyCandidatePages: deps.verifyCandidatePages,
+    listClientAssets: deps.listClientAssets ?? listClientAssetNames,
     releaseSha: options.releaseSha,
     releaseMode: options.releaseMode,
     ...(options.protocolV1BoundarySha
@@ -2775,6 +3035,7 @@ export async function runProductionReleaseCli(deps: ReleaseCliDeps): Promise<Rel
   return runProductionCanaryRelease({
     ...shared,
     ...(deps.d1Fetch ? { d1Fetch: deps.d1Fetch } : {}),
+    ...(deps.d1BookmarkFetch ? { d1BookmarkFetch: deps.d1BookmarkFetch } : {}),
   });
 }
 

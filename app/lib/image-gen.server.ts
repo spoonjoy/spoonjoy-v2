@@ -13,6 +13,9 @@ export interface ImageGenEnv {
   GEMINI_IMAGE_TIMEOUT_MS?: string;
   IMAGE_PROVIDER_PRIMARY?: string;
   IMAGE_PROVIDER_FALLBACKS?: string;
+  /** Operator kill switch and global daily budget, read by the image-gen ledger. */
+  SPOONJOY_AI_IMAGE_GENERATION?: string;
+  SPOONJOY_AI_DAILY_GENERATION_BUDGET?: string;
 }
 
 export interface GeneratedImageOutput {
@@ -21,18 +24,37 @@ export interface GeneratedImageOutput {
   url?: string;
 }
 
+export interface ImageGenRunnerOptions {
+  model: string;
+  /** Aborted when the attempt's time is up; runners pass it to their provider request. */
+  signal?: AbortSignal;
+}
+
 export interface ImageGenRunner {
-  textToImage(prompt: string, opts: { model: string }): Promise<GeneratedImageOutput>;
+  textToImage(prompt: string, opts: ImageGenRunnerOptions): Promise<GeneratedImageOutput>;
   imageToImage(
     srcImage: File,
     prompt: string,
-    opts: { model: string },
+    opts: ImageGenRunnerOptions,
   ): Promise<GeneratedImageOutput>;
+}
+
+/**
+ * The time an image job may spend talking to providers. Every provider attempt gets at most
+ * `attemptTimeoutMs`, and no attempt runs past `deadline`, so a hung provider can never keep a
+ * job (and its cover) in "processing" past the end of its Worker's waitUntil window.
+ */
+export interface ImageJobBudget {
+  totalMs: number;
+  deadline: number;
+  attemptTimeoutMs: number;
+  now: () => number;
 }
 
 export interface ImageGenDeps {
   env: ImageGenEnv;
   runner: ImageGenRunner;
+  budget?: ImageJobBudget;
   model?: string;
   fetchImpl?: typeof fetch;
   bucket?: R2Bucket;
@@ -47,7 +69,7 @@ export interface ImagePromptOptions {
 
 type ImageAssetDeps = Pick<
   ImageGenDeps,
-  "fetchImpl" | "bucket" | "now" | "randomId" | "allowLocalImageFallback"
+  "fetchImpl" | "bucket" | "now" | "randomId" | "allowLocalImageFallback" | "budget"
 >;
 
 export interface ImageEditAttempt {
@@ -94,6 +116,24 @@ export const IMAGE_PROMPT_ADDITION_MAX_LENGTH = 240;
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
 export const DEFAULT_GEMINI_IMAGE_TIMEOUT_MS = 30_000;
 
+/**
+ * A request's waitUntil work is cancelled 30 seconds after the response
+ * (https://developers.cloudflare.com/workers/runtime-apis/context/#waituntil). An image job in
+ * waitUntil stops talking to providers after 22 seconds, which leaves time to record the failure
+ * before the cut-off.
+ */
+export const IMAGE_JOB_BUDGET_MS = 22_000;
+/** The longest one provider attempt may take, inside the job's budget. */
+export const IMAGE_ATTEMPT_TIMEOUT_MS = 20_000;
+
+export function imageJobBudget({
+  now = Date.now,
+  totalMs = IMAGE_JOB_BUDGET_MS,
+  attemptTimeoutMs = IMAGE_ATTEMPT_TIMEOUT_MS,
+}: { now?: () => number; totalMs?: number; attemptTimeoutMs?: number } = {}): ImageJobBudget {
+  return { totalMs, deadline: now() + totalMs, attemptTimeoutMs, now };
+}
+
 export class ImageGenError extends Error {
   /** Original provider error code (e.g. `insufficient_quota`), when known. */
   code: string | null;
@@ -117,6 +157,53 @@ export class ImageGenError extends Error {
     if (options?.cause !== undefined) {
       (this as { cause?: unknown }).cause = options.cause;
     }
+  }
+}
+
+/**
+ * An image job ran out of time. `scope` is "attempt" when one provider attempt hit its own limit
+ * (the next provider may still be tried) and "budget" when the job's whole budget is spent.
+ */
+export class ImageGenTimeoutError extends ImageGenError {
+  readonly code = "timeout";
+  readonly scope: "attempt" | "budget";
+
+  constructor(scope: "attempt" | "budget", limitMs: number) {
+    super(scope === "budget"
+      ? `Image generation ran out of its ${limitMs}ms budget`
+      : `Image generation attempt timed out after ${limitMs}ms`);
+    this.name = "ImageGenTimeoutError";
+    this.scope = scope;
+  }
+}
+
+/**
+ * Runs one step of an image job inside its budget: at most `limitMs` (an attempt's limit, or the
+ * rest of the budget), and never past the deadline. The step's signal is aborted when time is
+ * up, and the step is abandoned even if it ignores the signal.
+ */
+async function runWithinBudget<T>(
+  budget: ImageJobBudget | undefined,
+  limitMs: number | null,
+  step: (signal?: AbortSignal) => Promise<T>,
+): Promise<T> {
+  if (!budget) return step();
+  const remaining = budget.deadline - budget.now();
+  if (remaining <= 0) throw new ImageGenTimeoutError("budget", budget.totalMs);
+  const scope = limitMs !== null && limitMs < remaining ? "attempt" : "budget";
+  const allowed = scope === "attempt" ? limitMs! : remaining;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new ImageGenTimeoutError(scope, scope === "attempt" ? allowed : budget.totalMs));
+    }, allowed);
+  });
+  try {
+    return await Promise.race([step(controller.signal), timedOut]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -214,6 +301,10 @@ function normalizedSignal(value: string | number | null): string | null {
 export function isImageProviderFallbackError(cause: unknown): boolean {
   if (cause instanceof ImageProviderEmptyOutputError) {
     return true;
+  }
+  if (cause instanceof ImageGenTimeoutError) {
+    // A slow provider may be followed by a faster one; a spent budget ends the job.
+    return cause.scope === "attempt";
   }
 
   const code = normalizedSignal(errorCode(cause));
@@ -492,11 +583,15 @@ export async function generatePlaceholderImage(
   const prompt = composePlaceholderPrompt(title, description, options);
   let runnerResult: GeneratedImageOutput;
   try {
-    runnerResult = await deps.runner.textToImage(prompt, { model: deps.model ?? "dall-e-3" });
+    runnerResult = await runWithinBudget(
+      deps.budget,
+      deps.budget?.attemptTimeoutMs ?? null,
+      (signal) => deps.runner.textToImage(prompt, { model: deps.model ?? "dall-e-3", signal }),
+    );
   } catch (cause) {
     throw new ImageGenError("Placeholder image generation failed", { cause });
   }
-  return persistGeneratedImage(runnerResult, deps);
+  return runWithinBudget(deps.budget, null, () => persistGeneratedImage(runnerResult, deps));
 }
 
 export async function stylizeSpoonPhoto(
@@ -507,12 +602,14 @@ export async function stylizeSpoonPhoto(
 ): Promise<StylizationResult> {
   const prompt = composeStylizationPrompt(options);
   try {
-    const sourceFile = await resolveEditSourceFile(rawPhotoUrl, deps);
+    const sourceFile = await runWithinBudget(deps.budget, null, () => resolveEditSourceFile(rawPhotoUrl, deps));
     const failures: ImageProviderAttemptError[] = [];
     for (const attempt of resolveImageEditAttempts(deps)) {
       try {
-        const result = await attempt.runner.imageToImage(sourceFile, prompt, { model: attempt.model });
-        const url = await persistGeneratedImage(result, deps);
+        const url = await runWithinBudget(deps.budget, deps.budget?.attemptTimeoutMs ?? null, async (signal) => {
+          const result = await attempt.runner.imageToImage(sourceFile, prompt, { model: attempt.model, signal });
+          return persistGeneratedImage(result, deps);
+        });
         return {
           url,
           usedModel: attempt.model,
@@ -561,13 +658,13 @@ export interface OpenAIImageClient {
       n: number;
       size: string;
       response_format?: "b64_json";
-    }): Promise<{ data?: Array<{ url?: string; b64_json?: string }> }>;
+    }, options?: { signal?: AbortSignal }): Promise<{ data?: Array<{ url?: string; b64_json?: string }> }>;
     edit(args: {
       image: File;
       prompt: string;
       model: string;
       response_format?: "b64_json";
-    }): Promise<{ data?: Array<{ url?: string; b64_json?: string }> }>;
+    }, options?: { signal?: AbortSignal }): Promise<{ data?: Array<{ url?: string; b64_json?: string }> }>;
   };
 }
 
@@ -600,7 +697,7 @@ export function createOpenAIImageRunner(
         n: 1,
         size: "1024x1024",
         ...base64ResponseArgs(opts.model),
-      });
+      }, { signal: opts.signal });
       return imageOutputFromOpenAI(response, "textToImage");
     },
     async imageToImage(srcImage, prompt, opts) {
@@ -609,7 +706,7 @@ export function createOpenAIImageRunner(
         prompt,
         model: opts.model,
         ...base64ResponseArgs(opts.model),
-      });
+      }, { signal: opts.signal });
       return imageOutputFromOpenAI(response, "imageToImage");
     },
   };
@@ -764,6 +861,7 @@ export function createGeminiImageRunner({
     model: string,
     parts: GeminiPart[],
     operation: "textToImage" | "imageToImage",
+    signal: AbortSignal | undefined,
   ): Promise<GeneratedImageOutput> {
     const response = await fetchWithTimeout(
       fetchImpl,
@@ -780,6 +878,7 @@ export function createGeminiImageRunner({
         }),
       },
       timeoutMs,
+      signal,
     );
     if (!response.ok) {
       throw await geminiApiError(response);
@@ -789,7 +888,7 @@ export function createGeminiImageRunner({
 
   return {
     async textToImage(prompt, opts) {
-      return generateContent(opts.model, [{ text: prompt }], "textToImage");
+      return generateContent(opts.model, [{ text: prompt }], "textToImage", opts.signal);
     },
     async imageToImage(srcImage, prompt, opts) {
       return generateContent(
@@ -804,6 +903,7 @@ export function createGeminiImageRunner({
           },
         ],
         "imageToImage",
+        opts.signal,
       );
     },
   };
@@ -814,9 +914,13 @@ async function fetchWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  // The job's own budget can end the request sooner than the Gemini timeout.
+  const abortWithJob = () => controller.abort();
+  signal?.addEventListener("abort", abortWithJob, { once: true });
   try {
     return await fetchImpl(url, { ...init, signal: controller.signal });
   } catch (cause) {
@@ -831,5 +935,6 @@ async function fetchWithTimeout(
     throw cause;
   } finally {
     clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortWithJob);
   }
 }

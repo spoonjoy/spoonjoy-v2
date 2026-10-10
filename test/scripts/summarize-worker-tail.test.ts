@@ -1,12 +1,14 @@
 // @vitest-environment node
 // Locks the Worker tail summary that the Journeys workflow uploads in its public report artifact:
-// the jq program's field allowlist, the redaction of exception messages, the completeness flag,
-// and the workflow wiring that keeps the raw tail stream out of every upload.
+// the jq program's field allowlist, the redaction of exception messages and of the error-level
+// log lines kept for per-run QA Workers only, the completeness flag, and the workflow wiring that
+// keeps the raw tail stream out of every upload.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
+import { expectNoSecrets, FAKE_SECRETS, secretLine, secretMessage } from "../fixtures/fake-secrets";
 
 const ROOT = resolve(__dirname, "../..");
 const PROGRAM = resolve(ROOT, "scripts/summarize-worker-tail.jq");
@@ -14,10 +16,10 @@ const WORKFLOW = resolve(ROOT, ".github/workflows/journeys.yml");
 
 type TailEvent = Record<string, unknown>;
 
-function summarize(events: TailEvent[], tailAliveAtStop = true) {
+function summarize(events: TailEvent[], tailAliveAtStop = true, extraArgs: string[] = []) {
   const output = execFileSync(
     "jq",
-    ["-s", "--argjson", "tailAliveAtStop", String(tailAliveAtStop), "-f", PROGRAM],
+    ["-s", "--argjson", "tailAliveAtStop", String(tailAliveAtStop), ...extraArgs, "-f", PROGRAM],
     { input: events.map((event) => JSON.stringify(event)).join("\n"), encoding: "utf8" },
   );
   return { summary: JSON.parse(output), raw: output };
@@ -89,14 +91,17 @@ describe("summarize-worker-tail.jq", () => {
       "complete",
       "firstEventTimestamp",
       "firstExceptions",
+      "hungInvocations",
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
+      "serverErrorInvocations",
       "slowest",
+      "stalledInvocations",
       "tailAliveAtStop",
       "totalInvocations",
     ]);
-    for (const invocation of [...summary.nonOkInvocations, ...summary.firstExceptions, ...summary.slowest]) {
+    for (const invocation of [...summary.nonOkInvocations, ...summary.firstExceptions, ...summary.slowest, ...summary.serverErrorInvocations]) {
       expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
     }
@@ -166,6 +171,9 @@ describe("summarize-worker-tail.jq", () => {
       lastEventTimestamp: null,
       outcomes: {},
       nonOkInvocations: [],
+      serverErrorInvocations: [],
+      hungInvocations: 0,
+      stalledInvocations: 0,
       firstExceptions: [],
       slowest: [],
       byPath: [],
@@ -257,12 +265,220 @@ describe("summarize-worker-tail.jq", () => {
     });
   });
 
+  it("lists every 5xx response, including ones the Worker returned normally, so an app-level 500 is on record", () => {
+    // React Router turns a loader or action error into a 500 response and the invocation still
+    // ends "ok", so nonOkInvocations misses it; Journeys run 37942328703 failed on such a
+    // /login.data 500 that the summary did not show.
+    const load = (path: string, status: number | undefined, outcome = "ok", eventTimestamp = 1) => ({
+      outcome,
+      eventTimestamp,
+      wallTime: 40,
+      cpuTime: 9,
+      event: { request: { url: `https://qa.example${path}?x=1`, method: "POST" }, response: status === undefined ? undefined : { status } },
+    });
+    const events = [
+      load("/login.data", 500, "ok", 3),
+      load("/recipes/cmg1abcdefghijklmnopqrstu.data", 502, "ok", 4),
+      load("/shopping-list.data", 500, "exception", 5),
+      load("/missing", 404),
+      load("/recipes", 200),
+      load("/canceled", undefined, "canceled"),
+      ...Array.from({ length: 60 }, (_, index) => load("/burst", 503, "ok", 100 + index)),
+    ];
+
+    const { summary } = summarize(events);
+
+    expect(summary.serverErrorInvocations).toHaveLength(50);
+    expect(summary.serverErrorInvocations.slice(0, 3)).toEqual([
+      { outcome: "ok", path: "/login.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 3, exceptions: [] },
+      { outcome: "ok", path: "/recipes/cmg1abcdefghijklmnopqrstu.data", method: "POST", status: 502, cpuTime: 9, wallTime: 40, eventTimestamp: 4, exceptions: [] },
+      { outcome: "exception", path: "/shopping-list.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 5, exceptions: [] },
+    ]);
+    expect(summary.serverErrorInvocations.map((entry: { status: number }) => entry.status)).not.toContain(404);
+  });
+
+  it("counts the requests the Workers runtime canceled as hung (Error 1101), whatever their outcome", () => {
+    // Journeys runs 37942328703 and 37912555692 had 13 such 500s; the summary showed them only as
+    // "exception" entries among the other non-ok invocations, with no count to compare runs by.
+    const HUNG =
+      "The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/";
+    const at = (outcome: string, message?: string) => ({
+      outcome,
+      cpuTime: 12,
+      wallTime: 20,
+      event: { request: { url: "https://qa.example/api/cook-sessions/x", method: "GET" }, response: { status: 500 } },
+      exceptions: message === undefined ? [] : [{ name: "Error", message }],
+    });
+
+    const { summary } = summarize([
+      at("exception", HUNG),
+      at("exception", HUNG),
+      at("canceled", HUNG),
+      at("exception", "memory access out of bounds"),
+      at("exception", "Network connection lost."),
+      at("ok"),
+    ]);
+
+    expect(summary.hungInvocations).toBe(3);
+    expect(summarize([at("exception", "unreachable")]).summary.hungInvocations).toBe(0);
+  });
+
+  it("counts requests that waited over 2 s on under 5 ms of CPU, the shape of a request stuck on a promise", () => {
+    // Runs 37956171261 (/recipes/:id.data, 1 ms CPU, 4,273 ms wall) and 37935772167 (/_root.data,
+    // 1 ms CPU, 6,288 ms wall) each had one, canceled when Playwright gave up.
+    const timed = (cpuTime: unknown, wallTime: unknown, outcome = "canceled") => ({
+      outcome,
+      cpuTime,
+      wallTime,
+      event: { request: { url: "https://qa.example/_root.data", method: "GET" } },
+    });
+
+    const { summary } = summarize([
+      timed(1, 6288),
+      timed(4, 2001, "ok"),
+      timed(5, 4000),
+      timed(33, 5146),
+      timed(1, 2000),
+      timed(1, 1500),
+      timed(undefined, 9000),
+      timed(1, undefined),
+    ]);
+
+    expect(summary.stalledInvocations).toBe(2);
+  });
+
   it("tolerates events without a request", () => {
     const { summary } = summarize([{ outcome: "exceededCpu", exceptions: [] }]);
 
     expect(summary.nonOkInvocations).toEqual([
       { outcome: "exceededCpu", path: "", method: null, status: null, cpuTime: null, wallTime: null, eventTimestamp: null, exceptions: [] },
     ]);
+  });
+});
+
+// Error-level log lines are kept only behind the explicit QA switch (`--argjson keepErrorLogs true`,
+// passed by the Journeys workflow for its per-run QA Worker). Any other caller, such as a
+// production tail, gets no log lines at all.
+const QA_ERROR_LOGS = ["--argjson", "keepErrorLogs", "true"];
+
+function serverError(logs: unknown[], overrides: TailEvent = {}): TailEvent {
+  return {
+    outcome: "ok",
+    eventTimestamp: 3,
+    wallTime: 40,
+    cpuTime: 9,
+    logs,
+    exceptions: [],
+    event: { request: { url: "https://qa.example/login.data?redirectTo=%2F", method: "POST" }, response: { status: 500 } },
+    ...overrides,
+  };
+}
+
+const stackOf = (count: number) => Array.from({ length: count }, (_, index) => `    at frame${index} (index.js:${index + 1}:7)`).join("\n");
+
+describe("summarize-worker-tail.jq error-level log lines (per-run QA Worker only)", () => {
+  const loginFailure = serverError([
+    { level: "log", message: ["canary-info-line"], timestamp: 1 },
+    { level: "warn", message: ["canary-warn-line"], timestamp: 2 },
+    { level: "error", message: [`TypeError: Cannot read properties of undefined (reading 'id')\n${stackOf(7)}`], timestamp: 3 },
+  ]);
+
+  it("keeps no log line, error-level or not, without the explicit QA switch", () => {
+    for (const args of [[], ["--argjson", "keepErrorLogs", "false"]]) {
+      const { summary, raw } = summarize([loginFailure, hostileEvent()], true, args);
+
+      expect(summary).not.toHaveProperty("errorLogs");
+      for (const invocation of [...summary.serverErrorInvocations, ...summary.firstExceptions, ...summary.nonOkInvocations, ...summary.slowest]) {
+        expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
+      }
+      expect(raw).not.toMatch(/Cannot read properties|frame0|canary-info-line|canary-warn-line|TypeError/);
+    }
+  });
+
+  it("attaches the error-level lines, reduced to class, message and five stack frames, to the 500 that ended ok", () => {
+    const { summary, raw } = summarize([loginFailure], true, QA_ERROR_LOGS);
+
+    expect(summary.serverErrorInvocations[0]).toMatchObject({ outcome: "ok", path: "/login.data", status: 500 });
+    expect(summary.serverErrorInvocations[0].errorLogs).toEqual([
+      {
+        name: "TypeError",
+        message: "Cannot read properties of undefined (reading 'id')",
+        stack: ["at frame0 (index.js:1:7)", "at frame1 (index.js:2:7)", "at frame2 (index.js:3:7)", "at frame3 (index.js:4:7)", "at frame4 (index.js:5:7)"],
+      },
+    ]);
+    expect(Object.keys(summary.serverErrorInvocations[0]).sort()).toEqual([...INVOCATION_KEYS, "errorLogs"].sort());
+    expect(raw).not.toMatch(/canary-info-line|canary-warn-line|frame5/);
+    expect(summary.errorLogs).toEqual({ kept: 1, droppedOverCap: 0, invocations: 1, perInvocationCap: 3, totalCap: 40 });
+    // Only the two lists that explain a failure carry log lines.
+    expect(summary.slowest[0]).not.toHaveProperty("errorLogs");
+    expect(summary.firstExceptions).toEqual([]);
+  });
+
+  it("scrubs every secret category from a kept line, whether plain text or nested in a JSON-stringified message", () => {
+    const nested = JSON.stringify({
+      level: "error",
+      msg: "login action failed",
+      request: { headers: { cookie: `__session=${FAKE_SECRETS.sessionCookie}`, authorization: `Bearer ${FAKE_SECRETS.bearer}` } },
+      error: {
+        name: "PrismaClientKnownRequestError",
+        message: `lookup failed: ${secretMessage}`,
+        stack: `PrismaClientKnownRequestError: lookup failed\n    at action (https://chef:${FAKE_SECRETS.userinfo}@qa.example.test/build/server.js?v=${FAKE_SECRETS.query}:1:2)\n${stackOf(2)}`,
+      },
+    });
+    const events = [
+      serverError([{ level: "error", message: [`Error: ${secretMessage}\n${secretLine}\n${stackOf(1)}`] }], { eventTimestamp: 1 }),
+      serverError([{ level: "error", message: [nested] }], { eventTimestamp: 2 }),
+      serverError([{ level: "error", message: [JSON.stringify(nested)] }], { eventTimestamp: 3 }),
+      serverError([{ level: "error", message: [{ name: "Error", message: secretMessage, stack: `Error: x\n${stackOf(1)}` }] }], { eventTimestamp: 4 }),
+    ];
+
+    const { summary, raw } = summarize(events, true, QA_ERROR_LOGS);
+
+    expectNoSecrets(raw);
+    const [plain, json, doubleJson, object] = summary.serverErrorInvocations.map((entry: { errorLogs: unknown[] }) => entry.errorLogs[0]);
+    // The lines were kept (so the check above is not vacuous), with each secret replaced by its placeholder.
+    expect(plain.name).toBe("Error");
+    for (const placeholder of ["Cookie: [cookie]", "Set-Cookie: [cookie]", "[cookie]", "Bearer [token]", "Authorization: [token]", "[token]", "[email]", "?[query]", "#[fragment]", "[userinfo]@api.example.test/v1/login"]) {
+      expect(`${plain.message} ${object.message}`, placeholder).toContain(placeholder);
+    }
+    expect(plain.stack).toEqual(["at frame0 (index.js:1:7)"]);
+    for (const entry of [json, doubleJson]) {
+      expect(entry.name).toBe("PrismaClientKnownRequestError");
+      expect(entry.message).toMatch(/^lookup failed: /);
+      expect(entry.stack).toEqual(["at action (https://[userinfo]@qa.example.test/build/server.js?[query])", "at frame0 (index.js:1:7)", "at frame1 (index.js:2:7)"]);
+    }
+    expect(object).toMatchObject({ name: "Error", stack: ["at frame0 (index.js:1:7)"] });
+    expect(object.message.length).toBeLessThanOrEqual(500);
+    // Text that only looks like a fragment or a header name outside a URL is left alone.
+    const issue = summarize([serverError([{ level: "error", message: ["Error: see issue #123 for recipe 12"] }])], true, QA_ERROR_LOGS);
+    expect(issue.summary.serverErrorInvocations[0].errorLogs[0].message).toBe("see issue #123 for recipe 12");
+  });
+
+  it("scrubs the same categories from exception messages, which every caller keeps", () => {
+    const { raw } = summarize([serverError([], { exceptions: [{ name: "Error", message: `${secretMessage} | ${secretLine}` }] })]);
+
+    expectNoSecrets(raw);
+  });
+
+  it("caps log lines per invocation and in total, counts what the caps dropped, and attaches them to firstExceptions too", () => {
+    const errorLine = (index: number) => ({ level: "error", message: [`Error: failure ${index}`] });
+    const events = [
+      // A 500 with an exception is in both lists; its lines count once.
+      serverError([0, 1, 2, 3, 4].map(errorLine), { outcome: "exception", exceptions: [{ name: "Error", message: "boom" }] }),
+      ...Array.from({ length: 20 }, (_, index) => serverError([errorLine(index), errorLine(index + 100)], { eventTimestamp: 10 + index })),
+      // Not a 5xx and no exception: its error lines are never read.
+      { ...serverError([errorLine(999)]), event: { request: { url: "https://qa.example/ok", method: "GET" }, response: { status: 200 } } },
+    ];
+
+    const { summary } = summarize(events, true, QA_ERROR_LOGS);
+
+    expect(summary.serverErrorInvocations[0].errorLogs.map((line: { message: string }) => line.message)).toEqual(["failure 0", "failure 1", "failure 2"]);
+    expect(summary.firstExceptions[0].errorLogs).toEqual(summary.serverErrorInvocations[0].errorLogs);
+    const kept = summary.serverErrorInvocations.reduce((total: number, entry: { errorLogs: unknown[] }) => total + entry.errorLogs.length, 0);
+    expect(kept).toBe(40);
+    expect(summary.serverErrorInvocations.at(-1).errorLogs).toEqual([]);
+    expect(summary.errorLogs).toEqual({ kept: 40, droppedOverCap: 2 + (3 + 20 * 2 - 40), invocations: 20, perInvocationCap: 3, totalCap: 40 });
+    expect(JSON.stringify(summary)).not.toContain("failure 999");
   });
 });
 
@@ -278,8 +494,8 @@ describe("Journeys workflow tail wiring", () => {
   it("summarises the tail with the tested jq program and never copies raw fields itself", () => {
     const summarise = step("Stop QA Worker tail and summarise it");
 
-    // Runs even after a failed suite, but only for a run that holds the QA lock.
-    expect(summarise.if).toBe("always() && steps.qa-lock.outcome == 'success'");
+    // Runs even after a failed suite, but only for a run whose own QA stack was created.
+    expect(summarise.if).toBe("always() && steps.qa-run.outcome == 'success'");
     expect(summarise.run).toContain("-f scripts/summarize-worker-tail.jq");
     expect(summarise.run).toContain("--argjson tailAliveAtStop");
     expect(summarise.run).toContain("::warning::");
@@ -309,6 +525,51 @@ describe("Journeys workflow tail wiring", () => {
     ]);
     expect(execFileSync("jq", ["-r", filter!], { input: JSON.stringify({ budget: { cpuTimeP95Ms: 10, overBudget: [] } }), encoding: "utf8" }))
       .toBe("");
+  });
+
+  it("prints the hang and stall counts in the step log and warns, without failing, when any request hung", () => {
+    const summarise = step("Stop QA Worker tail and summarise it") as { run?: string; "continue-on-error"?: boolean };
+    const run = summarise.run ?? "";
+    expect(summarise["continue-on-error"]).toBe(true);
+    expect(run).toMatch(/jq '\{[^']*hungInvocations, stalledInvocations[^']*\}'/);
+
+    const filter = /jq -r '(select\(\.hungInvocations[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(warn({ hungInvocations: 11, stalledInvocations: 1 }).trimEnd()).toBe(
+      "::warning::Worker hangs: 11 request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json.",
+    );
+    expect(warn({ hungInvocations: 0, stalledInvocations: 3 })).toBe("");
+    expect(warn({})).toBe("");
+  });
+
+  it("waits for late tail events before stopping the tail, bounded, so the last failures are kept", () => {
+    // Tail events arrive seconds after their request ends. Stopping the tail as soon as the suite
+    // finished lost the last ~6 s of events in runs 37934997247 and 37912555692, including the
+    // failing request itself.
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const waitAt = run.indexOf("wc -c < .worker-tail/tail.json");
+    const killAt = run.indexOf('kill "$(cat .worker-tail/pid)"');
+
+    expect(waitAt).toBeGreaterThan(-1);
+    expect(waitAt).toBeLessThan(killAt);
+    // Alive-at-stop is judged before the wait, so a tail that died during the suite stays incomplete.
+    expect(run.indexOf("tail_alive=true")).toBeLessThan(waitAt);
+    expect(run).toMatch(/for _ in \$\(seq 1 30\)/);
+    expect(run).toMatch(/quiet" -ge 5/);
+  });
+
+  it("keeps error-level log lines for the per-run QA Worker only, and prints how many it kept", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+
+    expect(run).toContain("--argjson keepErrorLogs true");
+    expect(step("Start QA Worker tail").run).toContain('wrangler tail "$SPOONJOY_QA_RUN_WORKER"');
+    const filter = /jq -r '("QA Worker error log lines[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const print = (summary: unknown) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(print({ errorLogs: { kept: 7, droppedOverCap: 2, invocations: 3, perInvocationCap: 3, totalCap: 40 } }))
+      .toBe("QA Worker error log lines kept: 7 from 3 invocations (2 over the cap).\n");
+    expect(print({})).toBe("QA Worker error log lines kept: 0 from 0 invocations (0 over the cap).\n");
   });
 
   it("keeps the raw tail stream out of every upload, behind the unchanged gates", () => {

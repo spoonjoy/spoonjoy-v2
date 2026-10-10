@@ -11,7 +11,8 @@ import {
 import { LogOut } from "lucide-react";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
-import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
+import { Field, Label, ErrorMessage, Description } from "~/components/ui/fieldset";
+import { Checkbox, CheckboxField } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
@@ -531,6 +532,14 @@ export default function AccountSettings() {
                     autoComplete="new-password"
                   />
                 </Field>
+                <input type="hidden" name="connectionsChoice" value="1" />
+                <CheckboxField>
+                  <Checkbox name="revokeConnections" value="1" defaultChecked />
+                  <Label>Also sign out other devices and disconnect apps, agents and API tokens</Label>
+                  <Description>
+                    Recommended if someone else may know your old password. You stay signed in here.
+                  </Description>
+                </CheckboxField>
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit">
                     Change Password
@@ -627,8 +636,8 @@ export default function AccountSettings() {
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="sign-out-everywhere">
           <Text className="font-medium text-[var(--sj-ink)]">Sign out everywhere</Text>
           <Text className="mt-1 text-sm">
-            Signs you out of every other browser where you're signed in to Spoonjoy. You stay signed in here. Apps and agents
-            connected with API tokens keep their access; revoke those under API and app access.
+            Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app,
+            agent and API token, including Claude. You stay signed in here; reconnect what you still use afterwards.
           </Text>
           {isConfirmingSignOutEverywhere ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">

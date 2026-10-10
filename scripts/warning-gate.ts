@@ -4,11 +4,29 @@ import { stripVTControlCharacters } from "node:util";
 export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
   "Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, implicit & explicit transactions will be ignored and run as individual queries, which breaks the guarantees of the ACID properties of transactions. For more details see https://pris.ly/d/d1-transactions";
 
+// pnpm reports a transient registry fetch failure that it is about to retry like this:
+// (pnpm pads WARN with thin spaces, U+2009; without colour it prints two plain spaces)
+//   WARN  GET https://registry.npmjs.org/ansi-escapes/-/ansi-escapes-7.2.0.tgz error (ERR_PNPM_FETCH_502). Will retry in 10 seconds. 2 retries left.
+// Only that exact shape, for the npm registry and a transient cause, is tolerated. A fetch that
+// still fails after its last retry exits non-zero, so the command fails anyway.
+export const PNPM_TRANSIENT_FETCH_RETRY_PATTERN =
+  /^WARN(?:  | {2})GET https:\/\/registry\.npmjs\.org\/[A-Za-z0-9@%._~\/+-]+ error \((?:ERR_PNPM_FETCH_(?:429|5\d\d)|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ERR_SOCKET_TIMEOUT)\)\. Will retry in \d+(?:\.\d+)? seconds?\. \d+ retr(?:y|ies) left\.$/;
+
+function isTolerableTransientRetry(text: string): boolean {
+  return PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(text);
+}
+
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;
 const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warnings?|warnings?|warn)(?!-gate\.ts\b|-summary\.log\b)(?=[:!.,;\s([<{=]|$|-)/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
-const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+(?:should|keeps?|rejects?|parses?|detects?|streams?|runs?|fails?|still|preserves?|prints?|uses?|handles?|renders?|displays?|shows?|allows?|supports?|returns?|loads?|creates?|updates?|deletes?|validates?|redirects?|reports?|records?|omits?)\b/i;
+// A vitest result line is a status mark followed by a test title we wrote. Any title counts,
+// including the slow-test lines vitest prints with a duration suffix, unless its first word is
+// itself a warning word ("✓ Warning: ...", "✓ warning dependency fallback used"); those still get
+// the full check. A verb allow-list here made any slow title like "requires warning-clean setup"
+// fail CI only when that test happened to cross vitest's slow threshold.
+const TEST_RESULT_LINE_PATTERN =
+  /^[✓↓×]\s+(?!(?:warn(?:ings?)?|[A-Za-z]+warnings?)(?=[:!.,;\s([<{=-]|$))\S/i;
 const TEST_FILE_RESULT_LINE_PATTERN =
   /^[✓↓×]\s+(?:test|app)\/\S+\.test\.[cm]?[jt]sx?(?:\s+\(\d+\s+tests?\))?(?:\s+\d+(?:\.\d+)?(?:ms|s))?$/i;
 const OSC_SEQUENCE_PATTERN = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
@@ -93,7 +111,7 @@ export function findUnexpectedWarnings(output: string): string[] {
       unexpectedWarnings.push(formatRejectedTerminalControlLine(line.text));
       continue;
     }
-    if (line.text !== "" && isWarningLine(line.text)) {
+    if (line.text !== "" && isWarningLine(line.text) && !isTolerableTransientRetry(line.text)) {
       unexpectedWarnings.push(line.text);
     }
   }
@@ -107,7 +125,7 @@ export function findUnexpectedDiagnosticOutput(
   const warningChannelLines = warningOutput
     .split(/\r?\n/)
     .map((line) => normalizeOutputLine(line))
-    .filter((line) => line.text !== "" || line.rejectedTerminalControl)
+    .filter((line) => line.rejectedTerminalControl || (line.text !== "" && !isTolerableTransientRetry(line.text)))
     .map((line) =>
       line.rejectedTerminalControl ? formatRejectedTerminalControlLine(line.text) : line.text
     );

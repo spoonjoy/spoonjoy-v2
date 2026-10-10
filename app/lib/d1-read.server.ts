@@ -107,3 +107,12 @@ export function groupRows<T>(rows: readonly T[], keyFor: (row: T) => string): Ma
   }
   return groups;
 }
+
+/**
+ * SQL for a DateTime column (or expression) as epoch milliseconds. DateTime columns hold ISO
+ * text when written through D1 (`Z`, or `+00:00` from Prisma's D1 adapter) and integer
+ * milliseconds when written by Prisma's native SQLite driver, so a raw comparison must convert.
+ */
+export function d1EpochMsSql(column: string): string {
+  return `(CASE WHEN typeof(${column}) IN ('integer', 'real') THEN ${column} ELSE CAST(ROUND((julianday(${column}) - 2440587.5) * 86400000) AS INTEGER) END)`;
+}

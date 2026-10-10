@@ -3,6 +3,7 @@ name: Journeys
 on:
   pull_request:
     branches: [main]
+  merge_group:
   push:
     branches: [main]
   schedule:
@@ -26,24 +27,24 @@ defaults:
   run:
     shell: bash
 
-# QA is single-tenant, and runs take their turn through the FIFO queue in the qa-turn job below,
-# not through a shared concurrency group: GitHub keeps one running and one pending run per group
-# and cancels the older pending run whenever a newer one queues, which silently dropped runs.
-# The only shared group left is per pull request, and it never cancels a run in progress, so a
-# run already on QA always finishes, including its rotate and cleanup steps. A newer push to the
-# same pull request still replaces that pull request's pending run (GitHub's one-pending rule).
-# Every other run (pushes to main, the schedule, manual runs) gets a group of its own.
+# Every run gets its own QA stack (scripts/qa-run-scope.mjs): its own Worker, its own D1 database
+# and its own URL, sharing only QA's R2 bucket and rate-limit namespaces. Runs for different pull
+# requests therefore run at the same time instead of queueing for one shared QA Worker. A newer push
+# to the same pull request cancels that pull request's run in progress, because its result is
+# already stale and runners are shared. The cancelled run's teardown step still runs, because it
+# is `if: always()`; if it cannot, the hourly QA Run Sweep deletes any run stack older than three
+# hours. Every other run (pushes to main, merge-queue groups, the schedule, manual runs) gets a
+# group of its own and is never cancelled.
 concurrency:
   group: journeys-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
-  SPOONJOY_JOURNEYS_BASE_URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev
   SPOONJOY_QA_CREDENTIALS: ${{ github.workspace }}/.journeys/credentials.json
   # Push, pull_request, and the daily schedule always run the journeys suite; only a
-  # workflow_dispatch can choose explore. Everything else (deploy, seed, rotate, sanitise,
-  # gated upload, cleanup, concurrency) is shared between the two suites.
+  # workflow_dispatch can choose explore. Everything else (the run's QA stack, deploy, seed,
+  # rotate, sanitise, gated upload, cleanup, teardown, concurrency) is shared between the two suites.
   SUITE: ${{ github.event_name == 'workflow_dispatch' && inputs.suite || 'journeys' }}
 
 jobs:
@@ -53,23 +54,54 @@ jobs:
     steps:
       - run: echo "::warning::Journeys need QA credentials and do not run for fork pull requests. A maintainer must re-run them from a same-repo branch."
 
-  # One run at a time on the shared QA mirror, first in, first out. scripts/wait-for-qa-turn.mjs
-  # waits until no other active Journeys run of this repository is ahead of this one (ordered by
-  # the start of each run's current attempt, then by run id, so a re-run joins the back of the
-  # queue) and none behind it already holds QA. Fork pull request runs never enter the queue. It
-  # fails after 90 minutes rather than proceed without its turn; the job timeout leaves 15 minutes
-  # more for checkout, setup and that clear failure message. The run keeps QA until it completes.
-  # Known residual race: the Actions API can lag by a few seconds, so two runs that become
-  # eligible at the same moment could both see a free QA. The worst case is a contended, failed
-  # run that needs a fresh push, never a skipped required check, because QA holds only disposable data.
-  qa-turn:
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    name: wait for QA
+  # On a pull request, `changes` decides whether the suite needs to run (scripts/journeys-scope.mjs):
+  # it skips only when every changed file is documentation, a unit test outside app/ or another
+  # workflow that Journeys does not read, and the `visual` label always forces it (add the label,
+  # then re-run the run). Any doubt runs the suite. It runs the base branch's copy of the script, so
+  # a pull request cannot widen the list for its own run, and it gets no secrets. A skipped suite
+  # still reports the required `journeys` check as passed, and the merge queue's run of the same
+  # change always runs the full suite before anything reaches main.
+  changes:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 105
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      journeys: ${{ steps.scope.outputs.journeys }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: scripts/journeys-scope.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Decide whether this pull request needs the suite
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/journeys-scope.mjs
+
+  # After a merge-queue merge, main's new commit is exactly the commit the queue's Journeys run
+  # already tested. On a push to main, queue-tested asks GitHub whether that run's journeys job
+  # passed; if it did, journeys skips on this push and deploy-shared-qa still mirrors main. A push
+  # that bypassed the queue, a missing or failed queue run, or any lookup error runs the suite.
+  queue-tested:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       actions: read
       contents: read
+    outputs:
+      tested: ${{ steps.lookup.outputs.tested }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -79,35 +111,25 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Wait for this run's turn on QA
+      - name: Ask whether the merge queue already tested this commit
+        id: lookup
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/wait-for-qa-turn.mjs
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs queue-tested-journeys
 
-  # `journeys` is the required check. It runs even when qa-turn failed or timed out (a skipped
-  # required check would count as passing) and then fails in its first step. The queue only
-  # orders runs: it reads the Actions API, which can lag, so before deploying the job also takes
-  # an atomic lock in QA's own D1 (scripts/qa-lock.mjs) and releases it as its last step. Steps
-  # that touch QA after a failure (tail, rotate, cleanup) run only while this run holds the lock.
-  # The job timeout stays below the lock's 45-minute expiry.
+  # `journeys` is the required check. It builds this commit for QA, checks the build against the
+  # QA config, gives the run its own QA stack (Worker, D1 and URL; scripts/qa-run-scope.mjs),
+  # deploys there, seeds it, runs the suite, and deletes the stack as its last step. Steps that
+  # touch the run's stack after a failure (tail summary, rotate, cleanup) run only if the stack
+  # was created. The Cloudflare token is given only to the steps that need it, never to
+  # `pnpm install`, which runs dependency install scripts from the pull request's lockfile.
   journeys:
-    needs: qa-turn
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [queue-tested, changes]
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}
     name: journeys
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Require this run's turn on QA
-        if: needs.qa-turn.result != 'success'
-        env:
-          QA_TURN_RESULT: ${{ needs.qa-turn.result }}
-        run: |
-          echo "::error::This run did not get its turn on QA (the wait for QA job ended as: ${QA_TURN_RESULT}). Journeys fail instead of sharing QA or reporting as skipped. Re-run once the runs ahead have finished."
-          exit 1
-
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
@@ -117,6 +139,11 @@ jobs:
           node-version: '22'
 
       - name: Require Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: |
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
             echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required. Journeys fail closed."
@@ -147,14 +174,56 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
 
-      # The atomic step: one D1 statement takes the lock only if it is free or expired, and the
-      # row is read back to confirm this run and attempt hold it. Waits up to 10 minutes.
-      - name: Take the QA lock
-        id: qa-lock
-        run: node scripts/qa-lock.mjs acquire --target-env qa
+      # The QA preflight checks the static config and the generated build against the shared QA
+      # identity (Worker, URL, D1, R2, rate limits, CSP, PostHog) before anything is created.
+      - name: Check the QA config
+        run: SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight
 
-      - name: Deploy this build to QA
-        run: pnpm run deploy:qa
+      - name: Build for QA
+        run: node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build
+
+      - name: Check the generated QA build
+        run: SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG=1 pnpm run qa:preflight
+
+      # Creates this run's empty D1 (the next step applies every migration to it), rewrites this
+      # checkout's env.qa and generated build config to the run's Worker, D1 and URL (identity
+      # fields only), writes per-run secrets and exports SPOONJOY_JOURNEYS_BASE_URL. Every later
+      # `--env qa` command targets the run's stack.
+      - name: Create this run's QA stack
+        id: qa-run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: node scripts/qa-run-scope.mjs prepare
+
+      - name: Migrate this run's QA database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: pnpm run qa:migrate
+
+      - name: Deploy this build to this run's QA Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: node scripts/qa-run-scope.mjs deploy
+
+      # Secrets set, no pending migration, /health up, and every file in build/client/assets served
+      # from the run's URL with the right content-type (bounded at 2 minutes), so the suite never
+      # starts against a Worker whose static assets have not all propagated yet.
+      - name: Check this run's QA Worker is live
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: node scripts/qa-run-scope.mjs verify
 
       # Workers-side evidence for every run: stream the QA Worker's invocation log while the
       # suite runs, so an outcome the browser can't see (exceededCpu, exceededMemory, an
@@ -163,15 +232,25 @@ jobs:
       # must never fail a run, so this step and the summary step are non-fatal.
       - name: Start QA Worker tail
         continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: |
           mkdir -p .worker-tail
-          nohup ./node_modules/.bin/wrangler tail spoonjoy-v2-qa --format json \
+          nohup ./node_modules/.bin/wrangler tail "$SPOONJOY_QA_RUN_WORKER" --format json \
             > .worker-tail/tail.json 2> .worker-tail/tail.err < /dev/null &
           echo $! > .worker-tail/pid
           # The JSON format prints no "connected" line; give the socket a moment to open.
           sleep 10 || true
 
       - name: Seed the QA kitchen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: |
           mkdir -p .journeys
           pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
@@ -194,20 +273,39 @@ jobs:
       # report) with scripts/summarize-worker-tail.jq, an allowlist locked by
       # test/scripts/summarize-worker-tail.test.ts. Per invocation it keeps the outcome, the
       # path without its query, method, status, CPU and wall time and redacted exception
-      # messages, for non-ok invocations, the first 20 with exceptions and the 25 slowest,
+      # messages, for non-ok invocations, the first 50 5xx responses (whatever the outcome), the
+      # first 20 with exceptions and the 25 slowest, counts of requests the runtime canceled as
+      # hung (Error 1101) and of requests that waited over 2 s on under 5 ms of CPU,
       # plus p50/p95/max wall and CPU time per path pattern, and the routes whose p95 CPU time is
-      # over the 10 ms per-request budget (printed as warnings). No header, cookie, body or log line
-      # is copied. If the tail had already exited when the suite finished, or recorded nothing,
+      # over the 10 ms per-request budget (printed as warnings). No header, cookie or body is
+      # copied. Because this is the run's own QA Worker, --argjson keepErrorLogs true also keeps
+      # its error-level log lines (React Router logs a loader or action error with console.error
+      # and answers 500 while the invocation ends "ok"), each reduced to the exception class, a
+      # scrubbed message and at most 5 scrubbed stack frames, attached to the 5xx and exception
+      # entries, at most 3 per invocation and 40 in all; the log prints how many were kept. Any
+      # other caller of the program, such as a production tail, keeps no log line.
+      # If the tail had already exited when the suite finished, or recorded nothing,
       # the summary says `complete: false` and the log warns: that is no evidence, not a clean
       # run. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
-        if: always() && steps.qa-lock.outcome == 'success'
+        if: always() && steps.qa-run.outcome == 'success'
         continue-on-error: true
         run: |
           mkdir -p .worker-tail test-results
           tail_alive=false
           if [ -f .worker-tail/pid ]; then
             if kill -0 "$(cat .worker-tail/pid)" 2>/dev/null; then tail_alive=true; fi
+            # Tail events reach the stream seconds after their request ends, so stopping at once
+            # loses the last ones (often the failing request). Wait until the stream has not
+            # grown for 5 s, at most 30 s.
+            quiet=0; last_size=""
+            for _ in $(seq 1 30); do
+              size=$(wc -c < .worker-tail/tail.json 2>/dev/null || echo 0)
+              if [ "$size" = "$last_size" ]; then quiet=$((quiet + 1)); else quiet=0; fi
+              last_size=$size
+              if [ "$quiet" -ge 5 ]; then break; fi
+              sleep 1 || true
+            done
             kill "$(cat .worker-tail/pid)" 2>/dev/null || true
             sleep 2 || true
             kill -9 "$(cat .worker-tail/pid)" 2>/dev/null || true
@@ -218,14 +316,20 @@ jobs:
             # a value cut off by the kill instead of failing on it.
             sed -n '/^{/,$p' .worker-tail/tail.json | jq -c '.' > .worker-tail/events.ndjson 2>/dev/null || true
           fi
-          jq -s --argjson tailAliveAtStop "$tail_alive" -f scripts/summarize-worker-tail.jq \
+          jq -s --argjson tailAliveAtStop "$tail_alive" --argjson keepErrorLogs true -f scripts/summarize-worker-tail.jq \
             .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
           if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           rm -rf .worker-tail
           if [ "$(jq -r '.complete' test-results/worker-tail-summary.json 2>/dev/null)" != "true" ]; then
             echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, or recorded no events). Treat worker-tail-summary.json as no evidence, not as a run without Worker-side failures."
           fi
-          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), slowestPaths: (.byPath | .[0:5]) }' \
+          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, slowestPaths: (.byPath | .[0:5]) }' \
+            test-results/worker-tail-summary.json || true
+          # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
+          # a server failure, so name it in the log. Non-fatal for now.
+          jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \
+            test-results/worker-tail-summary.json || true
+          jq -r '"QA Worker error log lines kept: \(.errorLogs.kept // 0) from \(.errorLogs.invocations // 0) invocations (\(.errorLogs.droppedOverCap // 0) over the cap)."' \
             test-results/worker-tail-summary.json || true
           # One warning per route whose p95 CPU time is over the per-request budget (the Workers
           # Free plan's 10 ms CPU limit). Non-fatal for now. A path is reduced to URL-safe
@@ -245,12 +349,24 @@ jobs:
       # Runs even if the journeys failed; if the seed step never ran, re-seeding is harmless.
       - name: Rotate persona passwords
         id: rotate-passwords
-        if: always() && steps.qa-lock.outcome == 'success'
+        if: always() && steps.qa-run.outcome == 'success'
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
         id: cleanup-qa-data
-        if: always() && steps.qa-lock.outcome == 'success'
+        if: always() && steps.qa-run.outcome == 'success'
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files
@@ -282,8 +398,10 @@ jobs:
       #     (explore-report/ additionally holds summary.json and a full-page screenshot per
       #     route visited);
       #   - test-results/: per-failure traces, videos, screenshots and error context, plus
-      #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings and
-      #     exception names plus redacted, capped messages only; no headers, cookies or bodies).
+      #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings,
+      #     exception names plus redacted, capped messages, and the QA Worker's error-level log
+      #     lines reduced to class, scrubbed message and 5 scrubbed frames; no headers, cookies or
+      #     bodies).
       # Traces keep the action log (with typed values other than secrets), DOM snapshots,
       # screencast frames and test source. A DOM snapshot records every input's value and the
       # error context prints a textbox's value, so "Strip network logs from traces" also redacts
@@ -320,8 +438,80 @@ jobs:
           retention-days: 30
           include-hidden-files: false
 
-      # Last step, so QA stays locked through rotate and cleanup. Deletes the lock only if this
-      # run and attempt hold it; a failed release only warns, and the lock then expires.
-      - name: Release the QA lock
-        if: always() && steps.qa-lock.outcome == 'success'
-        run: node scripts/qa-lock.mjs release --target-env qa
+      # Delete this run's Worker and D1, whatever happened before. It runs even if creating the
+      # stack failed part-way: it deletes the database by the id prepare recorded, or else by the
+      # run's exact database name. A failure only warns; the hourly QA Run Sweep workflow (and
+      # every prepare) deletes any run stack older than three hours.
+      - name: Delete this run's QA stack
+        if: always()
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
+          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+        run: node scripts/qa-run-scope.mjs teardown
+
+      # Every Cloudflare step above logs its API requests (scripts/count-cloudflare-requests.mjs),
+      # so each run's share of Cloudflare's 1,200-requests-per-5-minutes limit is on record.
+      - name: Report Cloudflare API requests
+        if: always()
+        continue-on-error: true
+        run: node scripts/count-cloudflare-requests.mjs summary "$RUNNER_TEMP/cloudflare-requests.log" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The shared QA Worker (spoonjoy-v2-qa, D1 spoonjoy-qa) mirrors main: native journeys and the
+  # QA Image Cover Smoke workflow run against it (both create their own accounts by signing up,
+  # so neither needs this workflow to seed shared QA). After main's journeys pass, deploy main
+  # there, applying main's migrations to shared QA. One deploy at a time, and only while the
+  # commit is still main's tip.
+  deploy-shared-qa:
+    needs: [queue-tested, journeys]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (needs.journeys.result == 'success' || (needs.journeys.result == 'skipped' && needs.queue-tested.outputs.tested == 'true')) }}
+    name: deploy main to shared QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: journeys-shared-qa-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: Activate pnpm
+        run: |
+          node scripts/warning-gate.ts -- corepack enable
+          node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: node scripts/warning-gate.ts -- pnpm prisma:generate
+
+      # Journeys runs for main pushes finish in any order, so an older main's run can pass after a
+      # newer one's. Deploy only while this commit is still main's tip, so shared QA never goes
+      # back to an older main.
+      - name: Check this commit is still main's tip
+        id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tip="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Main has moved on to $tip; not deploying $GITHUB_SHA over it."
+          fi
+
+      - name: Deploy main to shared QA
+        if: steps.tip.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm run deploy:qa

@@ -987,7 +987,11 @@ describe("handleMcpHttpRequest", () => {
   it("skips PostHog capture when cloudflareEnv is missing but waitUntil is set", async () => {
     const waitUntil = vi.fn();
     await handleMcpHttpRequest({ request: badToolCall(await mintToken()), db, waitUntil });
-    expect(waitUntil).not.toHaveBeenCalled();
+    // The only deferred work is the bearer token's lastUsedAt write; nothing goes to PostHog.
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    await Promise.all(waitUntil.mock.calls.map(([promise]) => promise));
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureEvent).not.toHaveBeenCalled();
   });
 
   it("skips PostHog capture when env is set but POSTHOG_KEY is not configured", async () => {
@@ -998,7 +1002,11 @@ describe("handleMcpHttpRequest", () => {
       cloudflareEnv: {}, // no POSTHOG_KEY → resolvePostHogServerConfig returns enabled=false
       waitUntil,
     });
-    expect(waitUntil).not.toHaveBeenCalled();
+    // The only deferred work is the bearer token's lastUsedAt write; nothing goes to PostHog.
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    await Promise.all(waitUntil.mock.calls.map(([promise]) => promise));
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureEvent).not.toHaveBeenCalled();
   });
 
   it("captures the raw exception via waitUntil when PostHog is configured", async () => {
