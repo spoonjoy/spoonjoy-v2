@@ -317,11 +317,18 @@ export async function waitForBrowserWorkerVersionReady({
   });
 }
 
+// After a deploy, a request can still reach the previous version for a while even with the version
+// override header (the release canary saw this right after two good cycles a second apart), so the
+// channels must agree for a sustained window before a release is proven, not just twice in a row.
+const WORKER_CHANNELS_STABLE_FOR_MS = 15_000;
+const WORKER_CHANNELS_READINESS_TIMEOUT_MS = 120_000;
+
 export async function waitForWorkerChannelsReady({
   workerVersionId,
   probes,
-  timeoutMs = WORKER_VERSION_READINESS_TIMEOUT_MS,
+  timeoutMs = WORKER_CHANNELS_READINESS_TIMEOUT_MS,
   intervalMs = WORKER_VERSION_READINESS_INTERVAL_MS,
+  stableForMs = WORKER_CHANNELS_STABLE_FOR_MS,
   now = Date.now,
   sleep,
   setTimer = setTimeout,
@@ -333,8 +340,12 @@ export async function waitForWorkerChannelsReady({
   if (!Array.isArray(probes) || probes.length < 2 || probes.some((probe) => typeof probe !== "function")) {
     throw new Error("Worker channel readiness requires at least two channel probe functions.");
   }
+  if (!Number.isFinite(stableForMs) || stableForMs < 0) {
+    throw new Error("Worker channel stable window must be a non-negative finite number.");
+  }
   const expected = normalizeWorkerVersionId(workerVersionId);
   let consecutiveReadyCycles = 0;
+  let readySince = 0;
 
   return waitForWorkerVersionReady({
     workerVersionId,
@@ -343,6 +354,7 @@ export async function waitForWorkerChannelsReady({
     now,
     sleep,
     probe: async (attempt, remainingMs) => {
+      const cycleStartedAt = now();
       const responses = await Promise.all(probes.map(async (probe) => {
         let timer;
         const deadline = new Promise((resolve) => {
@@ -363,8 +375,14 @@ export async function waitForWorkerChannelsReady({
         response?.status === 200
         && workerVersionResponseId(response.headers)?.toLowerCase() === expected
       ));
-      consecutiveReadyCycles = allChannelsReady ? consecutiveReadyCycles + 1 : 0;
-      return consecutiveReadyCycles >= 2 ? { [WORKER_VERSION_RESPONSE_HEADER]: expected } : {};
+      if (!allChannelsReady) {
+        consecutiveReadyCycles = 0;
+        return {};
+      }
+      if (consecutiveReadyCycles === 0) readySince = cycleStartedAt;
+      consecutiveReadyCycles += 1;
+      const stable = consecutiveReadyCycles >= 2 && now() - readySince >= stableForMs;
+      return stable ? { [WORKER_VERSION_RESPONSE_HEADER]: expected } : {};
     },
   });
 }

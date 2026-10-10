@@ -1224,6 +1224,7 @@ describe("smoke-live helpers", () => {
       probes: [browserProbe, apiProbe, mutationProbe],
       timeoutMs: 2_000,
       intervalMs: 250,
+      stableForMs: 250,
       now: () => now,
       sleep,
     })).resolves.toEqual({ attempts: 6, elapsedMs: 1_250, workerVersionId: CANDIDATE_VERSION });
@@ -1243,6 +1244,45 @@ describe("smoke-live helpers", () => {
         workerVersionId: CANDIDATE_VERSION,
         probes,
       })).rejects.toThrow(/at least two channel probe functions/i);
+    }
+  });
+
+  it("proves the candidate only after every channel has agreed for the whole stable window", async () => {
+    let now = 0;
+    const sleep = vi.fn(async (delayMs: number) => {
+      now += delayMs;
+    });
+    const candidate = { status: 200, headers: { "x-spoonjoy-worker-version": CANDIDATE_VERSION } };
+    const previous = { status: 200, headers: { "x-spoonjoy-worker-version": "33333333-3333-4333-8333-333333333333" } };
+    // Ready at once on both channels, then the previous version answers once at 3 s: the window restarts.
+    const apiProbe = vi.fn(async () => (now === 3_000 ? previous : candidate));
+    const browserProbe = vi.fn(async () => candidate);
+
+    await expect(waitForWorkerChannelsReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probes: [browserProbe, apiProbe],
+      intervalMs: 1_000,
+      now: () => now,
+      sleep,
+    })).resolves.toEqual({ attempts: 20, elapsedMs: 19_000, workerVersionId: CANDIDATE_VERSION });
+
+    // Two good cycles a second apart are no longer enough by default.
+    now = 0;
+    await expect(waitForWorkerChannelsReady({
+      workerVersionId: CANDIDATE_VERSION,
+      probes: [browserProbe, browserProbe],
+      timeoutMs: 10_000,
+      intervalMs: 1_000,
+      now: () => now,
+      sleep,
+    })).rejects.toThrow(/not ready after/i);
+
+    for (const stableForMs of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(waitForWorkerChannelsReady({
+        workerVersionId: CANDIDATE_VERSION,
+        probes: [browserProbe, apiProbe],
+        stableForMs,
+      })).rejects.toThrow(/stable window must be a non-negative finite number/i);
     }
   });
 
