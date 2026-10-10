@@ -533,4 +533,33 @@ describe("native Sign in with Apple API", () => {
       "invalid_identity_token",
     );
   });
+
+  /** Sign out everywhere lands just before the sign-in's grant is written. */
+  function signOutEverywhereBeforeTheGrant() {
+    const create = db.oAuthGrant.create.bind(db.oAuthGrant);
+    return vi.spyOn(db.oAuthGrant, "create").mockImplementation((async (args: any) => {
+      await db.user.update({ where: { id: args.data.userId }, data: { sessionVersion: { increment: 1 } } });
+      return create(args);
+    }) as any);
+  }
+
+  it("asks the chef to retry when sign out everywhere lands before the sign-in's grant exists", async () => {
+    const fixture = await nativeAppleTokenFixture();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify(fixture.jwks), {
+      headers: { "Content-Type": "application/json" },
+    }));
+    signOutEverywhereBeforeTheGrant();
+
+    const response = await action(routeArgs(new UndiciRequest("http://localhost/api/v1/auth/apple/native", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": "req_native_apple_race" },
+      body: JSON.stringify({ identityToken: fixture.identityToken, rawNonce: fixture.rawNonce }),
+    }) as unknown as Request));
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toMatchObject({ code: "validation_error", details: { providerCode: "sign_in_interrupted" } });
+    expect(await db.oAuthGrant.count({ where: { status: "active" } })).toBe(0);
+    expect(await db.oAuthRefreshToken.count({ where: { revokedAt: null } })).toBe(0);
+  });
 });

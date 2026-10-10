@@ -526,6 +526,7 @@ describe("handleOAuthToken", () => {
     "https://spoonjoy.app/mcp?query=1",
   ])("keeps a rotated non-canonical resource %s expiring", async (resource) => {
     const issued = await issueConnectorTokens(db, {
+      sessionVersion: 0,
       userId,
       clientId,
       scope: "kitchen:read",
@@ -747,6 +748,7 @@ describe("handleOAuthToken", () => {
     const issuerB = "https://issuer-b.example";
     const boundClient = await registerOAuthClient(db, { redirectUris: [redirectUri], issuer: issuerA });
     const issued = await issueConnectorTokens(db, {
+      sessionVersion: 0,
       userId,
       clientId: boundClient.clientId,
       scope: "kitchen:read",
@@ -1044,6 +1046,39 @@ describe("handleOAuthAuthorizeAction", () => {
     );
 
     expect(res.status).toBe(400);
+  });
+
+  it("mints no code when the account's session version moves while the approval is written", async () => {
+    const cookie = await authedCookie(userId);
+    const consentToken = await consentTokenFor(await fields(), cookie);
+    // This request's session (version 0) has been checked. Another browser then changes the
+    // password, which signs out every browser, just before the code is written.
+    const raced = new Proxy(db, {
+      get(target, prop) {
+        const delegate = Reflect.get(target, prop);
+        if (prop !== "oAuthAuthCode") return delegate;
+        return new Proxy(delegate, {
+          get(inner, innerProp) {
+            const fn = Reflect.get(inner, innerProp);
+            return innerProp === "create"
+              ? async (...args: unknown[]) => {
+                await db.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
+                return fn.apply(inner, args);
+              }
+              : fn;
+          },
+        });
+      },
+    });
+
+    const res = await handleOAuthAuthorizeAction(
+      formPost("https://spoonjoy.app/oauth/authorize", { decision: "approve", consent_token: consentToken }, cookie),
+      raced, null,
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.headers.get("Location")).toBeNull();
+    expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(0);
   });
 
   it("redirects back with access_denied on deny", async () => {

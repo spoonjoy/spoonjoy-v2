@@ -744,7 +744,7 @@ iOS production apps should register an HTTPS universal-link redirect URI such as
 }
 ```
 
-Generate a PKCE verifier in the app, store it only until the code exchange succeeds, and store `access_token` plus `refresh_token` in Keychain on iOS or Android Keystore-backed storage on Android. Refresh tokens rotate; replace the stored refresh token atomically after every successful refresh. If two requests hit `401` concurrently, run a single-flight refresh and have the other requests wait. Treat `invalid_grant` on refresh as a reconnect-required signal.
+Generate a PKCE verifier in the app, store it only until the code exchange succeeds, and store `access_token` plus `refresh_token` in Keychain on iOS or Android Keystore-backed storage on Android. Refresh tokens rotate; replace the stored refresh token atomically after every successful refresh. If two requests hit `401` concurrently, run a single-flight refresh and have the other requests wait. Treat `invalid_grant` on refresh as a reconnect-required signal. When the chef ended the session on purpose (sign out everywhere, a password change, or a disconnect in Account settings or from the app), the refusal also carries `"reason": "revoked_by_user"`, for example `{"error":"invalid_grant","error_description":"Session revoked","reason":"revoked_by_user"}`; sign out quietly instead of showing an error. A code exchange that sign out everywhere or a password change interrupts is refused the same way; start the sign-in again. Other refusals (expired, unknown, already rotated, wrong client or a reuse-detected compromise) carry no `reason`.
 
 ```text
 POST /oauth/token

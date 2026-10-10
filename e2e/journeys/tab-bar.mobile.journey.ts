@@ -109,6 +109,7 @@ test.describe("Tab bar on iPhone", () => {
       await expect(tabBar, `${path}: tab bar`).toBeVisible();
       await expect(tabBar.getByRole("link"), `${path}: the tabs, in order`).toHaveText(["Kitchen", "Recipes", "Cookbooks", "Shopping", ""]);
       await expect(tabBar.getByRole("button"), `${path}: no page actions in the tab bar`).toHaveCount(0);
+      await expect(page.getByTestId("phone-brand-bar"), `${path}: no sign-up bar for a signed-in chef`).toHaveCount(0);
       await expect(tabBar.locator('[aria-current="page"]'), `${path}: one current tab`).toHaveCount(1);
       await expect(tabBar.getByRole("link", { name: currentTab, exact: true }), `${path}: current tab`).toHaveAttribute("aria-current", "page");
       await expectTargetsAtLeast44(tabBar.getByRole("link"), `${path} tab bar`);
@@ -167,7 +168,7 @@ test.describe("Tab bar on iPhone", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Account settings", exact: true })).toBeVisible();
   });
 
-  test("Log out in Account settings signs the phone out", async ({ page }) => {
+  test("Log out in Account settings signs the phone out", async ({ page }, testInfo) => {
     const tabBar = page.getByRole("navigation", { name: "Spoonjoy navigation" });
 
     await page.goto("/account/settings");
@@ -186,6 +187,22 @@ test.describe("Tab bar on iPhone", () => {
     await page.goto("/");
     await expect(tabBar.getByRole("link")).toHaveText(["Home", "Recipes", "Log in", ""]);
     await expect(tabBar.getByRole("link", { name: "Log in", exact: true })).toHaveAttribute("href", "/login");
+
+    // Signed out, a slim bar names Spoonjoy and offers sign-up above the page, so someone who
+    // arrives from a shared recipe link sees whose site this is (product audit finding 18).
+    await page.goto("/recipes/qa-kitchen-recipe-lemon-rice");
+    const brandBar = page.getByTestId("phone-brand-bar");
+    await expect(brandBar).toBeVisible();
+    await expect(brandBar.getByRole("link", { name: "Spoonjoy" })).toHaveAttribute("href", "/");
+    await expect(brandBar.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup");
+    // The first screen someone sees from a shared link, for visual review.
+    await testInfo.attach("signed-out-shared-recipe", { body: await page.screenshot(), contentType: "image/png" });
+
+    // The public list: its first recipe shows on the first screen.
+    await page.goto("/recipes");
+    await expect(page.getByRole("heading", { level: 1, name: "Recipes worth opening." })).toBeVisible();
+    await expect(brandBar).toBeVisible();
+    await testInfo.attach("signed-out-recipes", { body: await page.screenshot(), contentType: "image/png" });
   });
 
   test("the page's bottom padding clears the tab bar on every page (R-M3-4)", async ({ page }) => {

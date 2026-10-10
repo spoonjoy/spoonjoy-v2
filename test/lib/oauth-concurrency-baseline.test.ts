@@ -98,6 +98,7 @@ describe("OAuth concurrency baseline across independent SQLite clients", () => {
           now: NOW,
         }, { onPersistenceMutation: race.hookFor(contender) });
         return issueConnectorTokens(clients[index], {
+          sessionVersion: 0,
           ...grant,
           clientId: CLIENT_ID,
           persistentMcpResource: "https://spoonjoy.app/mcp",
@@ -162,6 +163,7 @@ describe("OAuth concurrency baseline across independent SQLite clients", () => {
     "leaves the child family active when %s wins an indistinguishable public-bearer race",
     async (designatedWinner) => {
       const original = await issueConnectorTokens(clients[0], {
+        sessionVersion: 0,
         userId,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
