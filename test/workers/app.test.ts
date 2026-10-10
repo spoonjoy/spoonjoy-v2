@@ -65,7 +65,8 @@ vi.mock("../../workers/cook-session-api", () => ({
 }));
 
 const runScheduledPhotoSweep = vi.hoisted(() => vi.fn(async () => null));
-vi.mock("../../app/lib/photo-lifecycle.server", () => ({
+vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
+  isServablePhotoKey: (await importOriginal<typeof import("../../app/lib/photo-lifecycle.server")>()).isServablePhotoKey,
   runScheduledPhotoSweep,
 }));
 
@@ -211,6 +212,61 @@ describe("Cloudflare worker app", () => {
     expect(mcpPostRoute).not.toHaveBeenCalled();
   });
 
+  it("serves photos straight from R2 without React Router, and leaves other photo requests to it", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async (key: string) =>
+      key === "variants/w256/covers/a.jpg.webp"
+        ? { body: new Response("webp").body, size: 4, httpEtag: '"v"', httpMetadata: {} }
+        : null,
+    );
+    const env = { PHOTOS: { get } } as unknown as CloudflareEnvironment;
+    const waitUntil = vi.fn();
+    const cachePut = vi.fn(async () => undefined);
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put: cachePut } });
+
+    const response = await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg?w=200"), env, {
+      ...context(),
+      waitUntil,
+    } as unknown as ExecutionContext);
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("webp");
+    expect(response.headers.get("Content-Type")).toBe("image/webp");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(get).toHaveBeenCalledWith("variants/w256/covers/a.jpg.webp");
+    expect(requestHandler).not.toHaveBeenCalled();
+    // The edge copy is written after the response, through the Worker's waitUntil.
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(cachePut).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+
+    const head = await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg?w=200", { method: "HEAD" }), env, context());
+    expect(head.status).toBe(200);
+    expect(requestHandler).not.toHaveBeenCalled();
+
+    for (const request of [
+      new Request("https://spoonjoy.app/photos/covers/a.jpg", { method: "POST" }),
+      new Request("https://spoonjoy.app/photos/"),
+    ]) {
+      await worker.fetch(request, env, context());
+    }
+    await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg"), {} as CloudflareEnvironment, context());
+    expect(requestHandler).toHaveBeenCalledTimes(3);
+  });
+
+  it("never serves a quarantined photo, from the fast path or React Router", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async () => ({ body: new Response("old").body, size: 3, httpEtag: '"q"', httpMetadata: {} }));
+    const env = { PHOTOS: { get } } as unknown as CloudflareEnvironment;
+
+    const response = await worker.fetch(new Request("https://spoonjoy.app/photos/quarantine/covers/a.jpg"), env, context());
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(get).not.toHaveBeenCalled();
+    expect(requestHandler).not.toHaveBeenCalled();
+  });
+
   it("adds security and Worker-version headers to canonical redirects", async () => {
     requestHandler.mockClear();
 
@@ -225,6 +281,25 @@ describe("Cloudflare worker app", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
     expect(requestHandler).not.toHaveBeenCalled();
+  });
+
+  it("serves an earlier release's hashed asset from the archive before the 404 page", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async (key: string) => (
+      key === "release-assets/route-Ab12.js" ? { body: "export{}" } : null
+    ));
+    const env = versionedEnvironment({ PHOTOS: { get } as unknown as R2Bucket });
+
+    const archived = await worker.fetch(new Request("https://spoonjoy.app/assets/route-Ab12.js"), env, context());
+    expect(archived.status).toBe(200);
+    expect(await archived.text()).toBe("export{}");
+    expect(archived.headers.get("Content-Type")).toBe("text/javascript; charset=utf-8");
+    expect(archived.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+    expect(requestHandler).not.toHaveBeenCalled();
+
+    // An asset no release ever had still reaches the app's 404 handling.
+    await worker.fetch(new Request("https://spoonjoy.app/assets/missing-Zz99.js"), env, context());
+    expect(requestHandler).toHaveBeenCalledTimes(1);
   });
 
   it("exposes the executing Worker version for release-canary verification", async () => {

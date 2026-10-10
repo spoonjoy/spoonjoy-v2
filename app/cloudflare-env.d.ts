@@ -11,6 +11,10 @@ declare global {
 
   interface R2ObjectBody {
     body: BodyInit | null;
+    /** Stored size in bytes. */
+    size: number;
+    /** The object's ETag, quoted, ready for an ETag header. */
+    httpEtag: string;
     httpMetadata?: {
       contentType?: string;
     };
@@ -23,7 +27,8 @@ declare global {
       value: Blob | ArrayBuffer | ArrayBufferView | ReadableStream,
       options?: { httpMetadata?: { contentType?: string } }
     ): Promise<unknown>;
-    delete(key: string): Promise<void>;
+    /** Deletes one key or, in one call, up to 1000 keys. */
+    delete(keys: string | string[]): Promise<void>;
   }
 
   interface ExecutionContext {
@@ -66,6 +71,15 @@ declare global {
 
   interface Env {
     DB?: D1Database;
+    /**
+     * Cloudflare Email Service `send_email` binding for account mail (verification, email change,
+     * password reset). Absent until the sending domain is set up; see transactional-email.server.ts.
+     */
+    EMAIL?: { send(message: { to: string; from: string; subject: string; text: string; html?: string }): Promise<unknown> };
+    /** The From address for account mail, on the domain the EMAIL binding is allowed to send from. */
+    SPOONJOY_EMAIL_FROM?: string;
+    /** "capture" (QA) writes account mail to the EmailOutbox table instead of sending it. */
+    SPOONJOY_EMAIL_MODE?: string;
     PHOTOS?: R2Bucket;
     /** Sliding-window throttle for authenticated bearer-token traffic. */
     API_TOKEN_RATE_LIMITER?: RateLimitBinding;
@@ -81,6 +95,8 @@ declare global {
     /** "apply" lets the photo sweep move unreferenced photos to quarantine; "off" stops it; anything else is a dry run. */
     PHOTO_SWEEP_MODE?: string;
     SPOONJOY_CSP_MODE?: string;
+    /** "1" only on a per-run QA Worker: handleError writes one scrubbed console.error line per error. */
+    SPOONJOY_QA_ERROR_LOGS?: string;
     VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
@@ -89,6 +105,10 @@ declare global {
     GOOGLE_API_KEY?: string;
     GEMINI_API_KEY?: string;
     GEMINI_IMAGE_MODEL?: string;
+    /** "off" stops every AI generation (kill switch). */
+    SPOONJOY_AI_IMAGE_GENERATION?: string;
+    /** Global AI generations per UTC day across all users; default 200. */
+    SPOONJOY_AI_DAILY_GENERATION_BUDGET?: string;
     GEMINI_IMAGE_TIMEOUT_MS?: string;
     GEMINI_TEXT_MODEL?: string;
     GEMINI_TEXT_TIMEOUT_MS?: string;

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler",
+  "name": "spoonjoy-uptime-monitor",
+  "main": "./index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "triggers": {
+    "crons": ["* * * * *", "23 * * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "kv_namespaces": [
+    {
+      "binding": "STATE",
+      "id": "2036edf433e7471ca4529432eed5d1da"
+    }
+  ],
+  "vars": {
+    "TARGET_BASE_URL": "https://spoonjoy.app",
+    "RECIPE_PATH": "/recipes/cmuj0xz010001u70n41b6lwrr",
+    "GITHUB_REPOSITORY": "spoonjoy/spoonjoy-v2",
+    "ALERT_ASSIGNEE": "arimendelow",
+    "CANARY_WORKFLOW": "mcp-oauth-canary.yml"
+  }
+}

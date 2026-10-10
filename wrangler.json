@@ -10,6 +10,13 @@
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "placement": {
+    "mode": "smart"
+  },
   "durable_objects": {
     "bindings": [
       {
@@ -64,6 +71,7 @@
     "COOK_SESSION_PROTOCOL": "v1",
     "SPOONJOY_CSP_MODE": "enforce",
     "VITE_POSTHOG_HOST": "https://us.i.posthog.com",
+    "SPOONJOY_AI_DAILY_GENERATION_BUDGET": "200",
     "PHOTO_SWEEP_MODE": "dry-run"
   },
 
@@ -89,6 +97,13 @@
       ],
       "version_metadata": {
         "binding": "CF_VERSION_METADATA"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      },
+      "placement": {
+        "mode": "smart"
       },
       "d1_databases": [
         {
@@ -122,10 +137,12 @@
       ],
       "vars": {
         "NODE_ENV": "production",
+        "SPOONJOY_AI_DAILY_GENERATION_BUDGET": "1000",
         "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
         "COOK_SESSION_BOOTSTRAP_MODE": "1",
         "COOK_SESSION_PROTOCOL": "v1",
         "SPOONJOY_CSP_MODE": "enforce",
+        "SPOONJOY_EMAIL_MODE": "capture",
         "VITE_POSTHOG_HOST": "https://us.i.posthog.com",
         "PHOTO_SWEEP_MODE": "dry-run"
       },

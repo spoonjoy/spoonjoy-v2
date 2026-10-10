@@ -32,6 +32,7 @@ import {
 } from "~/lib/webauthn-route.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { createTestUser } from "../utils";
 
 const config = { rpName: "Spoonjoy", rpID: "spoonjoy.app", origin: "https://spoonjoy.app" };
@@ -682,7 +683,7 @@ describe("webauthn-route orchestration", () => {
       } as never);
       const telemetry = fakeTelemetry();
       const boom = new Error("D1 counter update failed");
-      const failing = dbFailingAt("userCredential", "update", boom);
+      const failing = dbFailingAt("userCredential", "updateMany", boom);
 
       await expect(
         finishAuthentication(failing, user.email, config, { id: "ac3" } as never, telemetry),
@@ -698,6 +699,148 @@ describe("webauthn-route orchestration", () => {
       const failing = dbFailingAt("user", "findUnique", boom);
       // No telemetry arg: the helper must still rethrow, just without capturing.
       await expect(startAuthentication(failing, "who@example.com", config)).rejects.toBe(boom);
+    });
+  });
+
+  describe("finishAuthentication sign-in writes", () => {
+    const telemetry = () => ({ enabled: true, captureException: vi.fn(), captureEvent: vi.fn() });
+    let d1: SqliteD1 | null = null;
+
+    afterEach(() => {
+      d1?.close();
+      d1 = null;
+    });
+
+    async function seed(counter: bigint) {
+      const user = await db.user.create({ data: { ...createTestUser(), webAuthnChallenge: "auth_chal" } });
+      await db.userCredential.create({
+        data: { id: "auth_cred", userId: user.id, publicKey: new Uint8Array([1]), counter },
+      });
+      return user;
+    }
+
+    async function state(userId: string) {
+      const user = await db.user.findUnique({ where: { id: userId } });
+      const credential = await db.userCredential.findUnique({ where: { id: "auth_cred" } });
+      return { challenge: user?.webAuthnChallenge, counter: credential?.counter };
+    }
+
+    function verifiesWithCounter(newCounter: number, meanwhile?: () => Promise<unknown>) {
+      vi.mocked(verifyAuthentication).mockImplementation(async () => {
+        // Another submission of the same assertion (or another sign-in) writing while this
+        // one is being verified.
+        await meanwhile?.();
+        return { verified: true, authenticationInfo: { newCounter } } as never;
+      });
+    }
+
+    const staleEvent = { surface: "webauthn", phase: "authenticate_verify", outcome: "challenge_or_counter_stale" };
+
+    describe("without a D1 binding", () => {
+      it("fails the sign-in, without rotating the counter, when the challenge was consumed meanwhile", async () => {
+        const user = await seed(2n);
+        verifiesWithCounter(7, () => db.user.update({ where: { id: user.id }, data: { webAuthnChallenge: null } }));
+        const sink = telemetry();
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, sink),
+        ).rejects.toMatchObject({ name: "WebAuthnError", status: 400, message: "Authentication could not be completed" });
+
+        expect(await state(user.id)).toEqual({ challenge: null, counter: 2n });
+        expect(sink.captureEvent).toHaveBeenCalledWith("spoonjoy.webauthn.failure", user.id, staleEvent);
+        expect(sink.captureException).not.toHaveBeenCalled();
+      });
+
+      it("fails the sign-in when the counter does not move past the stored one", async () => {
+        const user = await seed(7n);
+        verifiesWithCounter(7);
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never),
+        ).rejects.toMatchObject({ status: 400, message: "Authentication could not be completed" });
+
+        // The challenge is spent first, so it cannot be presented again; the counter is not written.
+        expect(await state(user.id)).toEqual({ challenge: null, counter: 7n });
+      });
+
+      it("accepts a zero counter from an authenticator that does not count", async () => {
+        const user = await seed(0n);
+        verifiesWithCounter(0);
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never),
+        ).resolves.toEqual({ verified: true, userId: user.id, sessionVersion: 0 });
+        expect(await state(user.id)).toEqual({ challenge: null, counter: 0n });
+      });
+    });
+
+    describe("with a D1 binding", () => {
+      it("rotates the counter and clears the challenge in one batch", async () => {
+        const user = await seed(2n);
+        verifiesWithCounter(7);
+        d1 = sqliteD1();
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, undefined, d1.binding),
+        ).resolves.toEqual({ verified: true, userId: user.id, sessionVersion: 0 });
+
+        expect(d1.roundTrips()).toBe(1);
+        expect(await state(user.id)).toEqual({ challenge: null, counter: 7n });
+      });
+
+      it("fails the sign-in and writes nothing when the challenge was consumed meanwhile", async () => {
+        const user = await seed(2n);
+        verifiesWithCounter(7, () => db.user.update({ where: { id: user.id }, data: { webAuthnChallenge: "next_chal" } }));
+        d1 = sqliteD1();
+        const sink = telemetry();
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, sink, d1.binding),
+        ).rejects.toMatchObject({ name: "WebAuthnError", status: 400 });
+
+        expect(await state(user.id)).toEqual({ challenge: "next_chal", counter: 2n });
+        expect(sink.captureEvent).toHaveBeenCalledWith("spoonjoy.webauthn.failure", user.id, staleEvent);
+      });
+
+      it("fails the sign-in and writes nothing when the counter would move backwards", async () => {
+        const user = await seed(9n);
+        verifiesWithCounter(5);
+        d1 = sqliteD1();
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, undefined, d1.binding),
+        ).rejects.toMatchObject({ name: "WebAuthnError", status: 400 });
+
+        expect(await state(user.id)).toEqual({ challenge: "auth_chal", counter: 9n });
+      });
+
+      it("accepts a zero counter from an authenticator that does not count", async () => {
+        const user = await seed(0n);
+        verifiesWithCounter(0);
+        d1 = sqliteD1();
+
+        await finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, undefined, d1.binding);
+
+        expect(await state(user.id)).toEqual({ challenge: null, counter: 0n });
+      });
+
+      it("captures and rethrows a batch fault that is not a guard", async () => {
+        const user = await seed(2n);
+        verifiesWithCounter(7);
+        const boom = new Error("D1 batch unavailable");
+        const binding = { prepare: () => ({ bind: () => ({}) }), batch: () => Promise.reject(boom) } as never;
+        const sink = telemetry();
+
+        await expect(
+          finishAuthentication(db, user.email, config, { id: "auth_cred" } as never, sink, binding),
+        ).rejects.toBe(boom);
+
+        expect(sink.captureException).toHaveBeenCalledWith(
+          boom,
+          { surface: "webauthn", phase: "authenticate_verify", distinct_id: user.id },
+        );
+        expect(await state(user.id)).toEqual({ challenge: "auth_chal", counter: 2n });
+      });
     });
   });
 });
