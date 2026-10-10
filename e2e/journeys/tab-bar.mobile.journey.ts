@@ -168,7 +168,7 @@ test.describe("Tab bar on iPhone", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Account settings", exact: true })).toBeVisible();
   });
 
-  test("Log out in Account settings signs the phone out", async ({ page }) => {
+  test("Log out in Account settings signs the phone out", async ({ page }, testInfo) => {
     const tabBar = page.getByRole("navigation", { name: "Spoonjoy navigation" });
 
     await page.goto("/account/settings");
@@ -195,6 +195,14 @@ test.describe("Tab bar on iPhone", () => {
     await expect(brandBar).toBeVisible();
     await expect(brandBar.getByRole("link", { name: "Spoonjoy" })).toHaveAttribute("href", "/");
     await expect(brandBar.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup");
+    // The first screen someone sees from a shared link, for visual review.
+    await testInfo.attach("signed-out-shared-recipe", { body: await page.screenshot(), contentType: "image/png" });
+
+    // The public list: its first recipe shows on the first screen.
+    await page.goto("/recipes");
+    await expect(page.getByRole("heading", { level: 1, name: "Recipes worth opening." })).toBeVisible();
+    await expect(brandBar).toBeVisible();
+    await testInfo.attach("signed-out-recipes", { body: await page.screenshot(), contentType: "image/png" });
   });
 
   test("the page's bottom padding clears the tab bar on every page (R-M3-4)", async ({ page }) => {
