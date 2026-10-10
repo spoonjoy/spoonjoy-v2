@@ -73,6 +73,10 @@ export const TRANSACTION_ALLOWLIST: Record<string, Allowance> = {
     max: 4,
     reason: `${NO_BINDING_FALLBACK} Each editor intent branches on requestD1(context) first.`,
   },
+  "app/routes/recipes.$id.steps.new.tsx": {
+    max: 1,
+    reason: `${NO_BINDING_FALLBACK} With a binding, the new step is one createRecipeStepOnD1 batch.`,
+  },
   "app/routes/recipes.$id.steps.$stepId.edit.tsx": {
     max: 4,
     reason: `${NO_BINDING_FALLBACK} Each step-editor intent branches on requestD1(context) first.`,
