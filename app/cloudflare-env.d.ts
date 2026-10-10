@@ -84,6 +84,8 @@ declare global {
     SPOONJOY_CSP_MODE?: string;
     /** "1" only on a per-run QA Worker: handleError writes one scrubbed console.error line per error. */
     SPOONJOY_QA_ERROR_LOGS?: string;
+    /** Share of successful fast API reads that send an analytics event (0 to 1; unset = 1). */
+    SPOONJOY_API_EVENT_SAMPLE_RATE?: string;
     VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
