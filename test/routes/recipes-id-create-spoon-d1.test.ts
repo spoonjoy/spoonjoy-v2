@@ -181,6 +181,12 @@ describe("logging a cook on a D1 binding", () => {
     expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
+  it("answers 404 for a recipe in the trash, and writes nothing", async () => {
+    await db.recipe.update({ where: { id: recipeId }, data: { deletedAt: new Date() } });
+    await expect(post(ownerId, { note: "Late" })).rejects.toMatchObject({ status: 404 });
+    expect(await db.recipeSpoon.count()).toBe(0);
+  });
+
   it("runs the background work with the Prisma client before answering when there is no waitUntil", async () => {
     platform.getRequestDb.mockResolvedValue(db);
     const answer = await post(ownerId, { photo: photo() }, { waitUntil: false });
