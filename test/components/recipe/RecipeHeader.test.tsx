@@ -96,6 +96,15 @@ describe('RecipeHeader', () => {
       expect(screen.getByTestId('recipe-masthead')).toHaveTextContent('Recipe actions')
       expect(screen.getByTestId('recipe-header-provenance')).toHaveTextContent('originally from example.com')
     })
+
+    it('closes the masthead with its own rule and no gap on a phone', () => {
+      // On a phone the action row draws only its top rule and sits flush on the masthead's
+      // bottom rule; a gap there drew two rules a few pixels apart.
+      renderWithRouter(<RecipeHeader {...defaultProps} masthead={<span>Recipe actions</span>} />)
+      const masthead = screen.getByTestId('recipe-masthead')
+      expect(masthead).toHaveClass('border-b', 'sm:pb-4')
+      expect(masthead).not.toHaveClass('pb-4')
+    })
   })
 
   describe('recipe image', () => {

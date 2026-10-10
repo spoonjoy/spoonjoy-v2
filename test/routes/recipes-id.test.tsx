@@ -3742,6 +3742,9 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("recipe-masthead")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/recipes");
       expect(screen.getByTestId("recipe-header-actions")).toBeInTheDocument();
+      // On a phone the row draws only its top rule; the masthead's rule closes it.
+      expect(screen.getByTestId("recipe-header-actions")).toHaveClass("border-t", "sm:border-t-0");
+      expect(screen.getByTestId("recipe-header-actions")).not.toHaveClass("border-y");
       expect(screen.getByRole("link", { name: "Cook mode" })).toHaveAttribute("href", "/recipes/recipe-1#cook");
       expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
       expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
