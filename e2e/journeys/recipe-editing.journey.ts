@@ -230,7 +230,7 @@ test.describe("Recipe create and edit", () => {
     await page.goto("/recipes/new");
     await waitForHydration(page);
     await page.getByLabel("Title", { exact: true }).fill(title);
-    await page.getByRole("button", { name: "Add Step", exact: true }).click();
+    await page.getByRole("button", { name: "Add step", exact: true }).click();
     const card = page.getByRole("article", { name: "Step 1", exact: true });
     await card.getByLabel("Instructions").fill("Boil the pasta in salted water");
     await expect(card.getByRole("switch", { name: "AI Parse" })).toBeChecked();
@@ -243,7 +243,7 @@ test.describe("Recipe create and edit", () => {
     await expect(card.getByRole("button", { name: "Remove kosher salt" })).toBeVisible();
     await testInfo.attach("rule-parsed-ingredients", { body: await card.screenshot(), contentType: "image/png" });
 
-    await page.getByRole("button", { name: "Create Recipe", exact: true }).click();
+    await page.getByRole("button", { name: "Create recipe", exact: true }).click();
     await expect(page).toHaveURL(RECIPE_URL);
     await verifyAfterReload(async () => {
       await expect(recipeStep(page, 1).getByRole("checkbox", { name: "spaghetti", exact: true })).toBeVisible();
