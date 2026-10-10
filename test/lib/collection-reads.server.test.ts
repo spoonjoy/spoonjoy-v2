@@ -104,6 +104,56 @@ describe("collection reads", () => {
     await expect(readPublicRecipesFromD1(d1.binding, { query: "stew", limit: 48 })).resolves.toHaveLength(4);
   });
 
+  it("pages through public recipes after a cursor, as Prisma does, with every recipe on exactly one page", async () => {
+    const chef = await db.user.create({ data: { ...createTestUser(), username: `pagechef_${Date.now()}` } });
+    // Seven recipes, three sharing one timestamp, so the id must break the tie consistently.
+    const minutes = [5, 4, 4, 4, 3, 2, 1];
+    const created = [];
+    for (const [index, minute] of minutes.entries()) {
+      created.push(await db.recipe.create({
+        data: { title: `Paged ${index}`, chefId: chef.id, createdAt: at(minute), updatedAt: at(minute) },
+      }));
+    }
+    const gone = await db.recipe.create({
+      data: { title: "Paged gone", chefId: chef.id, createdAt: at(3), updatedAt: at(3), deletedAt: at(6) },
+    });
+
+    const walk = async (read: (after: string | null) => Promise<{ id: string }[]>) => {
+      const seen: string[] = [];
+      let after: string | null = null;
+      for (let page = 0; page < 10; page += 1) {
+        const rows = await read(after);
+        seen.push(...rows.map((row) => row.id));
+        if (rows.length < 3) break;
+        after = rows[rows.length - 1]!.id;
+      }
+      return seen;
+    };
+
+    const fromD1 = await walk((after) => readPublicRecipesFromD1(d1.binding, { query: "", limit: 3, after }));
+    const fromPrisma = await walk((after) => readPublicRecipesWithPrisma(db, { query: "", limit: 3, after }));
+    expect(fromD1).toEqual(fromPrisma);
+    expect([...fromD1].sort()).toEqual(created.map((recipe) => recipe.id).sort());
+    expect(new Set(fromD1).size).toBe(created.length);
+    expect(fromD1).not.toContain(gone.id);
+
+    // Each page is one round trip, and a page after a deleted recipe still continues from its place.
+    const before = d1.roundTrips();
+    const afterGone = await readPublicRecipesFromD1(d1.binding, { query: "", limit: 48, after: gone.id });
+    expect(d1.roundTrips() - before).toBe(1);
+    expect(afterGone).toEqual(await readPublicRecipesWithPrisma(db, { query: "", limit: 48, after: gone.id }));
+    // The deleted recipe ties Paged 4 on time and has the later id, so Paged 4 comes right after it.
+    expect(afterGone.map((recipe) => recipe.title)).toEqual(["Paged 4", "Paged 5", "Paged 6"]);
+
+    // An unknown cursor reads nothing rather than starting over.
+    await expect(readPublicRecipesFromD1(d1.binding, { query: "", limit: 3, after: "no-such-recipe" })).resolves.toEqual([]);
+    await expect(readPublicRecipesWithPrisma(db, { query: "", limit: 3, after: "no-such-recipe" })).resolves.toEqual([]);
+
+    // A search ignores the cursor: search results are one ranked page.
+    const searched = await readPublicRecipesFromD1(d1.binding, { query: "paged", limit: 48, after: created[0]!.id });
+    expect(searched).toEqual(await readPublicRecipesWithPrisma(db, { query: "paged", limit: 48, after: created[0]!.id }));
+  });
+
   it("reads saved recipes as Prisma does, only from the user's own cookbooks", async () => {
     const { chef, friend, stranger, risotto } = await seedCollections();
     for (const userId of [chef.id, friend.id, stranger.id]) {
