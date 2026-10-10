@@ -540,6 +540,32 @@ describe("API v1 recipe write mutations", () => {
       expect(placeholder).toHaveBeenCalledTimes(1);
     });
 
+    it("leaves the placeholder to the retry that claimed the stopped create first", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const { body, reservation } = await committedCreateWithoutSchedule(fixture, "recipe-create-claim-lost");
+      await db.apiIdempotencyKey.update({ where: { id: reservation.id }, data: { createdAt: new Date(Date.now() - 60_000) } });
+      // Another retry claims the finished marker between this retry's check and its own claim, so
+      // this claim meets the marker's unique key (P2002). The race test above reaches that only
+      // when the two requests happen to interleave; this pins it.
+      const originalCreate = db.apiMutationTombstone.create;
+      const claim = vi.fn(async (args: Parameters<typeof originalCreate>[0]) => {
+        await originalCreate(args);
+        return originalCreate(args);
+      });
+      db.apiMutationTombstone.create = claim as unknown as typeof originalCreate;
+      let retry: Response;
+      try {
+        retry = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_claim_lost", body), "recipes"));
+      } finally {
+        db.apiMutationTombstone.create = originalCreate;
+      }
+
+      expect(claim).toHaveBeenCalledTimes(1);
+      expect(retry.status).toBe(201);
+      expect(placeholder).not.toHaveBeenCalled();
+    });
+
     it("recovers a finished create without scheduling its placeholder again", async () => {
       const fixture = await createRecipeWriteFixture(db);
       const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
