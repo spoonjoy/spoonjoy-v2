@@ -633,6 +633,8 @@ export default function EditStep() {
   }, [searchParams, setSearchParams, showToast]);
 
   // Ingredient input mode handlers
+  const parsedListShown = showIngredientForm && ingredientInputMode !== "manual" && parsedIngredients.length > 0;
+
   const handleModeChange = (mode: IngredientInputMode) => {
     setIngredientInputMode(mode);
   };
@@ -818,7 +820,7 @@ export default function EditStep() {
                     onParsed={handleParsed}
                     onSwitchToManual={() => setIngredientInputMode('manual')}
                   />
-                  {parsedIngredients.length > 0 && (
+                  {parsedListShown && (
                     <ParsedIngredientList
                       ingredients={parsedIngredients}
                       onEdit={handleEditParsed}
@@ -832,7 +834,8 @@ export default function EditStep() {
           )}
 
           {step.ingredients.length === 0 ? (
-            <RuledEmptyState title="No ingredients added yet" />
+            // Parsed ingredients waiting for "Add All" are not "none yet".
+            !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
           ) : (
             <div className="sj-list-ruled">
               {step.ingredients.map((ingredient) => (
