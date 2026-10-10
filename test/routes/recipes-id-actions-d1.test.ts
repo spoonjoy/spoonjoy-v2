@@ -1,6 +1,7 @@
 // @vitest-environment node
 // The recipe page's action with a D1 binding: saving to a cookbook, taking a recipe out, making a
-// cookbook from the Save dialog, deleting a cook and the owner's cover choices all answer from
+// cookbook from the Save dialog, deleting a cook, the owner's cover choices and moving the recipe
+// to the trash all answer from
 // D1, even when the request's Prisma client never answers (as in a poisoned isolate).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
@@ -184,6 +185,34 @@ describe("recipes.$id action on a D1 binding", () => {
     await db.recipe.update({ where: { id: ownId }, data: { deletedAt: new Date() } });
     expect(await answer({ intent: "setRecipeNoCover", confirmNoCover: "true" })).toBe(404);
     expect(await db.recipeCover.count({ where: { recipeId: ownId, status: "archived" } })).toBe(0);
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
+  it("moves the owner's recipe to the trash with its sync tombstone, without a Prisma client", async () => {
+    const ownId = (await db.recipe.create({ data: { title: "Soup", chefId } })).id;
+    const before = d1.roundTrips();
+
+    const answer = (await post({ intent: "delete" }, d1.binding, ownId)) as unknown as Response;
+
+    expect(answer.status).toBe(302);
+    expect(answer.headers.get("Location")).toBe("/recipes");
+    // The session check, the owner read, and one write batch.
+    expect(d1.roundTrips() - before).toBe(3);
+    const trashed = await db.recipe.findUniqueOrThrow({ where: { id: ownId } });
+    expect(trashed.deletedAt).toBeInstanceOf(Date);
+    const tombstone = await db.nativeSyncTombstone.findFirstOrThrow({ where: { resourceType: "recipe", resourceId: ownId } });
+    expect(tombstone).toMatchObject({ accountId: chefId, title: "Soup" });
+    expect(tombstone.deletedAt.getTime()).toBe(trashed.deletedAt!.getTime());
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
+  it("answers a delete of someone else's recipe 403, and of a missing or trashed one 404", async () => {
+    await expect(post({ intent: "delete" })).rejects.toMatchObject({ status: 403 });
+    expect((await db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).deletedAt).toBeNull();
+    await expect(post({ intent: "delete" }, d1.binding, "missing")).rejects.toMatchObject({ status: 404 });
+    const ownId = (await db.recipe.create({ data: { title: "Gone", chefId, deletedAt: new Date() } })).id;
+    await expect(post({ intent: "delete" }, d1.binding, ownId)).rejects.toMatchObject({ status: 404 });
+    expect(await db.nativeSyncTombstone.count()).toBe(0);
     expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
