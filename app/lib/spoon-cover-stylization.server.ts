@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   createGeminiImageRunner,
   createOpenAIImageRunner,
+  imageJobBudget,
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   ImageProviderAttemptError,
@@ -69,6 +70,8 @@ export interface ScheduleSpoonStylizationInput {
   postHogConfig?: PostHogServerConfig;
   analyticsFetchImpl?: typeof fetch;
   now?: () => number;
+  /** Overrides the job's provider time limits (IMAGE_JOB_BUDGET_MS, IMAGE_ATTEMPT_TIMEOUT_MS). */
+  timeLimits?: { totalMs?: number; attemptTimeoutMs?: number };
   logger?: Pick<Console, "error">;
 }
 
@@ -794,6 +797,9 @@ export async function scheduleSpoonCoverStylization(
   input: ScheduleSpoonStylizationInput,
 ): Promise<void> {
   const logger = input.logger ?? console;
+  // The budget starts with the job, so a hung provider is cut off well inside waitUntil's window
+  // and the cover is marked failed, never left in "processing".
+  const budget = imageJobBudget(input.timeLimits);
   try {
     if (!input.rawPhotoUrl.trim()) {
       await markStylizationFailed(input, "missing_source_image", { force: true });
@@ -832,6 +838,7 @@ export async function scheduleSpoonCoverStylization(
       ...("runner" in providerResolution
         ? { runner: providerResolution.runner }
         : { imageEditAttempts: providerResolution.imageEditAttempts }),
+      budget,
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,

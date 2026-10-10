@@ -7,6 +7,7 @@ import {
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   generatePlaceholderImage,
+  imageJobBudget,
   sanitizeImagePromptAddition,
   type ImageGenEnv,
   type ImageGenRunner,
@@ -48,6 +49,8 @@ export interface SchedulePlaceholderInput {
   postHogConfig?: PostHogServerConfig;
   analyticsFetchImpl?: typeof fetch;
   now?: () => number;
+  /** Overrides the job's provider time limits (IMAGE_JOB_BUDGET_MS, IMAGE_ATTEMPT_TIMEOUT_MS). */
+  timeLimits?: { totalMs?: number; attemptTimeoutMs?: number };
   logger?: Pick<Console, "error">;
   activateWhenReady?: boolean;
   suppressAutoActivation?: boolean;
@@ -355,6 +358,9 @@ export async function scheduleAiPlaceholderCover(
   input: SchedulePlaceholderInput,
 ): Promise<void> {
   const logger = input.logger ?? console;
+  // The budget starts with the job, so a hung provider is cut off well inside waitUntil's window
+  // and the cover is marked failed, never left in "processing".
+  const budget = imageJobBudget(input.timeLimits);
   let model = OPENAI_PLACEHOLDER_MODEL;
   try {
     const runnerResolution = resolveRunner(input);
@@ -385,6 +391,7 @@ export async function scheduleAiPlaceholderCover(
       env: input.env ?? {},
       runner: runnerResolution.runner,
       model: runnerResolution.model,
+      budget,
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,
