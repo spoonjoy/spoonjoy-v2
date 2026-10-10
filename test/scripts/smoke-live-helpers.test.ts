@@ -24,6 +24,7 @@ import {
   buildBrowserEnvironment,
   buildD1CommandEnvironment,
   createWorkerVersionResponseTracker,
+  publicStaticAssetPaths,
   completeConsentSubmission,
   decideMcpCanaryIssueAction,
   findMcpCanarySecretLeaks,
@@ -1375,6 +1376,26 @@ describe("smoke-live helpers", () => {
     expect(() => tracker.assertSince(assetsOnlyCheckpoint, "assets-only phase")).toThrow(
       /observed no Spoonjoy responses/i,
     );
+  });
+
+  it("ignores files the static asset binding serves from public/, such as the default chef avatar", () => {
+    const tracker = createWorkerVersionResponseTracker({
+      baseUrl: "https://spoonjoy.app",
+      workerVersionId: CANDIDATE_VERSION,
+    });
+    for (const path of ["/images/chef-rj.png", "/icons/sj-192.png", "/manifest.webmanifest", "/sw.js"]) {
+      expect(tracker.record({ url: `https://spoonjoy.app${path}`, headers: {}, label: `GET ${path}` })).toBe(false);
+    }
+    expect(tracker.record({ url: "https://spoonjoy.app/images/not-shipped.png", headers: {}, label: "GET /images/not-shipped.png" })).toBe(true);
+    expect(() => tracker.assertAll("browser flow")).toThrow(/not-shipped\.png/);
+  });
+
+  it("lists every public file by URL path and leaves out the binding's _headers config", () => {
+    const paths = publicStaticAssetPaths();
+    expect(paths).toContain("/images/chef-rj.png");
+    expect(paths).toContain("/.well-known/appspecific/com.chrome.devtools.json");
+    expect(paths).not.toContain("/_headers");
+    expect([...paths].every((path) => path.startsWith("/") && !path.includes("\\"))).toBe(true);
   });
 
   it("requires browser phases to observe responses and validates tracker checkpoints", () => {
