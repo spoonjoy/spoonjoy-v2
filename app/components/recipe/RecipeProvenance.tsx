@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { chefDisplayName } from "~/lib/username";
 
 export interface RecipeProvenanceSourceRecipe {
   id: string;
@@ -81,7 +82,7 @@ export function RecipeProvenance({ sourceUrl, sourceRecipe }: RecipeProvenancePr
               to={`/recipes/${sourceRecipe!.id}`}
               className="underline hover:text-[var(--sj-tomato)]"
             >
-              <span>{sourceRecipe!.chef.username}</span>
+              <span>{chefDisplayName(sourceRecipe!.chef.username)}</span>
               <span aria-hidden> · </span>
               <span title={title}>{displayTitle}</span>
             </Link>

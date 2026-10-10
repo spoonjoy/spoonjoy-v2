@@ -3,7 +3,10 @@ import { data, redirect } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
-import { createUserSessionCookie, getSessionAuthenticatedAt, requireUserId } from "~/lib/session.server";
+import { createUserSessionCookie, destroyUserSession, getSessionAuthenticatedAt, requireUserId } from "~/lib/session.server";
+import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
+import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
+import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
 import { removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
@@ -94,7 +97,11 @@ export interface AccountSettingsLoaderData {
 // The forms whose results the page needs to tell apart: a successful Save closes the user
 // information form, a successful password change or set closes the password form, and a photo
 // upload's error shows next to the photo instead of in the page banner.
-export type AccountSettingsFormIntent = "updateUserInfo" | "changePassword" | "setPassword" | "uploadPhoto";
+// A failed account deletion shows its error inside the deletion form.
+export type AccountSettingsFormIntent = "updateUserInfo" | "changePassword" | "setPassword" | "uploadPhoto" | "deleteAccount";
+
+/** Where "Sign in again" sends a passwordless chef, so they come back to finish deleting. */
+export const DELETE_ACCOUNT_REAUTH_REDIRECT = "/login?redirectTo=%2Faccount%2Fsettings%23delete-account";
 
 export interface AccountSettingsActionResult {
   success: boolean;
@@ -121,7 +128,12 @@ export interface AccountSettingsActionResult {
     | "no_password_to_remove"
     | "passkey_not_found"
     | "credential_not_found"
-    | "oauth_connection_not_found";
+    | "oauth_connection_not_found"
+    | "confirmation_mismatch"
+    | "password_incorrect"
+    | "recent_sign_in_required"
+    | "apple_account_mismatch"
+    | "rate_limited";
   message?: string;
   fieldErrors?: {
     email?: string;
@@ -808,6 +820,15 @@ export async function handleAccountSettingsAction({
     }, sessionVersion);
   }
 
+  if (intent === "deleteAccount") {
+    return handleDeleteAccount({ request, context, formData, userId, database });
+  }
+
+  if (intent === "reauthenticate") {
+    // Sign out, then back in: the new session's sign-in time lets a passwordless chef delete.
+    throw await destroyUserSession(request, DELETE_ACCOUNT_REAUTH_REDIRECT, getCloudflareEnv(context));
+  }
+
   if (intent === "setPassword") {
     const newPassword = formData.get("newPassword")?.toString() || "";
     const confirmPassword = formData.get("confirmPassword")?.toString() || "";
@@ -1013,4 +1034,53 @@ export async function handleAccountSettingsAction({
   }
 
   return { success: false };
+}
+
+interface DeleteAccountArgs extends AccountSettingsRouteArgs {
+  formData: FormData;
+  userId: string;
+  database: Awaited<ReturnType<typeof getRequestDb>>;
+}
+
+// Deleting the account needs the username typed back plus proof the chef is the owner right now:
+// the password, or for an account without one, a sign-in in the last few minutes. See
+// docs/account-deletion.md for what happens to the data.
+async function handleDeleteAccount({ request, context, formData, userId, database }: DeleteAccountArgs): Promise<AccountSettingsActionResult> {
+  const env = getCloudflareEnv(context);
+  const failure = (error: AccountSettingsActionResult["error"], message: string): AccountSettingsActionResult => ({
+    success: false,
+    intent: "deleteAccount",
+    error,
+    message,
+  });
+
+  // A stolen session must not become a password-guessing oracle.
+  const rateLimit = await enforceAuthRateLimit(request, env?.AUTH_IP_RATE_LIMITER);
+  if (!rateLimit.allowed) return failure("rate_limited", "Too many attempts. Try again in a few minutes.");
+
+  const user = await database.user.findUniqueOrThrow({ where: { id: userId }, select: { username: true } });
+  const confirmUsername = formData.get("confirmUsername")?.toString().trim() ?? "";
+  if (confirmUsername !== user.username) {
+    return failure("confirmation_mismatch", "Type your username exactly to confirm.");
+  }
+
+  const proof = await verifyAccountOwnerProof(database, userId, {
+    password: formData.get("password")?.toString() || null,
+    sessionAuthenticatedAt: await getSessionAuthenticatedAt(request, env),
+  });
+  if (!proof.ok) {
+    /* istanbul ignore if -- @preserve requireUserId found the account; this is a race guard. */
+    if (proof.reason === "account_not_found") throw await destroyUserSession(request, "/login", env);
+    return failure(proof.reason, proof.message);
+  }
+
+  const d1 = requestD1(context);
+  if (!d1) throw new Error("Account deletion needs the D1 database binding");
+  try {
+    await deleteAccount(d1, userId);
+  } catch (error) {
+    /* istanbul ignore next -- @preserve a concurrent deletion of the same account lands here. */
+    if (!(error instanceof AccountDeletionError)) throw error;
+  }
+  throw await destroyUserSession(request, "/account/deleted", env);
 }
