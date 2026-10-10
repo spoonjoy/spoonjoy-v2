@@ -2283,7 +2283,7 @@ describe("Recipes $id Edit Route", () => {
 
       // Wait for form to render by finding the Title input first
       await screen.findByLabelText(/Title/);
-      // Save Recipe button (matches "Save Recipe" in edit mode)
+      // Save recipe button (matches "Save recipe" in edit mode)
       expect(screen.getByRole("button", { name: /save recipe/i })).toBeInTheDocument();
       // Cancel is now a button that navigates programmatically, not a link
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
@@ -2628,14 +2628,14 @@ describe("Recipes $id Edit Route", () => {
       ]);
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
-      await user.click(await screen.findByRole("button", { name: "Save Recipe" }));
+      await user.click(await screen.findByRole("button", { name: "Save recipe" }));
 
       expect(await screen.findByText(conflict)).toBeInTheDocument();
       await waitForSaveToSettle();
       // The cook's edits are still in the form.
       expect(screen.getByLabelText(/^Title$/i)).toHaveValue("Original Title");
 
-      await user.click(screen.getByRole("button", { name: "Save Recipe" }));
+      await user.click(screen.getByRole("button", { name: "Save recipe" }));
       await waitFor(() => {
         expect(sent).toEqual(["2026-03-01T10:00:00.123Z", "2026-03-01T10:05:00.456Z"]);
       });
