@@ -46,6 +46,7 @@ import {
   sweepStaleRunStacks,
   teardown,
   verify,
+  QA_ERROR_LOGS_VAR,
 } from "../../scripts/qa-run-scope.mjs";
 import { QA_BASE_URL, QA_D1_DATABASE_ID } from "../../scripts/script-environment.mjs";
 import { expectConsoleError } from "../warning-policy";
@@ -191,6 +192,22 @@ describe("scopeWranglerConfig", () => {
     expect(scopedTop).toEqual(realTop);
     // The input is not mutated.
     expect(REAL_WRANGLER.env.qa.d1_databases[0].database_id).toBe(QA_D1_DATABASE_ID);
+  });
+
+  it("turns on the QA error log line for the run's own Worker only, never for shared QA or production", () => {
+    const scoped = scopeWranglerConfig(REAL_WRANGLER, IDENTITY, RUN_DB_ID);
+    const generated = scopeGeneratedBuildConfig(generatedBuildConfig(), IDENTITY, RUN_DB_ID);
+
+    expect(QA_ERROR_LOGS_VAR).toBe("SPOONJOY_QA_ERROR_LOGS");
+    expect(scoped.env.qa.vars[QA_ERROR_LOGS_VAR]).toBe("1");
+    expect(generated.vars[QA_ERROR_LOGS_VAR]).toBe("1");
+    expect(scoped.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    expect(REAL_WRANGLER.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    expect(REAL_WRANGLER.env.qa.vars).not.toHaveProperty(QA_ERROR_LOGS_VAR);
+    // A shared QA config that already carried the switch would be more than an identity change.
+    const sharedWithSwitch = structuredClone(REAL_WRANGLER);
+    sharedWithSwitch.env.qa.vars[QA_ERROR_LOGS_VAR] = "1";
+    expect(() => scopeWranglerConfig(sharedWithSwitch, IDENTITY, RUN_DB_ID)).toThrow(/already sets SPOONJOY_QA_ERROR_LOGS/);
   });
 
   it("refuses a config whose env.qa does not name shared QA", () => {

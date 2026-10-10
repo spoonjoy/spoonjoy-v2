@@ -241,8 +241,14 @@ jobs:
       # first 20 with exceptions and the 25 slowest, counts of requests the runtime canceled as
       # hung (Error 1101) and of requests that waited over 2 s on under 5 ms of CPU,
       # plus p50/p95/max wall and CPU time per path pattern, and the routes whose p95 CPU time is
-      # over the 10 ms per-request budget (printed as warnings). No header, cookie, body or log line
-      # is copied. If the tail had already exited when the suite finished, or recorded nothing,
+      # over the 10 ms per-request budget (printed as warnings). No header, cookie or body is
+      # copied. Because this is the run's own QA Worker, --argjson keepErrorLogs true also keeps
+      # its error-level log lines (React Router logs a loader or action error with console.error
+      # and answers 500 while the invocation ends "ok"), each reduced to the exception class, a
+      # scrubbed message and at most 5 scrubbed stack frames, attached to the 5xx and exception
+      # entries, at most 3 per invocation and 40 in all; the log prints how many were kept. Any
+      # other caller of the program, such as a production tail, keeps no log line.
+      # If the tail had already exited when the suite finished, or recorded nothing,
       # the summary says `complete: false` and the log warns: that is no evidence, not a clean
       # run. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
@@ -274,7 +280,7 @@ jobs:
             # a value cut off by the kill instead of failing on it.
             sed -n '/^{/,$p' .worker-tail/tail.json | jq -c '.' > .worker-tail/events.ndjson 2>/dev/null || true
           fi
-          jq -s --argjson tailAliveAtStop "$tail_alive" -f scripts/summarize-worker-tail.jq \
+          jq -s --argjson tailAliveAtStop "$tail_alive" --argjson keepErrorLogs true -f scripts/summarize-worker-tail.jq \
             .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
           if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           rm -rf .worker-tail
@@ -286,6 +292,8 @@ jobs:
           # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
           # a server failure, so name it in the log. Non-fatal for now.
           jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \
+            test-results/worker-tail-summary.json || true
+          jq -r '"QA Worker error log lines kept: \(.errorLogs.kept // 0) from \(.errorLogs.invocations // 0) invocations (\(.errorLogs.droppedOverCap // 0) over the cap)."' \
             test-results/worker-tail-summary.json || true
           # One warning per route whose p95 CPU time is over the per-request budget (the Workers
           # Free plan's 10 ms CPU limit). Non-fatal for now. A path is reduced to URL-safe
@@ -352,8 +360,10 @@ jobs:
       #     (explore-report/ additionally holds summary.json and a full-page screenshot per
       #     route visited);
       #   - test-results/: per-failure traces, videos, screenshots and error context, plus
-      #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings and
-      #     exception names plus redacted, capped messages only; no headers, cookies or bodies).
+      #     worker-tail-summary.json (Worker outcomes, paths without queries, statuses, timings,
+      #     exception names plus redacted, capped messages, and the QA Worker's error-level log
+      #     lines reduced to class, scrubbed message and 5 scrubbed frames; no headers, cookies or
+      #     bodies).
       # Traces keep the action log (with typed values other than secrets), DOM snapshots,
       # screencast frames and test source. A DOM snapshot records every input's value and the
       # error context prints a textbox's value, so "Strip network logs from traces" also redacts

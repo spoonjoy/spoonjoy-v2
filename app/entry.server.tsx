@@ -12,6 +12,7 @@ import {
   resolvePostHogServerConfig,
 } from "~/lib/analytics-server";
 import { NonceContext } from "~/lib/nonce";
+import { formatQaErrorLog, qaErrorLogsEnabled } from "~/lib/qa-error-logs.server";
 
 export default async function handleRequest(
   request: Request,
@@ -93,6 +94,12 @@ export default async function handleRequest(
  *
  * Capture is wrapped in `ctx.waitUntil` so it never blocks or breaks the
  * error response.
+ *
+ * Exporting this replaces React Router's default `console.error`, so nothing
+ * is logged in production. A per-run QA Worker (and only that) sets
+ * `SPOONJOY_QA_ERROR_LOGS=1`; then the error is also written as one scrubbed
+ * console.error line (class, message, at most 5 frames) for the Journeys tail
+ * summary. See app/lib/qa-error-logs.server.ts.
  */
 export function handleError(
   error: unknown,
@@ -114,6 +121,14 @@ export function handleError(
   const env = loadContext?.cloudflare?.env;
   const ctx = loadContext?.cloudflare?.ctx;
   if (!env) return;
+
+  if (qaErrorLogsEnabled(env)) {
+    try {
+      console.error(formatQaErrorLog(error));
+    } catch {
+      // Logging is evidence only; it must never break the error response.
+    }
+  }
 
   const postHogConfig = resolvePostHogServerConfig(env);
   if (!postHogConfig.enabled) return;

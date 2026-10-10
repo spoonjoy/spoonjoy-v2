@@ -82,6 +82,8 @@ declare global {
     /** "v1" serves cook-session protocol v1 (cross-device cook progress); unset keeps the inert 503. */
     COOK_SESSION_PROTOCOL?: string;
     SPOONJOY_CSP_MODE?: string;
+    /** "1" only on a per-run QA Worker: handleError writes one scrubbed console.error line per error. */
+    SPOONJOY_QA_ERROR_LOGS?: string;
     VITE_POSTHOG_HOST?: string;
     SESSION_SECRET?: string;
     SPOONJOY_BASE_URL?: string;
