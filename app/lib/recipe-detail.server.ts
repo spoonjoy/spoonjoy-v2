@@ -2,7 +2,7 @@ import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import {
   addRecipeToCookbookOnD1,
   assertActiveRecipeOnD1,
@@ -248,6 +248,26 @@ async function runOrQueueAiPlaceholderCover(
   await scheduleAiPlaceholderCover(input);
 }
 
+/** What the recipe page's not-found screen is told about a recipe it cannot show. */
+export interface RecipeNotFoundData {
+  message: "Recipe not found";
+  // True when the recipe existed and was deleted; false when there is no such recipe.
+  deleted: boolean;
+}
+
+// A recipe link can outlive its recipe. The page says whether the recipe was deleted (product audit
+// 2026-10-09, finding 20). It reads only the deletion time: naming the chef would need to know the
+// recipe was public when it was deleted, and nothing records that yet.
+async function recipeNotFoundResponse(context: RecipeDetailRouteArgs["context"], id: string): Promise<Response> {
+  const d1 = requestD1(context);
+  const row = d1
+    ? ((await d1ReadBatch(d1, [['SELECT "deletedAt" FROM "Recipe" WHERE "id" = ? LIMIT 1', id]]))[0][0] as { deletedAt: unknown } | undefined)
+    : await (await getRequestDb(context)).recipe.findUnique({ where: { id }, select: { deletedAt: true } });
+  const deleted = row !== undefined && row !== null && row.deletedAt !== null && row.deletedAt !== undefined;
+  const body: RecipeNotFoundData = { message: "Recipe not found", deleted };
+  return Response.json(body, { status: 404 });
+}
+
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
@@ -261,7 +281,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const { recipe } = reads;
 
   if (!recipe) {
-    throw new Response("Recipe not found", { status: 404 });
+    throw await recipeNotFoundResponse(context, id);
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;

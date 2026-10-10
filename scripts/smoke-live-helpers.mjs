@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 
 import {
   DEFAULT_PRODUCTION_BASE_URL,
@@ -147,9 +149,23 @@ export function isRouteActionResponse({ baseUrl, responseUrl, routePath, request
   }
 }
 
+// Every file under public/ ships in build/client next to Vite's /assets/, and the static asset
+// binding answers those paths before the Worker runs, so their responses never carry a Worker
+// version header. `_headers` configures the binding and is never served.
+export function publicStaticAssetPaths(publicDirectory = resolve("public")) {
+  return new Set(
+    readdirSync(publicDirectory, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => `/${relative(publicDirectory, join(entry.parentPath, entry.name)).split(sep).join("/")}`)
+      .filter((path) => path !== "/_headers"),
+  );
+}
+
+let publicStaticAssetPathCache;
+
 function isStaticAssetBindingUrl(requestUrl) {
   const pathname = new URL(requestUrl).pathname;
-  return pathname === "/assets" || pathname.startsWith("/assets/");
+  return pathname === "/assets" || pathname.startsWith("/assets/") || (publicStaticAssetPathCache ??= publicStaticAssetPaths()).has(pathname);
 }
 
 export function buildWorkerVersionRequestHeaders({ baseUrl, requestUrl, headers = {}, workerVersionId }) {
