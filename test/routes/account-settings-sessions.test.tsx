@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -470,6 +470,82 @@ describe("Account settings - revocable sessions", () => {
       expect(intents).toEqual(["signOutEverywhere"]);
       expect(screen.getByRole("button", { name: "Sign out everywhere" })).toBeInTheDocument();
       expect(screen.queryByText("Are you sure?")).not.toBeInTheDocument();
+    });
+
+    it("says that apps, agents and API tokens are disconnected too", async () => {
+      renderSettings(() => {});
+
+      const section = await screen.findByTestId("sign-out-everywhere");
+      expect(section).toHaveTextContent(/disconnects every app, agent and API token/i);
+      expect(section).not.toHaveTextContent(/keep their access/i);
+    });
+  });
+
+  describe("component - password change disconnect choice", () => {
+    function renderPasswordForm(onSubmit: (form: FormData) => void) {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/account/settings",
+          Component: AccountSettings,
+          loader: () => ({
+            user: {
+              id: userId,
+              email: "chef@example.com",
+              username: "chef",
+              hasPassword: true,
+              oauthAccounts: [],
+              photoUrl: null,
+              passkeys: [],
+            },
+            notifications: { pushSubscribed: false },
+          }),
+          action: async ({ request }) => {
+            onSubmit(await request.formData());
+            return { success: true, message: "Your password has been changed." };
+          },
+        },
+      ]);
+      render(<Stub initialEntries={["/account/settings"]} />);
+    }
+
+    async function fillPasswordForm(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole("button", { name: "Change Password" }));
+      await user.type(screen.getByLabelText("Current Password"), "oldPassword123!");
+      await user.type(screen.getByLabelText("New Password"), "newPassword456!");
+      await user.type(screen.getByLabelText("Confirm Password"), "newPassword456!");
+    }
+
+    it("disconnects other devices, apps, agents and API tokens unless the chef unticks it", async () => {
+      const user = userEvent.setup();
+      const forms: FormData[] = [];
+      renderPasswordForm((form) => forms.push(form));
+
+      await fillPasswordForm(user);
+      const choice = screen.getByRole("checkbox", { name: /also sign out other devices and disconnect apps, agents and api tokens/i });
+      expect(choice).toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+      await waitFor(() => expect(forms).toHaveLength(1));
+      expect(forms[0].get("intent")).toBe("changePassword");
+      expect(forms[0].get("connectionsChoice")).toBe("1");
+      expect(forms[0].get("revokeConnections")).toBe("1");
+      // Let the action's result render, so its state update lands inside the test.
+      expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
+    });
+
+    it("keeps apps and tokens connected when the chef unticks the box", async () => {
+      const user = userEvent.setup();
+      const forms: FormData[] = [];
+      renderPasswordForm((form) => forms.push(form));
+
+      await fillPasswordForm(user);
+      await user.click(screen.getByRole("checkbox", { name: /also sign out other devices/i }));
+      await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+      await waitFor(() => expect(forms).toHaveLength(1));
+      expect(forms[0].get("connectionsChoice")).toBe("1");
+      expect(forms[0].has("revokeConnections")).toBe(false);
+      expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
     });
   });
 });

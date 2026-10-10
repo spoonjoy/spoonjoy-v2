@@ -127,7 +127,12 @@ describe("recipe import and recipe page writes on a D1 binding", () => {
         {
           db,
           env: { DB },
-          ingredientParser: async (text) => [{ quantity: 1, unit: `Residue ${tag} unit`, ingredientName: `Residue ${tag} ${text}` }],
+          // The import parses every ingredient line in one call, so the stub answers per line.
+          ingredientParser: async (text) => text.split("\n").map((line) => ({
+            quantity: 1,
+            unit: `Residue ${tag} unit`,
+            ingredientName: `Residue ${tag} ${line}`,
+          })),
         },
       );
       const failing: D1ReadDatabase = {

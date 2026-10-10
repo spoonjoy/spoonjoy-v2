@@ -88,7 +88,8 @@ export type ImportRecipeCode =
   | "rate-limited"
   | "title-conflict"
   | "oembed-failed"
-  | "video-unavailable";
+  | "video-unavailable"
+  | "bad-image";
 
 export class ImportRecipeError extends Error {
   readonly code: ImportRecipeCode;
@@ -138,7 +139,13 @@ export type NativeRecipeImportSource =
       sourceUrl?: string | null;
       capture?: NativeRecipeImportCapture | null;
     }
-  | { type: "json-ld"; jsonLd: unknown; sourceUrl?: string | null };
+  | { type: "json-ld"; jsonLd: unknown; sourceUrl?: string | null }
+  | { type: "photo"; photo: Uint8Array; contentType: string };
+
+/** Photo types the vision model reads. */
+export const RECIPE_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+/** The largest photo an import accepts: a phone camera's full-size JPEG fits well under it. */
+export const RECIPE_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 
 export interface ImportRecipeFromSourceOptions {
   chefId: string;
@@ -246,6 +253,24 @@ function ensureNonblankText(value: string, field: string): string {
     throw new ImportRecipeError("no-content", 422, `${field} must not be blank`);
   }
   return value;
+}
+
+function photoDataUrl(photo: Uint8Array, contentType: string): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < photo.length; i += chunk) {
+    binary += String.fromCharCode(...photo.subarray(i, i + chunk));
+  }
+  return `data:${contentType};base64,${btoa(binary)}`;
+}
+
+function ensureRecipePhoto(photo: Uint8Array, contentType: string): void {
+  if (!(RECIPE_PHOTO_TYPES as readonly string[]).includes(contentType)) {
+    throw new ImportRecipeError("bad-image", 415, `Unsupported photo type: ${contentType}`);
+  }
+  if (photo.length === 0 || photo.length > RECIPE_PHOTO_MAX_BYTES) {
+    throw new ImportRecipeError("bad-image", 413, `Photo must be 1 to ${RECIPE_PHOTO_MAX_BYTES} bytes`);
+  }
 }
 
 function getLlmRunner(deps: ImportRecipeDeps): RecipeLlmRunner | null {
@@ -501,6 +526,46 @@ async function runTextExtraction(
   };
 }
 
+async function runPhotoExtraction(
+  photo: Uint8Array,
+  contentType: string,
+  chefId: string,
+  deps: ImportRecipeDeps,
+): Promise<ExtractionOutput> {
+  const llmRunner = getLlmRunner(deps);
+  if (!llmRunner?.extractFromPhoto) {
+    throw new ImportRecipeError("llm-failed", 502, "Photo reading is not configured");
+  }
+  let extracted;
+  const startedAt = Date.now();
+  try {
+    extracted = await llmRunner.extractFromPhoto({ dataUrl: photoDataUrl(photo, contentType) });
+  } catch (err) {
+    if (err instanceof RecipeLlmError) {
+      await captureRecipeLlmFailure(deps, chefId, llmRunner, err);
+      throw new ImportRecipeError("llm-failed", 502, err.message);
+    }
+    throw err;
+  }
+  await captureRecipeLlmSuccess(deps, chefId, llmRunner, Date.now() - startedAt);
+  if (!extracted.title.trim()) {
+    throw new ImportRecipeError("no-content", 422, "Could not read a recipe in the photo");
+  }
+  return {
+    draft: {
+      title: extracted.title,
+      description: extracted.description,
+      servings: extracted.servings,
+      ingredients: extracted.ingredients,
+      steps: extracted.steps,
+      imageUrl: null,
+      sourceUrl: null,
+    },
+    source: "llm",
+    confidence: "low",
+  };
+}
+
 function jsonLdHtml(jsonLd: unknown): string {
   return `<html><head><script type="application/ld+json">${
     JSON.stringify(jsonLd).replace(/</g, "\\u003c")
@@ -586,8 +651,9 @@ async function findExistingRecipeId(
 async function consumeImportQuota(
   deps: ImportRecipeDeps,
   chefId: string,
+  kind: "import" | "import-photo" = "import",
 ): Promise<void> {
-  const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
+  const ok = await tryConsumeImageGenQuota(deps.db, chefId, kind, {
     now: deps.now,
     d1: d1Binding(deps.env?.DB),
     env: deps.env,
@@ -638,6 +704,43 @@ async function resolveTitleWithRetry(
 // between sends it back to pick the next free one, this many times at most.
 const D1_TITLE_RACE_ATTEMPTS = 3;
 
+function ingredientWordForms(word: string): string[] {
+  if (word.endsWith("ies")) return [word, `${word.slice(0, -3)}y`];
+  if (word.endsWith("es")) return [word, word.slice(0, -2), word.slice(0, -1)];
+  if (word.endsWith("s")) return [word, word.slice(0, -1)];
+  return [word, `${word}s`, `${word}es`];
+}
+
+// The phrase is already lower-case letters, hyphens and single spaces, so it is safe to
+// place in a pattern as it is.
+function mentions(stepText: string, phrase: string): boolean {
+  const words = phrase.split(" ");
+  const last = words.pop() as string;
+  const head = words.map((word) => `${word}\\s+`).join("");
+  return ingredientWordForms(last).some((form) =>
+    new RegExp(`(^|[^a-z])${head}${form}([^a-z]|$)`).test(stepText));
+}
+
+/**
+ * The step an imported ingredient belongs on: the first step whose text names it, by its
+ * full name, its last two words or (when longer than three letters) its last word, allowing
+ * a plural. Ingredients no step names stay on step 1.
+ */
+export function stepForIngredient(ingredientName: string, steps: string[]): number {
+  const name = ingredientName.split(",")[0].toLowerCase().replace(/[^a-z\s-]/g, " ").trim().replace(/\s+/g, " ");
+  if (!name) return 1;
+  const words = name.split(" ");
+  const phrases = [name];
+  if (words.length > 2) phrases.push(words.slice(-2).join(" "));
+  const lastWord = words[words.length - 1];
+  if (words.length > 1 && lastWord.length > 3) phrases.push(lastWord);
+  for (const phrase of phrases) {
+    const index = steps.findIndex((step) => mentions(step.toLowerCase(), phrase));
+    if (index >= 0) return index + 1;
+  }
+  return 1;
+}
+
 async function persistRecipe(
   db: PrismaClient,
   chefId: string,
@@ -649,17 +752,18 @@ async function persistRecipe(
 ): Promise<{ id: string; recipe: unknown; title: string }> {
   let title = await resolveTitleWithRetry(db, chefId, draft.title, now);
 
-  // Parse ingredient strings up-front (outside the transaction).
-  const allIngredients: ParsedIngredient[] = [];
-  for (const ingredientText of draft.ingredients) {
-    const parsed = await ingredientParser(ingredientText, env);
-    for (const p of parsed) allIngredients.push(p);
-  }
+  // Parse every ingredient line in one call, outside the transaction.
+  const allIngredients = draft.ingredients.length === 0
+    ? []
+    : await ingredientParser(
+      draft.ingredients.map((line) => line.replace(/\s*\n\s*/g, " ")).join("\n"),
+      env,
+    );
 
   const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
   const namedIngredients = allIngredients.map((ingredient) => ({
     recipeId: id,
-    stepNum: 1,
+    stepNum: stepForIngredient(ingredient.ingredientName, draft.steps),
     quantity: ingredient.quantity,
     unitName: normalizeName(ingredient.unit),
     ingredientName: normalizeName(ingredient.ingredientName),
@@ -711,7 +815,7 @@ async function persistRecipe(
       const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
       ingredientRows.push({
         recipeId: id,
-        stepNum: 1,
+        stepNum: ingredient.stepNum,
         quantity: ingredient.quantity,
         unitId: unit.id,
         ingredientRefId: ref.id,
@@ -1029,6 +1133,26 @@ export async function importRecipeFromSource(
       return completeImportFromExtraction({
         chefId,
         sourceUrl,
+        dryRun,
+        recipeId,
+        extraction,
+        deps,
+      });
+    }
+    case "photo": {
+      // Validate before spending quota, so a wrong file costs nothing.
+      ensureRecipePhoto(options.source.photo, options.source.contentType);
+      // A dry run still makes the vision call, so it spends a photo import too.
+      await consumeImportQuota(deps, chefId, "import-photo");
+      const extraction = await runPhotoExtraction(
+        options.source.photo,
+        options.source.contentType,
+        chefId,
+        deps,
+      );
+      return completeImportFromExtraction({
+        chefId,
+        sourceUrl: null,
         dryRun,
         recipeId,
         extraction,
