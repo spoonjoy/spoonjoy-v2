@@ -152,7 +152,7 @@ describe('RecipeHeader', () => {
 
       expect(screen.getByAltText('Photo of Test Recipe')).toHaveAttribute('src', '/photos/raw-spoon.jpg')
       expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Original photo')
-      expect(screen.getByRole('status')).toHaveTextContent('Editorializing cover')
+      expect(screen.getByRole('status')).toHaveTextContent('Styling cover')
     })
 
     it('uses a high-contrast overlay treatment for cover provenance on bright photos', () => {

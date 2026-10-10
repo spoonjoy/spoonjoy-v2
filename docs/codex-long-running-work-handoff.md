@@ -39,7 +39,7 @@ For the current recipe-image work, the durable task anchor is:
 
 ## Recommended durable-file locations
 
-- Planning/doing tasks: `<agent>/tasks/YYYY-MM-DD-HHMM-planning-<slug>.md` and `<agent>/tasks/YYYY-MM-DD-HHMM-doing-<slug>.md`
+- Planning/doing tasks: keep them in the agent's own desk or workspace, not in this repository (`.gitignore` ignores `*/tasks/` and `*.log`).
 - Research handoffs: `docs/<topic>-research.md`
 - Production incident handoffs: `docs/<topic>-incident-handoff.md`
 - UI/product audits: `docs/qa/<ticket-or-topic>-audit.md`

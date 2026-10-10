@@ -55,7 +55,10 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
   const checkEmail = emailChanged ? 1 : 0;
   const checkUsername = usernameChanged ? 1 : 0;
   const updated = await db.$executeRaw`
-    UPDATE "User" SET "email" = ${email}, "username" = ${username}
+    UPDATE "User" SET
+      "email" = CASE WHEN ${checkEmail} = 1 THEN ${email} ELSE "email" END,
+      "username" = ${username},
+      "emailVerifiedAt" = CASE WHEN ${checkEmail} = 0 OR lower("email") = lower(${email}) THEN "emailVerifiedAt" ELSE NULL END
     WHERE "id" = ${userId}
       AND (${checkEmail} = 0 OR NOT EXISTS (
         SELECT 1 FROM "User" AS "other" WHERE "other"."id" != ${userId} AND lower("other"."email") = lower(${email})
@@ -77,7 +80,10 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
     return "username_taken";
   }
 
-  // The guarded write is raw SQL, which leaves updatedAt alone; native sync reads it.
+  // A new address has not been proven yet, so the guarded write above clears the verification in
+  // the same statement (Google and GitHub sign-in will not link to it until it is confirmed): no
+  // moment, and no failed second write, leaves the old verification on the new address. The raw
+  // write leaves updatedAt alone; native sync reads it.
   await db.user.update({ where: { id: userId }, data: { updatedAt: new Date() } });
   return "saved";
 }

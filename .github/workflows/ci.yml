@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  merge_group:
   workflow_dispatch:
     inputs:
       source_sha:
@@ -16,9 +17,21 @@ on:
         required: true
         type: string
 
+# Every CI job only reads the repository; nothing here needs a write-scoped GITHUB_TOKEN.
+permissions:
+  contents: read
+
 defaults:
   run:
     shell: bash
+
+# A newer push to the same pull request cancels that pull request's CI run in progress: its result
+# is already stale, and the runner pool (20 concurrent jobs) is shared with main's CI and the
+# production deploy. Every other run (main pushes, merge-queue groups, dispatches) gets a group of
+# its own and is never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   GIT_CONFIG_COUNT: "1"
@@ -29,8 +42,46 @@ env:
   SPOONJOY_CSP_REPORT_ONLY_BREAK_GLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.csp_report_only_break_glass || '' }}
 
 jobs:
+  # After a merge-queue merge, main's new commit is exactly the commit the queue's CI run already
+  # tested, with this same workflow file. On a push to main, queue-tested asks GitHub whether that
+  # merge-queue run passed every canonical job; if it did, the four jobs below skip on this push and
+  # the production deploy uses the queue's run as its evidence. A push that bypassed the queue, a
+  # missing, failed or partly skipped queue run, or any lookup error runs full CI. Pull requests,
+  # merge-queue groups and dispatches skip queue-tested and always run full CI.
+  queue-tested:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      tested: ${{ steps.lookup.outputs.tested }}
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ env.CI_SOURCE_SHA }}
+          persist-credentials: false
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+
+      - name: 🔐 Validate CI invocation
+        run: node scripts/warning-gate.ts -- node scripts/workflow-security.mjs validate-ci-invocation
+
+      - name: 🔎 Ask whether the merge queue already tested this commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/workflow-security.mjs queue-tested-ci
+
   advisory:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-advisory' || 'advisory' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -77,6 +128,8 @@ jobs:
 
   coverage:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-coverage' || 'coverage' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -153,6 +206,8 @@ jobs:
 
   workers-coverage:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-workers-coverage' || 'workers-coverage' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -183,6 +238,8 @@ jobs:
 
   e2e:
     name: ${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}
+    needs: queue-tested
+    if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

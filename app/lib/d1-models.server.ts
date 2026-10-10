@@ -45,6 +45,7 @@ export const RECIPE_COVER_COLUMNS: ColumnSpec<RecipeCover> = {
   createdById: "string?",
   sourceImageUrl: "string?",
   generationStatus: "string",
+  generationStartedAt: "dateTime?",
   failureReason: "string?",
   promptVersion: "string?",
   styleVersion: "string?",

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { workerDbPath } from "../support/worker-db";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { faker } from "@faker-js/faker";
 import {
@@ -237,7 +238,7 @@ describe("revocable sessions", () => {
     // A fake D1 binding backed by the real test database, so the raw statement runs against the
     // real schema (table and column quoting included) without Prisma.
     function sqliteD1() {
-      const sqlite = new DatabaseSync(resolve(__dirname, "../../prisma/test.db"), { readonly: true });
+      const sqlite = new DatabaseSync(workerDbPath(), { readonly: true });
       const statements: Array<{ sql: string; params: unknown[] }> = [];
       const binding = {
         prepare(sql: string) {

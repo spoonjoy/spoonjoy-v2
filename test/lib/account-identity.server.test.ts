@@ -127,6 +127,80 @@ describe("saveAccountIdentity", () => {
     })).resolves.toBe("username_taken");
   });
 
+  it("marks a changed email unverified and leaves a username-only change's verification alone", async () => {
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: (await stored()).email,
+      username: "renamed_chef",
+      emailChanged: false,
+      usernameChanged: true,
+    })).resolves.toBe("saved");
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeInstanceOf(Date);
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: "brand-new-address@example.com",
+      username: "renamed_chef",
+      emailChanged: true,
+      usernameChanged: false,
+    })).resolves.toBe("saved");
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeNull();
+  });
+
+  // Review of audit finding 2: clearing the verification in a second write left the old
+  // verification on the new address if that write failed (a D1 error, the Worker cut off).
+  it("clears the verification in the same write that changes the email", async () => {
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+    const failingSecondWrite = {
+      $queryRaw: db.$queryRaw.bind(db),
+      $executeRaw: db.$executeRaw.bind(db),
+      user: { update: () => Promise.reject(new Error("D1 went away")) },
+    } as unknown as Parameters<typeof saveAccountIdentity>[0];
+
+    await expect(saveAccountIdentity(failingSecondWrite, {
+      userId,
+      email: "moved-address@example.com",
+      username: (await stored()).username,
+      emailChanged: true,
+      usernameChanged: false,
+    })).rejects.toThrow("D1 went away");
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: "moved-address@example.com", emailVerifiedAt: null });
+  });
+
+  // Re-review: a username-only save passed an email read earlier in the request, so an email change
+  // landing in between was quietly undone. A username-only save never writes the email.
+  it("leaves the email alone on a username-only save, even when given a stale one", async () => {
+    const current = await stored();
+    await db.user.update({ where: { id: userId }, data: { email: "changed-on-web@example.com" } });
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: current.email,
+      username: "renamed_after_race",
+      emailChanged: false,
+      usernameChanged: true,
+    })).resolves.toBe("saved");
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: "changed-on-web@example.com", username: "renamed_after_race" });
+  });
+
+  it("keeps the verification when only the letter case of the email changes", async () => {
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+    const current = await stored();
+
+    await expect(saveAccountIdentity(db, {
+      userId,
+      email: current.email.toUpperCase(),
+      username: current.username,
+      emailChanged: true,
+      usernameChanged: false,
+    })).resolves.toBe("saved");
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
   it("refuses an email another account holds, in any case, before looking at the username", async () => {
     const other = await makeUser("Taken_Chef");
 
