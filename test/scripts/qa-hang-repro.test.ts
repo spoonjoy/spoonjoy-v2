@@ -186,7 +186,22 @@ describe("tail and client analysis", () => {
     });
     expect(rows.map((row) => row.ray)).toEqual(["r1", "r2", "r1", ""]);
     expect(JSON.stringify(summary)).not.toMatch(/secret|cookie|x=/);
-    expect(analyzeTail([], 0, 1).summary).toMatchObject({ invocations: 0, wallP95: null, wallMax: null });
+    expect(analyzeTail([], 0, 1).summary).toMatchObject({ invocations: 0, wallP95: null, wallMax: null, cpuP95: null, byRoute: {} });
+  });
+
+  it("splits CPU from wall time per route so slow variants show planning cost versus D1 waiting", () => {
+    const fork = { request: { method: "POST", url: "https://w.example/recipes/r1/fork.data" } };
+    const events = [
+      tailEvent({ cpuTime: 4, wallTime: 900, event: fork }),
+      tailEvent({ cpuTime: 6, wallTime: 1_100, event: fork }),
+      tailEvent({ cpuTime: 80, wallTime: 100 }),
+    ];
+    const { summary } = analyzeTail(events, 1_000, 2_000);
+    expect(summary).toMatchObject({ cpuP50: 6, cpuP95: 80 });
+    expect(summary.byRoute).toEqual({
+      "POST /recipes/:id/fork.data": { n: 2, cpuP50: 6, cpuP95: 6, wallP50: 1_100, wallP95: 1_100 },
+      "GET /recipes/:id.data": { n: 1, cpuP50: 80, cpuP95: 80, wallP50: 100, wallP95: 100 },
+    });
   });
 
   it("measures unaborted client requests and matches 5xx to the tail by ray", () => {

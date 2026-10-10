@@ -97,6 +97,15 @@ export function analyzeTail(events, sinceMs, untilMs) {
     if (row.wall > STALL_MS) tally(stalledByOutcome, row.outcome);
   }
   const walls = rows.map((row) => row.wall);
+  const routeRows = {};
+  for (const row of rows) (routeRows[row.route] ??= []).push(row);
+  const byRoute = Object.fromEntries(
+    Object.entries(routeRows).map(([route, group]) => {
+      const cpus = group.map((row) => row.cpu);
+      const routeWalls = group.map((row) => row.wall);
+      return [route, { n: group.length, cpuP50: percentile(cpus, 0.5), cpuP95: percentile(cpus, 0.95), wallP50: percentile(routeWalls, 0.5), wallP95: percentile(routeWalls, 0.95) }];
+    }),
+  );
   return {
     rows,
     summary: {
@@ -111,6 +120,9 @@ export function analyzeTail(events, sinceMs, untilMs) {
       wallP50: percentile(walls, 0.5),
       wallP95: percentile(walls, 0.95),
       wallMax: walls.length ? Math.max(...walls) : null,
+      cpuP50: percentile(rows.map((row) => row.cpu), 0.5),
+      cpuP95: percentile(rows.map((row) => row.cpu), 0.95),
+      byRoute,
     },
   };
 }
