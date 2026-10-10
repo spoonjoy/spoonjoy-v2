@@ -343,7 +343,12 @@ describe("recipe editor routes on a D1 binding", () => {
 
       expect(responseStatus(result)).toBe(409);
       expect((result as { data: unknown }).data).toEqual({ errors: { general: CONFLICT }, currentUpdatedAt: LATER.toISOString() });
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      // The upload and its resized variants are removed; nothing it wrote stays behind.
+      const [[uploadKey], [variantKeys]] = bucket.delete.mock.calls as [[string], [string[]]];
+      expect(bucket.delete).toHaveBeenCalledTimes(2);
+      expect(uploadKey).toMatch(/^recipes\/.+\.png$/);
+      expect(variantKeys.length).toBeGreaterThan(0);
+      for (const key of variantKeys) expect(key).toMatch(new RegExp(`^variants/w\\d+/${uploadKey.replaceAll(".", "\\.")}\\.webp$`));
       await expect(graph(mine)).resolves.toMatchObject({ description: "Their description", covers: [] });
     });
   });
