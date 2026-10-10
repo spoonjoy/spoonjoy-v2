@@ -39,6 +39,7 @@ import {
 } from "~/lib/recipe-steps-update.server";
 import {
   RecipeWriteInFlightError,
+  type DedupedRecipeWriteRequest,
   RecipeWriteKeyConflictError,
   runDedupedRecipeWrite,
 } from "~/lib/recipe-write-dedupe.server";
@@ -3822,7 +3823,7 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
 /** runDedupedRecipeWrite, with its key errors answered as MCP errors. */
 async function dedupedMcpRecipeWrite<T extends { recipeId: string | null }>(
   db: PrismaClientType,
-  input: Omit<Parameters<typeof runDedupedRecipeWrite<T>>[0], "db">,
+  input: DedupedRecipeWriteRequest<T>,
 ): Promise<{ value: T; replayed: boolean }> {
   try {
     return await runDedupedRecipeWrite({ db, ...input });

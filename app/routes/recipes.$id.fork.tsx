@@ -1,11 +1,13 @@
 import { redirect, type ActionFunctionArgs, type AppLoadContext } from "react-router";
 import { requireUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { requestD1 } from "~/lib/d1-read.server";
+import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import {
   forkRecipe,
+  forkRecipeOnD1,
   ForkSourceNotFoundError,
   ForkTitleExhaustedError,
+  type ForkedRecipeSummary,
 } from "~/lib/recipe-fork.server";
 import { notifyForkOfMyRecipe } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
@@ -58,21 +60,28 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   const forkToken = formData?.get("forkToken");
   const token = typeof forkToken === "string" && /^[\w-]{8,100}$/.test(forkToken) ? forkToken : null;
 
-  const db = await getRequestDb(context);
+  // With a D1 binding the fork, its duplicate-submit key and its reads all run on D1, so a fork
+  // never builds a Prisma client in the request (only the background notification does).
+  const d1 = requestD1(context);
+  let prismaClient: ReturnType<typeof getRequestDb> | undefined;
+  const prisma = () => (prismaClient ??= getRequestDb(context));
+  const fork = d1
+    ? () => forkOnD1AndNotify(d1, context, viewerId, sourceRecipeId)
+    : async () => forkAndNotify(await prisma(), context, viewerId, sourceRecipeId);
   try {
     if (token) {
       const { value } = await runDedupedRecipeWrite({
-        db,
+        ...(d1 ? { d1 } : { db: await prisma() }),
         chefId: viewerId,
         operation: "web.fork_recipe",
         key: token,
         request: { sourceRecipeId },
         waitForInFlightMs: IN_FLIGHT_WAIT_MS,
-        write: async () => ({ recipeId: await forkAndNotify(db, context, viewerId, sourceRecipeId) }),
+        write: async () => ({ recipeId: await fork() }),
       });
       return redirect(`/recipes/${value.recipeId}`);
     }
-    return redirect(`/recipes/${await forkAndNotify(db, context, viewerId, sourceRecipeId)}`);
+    return redirect(`/recipes/${await fork()}`);
   } catch (err) {
     if (err instanceof ForkSourceNotFoundError) {
       throw new Response("Not Found", { status: 404 });
@@ -103,30 +112,58 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   }
 }
 
-/** Forks the recipe, notifies the source chef, and answers the fork's id. */
+/** Forks the recipe through Prisma, notifies the source chef, and answers the fork's id. */
 async function forkAndNotify(
   db: Awaited<ReturnType<typeof getRequestDb>>,
   context: AppLoadContext,
   viewerId: string,
   sourceRecipeId: string,
 ): Promise<string> {
-  const result = await forkRecipe(db, { sourceRecipeId, viewerId }, requestD1(context));
+  const result = await forkRecipe(db, { sourceRecipeId, viewerId });
+  await notifySourceChef(context, viewerId, {
+    recipeId: result.recipe.id,
+    attribution: result.attribution,
+    appliedTitle: result.appliedTitle,
+  }, async () => db);
+  return result.recipe.id;
+}
 
-  // Fire-and-forget: notify the source chef when someone else forked.
+/** Forks the recipe on D1, notifies the source chef, and answers the fork's id. */
+async function forkOnD1AndNotify(
+  d1: D1ReadDatabase,
+  context: AppLoadContext,
+  viewerId: string,
+  sourceRecipeId: string,
+): Promise<string> {
+  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId });
+  await notifySourceChef(context, viewerId, result, () => getRequestDb(context));
+  return result.recipeId;
+}
+
+/**
+ * Fire-and-forget: notify the source chef when someone else forked. The notification reads
+ * through Prisma, so the client is built inside the background task, after the response.
+ */
+async function notifySourceChef(
+  context: AppLoadContext,
+  viewerId: string,
+  fork: Pick<ForkedRecipeSummary, "recipeId" | "attribution" | "appliedTitle">,
+  getDb: () => Promise<Awaited<ReturnType<typeof getRequestDb>>>,
+): Promise<void> {
   try {
     const { vapidEnv, postHogConfig, waitUntil } = getCloudflareCtx(context);
     const vapid = getVapidConfig(vapidEnv);
-    const notifyTask = notifyForkOfMyRecipe(
-      db,
+    const notifyTask = (async () => notifyForkOfMyRecipe(
+      await getDb(),
       {
-        forkedRecipeId: result.recipe.id,
-        sourceRecipeId: result.attribution.sourceRecipeId,
+        forkedRecipeId: fork.recipeId,
+        sourceRecipeId: fork.attribution.sourceRecipeId,
         forkerId: viewerId,
-        sourceChefId: result.attribution.sourceChef.id,
-        appliedTitle: result.appliedTitle,
+        sourceChefId: fork.attribution.sourceChef.id,
+        appliedTitle: fork.appliedTitle,
       },
       { vapid, waitUntil, postHogConfig },
-    );
+    ))();
     if (waitUntil) {
       waitUntil(notifyTask);
     } else {
@@ -135,6 +172,4 @@ async function forkAndNotify(
   } catch {
     // VAPID not configured locally — skip silently.
   }
-
-  return result.recipe.id;
 }

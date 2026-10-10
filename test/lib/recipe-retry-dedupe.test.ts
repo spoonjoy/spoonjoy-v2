@@ -154,6 +154,14 @@ describe("retried imports and forks", () => {
       expect(await forkCount()).toBe(1);
     });
 
+    it("builds one Prisma client for a fork's key and its write", async () => {
+      const { getRequestDb } = await import("~/lib/route-platform.server");
+      vi.mocked(getRequestDb).mockClear();
+
+      expect((await submitFork(crypto.randomUUID())).status).toBe(302);
+      expect(getRequestDb).toHaveBeenCalledTimes(1);
+    });
+
     it("forks every time for posts without a usable token, as before", async () => {
       await submitFork();
       await submitFork("short");
