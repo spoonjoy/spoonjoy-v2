@@ -1,4 +1,5 @@
-import { createExecutionContext, env } from "cloudflare:test";
+import { env } from "cloudflare:test";
+import { trackedExecutionContext } from "./execution-contexts";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -131,7 +132,7 @@ function routeContext(DB: D1Database = database()) {
   const routeEnv = new Proxy(env as object, {
     get: (target, property, receiver) => (property === "DB" ? DB : Reflect.get(target, property, receiver)),
   });
-  return { cloudflare: { env: routeEnv, ctx: createExecutionContext() } };
+  return { cloudflare: { env: routeEnv, ctx: trackedExecutionContext() } };
 }
 
 async function webAddRecipe(recipeId: string, scaleFactor: string, DB?: D1Database) {
@@ -273,6 +274,24 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
         { ingredientRefId: APPLES, quantity: 5, deleted: 0, checked: 0 },
         { ingredientRefId: FLOUR, quantity: 1, deleted: 0, checked: 0 },
       ]);
+    });
+
+    it("restarts a cleared item from the recipe's amount on the web, REST and MCP", async () => {
+      // A cleared row keeps its last quantity; re-adding the recipe must not add on top of it.
+      const clear = () => run(`UPDATE "ShoppingListItem" SET "deletedAt" = ? WHERE "shoppingListId" = ?`, OLD, LIST);
+      await seedItem(APPLES, 7, { deleted: true });
+
+      await webAddRecipe("sca-pie", "1");
+      expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 2, deleted: 0, checked: 0 }]);
+      await clear();
+
+      const added = await apiPost("shopping-list/add-from-recipe", { clientMutationId: "sca-rest-readd", recipeId: "sca-pie" });
+      expect(added.body.data).toMatchObject({ updated: 1, items: [{ name: "sca apples", quantity: 2 }] });
+      expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 2, deleted: 0, checked: 0 }]);
+      await clear();
+
+      await callSpoonjoyApiOperation("add_recipe_to_shopping_list", { recipeId: "sca-pie" }, mcp());
+      expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 2, deleted: 0, checked: 0 }]);
     });
 
     it("keeps both amounts when a web add lands inside an MCP add", async () => {
@@ -590,6 +609,45 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
 
       expect(added).toMatchObject({ added: false, cookbook: { id: BOOK, recipeCount: 1 } });
       expect(await memberships()).toBe(1);
+      expect(await bookTouched()).toBe(true);
+    });
+  });
+
+  describe("MCP remove_recipe_from_cookbook", () => {
+    async function memberships() {
+      return (await rows<{ count: number }>(
+        `SELECT COUNT(*) AS "count" FROM "RecipeInCookbook" WHERE "cookbookId" = ? AND "recipeId" = 'sca-pie'`,
+        BOOK,
+      ))[0]!.count;
+    }
+
+    async function bookTouched() {
+      const [book] = await rows<{ updatedAt: string }>(`SELECT "updatedAt" FROM "Cookbook" WHERE "id" = ?`, BOOK);
+      return book!.updatedAt !== OLD;
+    }
+
+    afterEach(async () => {
+      await run(`DELETE FROM "RecipeInCookbook" WHERE "cookbookId" = ? AND "recipeId" = 'sca-pie'`, BOOK);
+      await run(`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?`, OLD, BOOK);
+    });
+
+    it("removes the membership and touches the cookbook together, or neither", async () => {
+      await run(
+        `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
+         VALUES ('sca-pie-membership', ?, 'sca-pie', ?, ?, ?)`,
+        BOOK, CHEF, OLD, OLD,
+      );
+      await failOn("UPDATE", "Cookbook", `OLD."id" = '${BOOK}'`);
+
+      expect(String(await rejection(callSpoonjoyApiOperation("remove_recipe_from_cookbook", { cookbookId: BOOK, recipeId: "sca-pie" }, mcp()))))
+        .toContain(FAILURE);
+      expect(await memberships()).toBe(1);
+      expect(await bookTouched()).toBe(false);
+
+      await run(`DROP TRIGGER "${TRIGGER}"`);
+      await expect(callSpoonjoyApiOperation("remove_recipe_from_cookbook", { cookbookId: BOOK, recipeId: "sca-pie" }, mcp()))
+        .resolves.toMatchObject({ removed: true, cookbook: { id: BOOK, recipeCount: 0 } });
+      expect(await memberships()).toBe(0);
       expect(await bookTouched()).toBe(true);
     });
   });

@@ -4,9 +4,9 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
   deleteRecipeStepOnD1,
-  RECIPE_CHANGED_MESSAGE,
   saveRecipeEditOnD1,
   stepDeletionRaceAnswer,
+  stepSwapRaceAnswer,
   swapRecipeStepsOnD1,
 } from "~/lib/recipe-d1-edits.server";
 import { isD1GuardFailure } from "~/lib/d1-write.server";
@@ -15,6 +15,7 @@ import { Link } from "~/components/ui/link";
 import { ValidationError } from "~/components/ui/validation-error";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
+import { ImportedRecipeNotice } from "~/components/recipe/RecipeImportPanel";
 import {
   validateTitle,
   validateDescription,
@@ -121,7 +122,9 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     })),
   }));
 
-  return { recipe, coverImageUrl, formattedSteps };
+  const imported = new URL(request.url).searchParams.get("imported") === "1";
+
+  return { recipe, coverImageUrl, formattedSteps, imported };
 }
 
 export async function action({ request, params, context }: Route.ActionArgs) {
@@ -188,9 +191,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
               targetStepNum,
             });
           } catch (error) {
-            // The steps moved in between; nothing was swapped.
+            // A step moved or went away, or the step gained an output dependency the move
+            // would break, in between; nothing was swapped.
             if (!isD1GuardFailure(error)) throw error;
-            return data({ errors: { reorder: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
+            const answer = await stepSwapRaceAnswer(database, id, stepId, direction);
+            return data({ errors: { reorder: answer.error } }, { status: answer.status });
           }
 
           return data({ success: true });
@@ -501,7 +506,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 }
 
 export default function EditRecipe() {
-  const { recipe, coverImageUrl, formattedSteps } = useLoaderData<typeof loader>();
+  const { recipe, coverImageUrl, formattedSteps, imported } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -581,6 +586,8 @@ export default function EditRecipe() {
         title="Edit Recipe"
         action={<Link href={`/recipes/${recipe.id}`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
       />
+
+      {imported ? <ImportedRecipeNotice sourceUrl={recipe.sourceUrl} /> : null}
 
       <div className="mt-8 max-w-5xl">
         <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden" aria-hidden="true">

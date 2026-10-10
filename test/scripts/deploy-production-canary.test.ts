@@ -19,6 +19,10 @@ import {
   runProductionCanaryRelease,
   runProductionRollback,
   runProductionReleaseCli,
+  CANDIDATE_PAGE_PATHS,
+  listClientAssetNames,
+  selectArchivableAssets,
+  verifyCandidatePages,
   selectCurrentProductionVersion,
   selectUploadedVersion,
   writeReleaseArtifactFile,
@@ -48,8 +52,17 @@ const WRANGLER_CONFIG = JSON.stringify({
     database_id: D1_DATABASE_ID,
   }],
 });
+// The canary path archives the build's hashed assets (in name order) before uploading the version.
+const CLIENT_ASSETS = ["root-AbC1.js", "root-AbC1.css"] as const;
+const ARCHIVE_COMMANDS = [...CLIENT_ASSETS].sort().map((name) => (
+  `pnpm exec wrangler r2 object put spoonjoy-photos/release-assets/${name} --file build/client/assets/${name} ` +
+  `--content-type ${name.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8"} ` +
+  "--cache-control public, max-age=31536000, immutable --remote"
+));
 const PROTOCOL_BOUNDARY_LOG_COMMAND =
   "git log --diff-filter=A --format=%H --reverse -- workers/cook-session-protocol-v1-boundary";
+const FORWARD_ONLY_ANCESTRY_COMMAND =
+  `git merge-base --is-ancestor ${PREVIOUS_PRODUCT_SHA} ${RELEASE_SHA}`;
 const CANARY_UPLOAD_COMMAND = `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`;
 const CANARY_STAGE_COMMAND = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`;
 const CANARY_PROMOTE_COMMAND = `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`;
@@ -189,6 +202,7 @@ function productionGeneratedWorkerConfig(host = CUSTOM_POSTHOG_HOST): Record<str
       NODE_ENV: "production",
       VITE_POSTHOG_HOST: host,
     },
+    r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos" }],
   };
 }
 
@@ -207,6 +221,7 @@ function postHogArtifactReaderDeps(host = CUSTOM_POSTHOG_HOST) {
     readGeneratedWorkerConfig: async () => productionGeneratedWorkerConfig(host),
     readClientBuildMetadata: async () => productionBuildMetadata(host),
     readClientBundleSources: async () => productionBundleSources(host),
+    listClientAssets: async () => [...CLIENT_ASSETS],
   };
 }
 
@@ -590,6 +605,20 @@ function successfulD1Fetch() {
   }));
 }
 
+const PRE_MIGRATION_BOOKMARK = "000002d3-000002e9-000050ff-b5a760ef72525d4e6c502f1a227d77da";
+
+function successfulD1BookmarkFetch() {
+  return vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+    success: true,
+    errors: [],
+    messages: [],
+    result: { bookmark: PRE_MIGRATION_BOOKMARK },
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  }));
+}
+
 describe("remote mutation command oracle", () => {
   it.each([
     ["a bare Worker deploy", { command: "pnpm", args: ["exec", "wrangler", "deploy"] }, true],
@@ -814,6 +843,7 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
   return {
     artifactDir: "mcp-oauth-canary-artifacts",
     d1Fetch,
+    d1BookmarkFetch: successfulD1BookmarkFetch(),
     env: {
       PATH: "/test/bin",
       CLOUDFLARE_ACCOUNT_ID,
@@ -831,6 +861,8 @@ function releaseDeps(runCommand: ReleaseCommandRunner) {
       "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
     })),
     readPublicWorkerVersion: vi.fn(async () => CANDIDATE_VERSION),
+    verifyCandidatePages: vi.fn(async () => undefined),
+    listClientAssets: vi.fn(async () => [...CLIENT_ASSETS]),
     releaseSha: RELEASE_SHA,
     releaseMode: "protocol-v1-canary" as const,
     protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
@@ -934,6 +966,127 @@ describe("immutable migration apply boundary", () => {
     expect(recordedCommands(runCommand)).not.toContain(
       "pnpm exec wrangler d1 migrations apply DB --remote",
     );
+  });
+
+  it("takes a D1 Time Travel restore point before applying migrations and records it in the artifact", async () => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    const order: string[] = [];
+    deps.d1BookmarkFetch.mockImplementation(async (...args) => {
+      order.push("bookmark");
+      return successfulD1BookmarkFetch()(...args);
+    });
+    deps.d1Fetch.mockImplementation(async (...args) => {
+      order.push("migrate");
+      return successfulD1Fetch()(...args);
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    try {
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({
+        status: "promoted",
+        migrationApply: "succeeded",
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
+      });
+      expect(log).toHaveBeenCalledWith(`D1 restore point before migrations: ${PRE_MIGRATION_BOOKMARK}`);
+    } finally {
+      log.mockRestore();
+    }
+
+    expect(order).toEqual(["bookmark", "migrate"]);
+    const [url, request] = deps.d1BookmarkFetch.mock.calls[0]!;
+    expect(url).toBe(`https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${D1_DATABASE_ID}/time_travel/bookmark`);
+    expect(request).toEqual({ method: "GET", headers: { Authorization: `Bearer ${D1_API_TOKEN}` }, signal: expect.any(AbortSignal) });
+  });
+
+  it("takes no restore point when there is no migration to apply", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler d1 migrations list DB --remote": noPendingMigrations,
+    });
+    const deps = releaseDeps(runCommand);
+
+    const result = await runProductionCanaryRelease(deps);
+
+    expect(result).toMatchObject({ status: "promoted", migrationApply: "not_needed" });
+    expect(result).not.toHaveProperty("preMigrationBookmark");
+    expect(deps.d1BookmarkFetch).not.toHaveBeenCalled();
+  });
+
+  it("reads the restore point with the runtime fetch when no bookmark fetch is injected", async () => {
+    const runtimeFetch = successfulD1BookmarkFetch();
+    vi.stubGlobal("fetch", runtimeFetch);
+    const { d1BookmarkFetch: _omitted, ...deps } = releaseDeps(successfulRunner());
+
+    try {
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ preMigrationBookmark: PRE_MIGRATION_BOOKMARK });
+      expect(runtimeFetch).toHaveBeenCalledTimes(1);
+      expect(deps.d1Fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    {
+      label: "a rejected request",
+      response: new Error(`transport ${D1_API_TOKEN}`),
+      failure: "Cloudflare D1 restore point request failed; no migration was applied.",
+    },
+    {
+      label: "an HTTP error",
+      response: new Response(`${D1_API_TOKEN}`, { status: 403 }),
+      failure: "Cloudflare D1 restore point request failed with HTTP 403; no migration was applied.",
+    },
+    {
+      label: "malformed JSON",
+      response: new Response(`${D1_API_TOKEN}`, { status: 200 }),
+      failure: "Cloudflare D1 restore point request returned malformed JSON; no migration was applied.",
+    },
+    {
+      label: "an unsuccessful envelope",
+      response: new Response(JSON.stringify({ success: false, result: { bookmark: PRE_MIGRATION_BOOKMARK } }), { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+    {
+      label: "a null body",
+      response: new Response("null", { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+    {
+      label: "a missing result",
+      response: new Response(JSON.stringify({ success: true }), { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+    {
+      label: "a malformed bookmark",
+      response: new Response(JSON.stringify({ success: true, result: { bookmark: "latest; DROP" } }), { status: 200 }),
+      failure: "Cloudflare D1 restore point response had no valid bookmark; no migration was applied.",
+    },
+  ] as const)("does not migrate without a restore point: $label", async ({ response, failure }) => {
+    const runCommand = successfulRunner();
+    const deps = releaseDeps(runCommand);
+    if (response instanceof Error) deps.d1BookmarkFetch.mockRejectedValueOnce(response);
+    else deps.d1BookmarkFetch.mockResolvedValueOnce(response);
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-d1-restore-point-"));
+    deps.artifactDir = artifactDir;
+    deps.writeReleaseArtifact = (artifact) => writeReleaseArtifactFile(artifactDir, artifact);
+
+    try {
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(failure);
+      expect(deps.d1Fetch).not.toHaveBeenCalled();
+      const written = await readFile(path.join(artifactDir, "production-release.json"), "utf8");
+      expect(JSON.parse(written)).toMatchObject({
+        status: "failed_before_stage",
+        phase: "migration_review",
+        migrationApply: "not_started",
+        failure,
+      });
+      expect(written).not.toContain("preMigrationBookmark");
+      expect(written).not.toContain(D1_API_TOKEN);
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
   });
 
   it("uses the runtime fetch implementation when no D1 fetch dependency is injected", async () => {
@@ -1438,6 +1591,92 @@ describe("deployment mutation identity protocol", () => {
     expect(deps.sleep).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["atomic-bootstrap", "atomic-product-activation"] as const)(
+    "rolls back in %s mode without a configured protocol boundary and writes a valid artifact",
+    async (releaseMode) => {
+      const runCommand = successfulRunner({
+        "git rev-parse HEAD": TOOLING_SHA,
+        "git rev-parse origin/main": TOOLING_SHA,
+        "pnpm exec wrangler deployments list --json": [
+          deploymentPayload(PREVIOUS_VERSION),
+          deploymentPayload(PREVIOUS_VERSION),
+          stagedDeploymentPayload(),
+          stagedDeploymentPayload(),
+          stagedDeploymentPayload(),
+          deploymentPayload(CANDIDATE_VERSION),
+          deploymentPayload(CANDIDATE_VERSION),
+        ],
+      }, { exactDeploymentSequence: true, preserveDeploymentIds: true });
+      const { protocolV1BoundarySha: _boundary, ...base } = rollbackDeps(runCommand);
+      const written: ReleaseArtifact[] = [];
+      const deps = {
+        ...base,
+        releaseMode,
+        writeReleaseArtifact: vi.fn(async (artifact: ReleaseArtifact) => {
+          written.push(artifact);
+          const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-artifact-"));
+          await writeReleaseArtifactFile(dir, artifact);
+        }),
+      };
+
+      const result = await runProductionRollback(deps);
+
+      expect(result).toMatchObject({
+        status: "rollback_promoted",
+        releaseMode,
+        deploymentStrategy: "atomic",
+        candidateVersionId: CANDIDATE_VERSION,
+      });
+      expect(result).not.toHaveProperty("protocolV1BoundarySha");
+      expect(written).toHaveLength(1);
+      const keys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+      if (releaseMode === "atomic-bootstrap") {
+        // Before product activation there is no boundary marker, so there is nothing to cross.
+        expect(keys.some((key) => key.startsWith("git log"))).toBe(false);
+        expect(keys.some((key) => key.includes("merge-base"))).toBe(false);
+      } else {
+        // After product activation the boundary comes from Git, and both sources must descend from it.
+        expect(keys).toContain(PROTOCOL_BOUNDARY_LOG_COMMAND);
+        expect(keys).toEqual(expect.arrayContaining([
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+        ]));
+      }
+      expect(keys).toContain(
+        `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Roll back to ${RELEASE_SHA}`,
+      );
+    },
+  );
+
+  it.each([
+    ["rollback_version_lookup", { treeHash: TREE_HASH }],
+    ["rollback_current_deployment", { treeHash: TREE_HASH, candidateVersionId: CANDIDATE_VERSION }],
+    ["rollback_already_active", {
+      treeHash: TREE_HASH,
+      previousVersionId: CANDIDATE_VERSION,
+      candidateVersionId: CANDIDATE_VERSION,
+    }],
+    ["rollback_active_version_mapping", {
+      treeHash: TREE_HASH,
+      previousVersionId: PREVIOUS_VERSION,
+      candidateVersionId: CANDIDATE_VERSION,
+    }],
+  ] as const)("accepts an atomic-mode rollback failure artifact at %s", async (phase, fields) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-failure-artifact-"));
+    await expect(writeReleaseArtifactFile(dir, {
+      status: "failed_before_stage",
+      sourceSha: RELEASE_SHA,
+      releaseMode: "atomic-product-activation",
+      deploymentStrategy: "atomic",
+      phase,
+      reviewedMigrations: [],
+      migrationApply: "not_needed",
+      databaseRollbackSupported: false,
+      failure: "Rollback refused.",
+      ...fields,
+    } as ReleaseArtifact)).resolves.toBeUndefined();
+  });
+
   it("tolerates one exact predecessor observation after a rollback deploy", async () => {
     const runCommand = successfulRunner({
       "git rev-parse HEAD": TOOLING_SHA,
@@ -1508,6 +1747,7 @@ describe("deployment mutation identity protocol", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("stage failed before mutation");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -1680,6 +1920,7 @@ describe("deployment mutation identity protocol", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("promotion failed before mutation");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -1907,6 +2148,7 @@ describe("deployment mutation identity protocol", () => {
       "Automatic restoration refused",
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -3187,6 +3429,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
     });
@@ -3202,9 +3445,11 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler versions list --json",
       `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
       `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+      FORWARD_ONLY_ANCESTRY_COMMAND,
       "pnpm exec wrangler deployments list --json",
       "pnpm run deploy:preflight",
       "pnpm exec wrangler deployments list --json",
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
       "pnpm exec wrangler versions list --json",
       "pnpm exec wrangler deployments list --json",
@@ -3216,6 +3461,7 @@ describe("production canary release orchestration", () => {
       "pnpm exec wrangler deployments list --json",
     ]);
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
@@ -3275,6 +3521,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
     ]);
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -3304,6 +3551,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3334,6 +3582,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3365,6 +3614,7 @@ describe("production canary release orchestration", () => {
     );
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3397,6 +3647,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
     ]);
@@ -3470,7 +3721,8 @@ describe("production canary release orchestration", () => {
 
     await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
 
-    expect(deps.readGeneratedWorkerConfig).toHaveBeenCalledTimes(1);
+    // Once for the PostHog validation after build, once for the asset archive's bucket name.
+    expect(deps.readGeneratedWorkerConfig).toHaveBeenCalledTimes(2);
     expect(deps.readClientBuildMetadata).toHaveBeenCalledTimes(1);
     expect(deps.readClientBundleSources).toHaveBeenCalledTimes(1);
     expect(events.slice(3, 10)).toEqual([
@@ -3638,6 +3890,7 @@ describe("production canary release orchestration", () => {
     expect(calls).not.toContain("pnpm exec wrangler d1 migrations list DB --remote");
     expect(calls).not.toContain("pnpm exec wrangler d1 migrations apply DB --remote");
     expect(calls).not.toContain(
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
     );
     expect(deps.writeReleaseArtifact).toHaveBeenCalledWith(expect.objectContaining({
@@ -3679,6 +3932,24 @@ describe("production canary release orchestration", () => {
     });
   });
 
+  it("targets the QA Worker name only when the rehearsal override is given", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    await readCandidateCspHeaders("https://example.test", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch);
+    await readCandidateCspHeaders(
+      "https://example.test",
+      CANDIDATE_VERSION,
+      fetchImpl as unknown as typeof fetch,
+      "spoonjoy-v2-qa",
+    );
+    const overrides = fetchImpl.mock.calls.map(([, init]) => (
+      (init as RequestInit).headers as Record<string, string>
+    )["Cloudflare-Workers-Version-Overrides"]);
+    expect(overrides).toEqual([
+      `spoonjoy-v2="${CANDIDATE_VERSION}"`,
+      `spoonjoy-v2-qa="${CANDIDATE_VERSION}"`,
+    ]);
+  });
+
   it("restores the previous version when the candidate smoke fails", async () => {
     const smokeCommand = `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`;
     const runCommand = successfulRunner({
@@ -3705,6 +3976,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
       `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@0% ${PREVIOUS_VERSION}@100% -y --message Stage ${RELEASE_SHA} for canary`,
       `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
@@ -3721,9 +3993,219 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
+    });
+  });
+
+  it("restores the previous version when a candidate page fails before promotion", async () => {
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler deployments list --json": [
+        deploymentPayload(PREVIOUS_VERSION, "2026-07-15T00:00:00Z"),
+        deploymentPayload(PREVIOUS_VERSION),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+    deps.verifyCandidatePages.mockRejectedValue(
+      new Error("Candidate page verification failed: /recipes returned HTTP 500."),
+    );
+    deps.readPublicWorkerVersion.mockResolvedValue(PREVIOUS_VERSION);
+
+    await expect(runProductionCanaryRelease(deps)).rejects.toThrow("/recipes returned HTTP 500");
+
+    expect(deps.verifyCandidatePages).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
+    expect(deps.readCandidateCspHeaders).not.toHaveBeenCalled();
+    const mutations = remoteMutationCommands(recordedCommandCalls(runCommand));
+    expect(mutations.at(-1)).toBe(
+      `pnpm exec wrangler versions deploy ${PREVIOUS_VERSION}@100% -y --message Restore after failed ${RELEASE_SHA}`,
+    );
+    expect(mutations.some((command) => command.includes(`${CANDIDATE_VERSION}@100%`))).toBe(false);
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+      status: "rolled_back",
+      phase: "canary",
+      failure: "Candidate page verification failed: /recipes returned HTTP 500.",
+    }));
+  });
+
+  it("retries the candidate page probe while the version override catches up", async () => {
+    const runCommand = successfulRunner({});
+    const deps = releaseDeps(runCommand);
+    deps.verifyCandidatePages
+      .mockRejectedValueOnce(new Error("Candidate page verification failed: / was not served by the candidate."))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+    expect(deps.verifyCandidatePages).toHaveBeenCalledTimes(2);
+    expect(deps.sleep).toHaveBeenCalledWith(1_000);
+  });
+
+  describe("release asset archive", () => {
+    it("archives every hashed asset before the version upload, at most eight at a time", async () => {
+      const names = Array.from({ length: 20 }, (_, index) => `chunk-${String(index).padStart(2, "0")}.js`);
+      let inFlight = 0;
+      let peak = 0;
+      const base = successfulRunner({});
+      const runCommand = vi.fn(async (command: string, args: readonly string[], options: { env: NodeJS.ProcessEnv }) => {
+        if (args.includes("r2")) {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          inFlight -= 1;
+        }
+        return base(command, args, options);
+      }) as unknown as ReleaseCommandRunner;
+      const deps = releaseDeps(runCommand);
+      deps.listClientAssets.mockResolvedValue([...names, "index.html", "manifest-..x.js", ".hidden.js"]);
+
+      await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
+
+      const keys = (runCommand as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map(([command, args]) => commandKey(command, args));
+      const puts = keys.filter((key) => key.includes(" r2 object put "));
+      expect(puts).toHaveLength(20);
+      expect(puts.every((key) => key.includes("--remote") && key.includes("spoonjoy-photos/release-assets/chunk-"))).toBe(true);
+      expect(keys.findIndex((key) => key.includes("versions upload"))).toBeGreaterThan(
+        keys.findLastIndex((key) => key.includes(" r2 object put ")),
+      );
+      expect(peak).toBeLessThanOrEqual(8);
+      expect(peak).toBeGreaterThan(1);
+    });
+
+    it("lists a client asset directory, defaulting to the build output", async () => {
+      const dir = await mkdtemp(path.join(os.tmpdir(), "client-assets-"));
+      try {
+        await writeFile(path.join(dir, "root-AbC1.js"), "export{}");
+        await expect(listClientAssetNames(dir)).resolves.toEqual(["root-AbC1.js"]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+      // build/client/assets exists only after a local build; either outcome proves the default path.
+      const fallback = await listClientAssetNames().catch((error: NodeJS.ErrnoException) => error.code);
+      expect(Array.isArray(fallback) || fallback === "ENOENT").toBe(true);
+    });
+
+    it("refuses to stage a canary release that has no client asset lister", async () => {
+      const runCommand = successfulRunner({});
+      const { listClientAssets: _injected, ...deps } = releaseDeps(runCommand);
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(
+        "Release has no client asset lister for the asset archive.",
+      );
+      expect(remoteMutationCommands(recordedCommandCalls(runCommand))
+        .some((key) => key.includes("versions upload"))).toBe(false);
+    });
+
+    it("selects only names the Worker archive fallback can serve", () => {
+      expect(selectArchivableAssets(["b-2.css", "a-1.js", "x.html", "a..b.js", ".env.js", "font-z.woff2"]))
+        .toEqual(["a-1.js", "b-2.css", "font-z.woff2"]);
+    });
+
+    it.each([
+      ["no hashed assets", { assets: ["index.html"], config: undefined }, "Production build has no hashed client assets to archive."],
+      ["no PHOTOS bucket", { assets: ["a-1.js"], config: { vars: {} } }, "Generated Worker config has no valid PHOTOS R2 bucket for the asset archive."],
+      ["a malformed bucket name", { assets: ["a-1.js"], config: { r2_buckets: [null, { binding: "PHOTOS", bucket_name: "Bad_Name" }] } }, "Generated Worker config has no valid PHOTOS R2 bucket for the asset archive."],
+    ])("stops before any Worker mutation with %s", async (_label, { assets, config }, failure) => {
+      const runCommand = successfulRunner({});
+      const deps = releaseDeps(runCommand);
+      deps.listClientAssets.mockResolvedValue(assets);
+      if (config) {
+        deps.readGeneratedWorkerConfig
+          .mockResolvedValueOnce(productionGeneratedWorkerConfig())
+          .mockResolvedValueOnce(config as Record<string, unknown>);
+      }
+
+      await expect(runProductionCanaryRelease(deps)).rejects.toThrow(failure);
+      const mutations = remoteMutationCommands(recordedCommandCalls(runCommand));
+      expect(mutations.some((key) => key.includes("versions upload") || key.includes("versions deploy"))).toBe(false);
+      // The fixture applied a migration first, so (as for any later failure) the release needs forward repair.
+      expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(expect.objectContaining({
+        status: "forward_repair_required",
+        phase: "version_upload",
+        failure,
+      }));
+    });
+  });
+
+  describe("verifyCandidatePages", () => {
+    const html = (asset = "/assets/root-AbC123.js") =>
+      `<!doctype html><script type="module" src="${asset}"></script>`;
+    function pageFetch(overrides: Record<string, () => Response | Promise<Response>> = {}) {
+      return vi.fn(async (input: URL | RequestInfo) => {
+        const url = new URL(String(input));
+        const custom = overrides[url.pathname];
+        if (custom) return custom();
+        const isHtml = !url.pathname.startsWith("/assets/") && url.pathname !== "/health" && !url.pathname.startsWith("/.well-known/");
+        return new Response(isHtml ? html() : "{}", {
+          status: 200,
+          headers: {
+            "Content-Type": isHtml ? "text/html; charset=utf-8" : "application/json",
+            "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION,
+          },
+        });
+      });
+    }
+
+    it("probes every page and one hashed asset through the candidate override", async () => {
+      const fetchImpl = pageFetch();
+      await verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch);
+      const calls = fetchImpl.mock.calls.map(([input, init]) => ({
+        path: new URL(String(input)).pathname,
+        override: ((init as RequestInit).headers as Record<string, string>)["Cloudflare-Workers-Version-Overrides"],
+      }));
+      expect(calls.map((call) => call.path)).toEqual([...CANDIDATE_PAGE_PATHS, "/assets/root-AbC123.js"]);
+      expect(new Set(calls.map((call) => call.override))).toEqual(new Set([`spoonjoy-v2="${CANDIDATE_VERSION}"`]));
+    });
+
+    it("names every page that failed or was served by another version", async () => {
+      const fetchImpl = pageFetch({
+        "/recipes": () => new Response("boom", { status: 500, headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } }),
+        "/login": () => new Response(html(), { status: 200, headers: { "Content-Type": "text/html", "X-Spoonjoy-Worker-Version": PREVIOUS_VERSION } }),
+        "/search": () => Promise.reject(new Error("socket hang up")),
+        "/privacy": () => new Response("plain", { status: 200 }),
+        "/health": () => Promise.reject("offline"),
+      });
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch))
+        .rejects.toThrow(
+          "Candidate page verification failed: /login was not served by the candidate; /recipes returned HTTP 500; /search request failed (socket hang up); /privacy was not served by the candidate; /health request failed (offline).",
+        );
+    });
+
+    it("fails when the candidate's hashed asset is missing", async () => {
+      const fetchImpl = pageFetch({ "/assets/root-AbC123.js": () => new Response("", { status: 404 }) });
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch))
+        .rejects.toThrow("/assets/root-AbC123.js returned HTTP 404");
+    });
+
+    it("fails when no page references a hashed asset, or the asset request fails", async () => {
+      // "/" answers without a Content-Type, so it is never parsed for assets.
+      const noAsset = pageFetch({ "/": () => new Response(null, { status: 200, headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } }) });
+      const htmlRoutes = ["/login", "/recipes", "/search", "/privacy"];
+      for (const route of htmlRoutes) {
+        const original = noAsset.getMockImplementation()!;
+        noAsset.mockImplementation(async (input: URL | RequestInfo, init?: RequestInit) => (
+          new URL(String(input)).pathname === route
+            ? new Response("<p>none</p>", { status: 200, headers: { "Content-Type": "text/html", "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } })
+            : original(input, init)
+        ));
+      }
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, noAsset as unknown as typeof fetch))
+        .rejects.toThrow("no candidate HTML page referenced a hashed /assets/ file");
+
+      const assetDown = pageFetch({ "/assets/root-AbC123.js": () => Promise.reject(new Error("reset")) });
+      await expect(verifyCandidatePages("https://spoonjoy.app", CANDIDATE_VERSION, assetDown as unknown as typeof fetch))
+        .rejects.toThrow("/assets/root-AbC123.js returned no response");
+    });
+
+    it("targets the QA Worker when asked and rejects a malformed version", async () => {
+      const fetchImpl = pageFetch();
+      await verifyCandidatePages("https://example.test", CANDIDATE_VERSION, fetchImpl as unknown as typeof fetch, "spoonjoy-v2-qa");
+      const [, init] = fetchImpl.mock.calls[0]!;
+      expect(((init as RequestInit).headers as Record<string, string>)["Cloudflare-Workers-Version-Overrides"])
+        .toBe(`spoonjoy-v2-qa="${CANDIDATE_VERSION}"`);
+      await expect(verifyCandidatePages("https://example.test", "not-a-version", fetchImpl as unknown as typeof fetch))
+        .rejects.toThrow("did not contain a valid Worker version ID");
     });
   });
 
@@ -3803,6 +4285,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -3839,6 +4322,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -3856,6 +4340,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -3891,6 +4376,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("canary failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -3927,6 +4413,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("stage failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       stageCommand,
       CANARY_RESTORE_COMMAND,
@@ -3943,6 +4430,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "stage failed",
@@ -3979,6 +4467,7 @@ describe("production canary release orchestration", () => {
       await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         CANARY_UPLOAD_COMMAND,
         CANARY_STAGE_COMMAND,
         CANARY_RESTORE_COMMAND,
@@ -3995,6 +4484,7 @@ describe("production canary release orchestration", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "stage failed",
@@ -4018,6 +4508,7 @@ describe("production canary release orchestration", () => {
 
     await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({ status: "promoted" });
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -4091,6 +4582,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("did not converge");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -4108,6 +4600,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "Production version did not converge to " + CANDIDATE_VERSION + ".",
@@ -4142,6 +4635,7 @@ describe("production canary release orchestration", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -4158,6 +4652,7 @@ describe("production canary release orchestration", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -4634,6 +5129,7 @@ describe("release failure containment", () => {
       "pnpm exec wrangler d1 migrations apply DB --remote",
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -4776,6 +5272,7 @@ describe("release failure containment", () => {
     expect((rejection as Error).message).toContain(failureMessage);
     if (restoreFails) expect((rejection as Error).message).toContain("Rollback failed: restore failed.");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       ...(afterStage ? [CANARY_STAGE_COMMAND] : []),
       ...(promotionAttempted ? [CANARY_PROMOTE_COMMAND] : []),
@@ -4935,6 +5432,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "failed",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       failure: "Cloudflare D1 migration query request failed.",
     });
@@ -4961,6 +5459,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       failure: "full preflight failed",
     });
@@ -4977,6 +5476,7 @@ describe("release failure containment", () => {
     try {
       await expect(runProductionCanaryRelease(deps)).rejects.toThrow("upload failed");
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         uploadCommand,
       ]);
       expect(JSON.parse(
@@ -4992,6 +5492,7 @@ describe("release failure containment", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: "upload failed",
       });
@@ -5114,6 +5615,7 @@ describe("release failure containment", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("disk unavailable");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -5134,6 +5636,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
     });
@@ -5148,6 +5651,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "disk unavailable",
@@ -5172,6 +5676,7 @@ describe("release failure containment", () => {
       "canary failed Release artifact write also failed: disk unavailable",
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_RESTORE_COMMAND,
@@ -5188,6 +5693,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -5205,6 +5711,7 @@ describe("release failure containment", () => {
 
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed: rollback failed");
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       rollbackCommand,
@@ -5221,6 +5728,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "canary failed",
@@ -5243,6 +5751,7 @@ describe("release failure containment", () => {
     await expect(runProductionCanaryRelease(deps)).rejects.toThrow("promotion failed");
 
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       CANARY_PROMOTE_COMMAND,
@@ -5260,6 +5769,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "promotion failed",
@@ -5289,6 +5799,7 @@ describe("release failure containment", () => {
       await expect(runProductionCanaryRelease(deps)).rejects.toThrow("Rollback failed");
 
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         CANARY_UPLOAD_COMMAND,
         CANARY_STAGE_COMMAND,
         CANARY_PROMOTE_COMMAND,
@@ -5306,6 +5817,7 @@ describe("release failure containment", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "promotion failed",
@@ -5340,6 +5852,7 @@ describe("release failure containment", () => {
       /bareD1CredentialAlpha|bareWorkersCredentialBeta/,
     );
     expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+      ...ARCHIVE_COMMANDS,
       CANARY_UPLOAD_COMMAND,
       CANARY_STAGE_COMMAND,
       promoteCommand,
@@ -5357,6 +5870,7 @@ describe("release failure containment", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
       failure: "promotion failed [REDACTED]",
@@ -5673,6 +6187,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "Bearer visible token=value\nnext",
@@ -5699,6 +6214,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
         failure: "Bearer [REDACTED] token=[REDACTED] next",
@@ -5716,6 +6232,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "failed",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: "migration apply failed",
       } as ReleaseArtifact & {
@@ -5733,9 +6250,58 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "failed",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: "migration apply failed",
       });
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "a malformed restore point",
+      "not-a-bookmark",
+      {
+        status: "forward_repair_required",
+        sourceSha: RELEASE_SHA,
+        releaseMode: "atomic-bootstrap",
+        deploymentStrategy: "atomic",
+        phase: "migration_apply",
+        treeHash: TREE_HASH,
+        reviewedMigrations: ["0024_add_release_marker.sql"],
+        migrationApply: "failed",
+        databaseRollbackSupported: false,
+        previousVersionId: PREVIOUS_VERSION,
+        failure: "migration failed",
+      },
+    ],
+    [
+      "a restore point when no migration ran",
+      PRE_MIGRATION_BOOKMARK,
+      {
+        status: "failed_before_stage",
+        sourceSha: RELEASE_SHA,
+        releaseMode: "atomic-bootstrap",
+        deploymentStrategy: "atomic",
+        phase: "migration_review",
+        treeHash: TREE_HASH,
+        reviewedMigrations: ["0024_add_release_marker.sql"],
+        migrationApply: "not_started",
+        databaseRollbackSupported: false,
+        failure: "stopped",
+      },
+    ],
+  ] as const)("rejects an otherwise valid artifact with %s", async (_label, preMigrationBookmark, artifact) => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-bad-restore-point-"));
+    try {
+      // The artifact alone is valid, so the rejection below comes from the restore point.
+      await expect(writeReleaseArtifactFile(artifactDir, artifact as unknown as ReleaseArtifact)).resolves.toBeUndefined();
+      await expect(writeReleaseArtifactFile(artifactDir, {
+        ...artifact,
+        preMigrationBookmark,
+      } as unknown as ReleaseArtifact)).rejects.toThrow("lifecycle");
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
@@ -6163,6 +6729,7 @@ describe("release artifact and CLI boundary", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "succeeded",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       candidateVersionId: CANDIDATE_VERSION,
     };
@@ -6199,6 +6766,7 @@ describe("release artifact and CLI boundary", () => {
       reviewedMigrations: ["0024_add_release_marker.sql"],
       migrationApply: "failed",
       databaseRollbackSupported: false,
+      preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
       previousVersionId: PREVIOUS_VERSION,
       failure: "migration failed",
     };
@@ -6575,6 +7143,7 @@ describe("release artifact and CLI boundary", () => {
   });
 
   it("runs the CLI with injected commands and the authoritative Wrangler PostHog host", async () => {
+    const verifyCandidatePages = vi.fn(async () => undefined);
     vi.stubEnv("SOURCE_SHA", RELEASE_SHA);
     vi.stubEnv("SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA", PRODUCT_BOUNDARY_SHA);
     vi.stubEnv("SPOONJOY_RELEASE_MODE", "protocol-v1-canary");
@@ -6631,11 +7200,13 @@ describe("release artifact and CLI boundary", () => {
         vars: { VITE_POSTHOG_HOST: CUSTOM_POSTHOG_HOST },
       }),
       readPublicWorkerVersion: async () => CANDIDATE_VERSION,
+      verifyCandidatePages,
       sleep: async () => undefined,
       writeReleaseArtifact,
     });
 
     expect(result.status).toBe("promoted");
+    expect(verifyCandidatePages).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
     expect(execFileImpl).toHaveBeenCalled();
     expect(writeReleaseArtifact).toHaveBeenCalledWith("mcp-oauth-canary-artifacts", result);
   });
@@ -6710,7 +7281,26 @@ describe("release artifact and CLI boundary", () => {
         headers: { "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION },
         status: 200,
       }));
-    vi.stubGlobal("fetch", fetchImpl);
+    // The default page verifier probes pages and one hashed asset first; answer those as the
+    // candidate, and count only the CSP and public-version requests below.
+    const isPageProbe = (input: unknown) => {
+      const url = new URL(String(input));
+      return url.searchParams.has("candidate_page_verification") || url.pathname.startsWith("/assets/");
+    };
+    const pageResponse = (input: unknown) => new Response(
+      new URL(String(input)).pathname.startsWith("/assets/") ? "" : '<script src="/assets/root-x1.js"></script>',
+      { status: 200, headers: { "Content-Type": "text/html", "X-Spoonjoy-Worker-Version": CANDIDATE_VERSION } },
+    );
+    const queued = fetchImpl;
+    const pageCalls: string[] = [];
+    const routedFetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+      if (isPageProbe(input)) {
+        pageCalls.push(new URL(String(input)).pathname);
+        return pageResponse(input);
+      }
+      return queued(input, init);
+    });
+    vi.stubGlobal("fetch", routedFetch);
 
     const release = runProductionReleaseCli({
       ...postHogArtifactReaderDeps(),
@@ -6729,6 +7319,7 @@ describe("release artifact and CLI boundary", () => {
 
     await expect(release).resolves.toMatchObject({ status: "promoted" });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(pageCalls).toEqual([...CANDIDATE_PAGE_PATHS, "/assets/root-x1.js"]);
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
       headers: {
         "Cloudflare-Workers-Version-Overrides": buildWorkerVersionOverride("spoonjoy-v2", CANDIDATE_VERSION),
@@ -6748,6 +7339,7 @@ describe("release artifact and CLI boundary", () => {
         ...postHogArtifactReaderDeps("https://us.i.posthog.com"),
         argv: ["--artifact-dir", artifactDir],
         d1Fetch: successfulD1Fetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
         env: {
           CLOUDFLARE_ACCOUNT_ID,
           CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -6807,6 +7399,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         candidateVersionId: CANDIDATE_VERSION,
       };
@@ -6924,6 +7517,7 @@ describe("release artifact and CLI boundary", () => {
 
       expect(recordedCommands(runCommand)).not.toContain(smokeCommand);
       expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+        ...ARCHIVE_COMMANDS,
         CANARY_UPLOAD_COMMAND,
         CANARY_STAGE_COMMAND,
       ]);
@@ -6937,6 +7531,7 @@ describe("release artifact and CLI boundary", () => {
     function atomicCommandSequence(mode: "atomic-bootstrap" | "atomic-product-activation") {
       return [
         ...READ_ONLY_RELEASE_COMMANDS,
+        ...(mode === "atomic-product-activation" ? [FORWARD_ONLY_ANCESTRY_COMMAND] : []),
         "pnpm exec wrangler deployments list --json",
         "pnpm run deploy:preflight",
         "pnpm exec wrangler deployments list --json",
@@ -7083,7 +7678,7 @@ describe("release artifact and CLI boundary", () => {
       },
     );
 
-    it("parses only source-controlled lifecycle modes and forbids rollback in atomic modes", () => {
+    it("parses only source-controlled lifecycle modes and accepts rollback in every mode", () => {
       expect(parseReleaseCliOptions([], {
         SOURCE_SHA: RELEASE_SHA,
         SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
@@ -7118,18 +7713,19 @@ describe("release artifact and CLI boundary", () => {
         SOURCE_SHA: RELEASE_SHA,
         SPOONJOY_RELEASE_MODE: "gradual",
       })).toThrow("release mode");
-      expect(() => parseReleaseCliOptions([
-        "--rollback-version-id", CANDIDATE_VERSION,
-      ], {
-        SOURCE_SHA: RELEASE_SHA,
-        SPOONJOY_RELEASE_MODE: "atomic-bootstrap",
-      })).toThrow("rollback");
-      expect(() => parseReleaseCliOptions([
-        "--rollback-version-id", CANDIDATE_VERSION,
-      ], {
-        SOURCE_SHA: RELEASE_SHA,
-        SPOONJOY_RELEASE_MODE: "atomic-product-activation",
-      })).toThrow("rollback");
+      for (const mode of ["atomic-bootstrap", "atomic-product-activation"] as const) {
+        expect(parseReleaseCliOptions([
+          "--rollback-version-id", CANDIDATE_VERSION,
+        ], {
+          SOURCE_SHA: RELEASE_SHA,
+          SPOONJOY_RELEASE_MODE: mode,
+        })).toEqual({
+          artifactDir: "mcp-oauth-canary-artifacts",
+          releaseMode: mode,
+          releaseSha: RELEASE_SHA,
+          rollbackVersionId: CANDIDATE_VERSION,
+        });
+      }
       expect(() => parseReleaseCliOptions([], {
         SOURCE_SHA: RELEASE_SHA,
         SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: PRODUCT_BOUNDARY_SHA,
@@ -7287,6 +7883,7 @@ describe("release artifact and CLI boundary", () => {
       const result = await runProductionReleaseCli({
         ...postHogArtifactReaderDeps(),
         d1Fetch: successfulD1Fetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
         env: {
           CLOUDFLARE_ACCOUNT_ID,
           CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -7332,6 +7929,7 @@ describe("release artifact and CLI boundary", () => {
       await expect(runProductionReleaseCli({
         ...postHogArtifactReaderDeps(),
         d1Fetch: successfulD1Fetch(),
+        d1BookmarkFetch: successfulD1BookmarkFetch(),
         env: {
           CLOUDFLARE_ACCOUNT_ID,
           CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -7394,6 +7992,7 @@ describe("release artifact and CLI boundary", () => {
         await expect(runProductionReleaseCli({
           ...postHogArtifactReaderDeps(),
           d1Fetch: successfulD1Fetch(),
+          d1BookmarkFetch: successfulD1BookmarkFetch(),
           env: {
             CLOUDFLARE_ACCOUNT_ID,
             CLOUDFLARE_D1_API_TOKEN: D1_API_TOKEN,
@@ -7699,8 +8298,8 @@ describe("release artifact and CLI boundary", () => {
     it.each([
       ["protocol-v1-canary", undefined, "boundary"],
       ["protocol-v1-canary", "main", "boundary"],
-      ["atomic-bootstrap", undefined, "rollback"],
-      ["atomic-product-activation", undefined, "rollback"],
+      ["atomic-bootstrap", PRODUCT_BOUNDARY_SHA, "boundary"],
+      ["atomic-product-activation", PRODUCT_BOUNDARY_SHA, "boundary"],
     ] as const)("rejects direct %s rollback with boundary %s", async (
       releaseMode,
       protocolV1BoundarySha,
@@ -7749,9 +8348,11 @@ describe("release artifact and CLI boundary", () => {
         ...READ_ONLY_RELEASE_COMMANDS,
         `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
         `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`,
+        FORWARD_ONLY_ANCESTRY_COMMAND,
         "pnpm exec wrangler deployments list --json",
         "pnpm run deploy:preflight",
         "pnpm exec wrangler deployments list --json",
+        ...ARCHIVE_COMMANDS,
         `pnpm exec wrangler versions upload --tag ${RELEASE_SHA} --message Spoonjoy source ${RELEASE_SHA}`,
         "pnpm exec wrangler versions list --json",
         "pnpm exec wrangler deployments list --json",
@@ -7877,6 +8478,230 @@ describe("release artifact and CLI boundary", () => {
         failure,
       });
     });
+
+    describe("forward-only production releases", () => {
+      const NEWER_PRODUCTION_SHA = "f".repeat(40);
+      const BACKWARDS_FAILURE =
+        "Release source does not contain, or this checkout cannot verify that it contains, the commit production is running; refusing to move production backwards.";
+
+      function runnerWithActiveTag(
+        activeTag: unknown,
+        extraOverrides: Record<string, CommandResponse | readonly CommandResponse[]> = {},
+      ) {
+        return successfulRunner({
+          "pnpm exec wrangler versions list --json": [
+            JSON.stringify([workerVersion(PREVIOUS_VERSION, activeTag, "2026-07-14T00:00:00Z")]),
+            JSON.stringify([
+              workerVersion(PREVIOUS_VERSION, activeTag, "2026-07-14T00:00:00Z"),
+              workerVersion(CANDIDATE_VERSION, RELEASE_SHA, "2026-07-15T00:00:00Z", 2),
+            ]),
+          ],
+          ...extraOverrides,
+        });
+      }
+
+      function validatedArtifactWriter(written: ReleaseArtifact[]) {
+        return vi.fn(async (artifact: ReleaseArtifact) => {
+          written.push(artifact);
+          const dir = await mkdtemp(path.join(os.tmpdir(), "forward-only-artifact-"));
+          await writeReleaseArtifactFile(dir, artifact);
+        });
+      }
+
+      it("refuses an atomic product release older than the commit production is running", async () => {
+        const backwardsCommand = `git merge-base --is-ancestor ${NEWER_PRODUCTION_SHA} ${RELEASE_SHA}`;
+        const runCommand = runnerWithActiveTag(NEWER_PRODUCTION_SHA, {
+          [backwardsCommand]: new Error("not an ancestor"),
+        });
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow(BACKWARDS_FAILURE);
+        expect(recordedCommands(runCommand)).toEqual([
+          ...READ_ONLY_RELEASE_COMMANDS,
+          backwardsCommand,
+        ]);
+        expect(recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args)))
+          .toContain(`pnpm exec wrangler versions view ${PREVIOUS_VERSION} --json`);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(deps.d1Fetch).not.toHaveBeenCalled();
+        expect(written).toEqual([{
+          status: "failed_before_stage",
+          sourceSha: RELEASE_SHA,
+          releaseMode: "atomic-product-activation",
+          deploymentStrategy: "atomic",
+          phase: "version_snapshot",
+          treeHash: TREE_HASH,
+          reviewedMigrations: ["0024_add_release_marker.sql"],
+          migrationApply: "not_started",
+          databaseRollbackSupported: false,
+          previousVersionId: PREVIOUS_VERSION,
+          failure: BACKWARDS_FAILURE,
+        }]);
+      });
+
+      it("refuses a protocol-v1 canary older than the commit production is running", async () => {
+        const backwardsCommand = `git merge-base --is-ancestor ${NEWER_PRODUCTION_SHA} ${RELEASE_SHA}`;
+        const runCommand = runnerWithActiveTag(NEWER_PRODUCTION_SHA, {
+          [backwardsCommand]: new Error("not an ancestor"),
+        });
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...releaseDeps(runCommand),
+          protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
+          releaseMode: "protocol-v1-canary" as const,
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow(BACKWARDS_FAILURE);
+        const commandKeys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+        expect(recordedCommands(runCommand)).toEqual([
+          ...READ_ONLY_RELEASE_COMMANDS,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`,
+          `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${NEWER_PRODUCTION_SHA}`,
+          backwardsCommand,
+        ]);
+        expect(commandKeys.filter((key) => key.startsWith("pnpm exec wrangler versions view "))).toEqual([
+          `pnpm exec wrangler versions view ${PREVIOUS_VERSION} --json`,
+        ]);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([{
+          status: "failed_before_stage",
+          sourceSha: RELEASE_SHA,
+          releaseMode: "protocol-v1-canary",
+          deploymentStrategy: "gradual",
+          protocolV1BoundarySha: PRODUCT_BOUNDARY_SHA,
+          phase: "protocol_ancestry",
+          treeHash: TREE_HASH,
+          reviewedMigrations: ["0024_add_release_marker.sql"],
+          migrationApply: "not_started",
+          databaseRollbackSupported: false,
+          previousVersionId: PREVIOUS_VERSION,
+          failure: BACKWARDS_FAILURE,
+        }]);
+      });
+
+      it.each([
+        ["the release commit itself", RELEASE_SHA],
+        ["an ancestor of the release commit", PREVIOUS_PRODUCT_SHA],
+      ])("allows an atomic product release when production runs %s", async (_label, activeTag) => {
+        const runCommand = runnerWithActiveTag(activeTag, {
+          "pnpm exec wrangler d1 migrations list DB --remote": "No migrations to apply!",
+          [atomicDeployCommand("atomic-product-activation")]: "",
+        });
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        const result = await runProductionCanaryRelease(deps);
+
+        expect(result).toMatchObject({
+          status: "promoted",
+          releaseMode: "atomic-product-activation",
+          previousVersionId: PREVIOUS_VERSION,
+          candidateVersionId: CANDIDATE_VERSION,
+        });
+        expect(written).toEqual([result]);
+        const commandKeys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+        const forwardCommand = `git merge-base --is-ancestor ${activeTag} ${RELEASE_SHA}`;
+        expect(commandKeys).toContain(forwardCommand);
+        expect(commandKeys.indexOf(forwardCommand))
+          .toBeLessThan(commandKeys.indexOf(atomicDeployCommand("atomic-product-activation")));
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([
+          atomicDeployCommand("atomic-product-activation"),
+        ]);
+      });
+
+      it.each([
+        ["untagged", undefined, "Active Worker version is not source-tagged."],
+        ["tagged with an empty source", "", "Active Worker version is not source-tagged."],
+        ["tagged with a malformed source SHA", "main", "Active Worker version has a malformed source tag."],
+      ])("fails closed when the active production version is %s in atomic product mode", async (
+        _label,
+        activeTag,
+        failure,
+      ) => {
+        const runCommand = runnerWithActiveTag(activeTag);
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-product-activation"),
+          writeReleaseArtifact: validatedArtifactWriter(written),
+        };
+
+        await expect(runProductionCanaryRelease(deps)).rejects.toThrow(failure);
+        expect(recordedCommands(runCommand)).toEqual(READ_ONLY_RELEASE_COMMANDS);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([expect.objectContaining({
+          status: "failed_before_stage",
+          releaseMode: "atomic-product-activation",
+          phase: "version_snapshot",
+          migrationApply: "not_started",
+          previousVersionId: PREVIOUS_VERSION,
+          failure,
+        })]);
+      });
+
+      it("leaves atomic bootstrap free to replace an untagged production version", async () => {
+        const runCommand = runnerWithActiveTag(undefined, {
+          [atomicDeployCommand("atomic-bootstrap")]: "",
+        });
+        const deps = {
+          ...atomicReleaseDeps(runCommand, "atomic-bootstrap"),
+          readBootstrapProbe: vi.fn(async () => validProbeResult),
+        };
+
+        const result = await runProductionCanaryRelease(deps);
+
+        expect(result).toMatchObject({ status: "promoted", releaseMode: "atomic-bootstrap" });
+        const commandKeys = recordedCommandCalls(runCommand).map(({ command, args }) => commandKey(command, args));
+        expect(commandKeys.some((key) => key.startsWith("pnpm exec wrangler versions view "))).toBe(false);
+        expect(commandKeys.some((key) => key.includes("merge-base"))).toBe(false);
+      });
+    });
+
+    it.each(["rollback target", "current active"])(
+      "refuses an atomic product-activation rollback when the %s is below the Git boundary marker",
+      async (version) => {
+        const failure = version === "rollback target"
+          ? "Rollback target source is below the protocol-v1 boundary."
+          : "Current Worker source is below the protocol-v1 boundary.";
+        const targetCommand = `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${RELEASE_SHA}`;
+        const currentCommand = `git merge-base --is-ancestor ${PRODUCT_BOUNDARY_SHA} ${PREVIOUS_PRODUCT_SHA}`;
+        const runCommand = successfulRunner({
+          "git rev-parse HEAD": TOOLING_SHA,
+          "git rev-parse origin/main": TOOLING_SHA,
+          [PROTOCOL_BOUNDARY_LOG_COMMAND]: PRODUCT_BOUNDARY_SHA,
+          "pnpm exec wrangler deployments list --json": deploymentPayload(PREVIOUS_VERSION),
+          [version === "rollback target" ? targetCommand : currentCommand]: new Error("not an ancestor"),
+        });
+        const { protocolV1BoundarySha: _boundary, ...base } = rollbackDeps(runCommand);
+        const written: ReleaseArtifact[] = [];
+        const deps = {
+          ...base,
+          releaseMode: "atomic-product-activation" as const,
+          writeReleaseArtifact: vi.fn(async (artifact: ReleaseArtifact) => {
+            written.push(artifact);
+            const dir = await mkdtemp(path.join(os.tmpdir(), "rollback-artifact-"));
+            await writeReleaseArtifactFile(dir, artifact);
+          }),
+        };
+
+        await expect(runProductionRollback(deps)).rejects.toThrow(failure);
+        expect(remoteMutationCommands(recordedCommandCalls(runCommand))).toEqual([]);
+        expect(written).toEqual([expect.objectContaining({
+          status: "failed_before_stage",
+          releaseMode: "atomic-product-activation",
+          phase: "rollback_protocol_ancestry",
+          failure,
+        })]);
+        expect(written[0]).not.toHaveProperty("protocolV1BoundarySha");
+      },
+    );
 
     it.each(["rollback target", "current active"])(
       "refuses a manual %s below the protocol-v1 boundary",
@@ -8062,6 +8887,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: failurePoint === "D1 apply" ? "failed" : "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         failure: failurePoint === "D1 apply"
           ? "Cloudflare D1 migration query request failed."
@@ -8135,6 +8961,7 @@ describe("release artifact and CLI boundary", () => {
         reviewedMigrations: ["0024_add_release_marker.sql"],
         migrationApply: "succeeded",
         databaseRollbackSupported: false,
+        preMigrationBookmark: PRE_MIGRATION_BOOKMARK,
         previousVersionId: PREVIOUS_VERSION,
         ...(candidateWasResolved ? { candidateVersionId: CANDIDATE_VERSION } : {}),
         failure: failurePoint === "convergence"
@@ -8297,6 +9124,7 @@ describe("release artifact and CLI boundary", () => {
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...(migrationApply === "succeeded" ? { preMigrationBookmark: PRE_MIGRATION_BOOKMARK } : {}),
           previousVersionId: PREVIOUS_VERSION,
           candidateVersionId: CANDIDATE_VERSION,
         });
@@ -8310,6 +9138,7 @@ describe("release artifact and CLI boundary", () => {
           reviewedMigrations,
           migrationApply,
           databaseRollbackSupported: false,
+          ...(migrationApply === "succeeded" ? { preMigrationBookmark: PRE_MIGRATION_BOOKMARK } : {}),
           previousVersionId: PREVIOUS_VERSION,
           candidateVersionId: CANDIDATE_VERSION,
           failure: "artifact failed [REDACTED] [REDACTED]",

@@ -45,7 +45,8 @@ test.describe('Spoon a recipe flow', () => {
     const photoInput = page.locator('input[type="file"]');
     await photoInput.setInputFiles(FIXTURE_PHOTO);
 
-    const submit = page.getByRole('button', { name: /save spoon/i });
+    // The header's own "Log cook" button sits behind the dialog, so look inside it.
+    const submit = page.getByRole('dialog').getByRole('button', { name: 'Log cook', exact: true });
     await expect(submit).toBeEnabled();
     await submit.click();
 

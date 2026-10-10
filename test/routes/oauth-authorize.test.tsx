@@ -411,9 +411,10 @@ describe("oauth.authorize route", () => {
     expect(screen.getAllByText("https://claude.ai")).toHaveLength(2);
     expect(screen.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeInTheDocument();
     expect(screen.getByText(/add, edit, and remove kitchen data/i)).toBeInTheDocument();
-    expect(screen.getByText(/stays active until you disconnect/i)).toBeInTheDocument();
+    expect(screen.getByText(/stays active while claude keeps using it/i)).toHaveTextContent(/unused for 180 days/i);
     expect(screen.getByText(/connection details/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /allow access/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve access" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /allow access/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deny/i })).toBeInTheDocument();
     const forms = Array.from(rendered.container.querySelectorAll("form"));
     expect(forms).toHaveLength(2);
@@ -500,6 +501,33 @@ describe("oauth.authorize route", () => {
     });
     expect(await screen.findByRole("heading", { name: /connect tiny client to spoonjoy/i })).toBeInTheDocument();
     expect(screen.queryByText(/broad kitchen changes/i)).not.toBeInTheDocument();
+  });
+
+  // Audit 2026-10-09: a read-only kitchen connection was warned it "can make broad kitchen changes".
+  it.each([
+    ["kitchen:read", /can read your whole kitchen.*cannot change anything/i, /broad kitchen changes/i],
+    ["kitchen:read kitchen:write", /can make broad kitchen changes/i, /cannot change anything/i],
+    ["kitchen:write", /can make broad kitchen changes/i, /cannot change anything/i],
+  ])("words the kitchen warning for %s", async (scope, shown, absent) => {
+    renderView({
+      kind: "consent",
+      clientName: "Kitchen client",
+      scope,
+      consentToken: "oct_test_consent",
+      params: {
+        clientId: "c",
+        redirectUri,
+        responseType: "code",
+        state: "state_0123456789abcdef",
+        scope,
+        codeChallenge: "cc",
+        codeChallengeMethod: "S256",
+        resource: "",
+      },
+    });
+    expect(await screen.findByRole("heading", { name: /connect kitchen client to spoonjoy/i })).toBeInTheDocument();
+    expect(screen.getByText(shown)).toBeInTheDocument();
+    expect(screen.queryByText(absent)).not.toBeInTheDocument();
   });
 
   it("renders the error view", async () => {

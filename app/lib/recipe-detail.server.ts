@@ -10,6 +10,7 @@ import {
   recipeUpdateStatement,
 } from "~/lib/recipe-d1-writes.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
+import { d1StuckCoverStore, prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
 import {
   archiveRecipeCover,
   createCover,
@@ -74,7 +75,7 @@ import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.
 interface CloudflareContextLike {
   cloudflare?: {
     env?:
-      | (ImageGenEnv & { PHOTOS?: R2Bucket } & VapidEnv & PostHogServerEnv)
+      | (ImageGenEnv & { PHOTOS?: R2Bucket; DB?: unknown } & VapidEnv & PostHogServerEnv)
       | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
@@ -95,7 +96,7 @@ function spoonErrorToResponse(error: unknown): never {
 
 function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
-  env: (ImageGenEnv & PostHogServerEnv) | null;
+  env: (ImageGenEnv & PostHogServerEnv & { DB?: unknown }) | null;
   vapidEnv: VapidEnv;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -115,6 +116,9 @@ function getCloudflareCtx(context: AppLoadContext): {
           POSTHOG_KEY: envSource.POSTHOG_KEY,
           POSTHOG_HOST: envSource.POSTHOG_HOST,
           POSTHOG_DISABLED: envSource.POSTHOG_DISABLED,
+          // The D1 binding: background stylization and its quota claim write through atomic
+          // D1 batches with it, and fall back to separate Prisma writes without it.
+          DB: envSource.DB,
         }
       : null,
     vapidEnv: {
@@ -168,6 +172,7 @@ function recipeCoverHistoryFor(recipe: {
       generationStatus: cover.generationStatus,
       sourceType: cover.sourceType,
       sourceImageUrl: cover.sourceImageUrl,
+      parentCoverId: cover.parentCoverId,
       archivedAt: cover.archivedAt?.toISOString() ?? null,
       createdAt: cover.createdAt.toISOString(),
       isActive: recipe.activeCoverId === cover.id,
@@ -248,6 +253,16 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
+  // A generation whose job died is failed here, for any viewer of its active cover and for
+  // the owner's history, so neither spins forever.
+  const [settledActiveCover, ...settledHistory] = await settleStuckCoverGenerations(
+    d1 ? d1StuckCoverStore(d1) : prismaStuckCoverStore(await getRequestDb(context)),
+    recipe.id,
+    [recipe.activeCover, ...reads.coverHistoryCovers],
+  );
+  recipe.activeCover = settledActiveCover;
+  // Only the first entry can be null: the history holds rows read from the table.
+  const coverHistoryCovers = settledHistory as typeof reads.coverHistoryCovers;
   const activeCover = getScopedActiveCover(recipe);
   const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
   const activeRealCover = hasActiveRealRecipeCover(recipe);
@@ -303,7 +318,6 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     nextTime: spoon.nextTime,
     chef: spoon.chef,
   }));
-  const coverHistoryCovers = reads.coverHistoryCovers;
   const spoonImages = reads.spoonImages;
   const { activeCover: _activeCover, ...recipeForClient } = recipe;
 

@@ -1,7 +1,9 @@
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
+import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
 import type { AppLoadContext } from "react-router";
 import {
@@ -10,6 +12,7 @@ import {
   createApiCredential,
   expandCredentialScopes,
   normalizeCredentialScopes,
+  resolvePersonalTokenExpiry,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import {
@@ -18,6 +21,7 @@ import {
   type NotificationPreferenceFlags,
 } from "~/lib/account-settings.server";
 import { saveAccountIdentity } from "~/lib/account-identity.server";
+import { sampleApiEvent } from "~/lib/api-v1-event-sampling.server";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import {
@@ -29,7 +33,9 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import {
+  completeCommittedIdempotencyKey,
   completeIdempotencyKey,
+  idempotencyCompletionFailureSummary,
   hashIdempotencyRequest,
   IDEMPOTENCY_RETRY_AFTER_SECONDS,
   idempotencyClientKey,
@@ -743,6 +749,12 @@ function observeApiV1Response(
     ?? responseMetadata.idempotencyOutcome
     ?? defaultIdempotencyOutcome(operation, errorCode);
   const rateLimitScope = input.telemetry?.rateLimitScope ?? responseMetadata.rateLimitScope;
+  const latencyMs = Math.max(0, Date.now() - input.startedAt);
+  const sample = sampleApiEvent(
+    { method: args.request.method, status: input.response.status, errorCode, latencyMs },
+    env,
+  );
+  if (!sample.send) return input.response;
   waitUntil(
     captureEvent(postHogConfig, {
       event: "spoonjoy.api_v1.request",
@@ -769,7 +781,9 @@ function observeApiV1Response(
         user_agent_family: userAgentFamily(args.request.headers.get("User-Agent")),
         idempotency_outcome: idempotencyOutcome,
         rate_limit_scope: rateLimitScope,
-        latency_ms: Math.max(0, Date.now() - input.startedAt),
+        latency_ms: latencyMs,
+        sample_rate: sample.sampleRate,
+        sample_reason: sample.reason,
       },
     }),
   );
@@ -853,7 +867,9 @@ export function normalizeApiV1AuthError(error: ApiAuthError): ApiV1Error {
 async function optionalPrincipal(args: ApiV1RouteArgs): Promise<ApiPrincipal | null> {
   const db = await getRequestDb(args.context);
   try {
-    return await authenticateApiRequest(db, args.request, args.context.cloudflare?.env ?? null);
+    return await authenticateApiRequest(db, args.request, args.context.cloudflare?.env ?? null, {
+      waitUntil: apiV1WaitUntilFor(args),
+    });
   } catch (error) {
     if (error instanceof ApiAuthError) {
       throw normalizeApiV1AuthError(error);
@@ -1580,11 +1596,11 @@ function coverMutationError(error: unknown, coverId: string): ApiV1Error {
   return new ApiV1Error("validation_error", message);
 }
 
-async function activeFullCoverPayload(db: ApiV1Db, recipe: RecipeCoverOwnerRow, origin: string) {
+async function activeFullCoverPayload(db: ApiV1Db, recipe: RecipeCoverOwnerRow, origin: string, d1: D1ReadDatabase | null) {
   if (!recipe.activeCoverId) return null;
-  const cover = await db.recipeCover.findFirst({
+  const [cover] = await settleStuckCoverGenerations(stuckCoverStore(db, d1), recipe.id, [await db.recipeCover.findFirst({
     where: { id: recipe.activeCoverId, recipeId: recipe.id },
-  });
+  })]);
   return cover ? fullCoverPayload(cover, recipe, origin) : null;
 }
 
@@ -1676,61 +1692,7 @@ type RecipeRow = NonNullable<Awaited<ReturnType<typeof loadRecipeById>>>;
 type CookbookRow = NonNullable<Awaited<ReturnType<typeof loadCookbookById>>>;
 
 async function loadRecipeById(db: Awaited<ReturnType<typeof getRequestDb>>, id: string) {
-  return db.recipe.findFirst({
-    where: { id, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      servings: true,
-      sourceUrl: true,
-      activeCoverId: true,
-      activeCoverVariant: true,
-      coverMode: true,
-      createdAt: true,
-      updatedAt: true,
-      chef: { select: { id: true, username: true } },
-      sourceRecipe: {
-        select: {
-          id: true,
-          title: true,
-          deletedAt: true,
-          chef: { select: { id: true, username: true } },
-        },
-      },
-      activeCover: { select: RECIPE_COVER_DISPLAY_SELECT },
-      steps: {
-        select: {
-          id: true,
-          stepNum: true,
-          stepTitle: true,
-          description: true,
-          duration: true,
-          ingredients: {
-            select: {
-              id: true,
-              quantity: true,
-              ingredientRef: { select: { name: true } },
-              unit: { select: { name: true } },
-            },
-          },
-          usingSteps: {
-            select: {
-              id: true,
-              inputStepNum: true,
-              outputStepNum: true,
-              outputOfStep: { select: { stepNum: true, stepTitle: true } },
-            },
-            orderBy: { outputStepNum: "asc" },
-          },
-        },
-      },
-      cookbooks: {
-        select: { cookbook: { select: { id: true, title: true } } },
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
+  return loadApiRecipeWithPrisma(db, id);
 }
 
 async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null) {
@@ -1794,9 +1756,10 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
 }
 
 async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, id: string) {
-  const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
-  const recipe = await loadRecipeById(db, id);
+  // One D1 batch where the binding exists, instead of Prisma's query per relation level.
+  const d1 = requestD1(args.context);
+  const recipe = d1 ? await loadApiRecipeFromD1(d1, id) : await loadRecipeById(await getRequestDb(args.context), id);
   if (!recipe) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
@@ -2081,7 +2044,7 @@ async function maybeCreateSpoonCover(
 ) {
   if (!input.spoon.photoUrl) {
     return {
-      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin),
+      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin, requestD1(args.context)),
       previousActiveCover: null,
       createdCover: null,
       generationStatus: null,
@@ -2096,14 +2059,14 @@ async function maybeCreateSpoonCover(
   });
   if (!decision.shouldCreateCover) {
     return {
-      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin),
+      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin, requestD1(args.context)),
       previousActiveCover: null,
       createdCover: null,
       generationStatus: null,
     };
   }
 
-  const previousActiveCover = await activeFullCoverPayload(input.db, input.recipe, input.origin);
+  const previousActiveCover = await activeFullCoverPayload(input.db, input.recipe, input.origin, requestD1(args.context));
   const cover = await createCover(input.db, {
     recipeId: input.recipe.id,
     imageUrl: input.spoon.photoUrl,
@@ -2135,7 +2098,7 @@ async function maybeCreateSpoonCover(
   const nextRecipe = await loadActiveRecipeForSpoons(input.db, input.recipe.id);
   const createdCover = await input.db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId: input.recipe.id } });
   return {
-    activeCover: await activeFullCoverPayload(input.db, nextRecipe, input.origin),
+    activeCover: await activeFullCoverPayload(input.db, nextRecipe, input.origin, requestD1(args.context)),
     previousActiveCover,
     createdCover: fullCoverPayload(createdCover, nextRecipe, input.origin),
     generationStatus: createdCover.generationStatus,
@@ -2158,7 +2121,7 @@ async function isRecoveredOriginCook(db: ApiV1Db, recipe: RecipeForApiV1SpoonCov
   return !earlierSpoon;
 }
 
-async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, origin: string) {
+async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, origin: string, d1: D1ReadDatabase | null) {
   const existingCover = await db.recipeCover.findFirst({
     where: {
       recipeId: recipe.id,
@@ -2169,7 +2132,7 @@ async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1Spoo
   if (!existingCover) return null;
   const nextRecipe = await loadActiveRecipeForSpoons(db, recipe.id);
   return {
-    activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+    activeCover: await activeFullCoverPayload(db, nextRecipe, origin, d1),
     previousActiveCover: null,
     createdCover: fullCoverPayload(existingCover, nextRecipe, origin),
     generationStatus: existingCover.generationStatus,
@@ -2194,7 +2157,7 @@ async function recipeSpoonCreateData(
     where: { id: input.spoonId, recipeId: input.recipeId },
     include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
   });
-  const existingCoverData = await existingSpoonCoverPayload(input.db, recipe, spoon, origin);
+  const existingCoverData = await existingSpoonCoverPayload(input.db, recipe, spoon, origin, requestD1(args.context));
   const coverData = existingCoverData ?? await maybeCreateSpoonCover(args, {
     db: input.db,
     origin,
@@ -2401,7 +2364,7 @@ async function recipeImageUploadData(
     : null;
   return {
     spoon: spoon ? spoonPayload(spoon, origin) : null,
-    activeCover: await activeFullCoverPayload(input.db, recipe, origin),
+    activeCover: await activeFullCoverPayload(input.db, recipe, origin, requestD1(args.context)),
     previousActiveCover: input.previousActiveCover,
     createdCover: fullCoverPayload(cover, recipe, origin),
     generationStatus: cover.generationStatus,
@@ -2417,9 +2380,18 @@ async function recoverRecipeImageUpload(
     recipeId: string;
     clientMutationId: string;
     record: ApiIdempotencyKey;
+    attempt: ApiV1RecoveryAttempt;
   },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   await loadOwnedCoverRecipe(input.db, input.principal, input.recipeId);
+  // Without the marker the upload may have stopped (or may still be running) before its spoon,
+  // activation or job: the cover row alone is not an upload.
+  if (!await writeFinished(input.db, input.record, WRITE_FINISHED_RESOURCE.recipeImageUpload, input.record.id)) {
+    const abandoned = !input.attempt.stopped
+      && Date.now() - input.record.createdAt.getTime() >= ABANDONED_UPLOAD_AFTER_MS;
+    if (abandoned) await releaseAbandonedRecipeImageUpload(args, input);
+    return null;
+  }
   const cover = await input.db.recipeCover.findFirst({
     where: {
       id: input.record.id,
@@ -2442,6 +2414,34 @@ async function recoverRecipeImageUpload(
       previousActiveCover: null,
     }),
   };
+}
+
+/**
+ * An upload that stopped before its marker and never cleaned up after itself (its Worker died)
+ * would hold its key in flight for the key's whole lifetime. Undo what it left, as its own
+ * cleanup would have, and release the key, so the client's next retry runs the upload afresh.
+ * Its cover id is the key's id. The recipe's earlier active cover is not known here, so if the
+ * stopped upload had activated its cover, the recipe is left with no active cover.
+ */
+async function releaseAbandonedRecipeImageUpload(
+  args: ApiV1RouteArgs,
+  input: { db: ApiV1Db; principal: ApiPrincipal; recipeId: string; record: ApiIdempotencyKey },
+) {
+  const cover = await input.db.recipeCover.findFirst({
+    where: { id: input.record.id, recipeId: input.recipeId, createdById: input.principal.id },
+    select: { imageUrl: true, sourceSpoonId: true },
+  });
+  if (cover) {
+    // Spoon first, then cover, then photo, then key. A failed delete throws, the key stays held,
+    // and the next retry repeats only what is left: the cover row still points at the photo
+    // until it goes, so neither the spoon nor the photo is ever orphaned.
+    if (cover.sourceSpoonId) {
+      await input.db.recipeSpoon.deleteMany({ where: { id: cover.sourceSpoonId, recipeId: input.recipeId } });
+    }
+    await input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } });
+    await cleanupUploadedRecipeImageObject(args, input.principal, cover.imageUrl);
+  }
+  await input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } });
 }
 
 async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
@@ -2477,7 +2477,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.image.upload", async (db, reservation) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
 
     if (!hasUploadedImageFile(photo)) {
       throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
@@ -2497,6 +2497,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
     let uploadedImageUrl: string | null = null;
     let createdCoverId: string | null = null;
     let createdSpoonId: string | null = null;
+    let finishedMarked = false;
 
     try {
       uploadedImageUrl = await storeImage({
@@ -2551,6 +2552,9 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         }
       }
 
+      // Last, just before the job is queued: queueing hands the job to waitUntil without I/O, and
+      // a marker written after it would let the job run ahead of the response's read of the cover.
+      finishedMarked = await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeImageUpload, createdCover.id);
       if (generateEditorial) {
         await queueApiRecipeCoverStylization(args, {
           db,
@@ -2584,6 +2588,11 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
         }),
       };
     } catch (error) {
+      // A step after the marker failed. Undo the marker before undoing the upload; if the marker
+      // cannot be removed, keep the upload whole, so recovery's answer that it is done stays true.
+      if (finishedMarked && !await unmarkWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeImageUpload)) {
+        throw error;
+      }
       if (uploadedImageUrl) {
         await cleanupRecipeImageUploadRows(db, { recipe, coverId: createdCoverId, spoonId: createdSpoonId });
         await cleanupUploadedRecipeImageObject(args, principal, uploadedImageUrl);
@@ -2591,12 +2600,13 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
       throw error;
     }
   }, {
-    recoverInFlight: async (db, record) => recoverRecipeImageUpload(args, {
+    recoverInFlight: async (db, record, attempt) => recoverRecipeImageUpload(args, {
       db,
       principal,
       recipeId,
       clientMutationId,
       record,
+      attempt,
     }),
   });
 }
@@ -2609,7 +2619,8 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
   const limit = parseListLimit(url);
   const offset = parseCoverOffset(url);
   const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-  const covers = await db.recipeCover.findMany({
+  // A generation whose job died reads as failed, not processing forever.
+  const covers = await settleStuckCoverGenerations(stuckCoverStore(db, requestD1(args.context)), recipeId, await db.recipeCover.findMany({
     where: {
       recipeId,
       ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
@@ -2617,7 +2628,7 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     skip: offset,
-  });
+  }));
   const page = covers.slice(0, limit);
   const spoonImages = await db.recipeSpoon.findMany({
     where: {
@@ -2642,7 +2653,7 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
 
   return apiV1PrivateSuccess(requestId, {
     covers: page.map((cover) => fullCoverPayload(cover, recipe, origin)),
-    activeCover: await activeFullCoverPayload(db, recipe, origin),
+    activeCover: await activeFullCoverPayload(db, recipe, origin, requestD1(args.context)),
     spoonImages: spoonImages
       .filter((spoon): spoon is typeof spoon & { photoUrl: string } => Boolean(spoon.photoUrl))
       .map((spoon) => ({
@@ -2677,7 +2688,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.create", async (db) => {
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     await validateApiV1RecipeCoverImageUrl(args, principal, imageUrl);
     const cover = await createCover(db, {
       recipeId,
@@ -2724,7 +2735,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
     return {
       status: 201,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
         generationStatus: createdCover.generationStatus,
@@ -2745,7 +2756,7 @@ async function handleRecipeCoverGenerate(args: ApiV1RouteArgs, requestId: string
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.generate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const cover = await createCover(db, {
       recipeId,
       imageUrl: "",
@@ -2779,7 +2790,7 @@ async function handleRecipeCoverGenerate(args: ApiV1RouteArgs, requestId: string
     return {
       status: 201,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
         generationStatus: createdCover.generationStatus,
@@ -2801,12 +2812,12 @@ async function handleRecipeCoverSetNoCover(args: ApiV1RouteArgs, requestId: stri
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.set-no-cover", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const nextRecipe = await clearActiveRecipeCover(db, recipe.id, requestD1(args.context));
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         mutation: { clientMutationId, replayed: false },
       },
@@ -2823,7 +2834,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.activate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     try {
       await setActiveRecipeCover(db, { recipeId, coverId, variant }, requestD1(args.context));
     } catch (error) {
@@ -2833,7 +2844,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         mutation: { clientMutationId, replayed: false },
       },
@@ -2858,7 +2869,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.archive", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     let archivedCoverId: string;
     try {
       const result = await archiveRecipeCover(db, {
@@ -2877,7 +2888,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         archivedCover: fullCoverPayload(archivedCover, nextRecipe, origin),
         warnings: deleteSafeObjects ? ["deleteSafeObjects is not implemented; the cover record was archived without deleting image objects."] : [],
@@ -2899,7 +2910,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.regenerate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const cover = await db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
     if (!cover) {
       throw new ApiV1Error("not_found", "Cover not found", { resource: "recipe_cover", coverId });
@@ -2935,7 +2946,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(regeneratedCover, nextRecipe, origin),
         generationStatus: regeneratedCover.generationStatus,
@@ -2955,7 +2966,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.from-spoon", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const spoon = await db.recipeSpoon.findFirst({
       where: { id: spoonId, recipeId, deletedAt: null, photoUrl: { not: null } },
       select: { id: true, photoUrl: true },
@@ -2998,7 +3009,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
     return {
       status: 201,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
         generationStatus: createdCover.generationStatus,
@@ -3864,7 +3875,14 @@ type ApiV1IdempotentMutationResult = { status: number; data: Record<string, unkn
 type ApiV1IdempotentRecovery = (
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
+  attempt: ApiV1RecoveryAttempt,
 ) => Promise<ApiV1IdempotentMutationResult | null>;
+/**
+ * `stopped` is true when the attempt that reserved the key is known to have stopped: recovery
+ * runs in that attempt's own request after its write threw. A retry that finds the key in flight
+ * cannot know whether the first attempt is still running.
+ */
+type ApiV1RecoveryAttempt = { stopped: boolean };
 type ApiV1IdempotentMutationOptions = {
   beforeWrite?: (
     db: ApiV1WriteDb,
@@ -3987,7 +4005,7 @@ export async function runIdempotentApiV1Mutation(
   }
 
   if (reservation.status === "in_flight") {
-    const recovered = await options.recoverInFlight?.(db, reservation.record);
+    const recovered = await options.recoverInFlight?.(db, reservation.record, { stopped: false });
     if (recovered) {
       await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
       return apiV1RecoveredReplayResponse(requestId, operation, recovered);
@@ -4010,7 +4028,7 @@ export async function runIdempotentApiV1Mutation(
   } catch (error) {
     const recovered = error instanceof ApiV1Error
       ? null
-      : await options.recoverInFlight?.(db, reservation.record);
+      : await options.recoverInFlight?.(db, reservation.record, { stopped: true });
     if (recovered) {
       await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
       return apiV1IdempotentResponse(requestId, operation, recovered, "committed");
@@ -4029,22 +4047,12 @@ export async function runIdempotentApiV1Mutation(
   }
 
   const responseBody = idempotentMutationBody(requestId, result.data);
-  try {
-    await completeIdempotencyKey(db, reservation.record.id, {
-      status: result.status,
-      body: responseBody,
-    });
-  } catch (error) {
-    if (!options.recoverInFlight) throw error;
-    try {
-      await completeIdempotencyKey(db, reservation.record.id, {
-        status: result.status,
-        body: responseBody,
-      });
-    } catch {
-      // Leave the reserved key recoverable; the committed write is more important than a duplicate response write failure.
-    }
-  }
+  // The write has committed: answer it as committed even if its response cannot be saved.
+  const completionFailure = await completeCommittedIdempotencyKey(db, reservation.record.id, {
+    status: result.status,
+    body: responseBody,
+  });
+  if (completionFailure) reportIdempotencyCompletionFailure(args, requestId, operation, completionFailure);
 
   return withApiV1Telemetry(Response.json(responseBody, {
     status: result.status,
@@ -4671,6 +4679,8 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["email", "username", "clientMutationId"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
+  // `email` must be the account's current address: the API never changes it. Clients (the native
+  // app included) send the profile they show, so an unchanged email is accepted as before.
   const normalizedEmail = normalizeEmail(body.email);
   const submittedUsername = normalizeUsername(body.username);
   const fieldErrors: string[] = [];
@@ -4694,9 +4704,23 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
       throw new ApiV1Error("not_found", "Account not found");
     }
 
+    // The API never changes the email. A token (personal, OAuth, agent or the native app's) that
+    // could change it could hand the account to whoever controls the new address, since that
+    // address could then sign in with Google or GitHub. A request that only changes the email is
+    // refused with its own code, so the client can send the person to the website rather than
+    // treat it as a token problem. When the username changes too, the email is ignored: a queued
+    // username edit can carry an email cached before a change on the web, and the edit still saves.
+    const usernameChanged = submittedUsername !== currentUser.username.trim();
+    if (normalizedEmail !== currentUser.email.toLowerCase() && !usernameChanged) {
+      throw new ApiV1Error(
+        "email_change_requires_web",
+        "Your email can only be changed in Account settings on the Spoonjoy website.",
+        { field: "email" },
+      );
+    }
+
     // The same username rule as signup and account settings (app/lib/username.ts), applied only
     // to a changed username, so an older username that predates it can still save its email.
-    const usernameChanged = submittedUsername !== currentUser.username.trim();
     const username = usernameChanged ? submittedUsername : currentUser.username;
     if (usernameChanged) {
       const formatError = usernameFormatError(username);
@@ -4707,14 +4731,12 @@ async function handleAccountUpdate(args: ApiV1RouteArgs, requestId: string, prin
 
     const saved = await saveAccountIdentity(db, {
       userId: principal.id,
-      email: normalizedEmail,
+      email: currentUser.email,
       username,
-      emailChanged: normalizedEmail !== currentUser.email.toLowerCase(),
+      emailChanged: false,
       usernameChanged,
     });
-    if (saved === "email_taken") {
-      throw new ApiV1Error("validation_error", "This email is already in use by another account", { field: "email" });
-    }
+    // The API never changes the email (that is web-only), so only the username can collide.
     if (saved === "username_taken") {
       throw new ApiV1Error("validation_error", "This username is already taken", { field: "username" });
     }
@@ -5485,6 +5507,125 @@ function ingredientMatchesCreateInput(
     normalizedText(actual.name) === normalizedText(expected.ingredientName);
 }
 
+/**
+ * A write made of several steps that are not one batch (an upload's cover, spoon, activation and
+ * job; a create's commit and its placeholder job) records this marker after its last step.
+ * Recovery answers such a write as done only with the marker, so a retry is never told about a
+ * spoon, an activation or a job that did not happen.
+ */
+const WRITE_FINISHED_RESOURCE = {
+  recipeImageUpload: { operation: "recipes.image.upload", resourceType: "recipe_cover" },
+  recipeCreate: { operation: "recipes.create", resourceType: "recipe" },
+} as const;
+
+/** How long after its reservation an unfinished write is taken to have stopped. */
+export const UNFINISHED_WRITE_STOPPED_AFTER_MS = 30_000;
+
+/**
+ * How long after its reservation an unfinished upload is taken to be abandoned. An upload runs
+ * inside its request, not in waitUntil, so it gets far longer than 30 seconds before its rows are
+ * undone: releasing a live upload would let its own later cleanup overwrite the retry's cover.
+ */
+export const ABANDONED_UPLOAD_AFTER_MS = 5 * 60_000;
+
+function markerErrorLine(error: unknown) {
+  return (error instanceof Error ? error.message : String(error)).split("\n")[0];
+}
+
+/**
+ * Records that a multi-step write finished. A failed marker never fails the write: every step
+ * has happened, so the answer is still true. Recovery, needed only if saving the response fails
+ * as well, then treats the write as unfinished.
+ */
+async function markWriteFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+): Promise<boolean> {
+  try {
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: reservation.id,
+        operation: marker.operation,
+        resourceType: marker.resourceType,
+        resourceId,
+      },
+    });
+    return true;
+  } catch (error) {
+    console.error("[api-v1] write_finished_mark_failed", {
+      operation: marker.operation,
+      error: markerErrorLine(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Removes a finished marker when a step after it failed and the write is being undone, so
+ * recovery does not answer the undone write as done. Returns false, and logs, if it could not.
+ */
+async function unmarkWriteFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+): Promise<boolean> {
+  try {
+    await db.apiMutationTombstone.deleteMany({
+      where: { idempotencyKeyId: reservation.id, operation: marker.operation, resourceType: marker.resourceType },
+    });
+    return true;
+  } catch (error) {
+    console.error("[api-v1] write_finished_unmark_failed", {
+      operation: marker.operation,
+      error: markerErrorLine(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Claims the finished marker for a recovery that is about to finish the write itself. Only one
+ * claim can succeed, because the marker is unique per key, resource type and resource: a
+ * recovery that loses the race leaves the work to the winner. A claim that fails for any other
+ * reason is logged, and recovery goes ahead without the marker.
+ */
+async function claimWriteFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+): Promise<"claimed" | "taken" | "unmarked"> {
+  try {
+    await db.apiMutationTombstone.create({
+      data: {
+        idempotencyKeyId: reservation.id,
+        operation: marker.operation,
+        resourceType: marker.resourceType,
+        resourceId,
+      },
+    });
+    return "claimed";
+  } catch (error) {
+    if (isPrismaErrorCode(error, "P2002")) return "taken";
+    console.error("[api-v1] write_finished_mark_failed", {
+      operation: marker.operation,
+      error: markerErrorLine(error),
+    });
+    return "unmarked";
+  }
+}
+
+async function writeFinished(
+  db: ApiV1WriteDb,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+) {
+  return Boolean(await findMutationTombstone(db, reservation, { ...marker, resourceId }));
+}
+
 async function findMutationTombstone(
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
@@ -5505,12 +5646,44 @@ async function findMutationTombstone(
 }
 
 async function recoverNativeRecipeCreate(
+  args: ApiV1RouteArgs,
   db: ApiV1WriteDb,
   reservation: ApiIdempotencyKey,
-  input: { clientMutationId: string; origin: string; principalId: string },
+  attempt: ApiV1RecoveryAttempt,
+  input: {
+    clientMutationId: string;
+    origin: string;
+    principalId: string;
+    title: string;
+    description: string | null;
+    /** True when this request's own write already scheduled the placeholder. */
+    placeholderScheduled: () => boolean;
+  },
 ): Promise<ApiV1IdempotentMutationResult | null> {
   const recipe = await loadRecipeById(db, reservation.id);
   if (!recipe || recipe.chef.id !== input.principalId) return null;
+  if (!await writeFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id)) {
+    // The recipe committed, but its placeholder may never have been scheduled. While the first
+    // attempt may still be running (it schedules right after its commit), the retry waits; once
+    // it has stopped, recovery schedules the placeholder itself, so the answer is true. Recovery
+    // claims the marker first, so two late retries never both schedule (each run spends quota).
+    const stopped = attempt.stopped || Date.now() - reservation.createdAt.getTime() >= UNFINISHED_WRITE_STOPPED_AFTER_MS;
+    if (!stopped) return null;
+    const claim = await claimWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, reservation.id);
+    const placeholder = claim === "taken" ? null : await db.recipeCover.findFirst({
+      where: { recipeId: reservation.id, sourceType: "ai-placeholder", generationStatus: "processing" },
+      select: { id: true },
+    });
+    if (placeholder && !input.placeholderScheduled()) {
+      await scheduleApiRecipeCreatePlaceholder(args, db, {
+        userId: input.principalId,
+        recipeId: reservation.id,
+        coverId: placeholder.id,
+        title: input.title,
+        description: input.description,
+      });
+    }
+  }
   return {
     status: 201,
     data: {
@@ -5661,6 +5834,7 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
     throw new ApiV1Error(parsed.code, parsed.message, parsed.details);
   }
   const origin = publicContentOrigin(args);
+  let placeholderScheduled = false;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.create", async (db, reservation) => {
     // The create request has no cover field, so every API-created recipe starts with the same
@@ -5678,6 +5852,8 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
       title: parsed.data.title,
       description: parsed.data.description,
     });
+    placeholderScheduled = true;
+    await markWriteFinished(db, reservation, WRITE_FINISHED_RESOURCE.recipeCreate, created.data.recipeId);
     const recipe = await serializedRecipeOrThrow(db, created.data.recipeId, origin);
     return {
       status: created.status,
@@ -5687,10 +5863,13 @@ async function handleRecipeCreate(args: ApiV1RouteArgs, requestId: string, princ
         mutation: { clientMutationId: parsed.data.clientMutationId, replayed: false },
       },
     };
-  }, (db, reservation) => recoverNativeRecipeCreate(db, reservation, {
+  }, (db, reservation, attempt) => recoverNativeRecipeCreate(args, db, reservation, attempt, {
     clientMutationId: parsed.data.clientMutationId,
     origin,
     principalId: principal.id,
+    title: parsed.data.title,
+    description: parsed.data.description,
+    placeholderScheduled: () => placeholderScheduled,
   }));
 }
 
@@ -6653,8 +6832,15 @@ async function handleTokenList(args: ApiV1RouteArgs, requestId: string, authenti
 
 async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authenticated: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
-  assertKnownFields(body, ["name", "scopes"]);
+  assertKnownFields(body, ["name", "scopes", "expiresInDays"]);
   const name = nonblankString(body.name, "name");
+  let expiresAt: Date | null;
+  try {
+    expiresAt = resolvePersonalTokenExpiry(body.expiresInDays);
+  } catch (error) {
+    // The expiry check throws only ApiAuthError.
+    throw normalizeApiV1AuthError(error as ApiAuthError);
+  }
   const normalizedScopes = normalizeCreateTokenScopes(body.scopes);
   const storedScopes = normalizedScopes ?? (
     authenticated.source === "bearer"
@@ -6666,7 +6852,7 @@ async function handleTokenCreate(args: ApiV1RouteArgs, requestId: string, authen
   }
 
   const db = await getRequestDb(args.context);
-  const created = await createApiCredential(db, authenticated.id, name, { scopes: storedScopes });
+  const created = await createApiCredential(db, authenticated.id, name, { scopes: storedScopes, expiresAt });
 
   return withApiV1Telemetry(apiV1PrivateSuccess(requestId, {
     token: created.token,
@@ -7203,6 +7389,19 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 
 export function normalizeApiV1InternalError(error: unknown): ApiV1Error {
   return new ApiV1Error("internal_error", "Internal error");
+}
+
+/**
+ * A committed write whose response could not be saved on its idempotency key. The write is
+ * answered as committed; this makes the stuck key visible in logs and exception telemetry.
+ */
+function reportIdempotencyCompletionFailure(args: ApiV1RouteArgs, requestId: string, operation: string, error: unknown) {
+  console.error("[api-v1] idempotency_completion_failed", {
+    requestId,
+    operation,
+    error: idempotencyCompletionFailureSummary(error),
+  });
+  captureApiV1InternalException(args, error);
 }
 
 function logApiV1InternalError(args: ApiV1RouteArgs, requestId: string, error: unknown) {

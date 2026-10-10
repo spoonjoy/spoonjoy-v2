@@ -53,10 +53,22 @@ export interface AllowlistEntry {
 export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
   // --- intentional swallows / parse fallbacks (no user-facing failure) ---
   {
+    file: "app/lib/qa-error-logs.server.ts",
+    category: "swallow",
+    reason:
+      "describeValue falls back to String(value) when JSON.stringify throws on a non-Error thrown value; the line it builds is itself the per-run QA error log, written beside handleError's PostHog capture.",
+  },
+  {
     file: "app/lib/db.server.ts",
     category: "swallow",
     reason:
       "Dev/test platform-proxy bind failure falls back to a local SQLite db; restricted sandboxes legitimately cannot bind loopback ports.",
+  },
+  {
+    file: "app/lib/photo-delivery.server.ts",
+    category: "swallow",
+    reason:
+      "A /photos/ path that is not valid percent-encoding is answered as not found, and a failed edge-cache write is skipped because the photo was already served from R2.",
   },
   {
     file: "app/lib/recipe-import-jsonld.server.ts",
@@ -76,6 +88,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Cycle-safe error recognizer treats a throwing adapter-wrapper getter as an absent field; recognized cutover errors and all non-matches still return to the instrumented request boundary.",
   },
+  {
+    file: "app/lib/api-auth.server.ts",
+    category: "swallow",
+    reason:
+      "Both catches guard the advisory lastUsedAt write after the token is already authenticated: the awaited branch swallows only P2025 (credential deleted between read and write) and rethrows everything else, and the waitUntil branch logs a failed best-effort background write. No user-facing failure is hidden.",
+  },
 
   // --- pure rethrow / race recovery (surfaced to instrumented callers) ---
   {
@@ -83,6 +101,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "rethrow",
     reason:
       "Catch only recovers a unique-constraint idempotency race or re-throws; the API route layer (api-v1.server.ts) captures the surfaced exception.",
+  },
+  {
+    file: "app/lib/recipe-write-dedupe.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch only releases the idempotency reservation of a failed import or fork and re-throws; the MCP route and the web fork route capture the surfaced exception.",
   },
   {
     file: "app/lib/cookbook-membership-compat.server.ts",
@@ -201,6 +225,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     category: "non-request",
     reason:
       "Dev CLI token cache for the local MCP server; file-IO catch falls back to no cache. Not part of the deployed request path.",
+  },
+  {
+    file: "app/lib/health.server.ts",
+    category: "non-request",
+    reason:
+      "Readiness probe for uptime monitoring (GET /health/ready), not a user path. A failed D1 or R2 check is the probe's result: it becomes a 503 with a fixed reason, which the uptime monitor alerts on and Workers Logs record.",
   },
   // --- catch IS instrumented in a shared helper the file delegates to ---
   {

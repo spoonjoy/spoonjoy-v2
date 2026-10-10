@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   IMAGE_FALLBACK_ERROR_CODES,
   ImageGenError,
+  ImageGenTimeoutError,
   ImageProviderEmptyOutputError,
   composePlaceholderPrompt,
   composeStylizationFallbackPrompt,
@@ -9,6 +10,7 @@ import {
   createGeminiImageRunner,
   createOpenAIImageRunner,
   generatePlaceholderImage,
+  imageJobBudget,
   isImageProviderFallbackError,
   makeFallbackPlaceholderSvg,
   stylizeSpoonPhoto,
@@ -829,14 +831,16 @@ describe("createOpenAIImageRunner", () => {
     const runner = createOpenAIImageRunner({
       images: { generate, edit: vi.fn() },
     });
-    const result = await runner.textToImage("prompt", { model: "dall-e-3" });
+    const signal = new AbortController().signal;
+    const result = await runner.textToImage("prompt", { model: "dall-e-3", signal });
+    // The attempt's abort signal reaches the provider request.
     expect(generate).toHaveBeenCalledWith({
       prompt: "prompt",
       model: "dall-e-3",
       n: 1,
       size: "1024x1024",
       response_format: "b64_json",
-    });
+    }, { signal });
     expect(result).toEqual({ bytes: GENERATED_BYTES, contentType: "image/png" });
   });
 
@@ -846,10 +850,11 @@ describe("createOpenAIImageRunner", () => {
       images: { generate: vi.fn(), edit },
     });
     const sourceFile = new File([VALID_PNG_BYTES], "raw.png", { type: "image/png" });
+    const signal = new AbortController().signal;
     const result = await runner.imageToImage(
       sourceFile,
       "prompt",
-      { model: "gpt-image-1" },
+      { model: "gpt-image-1", signal },
     );
     expect(edit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -857,6 +862,7 @@ describe("createOpenAIImageRunner", () => {
         prompt: "prompt",
         model: "gpt-image-1",
       }),
+      { signal },
     );
     expect(result).toEqual({ bytes: GENERATED_BYTES, contentType: "image/png" });
   });
@@ -1235,6 +1241,19 @@ describe("createGeminiImageRunner", () => {
     }
   });
 
+  it("ends a Gemini request as soon as the job's signal is aborted, before its own timeout", async () => {
+    const fetchImpl = vi.fn((_url: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+      })) as unknown as typeof fetch;
+    const job = new AbortController();
+    const runner = createGeminiImageRunner({ apiKey: "gemini-key", fetchImpl, timeoutMs: 60_000 });
+    const promise = runner.textToImage("prompt", { model: "gemini-3.1-flash-image", signal: job.signal });
+    const assertion = expect(promise).rejects.toMatchObject({ code: "timeout" });
+    job.abort();
+    await assertion;
+  });
+
   it("propagates non-timeout Gemini fetch failures", async () => {
     const cause = new Error("network down");
     const fetchImpl = vi.fn(async () => {
@@ -1243,5 +1262,31 @@ describe("createGeminiImageRunner", () => {
     const runner = createGeminiImageRunner({ apiKey: "gemini-key", fetchImpl, timeoutMs: 1000 });
     await expect(runner.textToImage("prompt", { model: "gemini-3.1-flash-image" }))
       .rejects.toBe(cause);
+  });
+});
+
+describe("image job budget", () => {
+  it("never calls the provider once the job's budget is spent", async () => {
+    const runner: ImageGenRunner = { textToImage: vi.fn(), imageToImage: vi.fn() };
+    const budget = imageJobBudget({ now: () => 1_000, totalMs: 0 });
+
+    const failure = await generatePlaceholderImage("Pasta", null, { env: {}, runner, budget }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ImageGenError);
+    expect((failure as ImageGenError).cause).toBeInstanceOf(ImageGenTimeoutError);
+    expect((failure as ImageGenError).cause).toMatchObject({ scope: "budget", code: "timeout", message: "Image generation ran out of its 0ms budget" });
+    expect(runner.textToImage).not.toHaveBeenCalled();
+  });
+
+  it("treats a slow attempt as a reason to try the next provider, and a spent budget as final", () => {
+    expect(isImageProviderFallbackError(new ImageGenTimeoutError("attempt", 50))).toBe(true);
+    expect(isImageProviderFallbackError(new ImageGenTimeoutError("budget", 22_000))).toBe(false);
+  });
+
+  it("keeps the overall budget under 25 seconds and each attempt inside it", () => {
+    const budget = imageJobBudget({ now: () => 0 });
+    expect(budget.totalMs).toBeLessThan(25_000);
+    expect(budget.deadline).toBe(budget.totalMs);
+    expect(budget.attemptTimeoutMs).toBeLessThanOrEqual(budget.totalMs);
   });
 });

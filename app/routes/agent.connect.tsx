@@ -1,31 +1,24 @@
 import type { Route } from "./+types/agent.connect";
-import { Form, redirect, useLoaderData } from "react-router";
+import { Form, data, redirect, useLoaderData, useActionData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { enforceAgentCodeLookupRateLimit } from "~/lib/rate-limit.server";
+import { getUserId } from "~/lib/session.server";
+import {
+  isSameSiteFormPost,
+  normalizeUserCode,
+  rememberTypedCode,
+} from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/ui/button";
 import { Heading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
 
-type LoaderData = {
+type LookupData = {
   code: string;
   error: string | null;
 };
 
-function normalizeUserCode(value: string): string {
-  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (compact.length <= 4) return compact;
-  return `${compact.slice(0, 4)}-${compact.slice(4, 8)}`;
-}
-
-async function redirectForCode(request: Request, context: Route.LoaderArgs["context"], code: string): Promise<void> {
-  const userCode = normalizeUserCode(code);
-  if (!userCode) return;
-  const db = await getRequestDb(context);
-  const connection = await db.agentConnectionRequest.findUnique({ where: { userCode } });
-  if (!connection) return;
-  const url = new URL(request.url);
-  const from = url.searchParams.get("from");
-  throw redirect(`/agent/connect/${connection.id}?code=${encodeURIComponent(userCode)}${from === null ? "" : `&from=${encodeURIComponent(from)}`}`);
-}
+const NOT_FOUND = "That connection code was not found or has expired.";
+const TOO_MANY = "Too many codes tried. Please wait a minute and try again.";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -34,25 +27,44 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ request, context }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code") ?? "";
-  await redirectForCode(request, context, code);
-  return {
-    code: normalizeUserCode(code),
-    error: code ? "That connection code was not found or has expired." : null,
-  } satisfies LoaderData;
+// The page never takes the code from its URL: a link with the code in it (from an older agent, or
+// from someone else) must not stand in for the chef typing it.
+export async function loader(_args: Route.LoaderArgs) {
+  return { code: "", error: null } satisfies LookupData;
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
+  const env = context.cloudflare?.env;
+  if (!isSameSiteFormPost(request, env)) {
+    return data({ code: "", error: "Type the code your agent shows you on this page." } satisfies LookupData, { status: 403 });
+  }
+  // Throttle before the lookup: a correct guess opens someone else's pending request.
+  const rateLimit = await enforceAgentCodeLookupRateLimit(
+    request,
+    env?.AUTH_IP_RATE_LIMITER,
+    () => getUserId(request, env),
+  );
   const formData = await request.formData();
   const code = normalizeUserCode(formData.get("code")?.toString() ?? "");
-  await redirectForCode(request, context, code);
-  return { code, error: "That connection code was not found or has expired." } satisfies LoaderData;
+  if (!rateLimit.allowed) {
+    return data({ code, error: TOO_MANY } satisfies LookupData, {
+      status: 429,
+      headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+    });
+  }
+  if (!code) return { code, error: NOT_FOUND } satisfies LookupData;
+  const db = await getRequestDb(context);
+  const connection = await db.agentConnectionRequest.findUnique({ where: { userCode: code } });
+  if (!connection) return { code, error: NOT_FOUND } satisfies LookupData;
+  throw redirect(`/agent/connect/${connection.id}`, {
+    headers: { "Set-Cookie": await rememberTypedCode(env, request, connection.id, code) },
+  });
 }
 
 export default function AgentConnectLookup() {
-  const data = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>() as LookupData | undefined;
+  const view = actionData ?? loaderData;
 
   return (
     <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
@@ -68,13 +80,15 @@ export default function AgentConnectLookup() {
           Connection code
           <input
             name="code"
-            defaultValue={data.code}
+            defaultValue={view.code}
             autoComplete="one-time-code"
+            autoCapitalize="characters"
+            spellCheck={false}
             placeholder="ABCD-2345"
             className="min-h-12 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xl font-semibold tracking-[0.12em] text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
           />
         </label>
-        {data.error ? <Text role="alert">{data.error}</Text> : null}
+        {view.error ? <Text role="alert">{view.error}</Text> : null}
         <div>
           <Button type="submit">Continue</Button>
         </div>

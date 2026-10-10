@@ -40,6 +40,7 @@ export const RECIPE_COVER_DISPLAY_SELECT = {
   createdById: true,
   sourceImageUrl: true,
   generationStatus: true,
+  generationStartedAt: true,
   failureReason: true,
   promptVersion: true,
   styleVersion: true,
@@ -168,6 +169,9 @@ export async function startRecipeCoverRegeneration(
     data: {
       status: "processing",
       generationStatus: "processing",
+      // The stuck-generation check (recipe-cover-stuck.server.ts) times a generation from here;
+      // without it, it would fall back to the cover's own, older createdAt.
+      generationStartedAt: new Date(),
       failureReason: null,
       sourceImageUrl: cover.sourceImageUrl ?? input.rawPhotoUrl,
       promptAddition: input.promptAddition,
