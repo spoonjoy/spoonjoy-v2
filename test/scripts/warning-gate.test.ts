@@ -1,6 +1,9 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
+  PNPM_TRANSIENT_FETCH_RETRY_PATTERN,
   findUnexpectedDiagnosticOutput,
   findUnexpectedWarnings,
   main,
@@ -85,6 +88,18 @@ describe("warning gate", () => {
       "✓ warning dependency fallback used",
     ]);
     expect(findUnexpectedWarnings("✓ should keep warning copy in a passing test name")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ requires warning-clean CI workflow setup 333ms")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ accepts a single-job warning-clean Storybook deploy workflow  512ms")).toEqual([]);
+    expect(findUnexpectedWarnings("× surfaces remote-migration auth errors as warnings only 401ms")).toEqual([]);
+    expect(findUnexpectedWarnings("✓ DeprecationWarning: emitted by a dependency")).toEqual([
+      "✓ DeprecationWarning: emitted by a dependency",
+    ]);
+    expect(findUnexpectedWarnings("✓ warning-gates every command 400ms")).toEqual([
+      "✓ warning-gates every command 400ms",
+    ]);
+    expect(findUnexpectedWarnings("✓ checks output (warn: leaked)")).toEqual([
+      "✓ checks output (warn: leaked)",
+    ]);
 
     expect(findUnexpectedWarnings("▲ [WARNING] bundle contains dynamic import")).toEqual([
       "▲ [WARNING] bundle contains dynamic import",
@@ -248,6 +263,73 @@ describe("warning gate", () => {
     expect(result.unexpectedWarnings).toEqual(["Warning: leaked warning"]);
   });
 
+  describe("pnpm transient registry retries", () => {
+    // Captured from a real CI install (PR #382, 2026-10-09) that hit a registry 502, retried and succeeded.
+    const capturedInstall = readFileSync(
+      path.join(process.cwd(), "test/fixtures/warning-gate/pnpm-install-fetch-retry.txt"),
+      "utf8",
+    );
+    // pnpm pads WARN with thin spaces (U+2009); the captured line keeps them.
+    const retryLine =
+      "\u2009WARN\u2009 GET https://registry.npmjs.org/ansi-escapes/-/ansi-escapes-7.2.0.tgz error (ERR_PNPM_FETCH_502). Will retry in 10 seconds. 2 retries left.";
+
+    it("passes the captured install whose only warning is a registry retry, on either channel", async () => {
+      expect(capturedInstall).toContain(retryLine);
+      for (const result of [
+        { exitCode: 0, output: capturedInstall },
+        { exitCode: 0, output: capturedInstall, warningOutput: `${retryLine}\n` },
+      ]) {
+        await expect(runWarningGate(["--", "pnpm", "install", "--frozen-lockfile"], {
+          runCommand: vi.fn().mockResolvedValue(result),
+        })).resolves.toEqual({ exitCode: 0, unexpectedWarnings: [] });
+      }
+    });
+
+    it("still fails the same install when it also prints a real warning", async () => {
+      const realWarning = " WARN  deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported";
+      const result = await runWarningGate(["--", "pnpm", "install", "--frozen-lockfile"], {
+        runCommand: vi.fn().mockResolvedValue({
+          exitCode: 0,
+          output: capturedInstall.replace("Done in 22.7s", `${realWarning}\nDone in 22.7s`),
+          warningOutput: `${retryLine}\nWARN  Issues with peer dependencies found\n`,
+        }),
+      });
+      expect(result).toEqual({
+        exitCode: 1,
+        unexpectedWarnings: [realWarning.trim(), "WARN  Issues with peer dependencies found"],
+      });
+    });
+
+    it("keeps the install's own failure when the retries run out", async () => {
+      const result = await runWarningGate(["--", "pnpm", "install"], {
+        runCommand: vi.fn().mockResolvedValue({ exitCode: 1, output: `${retryLine}\n` }),
+      });
+      expect(result).toEqual({ exitCode: 1, unexpectedWarnings: [] });
+    });
+
+    it.each([
+      ["a retry notice from another registry host", "WARN  GET https://registry.example.com/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_502). Will retry in 10 seconds. 2 retries left."],
+      ["a client error that retrying cannot fix", "WARN  GET https://registry.npmjs.org/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_404). Will retry in 10 seconds. 2 retries left."],
+      ["an authentication failure", "WARN  GET https://registry.npmjs.org/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_401). Will retry in 10 seconds. 2 retries left."],
+      ["extra text after the notice", "WARN  GET https://registry.npmjs.org/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_502). Will retry in 10 seconds. 2 retries left. Also: integrity mismatch"],
+      ["a notice that does not say it will retry", "WARN  GET https://registry.npmjs.org/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_502)."],
+      ["a different warning that mentions retrying", "WARN  Request took 12s, will retry in 10 seconds. 2 retries left."],
+    ])("fails %s", (_label, line) => {
+      expect(PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(line)).toBe(false);
+      expect(findUnexpectedWarnings(`${line}\n`)).toEqual([line]);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([line]);
+    });
+
+    it.each([
+      "WARN  GET https://registry.npmjs.org/@prisma/engines/-/engines-6.19.2.tgz error (ECONNRESET). Will retry in 10 seconds. 2 retries left.",
+      "WARN  GET https://registry.npmjs.org/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_429). Will retry in 59.9 seconds. 1 retry left.",
+      "WARN  GET https://registry.npmjs.org/%40scope%2fpkg error (ETIMEDOUT). Will retry in 1 second. 4 retries left.",
+    ])("tolerates the transient retry notice %s", (line) => {
+      expect(findUnexpectedWarnings(`${line}\n`)).toEqual([]);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+  });
+
   it("fails successful commands that write otherwise unmarked output to the warning channel", async () => {
     const runCommand = vi.fn().mockResolvedValue({
       exitCode: 0,
@@ -374,5 +456,31 @@ describe("warning gate", () => {
     expect(result.exitCode).toBe(1);
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining("Warning: default CLI path"));
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe("repository test titles", () => {
+  // vitest prints a slow test as "✓ <title>  <n>ms". If a title reads as a warning, CI then fails
+  // only when that test happens to run slowly, so every title must pass the gate in that form.
+  it("never trip the warning gate when vitest reports them as slow", () => {
+    const roots = ["test", "app"].map((dir) => path.resolve(__dirname, "../..", dir));
+    const titlePattern = /\b(?:it|test)(?:\.each\([^)]*\))?\(\s*(["'`])((?:(?!\1)[^\\\n]|\\.)*)\1/g;
+    const flagged: string[] = [];
+    const visit = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          visit(full);
+        } else if (/\.test\.[cm]?[jt]sx?$/.test(entry.name)) {
+          for (const match of readFileSync(full, "utf8").matchAll(titlePattern)) {
+            if (findUnexpectedWarnings(`✓ ${match[2]}  333ms`).length > 0) {
+              flagged.push(`${path.relative(process.cwd(), full)}: ${match[2]}`);
+            }
+          }
+        }
+      }
+    };
+    roots.forEach(visit);
+    expect(flagged).toEqual([]);
   });
 });

@@ -1,12 +1,15 @@
 import type { PrismaClient } from "@prisma/client";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
+import { validateStepReorderComplete } from "~/lib/step-reorder-validation.server";
 import { d1Guard, d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { coverInsertStatement } from "~/lib/recipe-cover.server";
 import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
-  ingredientInsertStatement,
+  ingredientNamesFreeGuard,
+  namedIngredientInsertStatement,
+  nameUpsertStatements,
   recipeActiveGuard,
   recipeUpdateStatement,
   stepAtGuard,
@@ -15,6 +18,7 @@ import {
   stepOutputUseInsertStatement,
   stepInsertStatement,
   stepOutputUsesDeleteStatement,
+  stepReorderDependencyFreeGuard,
   type RecipeFields,
 } from "~/lib/recipe-d1-writes.server";
 
@@ -42,16 +46,33 @@ export async function stepDeletionRaceAnswer(
 }
 
 /**
+ * What the step-move checks answer now, for a swap whose batch was stopped because a step
+ * moved or went away, or the moved step gained an output dependency, in between.
+ */
+export async function stepSwapRaceAnswer(
+  db: PrismaClient,
+  recipeId: string,
+  stepId: string,
+  direction: "up" | "down",
+): Promise<{ error: string; status: number }> {
+  const step = await db.recipeStep.findUnique({ where: { id: stepId }, select: { recipeId: true, stepNum: true } });
+  if (!step || step.recipeId !== recipeId) return { error: RECIPE_CHANGED_MESSAGE, status: 409 };
+  const targetStepNum = direction === "up" ? step.stepNum - 1 : step.stepNum + 1;
+  const validation = await validateStepReorderComplete(db, recipeId, step.stepNum, targetStepNum);
+  return validation.valid ? { error: RECIPE_CHANGED_MESSAGE, status: 409 } : { error: validation.error, status: 400 };
+}
+
+/**
  * For an ingredient add whose batch was stopped: the name of one of the ingredients another
  * request added to the recipe in between, or null when the step changed instead.
  */
 export async function ingredientAlreadyInRecipe(
   db: PrismaClient,
   recipeId: string,
-  ingredientRefIds: readonly string[],
+  ingredientNames: readonly string[],
 ): Promise<string | null> {
   const existing = await db.ingredient.findFirst({
-    where: { recipeId, ingredientRefId: { in: [...ingredientRefIds] } },
+    where: { recipeId, ingredientRef: { name: { in: [...ingredientNames] } } },
     select: { ingredientRef: { select: { name: true } } },
   });
   return existing?.ingredientRef.name ?? null;
@@ -113,6 +134,7 @@ export async function swapRecipeStepsOnD1(
   await d1WriteBatch(d1, [
     stepAtGuard(input.stepId, input.recipeId, input.stepNum),
     stepAtGuard(input.targetStepId, input.recipeId, input.targetStepNum),
+    stepReorderDependencyFreeGuard(input.recipeId, input.stepNum, input.targetStepNum),
     stepNumUpdateStatement(input.stepId, -1, now),
     stepNumUpdateStatement(input.targetStepId, input.stepNum, now),
     stepNumUpdateStatement(input.stepId, input.targetStepNum, now),
@@ -142,8 +164,10 @@ export async function deleteRecipeStepOnD1(
 }
 
 /**
- * Adds ingredients to a step, all or none, then touches the recipe. The guards re-check that
- * the step is still where it was and that none of the ingredients is in the recipe yet.
+ * The step page's ingredient add: the ingredients, with their units and ingredient names
+ * created in the same batch when they are new, then the recipe touch. The guards re-check
+ * that the step is still where it was and that none of the names is in the recipe yet, so a
+ * stopped or failed batch leaves no new unit or ingredient name behind either.
  */
 export async function addStepIngredientsOnD1(
   d1: D1ReadDatabase,
@@ -151,25 +175,16 @@ export async function addStepIngredientsOnD1(
     recipeId: string;
     stepId: string;
     stepNum: number;
-    rows: ReadonlyArray<{ quantity: number; unitId: string; ingredientRefId: string }>;
+    rows: ReadonlyArray<{ quantity: number; unitName: string; ingredientName: string }>;
   },
 ): Promise<void> {
   const now = new Date();
+  const named = input.rows.map((row) => ({ ...row, recipeId: input.recipeId, stepNum: input.stepNum, now }));
   await d1WriteBatch(d1, [
     stepAtGuard(input.stepId, input.recipeId, input.stepNum),
-    // The ids go in as one JSON array: D1 allows at most 100 bound values per statement.
-    d1Guard(
-      `NOT EXISTS (SELECT 1 FROM "Ingredient"
-         WHERE "recipeId" = ? AND "ingredientRefId" IN (SELECT "value" FROM json_each(?)))`,
-      input.recipeId,
-      JSON.stringify(input.rows.map((row) => row.ingredientRefId)),
-    ),
-    ...input.rows.map((row) => ingredientInsertStatement({
-      recipeId: input.recipeId,
-      stepNum: input.stepNum,
-      ...row,
-      now,
-    })),
+    ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
+    ...nameUpsertStatements(named, now),
+    ...named.map(namedIngredientInsertStatement),
     recipeUpdateStatement(input.recipeId, {}, now),
   ]);
 }

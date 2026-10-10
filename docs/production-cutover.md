@@ -62,8 +62,7 @@ Future fresh cutovers (e.g., a v3) should write a new importer rather than resur
 
 Pre-import data hygiene (still relevant for any future import-style operation):
 
-- Always export D1 first: `pnpm exec wrangler d1 export DB --remote --output /tmp/spoonjoy-d1-backups/pre-import-$(date -u +%Y%m%dT%H%M%SZ).sql`.
-- If Wrangler refuses export because the database contains FTS5 virtual tables, capture a D1 Time Travel bookmark and a targeted row-level rollback file before applying the mutation.
+- Always back up D1 first: record a Time Travel bookmark (`pnpm exec wrangler d1 time-travel info DB --json`) and take a logical export with `node scripts/d1-logical-export.mjs --target production --output <file.sql>`. A plain `wrangler d1 export` refuses this database because of the FTS5 search table. [docs/d1-restore-runbook.md](d1-restore-runbook.md) covers restoring from either.
 - Run `PRAGMA foreign_key_check;` post-import; require zero rows.
 - Rebuild search with `rebuildSearchIndex(db)` after a bulk import.
 

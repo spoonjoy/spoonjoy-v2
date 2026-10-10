@@ -9,6 +9,9 @@ import {
   FOOD_IMAGE_TYPE_MESSAGE,
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
+import * as recipeCoverModule from "~/lib/recipe-cover.server";
+import * as recipeCoverServiceModule from "~/lib/recipe-cover-service.server";
+import * as recipeSpoonModule from "~/lib/recipe-spoon.server";
 import { SpoonValidationError } from "~/lib/recipe-spoon.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestRecipe, createTestUser } from "../utils";
@@ -760,6 +763,11 @@ describe("API v1 recipe cover management", () => {
     };
 
     try {
+      expectConsoleError("[api-v1] idempotency_completion_failed", {
+        requestId: "req_recipe_image_recover_first",
+        operation: "recipes.image.upload",
+        error: "idempotency completion retry failed after upload",
+      });
       const first = await action(routeArgs(
         recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_recipe_image_recover_first", recipeImageForm(body)),
         `recipes/${fixture.recipe.id}/image`,
@@ -799,6 +807,306 @@ describe("API v1 recipe cover management", () => {
       await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
     } finally {
       db.apiIdempotencyKey.update = originalUpdate;
+    }
+  });
+
+  // An upload writes its cover row first, then the spoon, the activation and the stylization
+  // job as separate steps. Recovery used to answer "uploaded" as soon as the cover row existed,
+  // so a retry could be told a spoon was posted and a cover activated when neither happened.
+  it("answers a retry as in progress, not uploaded, while the first upload has only saved its cover", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const realCreateSpoon = recipeSpoonModule.createSpoon;
+    let releaseSpoon!: () => void;
+    const spoonGate = new Promise<void>((resolve) => { releaseSpoon = resolve; });
+    vi.spyOn(recipeSpoonModule, "createSpoon").mockImplementation(async (...args) => {
+      await spoonGate;
+      return await realCreateSpoon(...args);
+    });
+    const body = {
+      clientMutationId: "upload-retry-before-spoon",
+      photo: photoFile("retry-before-spoon.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+      note: "Posted dinner",
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    const first = upload("req_upload_retry_first");
+    await vi.waitFor(async () => expect(await db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).toBe(1));
+
+    const retry = await upload("req_upload_retry_second");
+    expect(retry.status).toBe(409);
+    await expect(readJson(retry)).resolves.toMatchObject({ error: { code: "idempotency_in_progress" } });
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+
+    releaseSpoon();
+    const firstResponse = await first;
+    expect(firstResponse.status).toBe(201);
+    const firstPayload = await readJson(firstResponse);
+    expect(firstPayload.data).toMatchObject({ spoon: { id: expect.any(String) }, activeCover: { id: firstPayload.data.createdCover.id } });
+  });
+
+  it("does not answer an upload as committed when a later step fails and its cleanup fails too", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const spoonError = new Error("spoon insert failed");
+    vi.spyOn(recipeSpoonModule, "createSpoon").mockRejectedValue(spoonError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_upload_cleanup_fails",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: { name: spoonError.name, message: spoonError.message, stack: spoonError.stack },
+    });
+    const originalDeleteMany = db.recipeCover.deleteMany;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValue(new Error("cleanup failed")) as unknown as typeof db.recipeCover.deleteMany;
+    const body = {
+      clientMutationId: "upload-step-fails-cleanup-fails",
+      photo: photoFile("step-fails.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+    };
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_upload_cleanup_fails", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({ ok: false, error: { code: "internal_error" } });
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    } finally {
+      db.recipeCover.deleteMany = originalDeleteMany;
+    }
+  });
+
+  // A Worker that dies mid-upload never cleans up and never releases its key, so every retry
+  // used to wait out the key's 24-hour lifetime. Past the abandonment cutoff, a retry undoes
+  // what the dead upload left and releases the key; the next retry uploads afresh.
+  it.each([
+    ["storing the photo", "photo"],
+    ["posting the spoon", "spoon"],
+    ["activating the cover", "activation"],
+  ] as const)("releases an upload abandoned while %s, so a later retry uploads afresh", async (_step, deathPoint) => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    // The first upload's Worker "dies" at this step: it never continues.
+    let reached = false;
+    const hang = () => {
+      reached = true;
+      return new Promise<never>(() => undefined);
+    };
+    if (deathPoint === "photo") vi.mocked(photoBucket.bucket.put).mockImplementationOnce(hang);
+    if (deathPoint === "spoon") vi.spyOn(recipeSpoonModule, "createSpoon").mockImplementationOnce(hang);
+    if (deathPoint === "activation") vi.spyOn(recipeCoverModule, "setActiveRecipeCover").mockImplementationOnce(hang);
+    const body = {
+      clientMutationId: `upload-abandoned-at-${deathPoint}`,
+      photo: photoFile(`abandoned-${deathPoint}.png`),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+      note: "Posted dinner",
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    void upload(`req_upload_abandoned_${deathPoint}_first`);
+    await vi.waitFor(() => expect(reached).toBe(true));
+    const leftCovers = await db.recipeCover.findMany({ where: { recipeId: fixture.recipe.id }, select: { id: true } });
+    expect(leftCovers).toHaveLength(deathPoint === "photo" ? 0 : 1);
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(deathPoint === "activation" ? 1 : 0);
+
+    // Still young: the retry waits.
+    const young = await upload(`req_upload_abandoned_${deathPoint}_young`);
+    expect(young.status).toBe(409);
+
+    await db.apiIdempotencyKey.updateMany({
+      where: { key: body.clientMutationId },
+      data: { createdAt: new Date(Date.now() - 6 * 60_000) },
+    });
+    const release = await upload(`req_upload_abandoned_${deathPoint}_release`);
+    expect(release.status).toBe(409);
+    await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+    await expect(db.apiIdempotencyKey.count({ where: { key: body.clientMutationId } })).resolves.toBe(0);
+    // The dead upload's stored photo is deleted too.
+    await vi.waitFor(() => expect(photoBucket.keys.size).toBe(0));
+
+    const fresh = await upload(`req_upload_abandoned_${deathPoint}_fresh`);
+    expect(fresh.status).toBe(201);
+    const payload = await readJson(fresh);
+    expect(payload.data).toMatchObject({ spoon: { id: expect.any(String) }, activeCover: { id: payload.data.createdCover.id } });
+    expect(leftCovers.map((cover) => cover.id)).not.toContain(payload.data.createdCover.id);
+  });
+
+  it("keeps an abandoned upload's key when undoing it fails partway, and finishes the undo on the next retry", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    let reached = false;
+    vi.spyOn(recipeCoverModule, "setActiveRecipeCover").mockImplementationOnce(() => {
+      reached = true;
+      return new Promise<never>(() => undefined);
+    });
+    const body = {
+      clientMutationId: "upload-abandoned-undo-fails",
+      photo: photoFile("abandoned-undo-fails.png"),
+      activate: true,
+      generateEditorial: false,
+      postAsSpoon: true,
+      note: "Posted dinner",
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    void upload("req_upload_undo_fails_first");
+    await vi.waitFor(() => expect(reached).toBe(true));
+    await db.apiIdempotencyKey.updateMany({
+      where: { key: body.clientMutationId },
+      data: { createdAt: new Date(Date.now() - 6 * 60_000) },
+    });
+
+    const coverDeleteError = new Error("cover delete failed");
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_upload_undo_fails_release",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: { name: coverDeleteError.name, message: coverDeleteError.message, stack: coverDeleteError.stack },
+    });
+    const originalDeleteMany = db.recipeCover.deleteMany;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValueOnce(coverDeleteError)
+      .mockImplementation((...args: Parameters<typeof originalDeleteMany>) => originalDeleteMany(...args)) as unknown as typeof db.recipeCover.deleteMany;
+    try {
+      const failed = await upload("req_upload_undo_fails_release");
+      expect(failed.status).toBe(500);
+      // The spoon went first; the cover, its photo and the key are all still there.
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+      expect(photoBucket.keys.size).toBe(1);
+      await expect(db.apiIdempotencyKey.count({ where: { key: body.clientMutationId } })).resolves.toBe(1);
+
+      const finished = await upload("req_upload_undo_fails_retry");
+      expect(finished.status).toBe(409);
+      await expect(db.recipeCover.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(0);
+      await expect(db.apiIdempotencyKey.count({ where: { key: body.clientMutationId } })).resolves.toBe(0);
+      await vi.waitFor(() => expect(photoBucket.keys.size).toBe(0));
+    } finally {
+      db.recipeCover.deleteMany = originalDeleteMany;
+    }
+
+    const fresh = await upload("req_upload_undo_fails_fresh");
+    expect(fresh.status).toBe(201);
+  });
+
+  it("keeps a finished upload's retry waiting when its cover is gone", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const body = {
+      clientMutationId: "upload-finished-cover-gone",
+      photo: photoFile("finished-cover-gone.png"),
+      activate: false,
+      generateEditorial: false,
+      postAsSpoon: false,
+    };
+    const upload = (requestId: string) => action(routeArgs(
+      recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, requestId, recipeImageForm(body)),
+      `recipes/${fixture.recipe.id}/image`,
+      backgroundContext({ PHOTOS: photoBucket.bucket }),
+    ));
+
+    const first = await upload("req_upload_cover_gone_first");
+    expect(first.status).toBe(201);
+    const { data } = await readJson(first);
+    // The upload finished (its marker is written) but its response was never saved, and its
+    // cover has since gone: there is nothing to answer with, so the retry is told to wait.
+    await db.apiIdempotencyKey.updateMany({
+      where: { key: body.clientMutationId },
+      data: { responseStatus: null, responseBody: null },
+    });
+    await db.recipeCover.deleteMany({ where: { id: data.createdCover.id } });
+
+    const retry = await upload("req_upload_cover_gone_retry");
+    expect(retry.status).toBe(409);
+    await expect(readJson(retry)).resolves.toMatchObject({ ok: false, error: { code: "idempotency_in_progress" } });
+  });
+
+  it("does not answer an upload as committed when a step after its marker fails and its cleanup fails too", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    const queueError = new Error("queue failed");
+    vi.spyOn(recipeCoverServiceModule, "scheduleRecipeCoverStylization").mockRejectedValue(queueError);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_upload_after_marker_fails",
+      method: "POST",
+      path: `/api/v1/recipes/${fixture.recipe.id}/image`,
+      error: { name: queueError.name, message: queueError.message, stack: queueError.stack },
+    });
+    const originalDeleteMany = db.recipeCover.deleteMany;
+    db.recipeCover.deleteMany = vi.fn().mockRejectedValue(new Error("cleanup failed")) as unknown as typeof db.recipeCover.deleteMany;
+    const body = {
+      clientMutationId: "upload-after-marker-fails",
+      photo: photoFile("after-marker.png"),
+      activate: true,
+      generateEditorial: true,
+      postAsSpoon: true,
+    };
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_upload_after_marker_fails", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(500);
+      await expect(db.apiMutationTombstone.count()).resolves.toBe(0);
+    } finally {
+      db.recipeCover.deleteMany = originalDeleteMany;
+    }
+  });
+
+  it("keeps the upload whole, and answers it as done, when a step after its marker fails and the marker cannot be removed", async () => {
+    const fixture = await createFirstPhotoFixture(db);
+    const photoBucket = mockPhotoBucket();
+    vi.spyOn(recipeCoverServiceModule, "scheduleRecipeCoverStylization").mockRejectedValue(new Error("queue failed"));
+    expectConsoleError("[api-v1] write_finished_unmark_failed", { operation: "recipes.image.upload", error: "unmark failed" });
+    const originalDeleteMany = db.apiMutationTombstone.deleteMany;
+    db.apiMutationTombstone.deleteMany = vi.fn().mockRejectedValue(new Error("unmark failed")) as unknown as typeof db.apiMutationTombstone.deleteMany;
+    const body = {
+      clientMutationId: "upload-unmark-fails",
+      photo: photoFile("unmark-fails.png"),
+      activate: true,
+      generateEditorial: true,
+      postAsSpoon: true,
+    };
+
+    try {
+      const response = await action(routeArgs(
+        recipeImageUploadRequest(fixture.recipe.id, fixture.ownerKitchenWrite.token, "req_upload_unmark_fails", recipeImageForm(body)),
+        `recipes/${fixture.recipe.id}/image`,
+        backgroundContext({ PHOTOS: photoBucket.bucket }),
+      ));
+
+      expect(response.status).toBe(201);
+      const payload = await readJson(response);
+      expect(payload.data).toMatchObject({ spoon: { id: expect.any(String) }, activeCover: { id: payload.data.createdCover.id } });
+      await expect(db.recipeCover.count({ where: { id: payload.data.createdCover.id } })).resolves.toBe(1);
+      await expect(db.recipeSpoon.count({ where: { recipeId: fixture.recipe.id } })).resolves.toBe(1);
+    } finally {
+      db.apiMutationTombstone.deleteMany = originalDeleteMany;
     }
   });
 
@@ -1332,6 +1640,52 @@ describe("API v1 recipe cover management", () => {
     const archivedPayload = await readJson(archivedResponse);
     expect(archivedResponse.status).toBe(200);
     expect(archivedPayload.data.covers.map((cover: { id: string }) => cover.id)).toContain(fixture.archivedCover.id);
+  });
+
+  it("lists a cover whose generation stopped long ago as failed, and leaves a live one processing", async () => {
+    const fixture = await createCoverFixture(db);
+    // Its job's Worker died: created processing an hour ago, never finished.
+    const stuck = await db.recipeCover.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: fixture.owner.id,
+        createdAt: new Date(Date.now() - 60 * 60_000),
+      },
+    });
+    // Created as long ago, but regenerated a minute ago: still running.
+    const live = await db.recipeCover.create({
+      data: {
+        recipeId: fixture.recipe.id,
+        imageUrl: "/photos/covers/live-raw.jpg",
+        sourceType: "spoon",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: fixture.owner.id,
+        createdAt: new Date(Date.now() - 60 * 60_000),
+        generationStartedAt: new Date(Date.now() - 60_000),
+      },
+    });
+    await db.recipe.update({ where: { id: fixture.recipe.id }, data: { activeCoverId: stuck.id, activeCoverVariant: "image" } });
+
+    const response = await loader(routeArgs(new UndiciRequest(`http://localhost/api/v1/recipes/${fixture.recipe.id}/covers?limit=10`, {
+      headers: bearer(fixture.ownerKitchenWrite.token, "req_cover_list_stuck"),
+    }) as unknown as Request, `recipes/${fixture.recipe.id}/covers`));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    const byId = new Map(payload.data.covers.map((cover: { id: string }) => [cover.id, cover]));
+    expect(byId.get(stuck.id)).toMatchObject({
+      status: "failed",
+      generationStatus: "failed",
+      failureReason: "Generation stopped before it finished.",
+    });
+    expect(byId.get(live.id)).toMatchObject({ status: "processing", generationStatus: "processing" });
+    expect(payload.data.activeCover).toMatchObject({ id: stuck.id, status: "failed", generationStatus: "failed" });
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: stuck.id } })).resolves.toMatchObject({ status: "failed" });
   });
 
   it("creates cover candidates from JSON image URLs without creating a Spoon", async () => {
@@ -2018,10 +2372,12 @@ describe("API v1 recipe cover management", () => {
     });
     await expect(db.recipeCover.findUniqueOrThrow({
       where: { id: fixture.replacementCover.id },
-      select: { promptAddition: true, parentCoverId: true },
+      select: { promptAddition: true, parentCoverId: true, generationStartedAt: true },
     })).resolves.toEqual({
       promptAddition: `keep same plate ${"x".repeat(224)}`,
       parentCoverId: fixture.replacementCover.id,
+      // Regeneration restarts the clock that decides when a generation counts as stopped.
+      generationStartedAt: expect.any(Date),
     });
   });
 
@@ -2061,37 +2417,44 @@ describe("API v1 recipe cover management", () => {
     expect(recipe).toMatchObject({ activeCoverId: null, activeCoverVariant: null, coverMode: "none" });
   });
 
-  it("surfaces idempotency completion failures for cover mutations without recovery", async () => {
+  it("answers a committed cover mutation without recovery, and retries saving its response once", async () => {
+    // The response save after a committed write used to be tried once, and its failure was
+    // answered as a 500 even though the cover had already been cleared.
     const fixture = await createCoverFixture(db);
     const originalUpdate = db.apiIdempotencyKey.update;
-    const updateError = new Error("idempotency completion unavailable");
-    const updateSpy = vi.fn().mockRejectedValueOnce(updateError);
+    const updateSpy = vi.fn(originalUpdate).mockRejectedValueOnce(new Error("idempotency completion unavailable"));
     db.apiIdempotencyKey.update = updateSpy as unknown as typeof db.apiIdempotencyKey.update;
+    const clearCover = (requestId: string) => action(routeArgs(jsonRequest(
+      `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`,
+      "PATCH",
+      fixture.ownerKitchenWrite.token,
+      requestId,
+      { clientMutationId: "cover-none-completion-failure", confirmNoCover: true },
+    ), `recipes/${fixture.recipe.id}/covers`));
 
     try {
-      expectConsoleError("[api-v1] internal_error", {
-        requestId: "req_cover_completion_failure_no_recovery",
-        method: "PATCH",
-        path: `/api/v1/recipes/${fixture.recipe.id}/covers`,
-        error: {
-          name: updateError.name,
-          message: updateError.message,
-          stack: updateError.stack,
-        },
-      });
-      const response = await action(routeArgs(jsonRequest(
-        `http://localhost/api/v1/recipes/${fixture.recipe.id}/covers`,
-        "PATCH",
-        fixture.ownerKitchenWrite.token,
-        "req_cover_completion_failure_no_recovery",
-        { clientMutationId: "cover-none-completion-failure", confirmNoCover: true },
-      ), `recipes/${fixture.recipe.id}/covers`));
+      const response = await clearCover("req_cover_completion_failure_no_recovery");
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(200);
       await expect(response.json()).resolves.toMatchObject({
-        ok: false,
+        ok: true,
         requestId: "req_cover_completion_failure_no_recovery",
-        error: { code: "internal_error", status: 500 },
+        data: { mutation: { clientMutationId: "cover-none-completion-failure", replayed: false } },
+      });
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id: fixture.recipe.id } })).resolves.toMatchObject({
+        activeCoverId: null,
+        coverMode: "none",
+      });
+      await expect(db.apiIdempotencyKey.findFirstOrThrow({
+        where: { userId: fixture.owner.id, key: "cover-none-completion-failure" },
+      })).resolves.toMatchObject({ responseStatus: 200 });
+
+      const replay = await clearCover("req_cover_completion_failure_replay");
+      expect(replay.status).toBe(200);
+      await expect(replay.json()).resolves.toMatchObject({
+        requestId: "req_cover_completion_failure_replay",
+        data: { mutation: { clientMutationId: "cover-none-completion-failure", replayed: true } },
       });
     } finally {
       db.apiIdempotencyKey.update = originalUpdate;

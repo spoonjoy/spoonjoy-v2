@@ -266,6 +266,20 @@ describe("warning command policy", () => {
     ])).resolves.toBe(0);
   });
 
+  it("names the lines it rejected, up to five", async () => {
+    const { formatRejection } = await vi.importActual<{
+      formatRejection(lines: string[]): string;
+    }>("../../scripts/run-with-warning-policy.mjs");
+
+    expect(formatRejection(["Warning: one"])).toBe(
+      "warning-policy: rejected diagnostic output\n  rejected: Warning: one\n",
+    );
+    const many = formatRejection(["a", "b", "c", "d", "e", "f", "g"]);
+    expect(many).toContain("  rejected: e\n");
+    expect(many).not.toContain("rejected: f");
+    expect(many.endsWith("  ...and 2 more\n")).toBe(true);
+  });
+
   it("covers wrapper child lifecycle and termination boundaries in process", async () => {
     const { runWithWarningPolicy } = await vi.importActual<{
       runWithWarningPolicy(argv: string[], runtime?: Record<string, unknown>): Promise<number>;

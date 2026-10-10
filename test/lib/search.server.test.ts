@@ -508,10 +508,8 @@ describe("search.server", () => {
     const metadataRows = await db.$queryRawUnsafe<Array<{ sourceFingerprint: string }>>(
       `SELECT "sourceFingerprint" FROM "SearchIndexMetadata" WHERE "id" = 'current' LIMIT 1`,
     );
-    expect(metadataRows[0]!.sourceFingerprint).toContain("contentHash");
-    expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/covers/generated-tart.png");
-    expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/covers/stylized-toast.png");
-    expect(metadataRows[0]!.sourceFingerprint).not.toContain("/photos/recipes/chef/older-gratin.jpg");
+    // The metadata row only marks the maintenance scheme; it holds no recipe or cover data.
+    expect(metadataRows[0]!.sourceFingerprint).toBe("per-entity-triggers-v1");
   });
 
   it("keeps shopping-list search private to the signed-in owner", async () => {

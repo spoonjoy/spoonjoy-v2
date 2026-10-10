@@ -352,6 +352,6 @@ describe("Chefs drawer route", () => {
     expect(await screen.findByText("No fellow chefs yet.")).toBeInTheDocument();
     expect(screen.getByText("No one has used your recipes yet.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "No chef activity yet" })).toBeInTheDocument();
-    expect(screen.getByText(/start building your kitchen graph/i)).toBeInTheDocument();
+    expect(screen.getByText(/and that chef shows up here/i)).toBeInTheDocument();
   });
 });
