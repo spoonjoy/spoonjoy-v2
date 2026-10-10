@@ -1,7 +1,7 @@
 import type { ApiCredential, PrismaClient as PrismaClientType, User } from "@prisma/client";
 import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
@@ -332,8 +332,8 @@ export type ApiAuthOptions = {
   /** Runs the throttled `lastUsedAt` write after the response instead of before it. */
   waitUntil?: (promise: Promise<unknown>) => void;
   /**
-   * The request's D1 binding. A browser session's user is then read from it, so a cookie request
-   * never needs a Prisma client.
+   * The request's D1 binding. A browser session's user and a bearer token's credential are then
+   * read from it, so a request needs a Prisma client only to bind a legacy OAuth issuer.
    */
   d1?: D1ReadDatabase | null;
 };
@@ -466,6 +466,100 @@ export async function authenticateApiToken(
   );
 }
 
+// The credential, its user, and what its OAuth grant and client say, in one statement. A grant
+// counts against the token when any grant it names (by id or by connection key) is not active.
+const BEARER_CREDENTIAL_SQL = `SELECT
+  c."id", c."scopes", c."lastUsedAt", c."revokedAt", c."expiresAt",
+  c."oauthClientId", c."oauthIssuer", c."oauthResource",
+  u."id" AS "userId", u."email", u."username", u."sessionVersion",
+  EXISTS (
+    SELECT 1 FROM "OAuthGrant" g
+    WHERE (g."id" = c."oauthGrantId" OR g."connectionKey" = c."oauthConnectionKey") AND g."status" <> 'active'
+  ) AS "grantInactive",
+  (SELECT COUNT(*) FROM "OAuthClient" cl WHERE cl."id" = c."oauthClientId" AND cl."revokedAt" IS NULL) AS "clientCount",
+  (SELECT cl."issuer" FROM "OAuthClient" cl WHERE cl."id" = c."oauthClientId" AND cl."revokedAt" IS NULL) AS "clientIssuer"
+FROM "ApiCredential" c JOIN "User" u ON u."id" = c."userId"
+WHERE c."tokenHash" = ?`;
+
+function nullableText(value: unknown, column: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw new Error(`D1 credential row has a non-text ${column}`);
+  return value;
+}
+
+/** Marks a credential whose OAuth issuer is not bound yet; binding it writes, so Prisma does it. */
+const NEEDS_ISSUER_BINDING = Symbol("needs issuer binding");
+
+/**
+ * `authenticateApiToken` on D1: one read, then the throttled `lastUsedAt` write. A legacy OAuth
+ * credential or client that has no issuer yet answers NEEDS_ISSUER_BINDING, because binding it
+ * (once per client and credential) is left to the Prisma path.
+ */
+async function authenticateApiTokenOnD1(
+  d1: D1ReadDatabase,
+  token: string,
+  expectedOAuthIssuer: string,
+  options: ApiAuthOptions,
+): Promise<ApiPrincipal | typeof NEEDS_ISSUER_BINDING> {
+  const [[row]] = await d1ReadBatch(d1, [[BEARER_CREDENTIAL_SQL, await hashApiToken(token)]]);
+  if (!row) throw new ApiAuthError("Invalid API token", 401);
+  const { id, userId, email, username, sessionVersion } = row;
+  if (
+    typeof id !== "string" || typeof userId !== "string" || typeof email !== "string" ||
+    typeof username !== "string" || typeof sessionVersion !== "number"
+  ) {
+    throw new Error("D1 credential row is missing its id, user, email, username or session version");
+  }
+  const oauthClientId = nullableText(row.oauthClientId, "oauthClientId");
+  const oauthIssuer = nullableText(row.oauthIssuer, "oauthIssuer");
+  const expiresAt = d1NullableDateTime(row.expiresAt, "expiresAt");
+  if (
+    d1NullableDateTime(row.revokedAt, "revokedAt") ||
+    (effectiveCredentialExpiry({ expiresAt, oauthClientId })?.getTime() ?? Infinity) <= Date.now() ||
+    (oauthClientId && row.grantInactive)
+  ) {
+    throw new ApiAuthError("Invalid API token", 401);
+  }
+
+  if (oauthClientId) {
+    if (oauthIssuer !== null && oauthIssuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
+    if (!row.clientCount) throw new ApiAuthError("Invalid API token", 401);
+    const clientIssuer = nullableText(row.clientIssuer, "clientIssuer");
+    if (clientIssuer === null || oauthIssuer === null) return NEEDS_ISSUER_BINDING;
+    if (clientIssuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
+  } else if (oauthIssuer !== null) {
+    throw new ApiAuthError("Invalid API token", 401);
+  }
+
+  const now = Date.now();
+  const lastUsedAt = d1NullableDateTime(row.lastUsedAt, "lastUsedAt");
+  if (lastUsedAt === null || now - lastUsedAt.getTime() >= LAST_USED_AT_WRITE_INTERVAL_MS) {
+    // A credential deleted since the read updates no row, which is fine: there is nothing to record.
+    const touchedAt = d1Timestamp(new Date(now));
+    const touch = d1WriteBatch(d1, [[
+      'UPDATE "ApiCredential" SET "lastUsedAt" = ?, "updatedAt" = ? WHERE "id" = ?',
+      touchedAt, touchedAt, id,
+    ]]);
+    if (options.waitUntil) {
+      options.waitUntil(touch.catch((error: unknown) => {
+        console.warn("[api-auth] lastUsedAt update failed", error);
+      }));
+    } else {
+      await touch;
+    }
+  }
+
+  return toPrincipal(
+    { id: userId, email, username, sessionVersion },
+    "bearer",
+    id,
+    expandCredentialScopes(nullableText(row.scopes, "scopes")),
+    oauthClientId,
+    oauthIssuer,
+    nullableText(row.oauthResource, "oauthResource"),
+  );
+}
+
 export async function authenticateApiRequest(
   db: ApiAuthDatabase,
   request: Request,
@@ -475,12 +569,12 @@ export async function authenticateApiRequest(
   const prisma = () => (typeof db === "function" ? db() : Promise.resolve(db));
   const bearerToken = extractBearerToken(request);
   if (bearerToken) {
-    return authenticateApiToken(
-      await prisma(),
-      bearerToken,
-      resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL),
-      options,
-    );
+    const issuer = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
+    if (options.d1) {
+      const principal = await authenticateApiTokenOnD1(options.d1, bearerToken, issuer, options);
+      if (principal !== NEEDS_ISSUER_BINDING) return principal;
+    }
+    return authenticateApiToken(await prisma(), bearerToken, issuer, options);
   }
 
   const cookie = request.headers.get("Cookie");
