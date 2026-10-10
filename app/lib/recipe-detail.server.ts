@@ -36,12 +36,13 @@ import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.serv
 import {
   createSpoon,
   deleteSpoon,
+  prepareSpoonContent,
   SpoonAuthError,
   SpoonNotFoundError,
   SpoonValidationError,
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
-import { createSpoonOnD1 } from "~/lib/recipe-spoon-d1.server";
+import { createSpoonOnD1, spoonInsertStatement } from "~/lib/recipe-spoon-d1.server";
 import { coverRegenerationStatement, readOwnedRecipeForCoverJobOnD1 } from "~/lib/recipe-cover-jobs-d1.server";
 import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib/ai-placeholder-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
@@ -857,6 +858,113 @@ type RecipeDetailD1Answer =
   | { kind: "redirect"; response: Response };
 
 type CoverJobIntent = "createCoverFromSpoon" | "generateRecipeCoverPlaceholder" | "regenerateRecipeCover";
+/**
+ * The chef's first photo as the recipe's cover, on D1: the owner check, then the photo stored
+ * (as a cook's photo when it is posted as a cook, else as a recipe photo), then one guarded batch
+ * with the cook, the cover and (when asked) the cover made active with its cookbooks touched. The
+ * batch applies whole or not at all, so a failed write leaves only the stored photo to remove.
+ * The editorial job runs after the answer and builds its own Prisma client.
+ */
+async function handleCreateFirstPhotoCoverOnD1(
+  d1: D1ReadDatabase,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+  context: AppLoadContext,
+) {
+  const { recipe } = await readOwnedRecipeForCoverJobOnD1(d1, { recipeId, userId });
+  const photoEntry = formData.get("photo");
+  const photoFile = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : null;
+  if (!photoFile) {
+    throw new Response("Please select a photo to upload", { status: 400 });
+  }
+
+  const postAsSpoon = formData.get("postAsSpoon") === "true";
+  const generateEditorial = formData.get("generateEditorial") !== "false";
+  const activateWhenReady = formData.get("activateWhenReady") !== "false";
+  const note = optionalFormText(formData, "note");
+  const nextTime = optionalFormText(formData, "nextTime");
+  const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
+  const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
+  const { bucket, env, waitUntil } = getCloudflareCtx(context);
+
+  const spoon = postAsSpoon
+    ? await prepareSpoonContent({ chefId: userId, recipeId, photoFile, note, nextTime, cookedAt }, { bucket })
+      .catch(spoonErrorToResponse)
+    : null;
+  // prepareSpoonContent stores the photo file it is given, so a posted cook always has a photo URL.
+  const photoUrl = spoon ? spoon.photoUrl! : await validateAndStoreDirectRecipePhoto(photoFile, { bucket, userId, recipeId });
+
+  const now = new Date();
+  const sourceSpoonId = spoon ? crypto.randomUUID() : null;
+  const coverId = crypto.randomUUID();
+  const sourceType = sourceSpoonId ? "spoon" : "chef-upload";
+  const writes: D1Query[] = [];
+  if (spoon && sourceSpoonId) {
+    writes.push(spoonInsertStatement(
+      { id: sourceSpoonId, chefId: userId, recipeId, cookedAt: cookedAt ?? null, photoUrl, note: spoon.note, nextTime: spoon.nextTime },
+      now,
+    ));
+  }
+  writes.push(coverInsertStatement(
+    {
+      id: coverId,
+      recipeId,
+      imageUrl: photoUrl,
+      sourceType,
+      sourceSpoonId,
+      status: generateEditorial ? "processing" : "ready",
+      createdById: userId,
+      sourceImageUrl: photoUrl,
+      generationStatus: generateEditorial ? "processing" : "none",
+      promptAddition,
+    },
+    now,
+  ));
+  if (activateWhenReady) {
+    writes.push(
+      recipeUpdateStatement(recipeId, { activeCoverId: coverId, activeCoverVariant: "image", coverMode: "manual" }, now),
+      cookbooksForRecipeTouchStatement(recipeId, now),
+    );
+  }
+  try {
+    await writeExistingRecipeOnD1(d1, recipeId, writes);
+  } catch (error) {
+    await deleteStoredImage({ bucket, imageUrl: photoUrl }).catch(() => false);
+    throw error;
+  }
+
+  if (generateEditorial) {
+    const later = backgroundWithRequestDb(context, waitUntil);
+    await later((database) =>
+      scheduleSpoonCoverStylization({
+        db: database,
+        userId,
+        recipeId,
+        coverId,
+        rawPhotoUrl: photoUrl,
+        recipeTitle: recipe.title,
+        env,
+        bucket,
+        sourceType,
+        promptAddition,
+        activateWhenReady,
+        suppressAutoActivation: !activateWhenReady,
+        activationGuard: activateWhenReady
+          ? { activeCoverId: coverId, activeCoverVariant: "image", coverMode: "manual" }
+          : undefined,
+      }),
+    );
+  }
+
+  return {
+    success: true,
+    intent: "createFirstPhotoCover",
+    spoon: sourceSpoonId ? { id: sourceSpoonId } : null,
+    coverId,
+  };
+}
+
 const COVER_JOB_INTENTS: ReadonlySet<unknown> = new Set<CoverJobIntent>([
   "createCoverFromSpoon",
   "generateRecipeCoverPlaceholder",
@@ -1169,6 +1277,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   if (d1 && intent === "createSpoon") {
     return handleCreateSpoonOnD1(d1, userId, id, formData, context);
   }
+  if (d1 && intent === "createFirstPhotoCover") {
+    return handleCreateFirstPhotoCoverOnD1(d1, userId, id, formData, context);
+  }
   if (d1 && COVER_JOB_INTENTS.has(intent)) {
     return handleCoverJobOnD1(d1, intent as CoverJobIntent, userId, id, formData, context);
   }
@@ -1298,6 +1409,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     throw new Response("Unauthorized", { status: 403 });
   }
 
+  // With a D1 binding the first photo was answered on D1 above; this is the fallback.
   if (intent === "createFirstPhotoCover") {
     return handleCreateFirstPhotoCover(database, userId, id, recipe, formData, context);
   }
