@@ -548,6 +548,12 @@ describe("API v1 recipe write mutations", () => {
       db.apiIdempotencyKey.update = vi.fn()
         .mockRejectedValueOnce(new Error("save failed"))
         .mockRejectedValueOnce(new Error("save failed again")) as unknown as typeof db.apiIdempotencyKey.update;
+      // The committed create is still answered 201; the unsaved key is reported once.
+      expectConsoleError("[api-v1] idempotency_completion_failed", {
+        requestId: "req_finished_first",
+        operation: "recipes.create",
+        error: "save failed again",
+      });
       try {
         const first = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_finished_first", body), "recipes"));
         expect(first.status).toBe(201);
