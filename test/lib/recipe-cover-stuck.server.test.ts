@@ -9,6 +9,7 @@ import {
   settleStuckCoverGenerations,
   STUCK_COVER_FAILURE_REASON,
   STUCK_COVER_GENERATION_AFTER_MS,
+  stuckCoverStore,
   type StuckCoverStore,
 } from "~/lib/recipe-cover-stuck.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -201,6 +202,32 @@ describe("settleStuckCoverGenerations", () => {
     const [settled] = await settleStuckCoverGenerations(store(), seeded.recipe.id, [read], NOW);
 
     expect(settled).toMatchObject({ status: "ready", generationStatus: "failed", failureReason: STUCK_COVER_FAILURE_REASON });
+  });
+
+  it("fails stuck covers through the request's D1 batch when there is a binding, and Prisma only without one", async () => {
+    // Prisma's D1 adapter runs a $transaction as separate statements, so a request with a binding
+    // must fail the covers and touch native sync in one D1 batch.
+    const seeded = await seed();
+    const read = await db.recipeCover.findUniqueOrThrow({ where: { id: seeded.deadPlaceholder.id } });
+    const batch = vi.spyOn(d1.binding, "batch");
+    const transaction = vi.spyOn(db, "$transaction");
+
+    const [throughD1] = await settleStuckCoverGenerations(stuckCoverStore(db, d1.binding), seeded.recipe.id, [read], NOW);
+
+    expect(throughD1).toMatchObject({ status: "failed", generationStatus: "failed" });
+    expect(batch).toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+
+    await db.recipeCover.update({
+      where: { id: seeded.deadPlaceholder.id },
+      data: { status: "processing", generationStatus: "processing", failureReason: null },
+    });
+    batch.mockClear();
+    const [throughPrisma] = await settleStuckCoverGenerations(stuckCoverStore(db, null), seeded.recipe.id, [read], NOW);
+
+    expect(throughPrisma).toMatchObject({ status: "failed", generationStatus: "failed" });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(batch).not.toHaveBeenCalled();
   });
 
   it("keeps a generation restarted after the read, through D1", async () => {

@@ -390,6 +390,19 @@ WHERE key IS NOT NULL AND key != '';
 `.trim();
 }
 
+/** One row when the D1 database has been migrated; none when its schema was never created. */
+export function buildSchemaPresentSql() {
+  return "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'User';";
+}
+
+async function localSchemaPresent({ dbName, target, runCommand }) {
+  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildSchemaPresentSql(), target), {
+    encoding: "utf8",
+    maxBuffer: MAX_WRANGLER_BUFFER,
+  });
+  return parseWranglerRows(result.stdout, "local schema preflight").length > 0;
+}
+
 export function buildQaR2SearchTableExistsSql() {
   return buildSearchTablesExistSql(["SearchDocument"]);
 }
@@ -1312,6 +1325,17 @@ export async function runCleanupCli({
   if (options.apply) await removeScratchSchema();
 
   try {
+    // A CI job that failed before migrating its local D1 still runs this cleanup step. With no
+    // schema there is no disposable data, so say so once instead of failing on every query.
+    // QA and production always have a schema, so a missing one there is left to fail loudly.
+    if (
+      options.apply
+      && options.target.targetEnv === "local"
+      && !(await localSchemaPresent({ dbName: options.dbName, target: options.target, runCommand }))
+    ) {
+      stdout.write("Skipped local cleanup: the local D1 database has no schema yet (no User table).\n");
+      return;
+    }
     const existingSearchTables = options.apply
       ? await collectExistingSearchTables({
         dbName: options.dbName,

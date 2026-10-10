@@ -11,6 +11,7 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { getCurrentSessionIdentity, getUserId } from "~/lib/session.server";
 import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   clientAllowsRedirect,
   consumeAuthorizationCode,
@@ -85,16 +86,16 @@ function bodyTooLargeError(): OAuthError {
 }
 
 async function readLimitedBodyText(request: Request, maxBytes: number): Promise<string> {
-  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw bodyTooLargeError();
+  // Streams the body and stops as soon as it passes maxBytes, so a body with no Content-Length is
+  // never buffered whole.
+  try {
+    return await readLimitedTextBody(request, maxBytes);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      throw bodyTooLargeError();
+    }
+    throw error;
   }
-
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
-    throw bodyTooLargeError();
-  }
-  return text;
 }
 
 async function readLimitedJsonBody(request: Request): Promise<RegisterBody> {

@@ -15,6 +15,16 @@ const HAS_LETTER_OR_DIGIT = /[A-Za-z0-9]/;
 // falls back to an ID lookup, so a username shaped like one would be confusing at best.
 const ACCOUNT_ID_SHAPE = /^c[a-z0-9]{24}$/i;
 
+// Usernames no person can take. "deleted-chef" is the account that keeps the recipes other cooks
+// built on after their chef deletes their account (account-deletion.server.ts).
+export const DELETED_CHEF_USERNAME = "deleted-chef";
+const RESERVED_USERNAMES = new Set([DELETED_CHEF_USERNAME]);
+
+// True for a username reserved for Spoonjoy itself, in any letter case. It counts as taken.
+export function isReservedUsername(username: string): boolean {
+  return RESERVED_USERNAMES.has(username.toLowerCase());
+}
+
 // The submitted username without leading or trailing whitespace. A missing field, a file where
 // text was expected, or a non-string JSON value is an empty username.
 export function normalizeUsername(value: unknown): string {

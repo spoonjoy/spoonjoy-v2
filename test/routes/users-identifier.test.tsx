@@ -417,8 +417,8 @@ describe("Users $identifier Route", () => {
       expect(profileLine("Joined May 2026 • 2 recipes • 1 cookbook")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open kitchen view" })).toHaveAttribute("href", "/?chef=chef-rowan");
       expect(screen.queryByText("Canonical profile: /users/chef-rowan")).toBeNull();
-      expect(screen.getAllByRole("link", { name: "Miso Soup" })[0]).toHaveAttribute("href", "/recipes/recipe-1");
-      expect(screen.getByRole("link", { name: "Plain Rice" })).toHaveAttribute("href", "/recipes/recipe-2");
+      expect(screen.getAllByRole("link", { name: /\bMiso Soup\b/ })[0]).toHaveAttribute("href", "/recipes/recipe-1");
+      expect(screen.getByRole("link", { name: /\bPlain Rice\b/ })).toHaveAttribute("href", "/recipes/recipe-2");
       expect(screen.getAllByText("Weeknight Pantry").length).toBeGreaterThan(0);
       expect(screen.queryByRole("link", { name: "Open settings" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
@@ -427,6 +427,71 @@ describe("Users $identifier Route", () => {
       // inside it and fail landmark-complementary-is-top-level.
       expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
       expect(screen.getByRole("region", { name: "Cookbooks" })).toBeInTheDocument();
+    });
+
+    it("shows the total recipe count and appends the next page of recipes in place", async () => {
+      const profile = { id: "user-1", username: "chef-rowan", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" };
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: ({ request }: { request: Request }) => {
+            const after = new URL(request.url).searchParams.get("after");
+            return {
+              profile,
+              isOwner: false,
+              recipes: after
+                ? [{ id: "recipe-2", title: "Plain Rice", description: null, coverImageUrl: null, servings: null }]
+                : [{ id: "recipe-1", title: "Miso Soup", description: null, coverImageUrl: null, servings: null }],
+              recipeCount: 30,
+              after,
+              nextCursor: after ? null : "recipe-1",
+              cookbooks: [],
+            };
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/users/chef-rowan"]} />);
+
+      expect(await screen.findByRole("heading", { name: "chef-rowan" })).toBeInTheDocument();
+      expect(profileLine("Joined May 2026 • 30 recipes • 0 cookbooks")).toBeInTheDocument();
+      expect(screen.getByText("30 total")).toBeInTheDocument();
+      const more = screen.getByRole("link", { name: "Show more recipes" });
+      expect(more).toHaveAttribute("href", "/users/chef-rowan?after=recipe-1");
+
+      fireEvent.click(more);
+
+      const added = await screen.findByRole("link", { name: /\bPlain Rice\b/ });
+      expect(screen.getByRole("link", { name: /\bMiso Soup\b/ })).toBeInTheDocument();
+      await waitFor(() => expect(added).toHaveFocus());
+      expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 2 recipes");
+      expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
+    });
+
+    it("says the list is finished on a page past the last recipe", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-1", username: "chef-rowan", photoUrl: null, joinedAt: "2026-05-15T12:00:00.000Z" },
+            isOwner: true,
+            recipes: [],
+            recipeCount: 30,
+            after: "recipe-0",
+            nextCursor: null,
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/users/chef-rowan?after=recipe-0"]} />);
+
+      expect(await screen.findByText("That's every recipe")).toBeInTheDocument();
+      expect(screen.getByText("You've reached chef-rowan's oldest recipe.")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Create Recipe" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
     });
 
     it("clears cached cook progress when the owner logs out from their profile", async () => {
@@ -453,6 +518,8 @@ describe("Users $identifier Route", () => {
         expect(window.localStorage.getItem("spoonjoy-cook-progress:user:user-1:recipe-1")).toBeNull();
       });
       expect(window.localStorage.getItem("spoonjoy-cook-progress:recipe-1")).toBeNull();
+      // Let the logout navigation settle before the test ends (the page holds a fetcher).
+      expect(await screen.findByText("Signed out")).toBeInTheDocument();
       window.localStorage.clear();
     });
 
@@ -518,7 +585,7 @@ describe("Users $identifier Route", () => {
 
       expect(await screen.findByText("May 2026")).toBeInTheDocument();
       expect(profileLine("Joined May 2026 • 1 recipe • 0 cookbooks")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Solo Stew" })).toHaveAttribute("href", "/recipes/recipe-3");
+      expect(screen.getByRole("link", { name: /\bSolo Stew\b/ })).toHaveAttribute("href", "/recipes/recipe-3");
     });
 
     it("renders Fellow chefs and Kitchen visitors entry-point links with counts (owner view)", async () => {

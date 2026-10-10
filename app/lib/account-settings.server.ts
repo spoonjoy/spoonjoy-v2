@@ -3,7 +3,7 @@ import { data, redirect } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
-import { createUserSessionCookie, requireUserId } from "~/lib/session.server";
+import { createUserSessionCookie, getSessionAuthenticatedAt, requireUserId } from "~/lib/session.server";
 import { unlinkOAuthAccount } from "~/lib/oauth-user.server";
 import { hashPassword, verifyPassword } from "~/lib/auth.server";
 import { removeUserPasskey, renameUserPasskey } from "~/lib/webauthn-route.server";
@@ -327,7 +327,11 @@ export async function handleAccountSettingsAction({
   const withSessionForVersion = async (result: AccountSettingsActionResult, sessionVersion: number) =>
     data(result, {
       headers: {
-        "Set-Cookie": await createUserSessionCookie(userId, getCloudflareEnv(context), request, { sessionVersion }),
+        // The same sign-in, so the cookie keeps its sign-in time.
+        "Set-Cookie": await createUserSessionCookie(userId, getCloudflareEnv(context), request, {
+          sessionVersion,
+          authenticatedAt: await getSessionAuthenticatedAt(request, getCloudflareEnv(context)),
+        }),
       },
     });
   // Legacy OAuth rows are promoted on every settings request. On D1 that is one atomic

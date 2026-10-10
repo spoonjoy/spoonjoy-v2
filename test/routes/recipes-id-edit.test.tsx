@@ -15,6 +15,8 @@ import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniquenes
 import * as stylizationModule from "~/lib/spoon-cover-stylization.server";
 import * as recipeCoverModule from "~/lib/recipe-cover.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { oversizedMultipartUpload } from "../helpers/oversized-upload";
+import { RECIPE_IMAGE_SIZE_MESSAGE } from "~/lib/recipe-image";
 import { faker } from "@faker-js/faker";
 
 // Helper to extract data from React Router's data() response
@@ -404,6 +406,26 @@ describe("Recipes $id Edit Route", () => {
       const { data, status } = extractResponseData(response);
       expect(status).toBe(400);
       expect(data.errors.title).toBe("Title is required");
+    });
+
+    it("refuses an oversized upload with 413 before buffering the whole body", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const cookie = (await sessionStorage.commitSession(session)).split(";")[0];
+      const upload = oversizedMultipartUpload(`http://localhost:3000/recipes/${recipeId}/edit`, cookie);
+      const before = await db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
+
+      const response = await action({
+        request: upload.request,
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(413);
+      expect(data.errors.image).toBe(RECIPE_IMAGE_SIZE_MESSAGE);
+      expect(upload.pulled()).toBeLessThanOrEqual(upload.readLimit);
+      expect(await db.recipe.findUniqueOrThrow({ where: { id: recipeId } })).toEqual(before);
     });
 
     it("should successfully update recipe and redirect", async () => {

@@ -80,7 +80,7 @@ async function seedChef() {
   await db.recipeSpoon.create({ data: { chefId: chef.id, recipeId: borrowed.id, cookedAt: at(32), deletedAt: at(33) } });
   await db.recipeSpoon.create({ data: { chefId: other.id, recipeId: withCover.id, cookedAt: at(34) } });
 
-  return { chef, fan, other };
+  return { chef, fan, other, extras, deleted };
 }
 
 describe("chef profile reads", () => {
@@ -96,12 +96,14 @@ describe("chef profile reads", () => {
   });
 
   it("returns what the Prisma reads return, in one D1 batch", async () => {
-    const { chef } = await seedChef();
+    const { chef, extras, deleted } = await seedChef();
 
     for (const input of [
-      { identifier: chef.username, recipeLimit: null, recipeOffset: 0 },
-      { identifier: chef.id, recipeLimit: null, recipeOffset: 0 },
-      { identifier: chef.username, recipeLimit: 2, recipeOffset: 1 },
+      { identifier: chef.username, recipeLimit: null },
+      { identifier: chef.id, recipeLimit: null },
+      { identifier: chef.username, recipeLimit: 2, recipeAfter: extras[2]!.id },
+      { identifier: chef.username, recipeLimit: 2, recipeAfter: deleted.id },
+      { identifier: chef.username, recipeLimit: 2, recipeAfter: "missing-recipe" },
     ]) {
       const before = d1.roundTrips();
       const fromD1 = await readChefProfileFromD1(d1.binding, input);
@@ -109,7 +111,7 @@ describe("chef profile reads", () => {
       expect(displayed(fromD1)).toEqual(displayed(await readChefProfileWithPrisma(db, input)));
     }
 
-    const rows = await readChefProfileFromD1(d1.binding, { identifier: chef.username, recipeLimit: null, recipeOffset: 0 });
+    const rows = await readChefProfileFromD1(d1.binding, { identifier: chef.username, recipeLimit: null });
     expect(rows.matchedBy).toBe("username");
     expect(rows.recipes.map((recipe) => recipe.title)).toEqual(["Extra 7", "Extra 6", "Extra 5", "Borrowed cover", "With cover"]);
     expect(rows.recipeCount).toBe(5);
@@ -124,16 +126,21 @@ describe("chef profile reads", () => {
     expect(rows.fellowChefsCount).toBe(1);
     expect(rows.kitchenVisitorsCount).toBe(2);
 
-    const byId = await readChefProfileFromD1(d1.binding, { identifier: chef.id, recipeLimit: 2, recipeOffset: 1 });
+    const byId = await readChefProfileFromD1(d1.binding, { identifier: chef.id, recipeLimit: 2, recipeAfter: extras[2]!.id });
     expect(byId.matchedBy).toBe("id");
     expect(byId.recipes.map((recipe) => recipe.title)).toEqual(["Extra 6", "Extra 5"]);
     expect(byId.recipeCount).toBe(5);
+    // A deleted cursor recipe still marks its place; an unknown one reads nothing.
+    const afterDeleted = await readChefProfileFromD1(d1.binding, { identifier: chef.id, recipeLimit: null, recipeAfter: deleted.id });
+    expect(afterDeleted.recipes.map((recipe) => recipe.title)).toEqual(["Borrowed cover", "With cover"]);
+    const afterUnknown = await readChefProfileFromD1(d1.binding, { identifier: chef.id, recipeLimit: null, recipeAfter: "missing" });
+    expect(afterUnknown.recipes).toEqual([]);
   });
 
   it("prefers a username match over another user whose id equals it", async () => {
     const first = await db.user.create({ data: createTestUser() });
     const named = await db.user.create({ data: { ...createTestUser(), username: first.id } });
-    const input = { identifier: first.id, recipeLimit: null, recipeOffset: 0 };
+    const input = { identifier: first.id, recipeLimit: null };
     for (const rows of [await readChefProfileFromD1(d1.binding, input), await readChefProfileWithPrisma(db, input)]) {
       expect(rows.profileUser?.id).toBe(named.id);
       expect(rows.matchedBy).toBe("username");
@@ -141,7 +148,7 @@ describe("chef profile reads", () => {
   });
 
   it("returns no profile for an unknown chef", async () => {
-    const input = { identifier: "missing-chef", recipeLimit: null, recipeOffset: 0 };
+    const input = { identifier: "missing-chef", recipeLimit: null };
     const fromD1 = await readChefProfileFromD1(d1.binding, input);
     expect(fromD1).toEqual({
       profileUser: null, matchedBy: null, recipes: [], recipeCount: 0, cookbooks: [], recentSpoons: [], fellowChefsCount: 0, kitchenVisitorsCount: 0,
@@ -150,7 +157,7 @@ describe("chef profile reads", () => {
   });
 
   it("fails closed on a D1 error or a malformed row", async () => {
-    const input = { identifier: "chef", recipeLimit: null, recipeOffset: 0 };
+    const input = { identifier: "chef", recipeLimit: null };
     const failing = { prepare: d1.binding.prepare, batch: async () => { throw new Error("D1_ERROR: lost"); } };
     await expect(readChefProfileFromD1(failing as never, input)).rejects.toThrow("D1_ERROR: lost");
 
@@ -218,5 +225,43 @@ describe("chef profile loader on a D1 binding", () => {
     expect(redirect.headers.get("Location")).toBe(`/users/${chef.username}`);
     await expect(load("missing-chef")).rejects.toMatchObject({ status: 404 });
     expect(getRequestDb).not.toHaveBeenCalled();
-  });
+  }, 30_000);
+
+  it("pages a long recipe list after a cursor", async () => {
+    const chef = await db.user.create({ data: createTestUser() });
+    await db.recipe.createMany({
+      data: Array.from({ length: 30 }, (_, index) => ({
+        title: `Recipe ${String(index).padStart(2, "0")}`, chefId: chef.id, createdAt: at(index), updatedAt: at(index),
+      })),
+    });
+    vi.resetModules();
+    vi.doMock("~/lib/route-platform.server", () => ({ getRequestDb: vi.fn() }));
+    const { loader } = await import("~/routes/users.$identifier");
+    const context = { cloudflare: { env: { DB: d1.binding } } };
+    const load = (path: string, identifier = chef.username) =>
+      loader({ request: new UndiciRequest(`http://localhost:3000${path}`), context, params: { identifier } } as never);
+    type Page = Exclude<Awaited<ReturnType<typeof load>>, Response>;
+
+    const first = await load(`/users/${chef.username}`) as Page;
+    expect(first.recipes).toHaveLength(24);
+    expect(first.recipes[0]!.title).toBe("Recipe 29");
+    expect(first.recipeCount).toBe(30);
+    expect(first.after).toBeNull();
+    expect(first.nextCursor).toBe(first.recipes[23]!.id);
+
+    const second = await load(`/users/${chef.username}?after=${first.nextCursor}`) as Page;
+    expect(second.recipes.map((recipe) => recipe.title)).toEqual(
+      ["Recipe 05", "Recipe 04", "Recipe 03", "Recipe 02", "Recipe 01", "Recipe 00"],
+    );
+    expect(second.nextCursor).toBeNull();
+    expect(second.canonicalUrl).toBe(`http://localhost:3000/users/${chef.username}`);
+
+    const ignored = await load(`/users/${chef.username}?after=${encodeURIComponent("bad cursor!")}`) as Page;
+    expect(ignored.after).toBeNull();
+    expect(ignored.recipes).toHaveLength(24);
+    const byId = await load(`/users/${chef.id}?after=${first.nextCursor}`, chef.id) as Response;
+    expect(byId.headers.get("Location")).toBe(`/users/${chef.username}?after=${first.nextCursor}`);
+    const byIdFirst = await load(`/users/${chef.id}`, chef.id) as Response;
+    expect(byIdFirst.headers.get("Location")).toBe(`/users/${chef.username}`);
+  }, 30_000);
 });

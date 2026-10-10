@@ -1,5 +1,5 @@
 import type { AppLoadContext } from "react-router";
-import { createUserSession, getUserId, isSessionIdentityCurrent, type SessionEnv } from "~/lib/session.server";
+import { createUserSession, getSessionAuthenticatedAt, getUserId, isSessionIdentityCurrent, type SessionEnv } from "~/lib/session.server";
 import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -158,6 +158,15 @@ async function readFormPostParams(request: Request): Promise<URLSearchParams> {
   return new URLSearchParams(await request.text());
 }
 
+/**
+ * Linking another sign-in method to the signed-in account is not a new sign-in: the re-issued
+ * cookie keeps the existing sign-in time, so linking a provider account cannot stand in for the
+ * recent sign-in that account deletion asks for (account-reauthentication.server.ts).
+ */
+async function sessionOptionsFor(action: string | undefined, request: Request, env: SessionEnv | null | undefined) {
+  return action === "account_linked" ? { authenticatedAt: await getSessionAuthenticatedAt(request, env) } : {};
+}
+
 export async function handleAppleCallback(request: Request, context: AppLoadContext) {
   const env = context.cloudflare?.env;
   const telemetry = authTelemetryFromContext(context);
@@ -237,7 +246,7 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -337,7 +346,7 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
     );
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
@@ -442,7 +451,7 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
     );
   }
 
-  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request);
+  const response = await createUserSession(callbackResult.userId, callbackResult.redirectTo, env, request, await sessionOptionsFor(callbackResult.action, request, env));
   response.headers.append("Set-Cookie", await destroyOAuthStartSession(request, env));
   return response;
 }
