@@ -261,6 +261,23 @@ export function recipeActiveGuard(recipeId: string): D1Query {
   return d1Guard(`EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL)`, recipeId);
 }
 
+/**
+ * Fails the batch unless the recipe's updatedAt is still `updatedAt`: an editor's "only if
+ * nobody changed it since I loaded it" precondition. The column holds ISO text in either
+ * format (see `d1Timestamp`), or epoch milliseconds where Prisma's SQLite driver wrote it, so
+ * both sides are compared as epoch milliseconds.
+ */
+export function recipeUpdatedAtGuard(recipeId: string, updatedAt: Date): D1Query {
+  return d1Guard(
+    `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND (CASE
+       WHEN typeof("updatedAt") = 'integer' THEN "updatedAt"
+       ELSE CAST(ROUND((julianday("updatedAt") - 2440587.5) * 86400000) AS INTEGER)
+     END) = ?)`,
+    recipeId,
+    updatedAt.getTime(),
+  );
+}
+
 /** Fails the batch unless the step is still the recipe's step `stepNum`. */
 export function stepAtGuard(stepId: string, recipeId: string, stepNum: number): D1Query {
   return d1Guard(

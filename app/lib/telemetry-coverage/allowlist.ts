@@ -171,6 +171,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Validation/draft-parse catch maps to a 4xx form error returned to the user; not an unexpected server exception.",
   },
   {
+    file: "app/lib/account-deletion.server.ts",
+    category: "expected-4xx",
+    reason:
+      "Sole catch maps the batch's existence-guard failure (account already gone) to AccountDeletionError(account_not_found), which DELETE /api/v1/me and the account settings action return as a 4xx; every other error is rethrown to the api-v1 and Worker request boundaries that capture it.",
+  },
+  {
     file: "app/lib/spoonjoy-api-request.server.ts",
     category: "expected-4xx",
     reason:

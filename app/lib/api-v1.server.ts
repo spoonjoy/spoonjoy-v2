@@ -101,7 +101,11 @@ import { getAppleNativeAuthConfig, getVapidConfig, type OAuthEnv, type VapidEnv 
 import {
   handleNativeAppleSignIn,
   NativeAppleAuthError,
+  verifyNativeAppleIdentityToken,
 } from "~/lib/apple-native-auth.server";
+import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
+import { accountExportFileName, buildAccountExport } from "~/lib/account-export.server";
+import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
 import {
   handleNativePasswordSignIn,
   NativePasswordAuthError,
@@ -154,6 +158,7 @@ import {
   validateImageFile,
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   FOOD_IMAGE_SIZE_MESSAGE,
   FOOD_IMAGE_TYPE_MESSAGE,
@@ -629,6 +634,10 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.read";
     case "PATCH me":
       return "account.update";
+    case "DELETE me":
+      return "account.delete";
+    case "GET me-export":
+      return "account.export";
     case "POST me-photo":
       return "account.photo.upload";
     case "DELETE me-photo":
@@ -828,13 +837,16 @@ export async function parseApiV1JsonBody(request: Request): Promise<Record<strin
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!contentType.includes("application/json")) return {};
 
-  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
-    throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
-  }
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_JSON_BODY_BYTES) {
-    throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
+  // Read through the limit so a body with no Content-Length is cut off as soon as it passes it,
+  // instead of being buffered whole first.
+  let text: string;
+  try {
+    text = await readLimitedTextBody(request, MAX_JSON_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
+    }
+    throw error;
   }
   if (!text.trim()) return {};
 
@@ -4843,6 +4855,92 @@ async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string,
   });
 }
 
+/**
+ * DELETE /api/v1/me: deletes the account (account-deletion.server.ts) after the owner proves it is
+ * them (account-reauthentication.server.ts) and types the username. Not idempotent by design: the
+ * account's idempotency keys go with it, and every token stops working, so a retry after success
+ * gets 401.
+ */
+async function handleAccountDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const env = args.context.cloudflare?.env;
+  // A stolen token must not become a password-guessing oracle.
+  const authRateLimit = await enforceAuthRateLimit(args.request, env?.AUTH_IP_RATE_LIMITER);
+  if (!authRateLimit.allowed) {
+    throw new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
+      retryAfterSeconds: authRateLimit.retryAfterSeconds,
+      scope: authRateLimit.scope,
+    });
+  }
+
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["confirmUsername", "password", "appleIdentityToken", "appleRawNonce"]);
+  const confirmUsername = nonblankString(body.confirmUsername, "confirmUsername");
+  const password = typeof body.password === "string" && body.password ? body.password : null;
+  const hasApple = body.appleIdentityToken !== undefined || body.appleRawNonce !== undefined;
+  const apple = hasApple
+    ? {
+      identityToken: nonblankString(body.appleIdentityToken, "appleIdentityToken", 8192),
+      rawNonce: nonblankString(body.appleRawNonce, "appleRawNonce", 256),
+    }
+    : null;
+
+  if (confirmUsername !== principal.username) {
+    throw new ApiV1Error("validation_error", "Type your username exactly to confirm.", { field: "confirmUsername", reason: "confirmation_mismatch" });
+  }
+
+  const db = await getRequestDb(args.context);
+  let proof;
+  try {
+    proof = await verifyAccountOwnerProof(db, principal.id, { password, apple }, {
+      verifyAppleCredential: async (credential) =>
+        (await verifyNativeAppleIdentityToken(credential, getAppleNativeAuthConfig((env ?? {}) as OAuthEnv))).id,
+    });
+  } catch (error) {
+    if (error instanceof NativeAppleAuthError) {
+      throw new ApiV1Error("validation_error", error.message, { field: "appleIdentityToken", reason: "apple_credential_invalid", providerCode: error.code });
+    }
+    if (error instanceof Error && error.message.startsWith("Missing required environment variable")) {
+      throw new ApiV1Error("validation_error", "Native Apple sign-in is not configured", { providerCode: "apple_native_unconfigured" });
+    }
+    throw error;
+  }
+  if (!proof.ok) {
+    /* istanbul ignore if -- @preserve auth resolved the account; this is a race guard. */
+    if (proof.reason === "account_not_found") throw new ApiV1Error("not_found", "Account not found");
+    throw new ApiV1Error("validation_error", proof.message, { reason: proof.reason });
+  }
+
+  const d1 = requestD1(args.context);
+  if (!d1) throw new ApiV1Error("internal_error", "Account deletion needs the database binding");
+  try {
+    const result = await deleteAccount(d1, principal.id);
+    return withApiV1Telemetry(
+      apiV1PrivateSuccess(requestId, { deleted: true, ...result }),
+      { idempotencyOutcome: "none" },
+    );
+  } catch (error) {
+    /* istanbul ignore next -- @preserve the account existed when auth ran; a concurrent deletion lands here. */
+    if (error instanceof AccountDeletionError) throw new ApiV1Error("not_found", "Account not found");
+    /* istanbul ignore next -- @preserve D1 failures propagate as internal errors. */
+    throw error;
+  }
+}
+
+/** GET /api/v1/me/export: everything the account put into Spoonjoy, as a JSON download. */
+async function handleAccountExport(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const now = new Date();
+  const exported = await buildAccountExport(db, principal.id, publicContentOrigin(args), now);
+  /* istanbul ignore if -- @preserve auth resolved the account; this keeps the read honest if the row disappears mid-request. */
+  if (!exported) throw new ApiV1Error("not_found", "Account not found");
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, exported, 200, {
+      "Content-Disposition": `attachment; filename="${accountExportFileName(principal.username, now)}"`,
+    }),
+    { idempotencyOutcome: "none" },
+  );
+}
+
 async function handleNativeChefsRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
@@ -5893,7 +5991,14 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context)));
+    const result = await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context));
+    if (!result.ok && result.code === "edit_conflict") {
+      // The recipe changed after the client's expectedUpdatedAt. Nothing was written; the
+      // answer carries the recipe as it is now, so the client can merge and retry.
+      const current = await serializedRecipeOrThrow(db, recipeId, origin);
+      throw new ApiV1Error(result.code, result.message, { ...(result.details as object), recipe: current });
+    }
+    const updated = recipeWriteResultOrThrow(result);
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,
@@ -7216,6 +7321,18 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && path === "me") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleAccountRead(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && path === "me") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountDelete(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/export") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountExport(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

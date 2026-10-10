@@ -37,6 +37,11 @@ describe("findUsernameConflict", () => {
     await expect(findUsernameConflict(db, other.id)).resolves.toBe(true);
   });
 
+  it("treats the reserved deleted-chef username as taken before any account holds it", async () => {
+    await expect(findUsernameConflict(db, "deleted-chef")).resolves.toBe(true);
+    await expect(findUsernameConflict(db, "Deleted-Chef")).resolves.toBe(true);
+  });
+
   it("ignores the account that is asking", async () => {
     const self = await makeUser("Self_Chef", "self_chef");
 
@@ -95,6 +100,19 @@ describe("saveAccountIdentity", () => {
 
     expect(result).toBe("username_taken");
     expect(await stored()).toMatchObject({ email: before.email, username: "original_chef" });
+  });
+
+  it("refuses the reserved deleted-chef username, and writes nothing", async () => {
+    const result = await saveAccountIdentity(db, {
+      userId,
+      email: "moved@example.com",
+      username: "Deleted-Chef",
+      emailChanged: true,
+      usernameChanged: true,
+    });
+
+    expect(result).toBe("username_taken");
+    expect(await stored()).toMatchObject({ username: "original_chef" });
   });
 
   it("refuses a username equal to another account's ID", async () => {
