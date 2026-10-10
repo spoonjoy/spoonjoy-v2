@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { faker } from "@faker-js/faker";
+// Ingredient names get digit-only random suffixes: the shopping list picks an icon and category by matching words such as "cod" or "egg" inside the name, and a random letter suffix can contain one.
 import { getLocalDb } from "~/lib/db.server";
 import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
@@ -2060,7 +2061,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("coalesces shared recipe adds by deterministic step and ingredient order without changing the MCP shape", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `ordered-${suffix}` },
     });
@@ -2148,7 +2149,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("rejects a non-finite shared recipe aggregate before writing any shopping item", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `finite-${suffix}` },
     });
@@ -2842,8 +2843,8 @@ describe("spoonjoy MCP tools", () => {
   it("gets shopping lists and filters deleted items including unitless items", async () => {
     const owner = await context.db.user.create({ data: { email: uniqueEmail("shopper"), username: faker.internet.username() } });
     const list = await context.db.shoppingList.create({ data: { authorId: owner.id } });
-    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `beans-${faker.string.alphanumeric(5).toLowerCase()}` } });
-    const secondRef = await context.db.ingredientRef.create({ data: { name: `apples-${faker.string.alphanumeric(5).toLowerCase()}` } });
+    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `beans-${faker.string.numeric(10)}` } });
+    const secondRef = await context.db.ingredientRef.create({ data: { name: `apples-${faker.string.numeric(10)}` } });
     await context.db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: ingredientRef.id, sortIndex: 1 } });
     await context.db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: secondRef.id, sortIndex: 1 } });
     await context.db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: ingredientRef.id, sortIndex: 2, deletedAt: new Date() } });
@@ -2921,7 +2922,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("always updates the active manual identity before considering a matching tombstone", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `manual-active-${suffix}` },
     });
@@ -2984,7 +2985,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("restores the earliest deterministic tombstone when no manual identity is active", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `manual-deleted-${suffix}` },
     });

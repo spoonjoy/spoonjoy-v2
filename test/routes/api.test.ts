@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { faker } from "@faker-js/faker";
+// Ingredient names get digit-only random suffixes: the shopping list picks an icon and category by matching words such as "cod" or "egg" inside the name, and a random letter suffix can contain one.
 import { action, loader } from "~/routes/api.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { captureEvent, captureException } from "~/lib/analytics-server";
@@ -550,9 +551,9 @@ describe("Spoonjoy REST API route", () => {
     await db.recipeStep.create({
       data: { recipeId: recipe.id, stepNum: 1, description: "Add beans" },
     });
-    const recipeUnit = await db.unit.create({ data: { name: `shape-can-${faker.string.alphanumeric(6).toLowerCase()}` } });
+    const recipeUnit = await db.unit.create({ data: { name: `shape-can-${faker.string.numeric(10)}` } });
     const recipeIngredient = await db.ingredientRef.create({
-      data: { name: `shape-beans-${faker.string.alphanumeric(6).toLowerCase()}` },
+      data: { name: `shape-beans-${faker.string.numeric(10)}` },
     });
     await db.ingredient.create({
       data: {
