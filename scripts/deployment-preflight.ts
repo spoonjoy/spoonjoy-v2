@@ -162,6 +162,13 @@ const STORYBOOK_REQUIRED_JOB_NAME =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+// The only artifacts canonical CI may upload: the Playwright report, and the full-page captures
+// e2e/screens.spec.ts writes for reviewing a visual change. Any other path could carry secrets.
+const CI_ARTIFACT_UPLOADS = [
+  { name: "playwright-report", path: "playwright-report/", "retention-days": 30 },
+  { name: "screens", path: "screens/", "retention-days": 30 },
+] as const;
+
 const PINNED_SETUP_PYTHON_ACTION = "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1";
 const PINNED_UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
 const PINNED_DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
@@ -552,6 +559,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:test:e2e"),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
     actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
+    actionStepSignature(PINNED_UPLOAD_ARTIFACT_ACTION),
   ]],
 ]);
 
@@ -741,11 +749,7 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
             !exactObjectKeys(step, ["name", "uses", "if", "with"]) ||
             typeof step.name !== "string" ||
             step.if !== "${{ !cancelled() }}" ||
-            !exactWorkflowRecord(withValues, {
-              name: "playwright-report",
-              path: "playwright-report/",
-              "retention-days": 30,
-            })
+            !CI_ARTIFACT_UPLOADS.some((upload) => exactWorkflowRecord(withValues, upload))
           ) return false;
         }
         continue;

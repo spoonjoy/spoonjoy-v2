@@ -202,6 +202,28 @@ test.describe("Shopping list", () => {
     await expectAccessible();
   });
 
+  test("a typed item keeps a describing word in its name and a real unit as its unit @mutates", async ({
+    page,
+    verifyAfterReload,
+    expectAccessible,
+  }) => {
+    await startWithAnEmptyList(page);
+    // "bell" is not a unit: the row is "bell pepper", not "pepper" with an amount of "1 bell".
+    await addByHand(page, "1 bell pepper", "bell pepper", "1");
+    await expect(row(page, "pepper")).toBeHidden();
+    await expect(row(page, "bell pepper"), FALLBACK_PARSER).not.toContainText("1 bell");
+    await addByHand(page, "2 cloves garlic", "garlic", "2 cloves");
+    await expect(view(page, "All", 2)).toBeVisible();
+    await expectAccessible();
+
+    await verifyAfterReload(async () => {
+      await expect(row(page, "bell pepper")).toBeVisible();
+      await expect(row(page, "pepper")).toBeHidden();
+      await expect(row(page, "garlic"), FALLBACK_PARSER).toContainText("2 cloves");
+    });
+    await clearAll(page);
+  });
+
   test("a recipe's ingredients added from its page at 2x are on the list doubled @mutates", async ({
     page,
     verifyAfterReload,

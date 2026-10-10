@@ -662,7 +662,8 @@ describe("atomic recipe writes on Wrangler D1", () => {
       }, {
         db: prisma,
         env: { DB: database() },
-        ingredientParser: async (text) => [{ quantity: 1, unit: "atomic whole", ingredientName: `atomic ${text}` }],
+        // The import parses every ingredient line in one call.
+        ingredientParser: async (text) => text.split("\n").map((line) => ({ quantity: 1, unit: "atomic whole", ingredientName: `atomic ${line}` })),
       });
       await failOn("INSERT", "Ingredient", `NEW."ingredientRefId" IN (SELECT "id" FROM "IngredientRef" WHERE "name" = 'atomic lemon')`);
 

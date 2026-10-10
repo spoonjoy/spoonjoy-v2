@@ -50,7 +50,12 @@ export interface ChefProfileInput {
   identifier: string;
   /** Recipes to return; null returns every one. */
   recipeLimit: number | null;
-  recipeOffset: number;
+  /**
+   * Start after this recipe, the last one already shown (the same keyset as the public
+   * recipe list). Recipes are ordered newest change first, the id breaking ties, so
+   * every recipe is on exactly one page.
+   */
+  recipeAfter?: string | null;
 }
 
 const EMPTY: Omit<ChefProfileRows, "profileUser" | "matchedBy"> = {
@@ -73,7 +78,7 @@ const RECIPE_CARD_SELECT = {
 
 export async function readChefProfileWithPrisma(
   database: PrismaClient,
-  { identifier, recipeLimit, recipeOffset }: ChefProfileInput,
+  { identifier, recipeLimit, recipeAfter = null }: ChefProfileInput,
 ): Promise<ChefProfileRows> {
   const userSelect = { id: true, username: true, photoUrl: true, createdAt: true } as const;
   const byUsername = await database.user.findUnique({ where: { username: identifier }, select: userSelect });
@@ -82,12 +87,21 @@ export async function readChefProfileWithPrisma(
   const matchedBy = byUsername ? "username" : "id";
 
   const liveRecipe = { chefId: profileUser.id, deletedAt: null };
+  // Keyset on the cursor row's own values, as on D1. (Prisma's `cursor` option would skip a
+  // row when the cursor recipe has since been deleted.) An unknown cursor reads no recipes.
+  const cursorRow = recipeAfter
+    ? await database.recipe.findUnique({ where: { id: recipeAfter }, select: { id: true, updatedAt: true } })
+    : null;
+  const afterCursor = recipeAfter
+    ? cursorRow
+      ? { OR: [{ updatedAt: { lt: cursorRow.updatedAt } }, { updatedAt: cursorRow.updatedAt, id: { lt: cursorRow.id } }] }
+      : { id: { in: [] } }
+    : {};
   const [recipes, recipeCount, cookbooks, recentSpoons, fellowChefsCount, kitchenVisitorsCount] = await Promise.all([
     database.recipe.findMany({
-      where: liveRecipe,
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+      where: { ...liveRecipe, ...afterCursor },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       ...(recipeLimit === null ? {} : { take: recipeLimit }),
-      skip: recipeOffset,
       select: { ...RECIPE_CARD_SELECT, description: true, servings: true },
     }),
     database.recipe.count({ where: liveRecipe }),
@@ -162,7 +176,7 @@ function activeCover(row: D1Row) {
  */
 export async function readChefProfileFromD1(
   db: D1ReadDatabase,
-  { identifier, recipeLimit, recipeOffset }: ChefProfileInput,
+  { identifier, recipeLimit, recipeAfter = null }: ChefProfileInput,
 ): Promise<ChefProfileRows> {
   // Plain `?` placeholders, each bound in order: `chefId` takes the identifier twice.
   const chefId = `COALESCE((SELECT "id" FROM "User" WHERE "username" = ?), (SELECT "id" FROM "User" WHERE "id" = ?))`;
@@ -176,12 +190,13 @@ export async function readChefProfileFromD1(
       `SELECT ${selectColumns(RECIPE_CARD_COLUMNS, "r")}, ${coverSelect}
        FROM "Recipe" r ${coverJoin}
        WHERE r."chefId" = ${chefId} AND r."deletedAt" IS NULL
-       ORDER BY r."updatedAt" DESC, r."createdAt" DESC, r."id" DESC
-       LIMIT ? OFFSET ?`,
+         ${recipeAfter ? `AND (r."updatedAt", r."id") < (SELECT c."updatedAt", c."id" FROM "Recipe" c WHERE c."id" = ?)` : ""}
+       ORDER BY r."updatedAt" DESC, r."id" DESC
+       LIMIT ?`,
       ...chef,
+      ...(recipeAfter ? [recipeAfter] : []),
       // SQLite reads a negative LIMIT as no limit.
       recipeLimit ?? -1,
-      recipeOffset,
     ],
     [`SELECT COUNT(*) AS "total" FROM "Recipe" WHERE "chefId" = ${chefId} AND "deletedAt" IS NULL`, ...chef],
     [
