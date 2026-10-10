@@ -37,11 +37,27 @@ export function getIngredientParserEnv(context: AppLoadContext): IngredientParse
   };
 }
 
+// One Prisma client per request, disconnected by the Worker after the response.
+const requestClients = new WeakMap<object, Promise<PrismaClientType>>();
+
+export function disconnectRequestDb(requestKey: object): Promise<void> {
+  const client = requestClients.get(requestKey);
+  requestClients.delete(requestKey);
+  return client ? client.then((db) => db.$disconnect()).catch(() => undefined) : Promise.resolve();
+}
+
 export async function getRequestDb(context: AppLoadContext): Promise<PrismaClientType> {
   const env = getCloudflareEnv(context);
 
   if (env?.DB) {
-    return getDb({ DB: env.DB });
+    const key = (context as { cloudflare?: object }).cloudflare;
+    if (!key) return getDb({ DB: env.DB });
+    let client = requestClients.get(key);
+    if (!client) {
+      client = getDb({ DB: env.DB });
+      requestClients.set(key, client);
+    }
+    return client;
   }
 
   return getLocalDb();

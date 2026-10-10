@@ -7,6 +7,7 @@ import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
 import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
 import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
+import { disconnectRequestDb } from "../app/lib/route-platform.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
@@ -316,10 +317,13 @@ export default {
       // header (below) and in the SSR shell's inline <script> nonces,
       // threaded via loadContext → entry.server → NonceContext.
       const nonce = generateNonce();
+      const requestKey = { env, ctx };
       const response = await requestHandler(request, {
-        cloudflare: { env, ctx },
+        cloudflare: requestKey,
         nonce,
       });
+      // Streamed bodies can still read after the handler returns, so wait before disconnecting.
+      ctx.waitUntil(new Promise((resolve) => setTimeout(resolve, 3000)).then(() => disconnectRequestDb(requestKey)));
       return finalizeResponse(response, env, nonce);
     } catch (error) {
       // Outer catch: errors that escaped React Router's onError (e.g. thrown
