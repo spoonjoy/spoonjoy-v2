@@ -20,7 +20,13 @@ const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^
 const WARNING_WORD_PATTERN = /(?:^|[^A-Za-z0-9])(?:[A-Za-z]+warnings?|warnings?|warn)(?!-gate\.ts\b|-summary\.log\b)(?=[:!.,;\s([<{=]|$|-)/i;
 const PRISMA_WARNING_PATTERN = /(?:^|[\s([<{])prisma:warn(?::|\s|$)/i;
 const WARNING_SYMBOL_PATTERN = /⚠/;
-const TEST_RESULT_LINE_PATTERN = /^[✓↓×]\s+(?:should|keeps?|rejects?|parses?|detects?|streams?|runs?|fails?|still|preserves?|prints?|uses?|handles?|renders?|displays?|shows?|allows?|supports?|returns?|loads?|creates?|updates?|deletes?|validates?|redirects?|reports?|records?|omits?)\b/i;
+// A vitest result line is a status mark followed by a test title we wrote. Any title counts,
+// including the slow-test lines vitest prints with a duration suffix, unless its first word is
+// itself a warning word ("✓ Warning: ...", "✓ warning dependency fallback used"); those still get
+// the full check. A verb allow-list here made any slow title like "requires warning-clean setup"
+// fail CI only when that test happened to cross vitest's slow threshold.
+const TEST_RESULT_LINE_PATTERN =
+  /^[✓↓×]\s+(?!(?:warn(?:ings?)?|[A-Za-z]+warnings?)(?=[:!.,;\s([<{=-]|$))\S/i;
 const TEST_FILE_RESULT_LINE_PATTERN =
   /^[✓↓×]\s+(?:test|app)\/\S+\.test\.[cm]?[jt]sx?(?:\s+\(\d+\s+tests?\))?(?:\s+\d+(?:\.\d+)?(?:ms|s))?$/i;
 const OSC_SEQUENCE_PATTERN = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;

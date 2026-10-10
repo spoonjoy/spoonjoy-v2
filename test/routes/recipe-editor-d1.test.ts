@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { getLocalDb } from "~/lib/db.server";
@@ -200,6 +200,16 @@ async function withFailingStylization<T>(surface: "recipe_create" | "recipe_edit
 }
 
 describe("recipe editor routes on a D1 binding", () => {
+  // The first import of each route transforms its whole module graph, which under coverage
+  // instrumentation on a busy CI runner took about 5 s and timed out whichever test ran first.
+  // Paying it here, under its own budget, leaves every test timing only its own work; the
+  // per-test vi.resetModules() re-evaluates the modules but keeps the transformed code cached.
+  beforeAll(async () => {
+    await import("~/routes/recipes.$id.edit");
+    await import("~/routes/recipes.$id.steps.$stepId.edit");
+    await import("~/routes/recipes.new");
+  }, 60_000);
+
   beforeEach(async () => {
     db = await getLocalDb();
     await cleanupDatabase();
