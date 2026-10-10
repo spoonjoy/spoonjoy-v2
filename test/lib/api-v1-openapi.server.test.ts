@@ -65,6 +65,8 @@ const OPERATION_SCOPES = {
   "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}": ["kitchen:write"],
   "GET /api/v1/me": ["account:read"],
   "PATCH /api/v1/me": ["account:write"],
+  "DELETE /api/v1/me": ["account:write"],
+  "GET /api/v1/me/export": ["account:read", "kitchen:read"],
   "GET /api/v1/me/sync": ["account:read", "kitchen:read"],
   "POST /api/v1/me/photo": ["account:write"],
   "DELETE /api/v1/me/photo": ["account:write"],

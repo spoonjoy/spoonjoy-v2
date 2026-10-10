@@ -18,6 +18,9 @@ export interface SessionEnv {
 
 const USER_ID_KEY = "userId";
 const SESSION_VERSION_KEY = "sessionVersion";
+// When the person last proved who they are by signing in (ms since the epoch). Re-issuing a cookie
+// for the same sign-in (a session version bump, linking another sign-in method) keeps it.
+const AUTHENTICATED_AT_KEY = "authenticatedAt";
 
 /** Who a signed session cookie says the visitor is, before any database check. */
 export interface SessionIdentity {
@@ -329,6 +332,19 @@ export interface CreateUserSessionOptions {
   // The user's current session version, when the caller already has it (for
   // example straight after bumping it). Otherwise it is read from the database.
   sessionVersion?: number;
+  // When the person signed in. Omitted: now, because this cookie is for a sign-in. A number or
+  // null: the existing cookie's value (see getSessionAuthenticatedAt), for a cookie re-issued
+  // without a new sign-in; null records none.
+  authenticatedAt?: number | null;
+}
+
+/**
+ * When the request's session cookie says the person signed in (ms since the epoch), or null when
+ * it records no time. Only meaningful for a session that is also current (getUserId).
+ */
+export async function getSessionAuthenticatedAt(request: Request, env?: SessionEnv | null): Promise<number | null> {
+  const value = (await getSession(request, env)).get(AUTHENTICATED_AT_KEY);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 // Helper to mint a `__session` Set-Cookie string for a user, without
@@ -346,6 +362,8 @@ export async function createUserSessionCookie(
   const session = await storage.getSession();
   session.set(USER_ID_KEY, userId);
   session.set(SESSION_VERSION_KEY, sessionVersion);
+  const authenticatedAt = options.authenticatedAt === undefined ? Date.now() : options.authenticatedAt;
+  if (authenticatedAt !== null) session.set(AUTHENTICATED_AT_KEY, authenticatedAt);
   return storage.commitSession(session);
 }
 

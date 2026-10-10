@@ -90,9 +90,9 @@ describe("AppNavbar", () => {
   it("offers login as a desktop menu instead of a page-only nav link", async () => {
     renderNavbar();
 
-    const loginButton = screen.getByRole("button", { name: "Login" });
+    const loginButton = screen.getByRole("button", { name: "Log in" });
     expect(loginButton).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Login" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument();
   });
 
   it("uses clear signed-in kitchen drawer navigation", () => {

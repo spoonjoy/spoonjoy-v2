@@ -178,7 +178,7 @@ test.describe("Tab bar on iPhone", () => {
     await waitForServiceWorker(page);
     await page.getByRole("main").getByRole("button", { name: "Log out", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/login"));
-    await expect(page.getByRole("heading", { level: 1, name: "Log In", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Log in", exact: true })).toBeVisible();
 
     // The session is gone, not just this page: a signed-in page sends the phone to log in, and the
     // home page shows the signed-out tabs.

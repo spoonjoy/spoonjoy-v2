@@ -85,6 +85,34 @@ describe("handleOAuthRegister", () => {
     });
   });
 
+  it("stops reading a registration body sent without Content-Length once it passes the limit", async () => {
+    const body = streamedBody(4 * 1024, 64);
+    const req = new Request("https://spoonjoy.app/oauth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body.stream,
+      duplex: "half",
+    } as RequestInit);
+    const res = await handleOAuthRegister(req, db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error_description: "Request body is too large" });
+    expect(body.pulled()).toBeLessThanOrEqual(16 * 1024 + 2 * 4 * 1024);
+  });
+
+  it("answers invalid_request when the registration body cannot be read", async () => {
+    const req = new Request("https://spoonjoy.app/oauth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: streamedBody(1, 1, true).stream,
+      duplex: "half",
+    } as RequestInit);
+    const res = await handleOAuthRegister(req, db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_request", error_description: "Invalid JSON body" });
+  });
+
   it("rejects declared oversized dynamic registration bodies before reading", async () => {
     const req = new Request("https://spoonjoy.app/oauth/register", {
       method: "POST",
@@ -1407,3 +1435,27 @@ describe("handleOAuthAuthorizeAction", () => {
     expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(0);
   });
 });
+
+function streamedBody(chunkBytes: number, chunkCount: number, fail = false) {
+  let pulled = 0;
+  let sent = 0;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (fail) {
+          controller.error(new Error("client went away"));
+          return;
+        }
+        if (sent >= chunkCount) {
+          controller.close();
+          return;
+        }
+        sent += 1;
+        pulled += chunkBytes;
+        controller.enqueue(new Uint8Array(chunkBytes).fill(0x20));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, pulled: () => pulled };
+}
