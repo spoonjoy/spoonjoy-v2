@@ -138,7 +138,7 @@ export default function NewCookbook() {
                 Cancel
               </Button>
               <Button type="submit">
-                Create Cookbook
+                Create cookbook
               </Button>
             </div>
           </Fieldset>

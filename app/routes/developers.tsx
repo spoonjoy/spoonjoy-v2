@@ -531,15 +531,15 @@ export default function Developers() {
           </Button>
           <Button href={openapiUrl} plain>
             <Braces data-slot="icon" aria-hidden="true" />
-            Full Spec
+            Full spec
           </Button>
           <Button href={sdkOpenapiUrl} plain>
             <Braces data-slot="icon" aria-hidden="true" />
-            SDK Spec
+            SDK spec
           </Button>
           <Button href={connectorOpenapiUrl} plain>
             <Braces data-slot="icon" aria-hidden="true" />
-            Connector Spec
+            Connector spec
           </Button>
         </div>
       )}>

@@ -390,14 +390,14 @@ describe("Account settings - identity", () => {
         message: "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
       }));
 
-      await userEvents.click(await screen.findByRole("button", { name: "Change Password" }));
-      expect(screen.getByLabelText("Current Password")).toBeInTheDocument();
-      await userEvents.click(screen.getByRole("button", { name: "Change Password" }));
+      await userEvents.click(await screen.findByRole("button", { name: "Change password" }));
+      expect(screen.getByLabelText("Current password")).toBeInTheDocument();
+      await userEvents.click(screen.getByRole("button", { name: "Change password" }));
 
       expect(await screen.findByRole("status")).toHaveTextContent("Your password has been changed successfully.");
-      await waitFor(() => expect(screen.queryByLabelText("Current Password")).not.toBeInTheDocument());
-      expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Change Password" })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument());
+      expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
     });
 
     it("closes the set-password form after a password is set", async () => {
@@ -411,12 +411,12 @@ describe("Account settings - identity", () => {
         () => ({ hasPassword }),
       );
 
-      await userEvents.click(await screen.findByRole("button", { name: "Set Password" }));
-      await userEvents.click(screen.getByRole("button", { name: "Set Password" }));
+      await userEvents.click(await screen.findByRole("button", { name: "Set password" }));
+      await userEvents.click(screen.getByRole("button", { name: "Set password" }));
 
       expect(await screen.findByRole("status")).toHaveTextContent("Your password has been set successfully");
-      await waitFor(() => expect(screen.queryByLabelText("New Password")).not.toBeInTheDocument());
-      expect(screen.getByRole("button", { name: "Change Password" })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText("New password")).not.toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
     });
 
     it("shows a photo upload error next to the photo only, not in the page banner", async () => {
@@ -434,7 +434,7 @@ describe("Account settings - identity", () => {
       // The upload itself goes through the cropper's canvas, which happy-dom can't draw; the
       // "Remove Photo" form posts to the same action, and the stub answers it as an upload.
       const photoSection = await screen.findByTestId("profile-photo-section");
-      await userEvents.click(within(photoSection).getByRole("button", { name: "Remove Photo" }));
+      await userEvents.click(within(photoSection).getByRole("button", { name: "Remove photo" }));
 
       expect(await within(photoSection).findByText("Please upload an image file")).toBeInTheDocument();
       expect(screen.getAllByText("Please upload an image file")).toHaveLength(1);

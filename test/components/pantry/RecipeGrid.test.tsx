@@ -139,7 +139,7 @@ describe('RecipeGrid', () => {
     renderWithRouter(<RecipeGrid recipes={[]} emptyCtaHref={null} />)
 
     expect(screen.getByText('No recipes yet')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Create Recipe' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Create recipe' })).toBeNull()
   })
 
   it('defaults href to /recipes/:id when no href provided', () => {

@@ -1522,7 +1522,7 @@ describe("Recipes New Route", () => {
       expect(screen.getByLabelText(/Servings/)).toBeInTheDocument();
       // Recipe Image is now a file upload via RecipeImageUpload - check for upload button
       expect(screen.getByRole("button", { name: /upload.*image/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Create Recipe" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Create recipe" })).toBeInTheDocument();
       // Cancel is now a button that navigates programmatically, not a link
       expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     });
@@ -1637,7 +1637,7 @@ describe("Recipes New Route", () => {
       await user.type(servingsInput, "4");
 
       // Click Create Recipe button (triggers RecipeBuilder.handleSave → onSave → handleSave)
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       await waitFor(() => {
@@ -1690,7 +1690,7 @@ describe("Recipes New Route", () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Click Create Recipe
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
     });
 
@@ -1728,7 +1728,7 @@ describe("Recipes New Route", () => {
         new File(["test image"], "test.jpg", { type: "image/jpeg" }),
       );
 
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       fireEvent.click(submitButton);
       fireEvent.click(submitButton);
 
@@ -1795,7 +1795,7 @@ describe("Recipes New Route", () => {
       hiddenTitleInput?.remove();
 
       // Click Create Recipe - should handle missing element gracefully
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       // Form should still submit (null check prevents crash)
@@ -1836,7 +1836,7 @@ describe("Recipes New Route", () => {
       const hiddenDescription = document.querySelector('form.hidden textarea[name="description"]');
       hiddenDescription?.remove();
 
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       // Form should still submit (null check prevents crash)
@@ -1876,7 +1876,7 @@ describe("Recipes New Route", () => {
       const hiddenServings = document.querySelector('form.hidden input[name="servings"]');
       hiddenServings?.remove();
 
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       // Form should still submit (null check prevents crash)
@@ -1916,7 +1916,7 @@ describe("Recipes New Route", () => {
       const hiddenSteps = document.querySelector('form.hidden input[name="steps"]');
       hiddenSteps?.remove();
 
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       // Form should still submit (null check prevents crash)
@@ -1956,7 +1956,7 @@ describe("Recipes New Route", () => {
       const hiddenClearImage = document.querySelector('form.hidden input[name="clearImage"]');
       hiddenClearImage?.remove();
 
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       // Form should still submit (null check prevents crash)
@@ -2006,7 +2006,7 @@ describe("Recipes New Route", () => {
       const removeButton = screen.getByRole("button", { name: "Remove" });
       await user.click(removeButton);
 
-      const submitButton = screen.getByRole("button", { name: "Create Recipe" });
+      const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
 
       await waitFor(() => {

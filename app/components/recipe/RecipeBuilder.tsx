@@ -259,7 +259,7 @@ export function RecipeBuilder({
           </Field>
 
           <Field>
-            <Label>Recipe Image</Label>
+            <Label>Recipe image</Label>
             <RecipeImageUpload
               coverImageUrl={displayImageUrl}
               onFileSelect={handleImageSelect}
@@ -274,7 +274,7 @@ export function RecipeBuilder({
       </fieldset>
 
       {showSteps && (
-        <section aria-label="Recipe Steps" className="space-y-4 border-t border-[var(--sj-border)] pt-6">
+        <section aria-label="Recipe steps" className="space-y-4 border-t border-[var(--sj-border)] pt-6">
           <div>
             <p className="sj-eyebrow">Method</p>
             <h2 className="font-sj-display mt-3 text-3xl/9 font-semibold tracking-normal text-[var(--sj-ink)]">
@@ -320,7 +320,7 @@ export function RecipeBuilder({
           className={isSaveDisabled && !isDisabled ? 'opacity-50' : undefined}
         >
           {loading && <Loader2 className="size-4 animate-spin" data-slot="icon" />}
-          {recipe ? 'Save Recipe' : 'Create Recipe'}
+          {recipe ? 'Save recipe' : 'Create recipe'}
         </Button>
       </div>
     </div>

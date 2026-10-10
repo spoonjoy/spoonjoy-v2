@@ -117,7 +117,7 @@ describe("RecipeBuilder hydration", () => {
     expect(serverFields.description.value).toBe(typed.description);
     expect(serverFields.servings.value).toBe(typed.servings);
 
-    const create = saveButton(container!, "Create Recipe");
+    const create = saveButton(container!, "Create recipe");
     // The title counts as filled in, so Create is not dimmed.
     expect(create).not.toHaveAttribute("aria-disabled");
     await act(async () => create.click());
@@ -136,7 +136,7 @@ describe("RecipeBuilder hydration", () => {
     expect(serverFields.title.value).toBe(typed.title);
     expect(serverFields.servings.value).toBe(typed.servings);
 
-    await act(async () => saveButton(container!, "Save Recipe").click());
+    await act(async () => saveButton(container!, "Save recipe").click());
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1", ...typed }));
   });

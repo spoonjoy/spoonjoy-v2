@@ -21,7 +21,7 @@ export function PantryPage({
       <CookbookHeader
         eyebrow="Pantry"
         title="Pantry"
-        action={<Button href={createRecipeHref} className="w-full justify-center sm:w-auto">Create Recipe</Button>}
+        action={<Button href={createRecipeHref} className="w-full justify-center sm:w-auto">Create recipe</Button>}
       >
         <Text>Your personal kitchen profile with recipes and pantry-ready favorites.</Text>
       </CookbookHeader>

@@ -341,7 +341,7 @@ export default function AgentConnect() {
               the browser asks for the code before either button submits. */}
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="submit" name="intent" value="approve">
-              Approve Access
+              Approve access
             </Button>
             <Button type="submit" name="intent" value="deny" plain>
               Deny

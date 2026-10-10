@@ -68,10 +68,10 @@ test.describe("Cookbooks", () => {
     await expect(dock(page)).toBeVisible({ visible: isMobile });
     await expectAccessible();
 
-    await main.getByRole("link", { name: "New Cookbook", exact: true }).click();
+    await main.getByRole("link", { name: "New cookbook", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/cookbooks/new"));
     await page.getByRole("textbox", { name: /Cookbook Title/ }).fill(title);
-    await page.getByRole("button", { name: "Create Cookbook", exact: true }).click();
+    await page.getByRole("button", { name: "Create cookbook", exact: true }).click();
     await expect(page).toHaveURL(COOKBOOK_URL);
     await expect(cookbookHeading(page, title)).toBeVisible();
     const cookbookPath = new URL(page.url()).pathname;
@@ -82,7 +82,7 @@ test.describe("Cookbooks", () => {
     // Save the friend's recipe into the new cookbook from the recipe's Save dialog, opened by the
     // masthead's Save on a phone and on desktop alike.
     const saveButton = page.getByTestId("recipe-header-save-action");
-    const saveDialog = page.getByRole("dialog", { name: "Save to Cookbook" });
+    const saveDialog = page.getByRole("dialog", { name: "Save to cookbook" });
     const cookbookToggle = saveDialog.getByRole("button", { name: title, exact: true });
 
     await page.goto(SALMON);
@@ -173,7 +173,7 @@ test.describe("Cookbooks", () => {
     // The new-cookbook form hides the tab bar (R-M3-2).
     await expect(dock(page)).toBeHidden();
     await expectAccessible();
-    await page.getByRole("button", { name: "Create Cookbook", exact: true }).click();
+    await page.getByRole("button", { name: "Create cookbook", exact: true }).click();
     await expect(page).toHaveURL(COOKBOOK_URL);
     await expect(cookbookHeading(page, originalTitle)).toBeVisible();
     const cookbookPath = new URL(page.url()).pathname;
@@ -257,7 +257,7 @@ test.describe("Cookbooks", () => {
     await page.goto("/cookbooks/new");
     await waitForHydration(page);
     await page.getByRole("textbox", { name: /Cookbook Title/ }).fill(title);
-    await page.getByRole("button", { name: "Create Cookbook", exact: true }).click();
+    await page.getByRole("button", { name: "Create cookbook", exact: true }).click();
     await expect(page).toHaveURL(COOKBOOK_URL);
     await expect(cookbookHeading(page, title)).toBeVisible();
     await expect(forkLink).toHaveCount(0);
