@@ -215,7 +215,9 @@ test.describe("Recipe create and edit", () => {
       url: new RegExp(`${recipePath}$`),
     });
     await page.goto(recipePath);
-    await expect(page.getByRole("heading", { level: 1, name: "Page not found." })).toBeVisible();
+    // The link says the recipe was deleted, rather than calling it a missing page.
+    await expect(page.getByRole("heading", { level: 1, name: "This recipe was deleted." })).toBeVisible();
+    await testInfo.attach("deleted-recipe-page", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
   });
 
   test("typed ingredients are kept when AI parsing is unavailable @mutates", async ({
