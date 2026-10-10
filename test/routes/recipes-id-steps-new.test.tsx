@@ -489,13 +489,42 @@ describe("Recipes $id Steps New Route", () => {
       }
     });
 
-    it("should return generic parse errors for unexpected parser failures", async () => {
+    it("parses typed ingredients by rules when AI parsing is unavailable", async () => {
+      const parseSpy = vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValue(new IngredientParseError("OpenAI API key is required"));
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "3 large eggs\npinch of salt" },
+        testUserId
+      );
+
+      try {
+        const response = await action({
+          request,
+          context: { cloudflare: { env: null } },
+          params: { id: recipeId },
+        } as any);
+
+        const { data, status } = extractResponseData(response);
+        expect(status).toBe(200);
+        expect(data).toEqual({
+          parsedIngredients: [
+            { quantity: 3, unit: "large", ingredientName: "eggs" },
+            { quantity: 1, unit: "pinch", ingredientName: "salt" },
+          ],
+        });
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it("should return generic parse errors for unexpected parser failures on text the rules cannot parse either", async () => {
       const parseSpy = vi
         .spyOn(ingredientParseModule, "parseIngredients")
         .mockRejectedValue(new Error("OpenAI unavailable"));
 
       const request = await createFormRequest(
-        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        { intent: "parseIngredients", ingredientText: "2 cups" },
         testUserId
       );
 

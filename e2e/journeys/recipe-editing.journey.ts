@@ -218,6 +218,46 @@ test.describe("Recipe create and edit", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Page not found." })).toBeVisible();
   });
 
+  test("typed ingredients are kept when AI parsing is unavailable @mutates", async ({
+    page,
+    verifyAfterReload,
+  }, testInfo) => {
+    // QA has no OpenAI key, so the AI parse is unavailable there and the rule-based parser must
+    // turn the typed lines into ingredients. Before, they were dropped on Create with no warning.
+    test.setTimeout(120_000);
+    const title = `Journey Pasta ${testInfo.project.name} ${Date.now().toString(36)}`;
+
+    await page.goto("/recipes/new");
+    await waitForHydration(page);
+    await page.getByLabel("Title", { exact: true }).fill(title);
+    await page.getByRole("button", { name: "Add Step", exact: true }).click();
+    const card = page.getByRole("article", { name: "Step 1", exact: true });
+    await card.getByLabel("Instructions").fill("Boil the pasta in salted water");
+    await expect(card.getByRole("switch", { name: "AI Parse" })).toBeChecked();
+    const parseResponse = page.waitForResponse(
+      (response) => response.request().method() === "POST" && new URL(response.url()).pathname.startsWith("/recipes/new"),
+    );
+    await card.getByRole("textbox", { name: "Ingredient text" }).fill("1 lb spaghetti\n2 tbsp kosher salt");
+    expect((await parseResponse).status()).toBe(200);
+    await expect(card.getByRole("button", { name: "Remove spaghetti" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Remove kosher salt" })).toBeVisible();
+    await testInfo.attach("rule-parsed-ingredients", { body: await card.screenshot(), contentType: "image/png" });
+
+    await page.getByRole("button", { name: "Create Recipe", exact: true }).click();
+    await expect(page).toHaveURL(RECIPE_URL);
+    await verifyAfterReload(async () => {
+      await expect(recipeStep(page, 1).getByRole("checkbox", { name: "spaghetti", exact: true })).toBeVisible();
+      await expect(recipeStep(page, 1).getByRole("checkbox", { name: "kosher salt", exact: true })).toBeVisible();
+    });
+
+    // --- Delete the recipe.
+    await waitForHydration(page);
+    await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
+    const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
+    await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page).toHaveURL(pathUrl("/recipes"));
+  });
+
   // QA has no OpenAI key (see AGENTS.md), so import answers that it isn't switched on rather than
   // reading the page; if that secret is ever added to QA, this test must import a seeded page
   // instead. It writes nothing, so it is not tagged @mutates.
