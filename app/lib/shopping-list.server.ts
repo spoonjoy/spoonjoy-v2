@@ -20,9 +20,8 @@ import {
   type ShoppingListItemWritePlan,
 } from "~/lib/shopping-list-mutations.server";
 
-type ShoppingListItemState = {
+type ShoppingListItemPosition = {
   id: string;
-  checkedAt: Date | null;
   sortIndex: number;
 };
 
@@ -41,22 +40,28 @@ async function nextSortIndex(database: PrismaClient, shoppingListId: string) {
   return (maxItem?.sortIndex ?? -1) + 1;
 }
 
+// Renumbers the active rows 0..n-1 in their current order after rows leave the list. It writes
+// only `sortIndex`, and only on rows whose position changes: it reads the whole list, and any other
+// field it wrote back from that read could overwrite a concurrent toggle of another row (shopping
+// list journey, run 37920386776).
 async function normalizeShoppingListOrdering(
   database: PrismaClient,
   shoppingListId: string
 ) {
-  const activeItems: ShoppingListItemState[] = await database.shoppingListItem.findMany({
+  const activeItems: ShoppingListItemPosition[] = await database.shoppingListItem.findMany({
     where: { shoppingListId, deletedAt: null },
-    select: { id: true, checkedAt: true, sortIndex: true },
+    select: { id: true, sortIndex: true },
     orderBy: [{ sortIndex: "asc" }, { updatedAt: "asc" }, { id: "asc" }],
   });
 
   await Promise.all(
-    activeItems.map((item, index) =>
-      database.shoppingListItem.update({
-        where: { id: item.id },
-        data: { sortIndex: index, checked: Boolean(item.checkedAt) },
-      })
+    activeItems.flatMap((item, index) =>
+      item.sortIndex === index
+        ? []
+        : [database.shoppingListItem.update({
+          where: { id: item.id },
+          data: { sortIndex: index },
+        })]
     )
   );
 }
@@ -449,6 +454,8 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
       if (item) {
         const willBeChecked = nextCheckedRaw ? nextCheckedRaw === "true" : !item.checked;
 
+        // One write to this row only. Checking keeps the row where it is, so the list needs no
+        // renumbering, and renumbering here would race the user's next tap on another row.
         await database.shoppingListItem.update({
           where: { id: itemId },
           data: {
@@ -456,8 +463,6 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
             checkedAt: willBeChecked ? new Date() : null,
           },
         });
-
-        await normalizeShoppingListOrdering(database, shoppingList.id);
       }
     }
     return data({ success: true });

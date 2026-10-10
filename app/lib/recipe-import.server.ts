@@ -40,13 +40,14 @@ import {
   captureLlmCallFailure,
   captureLlmCallSucceeded,
 } from "~/lib/llm-telemetry.server";
-import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
+import { tryConsumeImageGenQuota, type ImageGenBudgetEnv } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
   activeRecipeTitleFreeGuard,
-  ingredientInsertStatement,
+  nameUpsertStatements,
+  namedIngredientInsertStatement,
   recipeInsertStatement,
   stepInsertStatement,
 } from "~/lib/recipe-d1-writes.server";
@@ -71,6 +72,7 @@ import {
   type OEmbedMetadata,
 } from "~/lib/recipe-import-video.server";
 import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
+import { normalizeRecipeSourceUrl, recipeSourceUrlCandidates } from "~/lib/recipe-source-url.server";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 
@@ -148,7 +150,7 @@ export interface ImportRecipeFromSourceOptions {
 export interface ImportRecipeDeps {
   db: PrismaClient;
   /** The Worker environment; with a D1 binding in `DB` the recipe is written as one atomic batch. */
-  env?: (RecipeLlmEnv & PostHogServerEnv & { DB?: unknown }) | null;
+  env?: (RecipeLlmEnv & PostHogServerEnv & ImageGenBudgetEnv & { DB?: unknown }) | null;
   bucket?: R2Bucket;
   waitUntil?: (promise: Promise<unknown>) => void;
   fetchImpl?: typeof fetch;
@@ -570,23 +572,25 @@ async function findExistingRecipeId(
   chefId: string,
   sourceUrl: string | null,
 ): Promise<string | null> {
-  if (!sourceUrl) return null;
+  const candidates = recipeSourceUrlCandidates(sourceUrl);
+  if (candidates.length === 0) return null;
   const existing = await db.recipe.findFirst({
-    where: { chefId, sourceUrl, deletedAt: null },
+    where: { chefId, sourceUrl: { in: candidates }, deletedAt: null },
     select: { id: true },
   });
   return existing?.id ?? null;
 }
 
+// Every import spends one unit, dry runs included: a dry run still runs the extraction model,
+// so it counts against the chef's daily import cap and the global AI budget like a real import.
 async function consumeImportQuota(
   deps: ImportRecipeDeps,
   chefId: string,
-  dryRun: boolean,
 ): Promise<void> {
-  if (dryRun) return;
   const ok = await tryConsumeImageGenQuota(deps.db, chefId, "import", {
     now: deps.now,
     d1: d1Binding(deps.env?.DB),
+    env: deps.env,
   });
   if (!ok) {
     throw new ImportRecipeError(
@@ -653,18 +657,13 @@ async function persistRecipe(
   }
 
   const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
-  const ingredientRows = [];
-  for (const ingredient of allIngredients) {
-    const unit = await getOrCreateUnit(db, ingredient.unit);
-    const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-    ingredientRows.push({
-      recipeId: id,
-      stepNum: 1,
-      quantity: ingredient.quantity,
-      unitId: unit.id,
-      ingredientRefId: ref.id,
-    });
-  }
+  const namedIngredients = allIngredients.map((ingredient) => ({
+    recipeId: id,
+    stepNum: 1,
+    quantity: ingredient.quantity,
+    unitName: normalizeName(ingredient.unit),
+    ingredientName: normalizeName(ingredient.ingredientName),
+  }));
 
   const d1 = d1Binding(env?.DB);
   if (d1) {
@@ -692,7 +691,9 @@ async function persistRecipe(
             duration: null,
             now: at,
           })),
-          ...ingredientRows.map((ingredient) => ingredientInsertStatement({ ...ingredient, now: at })),
+          // New units and ingredient names are created here, so a failed batch leaves none behind.
+          ...nameUpsertStatements(namedIngredients, at),
+          ...namedIngredients.map((ingredient) => namedIngredientInsertStatement({ ...ingredient, now: at })),
         ]);
         break;
       } catch (error) {
@@ -704,6 +705,18 @@ async function persistRecipe(
       }
     }
   } else {
+    const ingredientRows = [];
+    for (const ingredient of namedIngredients) {
+      const unit = await getOrCreateUnit(db, ingredient.unitName);
+      const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
+      ingredientRows.push({
+        recipeId: id,
+        stepNum: 1,
+        quantity: ingredient.quantity,
+        unitId: unit.id,
+        ingredientRefId: ref.id,
+      });
+    }
     await db.$transaction([
       db.recipe.create({
         data: {
@@ -885,8 +898,13 @@ async function completeImportFromExtraction(input: {
   extraction: ExtractionOutput;
   deps: ImportRecipeDeps;
 }): Promise<ImportRecipeResult> {
-  const { chefId, sourceUrl, dryRun, recipeId, extraction, deps } = input;
-  const existingRecipeId = await findExistingRecipeId(deps.db, chefId, sourceUrl);
+  const { chefId, dryRun, recipeId, deps } = input;
+  // One stored form per link, so every writer's duplicate check sees every other writer's recipes.
+  const extraction: ExtractionOutput = {
+    ...input.extraction,
+    draft: { ...input.extraction.draft, sourceUrl: normalizeRecipeSourceUrl(input.extraction.draft.sourceUrl) },
+  };
+  const existingRecipeId = await findExistingRecipeId(deps.db, chefId, input.sourceUrl);
 
   if (dryRun) {
     return {
@@ -958,8 +976,8 @@ export async function importRecipeFromUrl(
   }
   const sourceKind = detectImportSource(parsedUrl);
 
-  // 1. Quota (skip on dry-run).
-  await consumeImportQuota(deps, chefId, dryRun);
+  // 1. Quota, dry runs included.
+  await consumeImportQuota(deps, chefId);
 
   // 2. Fetch + extract — web vs. video pipeline by hostname.
   let extraction: ExtractionOutput;
@@ -1005,7 +1023,7 @@ export async function importRecipeFromSource(
       return importRecipeFromUrl({ url: options.source.url, chefId, dryRun, recipeId }, deps);
     case "text": {
       const text = ensureNonblankText(options.source.text, "source.text");
-      await consumeImportQuota(deps, chefId, dryRun);
+      await consumeImportQuota(deps, chefId);
       const sourceUrl = options.source.sourceUrl ?? null;
       const extraction = await runTextExtraction(text, sourceUrl, chefId, deps);
       return completeImportFromExtraction({
@@ -1018,7 +1036,7 @@ export async function importRecipeFromSource(
       });
     }
     case "json-ld": {
-      await consumeImportQuota(deps, chefId, dryRun);
+      await consumeImportQuota(deps, chefId);
       const sourceUrl = options.source.sourceUrl ?? null;
       const extraction = await runExtraction(
         sourceUrl,
