@@ -48,6 +48,7 @@ storybook-pages-deploy/
 
 # Playwright
 playwright-report/
+screens/
 test-results/
 .playwright/
 e2e/.auth/
