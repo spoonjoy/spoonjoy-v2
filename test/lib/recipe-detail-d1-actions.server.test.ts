@@ -11,6 +11,7 @@ import { SpoonAuthError, SpoonNotFoundError } from "~/lib/recipe-spoon.server";
 import {
   addRecipeToCookbookOnD1,
   assertActiveRecipeOnD1,
+  assertOwnedActiveRecipeOnD1,
   createCookbookWithRecipeOnD1,
   deleteSpoonOnD1,
   removeRecipeFromCookbookOnD1,
@@ -150,6 +151,20 @@ describe("recipe page actions on D1", () => {
     await assertActiveRecipeOnD1(d1.binding, recipeId);
     await db.recipe.update({ where: { id: recipeId }, data: { deletedAt: new Date() } });
     expect(await status(assertActiveRecipeOnD1(d1.binding, recipeId))).toBe(404);
+  });
+
+  it("assertOwnedActiveRecipeOnD1 returns the owner's recipe title and refuses a row whose title is not text", async () => {
+    const ownId = (await db.recipe.create({ data: { title: "Soup", chefId } })).id;
+    expect(await assertOwnedActiveRecipeOnD1(d1.binding, { recipeId: ownId, userId: chefId })).toEqual({ title: "Soup" });
+
+    const statement = { bind: () => statement };
+    const corrupt = {
+      prepare: () => statement,
+      batch: async () => [{ results: [{ chefId, deletedAt: null, title: 42 }] }],
+    } as never;
+    await expect(assertOwnedActiveRecipeOnD1(corrupt, { recipeId: ownId, userId: chefId })).rejects.toThrow(
+      "D1 column title is not text",
+    );
   });
 
   describe("deleteSpoonOnD1", () => {

@@ -837,7 +837,8 @@ type RecipeDetailD1Answer =
   | { kind: "coverChanged"; intent: CoverIntent }
   | { kind: "newCookbook"; newCookbook: { id: string; title: string } }
   | { kind: "response"; response: ReturnType<typeof data<{ error: string; intent: string }>> }
-  | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> };
+  | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> }
+  | { kind: "redirect"; response: Response };
 
 function activeCoverChoice(formData: FormData, recipeId: string) {
   const coverId = formData.get("coverId");
@@ -933,6 +934,24 @@ async function handleRecipeDetailActionOnD1(
     }
     await deleteSpoonOnD1(d1, { userId, spoonId }).catch(spoonErrorToResponse);
     return { kind: "success" };
+  }
+
+  if (intent === "delete") {
+    const { title } = await assertOwnedActiveRecipeOnD1(d1, { recipeId, userId });
+    const deletedAt = new Date();
+    // One atomic batch: the soft delete and its native sync tombstone.
+    await writeExistingRecipeOnD1(d1, recipeId, [
+      [`UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`, d1Timestamp(deletedAt), d1Timestamp(deletedAt), recipeId],
+      nativeSyncTombstoneUpsertStatement({
+        accountId: userId,
+        resourceType: "recipe",
+        resourceId: recipeId,
+        title,
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+    ]);
+    return { kind: "redirect", response: redirect("/recipes") };
   }
 
   try {
@@ -1294,29 +1313,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     return { success: true, intent: "archiveRecipeCover" };
   }
 
+  // With a D1 binding the delete was answered on D1 above; this is the fallback.
   if (intent === "delete") {
     const deletedAt = new Date();
-    const d1 = requestD1(context);
-    if (d1) {
-      // One atomic batch: the soft delete and its native sync tombstone.
-      await writeExistingRecipeOnD1(d1, id, [
-        [
-          `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`,
-          d1Timestamp(deletedAt),
-          d1Timestamp(deletedAt),
-          id,
-        ],
-        nativeSyncTombstoneUpsertStatement({
-          accountId: userId,
-          resourceType: "recipe",
-          resourceId: id,
-          title: recipe.title,
-          deletedAt,
-          updatedAt: deletedAt,
-        }),
-      ]);
-      return redirect("/recipes");
-    }
     await database.$transaction([
       database.recipe.update({
         where: { id },
