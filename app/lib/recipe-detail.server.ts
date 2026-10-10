@@ -3,6 +3,13 @@ import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import {
+  addRecipeToCookbookOnD1,
+  assertActiveRecipeOnD1,
+  createCookbookWithRecipeOnD1,
+  deleteSpoonOnD1,
+  removeRecipeFromCookbookOnD1,
+} from "~/lib/recipe-detail-d1-actions.server";
 import { d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
   cookbooksForRecipeTouchStatement,
@@ -719,6 +726,69 @@ async function handleDeleteSpoon(
   return { success: true };
 }
 
+// What a D1-handled intent answered. The action turns these into the same object literals the
+// Prisma path returns, so the route's inferred action type (and the page's narrowing of it) is
+// unchanged.
+type RecipeDetailD1Answer =
+  | { kind: "success" }
+  | { kind: "newCookbook"; newCookbook: { id: string; title: string } }
+  | { kind: "response"; response: ReturnType<typeof data<{ error: string; intent: string }>> }
+  | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> };
+
+// The intents that run on D1 alone. Anything else (or a cookbook intent without a cookbook id,
+// which falls through to the owner checks below as before) returns null.
+async function handleRecipeDetailActionOnD1(
+  d1: D1ReadDatabase,
+  intent: FormDataEntryValue | null,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+): Promise<RecipeDetailD1Answer | null> {
+  if (intent === "deleteSpoon") {
+    const spoonId = formData.get("spoonId");
+    if (typeof spoonId !== "string" || !spoonId) {
+      throw new Response("spoonId is required", { status: 400 });
+    }
+    await deleteSpoonOnD1(d1, { userId, spoonId }).catch(spoonErrorToResponse);
+    return { kind: "success" };
+  }
+
+  try {
+    if (intent === "createCookbookAndSave") {
+      const title = formData.get("title")?.toString()?.trim();
+      if (!title) {
+        await assertActiveRecipeOnD1(d1, recipeId);
+        return { kind: "response", response: data({ error: "Title is required", intent: "createCookbookAndSave" }, { status: 400 }) };
+      }
+      try {
+        const newCookbook = await createCookbookWithRecipeOnD1(d1, { userId, recipeId, title });
+        return { kind: "newCookbook", newCookbook };
+      } catch (error) {
+        if (isCookbookTitleUniqueConflict(error)) {
+          return {
+            kind: "response",
+            response: data({ error: "You already have a cookbook with this title", intent: "createCookbookAndSave" }, { status: 400 }),
+          };
+        }
+        throw error;
+      }
+    }
+
+    const cookbookId = formData.get("cookbookId")?.toString();
+    if ((intent === "addToCookbook" || intent === "removeFromCookbook") && cookbookId) {
+      const input = { userId, cookbookId, recipeId };
+      await (intent === "addToCookbook" ? addRecipeToCookbookOnD1(d1, input) : removeRecipeFromCookbookOnD1(d1, input));
+      return { kind: "success" };
+    }
+  } catch (error) {
+    const cutoverResponse = productActivationPendingWebResponse(error);
+    if (cutoverResponse) return { kind: "cutover", response: cutoverResponse };
+    throw error;
+  }
+
+  return null;
+}
+
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
@@ -729,6 +799,18 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     throw new Response(FOOD_IMAGE_SIZE_MESSAGE, { status: 413 });
   }
   const intent = formData.get("intent");
+
+  // With a D1 binding, the everyday actions run as one D1 batch each and never build a Prisma
+  // client (a request's Prisma client can hang in a poisoned isolate).
+  const d1 = requestD1(context);
+  if (d1) {
+    const answered = await handleRecipeDetailActionOnD1(d1, intent, userId, id, formData);
+    if (answered?.kind === "success") return { success: true };
+    if (answered?.kind === "newCookbook") {
+      return { success: true, newCookbook: { id: answered.newCookbook.id, title: answered.newCookbook.title } };
+    }
+    if (answered) return answered.response;
+  }
 
   const database = await getRequestDb(context);
 
