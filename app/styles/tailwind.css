@@ -295,6 +295,7 @@ select {
   overflow: hidden;
 }
 
+body:has(#cook) .sj-phone-brandbar,
 body:has(#cook) .sj-desktop-topbar {
   display: none;
 }
