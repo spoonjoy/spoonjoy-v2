@@ -216,6 +216,35 @@ describe("recipes.$id action on a D1 binding", () => {
     expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
+  it("answers 404 when the recipe goes to the trash between the owner check and the write, and rethrows any other write failure", async () => {
+    const ownId = (await db.recipe.create({ data: { title: "Stew", chefId } })).id;
+    // The session check is a single query; batch 1 is the owner read and the write batch comes second.
+    function onWrite(write: () => Promise<void>) {
+      let batches = 0;
+      return {
+        prepare: d1.binding.prepare.bind(d1.binding),
+        batch: async (statements: unknown[]) => {
+          if (++batches === 2) await write();
+          return d1.binding.batch(statements as never);
+        },
+      };
+    }
+
+    const trashedMeanwhile = onWrite(async () => {
+      await db.recipe.update({ where: { id: ownId }, data: { deletedAt: new Date() } });
+    });
+    await expect(post({ intent: "delete" }, trashedMeanwhile, ownId)).rejects.toMatchObject({ status: 404 });
+    expect(await db.nativeSyncTombstone.count()).toBe(0);
+
+    await db.recipe.update({ where: { id: ownId }, data: { deletedAt: null } });
+    const failingWrite = onWrite(async () => {
+      throw new Error("D1_ERROR: disk I/O error");
+    });
+    await expect(post({ intent: "delete" }, failingWrite, ownId)).rejects.toThrow("disk I/O error");
+    expect((await db.recipe.findUniqueOrThrow({ where: { id: ownId } })).deletedAt).toBeNull();
+    expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
   it("leaves other intents, and a cookbook intent without a cookbook, to the Prisma path", async () => {
     platform.getRequestDb.mockImplementation(async () => db);
     // The chef does not own the recipe, so the owner check answers 403.
