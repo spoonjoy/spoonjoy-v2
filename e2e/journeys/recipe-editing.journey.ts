@@ -253,7 +253,7 @@ test.describe("Recipe create and edit", () => {
     // --- Delete the recipe.
     await waitForHydration(page);
     await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
-    const deleteRecipeDialog = page.getByRole("alertdialog", { name: "Delete this recipe?" });
+    const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
   });
