@@ -29,4 +29,12 @@ describe("RecipeNotFound", () => {
     expect(within(search).getByRole("button", { name: "Search" })).toHaveAttribute("type", "submit");
     expect(screen.getByRole("link", { name: "Browse recipes" })).toHaveAttribute("href", "/recipes");
   });
+
+  it("stretches the Search button to the field's height when they share a row", () => {
+    // Centered, the button kept its own 44px height beside the 56px field.
+    renderNotFound({ deleted: false });
+    const search = screen.getByRole("search");
+    expect(search).toHaveClass("sm:items-stretch");
+    expect(search).not.toHaveClass("sm:items-center");
+  });
 });

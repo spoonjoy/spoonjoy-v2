@@ -18,7 +18,7 @@ export function RecipeNotFound({ deleted }: { deleted: boolean }) {
         </Text>
       </CookbookHeader>
 
-      <Form method="get" action="/search" role="search" className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <Form method="get" action="/search" role="search" className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch">
         <input type="hidden" name="scope" value="recipes" />
         <label className="sr-only" htmlFor="recipe-not-found-search">Search recipes</label>
         <div className="flex h-14 items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4">
