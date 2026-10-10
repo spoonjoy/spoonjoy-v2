@@ -3,6 +3,7 @@ import { Pencil, Trash2, Check, X } from 'lucide-react'
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Input } from '~/components/ui/input'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
+import { formatQuantity } from '~/lib/quantity'
 
 const iconButtonBaseStyles = [
   'font-sj-ui relative isolate inline-flex items-center justify-center rounded-[var(--sj-radius-control)] border text-sm/6 font-semibold transition',
@@ -151,11 +152,6 @@ export function ParsedIngredientRow({
       e.preventDefault()
       handleCancel()
     }
-  }
-
-  // Format quantity - show decimals only if needed
-  const formatQuantity = (qty: number): string => {
-    return Number.isInteger(qty) ? String(qty) : String(qty)
   }
 
   if (isEditing) {

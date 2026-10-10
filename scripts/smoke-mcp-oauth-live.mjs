@@ -30,6 +30,8 @@ import {
 } from "./smoke-live-helpers.mjs";
 
 const execFileAsync = promisify(execFile);
+// MCP-bound access tokens last 90 days (app/lib/oauth-server.server.ts OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS).
+const MCP_ACCESS_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60;
 const requireFromCwd = createRequire(join(process.cwd(), "package.json"));
 const { chromium, expect } = requireFromCwd("@playwright/test");
 
@@ -247,7 +249,7 @@ async function approveConsent(page, { baseUrl, clientId, codeChallenge, resource
   await expect(page.getByRole("heading", { name: /connect claude to spoonjoy/i })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/read recipes, cookbooks, and your shopping list/i)).toBeVisible();
   await expect(page.getByText(/add, edit, and remove kitchen data/i)).toBeVisible();
-  const allow = page.getByRole("button", { name: /allow access/i });
+  const allow = page.getByRole("button", { name: /approve access/i });
   await expect(allow).toBeVisible();
   await expect(allow.locator("xpath=ancestor::form[1]")).toHaveAttribute("method", "post");
   await expect(allow.locator("xpath=ancestor::form[1]")).not.toHaveAttribute("data-discover", /.*/);
@@ -307,7 +309,7 @@ async function exchangeCodeForTokens(request, { baseUrl, clientId, code, codeVer
   const body = await responseJson(response, "authorization_code token exchange");
   assert.equal(body.token_type, "Bearer");
   assert.equal(body.scope, "kitchen:read kitchen:write");
-  assert.equal(body.expires_in, undefined);
+  assert.equal(body.expires_in, MCP_ACCESS_TOKEN_TTL_SECONDS);
   assert.match(body.access_token, /^sj_/);
   assert.match(body.refresh_token, /^ort_/);
   return { accessToken: body.access_token, refreshToken: body.refresh_token };
@@ -330,7 +332,7 @@ async function refreshTokens(request, { baseUrl, clientId, refreshToken, workerV
   });
   assert.equal(response.status(), 200, `refresh_token exchange failed with ${response.status()}`);
   const body = await responseJson(response, "refresh_token exchange");
-  assert.equal(body.expires_in, undefined);
+  assert.equal(body.expires_in, MCP_ACCESS_TOKEN_TTL_SECONDS);
   assert.match(body.access_token, /^sj_/);
   assert.match(body.refresh_token, /^ort_/);
   assert.notEqual(body.refresh_token, refreshToken);

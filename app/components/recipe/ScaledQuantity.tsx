@@ -1,4 +1,4 @@
-import { formatQuantity, scaleQuantity } from '../../lib/quantity'
+import { formatAmount, scaleQuantity } from '../../lib/quantity'
 
 export interface ScaledQuantityProps {
   /** The base quantity (before scaling) */
@@ -34,21 +34,7 @@ export function ScaledQuantity({
   // Calculate scaled quantity
   const scaledQuantity = hasQuantity ? scaleQuantity(quantity, scaleFactor) : null
 
-  // Format quantity as pretty fraction
-  const formattedQuantity = scaledQuantity != null ? formatQuantity(scaledQuantity) : ''
-
-  // Build the display string
-  const parts: string[] = []
-
-  if (formattedQuantity) {
-    parts.push(formattedQuantity)
-  }
-
-  if (unit) {
-    parts.push(unit)
-  }
-
-  parts.push(name)
+  const parts = [formatAmount(scaledQuantity, unit), name].filter(Boolean)
 
   return (
     <span
