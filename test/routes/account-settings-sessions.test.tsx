@@ -382,6 +382,8 @@ describe("Account settings - revocable sessions", () => {
       expect(forms[0].get("intent")).toBe("changePassword");
       expect(forms[0].get("connectionsChoice")).toBe("1");
       expect(forms[0].get("revokeConnections")).toBe("1");
+      // Let the action's result render, so its state update lands inside the test.
+      expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
     });
 
     it("keeps apps and tokens connected when the chef unticks the box", async () => {
@@ -396,6 +398,7 @@ describe("Account settings - revocable sessions", () => {
       await waitFor(() => expect(forms).toHaveLength(1));
       expect(forms[0].get("connectionsChoice")).toBe("1");
       expect(forms[0].has("revokeConnections")).toBe(false);
+      expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
     });
   });
 });
