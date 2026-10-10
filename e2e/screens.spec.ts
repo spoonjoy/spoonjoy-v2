@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 // Screens: full-page captures of the main pages at phone and desktop sizes, in light and dark,
@@ -23,6 +24,22 @@ function slug(path: string) {
   return path === "/" ? "home" : path.replace(/^\//, "").replace(/[^a-z0-9]+/gi, "-");
 }
 
+// List images below the first screen are loading="lazy", so a full-page capture taken from the
+// top shows them as empty boxes. Scroll the whole page first, then wait until every image has
+// either loaded or failed, so the capture shows what a reader who scrolled would see.
+async function loadEveryImage(page: Page) {
+  await page.evaluate(async () => {
+    for (let y = 0; y < document.documentElement.scrollHeight; y += window.innerHeight) {
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    window.scrollTo(0, 0);
+  });
+  await page
+    .waitForFunction(() => Array.from(document.images).every((image) => image.complete), undefined, { timeout: 10_000 })
+    .catch(() => undefined);
+}
+
 mkdirSync(OUT, { recursive: true });
 
 for (const [state, paths] of [["signed-out", SIGNED_OUT], ["signed-in", SIGNED_IN]] as const) {
@@ -37,6 +54,7 @@ for (const [state, paths] of [["signed-out", SIGNED_OUT], ["signed-in", SIGNED_I
             const response = await page.goto(path);
             expect(response?.status(), `${path} should load`).toBeLessThan(400);
             await page.waitForLoadState("networkidle");
+            await loadEveryImage(page);
             await page.screenshot({
               path: `${OUT}/${state}-${slug(path)}-${viewport.name}-${scheme}.png`,
               fullPage: true,
