@@ -437,8 +437,28 @@ describe("Cloudflare worker app", () => {
         retryable: true,
       },
     });
+    // Authentication gets a lazy Prisma client: only a bearer token builds one.
+    expect(apiMocks.getDb).not.toHaveBeenCalled();
+    const [prisma, calledRequest, calledEnv, options] = apiMocks.authenticateApiRequest.mock.calls.at(-1)!;
+    expect(calledRequest).toBe(request);
+    expect(calledEnv).toBe(env);
+    // `{ marker: "binding" }` is not a D1 binding, so the session read has none.
+    expect(options).toEqual({ d1: null });
+    await expect((prisma as () => Promise<unknown>)()).resolves.toBe(apiMocks.db);
     expect(apiMocks.getDb).toHaveBeenCalledWith({ DB: env.DB });
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+  });
+
+  it("passes the D1 binding for the browser session check, without building a Prisma client", async () => {
+    const binding = { prepare: vi.fn(), batch: vi.fn() };
+    const request = new Request("https://spoonjoy.app/api/cook-sessions/recipe-1", {
+      headers: { Origin: "https://spoonjoy.app" },
+    });
+    const env = versionedEnvironment({ DB: binding as unknown as D1Database });
+
+    await worker.fetch(request, env, context());
+
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: binding });
+    expect(apiMocks.getDb).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -573,7 +593,7 @@ describe("Cloudflare worker app", () => {
         retryable: false,
       },
     });
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, expect.anything());
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, expect.anything(), { d1: null });
     expect(namespace.idFromName).not.toHaveBeenCalled();
     expect(namespace.get).not.toHaveBeenCalled();
     expect(namespace.fetch).not.toHaveBeenCalled();
@@ -729,7 +749,7 @@ describe("Cloudflare worker app", () => {
         retryable: true,
       },
     });
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: null });
   });
 
   it.each([
@@ -969,7 +989,7 @@ describe("Cloudflare worker app", () => {
     const response = await worker.fetch(request, env, context());
 
     expect(response.status).toBe(503);
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: null });
   });
 
   it.each([undefined, "not a url", "ftp://spoonjoy.app"])(

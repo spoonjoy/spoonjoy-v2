@@ -11,6 +11,7 @@ import {
   namedIngredientInsertStatement,
   nameUpsertStatements,
   recipeActiveGuard,
+  recipeUpdatedAtGuard,
   recipeUpdateStatement,
   stepAtGuard,
   stepDeleteStatement,
@@ -94,6 +95,8 @@ export async function saveRecipeEditOnD1(
     chefId: string;
     fields: { title: string; description: string | null; servings: string | null };
     cover: RecipeEditCover;
+    /** When given, the save applies only if the recipe's updatedAt is still this. */
+    expectedUpdatedAt?: Date;
   },
 ): Promise<void> {
   const now = new Date();
@@ -107,6 +110,7 @@ export async function saveRecipeEditOnD1(
   await d1WriteBatch(d1, [
     recipeActiveGuard(recipeId),
     activeRecipeTitleFreeGuard(input.chefId, input.fields.title, recipeId),
+    ...(input.expectedUpdatedAt ? [recipeUpdatedAtGuard(recipeId, input.expectedUpdatedAt)] : []),
     ...(cover?.kind === "upload"
       ? [coverInsertStatement({
         id: cover.coverId,

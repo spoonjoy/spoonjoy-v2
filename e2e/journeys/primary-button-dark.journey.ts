@@ -35,7 +35,8 @@ test.describe("Primary button in dark mode", () => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/login");
     await waitForHydration(page);
-    const logIn = page.getByRole("button", { name: "Log In", exact: true });
+    // The form's submit button: the header has a "Log in" menu button too.
+    const logIn = page.locator("#main").getByRole("button", { name: "Log in", exact: true });
     // On a phone the Log In button is below the first screen; centre it so each screenshot shows it.
     await logIn.evaluate((element) => element.scrollIntoView({ block: "center" }));
 

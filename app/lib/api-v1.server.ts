@@ -158,6 +158,7 @@ import {
   validateImageFile,
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   FOOD_IMAGE_SIZE_MESSAGE,
   FOOD_IMAGE_TYPE_MESSAGE,
@@ -836,13 +837,16 @@ export async function parseApiV1JsonBody(request: Request): Promise<Record<strin
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!contentType.includes("application/json")) return {};
 
-  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
-    throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
-  }
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_JSON_BODY_BYTES) {
-    throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
+  // Read through the limit so a body with no Content-Length is cut off as soon as it passes it,
+  // instead of being buffered whole first.
+  let text: string;
+  try {
+    text = await readLimitedTextBody(request, MAX_JSON_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
+    }
+    throw error;
   }
   if (!text.trim()) return {};
 
@@ -5987,7 +5991,14 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context)));
+    const result = await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context));
+    if (!result.ok && result.code === "edit_conflict") {
+      // The recipe changed after the client's expectedUpdatedAt. Nothing was written; the
+      // answer carries the recipe as it is now, so the client can merge and retry.
+      const current = await serializedRecipeOrThrow(db, recipeId, origin);
+      throw new ApiV1Error(result.code, result.message, { ...(result.details as object), recipe: current });
+    }
+    const updated = recipeWriteResultOrThrow(result);
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,

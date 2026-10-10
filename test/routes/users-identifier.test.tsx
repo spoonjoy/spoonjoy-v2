@@ -421,7 +421,7 @@ describe("Users $identifier Route", () => {
       expect(screen.getByRole("link", { name: /\bPlain Rice\b/ })).toHaveAttribute("href", "/recipes/recipe-2");
       expect(screen.getAllByText("Weeknight Pantry").length).toBeGreaterThan(0);
       expect(screen.queryByRole("link", { name: "Open settings" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
       // The cookbook sidebar is a labelled region, not an <aside>: root.tsx already wraps
       // every route in a <main> landmark, so a complementary landmark here would nest
       // inside it and fail landmark-complementary-is-top-level.
@@ -512,7 +512,7 @@ describe("Users $identifier Route", () => {
       ]);
 
       render(<Stub initialEntries={["/users/chef-logout"]} />);
-      fireEvent.click(await screen.findByRole("button", { name: "Logout" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Log out" }));
 
       await waitFor(() => {
         expect(window.localStorage.getItem("spoonjoy-cook-progress:user:user-1:recipe-1")).toBeNull();
@@ -548,7 +548,7 @@ describe("Users $identifier Route", () => {
       expect(screen.getByTitle("chef-empty")).toBeInTheDocument();
       expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
-      expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
       expect(screen.getByText("No recipes yet")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Create Recipe" })).toHaveAttribute("href", "/recipes/new");
       expect(screen.getByText("No cookbooks yet.")).toBeInTheDocument();
