@@ -47,6 +47,7 @@ function observeOAuthTokenResponse(
       scope: telemetry.scope,
       resource: telemetry.resource,
       token_lifetime: telemetry.tokenLifetime,
+      refresh_refusal: telemetry.refusal,
       request_bytes: requestContentBytes(args.request),
       origin_host: safeHeaderHost(args.request.headers.get("Origin")),
       referrer_host: safeHeaderHost(args.request.headers.get("Referer")),
@@ -55,6 +56,21 @@ function observeOAuthTokenResponse(
       latency_ms: Math.max(0, Date.now() - input.startedAt),
     },
   }));
+  // A replayed refresh token just revoked a connection as compromised: its own event, so the
+  // runbook's triage (a leak, or a client refresh race) can find it without filtering errors.
+  if (telemetry.refusal === "reuse_revoked") {
+    waitUntil(captureEvent(postHogConfig, {
+      event: "spoonjoy.oauth.grant_compromised",
+      // Reuse is only judged when the request named the token's own client, so the id is set.
+      distinctId: telemetry.clientId!,
+      properties: {
+        route_template: "/oauth/token",
+        client_id: telemetry.clientId,
+        reason: "refresh_reuse",
+        user_agent_family: userAgentFamily(args.request.headers.get("User-Agent")),
+      },
+    }));
+  }
 
   return input.response;
 }

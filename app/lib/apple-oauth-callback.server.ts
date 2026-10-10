@@ -15,6 +15,7 @@ import {
   createOAuthUser,
   findExistingOAuthAccount,
   linkOAuthAccount,
+  markEmailVerifiedByProvider,
 } from "./oauth-user.server";
 
 /**
@@ -95,6 +96,8 @@ export async function handleAppleOAuthCallback(
       };
     }
 
+    await markEmailVerifiedByProvider(db, currentUserId, appleUser.email, appleUser.emailVerified);
+
     return {
       success: true,
       userId: currentUserId,
@@ -111,6 +114,9 @@ export async function handleAppleOAuthCallback(
   );
 
   if (existingOAuthAccount) {
+    // A returning sign-in whose provider vouches for the account's own address verifies it, so
+    // accounts made before verification existed become verified as people sign in.
+    await markEmailVerifiedByProvider(db, existingOAuthAccount.userId, appleUser.email, appleUser.emailVerified);
     return {
       success: true,
       userId: existingOAuthAccount.userId,
@@ -143,6 +149,7 @@ export async function handleAppleOAuthCallback(
     providerUsername: appleUser.fullName ?? appleUser.email,
     email: appleUser.email,
     name: appleUser.fullName,
+    emailVerified: appleUser.emailVerified,
   }, d1);
 
   if (!createResult.success) {

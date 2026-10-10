@@ -397,6 +397,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       db,
       bearerToken,
       resolveIssuerOrigin(request.url, cloudflareEnv?.SPOONJOY_BASE_URL),
+      { waitUntil },
     );
   } catch (error) {
     const response = authChallengeResponse(request, cloudflareEnv);
@@ -428,7 +429,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
       return { tools: listSpoonjoyMcpTools() };
     },
     async callTool(name, args) {
-      const context = buildSpoonjoyApiContext({ db, principal, cloudflareEnv, waitUntil });
+      const context = buildSpoonjoyApiContext({ db, principal, cloudflareEnv, waitUntil, request });
       try {
         const text = await callSpoonjoyMcpTool(name, args, context);
         return { content: [{ type: "text", text }] };

@@ -27,6 +27,7 @@ import { ValidationError } from "~/components/ui/validation-error";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
+import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
 import { ScaleSelector } from "~/components/recipe/ScaleSelector";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
 import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
@@ -41,6 +42,8 @@ import { shareContent, useDockSuppressed } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
+import { useCookTimers, type CookTimersController } from "~/hooks/use-cook-timers";
+import { useScreenWakeLock } from "~/hooks/use-screen-wake-lock";
 import {
   normalizeScaleFactor,
   normalizeStepIndex,
@@ -828,6 +831,14 @@ export default function RecipeDetail() {
   // The tab bar is hidden in cook mode so it never covers the step controls.
   useDockSuppressed(showOwnerTools || (isCookMode && recipe.steps.length > 0));
 
+  // Timers live here, above cook mode's step view, so changing step or leaving cook mode keeps them.
+  const cookTimerSteps = useMemo(
+    () => recipe.steps.map((step) => ({ stepNum: step.stepNum, label: step.stepTitle ?? "", durationMinutes: step.duration })),
+    [recipe.steps],
+  );
+  const cookTimers = useCookTimers(recipe.id, cookTimerSteps);
+  useScreenWakeLock(isCookMode && recipe.steps.length > 0);
+
   useEffect(() => {
     setAvailableCookbooks(cookbooks);
   }, [cookbooks]);
@@ -979,12 +990,26 @@ export default function RecipeDetail() {
         onNext={() => setActiveCookStepIndex((current) => Math.min(recipe.steps.length - 1, current + 1))}
         onStepSelect={(index) => setActiveCookStepIndex(index)}
         onExit={handleExitCookMode}
+        timers={cookTimers}
+        onGoToStepNum={(stepNum) => {
+          // The tray only lists this recipe's steps, so the step is always found.
+          setActiveCookStepIndex(Math.max(0, recipe.steps.findIndex((candidate) => candidate.stepNum === stepNum)));
+        }}
       />
     );
   }
 
   return (
     <div className="sj-page pb-24">
+      {cookTimers.active.length > 0 ? (
+        <div className="sticky top-0 z-20 bg-[var(--sj-page)]">
+          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+            <CookTimerTray controller={cookTimers} />
+          </div>
+        </div>
+      ) : (
+        <CookTimerTray controller={cookTimers} />
+      )}
       {/* Recipe Header with prominent image */}
       <RecipeHeader
         title={recipe.title}
@@ -1000,7 +1025,8 @@ export default function RecipeDetail() {
         servings={recipe.servings ?? undefined}
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}
-        onClearProgress={handleClearProgress}
+        // Only offered when there is something to clear (product audit 2026-10-09, finding 15).
+        onClearProgress={cookProgressChecked > 0 ? handleClearProgress : undefined}
         progressSyncStatus={cookSyncStatus}
         masthead={headerMasthead}
         provenance={headerProvenance}
@@ -1017,7 +1043,7 @@ export default function RecipeDetail() {
               aria-controls="recipe-owner-maintenance"
               onClick={() => setShowOwnerTools((visible) => !visible)}
             >
-              <span>Recipe maintenance</span>
+              <span>Manage recipe</span>
               <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
             </button>
 
@@ -1173,9 +1199,9 @@ export default function RecipeDetail() {
         size="sm"
         role="alertdialog"
       >
-        <DialogTitle>Delete this recipe?</DialogTitle>
+        <DialogTitle>{`Delete "${recipe.title}"?`}</DialogTitle>
         <DialogDescription>
-          Delete this recipe? This cannot be undone.
+          It will be removed from your kitchen and your cookbooks, and links to it will stop working. You can't undo this.
         </DialogDescription>
         <DialogActions>
           <Button plain onClick={() => setIsDeleteDialogOpen(false)}>
@@ -1288,6 +1314,8 @@ function CookModePanel({
   onNext,
   onStepSelect,
   onExit,
+  timers,
+  onGoToStepNum,
 }: {
   recipeTitle: string;
   step: CookModeStep;
@@ -1307,6 +1335,8 @@ function CookModePanel({
   onNext: () => void;
   onStepSelect: (index: number) => void;
   onExit: () => void;
+  timers: CookTimersController;
+  onGoToStepNum: (stepNum: number) => void;
 }) {
   const stepTitle = step.stepTitle ?? `Step ${step.stepNum}`;
   const recipeProgressLabel = progressTotal > 0
@@ -1353,6 +1383,8 @@ function CookModePanel({
           </button>
         </header>
 
+        <CookTimerTray controller={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
+
         <div
           data-testid="cook-mode-pager"
           className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-stretch lg:gap-12 lg:py-10"
@@ -1374,7 +1406,7 @@ function CookModePanel({
             <Text className="mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
               {step.description}
             </Text>
-            {step.duration ? <CookModeTimer durationMinutes={step.duration} /> : null}
+            <CookStepTimer stepNum={step.stepNum} controller={timers} />
           </article>
 
           {/* A <div>, not <aside>: this ingredient checklist and scale selector are core
@@ -1475,96 +1507,5 @@ function CookModePanel({
         </footer>
       </div>
     </section>
-  );
-}
-
-export function formatTimerSeconds(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
-  const seconds = Math.max(0, totalSeconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
-function CookModeTimer({ durationMinutes }: { durationMinutes: number }) {
-  const totalSeconds = Math.max(0, Math.round(durationMinutes * 60));
-  const [remainingSeconds, setRemainingSeconds] = useState(totalSeconds);
-  const [isRunning, setIsRunning] = useState(false);
-  const durationLabel = `${durationMinutes} min timer`;
-
-  useEffect(() => {
-    setRemainingSeconds(totalSeconds);
-    setIsRunning(false);
-  }, [totalSeconds]);
-
-  useEffect(() => {
-    if (!isRunning) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      setRemainingSeconds((current) => {
-        if (current <= 1) {
-          window.clearInterval(intervalId);
-          return 0;
-        }
-
-        return current - 1;
-      });
-    }, 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, [isRunning]);
-
-  useEffect(() => {
-    if (remainingSeconds === 0) {
-      setIsRunning(false);
-    }
-  }, [remainingSeconds]);
-
-  if (totalSeconds <= 0) {
-    return null;
-  }
-
-  return (
-    <div
-      data-testid="cook-mode-timer"
-      className="mt-6 flex flex-col gap-4 border-y border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <div>
-        <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.18em] text-[var(--sj-brass)]">
-          {durationLabel}
-        </p>
-        <p className="font-sj-display mt-2 text-4xl/10 font-semibold tabular-nums text-[var(--sj-ink)]">
-          {formatTimerSeconds(remainingSeconds)}
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:flex">
-        <Button
-          type="button"
-          onClick={() => {
-            if (isRunning) {
-              setIsRunning(false);
-              return;
-            }
-
-            if (remainingSeconds === 0) {
-              setRemainingSeconds(totalSeconds);
-            }
-            setIsRunning(true);
-          }}
-        >
-          {isRunning ? "Pause timer" : remainingSeconds === 0 ? "Restart timer" : "Start timer"}
-        </Button>
-        <Button
-          type="button"
-          plain
-          onClick={() => {
-            setRemainingSeconds(totalSeconds);
-            setIsRunning(false);
-          }}
-        >
-          Reset timer
-        </Button>
-      </div>
-    </div>
   );
 }

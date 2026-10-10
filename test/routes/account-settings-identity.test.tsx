@@ -14,6 +14,7 @@ import { createUserSessionCookie } from "~/lib/session.server";
 import type { AccountSettingsActionResult, AccountSettingsLoaderData } from "~/lib/account-settings.server";
 import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { photoVariantKeys } from "~/lib/photo-variants";
 
 const PASSWORD = "testPassword123";
 const FORMAT_ERROR = "Username can only use letters, numbers, periods, underscores and hyphens";
@@ -169,6 +170,22 @@ describe("Account settings - identity", () => {
       expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).email).toBe("trimmed.chef@example.com");
     });
 
+    // Audit 2026-10-09 finding 2: a new address is unproven, so Google and GitHub must not link to
+    // it by email until it is confirmed. A username-only save keeps the verification.
+    it("marks the account unverified when the email changes, not when only the username does", async () => {
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+      const verifiedAt = async () =>
+        (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { emailVerifiedAt: true } })).emailVerifiedAt;
+
+      await expect(saveUserInfo({ username: `renamed_${faker.string.alphanumeric(8)}` }))
+        .resolves.toMatchObject({ success: true });
+      expect(await verifiedAt()).toBeInstanceOf(Date);
+
+      await expect(saveUserInfo({ email: "moved.chef@example.com", username: await storedUsername() }))
+        .resolves.toMatchObject({ success: true });
+      expect(await verifiedAt()).toBeNull();
+    });
+
     it("refuses an email another account holds, typed with spaces and capitals", async () => {
       const otherEmail = `taken-${faker.string.alphanumeric(10).toLowerCase()}@example.com`;
       await createUser(db, otherEmail, `other_${faker.string.alphanumeric(8)}`, PASSWORD);
@@ -245,8 +262,9 @@ describe("Account settings - identity", () => {
 
       expect(result).toMatchObject({ success: true, intent: "uploadPhoto" });
       expect(result.photoUrl).toMatch(new RegExp(`^/photos/profiles/${userId}/`));
-      expect(bucket.delete).toHaveBeenCalledWith(`profiles/${userId}/1-old.jpg`);
-      expect(bucket.delete).toHaveBeenCalledTimes(1);
+      expect(bucket.delete).toHaveBeenCalledTimes(2);
+      expect(bucket.delete).toHaveBeenNthCalledWith(1, `profiles/${userId}/1-old.jpg`);
+      expect(bucket.delete).toHaveBeenNthCalledWith(2, photoVariantKeys(`profiles/${userId}/1-old.jpg`));
       expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).photoUrl).toBe(result.photoUrl);
     });
 

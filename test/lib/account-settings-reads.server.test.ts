@@ -110,6 +110,40 @@ describe("account settings reads", () => {
     expect(reads.accessCredentialCounts.map((row) => row.count).sort()).toEqual([1, 2]);
   });
 
+  it("leaves connections whose refresh token has expired off the list, on D1 and Prisma alike", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const lapsed = await db.oAuthClient.create({ data: { clientName: "Lapsed", redirectUris: "[]", issuer: ISSUER } });
+    const live = await db.oAuthClient.create({ data: { clientName: "Live", redirectUris: "[]", issuer: ISSUER } });
+    const legacy = await db.oAuthClient.create({ data: { clientName: "Pre-expiry", redirectUris: "[]", issuer: ISSUER } });
+    await refreshToken(user.id, lapsed.id, { connectionKey: "lapsed", expiresAt: new Date("2026-10-01T00:00:00Z") });
+    await refreshToken(user.id, live.id, { connectionKey: "live", expiresAt: new Date("2027-06-01T00:00:00Z") });
+    await refreshToken(user.id, legacy.id, { connectionKey: "legacy", expiresAt: null });
+    // A row written by raw SQL with a zoneless timestamp, as some D1 paths store them.
+    const zoneless = await db.oAuthClient.create({ data: { clientName: "Zoneless lapsed", redirectUris: "[]", issuer: ISSUER } });
+    await db.$executeRawUnsafe(
+      `INSERT INTO "OAuthRefreshToken" ("id", "tokenHash", "userId", "clientId", "scope", "issuer", "connectionKey", "createdAt", "expiresAt")
+       VALUES (?, ?, ?, ?, 'recipes:read', ?, 'zoneless', '2026-04-01 00:00:00', '2026-10-01 00:00:00')`,
+      `zoneless-${user.id}`, `refresh-zoneless-${user.id}`, user.id, zoneless.id, ISSUER,
+    );
+    await createApiCredential(db, user.id, "Lapsed access", { oauthClientId: lapsed.id, oauthIssuer: ISSUER, oauthConnectionKey: "lapsed" });
+    await createApiCredential(db, user.id, "Live access", { oauthClientId: live.id, oauthIssuer: ISSUER, oauthConnectionKey: "live" });
+
+    const clientNames = (reads: Awaited<ReturnType<typeof readAccountSettingsWithPrisma>>) =>
+      reads.oauthClients.map((client) => client.clientName).sort();
+    for (const [now, expected] of [
+      [new Date("2026-10-09T00:00:00Z"), ["Live", "Pre-expiry"]],
+      // After the legacy cutover a token without an expiry has lapsed too.
+      [new Date("2027-04-08T00:00:00Z"), ["Live"]],
+    ] as const) {
+      const fromD1 = await readAccountSettingsFromD1(d1.binding, user.id, ISSUER, now);
+      const fromPrisma = await readAccountSettingsWithPrisma(db, user.id, now);
+      expect(clientNames(fromD1)).toEqual(expected);
+      expect(comparable(fromD1)).toEqual(comparable(fromPrisma));
+      expect(fromD1.activeRefreshTokens).toHaveLength(expected.length);
+      expect(fromD1.accessCredentialCounts.map((row) => row.oauthConnectionKey)).toEqual(["live"]);
+    }
+  });
+
   it("reads a user with no password, preferences or connections, and a missing user", async () => {
     const bare = await db.user.create({ data: { ...createTestUser(), hashedPassword: null, salt: null } });
     for (const userId of [bare.id, "missing-user"]) {

@@ -18,6 +18,12 @@
   --sj-brass: #9b6834;
   --sj-action: #28231d;
   --sj-action-deep: #1f1b17;
+  /* The primary button: its label, and its hover/pressed and disabled fills. Every pair passes
+     WCAG AA 4.5:1 (test/styles/primary-button-contrast.test.ts). */
+  --sj-on-action: var(--sj-bone);
+  --sj-action-hover: var(--sj-action-deep);
+  --sj-action-disabled: #6b655c;
+  --sj-on-action-disabled: var(--sj-bone);
   --sj-tomato: #a24a38;
   --sj-herb: #596a4f;
   --sj-ink: var(--sj-charcoal);
@@ -58,6 +64,12 @@
   --sj-brass: #c4945c;
   --sj-action: #b9854b;
   --sj-action-deep: #95683a;
+  /* A dark label on the amber: the light one measured 2.61:1. Hover lightens instead of deepening,
+     so the dark label keeps its contrast. */
+  --sj-on-action: var(--sj-charcoal);
+  --sj-action-hover: #cc9a62;
+  --sj-action-disabled: #463d33;
+  --sj-on-action-disabled: var(--sj-charcoal-soft);
   /* Bumped from #d26850 (4.24:1 on --sj-panel-solid) to pass WCAG AA (≥4.5:1)
    * — it's the error-text color, so it has to be readable. */
   --sj-tomato: #e58263;
@@ -572,28 +584,40 @@ body:has(#cook) .sj-mobile-surface {
   box-shadow: var(--sj-shadow);
 }
 
-/* Skip-to-content link — invisible until keyboard-focused, then slides down
- * from the top edge. Rendered by Layout in root.tsx as the first focusable
+/* Skip-to-content link. Rendered by Layout in root.tsx as the first focusable
  * element so the very first Tab press jumps a keyboard / SR user past the
- * desktop nav and mobile dock straight to <main id="main">. */
+ * desktop nav and mobile dock straight to <main id="main">.
+ *
+ * Until it has focus it is visually hidden (clipped to a 1px box) rather than
+ * parked off-screen above the top edge: a fixed element at a negative top still
+ * paints in a full-page screenshot of a scrolled page, and screen readers still
+ * read a clipped link. With focus it shows at the top-left corner. */
 .sj-skip-link {
   position: fixed;
-  top: -3rem;
+  top: 0;
   left: 0.5rem;
   z-index: 100;
-  padding: 0.5rem 1rem;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
   background: var(--sj-charcoal);
   color: var(--sj-bone);
   font-family: var(--font-sj-ui);
   font-weight: 600;
   text-decoration: underline;
   border-radius: 0 0 var(--sj-radius-small) var(--sj-radius-small);
-  transition: top 0.15s ease;
 }
 
 .sj-skip-link:focus,
 .sj-skip-link:focus-visible {
-  top: 0;
+  width: auto;
+  height: auto;
+  padding: 0.5rem 1rem;
+  overflow: visible;
+  clip-path: none;
   outline: 2px solid var(--sj-brass);
   outline-offset: 2px;
 }

@@ -480,7 +480,7 @@ describe("native Sign in with Apple API", () => {
     );
   });
 
-  it("accepts array audiences, fallback email, and boolean Apple email flags", async () => {
+  it("accepts array audiences and boolean Apple email flags, and treats a fallback email as unverified", async () => {
     const fixture = await nativeAppleTokenFixture({
       aud: ["other.client", APPLE_NATIVE_IOS_CLIENT_ID],
       email: undefined,
@@ -499,10 +499,13 @@ describe("native Sign in with Apple API", () => {
       { fetcher: fetchAppleKeys(fixture.jwks) },
     );
 
+    // Review of audit finding 2: Apple vouches only for the email in its signed token. The app's
+    // fallback address is unproven even though the token says email_verified, so it must not
+    // create or link a verified account.
     expect(appleUser).toMatchObject({
       id: "apple-user-123",
       email: "fallback@example.com",
-      emailVerified: true,
+      emailVerified: false,
       isPrivateEmail: true,
       fullName: "Fallback Chef",
     });

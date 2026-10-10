@@ -67,7 +67,7 @@ function normalizeOffset(input: number | undefined): number {
 
 type Side = "viewer" | "chef";
 
-function interactionsCte(side: Side): string {
+function interactionsCte(side: Side, focal = "?"): string {
   // For `viewer` side (Fellow Chefs): focal user is the actor —
   // s.chefId = ?, fk.chefId = ?, ric.addedById = ?
   // For `chef` side (Kitchen Visitors): focal user owns the recipes —
@@ -84,25 +84,25 @@ function interactionsCte(side: Side): string {
     SELECT ${spoonOther} AS otherChefId, s.cookedAt AS interactionAt, 'spoon' AS kind
     FROM RecipeSpoon s
     JOIN Recipe r ON r.id = s.recipeId
-    WHERE ${spoonActor} = ?
+    WHERE ${spoonActor} = ${focal}
       AND s.deletedAt IS NULL
       AND r.deletedAt IS NULL
-      AND ${spoonOther} <> ?
+      AND ${spoonOther} <> ${focal}
     UNION ALL
     SELECT ${forkOther} AS otherChefId, fk.createdAt AS interactionAt, 'fork' AS kind
     FROM Recipe fk
     JOIN Recipe src ON src.id = fk.sourceRecipeId
-    WHERE ${forkActor} = ?
+    WHERE ${forkActor} = ${focal}
       AND fk.deletedAt IS NULL
       AND src.deletedAt IS NULL
-      AND ${forkOther} <> ?
+      AND ${forkOther} <> ${focal}
     UNION ALL
     SELECT ${saveOther} AS otherChefId, ric.createdAt AS interactionAt, 'save' AS kind
     FROM RecipeInCookbook ric
     JOIN Recipe r ON r.id = ric.recipeId
-    WHERE ${saveActor} = ?
+    WHERE ${saveActor} = ${focal}
       AND r.deletedAt IS NULL
-      AND ${saveOther} <> ?
+      AND ${saveOther} <> ${focal}
   `;
 }
 
@@ -187,6 +187,22 @@ async function runList(
   const total = toNumber(rawCount[0].total);
 
   return { rows, total };
+}
+
+/**
+ * SQL counting the distinct chefs on one side of the chef graph, with the focal user
+ * given as an SQL expression (for example a subquery), so a page's D1 batch can count
+ * without first resolving the user's id. Same semantics as `countFellowChefs` and
+ * `countKitchenVisitors`.
+ */
+export function chefGraphCountSql(side: Side, focalSql: string): string {
+  return `
+    WITH interactions AS (
+      ${interactionsCte(side, focalSql)}
+    )
+    SELECT COUNT(*) AS total
+    FROM (SELECT otherChefId FROM interactions GROUP BY otherChefId)
+  `;
 }
 
 async function runCount(

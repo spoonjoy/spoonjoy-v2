@@ -49,7 +49,7 @@ export function ChecklistRow({
     <span className="min-w-0">
       <span
         className={clsx(
-          "sj-checklist-name block truncate font-sj-ui text-base text-[var(--sj-ink)] print:whitespace-normal",
+          "sj-checklist-name block break-words font-sj-ui text-base text-[var(--sj-ink)]",
           checked && "text-[var(--sj-ink-soft)]",
         )}
       >
@@ -63,7 +63,8 @@ export function ChecklistRow({
     <span
       data-testid={quantityTestId}
       className={clsx(
-        "max-w-[8.5rem] break-words text-right font-sj-ui text-sm tabular-nums text-[var(--sj-ink)]",
+        // An amount never wraps or truncates; a long name wraps beside it instead.
+        "whitespace-nowrap text-right font-sj-ui text-sm tabular-nums text-[var(--sj-ink)]",
         checked && "text-[var(--sj-ink-soft)]",
       )}
     >
