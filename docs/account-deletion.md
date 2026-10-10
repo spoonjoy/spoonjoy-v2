@@ -4,7 +4,7 @@ A person can download everything they put into Spoonjoy, and can permanently del
 
 ## Export
 
-`GET /api/v1/me/export` returns one JSON document, format `spoonjoy.account-export.v1`:
+`GET /api/v1/me/export`, and Download my data in account settings (`/account/export`), return one JSON document, format `spoonjoy.account-export.v1`:
 
 - the account: id, username, email, profile photo URL, creation time and sign-in methods;
 - every recipe the person owns, including deleted ones, with steps, ingredients, which steps use another step's output, and every cover (active or archived);
@@ -15,6 +15,8 @@ A person can download everything they put into Spoonjoy, and can permanently del
 Photos are listed as absolute `https://spoonjoy.app/photos/...` URLs. Password hashes, tokens and passkey keys are never included.
 
 ## Who can delete
+
+On the web, Delete account in account settings posts the `deleteAccount` intent; a passwordless chef whose sign-in is too old gets Sign in again, which signs out and returns to the form. After deletion the browser is signed out and lands on `/account/deleted`.
 
 Deleting needs the username typed back, plus proof that the person is the owner right now (`app/lib/account-reauthentication.server.ts`):
 
@@ -30,7 +32,7 @@ Deleting needs the username typed back, plus proof that the person is the owner 
 
 Deletion is one atomic D1 batch: every step applies, or none does.
 
-**Recipes that other cooks built on stay public, under the "deleted chef" account.** A recipe counts as built on when another cook forked it, saved it in one of their cookbooks, or logged a cook of it. Its chef becomes the `deleted-chef` account (profile `/users/deleted-chef`). Nobody can sign in to that account, and the username `deleted-chef` is reserved.
+**Recipes that other cooks built on stay public, under the "deleted chef" account.** A recipe counts as built on when another cook forked it, saved it in one of their cookbooks, or logged a cook of it. Its chef becomes the `deleted-chef` account (profile `/users/deleted-chef`), which bylines show as "Deleted chef" (`chefDisplayName` in `app/lib/username.ts`). Nobody can sign in to that account, and the username `deleted-chef` is reserved.
 
 **Forks stay with the cook who forked them.** A fork keeps pointing at the recipe it came from. If that recipe was one of the deleted person's own forks of their own recipe, the link is cleared.
 

@@ -30,9 +30,9 @@ import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.ser
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import {
   IngredientParseError,
-  parseIngredients,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
+import { parseIngredientsWithRulesFallback } from "~/lib/ingredient-parse-fallback.server";
 import { useEffect, useRef, useState } from "react";
 import { importRecipeForSession, parseSessionImportForm } from "~/lib/recipe-import-session.server";
 import { RecipeImportPanel, type RecipeImportActionData } from "~/components/recipe/RecipeImportPanel";
@@ -79,7 +79,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === "parseIngredients") {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
     try {
-      const parsedIngredients = await parseIngredients(
+      const parsedIngredients = await parseIngredientsWithRulesFallback(
         ingredientText,
         getIngredientParserEnv(context),
         { distinctId: userId }

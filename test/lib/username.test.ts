@@ -5,6 +5,9 @@ import {
   isReservedUsername,
   normalizeUsername,
   usernameFormatError,
+  chefDisplayName,
+  DELETED_CHEF_DISPLAY_NAME,
+  DELETED_CHEF_USERNAME,
 } from "~/lib/username";
 
 describe("normalizeUsername", () => {
@@ -73,5 +76,14 @@ describe("usernameFormatError", () => {
     expect(usernameFormatError("cmg1a2b3c0000d4e5f6g7h8i")).toBeNull();
     expect(usernameFormatError("cmg1a2b3c0000d4e5f6g7h8i9j")).toBeNull();
     expect(usernameFormatError("amg1a2b3c0000d4e5f6g7h8i9")).toBeNull();
+  });
+});
+
+describe("chefDisplayName", () => {
+  it("shows the deleted-chef account as Deleted chef and every other chef by username", () => {
+    expect(chefDisplayName(DELETED_CHEF_USERNAME)).toBe(DELETED_CHEF_DISPLAY_NAME);
+    expect(DELETED_CHEF_DISPLAY_NAME).toBe("Deleted chef");
+    expect(chefDisplayName("ada")).toBe("ada");
+    expect(chefDisplayName("Deleted-Chef")).toBe("Deleted-Chef");
   });
 });

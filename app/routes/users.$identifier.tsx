@@ -1,4 +1,5 @@
 import type { Route } from "./+types/users.$identifier";
+import { chefDisplayName } from "~/lib/username";
 import { Form, redirect, useLoaderData } from "react-router";
 import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -225,14 +226,14 @@ export default function UserProfile() {
           <div className="flex items-center gap-4">
             <Avatar
               src={resolveChefAvatarUrl(profile.photoUrl)}
-              alt={profile.username}
+              alt={chefDisplayName(profile.username)}
               initials={profile.username.charAt(0).toUpperCase()}
               className="size-18 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
             />
             <div>
               <p className="sj-eyebrow">Chef profile</p>
               <Heading level={1} className="mt-2 text-5xl/12 tracking-normal">
-                {profile.username}
+                {chefDisplayName(profile.username)}
               </Heading>
               <Text className="mt-1 text-sm">
                 Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
@@ -280,8 +281,8 @@ export default function UserProfile() {
               firstNew={{ index: list.firstNewIndex, ref: firstNewRef }}
               emptyTitle={after ? "That's every recipe" : isOwner ? "No recipes yet" : "No public recipes yet"}
               emptyMessage={after
-                ? `You've reached ${profile.username}'s oldest recipe.`
-                : isOwner ? "Create your first recipe to start your kitchen." : `${profile.username} has not shared any recipes yet.`}
+                ? `You've reached ${chefDisplayName(profile.username)}'s oldest recipe.`
+                : isOwner ? "Create your first recipe to start your kitchen." : `${chefDisplayName(profile.username)} has not shared any recipes yet.`}
               emptyCtaHref={isOwner && !after ? "/recipes/new" : null}
             />
             {recipes.length > 0 ? (
@@ -307,7 +308,7 @@ export default function UserProfile() {
             {cookbooks.length === 0 ? (
               <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
                 <Text>
-                  {isOwner ? "No cookbooks yet." : `${profile.username} has not shared any cookbooks yet.`}
+                  {isOwner ? "No cookbooks yet." : `${chefDisplayName(profile.username)} has not shared any cookbooks yet.`}
                 </Text>
               </div>
             ) : (

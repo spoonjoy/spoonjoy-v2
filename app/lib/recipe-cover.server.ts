@@ -1,5 +1,5 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
-import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1DateTime, d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import { cookbooksForRecipeTouchStatement, recipeUpdateStatement } from "~/lib/recipe-d1-writes.server";
 import {
@@ -137,6 +137,49 @@ export async function createCover(
   return db.recipeCover.create({ data: coverCreateData(input) });
 }
 
+/**
+ * Starts regenerating a cover and returns the cover row the regeneration fills. A cover that
+ * already has a generated (stylized) image gets a child cover, a new entry in the recipe's cover
+ * history linked by `parentCoverId`, so that image is kept; regenerating used to overwrite it and
+ * set the cover's lineage to itself. A cover with no generated image to lose (a plain photo, or a
+ * failed attempt being retried) is regenerated in place, as before.
+ */
+export async function startRecipeCoverRegeneration(
+  db: PrismaClient,
+  cover: Pick<RecipeCover, "id" | "recipeId" | "imageUrl" | "stylizedImageUrl" | "sourceImageUrl" | "sourceType" | "sourceSpoonId">,
+  input: { createdById: string; rawPhotoUrl: string; promptAddition: string | null },
+): Promise<{ coverId: string; parentCoverId: string | undefined }> {
+  if (cover.stylizedImageUrl) {
+    const child = await createCover(db, {
+      recipeId: cover.recipeId,
+      imageUrl: cover.imageUrl,
+      sourceType: cover.sourceType as RecipeCoverSourceType,
+      sourceSpoonId: cover.sourceSpoonId,
+      status: "processing",
+      generationStatus: "processing",
+      createdById: input.createdById,
+      sourceImageUrl: input.rawPhotoUrl,
+      promptAddition: input.promptAddition,
+      parentCoverId: cover.id,
+    });
+    return { coverId: child.id, parentCoverId: cover.id };
+  }
+  await db.recipeCover.update({
+    where: { id: cover.id },
+    data: {
+      status: "processing",
+      generationStatus: "processing",
+      // The stuck-generation check (recipe-cover-stuck.server.ts) times a generation from here;
+      // without it, it would fall back to the cover's own, older createdAt.
+      generationStartedAt: new Date(),
+      failureReason: null,
+      sourceImageUrl: cover.sourceImageUrl ?? input.rawPhotoUrl,
+      promptAddition: input.promptAddition,
+    },
+  });
+  return { coverId: cover.id, parentCoverId: undefined };
+}
+
 /** `createCover` as a D1 statement for a write batch, with the same checks. */
 export function coverInsertStatement(input: CreateCoverInput & { id: string }, now: Date): D1Query {
   const data = coverCreateData(input);
@@ -267,11 +310,42 @@ export function getRecipeCoverDisplay(
   return fallbackVariant ? displayForVariant(cover, fallbackVariant) : null;
 }
 
-async function loadActivatableCover(db: PrismaClient, input: ActiveCoverInput): Promise<RecipeCover> {
+/** Finds one of the recipe's covers, by Prisma or on D1. */
+type CoverLookup = (recipeId: string, coverId: string) => Promise<RecipeCover | null>;
+
+function prismaCoverLookup(db: PrismaClient): CoverLookup {
+  return (recipeId, coverId) => db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
+}
+
+const RECIPE_COVER_COLUMNS = [
+  "id", "recipeId", "imageUrl", "stylizedImageUrl", "sourceType", "sourceSpoonId", "status", "createdById",
+  "sourceImageUrl", "generationStatus", "generationStartedAt", "failureReason", "promptVersion", "styleVersion",
+  "promptAddition", "parentCoverId", "archivedAt", "createdAt",
+].map((column) => `"${column}"`).join(", ");
+
+function recipeCoverFromD1Row(row: D1Row): RecipeCover {
+  return {
+    ...(row as unknown as RecipeCover),
+    generationStartedAt: d1NullableDateTime(row.generationStartedAt, "generationStartedAt"),
+    archivedAt: d1NullableDateTime(row.archivedAt, "archivedAt"),
+    createdAt: d1DateTime(row.createdAt, "createdAt"),
+  };
+}
+
+function recipeCoverQuery(recipeId: string, coverId: string): D1Query {
+  return [`SELECT ${RECIPE_COVER_COLUMNS} FROM "RecipeCover" WHERE "id" = ? AND "recipeId" = ?`, coverId, recipeId];
+}
+
+function d1CoverLookup(d1: D1ReadDatabase): CoverLookup {
+  return async (recipeId, coverId) => {
+    const [rows] = await d1ReadBatch(d1, [recipeCoverQuery(recipeId, coverId)]);
+    return rows[0] ? recipeCoverFromD1Row(rows[0]) : null;
+  };
+}
+
+async function loadActivatableCover(findCover: CoverLookup, input: ActiveCoverInput): Promise<RecipeCover> {
   assertCoverVariant(input.variant);
-  const cover = await db.recipeCover.findFirst({
-    where: { id: input.coverId, recipeId: input.recipeId },
-  });
+  const cover = await findCover(input.recipeId, input.coverId);
   if (!cover) throw new Error("Selected cover was not found");
   assertActivatableCover(cover);
   assertVariantAvailable(cover, input.variant);
@@ -307,6 +381,26 @@ function withCoverRaceRetry<T>(attempt: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Makes a cover the recipe's active one and touches the cookbooks holding the recipe, reading
+ * and writing only on D1: one atomic batch that re-checks the cover is still activatable.
+ */
+export function activateRecipeCoverOnD1(d1: D1ReadDatabase, input: ActiveCoverInput): Promise<void> {
+  return withCoverRaceRetry(async () => {
+    const cover = await loadActivatableCover(d1CoverLookup(d1), input);
+    const updatedAt = new Date();
+    await d1WriteBatch(d1, [
+      coverUnchangedGuard(cover),
+      recipeUpdateStatement(input.recipeId, {
+        activeCoverId: cover.id,
+        activeCoverVariant: input.variant,
+        coverMode: "manual",
+      }, updatedAt),
+      cookbooksForRecipeTouchStatement(input.recipeId, updatedAt),
+    ]);
+  });
+}
+
+/**
  * Makes a cover the recipe's active one and touches the cookbooks holding the recipe. With a
  * D1 binding the two are one atomic batch that re-checks the cover is still activatable.
  */
@@ -316,23 +410,11 @@ export async function setActiveRecipeCover(
   d1: D1ReadDatabase | null = null,
 ) {
   if (d1) {
-    return withCoverRaceRetry(async () => {
-      const cover = await loadActivatableCover(db, input);
-      const updatedAt = new Date();
-      await d1WriteBatch(d1, [
-        coverUnchangedGuard(cover),
-        recipeUpdateStatement(input.recipeId, {
-          activeCoverId: cover.id,
-          activeCoverVariant: input.variant,
-          coverMode: "manual",
-        }, updatedAt),
-        cookbooksForRecipeTouchStatement(input.recipeId, updatedAt),
-      ]);
-      return db.recipe.findUniqueOrThrow({ where: { id: input.recipeId } });
-    });
+    await activateRecipeCoverOnD1(d1, input);
+    return db.recipe.findUniqueOrThrow({ where: { id: input.recipeId } });
   }
 
-  const cover = await loadActivatableCover(db, input);
+  const cover = await loadActivatableCover(prismaCoverLookup(db), input);
   const updatedAt = new Date();
   const [recipe] = await db.$transaction([
     db.recipe.update({
@@ -385,9 +467,14 @@ async function loadArchive(db: PrismaClient, input: ArchiveCoverInput) {
       where: { id: input.coverId, recipeId: input.recipeId },
     }),
   ]);
+  return { recipe, ...archiveDecision(input, recipe.activeCoverId, cover) };
+}
+
+/** Checks an archive request against the recipe's active cover and decides what it changes. */
+function archiveDecision(input: ArchiveCoverInput, activeCoverId: string | null, cover: RecipeCover | null) {
   if (!cover) throw new Error("Cover was not found");
 
-  const isActiveCover = recipe.activeCoverId === cover.id;
+  const isActiveCover = activeCoverId === cover.id;
   if (isActiveCover && !input.confirmNoCover && !input.replacementCoverId) {
     throw new Error("Archiving the active cover requires a replacement or confirmNoCover");
   }
@@ -397,7 +484,7 @@ async function loadArchive(db: PrismaClient, input: ArchiveCoverInput) {
   if (isActiveCover && !input.confirmNoCover && !input.replacementVariant) {
     throw new Error("Replacement variant is required");
   }
-  return { recipe, cover, isActiveCover };
+  return { cover, isActiveCover };
 }
 
 /**
@@ -410,7 +497,14 @@ export async function archiveRecipeCover(
   input: ArchiveCoverInput,
   d1: D1ReadDatabase | null = null,
 ) {
-  if (d1) return withCoverRaceRetry(() => archiveRecipeCoverOnD1(db, input, d1));
+  if (d1) {
+    await archiveRecipeCoverOnD1(d1, input);
+    const [archivedCover, recipe] = await Promise.all([
+      db.recipeCover.findUniqueOrThrow({ where: { id: input.coverId } }),
+      db.recipe.findUniqueOrThrow({ where: { id: input.recipeId } }),
+    ]);
+    return { archivedCover, recipe };
+  }
 
   const { recipe, cover, isActiveCover } = await loadArchive(db, input);
   let nextRecipe = recipe;
@@ -434,10 +528,32 @@ export async function archiveRecipeCover(
   return { archivedCover, recipe: nextRecipe };
 }
 
-async function archiveRecipeCoverOnD1(db: PrismaClient, input: ArchiveCoverInput, d1: D1ReadDatabase) {
-  const { recipe, cover, isActiveCover } = await loadArchive(db, input);
+/**
+ * Archives a cover as `archiveRecipeCover` does, reading and writing only on D1: the
+ * activation, the archive and the cookbook touch are one atomic batch that re-checks the
+ * recipe's active cover and the replacement.
+ */
+export function archiveRecipeCoverOnD1(d1: D1ReadDatabase, input: ArchiveCoverInput): Promise<void> {
+  return withCoverRaceRetry(() => archiveRecipeCoverOnD1Attempt(d1, input));
+}
+
+async function archiveRecipeCoverOnD1Attempt(d1: D1ReadDatabase, input: ArchiveCoverInput): Promise<void> {
+  // One read for the recipe, the cover and any replacement.
+  const [recipeRows, coverRows, replacementRows = []] = await d1ReadBatch(d1, [
+    [`SELECT "activeCoverId" FROM "Recipe" WHERE "id" = ?`, input.recipeId],
+    recipeCoverQuery(input.recipeId, input.coverId),
+    ...(input.replacementCoverId ? [recipeCoverQuery(input.recipeId, input.replacementCoverId)] : []),
+  ]);
+  const recipe = recipeRows[0];
+  if (!recipe) throw new Error("Recipe was not found");
+  const activeCoverId = recipe.activeCoverId as string | null;
+  const { cover, isActiveCover } = archiveDecision(
+    input,
+    activeCoverId,
+    coverRows[0] ? recipeCoverFromD1Row(coverRows[0]) : null,
+  );
   const replacement = isActiveCover && !input.confirmNoCover
-    ? await loadActivatableCover(db, {
+    ? await loadActivatableCover(async () => (replacementRows[0] ? recipeCoverFromD1Row(replacementRows[0]) : null), {
       recipeId: input.recipeId,
       coverId: input.replacementCoverId!,
       variant: input.replacementVariant!,
@@ -465,18 +581,13 @@ async function archiveRecipeCoverOnD1(db: PrismaClient, input: ArchiveCoverInput
       `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "activeCoverId" IS ?)
        AND EXISTS (SELECT 1 FROM "RecipeCover" WHERE "id" = ?)`,
       input.recipeId,
-      recipe.activeCoverId,
+      activeCoverId,
       cover.id,
     ),
     ...activation,
     [`UPDATE "RecipeCover" SET "status" = 'archived', "archivedAt" = ? WHERE "id" = ?`, d1Timestamp(now), cover.id],
     ...(isActiveCover ? [cookbooksForRecipeTouchStatement(input.recipeId, now)] : []),
   ]);
-  const [archivedCover, nextRecipe] = await Promise.all([
-    db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } }),
-    isActiveCover ? db.recipe.findUniqueOrThrow({ where: { id: input.recipeId } }) : recipe,
-  ]);
-  return { archivedCover, recipe: nextRecipe };
 }
 
 export async function backfillActiveCoverForRecipe(
