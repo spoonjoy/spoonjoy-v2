@@ -281,7 +281,9 @@ jobs:
     if (!appTestConfig || !ts.isObjectLiteralExpression(appTestConfig)) return;
     const excluded = literalValue(property(appTestConfig, "exclude")) as string[];
     const cloudflarePoolFiles = readdirSync("test/workers")
-      .filter((name) => name.endsWith(".test.ts"))
+      // test/config/warning-policy.test.ts writes and deletes __warning-sentinel-generated.test.ts
+      // here while other files run in parallel.
+      .filter((name) => name.endsWith(".test.ts") && !name.startsWith("__warning-sentinel"))
       .map((name) => `test/workers/${name}`)
       .filter((path) => readFileSync(path, "utf8").includes('from "cloudflare:test"'));
 
