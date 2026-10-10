@@ -489,12 +489,17 @@ describe("warning command policy", () => {
     "console.error('▲ [WARNING] build diagnostic')",
     "console.error('(!) circular dependency')",
     "console.log('warning: stdout diagnostic')",
-  ])("fails a successful child for an actual diagnostic: %s", (code) => {
-    const result = runWrapped(code);
+  ].map((code, index) => [index + 1, code] as const))(
+    // The title names the case by number, not its text: vitest prints a slow test's title, and a
+    // title carrying the diagnostic would itself trip the warning gate around this run.
+    "fails a successful child for an actual diagnostic (case %i)",
+    (_case, code) => {
+      const result = runWrapped(code);
 
-    expect(result.status).toBe(1);
-    expect(`${result.stdout}${result.stderr}`).toContain("warning-policy: rejected diagnostic output");
-  });
+      expect(result.status).toBe(1);
+      expect(`${result.stdout}${result.stderr}`).toContain("warning-policy: rejected diagnostic output");
+    },
+  );
 
   it("allows ordinary prose that contains no diagnostic token", () => {
     const result = runWrapped(
