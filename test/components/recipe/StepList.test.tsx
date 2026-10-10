@@ -17,7 +17,7 @@ import type { StepData } from '~/components/recipe/StepEditorCard'
 
 const dragControlsStartMock = vi.hoisted(() => vi.fn())
 
-vi.mock('framer-motion', () => ({
+vi.mock('motion/react', () => ({
   Reorder: {
     Group: ({ children, className }: { children: React.ReactNode; className?: string }) => (
       <div className={className}>{children}</div>

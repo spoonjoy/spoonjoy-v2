@@ -45,11 +45,11 @@ import "./warning-policy";
 import { vi, beforeAll, expect } from "vitest";
 import React from "react";
 
-// Mock framer-motion Reorder components to render children directly in tests
+// Mock Motion's Reorder components to render children directly in tests
 // This is needed because Reorder.Group and Reorder.Item have complex animation
 // logic that doesn't work well with happy-dom
-vi.mock('framer-motion', async () => {
-  const actual = await vi.importActual('framer-motion');
+vi.mock('motion/react', async () => {
+  const actual = await vi.importActual('motion/react');
   return {
     ...actual as object,
     Reorder: {

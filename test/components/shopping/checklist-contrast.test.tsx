@@ -19,10 +19,11 @@ import React from "react";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 import { createTestRoutesStub } from "../../utils";
 
-vi.mock("framer-motion", () => ({
+vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   LayoutGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  motion: {
+  LazyMotion: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  m: {
     div: ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={className}>{children}</div>,
   },
 }));

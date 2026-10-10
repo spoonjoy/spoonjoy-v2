@@ -1,7 +1,8 @@
 import type { Route } from "./+types/shopping-list";
 import { formatAmount } from "~/lib/quantity";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { AnimatePresence, m } from "motion/react";
+import { LazyLayoutGroup } from "~/components/motion/lazy-motion";
 import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation } from "react-router";
 import {
   handleShoppingListAction,
@@ -389,7 +390,7 @@ export default function ShoppingList() {
           </RuledEmptyState>
         ) : (
           /* Item List */
-          <LayoutGroup id="shopping-list-items">
+          <LazyLayoutGroup id="shopping-list-items">
             <div className="sj-list-ruled mt-6">
               <AnimatePresence initial={false}>
                 {filteredItems.map((item, index) => {
@@ -397,7 +398,7 @@ export default function ShoppingList() {
                   const sectionLabel = getShoppingSectionLabel(item, previousItem, viewMode);
 
                   return (
-                    <motion.div
+                    <m.div
                       key={item.id}
                       layout="position"
                       initial={{ opacity: 0, y: -6 }}
@@ -429,7 +430,7 @@ export default function ShoppingList() {
                             </button>
                           </div>
                         )}
-                        <motion.div
+                        <m.div
                           drag="x"
                           animate={{
                             x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
@@ -475,14 +476,14 @@ export default function ShoppingList() {
                               </button>
                             )}
                           />
-                        </motion.div>
+                        </m.div>
                       </div>
-                    </motion.div>
+                    </m.div>
                   );
                 })}
               </AnimatePresence>
             </div>
-          </LayoutGroup>
+          </LazyLayoutGroup>
         )}
 
       {/* Add Item Form */}
