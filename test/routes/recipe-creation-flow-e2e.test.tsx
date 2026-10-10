@@ -424,7 +424,10 @@ describe("E2E: Complete Recipe Creation Flow", () => {
         },
       ]);
 
-      render(<Stub initialEntries={[`/recipes/${recipeId}`]} />);
+      // The ingredient list's animation features load in their own chunk; let them land inside act.
+      await act(async () => {
+        render(<Stub initialEntries={[`/recipes/${recipeId}`]} />);
+      });
 
       await screen.findByText(new RegExp(recipeTitle));
       expect(screen.getByText(/Test Step/)).toBeInTheDocument();

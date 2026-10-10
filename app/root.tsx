@@ -7,7 +7,6 @@ import {
   ScrollRestoration,
   useLoaderData,
   useRouteError,
-  isRouteErrorResponse,
   useNavigation,
   Form,
   Link as RouterLink,
@@ -35,9 +34,8 @@ import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/ui/button";
 import { OAuthButtonGroup } from "~/components/ui/oauth";
 import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
-import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Text } from "~/components/ui/text";
 import { SkipLink } from "~/components/navigation/skip-link";
+import { RouteErrorContent } from "~/components/errors/route-error";
 import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
@@ -339,38 +337,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
  */
 export function ErrorBoundary() {
   const error = useRouteError();
-  const isResponse = isRouteErrorResponse(error);
-  const status = isResponse ? error.status : 500;
-
-  let title = "Something went wrong.";
-  let message = "We hit an unexpected snag. Try again in a moment.";
-  if (status === 404) {
-    title = "Page not found.";
-    message = "The page you're looking for doesn't exist or may have moved.";
-  } else if (status === 403) {
-    title = "Not allowed.";
-    message = "You don't have access to this page.";
-  } else if (status === 401) {
-    title = "Please sign in.";
-    message = "You need to be signed in to view this page.";
-  } else if (isResponse && status >= 400 && status < 500) {
-    title = "We can't open that.";
-    message = typeof error.data === "string" && error.data.trim()
-      ? error.data
-      : "Try again, or head back home.";
-  }
-
   return (
     <main id="main" tabIndex={-1} className="sj-mobile-surface grow">
-      <CookbookPage>
-        <CookbookHeader eyebrow="Spoonjoy" title={title}>
-          <Text>{message}</Text>
-        </CookbookHeader>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button href="/">Go home</Button>
-          {status === 401 ? <Button href="/login" plain>Log in</Button> : null}
-        </div>
-      </CookbookPage>
+      <RouteErrorContent error={error} />
     </main>
   );
 }

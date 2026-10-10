@@ -17,6 +17,7 @@ import {
   stepDeleteStatement,
   stepNumUpdateStatement,
   stepOutputUseInsertStatement,
+  stepInsertStatement,
   stepOutputUsesDeleteStatement,
   stepReorderDependencyFreeGuard,
   type RecipeFields,
@@ -186,6 +187,52 @@ export async function addStepIngredientsOnD1(
   await d1WriteBatch(d1, [
     stepAtGuard(input.stepId, input.recipeId, input.stepNum),
     ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
+    ...nameUpsertStatements(named, now),
+    ...named.map(namedIngredientInsertStatement),
+    recipeUpdateStatement(input.recipeId, {}, now),
+  ]);
+}
+
+/**
+ * The new-step page's save: the step, its step output uses and its ingredients, with their
+ * units and ingredient names created in the same batch when they are new, then the recipe
+ * touch, all or none. The guards re-check that the recipe is still live, that `stepNum` is
+ * still the next step number and that none of the ingredients is in the recipe yet; the
+ * action validated all of that before writing anything.
+ */
+export async function createRecipeStepOnD1(
+  d1: D1ReadDatabase,
+  input: {
+    recipeId: string;
+    stepId: string;
+    stepNum: number;
+    stepTitle: string | null;
+    description: string;
+    usesSteps: readonly number[];
+    rows: ReadonlyArray<{ quantity: number; unitName: string; ingredientName: string }>;
+  },
+): Promise<void> {
+  const now = new Date();
+  const named = input.rows.map((row) => ({ ...row, recipeId: input.recipeId, stepNum: input.stepNum, now }));
+  await d1WriteBatch(d1, [
+    recipeActiveGuard(input.recipeId),
+    d1Guard(
+      `NOT EXISTS (SELECT 1 FROM "RecipeStep" WHERE "recipeId" = ? AND "stepNum" >= ?)`,
+      input.recipeId,
+      input.stepNum,
+    ),
+    ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
+    stepInsertStatement({
+      id: input.stepId,
+      recipeId: input.recipeId,
+      stepNum: input.stepNum,
+      stepTitle: input.stepTitle,
+      description: input.description,
+      duration: null,
+      now,
+    }),
+    ...[...new Set(input.usesSteps)].map((outputStepNum) =>
+      stepOutputUseInsertStatement(input.recipeId, input.stepNum, outputStepNum, now)),
     ...nameUpsertStatements(named, now),
     ...named.map(namedIngredientInsertStatement),
     recipeUpdateStatement(input.recipeId, {}, now),

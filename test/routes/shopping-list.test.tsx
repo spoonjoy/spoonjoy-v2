@@ -5,7 +5,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 
-vi.mock("framer-motion", () => {
+vi.mock("motion/react", () => {
   const MotionDiv = ({
     children,
     onDragEnd,
@@ -45,7 +45,8 @@ vi.mock("framer-motion", () => {
   return {
     AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     LayoutGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    motion: { div: MotionDiv },
+    LazyMotion: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    m: { div: MotionDiv },
   };
 });
 

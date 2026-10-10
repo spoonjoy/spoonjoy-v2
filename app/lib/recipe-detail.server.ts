@@ -2,7 +2,7 @@ import type { AppLoadContext } from "react-router";
 import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, requestD1, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import {
   addRecipeToCookbookOnD1,
   assertActiveRecipeOnD1,
@@ -40,6 +40,7 @@ import {
   SpoonValidationError,
 } from "~/lib/recipe-spoon.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
+import { createSpoonOnD1 } from "~/lib/recipe-spoon-d1.server";
 import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib/ai-placeholder-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
@@ -247,6 +248,26 @@ async function runOrQueueAiPlaceholderCover(
   await scheduleAiPlaceholderCover(input);
 }
 
+/** What the recipe page's not-found screen is told about a recipe it cannot show. */
+export interface RecipeNotFoundData {
+  message: "Recipe not found";
+  // True when the recipe existed and was deleted; false when there is no such recipe.
+  deleted: boolean;
+}
+
+// A recipe link can outlive its recipe. The page says whether the recipe was deleted (product audit
+// 2026-10-09, finding 20). It reads only the deletion time: naming the chef would need to know the
+// recipe was public when it was deleted, and nothing records that yet.
+async function recipeNotFoundResponse(context: RecipeDetailRouteArgs["context"], id: string): Promise<Response> {
+  const d1 = requestD1(context);
+  const row = d1
+    ? ((await d1ReadBatch(d1, [['SELECT "deletedAt" FROM "Recipe" WHERE "id" = ? LIMIT 1', id]]))[0][0] as { deletedAt: unknown } | undefined)
+    : await (await getRequestDb(context)).recipe.findUnique({ where: { id }, select: { deletedAt: true } });
+  const deleted = row !== undefined && row !== null && row.deletedAt !== null && row.deletedAt !== undefined;
+  const body: RecipeNotFoundData = { message: "Recipe not found", deleted };
+  return Response.json(body, { status: 404 });
+}
+
 export async function loadRecipeDetail({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const { id } = params;
@@ -260,7 +281,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   const { recipe } = reads;
 
   if (!recipe) {
-    throw new Response("Recipe not found", { status: 404 });
+    throw await recipeNotFoundResponse(context, id);
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
@@ -373,6 +394,87 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   };
 }
 
+function spoonFormFields(formData: FormData) {
+  const photoEntry = formData.get("photo");
+  const noteRaw = formData.get("note");
+  const nextTimeRaw = formData.get("nextTime");
+  return {
+    photoFile: photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : undefined,
+    note: typeof noteRaw === "string" ? noteRaw : undefined,
+    nextTime: typeof nextTimeRaw === "string" ? nextTimeRaw : undefined,
+    cookedAt: parseOptionalCookedAt(formData.get("cookedAt")),
+    useAsRecipeCover: formData.get("useAsRecipeCover") === "true",
+  };
+}
+
+// Logging a cook on D1: the spoon (and a cover from its photo) is written without Prisma. The
+// notifications and the cover's stylization run after the answer, each building the request's
+// Prisma client only when it starts; without waitUntil (tests) they run before the answer.
+async function handleCreateSpoonOnD1(
+  d1: D1ReadDatabase,
+  userId: string,
+  recipeId: string,
+  formData: FormData,
+  context: AppLoadContext,
+) {
+  const { useAsRecipeCover, ...fields } = spoonFormFields(formData);
+  const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
+  // The D1 binding comes from the environment, so it is always present here.
+  const postHogConfig = resolvePostHogServerConfig(env as NonNullable<typeof env>);
+  const result = await createSpoonOnD1(d1, { chefId: userId, recipeId, useAsRecipeCover, ...fields }, { bucket })
+    .catch(spoonErrorToResponse);
+
+  // One Prisma client for all of this cook's background work, built when the first task starts.
+  let database: ReturnType<typeof getRequestDb> | undefined;
+  const later = (task: (database: Awaited<ReturnType<typeof getRequestDb>>) => Promise<unknown>): Promise<unknown> => {
+    const run = async () => task(await (database ??= getRequestDb(context)));
+    if (!waitUntil) return run();
+    waitUntil(deferBackgroundTask(run));
+    return Promise.resolve();
+  };
+
+  try {
+    const vapid = getVapidConfig(vapidEnv);
+    await later((database) => notifySpoonOnMyRecipe(database, { recipeId, spoonerId: userId }, { vapid, waitUntil, postHogConfig }));
+  } catch {
+    // VAPID not configured locally — skip silently.
+  }
+
+  const { cover, spoon, recipe, spoonerUsername } = result;
+  if (cover && spoon.photoUrl) {
+    const rawPhotoUrl = spoon.photoUrl;
+    await later((database) =>
+      scheduleSpoonCoverStylization({
+        db: database,
+        userId,
+        recipeId,
+        coverId: cover.id,
+        rawPhotoUrl,
+        recipeTitle: recipe.title,
+        env,
+        bucket,
+      }),
+    );
+  }
+
+  if (result.isOriginCook && spoonerUsername) {
+    try {
+      const vapid = getVapidConfig(vapidEnv);
+      await later((database) =>
+        fanoutFellowChefOriginCook(
+          database,
+          { spoonerId: userId, recipeId: recipe.id, recipeTitle: recipe.title, spoonerUsername },
+          { vapid, waitUntil, postHogConfig },
+        ),
+      );
+    } catch {
+      // VAPID not configured locally — skip silently.
+    }
+  }
+
+  return { success: true, intent: "createSpoon", spoon: { id: spoon.id }, isOriginCook: result.isOriginCook };
+}
+
 async function handleCreateSpoon(
   database: Awaited<ReturnType<typeof getRequestDb>>,
   userId: string,
@@ -380,14 +482,9 @@ async function handleCreateSpoon(
   formData: FormData,
   context: AppLoadContext,
 ) {
-  const photoEntry = formData.get("photo");
-  const photoFile = photoEntry instanceof File && photoEntry.size > 0 ? photoEntry : undefined;
-  const noteRaw = formData.get("note");
-  const nextTimeRaw = formData.get("nextTime");
-  const useAsRecipeCover = formData.get("useAsRecipeCover") === "true";
-  const note = typeof noteRaw === "string" ? noteRaw : undefined;
-  const nextTime = typeof nextTimeRaw === "string" ? nextTimeRaw : undefined;
-  const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
+  const { photoFile, note, nextTime, cookedAt, useAsRecipeCover } = spoonFormFields(formData);
+  // A recipe in the trash takes no new cooks, as on the API.
+  await assertActiveRecipe(database, recipeId);
 
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
   // Resolve once: threaded into both the spoon notify and the origin-cook
@@ -740,7 +837,8 @@ type RecipeDetailD1Answer =
   | { kind: "coverChanged"; intent: CoverIntent }
   | { kind: "newCookbook"; newCookbook: { id: string; title: string } }
   | { kind: "response"; response: ReturnType<typeof data<{ error: string; intent: string }>> }
-  | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> };
+  | { kind: "cutover"; response: NonNullable<ReturnType<typeof productActivationPendingWebResponse>> }
+  | { kind: "redirect"; response: Response };
 
 function activeCoverChoice(formData: FormData, recipeId: string) {
   const coverId = formData.get("coverId");
@@ -838,6 +936,24 @@ async function handleRecipeDetailActionOnD1(
     return { kind: "success" };
   }
 
+  if (intent === "delete") {
+    const { title } = await assertOwnedActiveRecipeOnD1(d1, { recipeId, userId });
+    const deletedAt = new Date();
+    // One atomic batch: the soft delete and its native sync tombstone.
+    await writeExistingRecipeOnD1(d1, recipeId, [
+      [`UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`, d1Timestamp(deletedAt), d1Timestamp(deletedAt), recipeId],
+      nativeSyncTombstoneUpsertStatement({
+        accountId: userId,
+        resourceType: "recipe",
+        resourceId: recipeId,
+        title,
+        deletedAt,
+        updatedAt: deletedAt,
+      }),
+    ]);
+    return { kind: "redirect", response: redirect("/recipes") };
+  }
+
   try {
     if (intent === "createCookbookAndSave") {
       const title = formData.get("title")?.toString()?.trim();
@@ -888,6 +1004,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   // With a D1 binding, the everyday actions run as one D1 batch each and never build a Prisma
   // client (a request's Prisma client can hang in a poisoned isolate).
   const d1 = requestD1(context);
+  if (d1 && intent === "createSpoon") {
+    return handleCreateSpoonOnD1(d1, userId, id, formData, context);
+  }
   if (d1) {
     const answered = await handleRecipeDetailActionOnD1(d1, intent, userId, id, formData);
     if (answered?.kind === "success") return { success: true };
@@ -1194,29 +1313,9 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
     return { success: true, intent: "archiveRecipeCover" };
   }
 
+  // With a D1 binding the delete was answered on D1 above; this is the fallback.
   if (intent === "delete") {
     const deletedAt = new Date();
-    const d1 = requestD1(context);
-    if (d1) {
-      // One atomic batch: the soft delete and its native sync tombstone.
-      await writeExistingRecipeOnD1(d1, id, [
-        [
-          `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`,
-          d1Timestamp(deletedAt),
-          d1Timestamp(deletedAt),
-          id,
-        ],
-        nativeSyncTombstoneUpsertStatement({
-          accountId: userId,
-          resourceType: "recipe",
-          resourceId: id,
-          title: recipe.title,
-          deletedAt,
-          updatedAt: deletedAt,
-        }),
-      ]);
-      return redirect("/recipes");
-    }
     await database.$transaction([
       database.recipe.update({
         where: { id },

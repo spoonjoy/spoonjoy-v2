@@ -126,9 +126,11 @@ export async function deleteSpoonOnD1(d1: D1ReadDatabase, input: { userId: strin
 export async function assertOwnedActiveRecipeOnD1(
   d1: D1ReadDatabase,
   input: { recipeId: string; userId: string },
-): Promise<void> {
-  const [recipe] = await d1ReadBatch(d1, [[`SELECT "chefId", "deletedAt" FROM "Recipe" WHERE "id" = ?`, input.recipeId]]);
+): Promise<{ title: string }> {
+  const [recipe] = await d1ReadBatch(d1, [[`SELECT "chefId", "deletedAt", "title" FROM "Recipe" WHERE "id" = ?`, input.recipeId]]);
   const row = recipe[0];
   if (!row || row.deletedAt != null) throw recipeNotFound();
   if (row.chefId !== input.userId) throw unauthorized();
+  if (typeof row.title !== "string") throw new Error("D1 column title is not text");
+  return { title: row.title };
 }

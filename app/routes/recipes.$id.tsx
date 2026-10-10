@@ -1,15 +1,19 @@
 import type { Route } from "./+types/recipes.$id";
 import { chefDisplayName } from "~/lib/username";
 import {
+  isRouteErrorResponse,
   useActionData,
   useFetcher,
   useLoaderData,
   useLocation,
   useNavigate,
   useRevalidator,
+  useRouteError,
   useSubmit,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { RecipeNotFound } from "~/components/recipe/RecipeNotFound";
+import { RouteErrorContent } from "~/components/errors/route-error";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "~/lib/use-posthog";
@@ -58,7 +62,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   return loadRecipeDetail({ request, params, context });
 }
 
-export function meta({ data }: Route.MetaArgs) {
+export function meta({ data, error }: Route.MetaArgs) {
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return [
+      { title: "Recipe not found - Spoonjoy" },
+      { name: "robots", content: "noindex" },
+    ];
+  }
   if (!data) {
     return [
       { title: "Recipe - Spoonjoy" },
@@ -292,6 +302,20 @@ export function applyCreatedCookbookState(
     cookbooks: nextCookbooks,
     savedCookbookIds: nextSavedCookbookIds,
   };
+}
+
+function recipeNotFoundDetails(error: unknown): { deleted: boolean } | null {
+  if (!isRouteErrorResponse(error) || error.status !== 404) return null;
+  const body = (error.data && typeof error.data === "object" ? error.data : {}) as { deleted?: unknown };
+  return { deleted: body.deleted === true };
+}
+
+// A missing or deleted recipe gets a recipe-specific page; any other error (including one from a
+// page under this recipe) gets the app's usual error screen, inside the app's own layout.
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const notFound = recipeNotFoundDetails(error);
+  return notFound ? <RecipeNotFound {...notFound} /> : <RouteErrorContent error={error} />;
 }
 
 export default function RecipeDetail() {
@@ -719,7 +743,7 @@ export default function RecipeDetail() {
         Recipes
       </Link>
       <div
-        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-y border-[var(--sj-border)] py-1 sm:border-y-0 sm:py-0"
+        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-[var(--sj-border)] py-1 sm:border-t-0 sm:py-0"
         data-testid="recipe-header-actions"
       >
         <Link

@@ -645,14 +645,21 @@ export async function verify({ env, exec, fs, fetchImpl, now, sleep, log }) {
   assertWranglerIsRunScoped(fs, state);
   const known = { now, sleep, deadline: now() + READY_TIMEOUT_MS, workerName: state.workerName };
 
-  const secretNames = new Set(
-    parseJsonResults(await untilCloudflareKnows(
-      () => runWrangler(exec, ["secret", "list", "--env", "qa", "--format", "json"]),
-      known,
-    )).map((row) => row?.name),
-  );
-  const missing = REQUIRED_RUN_SECRETS.filter((name) => !secretNames.has(name));
-  if (missing.length > 0) throw new Error(`The run's Worker is missing secret(s): ${missing.join(", ")}.`);
+  // Right after deploy, `secret list` can also answer with an empty or partial list for a script
+  // Cloudflare already knows (seen on #452: all four secrets "missing" on a run whose deploy
+  // uploaded them). Re-read within the readiness window before calling a secret missing.
+  for (;;) {
+    const secretNames = new Set(
+      parseJsonResults(await untilCloudflareKnows(
+        () => runWrangler(exec, ["secret", "list", "--env", "qa", "--format", "json"]),
+        known,
+      )).map((row) => row?.name),
+    );
+    const missing = REQUIRED_RUN_SECRETS.filter((name) => !secretNames.has(name));
+    if (missing.length === 0) break;
+    if (now() >= known.deadline) throw new Error(`The run's Worker is missing secret(s): ${missing.join(", ")}.`);
+    await sleep(READY_POLL_MS);
+  }
 
   const migrations = await untilCloudflareKnows(
     () => runWrangler(exec, ["d1", "migrations", "list", "DB", "--remote", "--env", "qa"]),

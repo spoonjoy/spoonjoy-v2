@@ -45,13 +45,20 @@ import "./warning-policy";
 import { vi, beforeAll, expect } from "vitest";
 import React from "react";
 
-// Mock framer-motion Reorder components to render children directly in tests
+// Mock Motion's Reorder components to render children directly in tests
 // This is needed because Reorder.Group and Reorder.Item have complex animation
 // logic that doesn't work well with happy-dom
-vi.mock('framer-motion', async () => {
-  const actual = await vi.importActual('framer-motion');
+//
+// LazyMotion gets its features synchronously: the app loads them from a separate chunk after the
+// first render, and in a test that load would land after the render's act() scope and fail the
+// warning gate. test/components/motion/lazy-motion.test.tsx uses the real module to test the
+// lazy load itself.
+vi.mock('motion/react', async () => {
+  const actual = await vi.importActual<typeof import('motion/react')>('motion/react');
   return {
-    ...actual as object,
+    ...actual,
+    LazyMotion: ({ features, ...props }: React.ComponentProps<typeof actual.LazyMotion>) =>
+      React.createElement(actual.LazyMotion, { ...props, features: typeof features === 'function' ? actual.domMax : features }),
     Reorder: {
       Group: ({ children, className }: { children: React.ReactNode; className?: string }) =>
         React.createElement('div', { className }, children),
@@ -60,6 +67,32 @@ vi.mock('framer-motion', async () => {
     },
   };
 });
+
+// Prisma talks to the test database through better-sqlite3, the same SQLite library the D1 test
+// binding (test/helpers/sqlite-d1.ts) uses, instead of through its own engine's SQLite. SQLite's
+// POSIX locks are per process and per library: two libraries with one file open in one process
+// do not see each other's locks, and one could delete a journal the other still needed
+// ("disk I/O error", SQLITE_IOERR_DELETE_NOENT). One library keeps every connection in the
+// process on one lock table. Timestamps keep the engine's integer-millisecond storage.
+vi.mock('@prisma/client', async () => {
+  const actual = await vi.importActual<typeof import('@prisma/client')>('@prisma/client');
+  const { PrismaBetterSQLite3 } = await import('@prisma/adapter-better-sqlite3');
+  type Options = NonNullable<ConstructorParameters<typeof actual.PrismaClient>[0]>;
+  class TestPrismaClient extends actual.PrismaClient {
+    constructor(options: Options = {}) {
+      super(options.adapter ? options : { ...options, adapter: testDatabaseAdapter(PrismaBetterSQLite3) });
+    }
+  }
+  return { ...actual, PrismaClient: TestPrismaClient };
+});
+
+function testDatabaseAdapter(Adapter: typeof import('@prisma/adapter-better-sqlite3').PrismaBetterSQLite3) {
+  const url = process.env.DATABASE_URL ?? '';
+  if (!url.startsWith('file:')) throw new Error(`The test database URL is not a file URL: ${url}`);
+  const path = url.slice('file:'.length).split('?')[0];
+  // The engine waited up to 60 s for a lock (socket_timeout=60 in workerDatabaseUrl).
+  return new Adapter({ url: path, timeout: 60_000 }, { timestampFormat: 'unixepoch-ms' });
+}
 
 // Extend toBeDisabled to also check aria-disabled for better accessibility testing
 // This allows buttons with aria-disabled="true" (but no native disabled) to pass toBeDisabled()

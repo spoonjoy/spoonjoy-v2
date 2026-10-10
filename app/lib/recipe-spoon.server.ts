@@ -114,10 +114,34 @@ export async function createSpoon(
   input: CreateSpoonInput,
   deps: CreateSpoonDeps = {},
 ): Promise<CreateSpoonResult> {
+  const isOriginCook = await isOriginCookCandidate(db, input.chefId, input.recipeId);
+  const { note, nextTime, photoUrl } = await prepareSpoonContent(input, deps);
+  const data: Prisma.RecipeSpoonUncheckedCreateInput = {
+    id: input.id,
+    chefId: input.chefId,
+    recipeId: input.recipeId,
+    note,
+    nextTime,
+    photoUrl,
+  };
+  if (input.cookedAt) {
+    data.cookedAt = input.cookedAt;
+  }
+
+  const spoon = await db.recipeSpoon.create({ data });
+  return { spoon, isOriginCook };
+}
+
+/**
+ * A new spoon's trimmed note and next-time text and its photo URL. A photo file is checked and
+ * stored first; a spoon with none of the three is refused.
+ */
+export async function prepareSpoonContent(
+  input: CreateSpoonInput,
+  deps: CreateSpoonDeps,
+): Promise<{ note: string | null; nextTime: string | null; photoUrl: string | null }> {
   const note = trimOrNull(input.note ?? null);
   const nextTime = trimOrNull(input.nextTime ?? null);
-
-  const isOriginCook = await isOriginCookCandidate(db, input.chefId, input.recipeId);
 
   let photoUrl: string | null = input.photoUrl ?? null;
   if (input.photoFile) {
@@ -145,20 +169,7 @@ export async function createSpoon(
       "Spoon must include at least one of: photo, note, nextTime",
     );
   }
-  const data: Prisma.RecipeSpoonUncheckedCreateInput = {
-    id: input.id,
-    chefId: input.chefId,
-    recipeId: input.recipeId,
-    note,
-    nextTime,
-    photoUrl,
-  };
-  if (input.cookedAt) {
-    data.cookedAt = input.cookedAt;
-  }
-
-  const spoon = await db.recipeSpoon.create({ data });
-  return { spoon, isOriginCook };
+  return { note, nextTime, photoUrl };
 }
 
 async function findOwnedActiveSpoon(

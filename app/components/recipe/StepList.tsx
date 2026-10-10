@@ -10,7 +10,7 @@
  * - Steps array management (controlled component)
  */
 
-import { Reorder, useDragControls } from 'framer-motion'
+import { Reorder, useDragControls } from 'motion/react'
 import { GripVertical, Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Button } from '~/components/ui/button'
