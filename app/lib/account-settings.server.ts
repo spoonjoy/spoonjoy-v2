@@ -35,6 +35,11 @@ import {
   validateConnectorGrantConnectionKeys,
 } from "~/lib/oauth-server.server";
 
+
+// Signing out everywhere keeps the ways the chef signs in. Say so, so a chef recovering from a
+// compromise knows to check them for anything they did not add.
+const KEPT_SIGN_INS_NOTE = "Your passkeys and linked Google, GitHub or Apple sign-ins still work; remove any you don't recognise below.";
+
 export interface NotificationPreferenceFlags {
   notifySpoonOnMyRecipe: boolean;
   notifyForkOfMyRecipe: boolean;
@@ -778,45 +783,44 @@ export async function handleAccountSettingsAction({
       };
     }
 
-    // Hash and save new password, and revoke every other session in the same write.
-    const { hashedPassword, salt } = await hashPassword(newPassword);
-    const { sessionVersion } = await database.user.update({
-      where: { id: userId },
-      data: { hashedPassword, salt, sessionVersion: { increment: 1 } },
-      select: { sessionVersion: true },
-    });
-
     // A password change is usually account recovery, so by default it also disconnects every
     // app, agent and API token. The form can opt out: it marks that it offers the choice, and an
-    // unticked box then sends no `revokeConnections` value.
+    // unticked box then sends no `revokeConnections` value. A request without the marker (an old
+    // cached form, a script) revokes.
     const offersChoice = formData.has("connectionsChoice");
     const revokeConnections = !offersChoice || formData.has("revokeConnections");
-    if (revokeConnections) {
-      await revokeAllAccountAccess(database, userId, { reason: "password_change" });
-    }
+    const { hashedPassword, salt } = await hashPassword(newPassword);
+    // The password write, the session-version bump (which signs out every other browser) and,
+    // when chosen, the bearer revocation apply together or not at all.
+    const sessionVersion = revokeConnections
+      ? (await revokeAllAccountAccess(database, userId, {
+        d1: requestD1(context),
+        password: { hashedPassword, salt },
+      })).sessionVersion
+      : (await database.user.update({
+        where: { id: userId },
+        data: { hashedPassword, salt, sessionVersion: { increment: 1 } },
+        select: { sessionVersion: true },
+      })).sessionVersion;
 
     return withSessionForVersion({
       success: true,
       intent: "changePassword",
       message: revokeConnections
-        ? "Your password has been changed. Other browsers have been signed out, and apps, agents and API tokens have been disconnected."
+        ? `Your password has been changed. Other browsers have been signed out, and apps, agents and API tokens have been disconnected. ${KEPT_SIGN_INS_NOTE}`
         : "Your password has been changed successfully. Other browsers signed in to your account have been signed out.",
     }, sessionVersion);
   }
 
   if (intent === "signOutEverywhere") {
-    const { sessionVersion } = await database.user.update({
-      where: { id: userId },
-      data: { sessionVersion: { increment: 1 } },
-      select: { sessionVersion: true },
-    });
     // Everywhere includes bearer credentials: the iPhone app, connected agents, OAuth apps and
-    // personal API tokens. Otherwise a stolen token outlives the sign-out meant to stop it.
-    await revokeAllAccountAccess(database, userId, { reason: "sign_out_everywhere" });
+    // personal API tokens. Otherwise a stolen token outlives the sign-out meant to stop it. The
+    // session-version bump and the revocation apply together or not at all.
+    const { sessionVersion } = await revokeAllAccountAccess(database, userId, { d1: requestD1(context) });
 
     return withSessionForVersion({
       success: true,
-      message: "You've been signed out everywhere else, and apps, agents and API tokens have been disconnected. You're still signed in here.",
+      message: `You've been signed out everywhere else, and apps, agents and API tokens have been disconnected. You're still signed in here. ${KEPT_SIGN_INS_NOTE}`,
     }, sessionVersion);
   }
 

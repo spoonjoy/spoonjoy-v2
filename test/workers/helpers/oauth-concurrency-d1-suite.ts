@@ -157,6 +157,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
 
   async function issueTokens() {
     return issueConnectorTokens(clients[0], {
+      sessionVersion: 0,
       userId: USER_ID,
       clientId: CLIENT_ID,
       scope: "kitchen:read",
@@ -329,6 +330,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
     "reproduces the D1 state %s access insertion",
     async (timing) => {
       await expect(issueConnectorTokens(clients[0], {
+        sessionVersion: 0,
         userId: USER_ID,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
@@ -348,6 +350,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
     "reproduces the D1 state %s refresh insertion",
     async (timing) => {
       await expect(issueConnectorTokens(clients[0], {
+        sessionVersion: 0,
         userId: USER_ID,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
@@ -511,6 +514,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
           now: NOW,
         }, { onPersistenceMutation: race.hookFor(contender) });
         return issueConnectorTokens(clients[index], {
+          sessionVersion: 0,
           ...grant,
           clientId: CLIENT_ID,
           persistentMcpResource: "https://spoonjoy.test/mcp",
@@ -573,6 +577,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
     "leaves the D1 child family active when %s wins an indistinguishable public-bearer race",
     async (designatedWinner) => {
       const original = await issueConnectorTokens(clients[0], {
+        sessionVersion: 0,
         userId: USER_ID,
         clientId: CLIENT_ID,
         scope: "kitchen:read",

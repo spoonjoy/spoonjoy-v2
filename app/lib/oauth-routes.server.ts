@@ -9,7 +9,8 @@
  */
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { getUserId } from "~/lib/session.server";
+import { getCurrentSessionIdentity, getUserId } from "~/lib/session.server";
+import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   clientAllowsRedirect,
@@ -75,7 +76,7 @@ function oauthErrorResponse(error: unknown): Response {
     throw error;
   }
   return Response.json(
-    { error: error.code, error_description: error.message },
+    { error: error.code, error_description: error.message, ...(error.reason ? { reason: error.reason } : {}) },
     { status: error.status },
   );
 }
@@ -436,6 +437,7 @@ export async function handleOAuthToken(
         resource: grant.resource,
         persistentMcpResource,
         issuer,
+        sessionVersion: grant.sessionVersion,
       });
       return withOAuthTokenTelemetry(
         tokenResponse(tokens),
@@ -944,21 +946,22 @@ export async function handleOAuthAuthorizeAction(
     );
   }
   const decision = (form.get("decision") ?? "").toString();
-  const userId = await getUserId(request, env);
+  const identity = await getCurrentSessionIdentity(request, env);
   const consentToken = (form.get("consent_token") ?? "").toString();
-  if (!userId || (decision !== "approve" && decision !== "deny") || !consentToken) {
+  if (!identity || (decision !== "approve" && decision !== "deny") || !consentToken) {
     return withOAuthAuthorizeTelemetry(
       Response.json({ error: "invalid_request", error_description: "The consent transaction is invalid or expired." }, { status: 400 }),
       {
         outcome: "error",
         errorCode: "invalid_request",
-        principalId: userId || undefined,
+        principalId: identity?.userId,
         decision: authorizeDecision(decision),
         stateClass: "unknown",
       },
     );
   }
 
+  const userId = identity.userId;
   const now = new Date();
   const transaction = await db.oAuthConsentTransaction.findFirst({
     where: {
@@ -1048,7 +1051,11 @@ export async function handleOAuthAuthorizeAction(
     await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
     throw error;
   }
-  if (consumed.count !== 1) {
+  // The session-version fence: sign out everywhere or a password change that landed after this
+  // request's session was checked spent every code then, before this one existed, so this one
+  // must not survive it. One that lands after this check finds the code and spends it. (This
+  // read is consistent with the revocation's write because D1 read replication is off.)
+  if (consumed.count !== 1 || !(await sessionVersionUnchanged(db, userId, identity.sessionVersion))) {
     await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
     return consumedError();
   }
