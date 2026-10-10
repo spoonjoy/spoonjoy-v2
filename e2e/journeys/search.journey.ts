@@ -141,7 +141,7 @@ test.describe("Search", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  test("a recipe link that opens nothing says so and leads to a recipe search", async ({ page, expectAccessible, expectConsoleError }) => {
+  test("a recipe link that opens nothing says so and leads to a recipe search", async ({ page, expectAccessible, expectConsoleError }, testInfo) => {
     // The page answers 404, which the browser logs as a console error; that one is expected, and
     // scoped to this recipe's URL.
     expectConsoleError(/Failed to load resource: the server responded with a status of 404/, {
@@ -152,6 +152,7 @@ test.describe("Search", () => {
     await expect(page.getByRole("heading", { level: 1, name: "We can't find this recipe." })).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "Browse recipes" })).toHaveAttribute("href", "/recipes");
     await expectAccessible();
+    await testInfo.attach("missing-recipe-page", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
 
     await page.getByRole("searchbox", { name: "Search recipes" }).fill("saffron");
     await page.getByRole("main").getByRole("button", { name: "Search", exact: true }).click();
