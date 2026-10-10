@@ -30,11 +30,12 @@ describe("Login action session version", () => {
       password,
     );
     const realCompare = bcrypt.compareSync;
+    let bumped: Promise<unknown> | undefined;
     // A password change (or "Sign out everywhere") lands while this login is still comparing the old password.
     vi.spyOn(bcrypt, "compareSync").mockImplementation((candidate, hash) => {
       const matches = realCompare(candidate, hash);
       // Prisma queries are lazy; .then() sends this one now, ahead of anything the login queries next.
-      void db.$executeRawUnsafe(`UPDATE "User" SET "sessionVersion" = "sessionVersion" + 1 WHERE "id" = ?`, created.id)
+      bumped = db.$executeRawUnsafe(`UPDATE "User" SET "sessionVersion" = "sessionVersion" + 1 WHERE "id" = ?`, created.id)
         .then(() => undefined);
       return matches;
     });
@@ -50,8 +51,10 @@ describe("Login action session version", () => {
     } as any) as Response;
 
     expect(response.status).toBe(302);
-    const bumped = await db.user.findUniqueOrThrow({ where: { id: created.id }, select: { sessionVersion: true } });
-    expect(bumped.sessionVersion).toBe(1);
+    // The bump was fired and forgotten mid-login, so wait for it before reading the version back.
+    await bumped;
+    const afterBump = await db.user.findUniqueOrThrow({ where: { id: created.id }, select: { sessionVersion: true } });
+    expect(afterBump.sessionVersion).toBe(1);
     const signedIn = new UndiciRequest("http://localhost:3000/recipes", {
       headers: { Cookie: (response.headers.get("Set-Cookie") ?? "").split(";")[0] },
     }) as unknown as Request;
