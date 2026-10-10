@@ -3,7 +3,7 @@
 // holds many unrelated recipes from other journeys and legacy data, well past one page, so "Show
 // more" is there; nothing asserts counts or positions beyond that.
 import { test, expect } from "./support/journey";
-import { seededRecipeLink, waitForHydration } from "./support/navigation";
+import { seededRecipeLink, waitForHydration, waitForServiceWorker } from "./support/navigation";
 import { PAGER_OLDEST_RECIPE } from "../../scripts/seed-qa-kitchen.mjs";
 
 const MAX_PAGES = 40;
@@ -41,10 +41,15 @@ test.describe("Public recipes", () => {
     const oldest = seededRecipeLink(main, PAGER_OLDEST_RECIPE.title, `/recipes/${PAGER_OLDEST_RECIPE.id}`);
     const showMore = main.getByRole("link", { name: "Show more recipes", exact: true });
 
+    // The loop below makes full page loads back to back; let the first one's service-worker
+    // registration finish, or WebKit logs the next load cancelling it as a console error.
+    await page.goto("/recipes");
+    await waitForServiceWorker(page);
+
     let path: string | null = "/recipes";
     let pages = 0;
     while (path && pages < MAX_PAGES) {
-      await page.goto(path);
+      if (pages > 0) await page.goto(path);
       pages += 1;
       if (await oldest.isVisible()) break;
       path = (await showMore.count()) > 0 ? await showMore.getAttribute("href") : null;
