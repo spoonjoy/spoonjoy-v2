@@ -3,11 +3,22 @@ import { PrismaD1 } from "@prisma/adapter-d1";
 // Type import only - doesn't cause runtime bundling issues
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 
+// One Prisma client per D1 binding for the life of the isolate. Each client starts its own
+// WASM query engine, so a client per call grows the isolate's memory until the engine traps.
+const clientsByBinding = new WeakMap<object, Promise<PrismaClientType>>();
+
 // Cloudflare D1 for all environments (local + production)
-export async function getDb(env: { DB: D1Database }): Promise<PrismaClientType> {
-  const { PrismaClient } = await import("@prisma/client");
-  const adapter = new PrismaD1(env.DB as never);
-  return new PrismaClient({ adapter });
+export function getDb(env: { DB: D1Database }): Promise<PrismaClientType> {
+  const binding = env.DB as unknown as object;
+  let client = clientsByBinding.get(binding);
+  if (!client) {
+    client = (async () => {
+      const { PrismaClient } = await import("@prisma/client");
+      return new PrismaClient({ adapter: new PrismaD1(env.DB as never) });
+    })();
+    clientsByBinding.set(binding, client);
+  }
+  return client;
 }
 
 async function createLocalSqliteDb(): Promise<PrismaClientType> {
