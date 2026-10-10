@@ -64,6 +64,12 @@ vi.mock("../../workers/cook-session-api", () => ({
   handleCookSessionProtocolRequest: cookProtocolHandler,
 }));
 
+const runScheduledPhotoSweep = vi.hoisted(() => vi.fn(async () => null));
+vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
+  isServablePhotoKey: (await importOriginal<typeof import("../../app/lib/photo-lifecycle.server")>()).isServablePhotoKey,
+  runScheduledPhotoSweep,
+}));
+
 const worker = (await import("../../workers/app")).default;
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
 const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
@@ -132,6 +138,14 @@ describe("Cloudflare worker app", () => {
     apiMocks.authenticateApiRequest.mockResolvedValue(principal());
     apiMocks.getDb.mockReset();
     apiMocks.getDb.mockResolvedValue(apiMocks.db);
+  });
+
+  it("runs the photo sweep from the cron trigger, outliving the scheduled event", async () => {
+    const env = versionedEnvironment({ PHOTO_SWEEP_MODE: "dry-run" });
+    const ctx = context();
+    await worker.scheduled!({ cron: "23 */6 * * *", scheduledTime: 0, noRetry: () => undefined } as ScheduledController, env, ctx);
+    expect(runScheduledPhotoSweep).toHaveBeenCalledWith(env);
+    expect(ctx.waitUntil).toHaveBeenCalledWith(runScheduledPhotoSweep.mock.results[0].value);
   });
 
   it("configures React Router with the statically imported server build, evaluated at Worker startup", () => {
@@ -238,6 +252,19 @@ describe("Cloudflare worker app", () => {
     }
     await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg"), {} as CloudflareEnvironment, context());
     expect(requestHandler).toHaveBeenCalledTimes(3);
+  });
+
+  it("never serves a quarantined photo, from the fast path or React Router", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async () => ({ body: new Response("old").body, size: 3, httpEtag: '"q"', httpMetadata: {} }));
+    const env = { PHOTOS: { get } } as unknown as CloudflareEnvironment;
+
+    const response = await worker.fetch(new Request("https://spoonjoy.app/photos/quarantine/covers/a.jpg"), env, context());
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(get).not.toHaveBeenCalled();
+    expect(requestHandler).not.toHaveBeenCalled();
   });
 
   it("adds security and Worker-version headers to canonical redirects", async () => {

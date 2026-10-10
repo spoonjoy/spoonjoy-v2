@@ -151,7 +151,7 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 
 Supported entry points:
 
-- Native account settings and bootstrap sync: `GET /api/v1/me`, `GET /api/v1/me/sync`, `GET /api/v1/me/chefs`, `PATCH /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
+- Native account settings and bootstrap sync: `GET /api/v1/me`, `GET /api/v1/me/sync`, `GET /api/v1/me/chefs`, `GET /api/v1/me/export`, `PATCH /api/v1/me`, `DELETE /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
 - Native Apple app sign-in: `POST /api/v1/auth/apple/native` and `POST /api/v1/auth/password/native`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
@@ -512,6 +512,8 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/me` | Authenticated chef | `account:read` |
 | `GET` | `/api/v1/me/sync` | Authenticated chef | `account:read kitchen:read` |
 | `PATCH` | `/api/v1/me` | Authenticated chef | `account:write` |
+| `DELETE` | `/api/v1/me` | Authenticated chef, re-authenticated | `account:write` |
+| `GET` | `/api/v1/me/export` | Authenticated chef | `account:read kitchen:read` |
 | `POST` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
 | `DELETE` | `/api/v1/me/photo` | Authenticated chef | `account:write` |
 | `GET` | `/api/v1/me/chefs` | Authenticated chef | `kitchen:read` |
