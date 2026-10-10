@@ -26,6 +26,7 @@ import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
@@ -130,7 +131,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 export async function action({ request, params, context }: Route.ActionArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
-  const formData = await request.formData();
+  // The recipe image is the only large field, so the body is read through the image upload
+  // limit: an oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    return data({ errors: { image: RECIPE_IMAGE_SIZE_MESSAGE } }, { status: 413 });
+  }
   const intent = formData.get("intent")?.toString();
 
   const database = await getRequestDb(context);
