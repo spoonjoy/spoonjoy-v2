@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { sendPush, type PushSubscriptionRecord } from "~/lib/web-push.server";
+import {
+  isAllowedPushEndpoint,
+  PUSH_SEND_TIMEOUT_MS,
+  sendPush,
+  type PushSubscriptionRecord,
+} from "~/lib/web-push.server";
 import { generateVapidKeyPair } from "../../scripts/generate-vapid-keys";
 
 interface FixtureKeyset {
@@ -26,7 +31,7 @@ function makeFixtureSubscription(): PushSubscriptionRecord {
   // Generated once by running generateVapidKeyPair() — they are NOT a
   // working keypair, but they pass shape checks.
   return {
-    endpoint: "https://push.example.test/sub-abc",
+    endpoint: "https://fcm.googleapis.com/fcm/send/sub-abc",
     keys: {
       // 65 bytes of 0x04-prefixed pseudo point + 32 bytes X + 32 bytes Y.
       p256dh:
@@ -41,7 +46,92 @@ function okResponse(status: number, body = ""): Response {
   return new Response(body, { status });
 }
 
+describe("isAllowedPushEndpoint", () => {
+  it.each([
+    "https://fcm.googleapis.com/fcm/send/abc:def",
+    "https://web.push.apple.com/QGx2b2NhbA",
+    "https://updates.push.services.mozilla.com/wpush/v2/gAAAA",
+    "https://wns2-par02p.notify.windows.com/w/?token=abc",
+    "https://FCM.GoogleAPIs.com/fcm/send/upper",
+    "https://fcm.googleapis.com:443/fcm/send/explicit-default-port",
+  ])("accepts the browser push service endpoint %s", (endpoint) => {
+    expect(isAllowedPushEndpoint(endpoint)).toBe(true);
+  });
+
+  it.each([
+    ["plain http", "http://fcm.googleapis.com/fcm/send/abc"],
+    ["an unknown host", "https://attacker.example/collect"],
+    ["a look-alike suffix", "https://fcm.googleapis.com.attacker.example/x"],
+    ["a suffix without the dot boundary", "https://evilpush.apple.com/x"],
+    ["the bare windows notify domain", "https://notify.windows.com/x"],
+    ["a non-default port", "https://fcm.googleapis.com:8443/fcm/send/abc"],
+    ["embedded credentials", "https://user:pass@fcm.googleapis.com/fcm/send/abc"],
+    ["a username only", "https://user@fcm.googleapis.com/fcm/send/abc"],
+    ["an IP address", "https://169.254.169.254/latest/meta-data"],
+    ["localhost", "https://localhost/push"],
+    ["a non-URL string", "not a url"],
+    ["an empty string", ""],
+  ])("rejects %s", (_label, endpoint) => {
+    expect(isAllowedPushEndpoint(endpoint)).toBe(false);
+  });
+});
+
 describe("sendPush", () => {
+  it("does not contact an endpoint outside the push services and reports it expired so it is pruned", async () => {
+    const vapid = await getVapid();
+    const fetchMock = vi.fn(async () => okResponse(201));
+    const result = await sendPush(
+      { ...makeFixtureSubscription(), endpoint: "https://attacker.example/collect" },
+      { title: "x", body: "y", url: "/" },
+      vapid,
+      { fetch: fetchMock },
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      status: "expired",
+      httpStatus: 0,
+      providerEndpoint: "https://attacker.example/collect",
+      error: "Endpoint is not on a known Web Push service",
+    });
+  });
+
+  it("bounds the push request with a timeout signal", async () => {
+    const vapid = await getVapid();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => okResponse(201));
+    try {
+      await sendPush(
+        makeFixtureSubscription(),
+        { title: "x", body: "y", url: "/" },
+        vapid,
+        { fetch: fetchMock as unknown as typeof fetch },
+      );
+      expect(PUSH_SEND_TIMEOUT_MS).toBe(10_000);
+      expect(timeoutSpy).toHaveBeenCalledWith(PUSH_SEND_TIMEOUT_MS);
+      const init = fetchMock.mock.calls[0]![1] as RequestInit;
+      expect(init.signal).toBe(timeoutSpy.mock.results[0]!.value);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it("returns failed when the push request times out", async () => {
+    const vapid = await getVapid();
+    const result = await sendPush(
+      makeFixtureSubscription(),
+      { title: "x", body: "y", url: "/" },
+      vapid,
+      {
+        fetch: vi.fn(async () => {
+          throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        }),
+      },
+    );
+    expect(result.status).toBe("failed");
+    expect(result.httpStatus).toBe(0);
+    expect(result.error).toMatch(/timeout/);
+  });
+
   it("returns delivered on 201 from push provider", async () => {
     const vapid = await getVapid();
     const sub = makeFixtureSubscription();
@@ -203,7 +293,7 @@ describe("sendPush", () => {
     const vapid = await getVapid();
     const result = await sendPush(
       {
-        endpoint: "https://push.example.test/bad",
+        endpoint: "https://fcm.googleapis.com/fcm/send/bad",
         keys: { p256dh: "!!!notbase64!!!", auth: "AAA" },
       },
       { title: "x", body: "y", url: "/" },
@@ -240,7 +330,7 @@ describe("sendPush", () => {
     // so we use a malformed keys structure and assert the error message is a string.
     const result = await sendPush(
       {
-        endpoint: "https://push.example.test/x",
+        endpoint: "https://fcm.googleapis.com/fcm/send/x",
         keys: { p256dh: "bad", auth: "bad" },
       },
       { title: "x", body: "y", url: "/" },
@@ -264,7 +354,7 @@ describe("sendPush — buildPushPayload non-Error rejection (mocked)", () => {
     const mod = await import("~/lib/web-push.server");
     const vapid = await getVapid();
     const result = await mod.sendPush(
-      { endpoint: "https://push.example/x", keys: { p256dh: "p", auth: "a" } },
+      { endpoint: "https://fcm.googleapis.com/fcm/send/x", keys: { p256dh: "p", auth: "a" } },
       { title: "x", body: "y", url: "/" },
       vapid,
       { fetch: vi.fn(async () => okResponse(201)) },

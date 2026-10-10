@@ -1,9 +1,0 @@
-
-> spoonjoy-v2@1.0.0 typecheck /Users/arimendelow/Projects/spoonjoy-v2
-> pnpm run api:playground:generate && react-router typegen && tsc
-
-
-> spoonjoy-v2@1.0.0 api:playground:generate /Users/arimendelow/Projects/spoonjoy-v2
-> tsx scripts/generate-api-playground.ts
-
-Generated app/lib/generated/api-v1-playground.ts

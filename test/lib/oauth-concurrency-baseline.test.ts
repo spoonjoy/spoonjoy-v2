@@ -19,6 +19,8 @@ const CLIENT_ID = "oauth-concurrency-client";
 const REDIRECT_URI = "https://example.com/callback";
 const VERIFIER = "verifier-0123456789-abcdefghijklmnopqrstuvwxyz";
 const NOW = new Date("2026-08-29T18:00:00.000Z");
+// MCP-bound access tokens last 90 days (they had no expiry before the 2026-10-09 audit).
+const MCP_ACCESS_EXPIRES_AT = new Date("2026-11-27T18:00:00.000Z");
 const CONTENDERS = ["honest_client", "indistinguishable_replay"] as const;
 
 async function challengeFor(verifier: string): Promise<string> {
@@ -142,7 +144,7 @@ describe("OAuth concurrency baseline across independent SQLite clients", () => {
       oauthResource: "https://spoonjoy.app/mcp",
       oauthConnectionKey: refreshRows[0]?.connectionKey,
       revokedAt: null,
-      expiresAt: null,
+      expiresAt: MCP_ACCESS_EXPIRES_AT,
     });
     expect(refreshRows).toHaveLength(1);
     expect(refreshRows[0]).toMatchObject({
@@ -240,7 +242,7 @@ describe("OAuth concurrency baseline across independent SQLite clients", () => {
         oauthResource: "https://spoonjoy.app/mcp",
         oauthConnectionKey: parent.connectionKey,
         revokedAt: null,
-        expiresAt: null,
+        expiresAt: MCP_ACCESS_EXPIRES_AT,
       });
       expect(childAccess).toMatchObject({
         userId,

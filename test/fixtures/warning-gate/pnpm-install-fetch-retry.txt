@@ -1,0 +1,142 @@
+Packages: +838
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 838, reused 0, downloaded 80, added 54
+Progress: resolved 838, reused 0, downloaded 110, added 67
+Progress: resolved 838, reused 0, downloaded 226, added 136
+Progress: resolved 838, reused 0, downloaded 251, added 140
+Progress: resolved 838, reused 0, downloaded 326, added 180
+Progress: resolved 838, reused 0, downloaded 500, added 313
+ WARN  GET https://registry.npmjs.org/ansi-escapes/-/ansi-escapes-7.2.0.tgz error (ERR_PNPM_FETCH_502). Will retry in 10 seconds. 2 retries left.
+Progress: resolved 838, reused 0, downloaded 790, added 776
+Progress: resolved 838, reused 0, downloaded 837, added 836
+Progress: resolved 838, reused 0, downloaded 837, added 837
+Progress: resolved 838, reused 0, downloaded 838, added 837
+Progress: resolved 838, reused 0, downloaded 838, added 838, done
+.../node_modules/better-sqlite3 install$ node-gyp rebuild
+.../node_modules/better-sqlite3 install: gyp info it worked if it ends with ok
+.../node_modules/better-sqlite3 install: gyp info using node-gyp@11.5.0
+.../node_modules/better-sqlite3 install: gyp info using node@22.23.3 | linux | x64
+.../node_modules/better-sqlite3 install: gyp info find Python using Python version 3.13.16 found at "/opt/hostedtoolcache/Python/3.13.16/x64/bin/python3"
+.../node_modules/better-sqlite3 install: gyp http GET https://nodejs.org/download/release/v22.23.3/node-v22.23.3-headers.tar.gz
+.../node_modules/better-sqlite3 install: gyp http 200 https://nodejs.org/download/release/v22.23.3/node-v22.23.3-headers.tar.gz
+.../node_modules/better-sqlite3 install: gyp http GET https://nodejs.org/download/release/v22.23.3/SHASUMS256.txt
+.../node_modules/better-sqlite3 install: gyp http 200 https://nodejs.org/download/release/v22.23.3/SHASUMS256.txt
+.../node_modules/better-sqlite3 install: gyp info spawn /opt/hostedtoolcache/Python/3.13.16/x64/bin/python3
+.../node_modules/better-sqlite3 install: gyp info spawn args [
+.../node_modules/better-sqlite3 install: gyp info spawn args '/home/runner/.cache/node/corepack/v1/pnpm/10.28.1/dist/node_modules/node-gyp/gyp/gyp_main.py',
+.../node_modules/better-sqlite3 install: gyp info spawn args 'binding.gyp',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-f',
+.../node_modules/better-sqlite3 install: gyp info spawn args 'make',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-I',
+.../node_modules/better-sqlite3 install: gyp info spawn args '/home/runner/work/spoonjoy-v2/spoonjoy-v2/node_modules/.pnpm/better-sqlite3@13.0.0/node_modules/better-sqlite3/build/config.gypi',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-I',
+.../node_modules/better-sqlite3 install: gyp info spawn args '/home/runner/.cache/node/corepack/v1/pnpm/10.28.1/dist/node_modules/node-gyp/addon.gypi',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-I',
+.../node_modules/better-sqlite3 install: gyp info spawn args '/home/runner/.cache/node-gyp/22.23.3/include/node/common.gypi',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dlibrary=shared_library',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dvisibility=default',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dnode_root_dir=/home/runner/.cache/node-gyp/22.23.3',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dnode_gyp_dir=/home/runner/.cache/node/corepack/v1/pnpm/10.28.1/dist/node_modules/node-gyp',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dnode_lib_file=/home/runner/.cache/node-gyp/22.23.3/<(target_arch)/node.lib',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dmodule_root_dir=/home/runner/work/spoonjoy-v2/spoonjoy-v2/node_modules/.pnpm/better-sqlite3@13.0.0/node_modules/better-sqlite3',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Dnode_engine=v8',
+.../node_modules/better-sqlite3 install: gyp info spawn args '--depth=.',
+.../node_modules/better-sqlite3 install: gyp info spawn args '--no-parallel',
+.../node_modules/better-sqlite3 install: gyp info spawn args '--generator-output',
+.../node_modules/better-sqlite3 install: gyp info spawn args 'build',
+.../node_modules/better-sqlite3 install: gyp info spawn args '-Goutput_dir=.'
+.../node_modules/better-sqlite3 install: gyp info spawn args ]
+.../node_modules/better-sqlite3 install: gyp info spawn make
+.../node_modules/better-sqlite3 install: gyp info spawn args [ 'BUILDTYPE=Release', '-C', 'build' ]
+.../node_modules/better-sqlite3 install: make: Entering directory '/home/runner/work/spoonjoy-v2/spoonjoy-v2/node_modules/.pnpm/better-sqlite3@13.0.0/node_modules/better-sqlite3/build'
+.../node_modules/better-sqlite3 install:   TOUCH Release/obj.target/better_sqlite3.stamp
+.../node_modules/better-sqlite3 install:   TOUCH Release/obj.target/test_extension.stamp
+.../node_modules/better-sqlite3 install: make: Leaving directory '/home/runner/work/spoonjoy-v2/spoonjoy-v2/node_modules/.pnpm/better-sqlite3@13.0.0/node_modules/better-sqlite3/build'
+.../node_modules/better-sqlite3 install: gyp info ok 
+.../node_modules/better-sqlite3 install: Done
+
+dependencies:
++ @block65/webcrypto-web-push 1.0.2
++ @cloudflare/vite-plugin 1.22.1
++ @headlessui/react 2.2.9
++ @heroicons/react 2.2.0
++ @posthog/react 1.10.4
++ @prisma/adapter-d1 6.19.2
++ @prisma/client 6.19.2
++ @react-router/cloudflare 7.18.2
++ @react-router/dev 7.18.2
++ @react-router/node 7.18.2
++ @simplewebauthn/browser 13.3.0
++ @simplewebauthn/server 13.3.3
++ arctic 3.7.0
++ bcryptjs 3.0.3
++ clsx 2.1.1
++ fraction.js 5.3.4
++ framer-motion 12.29.2
++ isbot 5.1.34
++ lucide-react 0.563.0
++ motion 12.29.2
++ openai 6.17.0
++ posthog-js 1.418.10
++ react 19.2.4
++ react-dom 19.2.4
++ react-router 7.18.2
++ zod 4.3.6
+
+devDependencies:
++ @chromatic-com/storybook 5.0.0
++ @cloudflare/vitest-pool-workers 0.18.6
++ @cloudflare/workers-types 4.20260507.1
++ @faker-js/faker 10.6.0
++ @modelcontextprotocol/client 2.2.0
++ @playwright/test 1.58.1
++ @storybook/addon-a11y 10.2.10
++ @storybook/addon-docs 10.2.10
++ @storybook/addon-onboarding 10.2.10
++ @storybook/addon-themes 10.2.10
++ @storybook/addon-vitest 10.2.10
++ @storybook/react-vite 10.2.10
++ @storybook/test-runner 0.24.2
++ @tailwindcss/postcss 4.1.18
++ @testing-library/jest-dom 6.9.1
++ @testing-library/react 16.3.2
++ @testing-library/user-event 14.6.1
++ @types/bcryptjs 2.4.6
++ @types/better-sqlite3 7.6.13
++ @types/node 22.19.21
++ @types/pg 8.20.0
++ @types/react 19.2.10
++ @types/react-dom 19.2.3
++ @vitejs/plugin-react 5.1.2
++ @vitest/browser-playwright 4.1.11
++ @vitest/coverage-istanbul 4.1.11
++ @vitest/coverage-v8 4.1.11
++ @vitest/ui 4.1.11
++ autoprefixer 10.4.23
++ axe-core 4.11.1
++ better-sqlite3 13.0.0
++ chromatic 11.29.0
++ happy-dom 20.8.9
++ jsdom-testing-mocks 1.16.0
++ pg 8.21.0
++ postcss 8.5.23
++ prisma 6.19.2
++ sharp 0.35.5
++ storybook 10.2.10
++ tailwindcss 4.1.18
++ tsconfig-paths 4.2.0
++ tsx 4.21.0
++ typescript 5.9.3
++ undici 7.29.1
++ vite 7.3.5
++ vitest 4.1.11
++ wrangler 4.90.0
++ yaml 2.9.0
+
+. postinstall$ PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate
+. postinstall: Prisma schema loaded from prisma/schema.prisma
+. postinstall: ✔ Generated Prisma Client (v6.19.2) to ./node_modules/.prisma/client in 151ms
+. postinstall: Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+. postinstall: Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+. postinstall: Done
+Done in 22.7s using pnpm v10.28.1

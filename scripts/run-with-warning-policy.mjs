@@ -10,6 +10,14 @@ export function containsWarningDiagnostic(output) {
   return findUnexpectedDiagnosticOutput(output, "").length > 0;
 }
 
+// Name the lines that tripped the policy; without them a CI failure says only that something did.
+// They were already streamed to the log, so repeating up to five of them exposes nothing new.
+export function formatRejection(lines) {
+  const shown = lines.slice(0, 5).map((line) => `  rejected: ${line}\n`).join("");
+  const more = lines.length > 5 ? `  ...and ${lines.length - 5} more\n` : "";
+  return `warning-policy: rejected diagnostic output\n${shown}${more}`;
+}
+
 export function runWithWarningPolicy(argv, runtime = {}) {
   const stdout = runtime.stdout ?? process.stdout;
   const stderr = runtime.stderr ?? process.stderr;
@@ -64,11 +72,12 @@ export function runWithWarningPolicy(argv, runtime = {}) {
       stdout: completedLines(stdoutOutput),
       stderr: completedLines(stderrOutput),
     });
-    if (findUnexpectedDiagnosticOutput(filtered.stdout, filtered.stderr).length === 0) {
+    const rejected = findUnexpectedDiagnosticOutput(filtered.stdout, filtered.stderr);
+    if (rejected.length === 0) {
       return;
     }
     diagnosticDetected = true;
-    stderr.write("warning-policy: rejected diagnostic output\n");
+    stderr.write(formatRejection(rejected));
     terminateChild();
   };
 
@@ -131,8 +140,9 @@ export function runWithWarningPolicy(argv, runtime = {}) {
         stdout: stdoutOutput,
         stderr: stderrOutput,
       });
-      if (findUnexpectedDiagnosticOutput(filtered.stdout, filtered.stderr).length > 0) {
-        stderr.write("warning-policy: rejected diagnostic output\n");
+      const rejected = findUnexpectedDiagnosticOutput(filtered.stdout, filtered.stderr);
+      if (rejected.length > 0) {
+        stderr.write(formatRejection(rejected));
         settle(1);
         return;
       }

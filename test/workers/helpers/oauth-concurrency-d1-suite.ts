@@ -35,6 +35,8 @@ const CLIENT_ID = "oauth-concurrency-d1-client";
 const REDIRECT_URI = "https://example.com/callback";
 const VERIFIER = "verifier-0123456789-abcdefghijklmnopqrstuvwxyz";
 const NOW = new Date("2026-08-29T18:00:00.000Z");
+// MCP-bound access tokens last 90 days from issue.
+const MCP_ACCESS_EXPIRES_AT = new Date(NOW.getTime() + 90 * 24 * 60 * 60 * 1000);
 const CONTENDERS = ["honest_client", "indistinguishable_replay"] as const;
 const PRISMA_D1_TRANSACTION_WARNING =
   "prisma:warn Cloudflare D1 does not support transactions yet. When using Prisma's D1 adapter, " +
@@ -227,7 +229,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
       oauthResource: "https://spoonjoy.test/mcp",
       oauthConnectionKey: child.connectionKey,
       revokedAt: null,
-      expiresAt: null,
+      expiresAt: MCP_ACCESS_EXPIRES_AT,
     });
     expect(rotatedAccess).toMatchObject({
       userId: USER_ID,
@@ -556,7 +558,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
       oauthResource: "https://spoonjoy.test/mcp",
       oauthConnectionKey: refreshRows[0]?.connectionKey,
       revokedAt: null,
-      expiresAt: null,
+      expiresAt: MCP_ACCESS_EXPIRES_AT,
     });
     expect(refreshRows).toHaveLength(1);
     expect(refreshRows[0]).toMatchObject({
@@ -653,7 +655,7 @@ describe("OAuth concurrency baseline through independent PrismaD1 clients", () =
         oauthResource: "https://spoonjoy.test/mcp",
         oauthConnectionKey: parent.connectionKey,
         revokedAt: null,
-        expiresAt: null,
+        expiresAt: MCP_ACCESS_EXPIRES_AT,
       });
       expect(childAccess).toMatchObject({
         userId: USER_ID,

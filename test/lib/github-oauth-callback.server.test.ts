@@ -165,9 +165,39 @@ describe("github-oauth-callback.server", () => {
     expect(result.userId).toBeUndefined();
   });
 
+  it("refuses to sign in to an existing account whose email was never verified", async () => {
+    // Someone signed up with this address but never proved they own it. GitHub vouching for the
+    // address must not hand over that account, and must not create a second one either.
+    const existingUser = await db.user.create({
+      data: { ...createTestUser(), email: "unverified@example.com" },
+    });
+    testUserIds.push(existingUser.id);
+
+    const result = await runCallback(undefined, createMockGitHubUser({ email: "unverified@example.com" }));
+
+    expect(result).toMatchObject({ success: false, error: "account_exists_unverified" });
+    expect(result.userId).toBeUndefined();
+    expect(await db.oAuth.count({ where: { userId: existingUser.id } })).toBe(0);
+    expect(await db.user.count({ where: { email: "unverified@example.com" } })).toBe(1);
+  });
+
+  it("marks the account's email verified when a signed-in user links GitHub with that same verified address", async () => {
+    const existingUser = await db.user.create({
+      data: { ...createTestUser(), email: "linker@example.com" },
+    });
+    testUserIds.push(existingUser.id);
+
+    const result = await runCallback({ currentUserId: existingUser.id }, createMockGitHubUser({ email: "linker@example.com" }));
+
+    expect(result).toMatchObject({ success: true, action: "account_linked" });
+    const user = await db.user.findUniqueOrThrow({ where: { id: existingUser.id } });
+    expect(user.emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
   it("restores a missing GitHub OAuth row when verified email matches an existing user", async () => {
     const existingUser = await db.user.create({
-      data: { ...createTestUser(), email: "Existing@Example.com" },
+      // Linking by email needs an account that verified its address (see linkOAuthAccountByVerifiedEmail).
+      data: { ...createTestUser(), email: "Existing@Example.com", emailVerifiedAt: new Date() },
     });
     testUserIds.push(existingUser.id);
 
@@ -198,6 +228,7 @@ describe("github-oauth-callback.server", () => {
       data: {
         ...createTestUser(),
         email: "linked-github@example.com",
+        emailVerifiedAt: new Date(),
         OAuth: {
           create: {
             provider: "github",
@@ -235,5 +266,30 @@ describe("github-oauth-callback.server", () => {
       redirectTo: "/recipes",
     });
     expect(result.userId).toBeUndefined();
+  });
+  // Accounts made before email verification existed become verified when they sign in again
+  // through a provider that vouches for the account's own address, and only then.
+  it("verifies a returning github account whose email the provider vouches for", async () => {
+    const existingUser = await db.user.create({ data: { ...createTestUser(), email: "returning.github@example.com" } });
+    testUserIds.push(existingUser.id);
+    const providerUserId = faker.string.numeric(10);
+    await db.oAuth.create({
+      data: { userId: existingUser.id, provider: "github", providerUserId, providerUsername: "returning" },
+    });
+    const signIn = (email: string, emailVerified: boolean) =>
+      handleGitHubOAuthCallback({
+        db,
+        githubUser: createMockGitHubUser({ id: providerUserId, email, emailVerified }),
+        currentUserId: null,
+        redirectTo: null,
+      });
+    const verifiedAt = async () => (await db.user.findUniqueOrThrow({ where: { id: existingUser.id } })).emailVerifiedAt;
+
+    await expect(signIn("returning.github@example.com", false)).resolves.toMatchObject({ action: "user_logged_in" });
+    await expect(signIn("someone.else@example.com", true)).resolves.toMatchObject({ action: "user_logged_in" });
+    expect(await verifiedAt()).toBeNull();
+
+    await expect(signIn("Returning.github@Example.com", true)).resolves.toMatchObject({ action: "user_logged_in" });
+    expect(await verifiedAt()).toBeInstanceOf(Date);
   });
 });
