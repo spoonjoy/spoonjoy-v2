@@ -6,18 +6,21 @@ import { assertAdditiveMigrationSql } from "../../scripts/deploy-production-cana
 import { readChefProfileFromD1 } from "~/lib/chef-profile-reads.server";
 
 const MIGRATIONS_DIR = resolve(__dirname, "../../migrations");
-const MIGRATION = "0032_recipe_chef_keyset_index.sql";
+const MIGRATION = "0034_recipe_chef_keyset_index.sql";
 const ROOT_MIGRATION = resolve(MIGRATIONS_DIR, MIGRATION);
 const PRISMA_MIGRATION = resolve(
   __dirname,
-  "../../prisma/migrations/20261009180000_recipe_chef_keyset_index/migration.sql",
+  "../../prisma/migrations/20261010070000_recipe_chef_keyset_index/migration.sql",
 );
 
-/** A database with every root D1 migration applied in order, optionally stopping before one. */
-function migratedDatabase(before?: string) {
+/**
+ * A database with every root D1 migration applied in order, optionally without one. Later
+ * migrations still apply, so the reader's current query has every column it selects.
+ */
+function migratedDatabase(without?: string) {
   const db = new DatabaseSync(":memory:");
   for (const file of readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith(".sql")).sort()) {
-    if (before && file >= before) break;
+    if (file === without) continue;
     db.exec(readFileSync(resolve(MIGRATIONS_DIR, file), "utf8"));
   }
   return db;
@@ -44,13 +47,13 @@ function plan(db: DatabaseSync.Database, query: { sql: string; values: unknown[]
   return rows.map((row) => row.detail);
 }
 
-describe("migration 0032 copies", () => {
+describe("migration 0034 copies", () => {
   it("keeps root D1 and Prisma migration SQL byte-identical", () => {
     expect(readFileSync(ROOT_MIGRATION, "utf8")).toBe(readFileSync(PRISMA_MIGRATION, "utf8"));
   });
 });
 
-describe("migration 0032 - chef recipe keyset index", () => {
+describe("migration 0034 - chef recipe keyset index", () => {
   it("is additive so the production release can apply it automatically", () => {
     expect(() => assertAdditiveMigrationSql(MIGRATION, readFileSync(ROOT_MIGRATION, "utf8"))).not.toThrow();
   });
