@@ -261,8 +261,12 @@ function finalizeResponse(
   return finalized;
 }
 
-export default {
-  async fetch(request, env, ctx) {
+async function handleFetch(
+  request: Request,
+  env: CloudflareEnvironment,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  {
     const oauthPreflight = oauthCorsPreflightResponse(request);
     if (oauthPreflight) {
       return finalizeResponse(oauthPreflight, env);
@@ -337,5 +341,17 @@ export default {
       }
       throw error;
     }
+  }
+}
+
+export default {
+  fetch(request, env, ctx) {
+    // A browser that aborts a request must not cut a database query off halfway: Prisma's
+    // engine is shared by the isolate, and a query torn down mid-call leaves it unable to answer
+    // later requests, which the runtime then reports as hung (Error 1101). Holding the request
+    // open with waitUntil until the handler settles lets the query finish after the abort.
+    const response = handleFetch(request, env, ctx);
+    ctx.waitUntil(response.then(() => undefined, () => undefined));
+    return response;
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;
