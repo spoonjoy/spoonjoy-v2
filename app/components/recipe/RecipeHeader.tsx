@@ -180,7 +180,7 @@ export function RecipeHeader({
 
         <div className="sj-recipe-header-body flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14 print:min-h-0 print:px-0 print:py-4">
           {masthead ? (
-            <div className="border-b border-[var(--sj-border)] pb-4 print:hidden" data-testid="recipe-masthead">
+            <div className="border-b border-[var(--sj-border)] sm:pb-4 print:hidden" data-testid="recipe-masthead">
               {masthead}
             </div>
           ) : null}
