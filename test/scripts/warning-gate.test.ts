@@ -324,7 +324,7 @@ describe("warning gate", () => {
       "WARN  GET https://registry.npmjs.org/@prisma/engines/-/engines-6.19.2.tgz error (ECONNRESET). Will retry in 10 seconds. 2 retries left.",
       "WARN  GET https://registry.npmjs.org/a/-/a-1.0.0.tgz error (ERR_PNPM_FETCH_429). Will retry in 59.9 seconds. 1 retry left.",
       "WARN  GET https://registry.npmjs.org/%40scope%2fpkg error (ETIMEDOUT). Will retry in 1 second. 4 retries left.",
-    ])("tolerates the transient retry notice %s", (line) => {
+    ].map((line, index) => [index + 1, line] as const))("tolerates transient retry notice %i", (_case, line) => {
       expect(findUnexpectedWarnings(`${line}\n`)).toEqual([]);
       expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
     });
