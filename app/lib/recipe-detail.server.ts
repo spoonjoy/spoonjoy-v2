@@ -483,6 +483,8 @@ async function handleCreateSpoon(
   context: AppLoadContext,
 ) {
   const { photoFile, note, nextTime, cookedAt, useAsRecipeCover } = spoonFormFields(formData);
+  // A recipe in the trash takes no new cooks, as on the API.
+  await assertActiveRecipe(database, recipeId);
 
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
   // Resolve once: threaded into both the spoon notify and the origin-cook
