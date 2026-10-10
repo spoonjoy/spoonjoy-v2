@@ -26,7 +26,6 @@ import {
   parseCookProgressSnapshot,
   readCookProgress,
   readSyncedCookProgress,
-  formatTimerSeconds,
   writeCookProgress,
   shouldRevalidate as recipeShouldRevalidate,
 } from "~/routes/recipes.$id";
@@ -313,11 +312,6 @@ describe("Recipes $id Route", () => {
       expect(parseCookProgressSnapshot(JSON.stringify({ version: 0 }), bounds)).toBeNull();
       expect(parseCookProgressSnapshot(JSON.stringify(null), bounds)).toBeNull();
     });
-
-    it("formats timer seconds as cookbook timer text", () => {
-      expect(formatTimerSeconds(0)).toBe("00:00");
-      expect(formatTimerSeconds(65)).toBe("01:05");
-    });
   });
 
   describe("meta", () => {
@@ -482,6 +476,8 @@ describe("Recipes $id Route", () => {
           status: "processing",
           generationStatus: "processing",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          // Regenerated just now, so it is still a live generation rather than a stuck one.
+          generationStartedAt: new Date(),
         },
       });
       await db.recipe.update({
@@ -510,6 +506,45 @@ describe("Recipes $id Route", () => {
       });
     });
 
+    it("shows an active cover whose generation stopped long ago as failed, not processing", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const headers = new Headers({ Cookie: setCookieHeader.split(";")[0] });
+      // Its job's Worker died: the editorial pass started an hour ago and never finished.
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          sourceImageUrl: "/photos/detail-raw.jpg",
+          sourceType: "spoon",
+          status: "processing",
+          generationStatus: "processing",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          generationStartedAt: new Date(Date.now() - 60 * 60_000),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: activeCover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      // The raw photo stays the cover; only the editorial pass failed.
+      expect(result.coverImageUrl).toBe("/photos/detail-raw.jpg");
+      expect(result.activeCoverProcessing).toBeNull();
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: activeCover.id } })).resolves.toMatchObject({
+        status: "ready",
+        generationStatus: "failed",
+        failureReason: "Generation stopped before it finished.",
+      });
+    });
+
     it("tracks generation-status-only processing and omits ready active covers", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
@@ -524,6 +559,8 @@ describe("Recipes $id Route", () => {
           status: "ready",
           generationStatus: "processing",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          // Regenerated just now, so it is still a live generation rather than a stuck one.
+          generationStartedAt: new Date(),
         },
       });
       await db.recipe.update({
@@ -1813,6 +1850,8 @@ describe("Recipes $id Route", () => {
           failureReason: null,
           promptAddition: "less shadow more basil",
           parentCoverId: cover.id,
+          // Regeneration restarts the clock that decides when a generation counts as stopped.
+          generationStartedAt: expect.any(Date),
         });
       await expect(
         db.recipe.findUniqueOrThrow({
@@ -3146,10 +3185,10 @@ describe("Recipes $id Route", () => {
       await user.click(within(cookMode).getByRole("button", { name: "Start timer" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Pause timer" }));
-      expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
-      await user.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+      expect(within(cookMode).getByRole("button", { name: "Resume timer" })).toBeInTheDocument();
+      await user.click(within(cookMode).getByRole("button", { name: "Resume timer" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
-      await user.click(within(cookMode).getByRole("button", { name: "Reset timer" }));
+      await user.click(within(cookMode).getByRole("button", { name: "Cancel timer" }));
       expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
       expect(within(cookMode).getByText("05:00")).toBeInTheDocument();
       await exitCookMode(cookMode);
@@ -3251,6 +3290,8 @@ describe("Recipes $id Route", () => {
         });
 
         expect(within(cookMode).getByText("00:00")).toBeInTheDocument();
+        expect(within(cookMode).getByText("Time's up")).toBeInTheDocument();
+        expect(within(cookMode).getByRole("button", { name: "Stop alarm" })).toBeInTheDocument();
         expect(within(cookMode).getByRole("button", { name: "Restart timer" })).toBeInTheDocument();
 
         fireEvent.click(within(cookMode).getByRole("button", { name: "Restart timer" }));
@@ -3263,6 +3304,123 @@ describe("Recipes $id Route", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("keeps a running timer when the cook moves to another step, and lets them cancel it there", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-timers",
+          title: "Pasta Night",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            { id: "step-1", stepNum: 1, stepTitle: "Boil pasta", description: "Salt the water.", duration: 10, ingredients: [], usingSteps: [] },
+            { id: "step-2", stepNum: 2, stepTitle: "Make sauce", description: "Garlic in oil.", duration: null, ingredients: [], usingSteps: [] },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-timers"]} />);
+      await screen.findByRole("heading", { name: "Pasta Night" });
+      fireEvent.click(screen.getByTestId("recipe-header-cook-action"));
+      const cookMode = await screen.findByTestId("cook-mode-panel");
+      await settleBrowserTasks();
+      try {
+        vi.useFakeTimers();
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_000);
+        });
+        expect(within(cookMode).getByText("09:57")).toBeInTheDocument();
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
+        const tray = within(cookMode).getByTestId("cook-timer-tray");
+        expect(within(tray).getByText("Step 1 · Boil pasta")).toBeInTheDocument();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2_000);
+        });
+        expect(within(tray).getByText("09:55")).toBeInTheDocument();
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Go to step 1" }));
+        expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
+        expect(within(cookMode).getByText("09:55")).toBeInTheDocument();
+        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Cancel timer for step 1" }));
+        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Previous step" }));
+        expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+        expect(within(cookMode).getByText("10:00")).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+      await exitCookMode(cookMode);
+    });
+
+    it("rings from another step at zero and keeps a running timer on the recipe page after exiting cook mode", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-ring",
+          title: "Quick Rest",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            { id: "step-1", stepNum: 1, stepTitle: null, description: "Rest the dough.", duration: 1, ingredients: [], usingSteps: [] },
+            { id: "step-2", stepNum: 2, stepTitle: "Shape", description: "Shape it.", duration: 2, ingredients: [], usingSteps: [] },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+      const vibrate = vi.fn(() => true);
+      Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+
+      render(<Stub initialEntries={["/recipes/recipe-ring"]} />);
+      await screen.findByRole("heading", { name: "Quick Rest" });
+      fireEvent.click(screen.getByTestId("recipe-header-cook-action"));
+      const cookMode = await screen.findByTestId("cook-mode-panel");
+      await settleBrowserTasks();
+      try {
+        vi.useFakeTimers();
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(61_000);
+        });
+        const tray = within(cookMode).getByTestId("cook-timer-tray");
+        expect(within(tray).getByText("Time's up")).toBeInTheDocument();
+        expect(screen.getByTestId("cook-timer-announcement")).toHaveTextContent("Time's up: Step 1");
+        expect(vibrate).toHaveBeenCalled();
+        expect(document.title).toContain("Time's up: Step 1");
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Stop alarm for step 1" }));
+        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        expect(document.title).not.toContain("Time's up");
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+      } finally {
+        vi.useRealTimers();
+        Reflect.deleteProperty(navigator, "vibrate");
+      }
+      await exitCookMode(cookMode);
+      const pageTray = await screen.findByTestId("cook-timer-tray");
+      expect(within(pageTray).getByText("Step 2 · Shape")).toBeInTheDocument();
+      fireEvent.click(within(pageTray).getByRole("button", { name: "Cancel timer for step 2" }));
+      expect(screen.queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
     });
 
     describe("cook mode history", () => {

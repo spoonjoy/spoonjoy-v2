@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   createGeminiImageRunner,
   createOpenAIImageRunner,
+  imageJobBudget,
   DEFAULT_GEMINI_IMAGE_MODEL,
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   ImageProviderAttemptError,
@@ -14,7 +15,7 @@ import {
   type StylizationResult,
 } from "~/lib/image-gen.server";
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
-import { d1Binding, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import {
   captureImageGenerationException,
@@ -69,6 +70,8 @@ export interface ScheduleSpoonStylizationInput {
   postHogConfig?: PostHogServerConfig;
   analyticsFetchImpl?: typeof fetch;
   now?: () => number;
+  /** Overrides the job's provider time limits (IMAGE_JOB_BUDGET_MS, IMAGE_ATTEMPT_TIMEOUT_MS). */
+  timeLimits?: { totalMs?: number; attemptTimeoutMs?: number };
   logger?: Pick<Console, "error">;
 }
 
@@ -239,6 +242,7 @@ type StylizationCoverFields = {
   generationStatus: string;
   failureReason: string | null;
   stylizedImageUrl?: string;
+  generationStartedAt?: Date;
 };
 
 // Prisma's `status: { not: "archived" }, archivedAt: null` on the cover.
@@ -259,11 +263,13 @@ async function updateStylizationCoverOnD1(
   d1: D1ReadDatabase,
   fields: StylizationCoverFields,
   updatedAt: Date,
+  activation: D1Query[] = [],
 ): Promise<number> {
   const columns: Record<string, unknown> = {
     ...(fields.stylizedImageUrl !== undefined ? { stylizedImageUrl: fields.stylizedImageUrl } : {}),
     status: fields.status,
     generationStatus: fields.generationStatus,
+    ...(fields.generationStartedAt !== undefined ? { generationStartedAt: d1Timestamp(fields.generationStartedAt) } : {}),
     failureReason: fields.failureReason,
     promptVersion: STYLIZATION_PROMPT_VERSION,
     styleVersion: STYLIZATION_STYLE_VERSION,
@@ -295,6 +301,7 @@ async function updateStylizationCoverOnD1(
       input.coverId,
       input.recipeId,
     ],
+    ...activation,
   ]);
   return coverUpdate.changes;
 }
@@ -337,6 +344,7 @@ async function markStylizationProcessing(input: ScheduleSpoonStylizationInput): 
   return updateStylizationCover(input, {
     status: "processing",
     generationStatus: "processing",
+    generationStartedAt: new Date(),
     failureReason: null,
   });
 }
@@ -373,8 +381,9 @@ async function markStylizationFailed(
 
   const updatedAt = new Date();
   const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
-  await input.db.recipeCover.update({
-    where: { id: cover.id },
+  // Only while the cover is still unarchived: one archived since the read is left alone.
+  const result = await input.db.recipeCover.updateMany({
+    where: { id: cover.id, recipeId: input.recipeId, status: { not: "archived" }, archivedAt: null },
     data: {
       ...fields,
       promptVersion: STYLIZATION_PROMPT_VERSION,
@@ -383,6 +392,7 @@ async function markStylizationFailed(
       ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
     },
   });
+  if (result.count === 0) return;
   await input.db.$transaction([
     touchNativeSyncRecipeOperation(input.db, input.recipeId, updatedAt),
     touchNativeSyncCookbooksForRecipeOperation(input.db, input.recipeId, updatedAt),
@@ -428,6 +438,78 @@ function hasRealActiveCover(recipe: {
   if (cover.status !== "ready" || cover.archivedAt) return false;
   if (cover.sourceType === "ai-placeholder") return false;
   return hasActiveVariantUrl(cover, recipe.activeCoverVariant);
+}
+
+/**
+ * The stylized cover may only become the recipe's cover while it is still this recipe's,
+ * ready, unarchived and has its stylized image: one archived after it was marked succeeded
+ * must not become the active cover (the recipe would then show none).
+ */
+function activatableStylizedCover(input: ScheduleSpoonStylizationInput): Prisma.RecipeCoverWhereInput {
+  return {
+    id: input.coverId,
+    status: "ready",
+    archivedAt: null,
+    AND: [{ stylizedImageUrl: { not: null } }, { stylizedImageUrl: { not: "" } }],
+  };
+}
+
+const ACTIVATABLE_STYLIZED_COVER_SQL = `EXISTS (SELECT 1 FROM "RecipeCover"
+  WHERE "id" = ? AND "recipeId" = ? AND "status" = 'ready' AND "archivedAt" IS NULL
+    AND COALESCE("stylizedImageUrl", '') <> '')`;
+
+// SQL for `hasRealActiveCover` on the row being updated: the recipe's active cover (other than
+// the candidate) is its own, ready, unarchived, not a placeholder, and has its variant's image.
+const HAS_REAL_ACTIVE_COVER_SQL = `("activeCoverId" IS NOT NULL AND "activeCoverId" <> ? AND EXISTS (
+  SELECT 1 FROM "RecipeCover" AS "active"
+  WHERE "active"."id" = "Recipe"."activeCoverId" AND "active"."recipeId" = "Recipe"."id"
+    AND "active"."status" = 'ready' AND "active"."archivedAt" IS NULL AND "active"."sourceType" <> 'ai-placeholder'
+    AND CASE "Recipe"."activeCoverVariant"
+      WHEN 'stylized' THEN COALESCE("active"."stylizedImageUrl", '') <> ''
+      WHEN 'image' THEN COALESCE("active"."imageUrl", '') <> ''
+      ELSE COALESCE("active"."stylizedImageUrl", '') <> '' OR COALESCE("active"."imageUrl", '') <> ''
+    END))`;
+
+/**
+ * The activation that follows a successful stylization, as statements for the same D1 batch as
+ * the success mark, so the cover is never left marked succeeded with its activation lost. Each
+ * only matches while the recipe is as the request (or the auto rules) expect and the candidate
+ * cover is still activatable. The batch's cookbook touch already covers the recipe's cookbooks.
+ */
+async function stylizedActivationStatements(
+  input: ScheduleSpoonStylizationInput,
+  updatedAt: Date,
+): Promise<D1Query[]> {
+  const touchedAt = d1Timestamp(updatedAt);
+  if (input.activateWhenReady) {
+    const guard = input.activationGuard;
+    if (!guard) return [];
+    return [[
+      `UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'stylized', "coverMode" = 'manual', "updatedAt" = ?
+       WHERE "id" = ? AND "activeCoverId" IS ? AND "activeCoverVariant" IS ? AND "coverMode" = ?
+         AND ${ACTIVATABLE_STYLIZED_COVER_SQL}`,
+      input.coverId,
+      touchedAt,
+      input.recipeId,
+      guard.activeCoverId,
+      guard.activeCoverVariant,
+      guard.coverMode,
+      input.coverId,
+      input.recipeId,
+    ]];
+  }
+  if (input.suppressAutoActivation) return [];
+  return [[
+    `UPDATE "Recipe" SET "activeCoverId" = ?, "activeCoverVariant" = 'stylized', "updatedAt" = ?
+     WHERE "id" = ? AND "coverMode" = 'auto' AND NOT ${HAS_REAL_ACTIVE_COVER_SQL}
+       AND ${ACTIVATABLE_STYLIZED_COVER_SQL}`,
+    input.coverId,
+    touchedAt,
+    input.recipeId,
+    input.coverId,
+    input.coverId,
+    input.recipeId,
+  ]];
 }
 
 async function autoActivateStylizedCoverIfSafe(input: ScheduleSpoonStylizationInput): Promise<void> {
@@ -503,6 +585,7 @@ async function autoActivateStylizedCoverIfSafe(input: ScheduleSpoonStylizationIn
       coverMode: "auto",
       activeCoverId: recipe.activeCoverId,
       ...noRealActiveCover,
+      AND: [{ covers: { some: activatableStylizedCover(input) } }],
     },
     data: {
       activeCoverId: input.coverId,
@@ -524,6 +607,7 @@ async function activateStylizedCoverIfStillRequested(input: ScheduleSpoonStyliza
       activeCoverId: input.activationGuard?.activeCoverId,
       activeCoverVariant: input.activationGuard?.activeCoverVariant,
       coverMode: input.activationGuard?.coverMode,
+      covers: { some: activatableStylizedCover(input) },
     },
     data: {
       activeCoverId: input.coverId,
@@ -716,6 +800,9 @@ export async function scheduleSpoonCoverStylization(
   input: ScheduleSpoonStylizationInput,
 ): Promise<void> {
   const logger = input.logger ?? console;
+  // The budget starts with the job, so a hung provider is cut off well inside waitUntil's window
+  // and the cover is marked failed, never left in "processing".
+  const budget = imageJobBudget(input.timeLimits);
   try {
     if (!input.rawPhotoUrl.trim()) {
       await markStylizationFailed(input, "missing_source_image", { force: true });
@@ -754,6 +841,7 @@ export async function scheduleSpoonCoverStylization(
       ...("runner" in providerResolution
         ? { runner: providerResolution.runner }
         : { imageEditAttempts: providerResolution.imageEditAttempts }),
+      budget,
       fetchImpl: input.fetchImpl,
       bucket: input.bucket,
       now: input.now,
@@ -761,6 +849,19 @@ export async function scheduleSpoonCoverStylization(
     }, {
       promptAddition: input.promptAddition,
     });
+
+    const d1 = stylizationD1(input);
+    if (d1) {
+      const updatedAt = new Date();
+      await updateStylizationCoverOnD1(input, d1, {
+        stylizedImageUrl: result.url,
+        status: "ready",
+        generationStatus: "succeeded",
+        failureReason: null,
+      }, updatedAt, await stylizedActivationStatements(input, updatedAt));
+      await captureRecoveredProviderFallback(input, result);
+      return;
+    }
 
     const coverUpdatedAfterGeneration = await markStylizationSucceeded(input, result.url);
     if (coverUpdatedAfterGeneration) {

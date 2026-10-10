@@ -46,7 +46,8 @@ import { d1Binding } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import {
   activeRecipeTitleFreeGuard,
-  ingredientInsertStatement,
+  nameUpsertStatements,
+  namedIngredientInsertStatement,
   recipeInsertStatement,
   stepInsertStatement,
 } from "~/lib/recipe-d1-writes.server";
@@ -656,18 +657,13 @@ async function persistRecipe(
   }
 
   const id = recipeId ?? `recipe_import_${crypto.randomUUID()}`;
-  const ingredientRows = [];
-  for (const ingredient of allIngredients) {
-    const unit = await getOrCreateUnit(db, ingredient.unit);
-    const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
-    ingredientRows.push({
-      recipeId: id,
-      stepNum: 1,
-      quantity: ingredient.quantity,
-      unitId: unit.id,
-      ingredientRefId: ref.id,
-    });
-  }
+  const namedIngredients = allIngredients.map((ingredient) => ({
+    recipeId: id,
+    stepNum: 1,
+    quantity: ingredient.quantity,
+    unitName: normalizeName(ingredient.unit),
+    ingredientName: normalizeName(ingredient.ingredientName),
+  }));
 
   const d1 = d1Binding(env?.DB);
   if (d1) {
@@ -695,7 +691,9 @@ async function persistRecipe(
             duration: null,
             now: at,
           })),
-          ...ingredientRows.map((ingredient) => ingredientInsertStatement({ ...ingredient, now: at })),
+          // New units and ingredient names are created here, so a failed batch leaves none behind.
+          ...nameUpsertStatements(namedIngredients, at),
+          ...namedIngredients.map((ingredient) => namedIngredientInsertStatement({ ...ingredient, now: at })),
         ]);
         break;
       } catch (error) {
@@ -707,6 +705,18 @@ async function persistRecipe(
       }
     }
   } else {
+    const ingredientRows = [];
+    for (const ingredient of namedIngredients) {
+      const unit = await getOrCreateUnit(db, ingredient.unitName);
+      const ref = await getOrCreateIngredientRef(db, ingredient.ingredientName);
+      ingredientRows.push({
+        recipeId: id,
+        stepNum: 1,
+        quantity: ingredient.quantity,
+        unitId: unit.id,
+        ingredientRefId: ref.id,
+      });
+    }
     await db.$transaction([
       db.recipe.create({
         data: {

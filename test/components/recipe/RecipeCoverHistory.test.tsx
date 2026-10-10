@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { createTestRoutesStub } from "../../utils";
@@ -148,18 +148,84 @@ describe("RecipeCoverHistory", () => {
     ]);
 
     expect(await screen.findByText("Processing")).toBeInTheDocument();
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    // A failed attempt is labeled as one, on its status and in place of its photo.
+    expect(screen.getAllByText("Generation failed")).toHaveLength(2);
     expect(screen.getByText("Editorial failed")).toBeInTheDocument();
     expect(screen.getAllByText("Archived")).toHaveLength(2);
     expect(screen.getByText("Saved cover")).toBeInTheDocument();
-    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+    // The failed row shows its failure, not its unusable variant, so it adds no "Unavailable".
+    expect(screen.getAllByText("Unavailable")).toHaveLength(4);
     expect(screen.getByText("No usable image variants.")).toBeInTheDocument();
     expect(screen.getByText("No image")).toBeInTheDocument();
+    // Light on-photo text on the charcoal tile, in both themes.
+    expect(screen.getByText("No image")).toHaveClass("text-[var(--sj-on-photo)]");
     expect(screen.getAllByRole("button", { name: "Use Original photo cover" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Use Imported photo cover" })).toBeNull();
     expect(screen.queryByText(legacyChefPhotoLabel)).toBeNull();
     expect(screen.getAllByRole("button", { name: "Regenerate with direction" })).toHaveLength(3);
     expect(screen.getAllByRole("button", { name: "Archive cover" })).toHaveLength(3);
+  });
+
+  it("shows a failed regeneration as failed, without the original photo it was made from", async () => {
+    const original = { variant: "image" as const, imageUrl: "/photos/original.jpg", provenanceLabel: "Original photo", isActive: false };
+    renderHistory([
+      {
+        id: "current-cover",
+        status: "ready",
+        generationStatus: "ready",
+        sourceType: "chef-upload",
+        createdAt: "2026-10-09T12:00:00.000Z",
+        isActive: true,
+        activeVariant: "stylized",
+        variants: [
+          original,
+          { variant: "stylized", imageUrl: "/photos/editorial.jpg", provenanceLabel: "Editorial photo", isActive: true },
+        ],
+      },
+      {
+        id: "failed-child",
+        parentCoverId: "current-cover",
+        status: "failed",
+        generationStatus: "failed",
+        sourceType: "chef-upload",
+        createdAt: "2026-10-09T12:05:00.000Z",
+        isActive: false,
+        activeVariant: null,
+        variants: [original],
+      },
+      {
+        id: "failed-first",
+        parentCoverId: null,
+        status: "failed",
+        generationStatus: "failed",
+        sourceType: "chef-upload",
+        createdAt: "2026-10-09T12:10:00.000Z",
+        isActive: false,
+        activeVariant: null,
+        variants: [original],
+      },
+    ]);
+
+    const [current, child, first] = await screen.findAllByRole("article");
+    // The current cover still offers its original photo.
+    expect(within(current!).getByRole("button", { name: "Use Original photo cover" })).toBeInTheDocument();
+
+    for (const [card, label] of [[child!, "Regeneration failed"], [first!, "Generation failed"]] as const) {
+      // The status and the thumbnail both name the failure.
+      expect(within(card).getAllByText(label)).toHaveLength(2);
+      expect(within(card).getByTestId("recipe-cover-failed-thumbnail")).toHaveTextContent(label);
+      // Its text uses the light on-photo color in both themes. --sj-paper is the page color, which
+      // is dark in dark mode, so it would vanish on the charcoal tile.
+      expect(within(card).getByTestId("recipe-cover-failed-thumbnail")).toHaveClass("text-[var(--sj-on-photo)]");
+      // Nothing on the card reads like a usable cover: no photo, no variant row, no "Unavailable".
+      expect(card.querySelector("img")).toBeNull();
+      expect(within(card).queryByText("Original photo")).toBeNull();
+      expect(within(card).queryByText("Unavailable")).toBeNull();
+      expect(within(card).queryByText("Failed")).toBeNull();
+      expect(within(card).getByText("No image was made. Try again with a direction, or archive this attempt.")).toBeInTheDocument();
+      expect(within(card).getByRole("button", { name: "Regenerate with direction" })).toBeInTheDocument();
+      expect(within(card).getByRole("button", { name: "Archive cover" })).toBeInTheDocument();
+    }
   });
 
   it("submits set-cover and no-cover forms", async () => {

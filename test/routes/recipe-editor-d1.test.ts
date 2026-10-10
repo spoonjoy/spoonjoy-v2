@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { getLocalDb } from "~/lib/db.server";
@@ -200,6 +200,16 @@ async function withFailingStylization<T>(surface: "recipe_create" | "recipe_edit
 }
 
 describe("recipe editor routes on a D1 binding", () => {
+  // The first import of each route transforms its whole module graph, which under coverage
+  // instrumentation on a busy CI runner took about 5 s and timed out whichever test ran first.
+  // Paying it here, under its own budget, leaves every test timing only its own work; the
+  // per-test vi.resetModules() re-evaluates the modules but keeps the transformed code cached.
+  beforeAll(async () => {
+    await import("~/routes/recipes.$id.edit");
+    await import("~/routes/recipes.$id.steps.$stepId.edit");
+    await import("~/routes/recipes.new");
+  }, 60_000);
+
   beforeEach(async () => {
     db = await getLocalDb();
     await cleanupDatabase();
@@ -403,6 +413,34 @@ describe("recipe editor routes on a D1 binding", () => {
       expect((await graph(seeded)).steps.map((step) => [step.position, step.stepNum])).toEqual([[1, 2], [2, 3], [0, 9]]);
     });
 
+    it("answers a step swap whose step gained an output dependency in between with the dependency error", async () => {
+      const seeded = await seedRecipe("Swap dependency race");
+      const dependOnTarget = () => db.stepOutputUse.create({ data: { recipeId: seeded.recipe.id, outputStepNum: 1, inputStepNum: 2 } });
+      await expect(lostRace("edit", seeded, { intent: "reorderStep", stepId: seeded.steps[1]!.id, direction: "up" }, dependOnTarget))
+        .resolves.toEqual({ status: 400, errors: { reorder: "Cannot move Step 2 to position 1 because it uses output from Step 1" } });
+      const unchanged = await graph(seeded);
+      expect(unchanged.steps.map((step) => [step.position, step.stepNum])).toEqual([[0, 1], [1, 2], [2, 3]]);
+      expect(unchanged.touched).toBe(false);
+    });
+
+    it("answers a step moved down whose next step started using its output in between with the dependency error", async () => {
+      const seeded = await seedRecipe("Swap down dependency race");
+      const nextUsesStep = () => db.stepOutputUse.create({ data: { recipeId: seeded.recipe.id, outputStepNum: 2, inputStepNum: 3 } });
+      await expect(lostRace("edit", seeded, { intent: "reorderStep", stepId: seeded.steps[1]!.id, direction: "down" }, nextUsesStep))
+        .resolves.toEqual({ status: 400, errors: { reorder: "Cannot move Step 2 to position 3 because Step 3 uses its output" } });
+      const unchanged = await graph(seeded);
+      expect(unchanged.steps.map((step) => [step.position, step.stepNum])).toEqual([[0, 1], [1, 2], [2, 3]]);
+      expect(unchanged.touched).toBe(false);
+    });
+
+    it("answers a step swap whose step went away in between with the changed-recipe message", async () => {
+      const seeded = await seedRecipe("Swap gone race");
+      const deleteStep = () => db.recipeStep.delete({ where: { id: seeded.steps[1]!.id } });
+      await expect(lostRace("edit", seeded, { intent: "reorderStep", stepId: seeded.steps[1]!.id, direction: "down" }, deleteStep))
+        .resolves.toEqual({ status: 409, errors: { reorder: CHANGED } });
+      expect((await graph(seeded)).steps.map((step) => [step.position, step.stepNum])).toEqual([[0, 1], [2, 3]]);
+    });
+
     it.each([
       ["gained a dependent step", "Cannot delete Step 2 because it is used by Step 3", 400,
         (seeded: Seeded) => db.stepOutputUse.create({ data: { recipeId: seeded.recipe.id, outputStepNum: 2, inputStepNum: 3 } })],
@@ -440,6 +478,56 @@ describe("recipe editor routes on a D1 binding", () => {
       }, 2)).resolves.toEqual({ status: 400, errors: { ingredientName: "This ingredient is already in the recipe" } });
       await expect(lostRace("step", seeded, { ...single, ingredientName: "Barley" }, moveStep(8), 2))
         .resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+    });
+
+    it("leaves no new unit or ingredient name behind when an ingredient add is refused, loses a race or fails", async () => {
+      // Units and ingredient names are shared lookup rows. An add that writes nothing must not
+      // create them either: they used to be upserted one by one before the checks and the batch.
+      const seeded = await seedRecipe("Lookup residue");
+      const tag = crypto.randomUUID().slice(0, 8);
+      const lookupRows = async () => ({
+        units: await db.unit.count({ where: { name: { startsWith: `residue ${tag}` } } }),
+        names: await db.ingredientRef.count({ where: { name: { startsWith: `residue ${tag}` } } }),
+      });
+      const none = { units: 0, names: 0 };
+      const fresh = (n: number) => ({ quantity: 1, unit: `Residue ${tag} unit ${n}`, ingredientName: `Residue ${tag} name ${n}` });
+      const batch = (...rows: unknown[]) => ({ intent: "addIngredients", ingredientsJson: JSON.stringify(rows) });
+      const single = (n: number, ingredientName = fresh(n).ingredientName) =>
+        ({ intent: "addIngredient", quantity: "1", unitName: fresh(n).unit, ingredientName });
+      const down = { prepare: (sql: string) => d1.binding.prepare(sql), batch: async () => { throw new Error("D1 is down"); } };
+      const moveStep = () => db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 8 } });
+
+      // Refused by the checks: a later row is already in the recipe. With and without a binding.
+      for (const env of [{ DB: d1.binding }, null]) {
+        const refused = await withD1Routes(() => act("step", seeded, () => batch(fresh(1), { quantity: 1, unit: "cup", ingredientName: "Flour" }), env, 2));
+        expect(responseStatus(refused)).toBe(400);
+        const refusedOne = await withD1Routes(() => act("step", seeded, () => single(2, "Flour"), env, 2));
+        expect(responseStatus(refusedOne)).toBe(400);
+        expect(await lookupRows()).toEqual(none);
+      }
+
+      // Stopped in the batch: the step moved in between.
+      await expect(lostRace("step", seeded, batch(fresh(3)), moveStep, 2)).resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+      await db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 3 } });
+      await expect(lostRace("step", seeded, single(4), moveStep, 2)).resolves.toEqual({ status: 409, errors: { general: CHANGED } });
+      await db.recipeStep.update({ where: { id: seeded.steps[2]!.id }, data: { stepNum: 3 } });
+      expect(await lookupRows()).toEqual(none);
+
+      // The batch itself fails.
+      for (const fields of [batch(fresh(5)), single(6)]) {
+        const failed = await withD1Routes(() => act("step", seeded, () => fields, { DB: down }, 2)).catch((error: unknown) => error);
+        expect(failed).toEqual(new Error("D1 is down"));
+      }
+      expect(await lookupRows()).toEqual(none);
+
+      // A successful add on the binding creates each name once, in its batch.
+      const added = await withD1Routes(() => act("step", seeded, () => batch(fresh(7), { ...fresh(8), unit: fresh(7).unit }), { DB: d1.binding }, 2));
+      expect(responseStatus(added)).toBe(200);
+      expect(await lookupRows()).toEqual({ units: 1, names: 2 });
+      const successNames = [`residue ${tag} unit 7`, `residue ${tag} name 7`, `residue ${tag} name 8`];
+      expect(d1.statements
+        .filter((statement) => /INSERT INTO "(Unit|IngredientRef)"/.test(statement.sql))
+        .map((statement) => statement.params[1])).toEqual(successNames);
     });
 
     it("answers step saves that lost a race as the checks do", async () => {

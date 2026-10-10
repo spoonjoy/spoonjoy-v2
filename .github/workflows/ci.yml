@@ -17,6 +17,10 @@ on:
         required: true
         type: string
 
+# Every CI job only reads the repository; nothing here needs a write-scoped GITHUB_TOKEN.
+permissions:
+  contents: read
+
 defaults:
   run:
     shell: bash

@@ -182,7 +182,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Upload MCP OAuth canary artifacts",
 ] as const;
 const EXPECTED_RELEASE_SOURCE_RUN_SHA256 = "a7cb6362694e1491a024317adecffd7a4d8c4fe8a74266f91cc28e64b75c3de5";
-const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "3b9febef9ea2e91192eebabb3947a73257bc5df5b03db1a30ba1a4f7a472c721";
+const EXPECTED_RELEASE_ARTIFACT_RUN_SHA256 = "badae675ff339cc466f30e07564ff2e2874adae02b0b41bd0fef1a25f2c09242";
 const REQUIRED_IGNORED_BUILD_PACKAGES = [
   "@prisma/client",
   "@prisma/engines",
@@ -653,9 +653,12 @@ export const CI_CANONICAL_JOB_CONDITION = "${{ !cancelled() && needs.queue-teste
 
 function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   const root = parsedWorkflow(workflow);
-  if (!root || !exactObjectKeys(root, ["name", "on", "defaults", "concurrency", "env", "jobs"])) return false;
+  if (!root || !exactObjectKeys(root, ["name", "on", "permissions", "defaults", "concurrency", "env", "jobs"])) return false;
   if (root.name !== "CI" || !exactWorkflowRecord(root.env, CI_WORKFLOW_ENV)) return false;
   if (!exactWorkflowRecord(root.concurrency, CI_WORKFLOW_CONCURRENCY)) return false;
+  // CI runs pull request code, so its GITHUB_TOKEN may only read the repository.
+  const permissions = objectRecord(root.permissions);
+  if (!exactObjectKeys(permissions, ["contents"]) || permissions.contents !== "read") return false;
 
   const triggers = objectRecord(root.on);
   const push = objectRecord(triggers.push);
@@ -1809,7 +1812,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "output gate scripts",
-      scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage --fileParallelism=false" &&
+      scripts["test:coverage"] === "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage" &&
         scripts["test:e2e"] === "env -u FORCE_COLOR -u NO_COLOR PLAYWRIGHT_FORCE_TTY=0 tsx scripts/warning-gate.ts -- pnpm exec playwright test --reporter=list,html",
       "package.json test:coverage and test:e2e must run through scripts/warning-gate.ts so unexpected output fails CI."
     ),
