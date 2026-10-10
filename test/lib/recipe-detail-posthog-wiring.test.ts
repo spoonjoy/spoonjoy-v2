@@ -53,7 +53,7 @@ async function givePushSubscription(userId: string) {
   await db.pushSubscription.create({
     data: {
       userId,
-      endpoint: `https://push.example/${userId}/${Math.random().toString(36).slice(2)}`,
+      endpoint: `https://fcm.googleapis.com/fcm/send/${userId}/${Math.random().toString(36).slice(2)}`,
       p256dh: "p256dh-key",
       authSecret: "auth-secret",
     },

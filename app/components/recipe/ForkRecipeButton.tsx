@@ -23,6 +23,14 @@ export function ForkRecipeButton({
   triggerStyle = "button",
 }: ForkRecipeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // One fork per opening of the dialog: a double submit or a resubmit carries the same token, and
+  // the server makes one fork for it.
+  // It is made when the dialog opens (in the browser), never during server rendering.
+  const [forkToken, setForkToken] = useState("");
+  const open = () => {
+    setForkToken(crypto.randomUUID());
+    setIsOpen(true);
+  };
 
   const triggerLabel = isOwner ? "Make a variation" : "Fork";
   const submitLabel = isOwner ? "Make variation" : "Fork";
@@ -40,7 +48,7 @@ export function ForkRecipeButton({
       {triggerStyle === "text" ? (
         <button
           type="button"
-          onClick={() => setIsOpen(true)}
+          onClick={open}
           className={triggerClassName}
           data-testid={triggerTestId}
         >
@@ -50,7 +58,7 @@ export function ForkRecipeButton({
         <Button
           type="button"
           plain
-          onClick={() => setIsOpen(true)}
+          onClick={open}
           className={triggerClassName}
           data-testid={triggerTestId}
         >
@@ -65,6 +73,7 @@ export function ForkRecipeButton({
             Cancel
           </Button>
           <Form method="post" action={`/recipes/${recipeId}/fork`}>
+            <input type="hidden" name="forkToken" value={forkToken} />
             <Button type="submit">{submitLabel}</Button>
           </Form>
         </DialogActions>
