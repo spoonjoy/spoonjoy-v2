@@ -2,9 +2,13 @@ import { createRequestHandler } from "react-router";
 import * as serverBuild from "virtual:react-router/server-build";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
+import { d1Binding } from "../app/lib/d1-read.server";
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
+import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
+import { isServablePhotoKey, runScheduledPhotoSweep } from "../app/lib/photo-lifecycle.server";
+import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
@@ -146,10 +150,12 @@ async function handleCookSessionRequest(
   if (!requirement) return new Response(null, { status: 404 });
 
   try {
+    // A browser session is checked on D1; only a bearer token builds a Prisma client.
     const principal = await authenticateApiRequest(
-      await getDb({ DB: env.DB as D1Database }),
+      () => getDb({ DB: env.DB as D1Database }),
       request,
       env,
+      { d1: d1Binding(env.DB) },
     );
     if (!principal) {
       return cookErrorResponse(401, "authentication_required", "Authentication required.");
@@ -282,12 +288,36 @@ export default {
       if (url.pathname.startsWith(COOK_SESSION_PREFIX)) {
         return finalizeResponse(await handleCookSessionRequest(request, env), env);
       }
+      // Photos skip React Router: a list screen asks for dozens at once, and each one only needs R2
+      // or the edge cache.
+      const photoKey = request.method === "GET" || request.method === "HEAD" ? photoKeyFromPath(url.pathname) : null;
+      // Quarantined photos (moved there by the photo sweep) are never served.
+      if (photoKey && !isServablePhotoKey(photoKey)) {
+        return finalizeResponse(new Response("Not Found", { status: 404 }), env);
+      }
+      if (photoKey && env.PHOTOS) {
+        const response = await deliverPhoto({
+          request,
+          key: photoKey,
+          bucket: env.PHOTOS,
+          cache: defaultPhotoCache(),
+          waitUntil: (promise) => ctx.waitUntil(promise),
+        });
+        return finalizeResponse(response, env);
+      }
 
       if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
         const response = await handleMcpRouteRequest(request, {
           cloudflare: { env, ctx },
         });
         return finalizeResponse(response, env);
+      }
+
+      // Static assets already served the current build; a hashed asset that reaches the Worker
+      // belongs to an earlier release, so serve it from the release archive before the 404 page.
+      const archivedAsset = await serveReleaseAssetFallback(request, env.PHOTOS);
+      if (archivedAsset) {
+        return finalizeResponse(archivedAsset, env);
       }
 
       // One nonce per request: it must appear identically in the selected CSP
@@ -315,5 +345,11 @@ export default {
       }
       throw error;
     }
+  },
+
+  // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry
+  // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts).
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(runScheduledPhotoSweep(env));
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;

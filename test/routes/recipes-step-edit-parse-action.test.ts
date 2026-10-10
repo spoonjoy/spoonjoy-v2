@@ -200,15 +200,48 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
     })
   })
 
+  describe('rule-based fallback', () => {
+    it('parses typed ingredients by rules when AI parsing is unavailable', async () => {
+      vi.mocked(parseIngredients).mockRejectedValue(
+        new IngredientParseError('OpenAI API key is required')
+      )
+
+      const formData = new UndiciFormData()
+      formData.set('intent', 'parseIngredients')
+      formData.set('ingredientText', '2 cups flour\n1/2 tsp salt')
+
+      const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await action({
+        request,
+        params: { id: testRecipe.id, stepId: testStep.id },
+        context: mockContext,
+      } as any)
+
+      const { data, status } = extractActionData(result)
+      // A parse answers plain data, with no error status.
+      expect(status).toBeUndefined()
+      expect(data).toEqual({
+        parsedIngredients: [
+          { quantity: 2, unit: 'cup', ingredientName: 'flour' },
+          { quantity: 0.5, unit: 'tsp', ingredientName: 'salt' },
+        ],
+      })
+    })
+  })
+
   describe('error handling', () => {
-    it('returns error when LLM parsing fails', async () => {
+    it('returns error when LLM parsing fails on text the rules cannot parse either', async () => {
       vi.mocked(parseIngredients).mockRejectedValue(
         new IngredientParseError('Failed to parse ingredients')
       )
 
       const formData = new UndiciFormData()
       formData.set('intent', 'parseIngredients')
-      formData.set('ingredientText', '2 cups flour')
+      formData.set('ingredientText', '2 cups')
 
       const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
         method: 'POST',
@@ -227,14 +260,14 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       expect(data.parsedIngredients).toBeUndefined()
     })
 
-    it('returns error when API key is missing', async () => {
+    it('returns error when API key is missing on text the rules cannot parse either', async () => {
       vi.mocked(parseIngredients).mockRejectedValue(
         new IngredientParseError('OpenAI API key is required')
       )
 
       const formData = new UndiciFormData()
       formData.set('intent', 'parseIngredients')
-      formData.set('ingredientText', '2 cups flour')
+      formData.set('ingredientText', '2 cups')
 
       const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
         method: 'POST',
@@ -252,14 +285,14 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       expect(data.errors.parse).toBeDefined()
     })
 
-    it('returns error when rate limited', async () => {
+    it('returns error when rate limited on text the rules cannot parse either', async () => {
       vi.mocked(parseIngredients).mockRejectedValue(
         new IngredientParseError('Rate limit exceeded')
       )
 
       const formData = new UndiciFormData()
       formData.set('intent', 'parseIngredients')
-      formData.set('ingredientText', '2 cups flour')
+      formData.set('ingredientText', '2 cups')
 
       const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
         method: 'POST',
@@ -277,12 +310,12 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       expect(data.errors.parse).toBeDefined()
     })
 
-    it('handles non-IngredientParseError errors gracefully', async () => {
+    it('handles non-IngredientParseError errors gracefully on text the rules cannot parse either', async () => {
       vi.mocked(parseIngredients).mockRejectedValue(new Error('Unexpected error'))
 
       const formData = new UndiciFormData()
       formData.set('intent', 'parseIngredients')
-      formData.set('ingredientText', '2 cups flour')
+      formData.set('ingredientText', '2 cups')
 
       const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
         method: 'POST',

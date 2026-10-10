@@ -152,7 +152,7 @@ describe('RecipeHeader', () => {
 
       expect(screen.getByAltText('Photo of Test Recipe')).toHaveAttribute('src', '/photos/raw-spoon.jpg')
       expect(screen.getByTestId('cover-provenance-badge')).toHaveTextContent('Original photo')
-      expect(screen.getByRole('status')).toHaveTextContent('Editorializing cover')
+      expect(screen.getByRole('status')).toHaveTextContent('Styling cover')
     })
 
     it('uses a high-contrast overlay treatment for cover provenance on bright photos', () => {
@@ -294,5 +294,46 @@ describe('RecipeHeader', () => {
       expect(screen.queryByRole('button', { name: /share/i })).toBeNull()
       expect(screen.queryByRole('button', { name: /save/i })).toBeNull()
     })
+  })
+})
+
+describe('RecipeHeader on paper', () => {
+  const props = {
+    title: 'Test Recipe',
+    chefName: 'Test Chef',
+    scaleFactor: 1,
+    onScaleChange: vi.fn(),
+  }
+
+  it('says what the printed quantities are for, since the scale control does not print', () => {
+    const { rerender } = renderWithRouter(<RecipeHeader {...props} servings="4 servings" scaleFactor={2} />)
+    const yieldLine = screen.getByTestId('recipe-print-yield')
+    expect(yieldLine).toHaveTextContent('Yield: 8 servings · Quantities at 2× the recipe')
+    expect(yieldLine).toHaveClass('hidden', 'print:block')
+
+    rerender(<BrowserRouter><RecipeHeader {...props} servings="4 servings" /></BrowserRouter>)
+    expect(screen.getByTestId('recipe-print-yield')).toHaveTextContent(/^Yield: 4 servings$/)
+
+    rerender(<BrowserRouter><RecipeHeader {...props} scaleFactor={1.25} /></BrowserRouter>)
+    expect(screen.getByTestId('recipe-print-yield')).toHaveTextContent(/^Quantities at 1.25× the recipe$/)
+
+    rerender(<BrowserRouter><RecipeHeader {...props} /></BrowserRouter>)
+    expect(screen.queryByTestId('recipe-print-yield')).toBeNull()
+  })
+
+  it('leaves the scale control, page actions and empty cover off the printed page', () => {
+    renderWithRouter(<RecipeHeader {...props} masthead={<span>Actions</span>} />)
+    expect(screen.getByTestId('recipe-header-controls')).toHaveClass('print:hidden')
+    expect(screen.getByTestId('recipe-masthead')).toHaveClass('print:hidden')
+    expect(screen.getByTestId('recipe-image-placeholder')).toHaveClass('print:hidden')
+  })
+
+  it('carries the classes the print stylesheet uses to make the masthead one short column', () => {
+    renderWithRouter(<RecipeHeader {...props} coverImageUrl="https://example.com/cover.jpg" />)
+    const layout = screen.getByTestId('recipe-header-layout')
+    expect(layout).toHaveClass('sj-recipe-header-layout')
+    expect(layout.closest('header')).toHaveClass('sj-recipe-header')
+    expect(screen.getByTestId('recipe-image')).toHaveClass('sj-recipe-hero')
+    expect(screen.getByRole('heading', { level: 1 }).closest('.sj-recipe-header-body')).not.toBeNull()
   })
 })

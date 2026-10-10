@@ -18,6 +18,12 @@
   --sj-brass: #9b6834;
   --sj-action: #28231d;
   --sj-action-deep: #1f1b17;
+  /* The primary button: its label, and its hover/pressed and disabled fills. Every pair passes
+     WCAG AA 4.5:1 (test/styles/primary-button-contrast.test.ts). */
+  --sj-on-action: var(--sj-bone);
+  --sj-action-hover: var(--sj-action-deep);
+  --sj-action-disabled: #6b655c;
+  --sj-on-action-disabled: var(--sj-bone);
   --sj-tomato: #a24a38;
   --sj-herb: #596a4f;
   --sj-ink: var(--sj-charcoal);
@@ -58,6 +64,12 @@
   --sj-brass: #c4945c;
   --sj-action: #b9854b;
   --sj-action-deep: #95683a;
+  /* A dark label on the amber: the light one measured 2.61:1. Hover lightens instead of deepening,
+     so the dark label keeps its contrast. */
+  --sj-on-action: var(--sj-charcoal);
+  --sj-action-hover: #cc9a62;
+  --sj-action-disabled: #463d33;
+  --sj-on-action-disabled: var(--sj-charcoal-soft);
   /* Bumped from #d26850 (4.24:1 on --sj-panel-solid) to pass WCAG AA (≥4.5:1)
    * — it's the error-text color, so it has to be readable. */
   --sj-tomato: #e58263;
@@ -83,6 +95,108 @@
   --sj-photo-line: color-mix(in srgb, var(--sj-on-photo) 22%, transparent);
   --sj-shadow: 0 28px 90px color-mix(in srgb, var(--sj-photo-charcoal) 56%, transparent);
   --sj-shadow-soft: 0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
+}
+
+/* Print: a recipe on paper is the title, the ingredients and the method in dark ink on white, whatever
+ * theme the screen uses. Dark mode's tokens are put back to the light palette, on white paper, so a
+ * phone in dark mode never prints pale text on a charcoal page (product audit 2026-10-09, finding 14). */
+@media print {
+  @page {
+    margin: 0.6in;
+  }
+
+  :root,
+  .dark {
+    color-scheme: light;
+    --sj-bone: #ffffff;
+    --sj-bone-lift: #ffffff;
+    --sj-vellum: #f1f0ea;
+    --sj-charcoal: #1f1b17;
+    --sj-charcoal-soft: #4f4943;
+    --sj-brass: #7d5226;
+    --sj-action: #1f1b17;
+    --sj-action-deep: #1f1b17;
+    --sj-on-action: #ffffff;
+    --sj-tomato: #8f3e2e;
+    --sj-herb: #4b5a42;
+    --sj-ink: var(--sj-charcoal);
+    --sj-ink-soft: var(--sj-charcoal-soft);
+    --sj-paper: #ffffff;
+    --sj-page: #ffffff;
+    --sj-panel: #ffffff;
+    --sj-panel-solid: #ffffff;
+    --sj-field: #ffffff;
+    --sj-flour: var(--sj-vellum);
+    --sj-border: color-mix(in srgb, var(--sj-charcoal) 22%, transparent);
+    --sj-border-strong: color-mix(in srgb, var(--sj-charcoal) 40%, transparent);
+    --sj-shadow: none;
+    --sj-shadow-soft: none;
+  }
+
+  /* Navigation, the skip link and floating notices are screen controls with nothing to say on paper. */
+  .sj-skip-link,
+  .sj-desktop-topbar,
+  .sj-route-progress {
+    display: none !important;
+  }
+
+  /* Ticked ingredients are this cook's progress, not part of the recipe: print every ingredient plain,
+   * without its tick box or strike-through. */
+  #steps .sj-checklist-box,
+  #steps .sj-checklist-strike {
+    display: none !important;
+  }
+
+  /* Without its box, a row is one column. Left at the screen's 2rem box column, the name and amount
+   * would be squeezed into it and the name would print at no width at all. */
+  #steps .sj-checklist-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #steps .sj-checklist-name {
+    color: var(--sj-ink) !important;
+  }
+
+  /* The rules below are unlayered, so they beat Tailwind's layered utilities at every breakpoint. A
+   * print: utility can lose to a component class (.sj-eyebrow sets display) or to an lg: utility,
+   * and a desktop-width print still matches lg. */
+  .sj-print-hidden {
+    display: none !important;
+  }
+
+  /* The masthead is one column on paper: no screen-height minimum, which would leave the title
+   * centred in a tall empty box, and no photo column beside the text. */
+  .sj-recipe-header {
+    border-bottom: 0 !important;
+  }
+
+  .sj-recipe-header-layout {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .sj-recipe-header-body {
+    min-height: 0 !important;
+    padding: 0 0 1rem !important;
+  }
+
+  .sj-recipe-hero {
+    height: 3in !important;
+    min-height: 0 !important;
+    max-height: 3in !important;
+  }
+
+  /* Steps line up with the title, and each step's ingredients start at the left margin instead of
+   * sitting in a centred column. */
+  #steps .sj-step-card {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  #steps .sj-step-ingredients {
+    margin-left: 0 !important;
+    max-width: 32rem !important;
+  }
 }
 
 html {
@@ -517,28 +631,40 @@ body:has(#cook) .sj-mobile-surface {
   box-shadow: var(--sj-shadow);
 }
 
-/* Skip-to-content link — invisible until keyboard-focused, then slides down
- * from the top edge. Rendered by Layout in root.tsx as the first focusable
+/* Skip-to-content link. Rendered by Layout in root.tsx as the first focusable
  * element so the very first Tab press jumps a keyboard / SR user past the
- * desktop nav and mobile dock straight to <main id="main">. */
+ * desktop nav and mobile dock straight to <main id="main">.
+ *
+ * Until it has focus it is visually hidden (clipped to a 1px box) rather than
+ * parked off-screen above the top edge: a fixed element at a negative top still
+ * paints in a full-page screenshot of a scrolled page, and screen readers still
+ * read a clipped link. With focus it shows at the top-left corner. */
 .sj-skip-link {
   position: fixed;
-  top: -3rem;
+  top: 0;
   left: 0.5rem;
   z-index: 100;
-  padding: 0.5rem 1rem;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
   background: var(--sj-charcoal);
   color: var(--sj-bone);
   font-family: var(--font-sj-ui);
   font-weight: 600;
   text-decoration: underline;
   border-radius: 0 0 var(--sj-radius-small) var(--sj-radius-small);
-  transition: top 0.15s ease;
 }
 
 .sj-skip-link:focus,
 .sj-skip-link:focus-visible {
-  top: 0;
+  width: auto;
+  height: auto;
+  padding: 0.5rem 1rem;
+  overflow: visible;
+  clip-path: none;
   outline: 2px solid var(--sj-brass);
   outline-offset: 2px;
 }

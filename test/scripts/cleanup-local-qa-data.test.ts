@@ -26,6 +26,18 @@ function wranglerJson(results: unknown[] = []) {
   return JSON.stringify([{ success: true, results }]);
 }
 
+/**
+ * A fake Wrangler for a migrated local D1: it answers the schema preflight with the User table and
+ * hands every other command to `impl`.
+ */
+function migratedD1(impl: (cmd: string, args: string[]) => Promise<{ stdout?: string; stderr?: string }>) {
+  return vi.fn(async (cmd: string, args: string[]) => (
+    args.join(" ").includes(cleanup.buildSchemaPresentSql())
+      ? { stdout: wranglerJson([{ name: "User" }]), stderr: "" }
+      : impl(cmd, args)
+  ));
+}
+
 function expectInOrder(text: string, fragments: string[]) {
   let cursor = -1;
   for (const fragment of fragments) {
@@ -403,6 +415,48 @@ describe("cleanup-local-qa-data", () => {
     ).toThrow(/QA target mismatch/);
   });
 
+  it("names the run's own database when qa-run-scope has rewritten the QA binding", () => {
+    const { target } = cleanup.parseCleanupArgs(["--target-env", "qa"]);
+    const runConfig = {
+      env: {
+        qa: {
+          vars: { SPOONJOY_BASE_URL: "https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev" },
+          d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-1-1", database_id: "run-id" }],
+        },
+      },
+    };
+
+    expect(cleanup.formatCleanupTargetSummary(cleanup.resolveRunScopedQaTarget(target, "DB", runConfig))).toEqual([
+      "Target environment: qa",
+      "Base URL: https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev",
+      "D1 target: QA run D1 spoonjoy-qa-run-1-1 (--remote --env qa, rewritten by qa-run-scope)",
+      "R2 target: QA R2 spoonjoy-photos-qa (--remote)",
+      "Destructive scope: QA disposable test data only",
+    ]);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-1-1" }] } } }))
+      .toMatchObject({ baseUrl: target.baseUrl, d1Target: "QA run D1 spoonjoy-qa-run-1-1 (--remote --env qa, rewritten by qa-run-scope)" });
+    expect(cleanup.resolveRunScopedQaTarget(target, "OTHER_DB", runConfig)).toBe(target);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa" }] } } })).toBe(target);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", {})).toBe(target);
+    const local = cleanup.parseCleanupArgs([]).target;
+    expect(cleanup.resolveRunScopedQaTarget(local, "DB", runConfig)).toBe(local);
+  });
+
+  it("prints the run database from wrangler.json before a QA cleanup", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    const readWranglerConfig = vi.fn(() => ({
+      env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-9-1" }] } },
+    }));
+
+    await cleanup.runCleanupCli({ argv: ["--target-env", "qa"], runCommand, stdout: stdout.stream, stderr: stderr.stream, readWranglerConfig });
+
+    expect(readWranglerConfig).toHaveBeenCalledTimes(1);
+    expect(stdout.text()).toContain("D1 target: QA run D1 spoonjoy-qa-run-9-1 (--remote --env qa, rewritten by qa-run-scope)\n");
+    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa ");
+  });
+
   it("formats the target summary printed before cleanup commands", () => {
     const options = cleanup.parseCleanupArgs(["--target-env", "qa"]);
 
@@ -418,7 +472,7 @@ describe("cleanup-local-qa-data", () => {
   it("runs local dry-run and local apply with explicit target summaries and local Wrangler args", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    const runCommand = migratedD1(async () => ({ stdout: wranglerJson(), stderr: "" }));
 
     await cleanup.runCleanupCli({
       argv: ["--target-env", "local"],
@@ -455,10 +509,39 @@ describe("cleanup-local-qa-data", () => {
     );
   });
 
+  it("skips local apply with one info line when the local D1 database was never migrated", async () => {
+    const stdout = writableBuffer();
+    const stderr = writableBuffer();
+    // A never-migrated local D1: every query succeeds but sqlite_master lists no tables.
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "local", "--apply"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+    });
+
+    const joinedCalls = runCommand.mock.calls.map((call) => (call as unknown as [string, string[]])[1].join(" "));
+    expect(joinedCalls.some((command) => command.includes(cleanup.buildSchemaPresentSql()))).toBe(true);
+    expect(joinedCalls.filter((command) => command.includes("candidate_r2_keys"))).toHaveLength(0);
+    expect(joinedCalls).not.toContainEqual(expect.stringContaining(buildApplySql()));
+    expect(joinedCalls.at(-1)).toContain(cleanup.buildScratchCleanupSql());
+    expect(stdout.text()).toContain("Skipped local cleanup: the local D1 database has no schema yet (no User table).\n");
+    expect(stdout.text()).not.toContain("Applied local QA cleanup.");
+    expect(stderr.text()).toBe("");
+  });
+
+  it("detects the schema by asking sqlite_master for the User table", async () => {
+    expect(cleanup.buildSchemaPresentSql()).toBe(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'User';",
+    );
+  });
+
   it("deletes and verifies exact disposable local R2 keys before D1 cleanup", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+    const runCommand = migratedD1(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
         return {
@@ -502,7 +585,7 @@ describe("cleanup-local-qa-data", () => {
   it("reports retained local R2 keys without deleting them", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+    const runCommand = migratedD1(async (_cmd: string, args: string[]) => {
       if (args.join(" ").includes("candidate_r2_keys")) {
         return {
           stdout: JSON.stringify([
@@ -1342,7 +1425,7 @@ describe("cleanup-local-qa-data", () => {
   it("fails closed when a base-reference preflight omits Wrangler output", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+    const runCommand = migratedD1(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("candidate_r2_keys")) {
         return {
@@ -1427,7 +1510,7 @@ describe("cleanup-local-qa-data", () => {
     expect(blockerSql).not.toContain("SearchDocument");
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+    const runCommand = migratedD1(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes("'blocker_recipe_activeCoverId' AS blocker")) {
         return {
@@ -1463,7 +1546,7 @@ describe("cleanup-local-qa-data", () => {
   it("drops scratch schema in finally when the D1 apply command fails", async () => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+    const runCommand = migratedD1(async (_cmd: string, args: string[]) => {
       const sql = args.at(-1);
       if (sql === buildApplySql()) throw new Error("D1 apply failed");
       return { stdout: wranglerJson(), stderr: "" };
@@ -1585,7 +1668,7 @@ describe("cleanup-local-qa-data", () => {
   ])("fails closed on malformed %s rows", async (_case, commandMarker, malformedRow, errorPattern) => {
     const stdout = writableBuffer();
     const stderr = writableBuffer();
-    const runCommand = vi.fn(async (_cmd: string, args: string[]) => {
+    const runCommand = migratedD1(async (_cmd: string, args: string[]) => {
       const command = args.join(" ");
       if (command.includes(commandMarker)) return { stdout: wranglerJson([malformedRow]), stderr: "" };
       if (command.includes("candidate_r2_keys")) {

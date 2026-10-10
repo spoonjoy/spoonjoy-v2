@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { faker } from "@faker-js/faker";
+// Ingredient names get digit-only random suffixes: the shopping list picks an icon and category by matching words such as "cod" or "egg" inside the name, and a random letter suffix can contain one.
 import { getLocalDb } from "~/lib/db.server";
 import { authenticateApiToken, createApiCredential } from "~/lib/api-auth.server";
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
@@ -903,10 +904,70 @@ describe("spoonjoy MCP tools", () => {
     );
     await expect(context.db.recipeCover.findUniqueOrThrow({
       where: { id: cover.id },
-      select: { promptAddition: true, parentCoverId: true },
+      select: { promptAddition: true, parentCoverId: true, generationStartedAt: true },
     })).resolves.toEqual({
       promptAddition: `keep same plate ${"x".repeat(224)}`,
-      parentCoverId: cover.id,
+      // The cover had no editorial image to lose, so it was regenerated in place. Its lineage is
+      // no longer set to itself (a cover is not its own parent); a regeneration of a cover that
+      // has an editorial image is a child cover instead.
+      parentCoverId: null,
+      // Regeneration restarts the clock that decides when a generation counts as stopped.
+      generationStartedAt: expect.any(Date),
+    });
+  });
+
+  it("reports a cover generation that stopped long ago as failed, so a polling client stops", async () => {
+    const chef = await context.db.user.create({
+      data: {
+        email: uniqueEmail("cover-stuck-chef"),
+        username: `cover_stuck_chef_${faker.string.alphanumeric(6).toLowerCase()}`,
+      },
+    });
+    const principal = {
+      id: chef.id,
+      email: chef.email,
+      username: chef.username,
+      source: "bearer" as const,
+      scopes: ["recipes:read", "kitchen:write"],
+    };
+    const recipe = await context.db.recipe.create({
+      data: { title: `MCP Stuck ${faker.string.alphanumeric(6)}`, chefId: chef.id },
+    });
+    // Its job's Worker died: created processing an hour ago, never finished.
+    const cover = await context.db.recipeCover.create({
+      data: {
+        recipeId: recipe.id,
+        imageUrl: "",
+        sourceType: "ai-placeholder",
+        status: "processing",
+        generationStatus: "processing",
+        createdById: chef.id,
+        createdAt: new Date(Date.now() - 60 * 60_000),
+      },
+    });
+    await context.db.recipe.update({
+      where: { id: recipe.id },
+      data: { activeCoverId: cover.id, activeCoverVariant: "image", coverMode: "manual" },
+    });
+
+    const status = parseJson(await callSpoonjoyMcpTool(
+      "get_cover_generation_status",
+      { recipeId: recipe.id, coverId: cover.id },
+      { db: context.db, principal },
+    ));
+    expect(status).toMatchObject({
+      cover: { id: cover.id, status: "failed", generationStatus: "failed", failureReason: "Generation stopped before it finished." },
+      activeCover: { id: cover.id, generationStatus: "failed" },
+    });
+
+    const listed = parseJson(await callSpoonjoyMcpTool(
+      "list_recipe_covers",
+      { recipeId: recipe.id },
+      { db: context.db, principal },
+    ));
+    expect(listed).toMatchObject({
+      covers: [{ id: cover.id, status: "failed", generationStatus: "failed" }],
+      activeCover: { id: cover.id, generationStatus: "failed" },
     });
   });
 
@@ -1262,6 +1323,38 @@ describe("spoonjoy MCP tools", () => {
       .rejects.toThrow(`More than one account uses the email ${email} in different letter case`);
     await expect(context.db.user.count()).resolves.toBe(2);
     await expect(context.db.apiCredential.count()).resolves.toBe(0);
+  });
+
+  it("filters recipes by your own email or any chef's username, and never answers whether another email has an account", async () => {
+    // Audit 2026-10-09, finding 14: chefEmail was an anonymous oracle for whether an address has recipes.
+    const other = await context.db.user.create({
+      data: { email: uniqueEmail("other-chef"), username: `other-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    await context.db.recipe.create({ data: { title: "Oracle Pie", chefId: other.id } });
+    const me = await context.db.user.create({
+      data: { email: uniqueEmail("me-chef").toUpperCase(), username: `me-${faker.string.alphanumeric(8).toLowerCase()}` },
+    });
+    await context.db.recipe.create({ data: { title: "Oracle Tart", chefId: me.id } });
+    const { token } = await createApiCredential(context.db, me.id, "Search token", { scopes: ["kitchen:read"] });
+    const signedIn = { db: context.db, principal: await authenticateApiToken(context.db, token) };
+    const titles = async (args: Record<string, unknown>, ctx: Parameters<typeof callSpoonjoyMcpTool>[2]) =>
+      parseJson(await callSpoonjoyMcpTool("search_recipes", { query: "Oracle", ...args }, ctx)).recipes.map((recipe: { title: string }) => recipe.title);
+
+    const anonymous = { db: context.db, principal: null };
+    await expect(titles({ chefEmail: other.email }, anonymous)).resolves.toEqual([]);
+    await expect(titles({ chefEmail: other.email }, signedIn)).resolves.toEqual([]);
+    await expect(titles({ chefEmail: me.email.toLowerCase() }, signedIn)).resolves.toEqual(["Oracle Tart"]);
+    // The local stdio owner can still filter by their own address, and only theirs.
+    await expect(titles({ chefEmail: other.email }, { db: context.db, defaultOwnerEmail: other.email.toUpperCase() })).resolves.toEqual(["Oracle Pie"]);
+    await expect(titles({ chefEmail: other.email }, { db: context.db, defaultOwnerEmail: me.email })).resolves.toEqual([]);
+
+    // Both filters must name the same chef.
+    await expect(titles({ chefEmail: me.email.toLowerCase(), chefUsername: me.username }, signedIn)).resolves.toEqual(["Oracle Tart"]);
+    await expect(titles({ chefEmail: me.email.toLowerCase(), chefUsername: other.username }, signedIn)).resolves.toEqual([]);
+    const ghostOwner = uniqueEmail("ghost-owner");
+    await expect(titles({ chefEmail: ghostOwner, chefUsername: other.username }, { db: context.db, defaultOwnerEmail: ghostOwner })).resolves.toEqual([]);
+    await expect(titles({ chefUsername: other.username }, anonymous)).resolves.toEqual(["Oracle Pie"]);
+    await expect(titles({ chefUsername: "nobody-by-this-name" }, anonymous)).resolves.toEqual([]);
   });
 
   it("writes a signed-in user's changes to their own account, not a legacy account whose email differs in case", async () => {
@@ -1805,7 +1898,13 @@ describe("spoonjoy MCP tools", () => {
     expect(updated.recipe.steps[0].ingredients).toEqual([
       expect.objectContaining({ name: "egg", quantity: 2, unit: "whole" }),
     ]);
-    await expect(context.db.stepOutputUse.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(0);
+    // The steps are updated in place: they keep their ids, and step 2 still uses step 1's output.
+    expect(updated.recipe.steps.map((step: { id: string }) => step.id))
+      .toEqual(created.recipe.steps.map((step: { id: string }) => step.id));
+    await expect(context.db.stepOutputUse.findMany({
+      where: { recipeId: created.recipe.id },
+      select: { outputStepNum: true, inputStepNum: true },
+    })).resolves.toEqual([{ outputStepNum: 1, inputStepNum: 2 }]);
     await expect(context.db.ingredient.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(1);
   });
 
@@ -2022,7 +2121,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("coalesces shared recipe adds by deterministic step and ingredient order without changing the MCP shape", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `ordered-${suffix}` },
     });
@@ -2110,7 +2209,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("rejects a non-finite shared recipe aggregate before writing any shopping item", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `finite-${suffix}` },
     });
@@ -2595,6 +2694,32 @@ describe("spoonjoy MCP tools", () => {
     });
   });
 
+  it("touches the cookbook when MCP removes a recipe from it, as the web and API v1 paths do", async () => {
+    // Native sync finds changed cookbooks by updatedAt, so a removal that leaves it alone is
+    // never pulled by iPhone or Mac.
+    const cookbook = parseJson(await callSpoonjoyMcpTool("create_cookbook", {
+      title: "Touched On Removal",
+    }, context));
+    const recipe = parseJson(await callSpoonjoyMcpTool("create_recipe", {
+      title: "Removed Soup",
+    }, context));
+    await callSpoonjoyMcpTool("add_recipe_to_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context);
+    const old = new Date("2026-01-01T00:00:00.000Z");
+    await context.db.cookbook.update({ where: { id: cookbook.cookbook.id }, data: { updatedAt: old } });
+
+    const removed = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+      cookbookId: cookbook.cookbook.id,
+      recipeId: recipe.recipe.id,
+    }, context));
+
+    expect(removed).toMatchObject({ removed: true, cookbook: { recipeCount: 0 } });
+    const stored = await context.db.cookbook.findUniqueOrThrow({ where: { id: cookbook.cookbook.id } });
+    expect(stored.updatedAt.getTime()).toBeGreaterThan(old.getTime());
+  });
+
   it("runs owner-scoped write tools without callback-style transactions", async () => {
     const guardedContext = {
       ...context,
@@ -2638,10 +2763,17 @@ describe("spoonjoy MCP tools", () => {
     const removedItem = parseJson(await callSpoonjoyMcpTool("remove_shopping_list_item", {
       itemId: milkItem.id,
     }, guardedContext));
-    const removedRecipe = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
-      cookbookId: cookbook.cookbook.id,
-      recipeId: recipe.recipe.id,
-    }, guardedContext));
+    // Removal is the same shared membership write: one D1 batch with the cookbook touch.
+    const removalD1 = sqliteD1();
+    let removedRecipe: Record<string, any>;
+    try {
+      removedRecipe = parseJson(await callSpoonjoyMcpTool("remove_recipe_from_cookbook", {
+        cookbookId: cookbook.cookbook.id,
+        recipeId: recipe.recipe.id,
+      }, { ...guardedContext, env: { DB: removalD1.binding } }));
+    } finally {
+      removalD1.close();
+    }
 
     expect(added).toMatchObject({
       added: true,
@@ -2771,8 +2903,8 @@ describe("spoonjoy MCP tools", () => {
   it("gets shopping lists and filters deleted items including unitless items", async () => {
     const owner = await context.db.user.create({ data: { email: uniqueEmail("shopper"), username: faker.internet.username() } });
     const list = await context.db.shoppingList.create({ data: { authorId: owner.id } });
-    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `beans-${faker.string.alphanumeric(5).toLowerCase()}` } });
-    const secondRef = await context.db.ingredientRef.create({ data: { name: `apples-${faker.string.alphanumeric(5).toLowerCase()}` } });
+    const ingredientRef = await context.db.ingredientRef.create({ data: { name: `beans-${faker.string.numeric(10)}` } });
+    const secondRef = await context.db.ingredientRef.create({ data: { name: `apples-${faker.string.numeric(10)}` } });
     await context.db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: ingredientRef.id, sortIndex: 1 } });
     await context.db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: secondRef.id, sortIndex: 1 } });
     await context.db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: ingredientRef.id, sortIndex: 2, deletedAt: new Date() } });
@@ -2780,6 +2912,26 @@ describe("spoonjoy MCP tools", () => {
     const result = parseJson(await callSpoonjoyMcpTool("get_shopping_list", { ownerEmail: owner.email }, context));
     expect(result.shoppingList.items.map((item: { name: string }) => item.name)).toEqual([secondRef.name, ingredientRef.name].sort());
     expect(result.shoppingList.items[0]).toEqual(expect.objectContaining({ quantity: null, unit: null, sortIndex: 1 }));
+  });
+
+  it("unchecks an item without writing back the position it read, which a renumbering may have changed", async () => {
+    const added = parseJson(await callSpoonjoyMcpTool("add_shopping_list_item", { name: `leeks-${faker.string.alphanumeric(5).toLowerCase()}`, quantity: 1 }, context));
+    const itemId = added.shoppingList.items[0].id;
+    parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", { itemId, checked: true }, context));
+
+    const findFirst = context.db.shoppingListItem.findFirst.bind(context.db.shoppingListItem);
+    const spy = vi.spyOn(context.db.shoppingListItem, "findFirst").mockImplementationOnce((async (args: any) => {
+      const row = await findFirst(args);
+      // Another request renumbers the list after this one read the row.
+      await context.db.shoppingListItem.update({ where: { id: itemId }, data: { sortIndex: 7 } });
+      return row;
+    }) as any);
+    try {
+      const unchecked = parseJson(await callSpoonjoyMcpTool("set_shopping_list_item_checked", { itemId, checked: false }, context));
+      expect(unchecked.shoppingList.items[0]).toMatchObject({ id: itemId, checked: false, sortIndex: 7 });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("manages direct shopping-list item adds, checks, removes, and restores", async () => {
@@ -2850,7 +3002,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("always updates the active manual identity before considering a matching tombstone", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `manual-active-${suffix}` },
     });
@@ -2913,7 +3065,7 @@ describe("spoonjoy MCP tools", () => {
   });
 
   it("restores the earliest deterministic tombstone when no manual identity is active", async () => {
-    const suffix = faker.string.alphanumeric(8).toLowerCase();
+    const suffix = faker.string.numeric(10);
     const owner = await context.db.user.create({
       data: { email: context.defaultOwnerEmail!, username: `manual-deleted-${suffix}` },
     });

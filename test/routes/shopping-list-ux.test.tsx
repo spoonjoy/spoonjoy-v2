@@ -158,6 +158,44 @@ describe("shopping list UX updates", () => {
     expect(screen.getByTestId("shopping-list-checklist-board")).toHaveClass("lg:max-w-[40rem]");
   });
 
+  it("writes amounts the way the recipe does: fractions, plural units, whole things rounded up", async () => {
+    // A scaled recipe add used to show the raw float ("0.3125 cup", "1.25 whole").
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: {
+            id: "list-amounts",
+            items: [
+              { id: "item-stock", quantity: 0.3125, checked: false, unit: { name: "cup" }, ingredientRef: { name: "chicken stock" }, categoryKey: "pantry", iconKey: "droplets" },
+              { id: "item-rice", quantity: 2.5, checked: false, unit: { name: "cup" }, ingredientRef: { name: "jasmine rice" }, categoryKey: "pantry", iconKey: "wheat" },
+              { id: "item-lemon", quantity: 1.25, checked: false, unit: { name: "whole" }, ingredientRef: { name: "lemon" }, categoryKey: "produce", iconKey: "citrus" },
+              { id: "item-garlic", quantity: 2.5, checked: false, unit: { name: "clove" }, ingredientRef: { name: "garlic" }, categoryKey: "produce", iconKey: "carrot" },
+              { id: "item-salt", quantity: null, checked: false, unit: null, ingredientRef: { name: "salt" }, categoryKey: "spices", iconKey: "pot" },
+            ],
+          },
+          recipes: [],
+        }),
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    const amountOf = async (name: string) => {
+      const item = await screen.findByRole("checkbox", { name: new RegExp(`^${name}`) });
+      return item.textContent ?? "";
+    };
+    expect(await amountOf("chicken stock")).toContain("⅓ cup");
+    expect(await amountOf("chicken stock")).not.toContain("0.3125");
+    expect(await amountOf("jasmine rice")).toContain("2 ½ cups");
+    // A counted thing shows its number alone: "whole" is a stored unit, not a word a cook writes.
+    expect(await amountOf("lemon")).toMatch(/lemon2$/);
+    expect(await amountOf("garlic")).toContain("3 cloves");
+    expect(await amountOf("salt")).not.toMatch(/\d/);
+  });
+
   it("filters the list by needed, basket, and all item views", async () => {
     const Stub = createTestRoutesStub([
       {

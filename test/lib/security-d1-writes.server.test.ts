@@ -129,6 +129,18 @@ describe("security-relevant writes on a D1 binding", () => {
       });
     });
 
+    it("starts the account verified only when the provider vouched for the email, on both paths", async () => {
+      await createOAuthUser(db, data({ providerUserId: "pv", email: "prisma-verified@example.com", emailVerified: true }));
+      await createOAuthUser(db, data({ providerUserId: "dv", email: "d1-verified@example.com", emailVerified: true }), d1.binding);
+      await createOAuthUser(db, data({ providerUserId: "du", email: "d1-unverified@example.com" }), d1.binding);
+
+      const verifiedAt = async (email: string) =>
+        (await db.user.findUniqueOrThrow({ where: { email }, select: { emailVerifiedAt: true } })).emailVerifiedAt;
+      expect(await verifiedAt("prisma-verified@example.com")).toBeInstanceOf(Date);
+      expect(await verifiedAt("d1-verified@example.com")).toBeInstanceOf(Date);
+      expect(await verifiedAt("d1-unverified@example.com")).toBeNull();
+    });
+
     it("signs a second sign-in with the same identity in to the account created in between", async () => {
       let first: Awaited<ReturnType<typeof createOAuthUser>> | undefined;
       const racing: D1ReadDatabase = {

@@ -423,7 +423,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("Cook")).toBeInTheDocument();
       expect(screen.getByText("Share")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Start Your Kitchen" })).toHaveAttribute("href", "/signup");
-      expect(screen.getByRole("link", { name: "Log In" })).toHaveAttribute("href", "/login");
+      expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
       expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     });
@@ -556,7 +556,7 @@ describe("Kitchen Index Route", () => {
       expect(await screen.findByText("My Kitchen")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Create Recipe" })).toHaveAttribute("href", "/recipes/new");
       expect(screen.getByRole("link", { name: "Kitchen settings" })).toHaveAttribute("href", "/account/settings");
-      expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
@@ -684,7 +684,7 @@ describe("Kitchen Index Route", () => {
       expect(await screen.findByText("alpinechef's Kitchen")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Search Recipes" })).toHaveAttribute("href", "/search");
       expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Logout" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Log out" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "New Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Create First Recipe" })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Create First Cookbook", hidden: true })).not.toBeInTheDocument();

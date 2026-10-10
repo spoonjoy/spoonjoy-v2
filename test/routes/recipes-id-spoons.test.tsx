@@ -22,6 +22,8 @@ import RecipeDetail from "~/routes/recipes.$id";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { oversizedMultipartUpload } from "../helpers/oversized-upload";
+import { FOOD_IMAGE_SIZE_MESSAGE } from "~/lib/recipe-image";
 
 function extractResponseData(response: any): { data: any; status: number } {
   if (response && typeof response === "object" && response.type === "DataWithResponseInit") {
@@ -432,13 +434,29 @@ describe("Recipes $id route — spoons + provenance", () => {
     render(<Stub initialEntries={["/recipes/r1"]} />);
     await userEvent.click(await screen.findByRole("button", { name: /log cook/i }));
     await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
-    await userEvent.click(screen.getByRole("button", { name: /save spoon/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
 
     await waitFor(() => {
       expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull();
     });
     expect(actionCalls).toBe(1);
     expect(screen.getByRole("status")).toHaveTextContent("Cook logged.");
+  });
+
+  it("refuses an oversized spoon upload with 413 before buffering the whole body", async () => {
+    const upload = oversizedMultipartUpload("http://localhost/recipes/x", cookSessionCookie);
+
+    const thrown = await action({
+      request: upload.request,
+      params: { id: recipeId },
+      context: { cloudflare: { env: null } } as any,
+    }).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Response);
+    expect((thrown as Response).status).toBe(413);
+    expect(await (thrown as Response).text()).toBe(FOOD_IMAGE_SIZE_MESSAGE);
+    expect(upload.pulled()).toBeLessThanOrEqual(upload.readLimit);
+    expect(await db.recipeSpoon.count({ where: { recipeId } })).toBe(0);
   });
 
   it("action with intent=createSpoon creates a RecipeSpoon as the requesting user", async () => {

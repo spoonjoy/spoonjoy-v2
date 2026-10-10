@@ -64,6 +64,12 @@ vi.mock("../../workers/cook-session-api", () => ({
   handleCookSessionProtocolRequest: cookProtocolHandler,
 }));
 
+const runScheduledPhotoSweep = vi.hoisted(() => vi.fn(async () => null));
+vi.mock("../../app/lib/photo-lifecycle.server", async (importOriginal) => ({
+  isServablePhotoKey: (await importOriginal<typeof import("../../app/lib/photo-lifecycle.server")>()).isServablePhotoKey,
+  runScheduledPhotoSweep,
+}));
+
 const worker = (await import("../../workers/app")).default;
 const WORKER_VERSION_ID = "22222222-2222-4222-8222-222222222222";
 const ACCOUNT_DELETE_INTENT_RESOURCE = "urn:spoonjoy:account-delete-intent:v1";
@@ -134,6 +140,14 @@ describe("Cloudflare worker app", () => {
     apiMocks.getDb.mockResolvedValue(apiMocks.db);
   });
 
+  it("runs the photo sweep from the cron trigger, outliving the scheduled event", async () => {
+    const env = versionedEnvironment({ PHOTO_SWEEP_MODE: "dry-run" });
+    const ctx = context();
+    await worker.scheduled!({ cron: "23 */6 * * *", scheduledTime: 0, noRetry: () => undefined } as ScheduledController, env, ctx);
+    expect(runScheduledPhotoSweep).toHaveBeenCalledWith(env);
+    expect(ctx.waitUntil).toHaveBeenCalledWith(runScheduledPhotoSweep.mock.results[0].value);
+  });
+
   it("configures React Router with the statically imported server build, evaluated at Worker startup", () => {
     expect(configuredServerBuild).toMatchObject(serverBuildMarker);
     expect(configuredMode).toBe(import.meta.env.MODE);
@@ -198,6 +212,61 @@ describe("Cloudflare worker app", () => {
     expect(mcpPostRoute).not.toHaveBeenCalled();
   });
 
+  it("serves photos straight from R2 without React Router, and leaves other photo requests to it", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async (key: string) =>
+      key === "variants/w256/covers/a.jpg.webp"
+        ? { body: new Response("webp").body, size: 4, httpEtag: '"v"', httpMetadata: {} }
+        : null,
+    );
+    const env = { PHOTOS: { get } } as unknown as CloudflareEnvironment;
+    const waitUntil = vi.fn();
+    const cachePut = vi.fn(async () => undefined);
+    vi.stubGlobal("caches", { default: { match: vi.fn(async () => undefined), put: cachePut } });
+
+    const response = await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg?w=200"), env, {
+      ...context(),
+      waitUntil,
+    } as unknown as ExecutionContext);
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("webp");
+    expect(response.headers.get("Content-Type")).toBe("image/webp");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(get).toHaveBeenCalledWith("variants/w256/covers/a.jpg.webp");
+    expect(requestHandler).not.toHaveBeenCalled();
+    // The edge copy is written after the response, through the Worker's waitUntil.
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(cachePut).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+
+    const head = await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg?w=200", { method: "HEAD" }), env, context());
+    expect(head.status).toBe(200);
+    expect(requestHandler).not.toHaveBeenCalled();
+
+    for (const request of [
+      new Request("https://spoonjoy.app/photos/covers/a.jpg", { method: "POST" }),
+      new Request("https://spoonjoy.app/photos/"),
+    ]) {
+      await worker.fetch(request, env, context());
+    }
+    await worker.fetch(new Request("https://spoonjoy.app/photos/covers/a.jpg"), {} as CloudflareEnvironment, context());
+    expect(requestHandler).toHaveBeenCalledTimes(3);
+  });
+
+  it("never serves a quarantined photo, from the fast path or React Router", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async () => ({ body: new Response("old").body, size: 3, httpEtag: '"q"', httpMetadata: {} }));
+    const env = { PHOTOS: { get } } as unknown as CloudflareEnvironment;
+
+    const response = await worker.fetch(new Request("https://spoonjoy.app/photos/quarantine/covers/a.jpg"), env, context());
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(get).not.toHaveBeenCalled();
+    expect(requestHandler).not.toHaveBeenCalled();
+  });
+
   it("adds security and Worker-version headers to canonical redirects", async () => {
     requestHandler.mockClear();
 
@@ -212,6 +281,25 @@ describe("Cloudflare worker app", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
     expect(response.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
     expect(requestHandler).not.toHaveBeenCalled();
+  });
+
+  it("serves an earlier release's hashed asset from the archive before the 404 page", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async (key: string) => (
+      key === "release-assets/route-Ab12.js" ? { body: "export{}" } : null
+    ));
+    const env = versionedEnvironment({ PHOTOS: { get } as unknown as R2Bucket });
+
+    const archived = await worker.fetch(new Request("https://spoonjoy.app/assets/route-Ab12.js"), env, context());
+    expect(archived.status).toBe(200);
+    expect(await archived.text()).toBe("export{}");
+    expect(archived.headers.get("Content-Type")).toBe("text/javascript; charset=utf-8");
+    expect(archived.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+    expect(requestHandler).not.toHaveBeenCalled();
+
+    // An asset no release ever had still reaches the app's 404 handling.
+    await worker.fetch(new Request("https://spoonjoy.app/assets/missing-Zz99.js"), env, context());
+    expect(requestHandler).toHaveBeenCalledTimes(1);
   });
 
   it("exposes the executing Worker version for release-canary verification", async () => {
@@ -349,8 +437,28 @@ describe("Cloudflare worker app", () => {
         retryable: true,
       },
     });
+    // Authentication gets a lazy Prisma client: only a bearer token builds one.
+    expect(apiMocks.getDb).not.toHaveBeenCalled();
+    const [prisma, calledRequest, calledEnv, options] = apiMocks.authenticateApiRequest.mock.calls.at(-1)!;
+    expect(calledRequest).toBe(request);
+    expect(calledEnv).toBe(env);
+    // `{ marker: "binding" }` is not a D1 binding, so the session read has none.
+    expect(options).toEqual({ d1: null });
+    await expect((prisma as () => Promise<unknown>)()).resolves.toBe(apiMocks.db);
     expect(apiMocks.getDb).toHaveBeenCalledWith({ DB: env.DB });
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+  });
+
+  it("passes the D1 binding for the browser session check, without building a Prisma client", async () => {
+    const binding = { prepare: vi.fn(), batch: vi.fn() };
+    const request = new Request("https://spoonjoy.app/api/cook-sessions/recipe-1", {
+      headers: { Origin: "https://spoonjoy.app" },
+    });
+    const env = versionedEnvironment({ DB: binding as unknown as D1Database });
+
+    await worker.fetch(request, env, context());
+
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: binding });
+    expect(apiMocks.getDb).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -485,7 +593,7 @@ describe("Cloudflare worker app", () => {
         retryable: false,
       },
     });
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, expect.anything());
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, expect.anything(), { d1: null });
     expect(namespace.idFromName).not.toHaveBeenCalled();
     expect(namespace.get).not.toHaveBeenCalled();
     expect(namespace.fetch).not.toHaveBeenCalled();
@@ -641,7 +749,7 @@ describe("Cloudflare worker app", () => {
         retryable: true,
       },
     });
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: null });
   });
 
   it.each([
@@ -881,7 +989,7 @@ describe("Cloudflare worker app", () => {
     const response = await worker.fetch(request, env, context());
 
     expect(response.status).toBe(503);
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(apiMocks.db, request, env);
+    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: null });
   });
 
   it.each([undefined, "not a url", "ftp://spoonjoy.app"])(

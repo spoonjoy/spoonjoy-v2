@@ -200,3 +200,106 @@ export function formatServingsLabel(text: string | null | undefined): string {
 
   return trimmed
 }
+
+// Unit words a cook reads in the plural past one ("2 cups", "3 cloves"). Abbreviations such as
+// "tsp", "g" or "oz" and units already written in the plural are shown as written.
+const PLURAL_UNITS: Record<string, string> = {
+  bag: 'bags',
+  bottle: 'bottles',
+  box: 'boxes',
+  bunch: 'bunches',
+  can: 'cans',
+  clove: 'cloves',
+  cup: 'cups',
+  dash: 'dashes',
+  drop: 'drops',
+  ear: 'ears',
+  fillet: 'fillets',
+  gram: 'grams',
+  handful: 'handfuls',
+  head: 'heads',
+  inch: 'inches',
+  jar: 'jars',
+  kilogram: 'kilograms',
+  leaf: 'leaves',
+  liter: 'liters',
+  litre: 'litres',
+  ounce: 'ounces',
+  package: 'packages',
+  piece: 'pieces',
+  pinch: 'pinches',
+  pint: 'pints',
+  pound: 'pounds',
+  quart: 'quarts',
+  sheet: 'sheets',
+  slice: 'slices',
+  sprig: 'sprigs',
+  stalk: 'stalks',
+  stick: 'sticks',
+  strip: 'strips',
+  tablespoon: 'tablespoons',
+  teaspoon: 'teaspoons',
+}
+
+// Units counted in whole things. A shopper buys 2 lemons, not 1 ¼, so the shopping list rounds
+// these up.
+const COUNT_UNITS = new Set([
+  'bag', 'bottle', 'box', 'bunch', 'can', 'clove', 'ear', 'fillet', 'head', 'jar', 'package',
+  'piece', 'slice', 'sprig', 'stalk', 'stick', 'whole',
+])
+
+function singularUnit(unit: string): string {
+  const lower = unit.toLowerCase()
+  const singular = Object.keys(PLURAL_UNITS).find((key) => PLURAL_UNITS[key] === lower)
+  return singular ?? lower
+}
+
+/**
+ * Whether a unit counts whole things (whole, clove, can...), in either number.
+ */
+export function isCountUnit(unit: string | null | undefined): boolean {
+  return unit != null && COUNT_UNITS.has(singularUnit(unit.trim()))
+}
+
+export interface FormatAmountOptions {
+  /** Round counted units up to the next whole number (for the shopping list). */
+  roundCountsUp?: boolean
+}
+
+/**
+ * The one way Spoonjoy writes an amount: a rounded, Unicode-fraction quantity followed by its
+ * unit, with the unit in the plural past one.
+ *
+ * @example
+ * formatAmount(0.3125, 'cup') // "⅓ cup"
+ * formatAmount(2.5, 'cup') // "2 ½ cups"
+ * formatAmount(1.25, 'whole', { roundCountsUp: true }) // "2"
+ * formatAmount(null, 'pinch') // "pinch"
+ */
+export function formatAmount(
+  quantity: number | string | null | undefined,
+  unit: string | null | undefined,
+  { roundCountsUp = false }: FormatAmountOptions = {},
+): string {
+  const numeric = typeof quantity === 'string' ? Number.parseFloat(quantity) : quantity
+  const hasQuantity = numeric != null && Number.isFinite(numeric)
+  const trimmedUnit = unit?.trim() ?? ''
+  const value = hasQuantity && roundCountsUp && isCountUnit(trimmedUnit) && numeric > 0
+    ? Math.ceil(numeric - 1e-9)
+    : numeric
+  const quantityText = hasQuantity ? formatQuantity(value as number) : ''
+
+  // "whole" is how a counted ingredient is stored, not a word a cook writes: "2 lemons" reads as
+  // "2", not "2 whole" (product review 2026-10-09).
+  if (trimmedUnit.toLowerCase() === 'whole') {
+    return quantityText
+  }
+
+  let unitText = trimmedUnit
+  const plural = PLURAL_UNITS[trimmedUnit.toLowerCase()]
+  if (plural && hasQuantity && (value as number) > 1 && quantityText !== '1') {
+    unitText = trimmedUnit === trimmedUnit.toLowerCase() ? plural : plural.charAt(0).toUpperCase() + plural.slice(1)
+  }
+
+  return [quantityText, unitText].filter(Boolean).join(' ')
+}

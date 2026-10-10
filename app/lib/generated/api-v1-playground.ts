@@ -151,19 +151,23 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "/api/v1/tokens/{credentialId}"
       ],
       "scopes": [
-        "account:read",
-        "account:write",
+        "public:read",
+        "recipes:read",
+        "cookbooks:read",
         "kitchen:read",
         "kitchen:write",
         "shopping_list:read",
         "shopping_list:write"
       ],
       "notes": [
+        "Delegated approval never grants account:* or tokens:* scopes; requests for them fail with 400.",
+        "The approval link never carries the code: the chef opens it, signs in, and types userCode, so show both.",
+        "Approved delegated tokens expire after 90 days; start a new connection after that.",
         "The device code expires after 10 minutes.",
         "Poll no faster than the returned interval, currently 2 seconds.",
         "A pending poll returns pending plus authorizationUrl, verificationUri, verificationUriComplete, and userCode.",
         "Pass scopes such as shopping_list:read shopping_list:write to request a least-privilege delegated token; omitted scopes default to shopping_list:read shopping_list:write.",
-        "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl.",
+        "Tiny devices can show verificationUri plus userCode instead of the long authorizationUrl; verificationUriComplete is the same link as authorizationUrl and also needs the typed code.",
         "An approved poll returns the sj_... token once, plus token metadata.",
         "The token is a normal bearer credential. A device can revoke its own credential id with DELETE /api/v1/tokens/{credentialId}; revoking any other credential requires tokens:write."
       ],
@@ -423,7 +427,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"auth-apple-native\",\n        \"path\": \"/api/v1/auth/apple/native\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"auth-password-native\",\n        \"path\": \"/api/v1/auth/password/native\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"native-telemetry\",\n        \"path\": \"/api/v1/native/telemetry\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"search\",\n        \"path\": \"/api/v1/search\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-create\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-write\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-fork\",\n        \"path\": \"/api/v1/recipes/{id}/fork\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-import\",\n        \"path\": \"/api/v1/recipes/import\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-steps\",\n        \"path\": \"/api/v1/recipes/{id}/steps\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-reorder\",\n        \"path\": \"/api/v1/recipes/{id}/steps/reorder\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredients\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredient\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-output-uses\",\n        \"path\": \"/api/v1/recipes/{id}/step-output-uses\",\n        \"methods\": [\n          \"PUT\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons-create\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/spoons/{spoonId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-image\",\n        \"path\": \"/api/v1/recipes/{id}/image\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"POST\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-generate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/generate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks-create\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-mutate\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-recipes\",\n        \"path\": \"/api/v1/cookbooks/{id}/recipes/{recipeId}\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me\",\n        \"path\": \"/api/v1/me\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-sync\",\n        \"path\": \"/api/v1/me/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-chefs\",\n        \"path\": \"/api/v1/me/chefs\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-photo\",\n        \"path\": \"/api/v1/me/photo\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-notification-preferences\",\n        \"path\": \"/api/v1/me/notification-preferences\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-devices\",\n        \"path\": \"/api/v1/me/apns-devices\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-device\",\n        \"path\": \"/api/v1/me/apns-devices/{deviceId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-connections\",\n        \"path\": \"/api/v1/me/connections\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\"\n        ]\n      },\n      {\n        \"name\": \"me-connection\",\n        \"path\": \"/api/v1/me/connections/{connectionId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"native\": {\n        \"appleSignInUrl\": \"/api/v1/auth/apple/native\",\n        \"passwordSignInUrl\": \"/api/v1/auth/password/native\",\n        \"note\": \"First-party Spoonjoy Apple apps can exchange native Apple credentials or Spoonjoy username/password credentials for the app's rotating token session. Third-party clients must use OAuth/PKCE or delegated approval instead.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"app\": \"spoonjoy\",\n    \"version\": \"v1\",\n    \"status\": \"ok\",\n    \"docsUrl\": \"https://spoonjoy.app/api\",\n    \"openapiUrl\": \"/api/v1/openapi.json\",\n    \"sdkOpenapiUrl\": \"/api/v1/openapi.sdk.json\",\n    \"connectorOpenapiUrl\": \"/api/v1/openapi.connector.json\",\n    \"resources\": [\n      {\n        \"name\": \"root\",\n        \"path\": \"/api/v1\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"health\",\n        \"path\": \"/api/v1/health\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi\",\n        \"path\": \"/api/v1/openapi.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-sdk\",\n        \"path\": \"/api/v1/openapi.sdk.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"openapi-connector\",\n        \"path\": \"/api/v1/openapi.connector.json\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"auth-apple-native\",\n        \"path\": \"/api/v1/auth/apple/native\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"auth-password-native\",\n        \"path\": \"/api/v1/auth/password/native\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"native-telemetry\",\n        \"path\": \"/api/v1/native/telemetry\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"search\",\n        \"path\": \"/api/v1/search\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": []\n      },\n      {\n        \"name\": \"recipes\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-create\",\n        \"path\": \"/api/v1/recipes\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-write\",\n        \"path\": \"/api/v1/recipes/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-fork\",\n        \"path\": \"/api/v1/recipes/{id}/fork\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-import\",\n        \"path\": \"/api/v1/recipes/import\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-steps\",\n        \"path\": \"/api/v1/recipes/{id}/steps\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-reorder\",\n        \"path\": \"/api/v1/recipes/{id}/steps/reorder\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredients\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-ingredient\",\n        \"path\": \"/api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-step-output-uses\",\n        \"path\": \"/api/v1/recipes/{id}/step-output-uses\",\n        \"methods\": [\n          \"PUT\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"recipes:read\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoons-create\",\n        \"path\": \"/api/v1/recipes/{id}/spoons\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/spoons/{spoonId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-image\",\n        \"path\": \"/api/v1/recipes/{id}/image\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-covers\",\n        \"path\": \"/api/v1/recipes/{id}/covers\",\n        \"methods\": [\n          \"GET\",\n          \"POST\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover\",\n        \"path\": \"/api/v1/recipes/{id}/covers/{coverId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-generate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/generate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-regenerate\",\n        \"path\": \"/api/v1/recipes/{id}/covers/regenerate\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"recipe-cover-from-spoon\",\n        \"path\": \"/api/v1/recipes/{id}/covers/from-spoon/{spoonId}\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbooks-create\",\n        \"path\": \"/api/v1/cookbooks\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"optional\",\n        \"scopes\": [\n          \"cookbooks:read\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-mutate\",\n        \"path\": \"/api/v1/cookbooks/{id}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"cookbook-recipes\",\n        \"path\": \"/api/v1/cookbooks/{id}/recipes/{recipeId}\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:write\"\n        ]\n      },\n      {\n        \"name\": \"me\",\n        \"path\": \"/api/v1/me\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-export\",\n        \"path\": \"/api/v1/me/export\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-sync\",\n        \"path\": \"/api/v1/me/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-chefs\",\n        \"path\": \"/api/v1/me/chefs\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"kitchen:read\"\n        ]\n      },\n      {\n        \"name\": \"me-photo\",\n        \"path\": \"/api/v1/me/photo\",\n        \"methods\": [\n          \"POST\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-notification-preferences\",\n        \"path\": \"/api/v1/me/notification-preferences\",\n        \"methods\": [\n          \"GET\",\n          \"PATCH\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:read\",\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-devices\",\n        \"path\": \"/api/v1/me/apns-devices\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-apns-device\",\n        \"path\": \"/api/v1/me/apns-devices/{deviceId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"account:write\"\n        ]\n      },\n      {\n        \"name\": \"me-connections\",\n        \"path\": \"/api/v1/me/connections\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\"\n        ]\n      },\n      {\n        \"name\": \"me-connection\",\n        \"path\": \"/api/v1/me/connections/{connectionId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list\",\n        \"path\": \"/api/v1/shopping-list\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-sync\",\n        \"path\": \"/api/v1/shopping-list/sync\",\n        \"methods\": [\n          \"GET\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:read\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-items\",\n        \"path\": \"/api/v1/shopping-list/items\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-item\",\n        \"path\": \"/api/v1/shopping-list/items/{itemId}\",\n        \"methods\": [\n          \"PATCH\",\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-add-from-recipe\",\n        \"path\": \"/api/v1/shopping-list/add-from-recipe\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-completed\",\n        \"path\": \"/api/v1/shopping-list/clear-completed\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"shopping-list-clear-all\",\n        \"path\": \"/api/v1/shopping-list/clear-all\",\n        \"methods\": [\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"shopping_list:write\"\n        ]\n      },\n      {\n        \"name\": \"tokens\",\n        \"path\": \"/api/v1/tokens\",\n        \"methods\": [\n          \"GET\",\n          \"POST\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:read\",\n          \"tokens:write\"\n        ]\n      },\n      {\n        \"name\": \"token\",\n        \"path\": \"/api/v1/tokens/{credentialId}\",\n        \"methods\": [\n          \"DELETE\"\n        ],\n        \"auth\": \"bearer\",\n        \"scopes\": [\n          \"tokens:write\"\n        ]\n      }\n    ],\n    \"photoVariants\": {\n      \"queryParameter\": \"w\",\n      \"widths\": [\n        256,\n        512,\n        1024,\n        1536\n      ],\n      \"contentType\": \"image/webp\",\n      \"note\": \"Append ?w=<display width in pixels> to a Spoonjoy-hosted /photos/ URL to get the smallest stored WebP at least that wide (capped at the largest). Until a new photo's variants exist, the original is served with a short cache lifetime. Responses carry an ETag and answer If-None-Match with 304.\"\n    },\n    \"auth\": {\n      \"modes\": [\n        \"anonymous\",\n        \"session\",\n        \"bearer\",\n        \"oauth_pkce\",\n        \"delegated_agent\",\n        \"mcp\"\n      ],\n      \"tokenUrl\": \"/api/v1/tokens\",\n      \"revokeUrl\": \"/api/v1/tokens/{credentialId}\",\n      \"public\": {\n        \"anonymous\": true,\n        \"note\": \"Public recipe and cookbook reads can be called without credentials.\"\n      },\n      \"session\": {\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"note\": \"Same-origin Spoonjoy browser sessions can create personal bearer credentials.\"\n      },\n      \"native\": {\n        \"appleSignInUrl\": \"/api/v1/auth/apple/native\",\n        \"passwordSignInUrl\": \"/api/v1/auth/password/native\",\n        \"note\": \"First-party Spoonjoy Apple apps can exchange native Apple credentials or Spoonjoy username/password credentials for the app's rotating token session. Third-party clients must use OAuth/PKCE or delegated approval instead.\"\n      },\n      \"bearer\": {\n        \"header\": \"Authorization: Bearer sj_...\",\n        \"tokenUrl\": \"/api/v1/tokens\",\n        \"revokeUrl\": \"/api/v1/tokens/{credentialId}\"\n      },\n      \"oauth\": {\n        \"register\": \"/oauth/register\",\n        \"authorize\": \"/oauth/authorize\",\n        \"token\": \"/oauth/token\",\n        \"revoke\": \"/oauth/revoke\"\n      },\n      \"mcp\": {\n        \"endpoint\": \"/mcp\",\n        \"startAgentConnection\": \"/api/tools/start_agent_connection\",\n        \"pollAgentConnection\": \"/api/tools/poll_agent_connection\"\n      }\n    }\n  }\n}"
         },
         {
           "status": "400",
@@ -2332,7 +2336,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "409",
-          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+          "description": "Errors: idempotency_conflict, idempotency_in_progress, edit_conflict"
         },
         {
           "status": "429",
@@ -8796,7 +8800,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
     {
       "id": "PATCH /api/v1/me",
       "operationId": "patchApiV1Me",
-      "label": "Update the authenticated account email and username",
+      "label": "Update the authenticated account username (the email cannot be changed through the API)",
       "method": "PATCH",
       "path": "/api/v1/me",
       "profiles": [
@@ -8901,7 +8905,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "403",
-          "description": "Errors: insufficient_scope"
+          "description": "Errors: insufficient_scope, email_change_requires_web"
         },
         {
           "status": "404",
@@ -8962,6 +8966,172 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: account:write\",\n    \"status\": 403\n  }\n}"
         },
         {
+          "status": "403",
+          "name": "email_change_requires_web",
+          "label": "Email Change Requires Web",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"email_change_requires_web\",\n    \"message\": \"Your email can only be changed in Account settings on the Spoonjoy website.\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "DELETE /api/v1/me",
+      "operationId": "deleteApiV1Me",
+      "label": "Permanently delete the authenticated account after re-authentication",
+      "method": "DELETE",
+      "path": "/api/v1/me",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "account:write"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "destructive",
+      "risk": "destructive",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "required": true,
+        "contentType": "application/json",
+        "fields": [],
+        "example": "{\n  \"confirmUsername\": \"ari\",\n  \"password\": \"current password\"\n}",
+        "examples": [
+          {
+            "name": "example",
+            "label": "Example",
+            "example": "{\n  \"confirmUsername\": \"ari\",\n  \"password\": \"current password\"\n}"
+          }
+        ]
+      },
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_json, validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"deleted\": true,\n    \"reassignedRecipes\": 2,\n    \"deletedRecipes\": 5\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_json",
+          "label": "Invalid Json",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_json\",\n    \"message\": \"Invalid JSON body\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: account:write\",\n    \"status\": 403\n  }\n}"
+        },
+        {
           "status": "404",
           "name": "not_found",
           "label": "Not Found",
@@ -8972,6 +9142,161 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/me/export",
+      "operationId": "getApiV1MeExport",
+      "label": "Download everything the authenticated account put into Spoonjoy as JSON",
+      "method": "GET",
+      "path": "/api/v1/me/export",
+      "profiles": [
+        "full",
+        "sdk"
+      ],
+      "tag": "Account",
+      "auth": "authenticated",
+      "scopes": [
+        "account:read",
+        "kitchen:read"
+      ],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "session",
+        "bearer",
+        "oauth_pkce"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Requires an authenticated chef. Session mode uses your Spoonjoy login; Bearer mode uses a pasted sj_... token for external-client testing.",
+      "params": [
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: authentication_required, invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"format\": \"spoonjoy.account-export.v1\",\n    \"exportedAt\": \"2026-06-01T00:00:00.000Z\",\n    \"account\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"email\": \"ari@spoonjoy.app\",\n      \"photoUrl\": null,\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"signInMethods\": [\n        \"password\"\n      ]\n    },\n    \"recipes\": [],\n    \"cookbooks\": [],\n    \"shoppingList\": [],\n    \"cooks\": []\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "authentication_required",
+          "label": "Authentication Required",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"authentication_required\",\n    \"message\": \"Authentication required\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: account:read\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
         }
       ]
     },
@@ -13156,8 +13481,9 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       "auth": "optional",
       "scopes": [],
       "grantableScopes": [
-        "account:read",
-        "account:write",
+        "public:read",
+        "recipes:read",
+        "cookbooks:read",
         "kitchen:read",
         "kitchen:write",
         "shopping_list:read",
@@ -13214,7 +13540,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "example",
           "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"deviceCode\": \"sjdc_...\",\n    \"userCode\": \"ABCD-2345\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"expiresIn\": 600,\n    \"interval\": 2,\n    \"message\": \"Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"deviceCode\": \"sjdc_...\",\n    \"userCode\": \"ABCD-2345\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"expiresIn\": 600,\n    \"interval\": 2,\n    \"message\": \"Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.\"\n  }\n}"
         },
         {
           "status": "400",
@@ -13295,13 +13621,13 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "status": "200",
           "name": "pending",
           "label": "Pending",
-          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"pending\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123?code=ABCD-2345\",\n    \"userCode\": \"ABCD-2345\",\n    \"message\": \"Waiting for the user to approve this Spoonjoy connection.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"pending\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"authorizationUrl\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"verificationUri\": \"https://spoonjoy.app/agent/connect\",\n    \"verificationUriComplete\": \"https://spoonjoy.app/agent/connect/acr_123\",\n    \"userCode\": \"ABCD-2345\",\n    \"message\": \"Waiting for the user to approve this Spoonjoy connection. Show them authorizationUrl and, separately, userCode: they type the code on that page to approve.\"\n  }\n}"
         },
         {
           "status": "200",
           "name": "approved",
           "label": "Approved",
-          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"approved\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"token\": \"sj_...\",\n    \"credential\": {\n      \"id\": \"cred_1\",\n      \"name\": \"Kitchen display delegated token\",\n      \"tokenPrefix\": \"sj_abc123456\",\n      \"scopes\": [\n        \"shopping_list:read\",\n        \"shopping_list:write\"\n      ],\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"expiresAt\": null\n    },\n    \"message\": \"Connection approved. Cache this token locally and use it for future Spoonjoy calls.\"\n  }\n}"
+          "example": "{\n  \"ok\": true,\n  \"data\": {\n    \"status\": \"approved\",\n    \"expiresAt\": \"2026-06-01T00:00:00.000Z\",\n    \"token\": \"sj_...\",\n    \"credential\": {\n      \"id\": \"cred_1\",\n      \"name\": \"Kitchen display delegated token\",\n      \"tokenPrefix\": \"sj_abc123456\",\n      \"scopes\": [\n        \"shopping_list:read\",\n        \"shopping_list:write\"\n      ],\n      \"createdAt\": \"2026-06-01T00:00:00.000Z\",\n      \"expiresAt\": \"2026-08-30T00:00:00.000Z\"\n    },\n    \"message\": \"Connection approved. Cache this token locally and use it for future Spoonjoy calls.\"\n  }\n}"
         },
         {
           "status": "200",

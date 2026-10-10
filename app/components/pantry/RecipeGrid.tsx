@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Bookmark, Share2, UtensilsCrossed } from 'lucide-react'
 import { Subheading } from '../ui/heading'
 import { Link } from '../ui/link'
@@ -6,6 +7,7 @@ import { Button } from '../ui/button'
 import { RuledEmptyState } from '~/components/cookbook/page'
 import { formatServingsLabel } from '~/lib/quantity'
 import { CoverProvenanceBadge } from '~/components/recipe/CoverProvenanceBadge'
+import { listImageProps } from '~/lib/image-loading'
 
 export interface PantryRecipeCard {
   id: string
@@ -22,6 +24,10 @@ export interface PantryRecipeCard {
 
 export interface RecipeGridProps {
   recipes: PantryRecipeCard[]
+  /** Recipes across every page when the grid shows part of a longer list. */
+  totalCount?: number
+  /** Focus target for the first card a "Show more" added (see useFocusFirstNew). */
+  firstNew?: { index: number | null; ref: React.Ref<HTMLAnchorElement> }
   emptyTitle?: string
   emptyMessage?: string
   emptyCtaHref?: string | null
@@ -31,6 +37,8 @@ export interface RecipeGridProps {
 
 export function RecipeGrid({
   recipes,
+  totalCount = recipes.length,
+  firstNew,
   emptyTitle = 'No recipes yet',
   emptyMessage = 'Start by creating your first recipe for this pantry.',
   emptyCtaHref = '/recipes/new',
@@ -56,11 +64,11 @@ export function RecipeGrid({
     <section>
       <div className="mb-4 flex items-center justify-between gap-3">
         <Subheading level={2} className="text-2xl/8">Recipes</Subheading>
-        <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{recipes.length} total</Text>
+        <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</Text>
       </div>
 
       <div className="sj-list-ruled">
-        {recipes.map((recipe) => {
+        {recipes.map((recipe, index) => {
           const href = recipe.href ?? `/recipes/${recipe.id}`
           const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
           const hasQuickActions = Boolean(onShare || onSave)
@@ -73,14 +81,15 @@ export function RecipeGrid({
             >
               <Link
                 href={href}
-                aria-label={recipe.title}
+                ref={firstNew && index === firstNew.index ? firstNew.ref : undefined}
                 className="grid gap-4 py-5 no-underline sm:grid-cols-[7rem_minmax(0,1fr)] sm:pr-24"
               >
                 <span className="sj-photo-tile block aspect-[4/3] overflow-hidden sm:aspect-square">
                   {displayImageUrl ? (
                     <img
                       src={displayImageUrl}
-                      alt={recipe.title}
+                      alt=""
+                      {...listImageProps(index)}
                       className="h-full w-full object-cover"
                     />
                   ) : (

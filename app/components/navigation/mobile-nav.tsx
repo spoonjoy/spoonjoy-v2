@@ -68,7 +68,9 @@ const signedOutTabs: Tab[] = [
 ];
 
 function shouldHideTabBar(pathname: string, isAuthenticated: boolean) {
-  if (pathname === "/oauth/authorize") {
+  // The connector consent screen and the "Log out?" confirmation are single-decision pages: the
+  // bar would only cover their last choice ("Stay signed in" on /logout sat at its top edge).
+  if (pathname === "/oauth/authorize" || pathname === "/logout") {
     return true;
   }
 
@@ -123,7 +125,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
       data-testid="mobile-tab-bar"
       className={clsx(
         "fixed bottom-0 left-[max(0.75rem,env(safe-area-inset-left))] right-[max(0.75rem,env(safe-area-inset-right))]",
-        "z-50 mx-auto mb-[max(1rem,env(safe-area-inset-bottom))] flex max-w-lg items-center gap-2 max-[389px]:gap-1.5 lg:hidden",
+        "z-50 mx-auto mb-[max(1rem,env(safe-area-inset-bottom))] flex max-w-lg items-center gap-2 max-[389px]:gap-1.5 lg:hidden print:hidden",
       )}
     >
       <ul className={clsx(surfaceClassName, "m-0 flex h-16 bg-[var(--sj-photo-charcoal)] min-w-0 flex-1 list-none items-stretch rounded-full p-1")}>

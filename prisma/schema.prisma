@@ -24,6 +24,10 @@ model User {
   photoUrl                 String?
   // Browser session cookies carry this value; bumping it revokes every older cookie.
   sessionVersion           Int                       @default(0)
+  // Set when the user proves they own `email` (a verification link, a confirmed email change, a
+  // password reset, or a provider that vouches for the address). Null means unverified.
+  emailVerifiedAt          DateTime?
+  emailTokens              AccountEmailToken[]
   credentials              UserCredential[]
   OAuth                    OAuth[]
   recipes                  Recipe[]
@@ -50,6 +54,35 @@ model User {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
+// Single-use links sent by email. Only the SHA-256 of each token is stored.
+model AccountEmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // verify_email | change_email | reset_password (a CHECK constraint in migration 0029)
+  purpose   String
+  tokenHash String    @unique
+  // The address the link was sent to (for change_email, the new address).
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, purpose, createdAt])
+}
+
+// QA only (SPOONJOY_EMAIL_MODE=capture): messages written instead of sent.
+model EmailOutbox {
+  id        String   @id @default(cuid())
+  toAddress String
+  purpose   String
+  subject   String
+  textBody  String
+  createdAt DateTime @default(now())
+
+  @@index([toAddress, createdAt])
+}
+
 model ApiCredential {
   id                 String    @id @default(cuid())
   userId             String
@@ -66,8 +99,9 @@ model ApiCredential {
   oauthConnectionKey String?
   // Expand-phase compatibility hint only. OAuthGrant-owned sidecars are authoritative.
   oauthGrantId       String?
-  // Optional expiry. Null = non-expiring (API tokens, agent-delegated tokens).
-  // OAuth-connector access tokens set this so they roll over via refresh.
+  // Optional expiry. Null = non-expiring, which personal tokens get only when the owner asks for
+  // it. Personal tokens default to 90 days; OAuth access tokens always expire and roll over
+  // through refresh.
   expiresAt          DateTime?
 
   createdAt DateTime @default(now())
@@ -150,6 +184,11 @@ model AgentConnectionRequest {
   agentName      String
   scopes         String @default("kitchen:read kitchen:write")
   status         String @default("pending")
+
+  // Network details of whoever started the request, shown on the approval page. Not verified.
+  requesterIp        String?
+  requesterUserAgent String?
+  requesterCountry   String?
 
   approvedById String?
   approvedBy   User?   @relation(fields: [approvedById], references: [id], onDelete: SetNull)
@@ -277,6 +316,8 @@ model OAuthRefreshToken {
   resource      String?
   connectionKey String?
   revokedAt     DateTime?
+  // Refused after this time. Each rotation issues a new token with a fresh window.
+  expiresAt     DateTime?
   createdAt     DateTime  @default(now())
   // Expand-phase compatibility hint only. OAuthGrant-owned sidecars are authoritative.
   grantId       String?
@@ -407,6 +448,7 @@ model Recipe {
   @@index([coverMode])
   @@index([deletedAt, updatedAt])
   @@index([chefId, deletedAt, updatedAt])
+  @@index([chefId, deletedAt, updatedAt, id])
 }
 
 model RecipeStep {
@@ -573,26 +615,27 @@ model RecipeSpoon {
 }
 
 model RecipeCover {
-  id               String       @id @default(cuid())
-  recipeId         String
-  recipe           Recipe       @relation("RecipeCoverHistory", fields: [recipeId], references: [id], onDelete: Cascade)
-  imageUrl         String
-  stylizedImageUrl String?
-  sourceType       String
-  sourceSpoonId    String?
-  sourceSpoon      RecipeSpoon? @relation(fields: [sourceSpoonId], references: [id], onDelete: SetNull)
-  activeForRecipes Recipe[]     @relation("RecipeActiveCover")
-  status           String       @default("ready")
-  createdById      String?
-  sourceImageUrl   String?
-  generationStatus String       @default("none")
-  failureReason    String?
-  promptVersion    String?
-  styleVersion     String?
-  promptAddition   String?
-  parentCoverId    String?
-  archivedAt       DateTime?
-  createdAt        DateTime     @default(now())
+  id                  String       @id @default(cuid())
+  recipeId            String
+  recipe              Recipe       @relation("RecipeCoverHistory", fields: [recipeId], references: [id], onDelete: Cascade)
+  imageUrl            String
+  stylizedImageUrl    String?
+  sourceType          String
+  sourceSpoonId       String?
+  sourceSpoon         RecipeSpoon? @relation(fields: [sourceSpoonId], references: [id], onDelete: SetNull)
+  activeForRecipes    Recipe[]     @relation("RecipeActiveCover")
+  status              String       @default("ready")
+  createdById         String?
+  sourceImageUrl      String?
+  generationStatus    String       @default("none")
+  generationStartedAt DateTime?
+  failureReason       String?
+  promptVersion       String?
+  styleVersion        String?
+  promptAddition      String?
+  parentCoverId       String?
+  archivedAt          DateTime?
+  createdAt           DateTime     @default(now())
 
   @@index([recipeId, createdAt])
   @@index([sourceSpoonId])
@@ -613,6 +656,17 @@ model ImageGenLedger {
 
   @@unique([userId, kind, bucketStart])
   @@index([userId, bucketStart])
+}
+
+/// Global AI generations per UTC day across every user and kind. Not tied to a user, so
+/// deleting an account does not hand its spent units back.
+model ImageGenDailyBudget {
+  bucketStart   DateTime @id
+  count         Int      @default(0)
+  /// The consume that last spent a unit; lets the D1 batch tie the per-user increment to it.
+  lastConsumeId String?
+
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 model PushSubscription {
@@ -674,4 +728,43 @@ model NotificationPreference {
   notifyCookbookSaveOfMine   Boolean  @default(true)
   notifyFellowChefOriginCook Boolean  @default(true)
   updatedAt                  DateTime @default(now()) @updatedAt
+}
+
+// One stored photo (an R2 key) that no live row references any more. The photo sweep
+// (app/lib/photo-lifecycle.server.ts) records when it first saw the key unreferenced, moves the
+// object under `quarantine/` once `eligibleAt` passes, and purges it after the retention period.
+// A key that is referenced again before then simply loses its row.
+model PhotoCleanup {
+  key                 String    @id
+  reason              String
+  firstUnreferencedAt DateTime
+  eligibleAt          DateTime
+  sizeBytes           Int?
+  quarantinedAt       DateTime?
+  purgedAt            DateTime?
+  updatedAt           DateTime  @default(now()) @updatedAt
+
+  @@index([eligibleAt])
+  @@index([quarantinedAt])
+}
+
+// The counts from one run of the photo sweep, in whatever mode it ran.
+model PhotoSweepRun {
+  id                  String   @id @default(cuid())
+  mode                String
+  startedAt           DateTime
+  finishedAt          DateTime
+  objectsScanned      Int      @default(0)
+  referencedObjects   Int      @default(0)
+  unreferencedObjects Int      @default(0)
+  unreferencedBytes   Int      @default(0)
+  orphanVariants      Int      @default(0)
+  eligibleObjects     Int      @default(0)
+  quarantined         Int      @default(0)
+  purged              Int      @default(0)
+  failures            Int      @default(0)
+  truncated           Boolean  @default(false)
+  note                String?
+
+  @@index([startedAt])
 }

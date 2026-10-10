@@ -71,7 +71,8 @@ describe('ScaledQuantity', () => {
     it('doubles quantity with scaleFactor 2', () => {
       render(<ScaledQuantity quantity={1} unit="cup" name="butter" scaleFactor={2} />)
       const element = screen.getByTestId('scaled-quantity')
-      expect(element).toHaveTextContent('2 cup butter')
+      // Past one, the unit reads in the plural.
+      expect(element).toHaveTextContent('2 cups butter')
     })
 
     it('halves quantity with scaleFactor 0.5', () => {

@@ -26,7 +26,6 @@ import {
   parseCookProgressSnapshot,
   readCookProgress,
   readSyncedCookProgress,
-  formatTimerSeconds,
   writeCookProgress,
   shouldRevalidate as recipeShouldRevalidate,
 } from "~/routes/recipes.$id";
@@ -313,11 +312,6 @@ describe("Recipes $id Route", () => {
       expect(parseCookProgressSnapshot(JSON.stringify({ version: 0 }), bounds)).toBeNull();
       expect(parseCookProgressSnapshot(JSON.stringify(null), bounds)).toBeNull();
     });
-
-    it("formats timer seconds as cookbook timer text", () => {
-      expect(formatTimerSeconds(0)).toBe("00:00");
-      expect(formatTimerSeconds(65)).toBe("01:05");
-    });
   });
 
   describe("meta", () => {
@@ -482,6 +476,8 @@ describe("Recipes $id Route", () => {
           status: "processing",
           generationStatus: "processing",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          // Regenerated just now, so it is still a live generation rather than a stuck one.
+          generationStartedAt: new Date(),
         },
       });
       await db.recipe.update({
@@ -510,6 +506,45 @@ describe("Recipes $id Route", () => {
       });
     });
 
+    it("shows an active cover whose generation stopped long ago as failed, not processing", async () => {
+      const session = await sessionStorage.getSession();
+      session.set("userId", testUserId);
+      const setCookieHeader = await sessionStorage.commitSession(session);
+      const headers = new Headers({ Cookie: setCookieHeader.split(";")[0] });
+      // Its job's Worker died: the editorial pass started an hour ago and never finished.
+      const activeCover = await db.recipeCover.create({
+        data: {
+          recipeId,
+          imageUrl: "/photos/detail-raw.jpg",
+          sourceImageUrl: "/photos/detail-raw.jpg",
+          sourceType: "spoon",
+          status: "processing",
+          generationStatus: "processing",
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          generationStartedAt: new Date(Date.now() - 60 * 60_000),
+        },
+      });
+      await db.recipe.update({
+        where: { id: recipeId },
+        data: { activeCoverId: activeCover.id, activeCoverVariant: "image", coverMode: "manual" },
+      });
+
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/recipes/${recipeId}`, { headers }),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      // The raw photo stays the cover; only the editorial pass failed.
+      expect(result.coverImageUrl).toBe("/photos/detail-raw.jpg");
+      expect(result.activeCoverProcessing).toBeNull();
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: activeCover.id } })).resolves.toMatchObject({
+        status: "ready",
+        generationStatus: "failed",
+        failureReason: "Generation stopped before it finished.",
+      });
+    });
+
     it("tracks generation-status-only processing and omits ready active covers", async () => {
       const session = await sessionStorage.getSession();
       session.set("userId", testUserId);
@@ -524,6 +559,8 @@ describe("Recipes $id Route", () => {
           status: "ready",
           generationStatus: "processing",
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          // Regenerated just now, so it is still a live generation rather than a stuck one.
+          generationStartedAt: new Date(),
         },
       });
       await db.recipe.update({
@@ -1805,14 +1842,23 @@ describe("Recipes $id Route", () => {
         params: { id: recipeId },
       } as any);
 
-      expect(result).toEqual({ success: true, intent: "regenerateRecipeCover", coverId: cover.id });
+      // The cover has an editorial image, so the regeneration fills a new child cover and the
+      // cover keeps "/photos/old-editorial.jpg" (it used to be overwritten).
+      const child = await db.recipeCover.findFirstOrThrow({ where: { parentCoverId: cover.id } });
+      expect(result).toEqual({ success: true, intent: "regenerateRecipeCover", coverId: child.id });
+      expect(child).toMatchObject({
+        status: "processing",
+        generationStatus: "processing",
+        failureReason: null,
+        promptAddition: "less shadow more basil",
+        sourceImageUrl: "/photos/source.jpg",
+      });
       await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } }))
         .resolves.toMatchObject({
-          status: "processing",
-          generationStatus: "processing",
-          failureReason: null,
-          promptAddition: "less shadow more basil",
-          parentCoverId: cover.id,
+          stylizedImageUrl: "/photos/old-editorial.jpg",
+          status: "ready",
+          generationStatus: "succeeded",
+          parentCoverId: null,
         });
       await expect(
         db.recipe.findUniqueOrThrow({
@@ -3146,10 +3192,10 @@ describe("Recipes $id Route", () => {
       await user.click(within(cookMode).getByRole("button", { name: "Start timer" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Pause timer" }));
-      expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
-      await user.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+      expect(within(cookMode).getByRole("button", { name: "Resume timer" })).toBeInTheDocument();
+      await user.click(within(cookMode).getByRole("button", { name: "Resume timer" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
-      await user.click(within(cookMode).getByRole("button", { name: "Reset timer" }));
+      await user.click(within(cookMode).getByRole("button", { name: "Cancel timer" }));
       expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
       expect(within(cookMode).getByText("05:00")).toBeInTheDocument();
       await exitCookMode(cookMode);
@@ -3251,6 +3297,8 @@ describe("Recipes $id Route", () => {
         });
 
         expect(within(cookMode).getByText("00:00")).toBeInTheDocument();
+        expect(within(cookMode).getByText("Time's up")).toBeInTheDocument();
+        expect(within(cookMode).getByRole("button", { name: "Stop alarm" })).toBeInTheDocument();
         expect(within(cookMode).getByRole("button", { name: "Restart timer" })).toBeInTheDocument();
 
         fireEvent.click(within(cookMode).getByRole("button", { name: "Restart timer" }));
@@ -3263,6 +3311,123 @@ describe("Recipes $id Route", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("keeps a running timer when the cook moves to another step, and lets them cancel it there", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-timers",
+          title: "Pasta Night",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            { id: "step-1", stepNum: 1, stepTitle: "Boil pasta", description: "Salt the water.", duration: 10, ingredients: [], usingSteps: [] },
+            { id: "step-2", stepNum: 2, stepTitle: "Make sauce", description: "Garlic in oil.", duration: null, ingredients: [], usingSteps: [] },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-timers"]} />);
+      await screen.findByRole("heading", { name: "Pasta Night" });
+      fireEvent.click(screen.getByTestId("recipe-header-cook-action"));
+      const cookMode = await screen.findByTestId("cook-mode-panel");
+      await settleBrowserTasks();
+      try {
+        vi.useFakeTimers();
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_000);
+        });
+        expect(within(cookMode).getByText("09:57")).toBeInTheDocument();
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
+        const tray = within(cookMode).getByTestId("cook-timer-tray");
+        expect(within(tray).getByText("Step 1 · Boil pasta")).toBeInTheDocument();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2_000);
+        });
+        expect(within(tray).getByText("09:55")).toBeInTheDocument();
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Go to step 1" }));
+        expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
+        expect(within(cookMode).getByText("09:55")).toBeInTheDocument();
+        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Cancel timer for step 1" }));
+        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Previous step" }));
+        expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+        expect(within(cookMode).getByText("10:00")).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+      await exitCookMode(cookMode);
+    });
+
+    it("rings from another step at zero and keeps a running timer on the recipe page after exiting cook mode", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-ring",
+          title: "Quick Rest",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            { id: "step-1", stepNum: 1, stepTitle: null, description: "Rest the dough.", duration: 1, ingredients: [], usingSteps: [] },
+            { id: "step-2", stepNum: 2, stepTitle: "Shape", description: "Shape it.", duration: 2, ingredients: [], usingSteps: [] },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+      const vibrate = vi.fn(() => true);
+      Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+
+      render(<Stub initialEntries={["/recipes/recipe-ring"]} />);
+      await screen.findByRole("heading", { name: "Quick Rest" });
+      fireEvent.click(screen.getByTestId("recipe-header-cook-action"));
+      const cookMode = await screen.findByTestId("cook-mode-panel");
+      await settleBrowserTasks();
+      try {
+        vi.useFakeTimers();
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(61_000);
+        });
+        const tray = within(cookMode).getByTestId("cook-timer-tray");
+        expect(within(tray).getByText("Time's up")).toBeInTheDocument();
+        expect(screen.getByTestId("cook-timer-announcement")).toHaveTextContent("Time's up: Step 1");
+        expect(vibrate).toHaveBeenCalled();
+        expect(document.title).toContain("Time's up: Step 1");
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Stop alarm for step 1" }));
+        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        expect(document.title).not.toContain("Time's up");
+
+        fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
+      } finally {
+        vi.useRealTimers();
+        Reflect.deleteProperty(navigator, "vibrate");
+      }
+      await exitCookMode(cookMode);
+      const pageTray = await screen.findByTestId("cook-timer-tray");
+      expect(within(pageTray).getByText("Step 2 · Shape")).toBeInTheDocument();
+      fireEvent.click(within(pageTray).getByRole("button", { name: "Cancel timer for step 2" }));
+      expect(screen.queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
     });
 
     describe("cook mode history", () => {
@@ -3802,7 +3967,7 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      fireEvent.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
@@ -3887,7 +4052,7 @@ describe("Recipes $id Route", () => {
 
       const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Cover History Recipe" });
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
 
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
@@ -3896,10 +4061,10 @@ describe("Recipes $id Route", () => {
       expect(within(history).getByText("Editorial photo")).toBeInTheDocument();
       expect(within(history).getByText("Imported photo")).toBeInTheDocument();
       expect(within(history).queryByText("No cover selected")).toBeNull();
-      expect(screen.getByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument();
       expect(screen.getByText("Add cover photo")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: "Post as Spoon" })).toBeChecked();
-      expect(screen.getByRole("checkbox", { name: "Editorialize cover" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Also log this as a cook" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: "Make a styled cover" })).toBeChecked();
 
       await user.click(within(history).getByRole("button", { name: "Use Imported photo cover" }));
       await waitFor(() => {
@@ -3972,11 +4137,11 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Processing Cover Recipe" });
       expect(screen.getByAltText("Photo of Processing Cover Recipe")).toHaveAttribute("src", "/photos/raw-spoon.jpg");
       expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
-      expect(screen.getByRole("status")).toHaveTextContent("Editorializing cover");
+      expect(screen.getByRole("status")).toHaveTextContent("Styling cover");
 
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
-      expect(await screen.findByRole("heading", { name: "Photo studio" })).toBeInTheDocument();
-      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Editorializing cover");
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
+      expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Styling cover");
     });
 
     it("polls while the active cover is processing and swaps to the editorial variant", async () => {
@@ -4061,7 +4226,7 @@ describe("Recipes $id Route", () => {
 
         expect(loader.mock.calls.length).toBeGreaterThan(visibleLoaderCalls);
         expect(screen.getByAltText("Photo of Autoswap Recipe")).toHaveAttribute("src", "/photos/editorial-spoon.jpg");
-        expect(screen.queryByText("Editorializing cover")).toBeNull();
+        expect(screen.queryByText("Styling cover")).toBeNull();
       } finally {
         setIntervalSpy.mockRestore();
         clearIntervalSpy.mockRestore();
@@ -4538,13 +4703,14 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       await screen.findByRole("heading", { name: "Recipe to Delete" });
-      expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
 
-      expect(await screen.findByRole("alertdialog", { name: "Delete this recipe?" })).toBeInTheDocument();
-      expect(screen.getByText("Delete this recipe? This cannot be undone.")).toBeInTheDocument();
+      // The dialog names the recipe and what deleting it does, instead of asking the same question twice.
+      expect(await screen.findByRole("alertdialog", { name: 'Delete "Recipe to Delete"?' })).toBeInTheDocument();
+      expect(screen.getByText("It will be removed from your kitchen and your cookbooks, and links to it will stop working. You can't undo this.")).toBeInTheDocument();
     });
 
     it("should cancel recipe deletion from the dialog without submitting", async () => {
@@ -4581,11 +4747,11 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Actions" });
 
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
       });
       await settleBrowserTasks();
       expect(submittedIntents).toEqual([]);
@@ -4624,7 +4790,7 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
-      await user.click(screen.getByRole("button", { name: "Recipe maintenance Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Delete" }));
 
@@ -4632,7 +4798,7 @@ describe("Recipes $id Route", () => {
         expect(submittedIntents).toEqual(["delete"]);
       });
       await waitFor(() => {
-        expect(screen.queryByRole("alertdialog", { name: "Delete this recipe?" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
       });
       await settleBrowserTasks();
     });
@@ -5003,6 +5169,8 @@ describe("Recipes $id Route", () => {
 
       const checkboxes = screen.getAllByRole("checkbox");
       expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+      // Nothing is ticked yet, so there is nothing to clear (finding 15).
+      expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
 
       await user.click(checkboxes[0]);
       await user.click(checkboxes[1]);
@@ -5012,6 +5180,7 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByRole("button", { name: "Clear progress" }));
       expect(checkboxes[0]).not.toBeChecked();
       expect(checkboxes[1]).not.toBeChecked();
+      expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
     });
 
     it("should keep cookbook-save controls out of the recipe page", async () => {
@@ -5046,6 +5215,75 @@ describe("Recipes $id Route", () => {
       // Save functionality is tested through the registered recipe actions.
       await screen.findByRole("heading", { name: "Recipe to Save to Cookbook" });
       expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
+    });
+  });
+
+  describe("on paper", () => {
+    it("prints where the recipe lives and leaves the cooks log and cook-mode hints off the page", async () => {
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Printed Recipe",
+          description: null,
+          servings: "4 servings",
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: "Boil",
+              description: "Boil the water.",
+              ingredients: [],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: false,
+        isAuthenticated: false,
+        canonicalUrl: "https://spoonjoy.app/recipes/recipe-1",
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { level: 1, name: "Printed Recipe" });
+
+      const source = screen.getByTestId("recipe-print-source");
+      expect(source).toHaveTextContent("From Spoonjoy: https://spoonjoy.app/recipes/recipe-1");
+      expect(source).toHaveClass("hidden", "print:block");
+      expect(screen.getByTestId("recipe-cooks")).toHaveClass("print:hidden");
+      expect(screen.getByText("Tap ingredients as you go")).toHaveClass("print:hidden");
+      // .sj-eyebrow sets display itself, so the eyebrow is hidden by the stylesheet's unlayered rule.
+      expect(screen.getByText("Cook mode", { selector: "p" })).toHaveClass("sj-print-hidden");
+      expect(document.getElementById("step-1")).toHaveClass("print:break-inside-avoid");
+    });
+
+    it("prints no source line when the page has no canonical address", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ({
+            recipe: {
+              id: "recipe-2",
+              title: "Unlisted Recipe",
+              description: null,
+              servings: null,
+              coverImageUrl: null,
+              chef: { id: "user-1", username: "testchef" },
+              steps: [],
+            },
+            isOwner: false,
+            isAuthenticated: false,
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-2"]} />);
+      await screen.findByRole("heading", { level: 1, name: "Unlisted Recipe" });
+      expect(screen.queryByTestId("recipe-print-source")).toBeNull();
     });
   });
 

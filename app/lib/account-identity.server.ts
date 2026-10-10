@@ -13,16 +13,18 @@
 // signup and OAuth sign-up, and a single guarded UPDATE for renames, which checks and writes in
 // one statement so two renames can't both win.
 import type { PrismaClient } from "@prisma/client";
+import { isReservedUsername } from "~/lib/username";
 
 type IdentityDb = Pick<PrismaClient, "$queryRaw" | "$executeRaw" | "user">;
 
 // True when another account (not exceptUserId) holds this username in any letter case, or has it
-// as its ID.
+// as its ID, or the username is reserved (username.ts).
 export async function findUsernameConflict(
   db: Pick<PrismaClient, "$queryRaw">,
   username: string,
   exceptUserId = "",
 ): Promise<boolean> {
+  if (isReservedUsername(username)) return true;
   const rows = await db.$queryRaw<{ id: string }[]>`
     SELECT "id" FROM "User"
     WHERE (lower("username") = lower(${username}) OR "id" = ${username}) AND "id" != ${exceptUserId}
@@ -46,13 +48,17 @@ export type AccountIdentityResult = "saved" | "email_taken" | "username_taken";
 
 export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentityChange): Promise<AccountIdentityResult> {
   const { userId, email, username, emailChanged, usernameChanged } = change;
+  if (usernameChanged && isReservedUsername(username)) return "username_taken";
   // The guards are switched by SQL parameters rather than composed with `Prisma.sql`, so this module
   // needs only types from "@prisma/client" and never imports its runtime (which db.server.ts loads
   // dynamically for the Worker bundle).
   const checkEmail = emailChanged ? 1 : 0;
   const checkUsername = usernameChanged ? 1 : 0;
   const updated = await db.$executeRaw`
-    UPDATE "User" SET "email" = ${email}, "username" = ${username}
+    UPDATE "User" SET
+      "email" = CASE WHEN ${checkEmail} = 1 THEN ${email} ELSE "email" END,
+      "username" = ${username},
+      "emailVerifiedAt" = CASE WHEN ${checkEmail} = 0 OR lower("email") = lower(${email}) THEN "emailVerifiedAt" ELSE NULL END
     WHERE "id" = ${userId}
       AND (${checkEmail} = 0 OR NOT EXISTS (
         SELECT 1 FROM "User" AS "other" WHERE "other"."id" != ${userId} AND lower("other"."email") = lower(${email})
@@ -74,7 +80,10 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
     return "username_taken";
   }
 
-  // The guarded write is raw SQL, which leaves updatedAt alone; native sync reads it.
+  // A new address has not been proven yet, so the guarded write above clears the verification in
+  // the same statement (Google and GitHub sign-in will not link to it until it is confirmed): no
+  // moment, and no failed second write, leaves the old verification on the new address. The raw
+  // write leaves updatedAt alone; native sync reads it.
   await db.user.update({ where: { id: userId }, data: { updatedAt: new Date() } });
   return "saved";
 }

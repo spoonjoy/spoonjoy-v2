@@ -30,11 +30,15 @@ export function recipeLink(scope: Locator, title: string, recipePath: string): L
 }
 
 // A link to one seeded recipe where it is listed once (search results, the /recipes list), matched
-// by its exact accessible name and its href together. Another recipe can share the seeded title
-// (a journey's throwaway fork of Lemon Herb Rice lives until the run's cleanup, and journeys run
-// in parallel), so the name alone is not enough; the href is the seeded id.
+// by its href and a name that contains `name` as whole words. A search result's link is named by its
+// type, title and byline, not by its title alone, so the name is matched as a part, not exactly. Another recipe can share the seeded title (a journey's throwaway fork of Lemon
+// Herb Rice lives until the run's cleanup, and journeys run in parallel), so the name alone is not
+// enough; the href is the seeded id.
 export function seededRecipeLink(scope: Locator, name: string, recipePath: string): Locator {
-  return scope.getByRole("link", { name, exact: true }).and(scope.page().locator(`[href="${recipePath}"]`));
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return scope
+    .getByRole("link", { name: new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`) })
+    .and(scope.page().locator(`[href="${recipePath}"]`));
 }
 
 // A seeded cookbook's link, pinned to its seeded URL: QA can hold other cookbooks with the same title.

@@ -10,9 +10,11 @@ import {
   recipeUpdateStatement,
 } from "~/lib/recipe-d1-writes.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
+import { d1StuckCoverStore, prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
 import {
   archiveRecipeCover,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
@@ -62,6 +64,7 @@ import type { RecipeCover } from "@prisma/client";
 import type { ScheduleSpoonStylizationInput } from "~/lib/spoon-cover-stylization.server";
 import {
   deleteStoredImage,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
@@ -73,7 +76,7 @@ import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.
 interface CloudflareContextLike {
   cloudflare?: {
     env?:
-      | (ImageGenEnv & { PHOTOS?: R2Bucket } & VapidEnv & PostHogServerEnv)
+      | (ImageGenEnv & { PHOTOS?: R2Bucket; DB?: unknown } & VapidEnv & PostHogServerEnv)
       | null;
     ctx?: { waitUntil?: (promise: Promise<unknown>) => void };
   };
@@ -94,7 +97,7 @@ function spoonErrorToResponse(error: unknown): never {
 
 function getCloudflareCtx(context: AppLoadContext): {
   bucket?: R2Bucket;
-  env: (ImageGenEnv & PostHogServerEnv) | null;
+  env: (ImageGenEnv & PostHogServerEnv & { DB?: unknown }) | null;
   vapidEnv: VapidEnv;
   waitUntil?: (promise: Promise<unknown>) => void;
 } {
@@ -114,6 +117,9 @@ function getCloudflareCtx(context: AppLoadContext): {
           POSTHOG_KEY: envSource.POSTHOG_KEY,
           POSTHOG_HOST: envSource.POSTHOG_HOST,
           POSTHOG_DISABLED: envSource.POSTHOG_DISABLED,
+          // The D1 binding: background stylization and its quota claim write through atomic
+          // D1 batches with it, and fall back to separate Prisma writes without it.
+          DB: envSource.DB,
         }
       : null,
     vapidEnv: {
@@ -167,6 +173,7 @@ function recipeCoverHistoryFor(recipe: {
       generationStatus: cover.generationStatus,
       sourceType: cover.sourceType,
       sourceImageUrl: cover.sourceImageUrl,
+      parentCoverId: cover.parentCoverId,
       archivedAt: cover.archivedAt?.toISOString() ?? null,
       createdAt: cover.createdAt.toISOString(),
       isActive: recipe.activeCoverId === cover.id,
@@ -247,6 +254,16 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
+  // A generation whose job died is failed here, for any viewer of its active cover and for
+  // the owner's history, so neither spins forever.
+  const [settledActiveCover, ...settledHistory] = await settleStuckCoverGenerations(
+    d1 ? d1StuckCoverStore(d1) : prismaStuckCoverStore(await getRequestDb(context)),
+    recipe.id,
+    [recipe.activeCover, ...reads.coverHistoryCovers],
+  );
+  recipe.activeCover = settledActiveCover;
+  // Only the first entry can be null: the history holds rows read from the table.
+  const coverHistoryCovers = settledHistory as typeof reads.coverHistoryCovers;
   const activeCover = getScopedActiveCover(recipe);
   const coverDisplay = getRecipeCoverDisplay(recipe, activeCover ? [activeCover] : []);
   const activeRealCover = hasActiveRealRecipeCover(recipe);
@@ -302,7 +319,6 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     nextTime: spoon.nextTime,
     chef: spoon.chef,
   }));
-  const coverHistoryCovers = reads.coverHistoryCovers;
   const spoonImages = reads.spoonImages;
   const { activeCover: _activeCover, ...recipeForClient } = recipe;
 
@@ -707,7 +723,12 @@ async function handleDeleteSpoon(
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
-  const formData = await request.formData();
+  // A spoon photo is the only large field, so the body is read through the image upload limit: an
+  // oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    throw new Response(FOOD_IMAGE_SIZE_MESSAGE, { status: 413 });
+  }
   const intent = formData.get("intent");
 
   const database = await getRequestDb(context);
@@ -989,29 +1010,19 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       throw new Response("Cover has no source image", { status: 400 });
     }
     const { bucket, env, waitUntil } = getCloudflareCtx(context);
-    await database.recipeCover.update({
-      where: { id: cover.id },
-      data: {
-        status: "processing",
-        generationStatus: "processing",
-        failureReason: null,
-        sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-        promptAddition,
-        parentCoverId: cover.id,
-      },
-    });
+    const regeneration = await startRecipeCoverRegeneration(database, cover, { createdById: userId, rawPhotoUrl, promptAddition });
     await runOrQueueSpoonCoverStylization(
       {
         db: database,
         userId,
         recipeId: id,
-        coverId: cover.id,
+        coverId: regeneration.coverId,
         rawPhotoUrl,
         recipeTitle: recipe.title,
         env,
         bucket,
         sourceType: cover.sourceType === "spoon" ? "spoon" : "chef-upload",
-        parentCoverId: cover.id,
+        parentCoverId: regeneration.parentCoverId,
         promptAddition,
         activateWhenReady,
         suppressAutoActivation: !activateWhenReady,
@@ -1025,7 +1036,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       },
       waitUntil,
     );
-    return { success: true, intent: "regenerateRecipeCover", coverId: cover.id };
+    return { success: true, intent: "regenerateRecipeCover", coverId: regeneration.coverId };
   }
 
   if (intent === "archiveRecipeCover") {

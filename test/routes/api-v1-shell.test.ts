@@ -512,10 +512,12 @@ describe("/api/v1 shell", () => {
       authentication_required: 401,
       invalid_token: 401,
       insufficient_scope: 403,
+      email_change_requires_web: 403,
       not_found: 404,
       method_not_allowed: 405,
       idempotency_conflict: 409,
       idempotency_in_progress: 409,
+      edit_conflict: 409,
       rate_limited: 429,
       upstream_error: 502,
       upstream_timeout: 504,
@@ -599,6 +601,30 @@ describe("/api/v1 shell", () => {
     });
   });
 
+  it("stops reading a JSON body sent without Content-Length once it passes the limit", async () => {
+    const body = streamedBody(4 * 1024, 64);
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request)).rejects.toMatchObject({
+      code: "validation_error",
+      message: "JSON body must be at most 16384 bytes",
+    });
+    expect(body.pulled()).toBeLessThanOrEqual(16 * 1024 + 2 * 4 * 1024);
+  });
+
+  it("passes on a JSON body read failure that is not about size", async () => {
+    const body = streamedBody(1, 1, true);
+    await expect(parseApiV1JsonBody(new UndiciRequest("http://localhost/api/v1/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body.stream,
+      duplex: "half",
+    }) as unknown as Request)).rejects.toThrow("client went away");
+  });
+
   it("normalizes unexpected optional-auth failures into internal errors", async () => {
     const platformError = new Error("Platform env unavailable");
     let cloudflareReads = 0;
@@ -643,3 +669,27 @@ describe("/api/v1 shell", () => {
     });
   });
 });
+
+function streamedBody(chunkBytes: number, chunkCount: number, fail = false) {
+  let pulled = 0;
+  let sent = 0;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (fail) {
+          controller.error(new Error("client went away"));
+          return;
+        }
+        if (sent >= chunkCount) {
+          controller.close();
+          return;
+        }
+        sent += 1;
+        pulled += chunkBytes;
+        controller.enqueue(new Uint8Array(chunkBytes).fill(0x20));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, pulled: () => pulled };
+}

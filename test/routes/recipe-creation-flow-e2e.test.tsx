@@ -523,7 +523,7 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       }
     });
 
-    it("should return parse error when API key is missing", async () => {
+    it("should parse by rules when the API key is missing, and return the parse error only when the rules find nothing", async () => {
       const recipeId = await createRecipe("No API Key Test " + faker.string.alphanumeric(6));
       const stepId = await addStep(recipeId, "Mix ingredients");
 
@@ -531,9 +531,14 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       const originalKey = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
+      // This used to answer the parse error and drop the typed ingredient (product-ux #6).
       const result = await parseIngredientsAction(recipeId, stepId, "2 cups flour");
+      expect(result.errors).toBeUndefined();
+      expect(result.parsedIngredients).toEqual([expect.objectContaining({ quantity: 2, ingredientName: "flour" })]);
 
-      expect(result.errors?.parse).toBe("OpenAI API key is required");
+      // A quantity with no ingredient name gives the rules nothing either: the parse error stands.
+      const unparseable = await parseIngredientsAction(recipeId, stepId, "2 cups");
+      expect(unparseable.errors?.parse).toBe("OpenAI API key is required");
 
       // Restore original key if it existed
       if (originalKey) {
@@ -742,8 +747,8 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       const originalKey = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
-      // Attempt AI parse - should fail
-      const parseResult = await parseIngredientsAction(recipeId, stepId, "2 cups flour");
+      // Attempt AI parse on text the rule-based fallback cannot parse either - should fail
+      const parseResult = await parseIngredientsAction(recipeId, stepId, "2 cups");
       expect(parseResult.errors?.parse).toBe("OpenAI API key is required");
 
       // User falls back to manual mode and adds ingredient
@@ -798,8 +803,10 @@ describe("E2E: Complete Recipe Creation Flow", () => {
         globalThis.fetch = originalFetch;
       }
 
-      // Should get a parse error (could be various types of API errors)
-      expect(parseResult.errors?.parse).toBeDefined();
+      // The provider failed, so the rule-based fallback parses the typed line instead of
+      // answering a parse error (product-ux #6).
+      expect(parseResult.errors).toBeUndefined();
+      expect(parseResult.parsedIngredients).toEqual([expect.objectContaining({ quantity: 2, ingredientName: "flour" })]);
 
       // User can still add ingredients manually
       const uniqueSuffix = faker.string.alphanumeric(6);
@@ -828,7 +835,8 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       const originalKey = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
-      const parseResult = await parseIngredientsAction(recipeId, stepId, "2 cups flour");
+      // Text the rule-based fallback cannot parse either, so the error is returned.
+      const parseResult = await parseIngredientsAction(recipeId, stepId, "2 cups");
 
       // Verify error is in the correct location
       expect(parseResult).toHaveProperty("errors");
@@ -849,9 +857,13 @@ describe("E2E: Complete Recipe Creation Flow", () => {
       const originalKey = process.env.OPENAI_API_KEY;
       delete process.env.OPENAI_API_KEY;
 
-      // Attempt AI parse - fails
+      // AI parse fails; the rule-based fallback still parses both typed lines (product-ux #6).
       const parseResult = await parseIngredientsAction(recipeId, stepId, "2 cups flour\n1 tsp salt");
-      expect(parseResult.errors?.parse).toBeDefined();
+      expect(parseResult.errors).toBeUndefined();
+      expect(parseResult.parsedIngredients).toEqual([
+        expect.objectContaining({ quantity: 2, ingredientName: "flour" }),
+        expect.objectContaining({ quantity: 1, ingredientName: "salt" }),
+      ]);
 
       // Add multiple ingredients manually
       const uniqueSuffix = faker.string.alphanumeric(6);

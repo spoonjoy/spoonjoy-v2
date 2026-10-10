@@ -1,3 +1,5 @@
+import { PHOTO_VARIANT_CONTENT_TYPE, PHOTO_VARIANT_QUERY_PARAMETER, PHOTO_VARIANT_WIDTHS } from "~/lib/photo-variants";
+
 export const API_V1_RESOURCES = [
   { name: "root", path: "/api/v1", methods: ["GET"], auth: "optional", scopes: [] },
   { name: "health", path: "/api/v1/health", methods: ["GET"], auth: "optional", scopes: [] },
@@ -34,7 +36,8 @@ export const API_V1_RESOURCES = [
   { name: "cookbook", path: "/api/v1/cookbooks/{id}", methods: ["GET"], auth: "optional", scopes: ["cookbooks:read"] },
   { name: "cookbook-mutate", path: "/api/v1/cookbooks/{id}", methods: ["PATCH", "DELETE"], auth: "bearer", scopes: ["kitchen:write"] },
   { name: "cookbook-recipes", path: "/api/v1/cookbooks/{id}/recipes/{recipeId}", methods: ["POST", "DELETE"], auth: "bearer", scopes: ["kitchen:write"] },
-  { name: "me", path: "/api/v1/me", methods: ["GET", "PATCH"], auth: "bearer", scopes: ["account:read", "account:write"] },
+  { name: "me", path: "/api/v1/me", methods: ["GET", "PATCH", "DELETE"], auth: "bearer", scopes: ["account:read", "account:write"] },
+  { name: "me-export", path: "/api/v1/me/export", methods: ["GET"], auth: "bearer", scopes: ["account:read", "kitchen:read"] },
   { name: "me-sync", path: "/api/v1/me/sync", methods: ["GET"], auth: "bearer", scopes: ["account:read", "kitchen:read"] },
   { name: "me-chefs", path: "/api/v1/me/chefs", methods: ["GET"], auth: "bearer", scopes: ["kitchen:read"] },
   { name: "me-photo", path: "/api/v1/me/photo", methods: ["POST", "DELETE"], auth: "bearer", scopes: ["account:write"] },
@@ -100,6 +103,8 @@ export const API_V1_SCOPE_REQUIREMENTS = [
   { path: "/api/v1/cookbooks/{id}/recipes/{recipeId}", method: "DELETE", auth: "bearer", scopes: ["kitchen:write"] },
   { path: "/api/v1/me", method: "GET", auth: "bearer", scopes: ["account:read"] },
   { path: "/api/v1/me", method: "PATCH", auth: "bearer", scopes: ["account:write"] },
+  { path: "/api/v1/me", method: "DELETE", auth: "bearer", scopes: ["account:write"] },
+  { path: "/api/v1/me/export", method: "GET", auth: "bearer", scopes: ["account:read", "kitchen:read"] },
   { path: "/api/v1/me/sync", method: "GET", auth: "bearer", scopes: ["account:read", "kitchen:read"] },
   { path: "/api/v1/me/chefs", method: "GET", auth: "bearer", scopes: ["kitchen:read"] },
   { path: "/api/v1/me/photo", method: "POST", auth: "bearer", scopes: ["account:write"] },
@@ -131,10 +136,12 @@ export const API_V1_ERROR_STATUS = {
   authentication_required: 401,
   invalid_token: 401,
   insufficient_scope: 403,
+  email_change_requires_web: 403,
   not_found: 404,
   method_not_allowed: 405,
   idempotency_conflict: 409,
   idempotency_in_progress: 409,
+  edit_conflict: 409,
   rate_limited: 429,
   upstream_error: 502,
   product_activation_pending: 503,
@@ -153,6 +160,12 @@ export const API_V1_DISCOVERY_DATA = {
   sdkOpenapiUrl: "/api/v1/openapi.sdk.json",
   connectorOpenapiUrl: "/api/v1/openapi.connector.json",
   resources: API_V1_RESOURCES,
+  photoVariants: {
+    queryParameter: PHOTO_VARIANT_QUERY_PARAMETER,
+    widths: PHOTO_VARIANT_WIDTHS,
+    contentType: PHOTO_VARIANT_CONTENT_TYPE,
+    note: "Append ?w=<display width in pixels> to a Spoonjoy-hosted /photos/ URL to get the smallest stored WebP at least that wide (capped at the largest). Until a new photo's variants exist, the original is served with a short cache lifetime. Responses carry an ETag and answer If-None-Match with 304.",
+  },
   auth: {
     modes: ["anonymous", "session", "bearer", "oauth_pkce", "delegated_agent", "mcp"],
     tokenUrl: "/api/v1/tokens",

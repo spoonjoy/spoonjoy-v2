@@ -85,6 +85,34 @@ describe("handleOAuthRegister", () => {
     });
   });
 
+  it("stops reading a registration body sent without Content-Length once it passes the limit", async () => {
+    const body = streamedBody(4 * 1024, 64);
+    const req = new Request("https://spoonjoy.app/oauth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body.stream,
+      duplex: "half",
+    } as RequestInit);
+    const res = await handleOAuthRegister(req, db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error_description: "Request body is too large" });
+    expect(body.pulled()).toBeLessThanOrEqual(16 * 1024 + 2 * 4 * 1024);
+  });
+
+  it("answers invalid_request when the registration body cannot be read", async () => {
+    const req = new Request("https://spoonjoy.app/oauth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: streamedBody(1, 1, true).stream,
+      duplex: "half",
+    } as RequestInit);
+    const res = await handleOAuthRegister(req, db);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: "invalid_request", error_description: "Invalid JSON body" });
+  });
+
   it("rejects declared oversized dynamic registration bodies before reading", async () => {
     const req = new Request("https://spoonjoy.app/oauth/register", {
       method: "POST",
@@ -362,7 +390,7 @@ describe("handleOAuthToken", () => {
     expect(typeof body.access_token).toBe("string");
     expect(typeof body.refresh_token).toBe("string");
     expect(body.token_type).toBe("Bearer");
-    expect(body).not.toHaveProperty("expires_in");
+    expect(body.expires_in).toBe(90 * 24 * 60 * 60);
     expect(body.scope).toBe("kitchen:read kitchen:write");
     await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
       .resolves.toMatchObject({
@@ -370,10 +398,10 @@ describe("handleOAuthToken", () => {
         oauthClientId: clientId,
         oauthIssuer: "https://spoonjoy.app",
         oauthResource: "https://spoonjoy.app/mcp",
-        expiresAt: null,
+        expiresAt: expect.any(Date),
       });
     await expect(db.oAuthRefreshToken.findFirstOrThrow({ where: { userId } }))
-      .resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
+      .resolves.toMatchObject({ issuer: "https://spoonjoy.app", expiresAt: expect.any(Date) });
     await expect(db.oAuthClient.findUniqueOrThrow({ where: { id: clientId } }))
       .resolves.toMatchObject({ issuer: "https://spoonjoy.app" });
     // the access token is a real ApiCredential, plus one refresh token
@@ -479,13 +507,13 @@ describe("handleOAuthToken", () => {
 
     expect(refresh.status).toBe(200);
     const refreshBody = await refresh.json() as Record<string, unknown>;
-    expect(refreshBody).not.toHaveProperty("expires_in");
+    expect(refreshBody.expires_in).toBe(90 * 24 * 60 * 60);
     await expect(db.apiCredential.findFirstOrThrow({
       where: { userId, oauthClientId: claudeClient.clientId },
       orderBy: { createdAt: "desc" },
     })).resolves.toMatchObject({
       oauthResource: "https://spoonjoy.app/mcp",
-      expiresAt: null,
+      expiresAt: expect.any(Date),
     });
     await expect(db.oAuthRefreshToken.findFirstOrThrow({
       where: { userId, clientId: claudeClient.clientId, revokedAt: null },
@@ -596,7 +624,7 @@ describe("handleOAuthToken", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(typeof body.access_token).toBe("string");
     expect(body.refresh_token).not.toBe(first.refresh_token); // rotated
-    expect(body).not.toHaveProperty("expires_in");
+    expect(body.expires_in).toBe(90 * 24 * 60 * 60);
 
     const replay = await handleOAuthToken(
       formPost("https://spoonjoy.app/oauth/token", {
@@ -1407,3 +1435,27 @@ describe("handleOAuthAuthorizeAction", () => {
     expect(await db.oAuthAuthCode.count({ where: { userId } })).toBe(0);
   });
 });
+
+function streamedBody(chunkBytes: number, chunkCount: number, fail = false) {
+  let pulled = 0;
+  let sent = 0;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (fail) {
+          controller.error(new Error("client went away"));
+          return;
+        }
+        if (sent >= chunkCount) {
+          controller.close();
+          return;
+        }
+        sent += 1;
+        pulled += chunkBytes;
+        controller.enqueue(new Uint8Array(chunkBytes).fill(0x20));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, pulled: () => pulled };
+}

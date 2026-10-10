@@ -35,7 +35,7 @@ export function ChecklistRow({
     <span
       aria-hidden="true"
       className={clsx(
-        "sj-instant-state grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
+        "sj-instant-state sj-checklist-box grid size-6 place-items-center rounded-[var(--sj-radius-control)] border-2 font-sj-ui text-sm font-bold",
         checked
           ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
           : "border-[var(--sj-border-strong)] bg-transparent text-transparent",
@@ -49,7 +49,7 @@ export function ChecklistRow({
     <span className="min-w-0">
       <span
         className={clsx(
-          "block truncate font-sj-ui text-base text-[var(--sj-ink)]",
+          "sj-checklist-name block break-words font-sj-ui text-base text-[var(--sj-ink)]",
           checked && "text-[var(--sj-ink-soft)]",
         )}
       >
@@ -63,7 +63,8 @@ export function ChecklistRow({
     <span
       data-testid={quantityTestId}
       className={clsx(
-        "max-w-[8.5rem] break-words text-right font-sj-ui text-sm tabular-nums text-[var(--sj-ink)]",
+        // An amount never wraps or truncates; a long name wraps beside it instead.
+        "whitespace-nowrap text-right font-sj-ui text-sm tabular-nums text-[var(--sj-ink)]",
         checked && "text-[var(--sj-ink-soft)]",
       )}
     >
@@ -92,7 +93,9 @@ export function ChecklistRow({
   // A checked row is shown by its soft ink and the strike, not by dimming: soft ink is already at
   // the edge of WCAG AA on the page, so any opacity on top drops it below 4.5:1.
   const rowBaseClassName = "grid min-h-14 items-center gap-3 py-2";
-  const rowClassName = clsx(rowBaseClassName, "grid-cols-[2rem_minmax(0,1fr)]");
+  // `sj-checklist-row` marks the grid whose first column holds the tick box, so print can drop
+  // the column with the box.
+  const rowClassName = clsx(rowBaseClassName, "sj-checklist-row grid-cols-[2rem_minmax(0,1fr)]");
 
   if (onToggle) {
     if (action) {
@@ -101,7 +104,7 @@ export function ChecklistRow({
           <button
             type="button"
             onClick={onToggle}
-            className="grid min-h-11 min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-left"
+            className="sj-checklist-row grid min-h-11 min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 text-left"
             role="checkbox"
             aria-checked={checked}
             aria-label={name}

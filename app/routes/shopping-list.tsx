@@ -1,4 +1,5 @@
 import type { Route } from "./+types/shopping-list";
+import { formatAmount } from "~/lib/quantity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "motion/react";
 import { LazyLayoutGroup } from "~/components/motion/lazy-motion";
@@ -141,8 +142,10 @@ export function pendingShoppingItemChanges(
   return { checkedById, removedById };
 }
 
-function amountLabel(item: { quantity: number | string | null; unit?: { name: string } | null }) {
-  return [item.quantity, item.unit?.name].filter(Boolean).join(" ").trim();
+// "⅓ cup", "2 cups", "2": the same rounding as the recipe page, with counted things rounded
+// up to what a shopper can buy.
+export function amountLabel(item: { quantity: number | string | null; unit?: { name: string } | null }) {
+  return formatAmount(item.quantity, item.unit?.name, { roundCountsUp: true });
 }
 
 export default function ShoppingList() {

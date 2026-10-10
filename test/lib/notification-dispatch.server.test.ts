@@ -214,6 +214,39 @@ describe("enqueueNotification", () => {
     expect(result.eventId).not.toBeNull();
   });
 
+  it("prunes a subscription saved with a non-push-service endpoint without contacting it (real sendPush)", async () => {
+    const db = await getLocalDb();
+    const actor = await createUser();
+    const recipient = await createUser();
+    const legacy = await db.pushSubscription.create({
+      data: {
+        userId: recipient.id,
+        endpoint: `https://attacker.example/${Date.now()}-${Math.random()}`,
+        p256dh: VALID_KEYS.p256dh,
+        authSecret: VALID_KEYS.auth,
+      },
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const tasks: Promise<unknown>[] = [];
+    try {
+      await enqueueNotification(
+        db,
+        { actorId: actor.id, recipientId: recipient.id, kind: "spoon_on_my_recipe", payload: {} },
+        {
+          vapid: VAPID,
+          waitUntil: (p: Promise<unknown>) => {
+            tasks.push(p);
+          },
+        },
+      );
+      await Promise.all(tasks);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+    expect(await db.pushSubscription.findUnique({ where: { id: legacy.id } })).toBeNull();
+  });
+
   it("prunes (deletes) the subscription row when sendPush returns 'expired'", async () => {
     const db = await getLocalDb();
     const actor = await createUser();

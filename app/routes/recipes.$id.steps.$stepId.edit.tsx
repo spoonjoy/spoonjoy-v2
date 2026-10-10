@@ -31,10 +31,10 @@ import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/nat
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import {
-  parseIngredients,
   IngredientParseError,
   type ParsedIngredient,
 } from "~/lib/ingredient-parse.server";
+import { parseIngredientsWithRulesFallback } from "~/lib/ingredient-parse-fallback.server";
 import {
   validateStepTitle,
   validateStepDescription,
@@ -213,7 +213,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const ingredientText = formData.get("ingredientText")?.toString() || "";
 
     try {
-      const parsedIngredients = await parseIngredients(
+      const parsedIngredients = await parseIngredientsWithRulesFallback(
         ingredientText,
         getIngredientParserEnv(context),
         { distinctId: userId }
@@ -303,44 +303,40 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       seenNames.add(draft.ingredientName);
     }
 
-    const rows = [];
-    for (const draft of drafts) {
-      const unit = await database.unit.upsert({
-        where: { name: draft.unitName },
-        update: {},
-        create: { name: draft.unitName },
-      });
-      const ingredientRef = await database.ingredientRef.upsert({
-        where: { name: draft.ingredientName },
-        update: {},
-        create: { name: draft.ingredientName },
-      });
-      const existingIngredient = await database.ingredient.findFirst({
-        where: { recipeId: id, ingredientRefId: ingredientRef.id },
-      });
-      if (existingIngredient) {
-        return data(
-          { errors: { ingredientName: `${draft.ingredientName} is already in the recipe` } },
-          { status: 400 }
-        );
-      }
-      rows.push({ quantity: draft.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
+    // A read only: the units and ingredient names are created with the add, in its batch.
+    const already = await ingredientAlreadyInRecipe(database, id, drafts.map((draft) => draft.ingredientName));
+    if (already) {
+      return data({ errors: { ingredientName: `${already} is already in the recipe` } }, { status: 400 });
     }
 
     const d1 = requestD1(context);
     if (d1) {
       try {
-        await addStepIngredientsOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum, rows });
+        await addStepIngredientsOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum, rows: drafts });
       } catch (error) {
         // Another request added one of these ingredients, or moved the step, in between;
-        // none were added.
+        // none were added, and no unit or ingredient name was created.
         if (!isD1GuardFailure(error)) throw error;
-        const taken = await ingredientAlreadyInRecipe(database, id, rows.map((row) => row.ingredientRefId));
+        const taken = await ingredientAlreadyInRecipe(database, id, drafts.map((draft) => draft.ingredientName));
         return taken
           ? data({ errors: { ingredientName: `${taken} is already in the recipe` } }, { status: 400 })
           : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
       }
     } else {
+      const rows = [];
+      for (const draft of drafts) {
+        const unit = await database.unit.upsert({
+          where: { name: draft.unitName },
+          update: {},
+          create: { name: draft.unitName },
+        });
+        const ingredientRef = await database.ingredientRef.upsert({
+          where: { name: draft.ingredientName },
+          update: {},
+          create: { name: draft.ingredientName },
+        });
+        rows.push({ quantity: draft.quantity, unitId: unit.id, ingredientRefId: ingredientRef.id });
+      }
       await database.$transaction([
         ...rows.map((row) =>
           database.ingredient.create({
@@ -388,37 +384,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ errors: ingredientErrors }, { status: 400 });
     }
 
-    // Get or create unit
-    let unit = await database.unit.findUnique({
-      where: { name: unitName.toLowerCase() },
-    });
+    const unitKey = unitName.toLowerCase();
+    const ingredientKey = ingredientName.toLowerCase();
 
-    if (!unit) {
-      unit = await database.unit.create({
-        data: { name: unitName.toLowerCase() },
-      });
-    }
-
-    // Get or create ingredient ref
-    let ingredientRef = await database.ingredientRef.findUnique({
-      where: { name: ingredientName.toLowerCase() },
-    });
-
-    if (!ingredientRef) {
-      ingredientRef = await database.ingredientRef.create({
-        data: { name: ingredientName.toLowerCase() },
-      });
-    }
-
-    // Check for duplicate ingredient in recipe
-    const existingIngredient = await database.ingredient.findFirst({
-      where: {
-        recipeId: id,
-        ingredientRefId: ingredientRef.id,
-      },
-    });
-
-    if (existingIngredient) {
+    // Check for duplicate ingredient in recipe. A read only: the unit and ingredient name
+    // are created with the add, in its batch.
+    if (await ingredientAlreadyInRecipe(database, id, [ingredientKey])) {
       return data(
         { errors: { ingredientName: "This ingredient is already in the recipe" } },
         { status: 400 }
@@ -433,16 +404,22 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           recipeId: id,
           stepId,
           stepNum: step.stepNum,
-          rows: [{ quantity, unitId: unit.id, ingredientRefId: ingredientRef.id }],
+          rows: [{ quantity, unitName: unitKey, ingredientName: ingredientKey }],
         });
       } catch (error) {
         // Another request added this ingredient, or moved the step, in between.
         if (!isD1GuardFailure(error)) throw error;
-        return await ingredientAlreadyInRecipe(database, id, [ingredientRef.id])
+        return await ingredientAlreadyInRecipe(database, id, [ingredientKey])
           ? data({ errors: { ingredientName: "This ingredient is already in the recipe" } }, { status: 400 })
           : data({ errors: { general: RECIPE_CHANGED_MESSAGE } }, { status: 409 });
       }
     } else {
+      const unit = await database.unit.upsert({ where: { name: unitKey }, update: {}, create: { name: unitKey } });
+      const ingredientRef = await database.ingredientRef.upsert({
+        where: { name: ingredientKey },
+        update: {},
+        create: { name: ingredientKey },
+      });
       await database.$transaction([
         database.ingredient.create({
           data: {
@@ -656,6 +633,8 @@ export default function EditStep() {
   }, [searchParams, setSearchParams, showToast]);
 
   // Ingredient input mode handlers
+  const parsedListShown = showIngredientForm && ingredientInputMode !== "manual" && parsedIngredients.length > 0;
+
   const handleModeChange = (mode: IngredientInputMode) => {
     setIngredientInputMode(mode);
   };
@@ -841,7 +820,7 @@ export default function EditStep() {
                     onParsed={handleParsed}
                     onSwitchToManual={() => setIngredientInputMode('manual')}
                   />
-                  {parsedIngredients.length > 0 && (
+                  {parsedListShown && (
                     <ParsedIngredientList
                       ingredients={parsedIngredients}
                       onEdit={handleEditParsed}
@@ -855,7 +834,8 @@ export default function EditStep() {
           )}
 
           {step.ingredients.length === 0 ? (
-            <RuledEmptyState title="No ingredients added yet" />
+            // Parsed ingredients waiting for "Add All" are not "none yet".
+            !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
           ) : (
             <div className="sj-list-ruled">
               {step.ingredients.map((ingredient) => (

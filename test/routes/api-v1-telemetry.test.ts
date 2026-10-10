@@ -1116,6 +1116,43 @@ describe("API v1 mutation and validation telemetry", () => {
     });
   });
 
+  it("captures account deletion and export operation names on authentication failures", async () => {
+    const deleteRequest = apiJsonRequest("DELETE", "me", "req_account_delete_missing_auth_operation", {}, {
+      confirmUsername: "raw-confirm-username",
+      password: "raw-delete-password",
+    });
+    const deleteResponse = await action(routeArgs(deleteRequest.request, "me").args);
+
+    expect(deleteResponse.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/me",
+      requestId: "req_account_delete_missing_auth_operation",
+      operation: "account.delete",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      privacyClass: "private",
+      forbidden: ["raw-confirm-username", "raw-delete-password", deleteRequest.bodyText],
+    });
+
+    const exportResponse = await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/me/export",
+      "req_account_export_missing_auth_operation",
+    ), "me/export").args);
+
+    expect(exportResponse.status).toBe(401);
+    expectApiV1ErrorEvent({
+      routeTemplate: "/api/v1/me/export",
+      requestId: "req_account_export_missing_auth_operation",
+      operation: "account.export",
+      status: 401,
+      errorCode: "authentication_required",
+      authMode: "anonymous",
+      privacyClass: "private",
+      forbidden: [],
+    });
+  });
+
   it("captures recipe spoon operations without recipe ids, spoon ids, mutation ids, or body values", async () => {
     const user = await db.user.create({ data: createTestUser() });
     const credential = await createApiCredential(db, user.id, "Telemetry Spoon Writer", {
@@ -2162,6 +2199,72 @@ describe("API v1 authenticated telemetry", () => {
         recipeFixture.recipe.title,
         recipeFixture.recipe.description,
       ],
+    });
+  });
+});
+
+describe("API v1 request event sampling", () => {
+  beforeEach(async () => {
+    vi.mocked(captureEvent).mockClear();
+    await cleanupDatabase();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await cleanupDatabase();
+  });
+
+  it("sends no event for a fast successful read the sample skips", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const context = routeArgs(publicRequest("http://localhost/api/v1/health", "req_sampled_out"), "health", {
+      SPOONJOY_API_EVENT_SAMPLE_RATE: "0.1",
+    });
+    const response = await loader(context.args);
+
+    expect(response.status).toBe(200);
+    expect(context.waitUntil).not.toHaveBeenCalled();
+    expect(apiV1Event("/api/v1/health", "req_sampled_out")).toBeUndefined();
+  });
+
+  it("records the sample rate on a fast successful read the sample keeps", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.05);
+    const context = routeArgs(publicRequest("http://localhost/api/v1/health", "req_sampled_in"), "health", {
+      SPOONJOY_API_EVENT_SAMPLE_RATE: "0.1",
+    });
+    await loader(context.args);
+
+    expect(apiV1Event("/api/v1/health", "req_sampled_in")?.properties).toMatchObject({
+      status: 200,
+      sample_rate: 0.1,
+      sample_reason: "sampled",
+    });
+  });
+
+  it("always sends an error, at sample rate 1, even when successes are sampled to zero", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const context = routeArgs(
+      apiRequest("http://localhost/api/v1/recipes/missing-recipe", "req_sampled_error"),
+      "recipes/missing-recipe",
+      { SPOONJOY_API_EVENT_SAMPLE_RATE: "0" },
+    );
+    const response = await loader(context.args);
+
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(apiV1Event("/api/v1/recipes/{id}", "req_sampled_error")?.properties).toMatchObject({
+      status: response.status,
+      sample_rate: 1,
+      sample_reason: "error",
+    });
+  });
+
+  it("sends every event at rate 1 when no sample rate is configured", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const context = routeArgs(publicRequest("http://localhost/api/v1/health", "req_unsampled"), "health");
+    await loader(context.args);
+
+    expect(apiV1Event("/api/v1/health", "req_unsampled")?.properties).toMatchObject({
+      sample_rate: 1,
+      sample_reason: "sampled",
     });
   });
 });

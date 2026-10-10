@@ -19,7 +19,7 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 | `list_api_tokens` | List API token metadata for the owner; token secrets are never returned. |
 | `revoke_api_token` | Revoke one owner-scoped API token. |
 | `search_spoonjoy` | Full-text search recipes, cookbooks, chefs, and the configured owner's private shopping list. |
-| `search_recipes` | Full-text search recipes by title, description, source URL, steps, ingredients, and optional chef email. |
+| `search_recipes` | Full-text search recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own email. |
 | `search_shopping_list` | Full-text search the configured owner's private shopping list by ingredient, unit, category, icon, and checked state. |
 | `get_recipe` | Fetch a recipe by id or title with ordered steps and ingredients. |
 | `create_recipe` | Create a recipe for the configured owner, including steps and ingredients. |

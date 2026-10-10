@@ -40,6 +40,7 @@ export const RECIPE_COVER_DISPLAY_SELECT = {
   createdById: true,
   sourceImageUrl: true,
   generationStatus: true,
+  generationStartedAt: true,
   failureReason: true,
   promptVersion: true,
   styleVersion: true,
@@ -134,6 +135,49 @@ export async function createCover(
   input: CreateCoverInput,
 ): Promise<RecipeCover> {
   return db.recipeCover.create({ data: coverCreateData(input) });
+}
+
+/**
+ * Starts regenerating a cover and returns the cover row the regeneration fills. A cover that
+ * already has a generated (stylized) image gets a child cover, a new entry in the recipe's cover
+ * history linked by `parentCoverId`, so that image is kept; regenerating used to overwrite it and
+ * set the cover's lineage to itself. A cover with no generated image to lose (a plain photo, or a
+ * failed attempt being retried) is regenerated in place, as before.
+ */
+export async function startRecipeCoverRegeneration(
+  db: PrismaClient,
+  cover: Pick<RecipeCover, "id" | "recipeId" | "imageUrl" | "stylizedImageUrl" | "sourceImageUrl" | "sourceType" | "sourceSpoonId">,
+  input: { createdById: string; rawPhotoUrl: string; promptAddition: string | null },
+): Promise<{ coverId: string; parentCoverId: string | undefined }> {
+  if (cover.stylizedImageUrl) {
+    const child = await createCover(db, {
+      recipeId: cover.recipeId,
+      imageUrl: cover.imageUrl,
+      sourceType: cover.sourceType as RecipeCoverSourceType,
+      sourceSpoonId: cover.sourceSpoonId,
+      status: "processing",
+      generationStatus: "processing",
+      createdById: input.createdById,
+      sourceImageUrl: input.rawPhotoUrl,
+      promptAddition: input.promptAddition,
+      parentCoverId: cover.id,
+    });
+    return { coverId: child.id, parentCoverId: cover.id };
+  }
+  await db.recipeCover.update({
+    where: { id: cover.id },
+    data: {
+      status: "processing",
+      generationStatus: "processing",
+      // The stuck-generation check (recipe-cover-stuck.server.ts) times a generation from here;
+      // without it, it would fall back to the cover's own, older createdAt.
+      generationStartedAt: new Date(),
+      failureReason: null,
+      sourceImageUrl: cover.sourceImageUrl ?? input.rawPhotoUrl,
+      promptAddition: input.promptAddition,
+    },
+  });
+  return { coverId: cover.id, parentCoverId: undefined };
 }
 
 /** `createCover` as a D1 statement for a write batch, with the same checks. */

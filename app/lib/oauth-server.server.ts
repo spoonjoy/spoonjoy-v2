@@ -8,9 +8,11 @@
  * the OAuth wire format on top.
  *
  * Access tokens are `ApiCredential`s minted at the token endpoint (see
- * `createApiCredential`). Generic OAuth app credentials expire quickly and
- * refresh through rotating `refresh_token` values; MCP-bound credentials stay
- * valid until the user disconnects the connection.
+ * `createApiCredential`). Generic OAuth app credentials expire after 15 minutes
+ * and MCP-bound credentials after 90 days; both refresh through rotating
+ * `refresh_token` values, each valid for 180 days. Presenting a refresh token
+ * that was already rotated, outside a short grace window, marks the whole
+ * connection compromised and revokes it.
  */
 
 import type { OAuthRefreshToken as OAuthRefreshTokenRecord, PrismaClient as PrismaClientType } from "@prisma/client";
@@ -61,8 +63,41 @@ export const DEFAULT_SCOPE = "kitchen:read";
 /** Authorization codes are single-use and expire fast (RFC 6749 §4.1.2). */
 const AUTH_CODE_TTL_SECONDS = 60;
 
-/** Generic OAuth access tokens are short-lived. MCP credentials are durable. */
+/** Generic OAuth access tokens are short-lived. */
 export const OAUTH_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+/**
+ * MCP-bound access tokens (the Claude connector) last 90 days. They were durable until the
+ * 2026-10-09 audit (commit 56784ee7 made them so after 15-minute tokens broke Claude's reauth);
+ * 90 days keeps the connector working while a leaked token stops working eventually.
+ */
+export const OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60;
+/** Each refresh token is refused 180 days after it was issued; rotation issues a fresh one. */
+export const OAUTH_REFRESH_TOKEN_TTL_SECONDS = 180 * 24 * 60 * 60;
+/**
+ * Refresh tokens issued before they had an expiry (migration 0031) have `expiresAt` NULL and are
+ * accepted until this cutover, 180 days after the change shipped. Rotating one issues a token with
+ * its own 180-day expiry, so a connection in use never reaches the cutover.
+ */
+export const LEGACY_OAUTH_REFRESH_EXPIRES_AT = new Date("2027-04-07T00:00:00.000Z");
+/**
+ * A refresh token replayed this soon after its rotation is refused without revoking the
+ * connection: two refreshes racing from the same client are not an attack. Later replays mean
+ * someone holds a copy of an old token.
+ */
+export const OAUTH_REFRESH_REUSE_GRACE_SECONDS = 60;
+/**
+ * The grace for Spoonjoy's own iPhone app. Its main app, root view and App Intents each refresh
+ * on their own, and a process the system suspended between reading the Keychain and sending its
+ * refresh can replay the token it read minutes later; revoking then would sign the chef out.
+ *
+ * Accepted risk: if an attacker redeems a stolen current refresh token first, the app's own
+ * replay inside this window revokes nothing, and the attacker keeps a renewing session until the
+ * chef signs out everywhere. It goes back to 60 seconds once the app shares one refresh across
+ * its processes (spoonjoy/spoonjoy-apple#113).
+ */
+export const FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS = 15 * 60;
+/** The iPhone app's client id; other servers than spoonjoy.app suffix it with `:<origin hash>`. */
+export const SPOONJOY_APPLE_NATIVE_CLIENT_ID = "spoonjoy-apple-native";
 // Each refresh ownership query binds every key twice (connectionKey + legacy id).
 // D1 allows 100 bound parameters, so 32 leaves headroom for fixed predicates,
 // mutation values, and adapter-added pagination bindings.
@@ -137,9 +172,17 @@ export async function revokeConnectorGrantsByConnectionKeys(
 }
 
 /** OAuth 2.1 error, carrying an RFC 6749 error code for the wire response. */
+/**
+ * Why a refresh was refused, for telemetry and triage only (never sent to the client):
+ * a replay inside the grace window, a replay that revoked the connection as compromised, or an
+ * expired refresh token that ended its connection.
+ */
+export type OAuthRefreshRefusal = "grace_replay" | "reuse_revoked" | "expired";
+
 export class OAuthError extends Error {
   code: string;
   status: number;
+  refusal?: OAuthRefreshRefusal;
   constructor(code: string, message: string, status = 400) {
     super(message);
     this.name = "OAuthError";
@@ -539,7 +582,7 @@ export async function consumeAuthorizationCode(
 export interface IssuedConnectorTokens {
   accessToken: string;
   refreshToken: string;
-  expiresIn: number | null;
+  expiresIn: number;
   scope: string;
   resource: string | null;
 }
@@ -811,12 +854,12 @@ export async function issueConnectorTokens(
     input.persistentMcpResource &&
     input.resource === input.persistentMcpResource,
   );
-  const expiresIn = persistentAccessToken ? null : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
+  const expiresIn = persistentAccessToken ? OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("access_insert", "before");
   }
   const { token: accessToken } = await createApiCredential(db, input.userId, oauthCredentialName(client.clientName), {
-    expiresAt: expiresIn === null ? null : new Date(now.getTime() + expiresIn * 1000),
+    expiresAt: new Date(now.getTime() + expiresIn * 1000),
     scopes: canonicalScope,
     oauthClientId: input.clientId,
     oauthIssuer: client.issuer,
@@ -841,6 +884,7 @@ export async function issueConnectorTokens(
       resource: input.resource ?? null,
       connectionKey,
       grantId,
+      expiresAt: new Date(now.getTime() + OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000),
     },
   });
   if (dependencies.onPersistenceMutation) {
@@ -942,6 +986,108 @@ export async function revokeConnectorRefreshToken(
   return wasActive;
 }
 
+function connectionKeyOf(record: Pick<OAuthRefreshTokenRecord, "id" | "connectionKey">): string {
+  return record.connectionKey ?? record.id;
+}
+
+/**
+ * Revokes every refresh token and access credential on one connection and moves its grant to
+ * `status`. Rotation keeps `connectionKey` across a connection's refresh tokens, and a legacy
+ * token without one is the connection's key itself. Access tokens minted before migration 0026
+ * carry no connection key, so, as on disconnect, every unkeyed access token this client holds
+ * for the chef is revoked with the connection: it cannot be told which connection it belongs to.
+ */
+async function revokeConnection(
+  db: Database,
+  record: OAuthRefreshTokenRecord,
+  now: Date,
+  grant: { status: "compromised"; statusReason: "refresh_reuse" } | { status: "revoked"; statusReason: "inactivity_expiry" },
+): Promise<void> {
+  const connectionKey = connectionKeyOf(record);
+  await db.oAuthRefreshToken.updateMany({
+    where: {
+      userId: record.userId,
+      clientId: record.clientId,
+      revokedAt: null,
+      OR: [{ connectionKey }, { connectionKey: null, id: connectionKey }],
+    },
+    data: { revokedAt: now },
+  });
+  await db.apiCredential.updateMany({
+    where: {
+      userId: record.userId,
+      oauthClientId: record.clientId,
+      revokedAt: null,
+      ...oauthAccessConnectionOwnership([connectionKey], now),
+    },
+    data: { revokedAt: now },
+  });
+  await db.oAuthGrant.updateMany({
+    where: { userId: record.userId, clientId: record.clientId, connectionKey, status: "active" },
+    data: { ...grant, statusChangedAt: now },
+  });
+}
+
+/**
+ * A refresh token that was already rotated came back. Within the grace window that is a race
+ * between two refreshes from the same client; later, someone holds a copy of an old token, so
+ * the whole connection is revoked and its grant marked compromised (OAuth 2.1 §4.3.1). A
+ * connection that was disconnected has nothing active left and stays as it is.
+ */
+async function revokeConnectionOnRefreshReuse(
+  db: Database,
+  record: OAuthRefreshTokenRecord,
+  now: Date,
+): Promise<OAuthRefreshRefusal | undefined> {
+  const revokedAt = record.revokedAt;
+  /* istanbul ignore if -- @preserve callers pass only revoked records */
+  if (!revokedAt) return undefined;
+  const graceSeconds = await isFirstPartyNativeClient(db, record.clientId)
+    ? FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS
+    : OAUTH_REFRESH_REUSE_GRACE_SECONDS;
+  if (now.getTime() - revokedAt.getTime() <= graceSeconds * 1000) return "grace_replay";
+  const connectionKey = connectionKeyOf(record);
+  const stillActive = await db.oAuthRefreshToken.count({
+    where: {
+      userId: record.userId,
+      clientId: record.clientId,
+      revokedAt: null,
+      OR: [{ connectionKey }, { connectionKey: null, id: connectionKey }],
+    },
+  });
+  if (stillActive === 0) return undefined;
+  await revokeConnection(db, record, now, { status: "compromised", statusReason: "refresh_reuse" });
+  return "reuse_revoked";
+}
+
+/**
+ * Spoonjoy's own iPhone app: the native sign-in client, or the reserved "Spoonjoy Apple" OAuth
+ * registration, which can only use Spoonjoy's own callback.
+ */
+async function isFirstPartyNativeClient(db: Database, clientId: string): Promise<boolean> {
+  if (clientId === SPOONJOY_APPLE_NATIVE_CLIENT_ID || clientId.startsWith(`${SPOONJOY_APPLE_NATIVE_CLIENT_ID}:`)) {
+    return true;
+  }
+  const client = await db.oAuthClient.findUnique({ where: { id: clientId }, select: { clientName: true, redirectUris: true } });
+  return client?.clientName?.trim().toLowerCase() === SPOONJOY_APPLE_OAUTH_CLIENT_NAME.toLowerCase()
+    && client.redirectUris.trim() === SPOONJOY_APPLE_OAUTH_REDIRECT_URI;
+}
+
+/** A refused refresh with the reason telemetry records, for triage. */
+function refusedRefresh(message: string, refusal: OAuthRefreshRefusal | undefined): OAuthError {
+  const error = new OAuthError("invalid_grant", message);
+  if (refusal) error.refusal = refusal;
+  return error;
+}
+
+/**
+ * A refresh token past its expiry ends its connection: nothing on it can be refreshed again.
+ * Every rotation renews the expiry, so this is an inactivity timeout, not an absolute one.
+ */
+async function expireConnection(db: Database, record: OAuthRefreshTokenRecord, now: Date): Promise<void> {
+  await revokeConnection(db, record, now, { status: "revoked", statusReason: "inactivity_expiry" });
+}
+
 /**
  * Exchange a refresh token for a new token pair (RFC 6749 §6) with rotation:
  * the presented token is revoked before a new pair is issued, so a replayed
@@ -958,11 +1104,21 @@ export async function rotateConnectorTokens(
   let record = await db.oAuthRefreshToken.findUnique({
     where: { tokenHash: await hashOAuthOpaqueToken(input.refreshToken) },
   });
-  if (!record || record.revokedAt) {
+  if (!record) {
     throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
+  }
+  if (record.revokedAt) {
+    const refusal = record.clientId === input.clientId
+      ? await revokeConnectionOnRefreshReuse(db, record, now)
+      : undefined;
+    throw refusedRefresh("Unknown or revoked refresh token", refusal);
   }
   if (record.clientId !== input.clientId) {
     throw new OAuthError("invalid_grant", "Refresh token was issued to a different client");
+  }
+  if ((record.expiresAt ?? LEGACY_OAUTH_REFRESH_EXPIRES_AT).getTime() <= now.getTime()) {
+    await expireConnection(db, record, now);
+    throw refusedRefresh("Refresh token expired", "expired");
   }
   if (record.issuer !== null && record.issuer !== input.issuer) {
     throw new OAuthError("invalid_grant", "Refresh token was issued by a different issuer");
@@ -1008,6 +1164,9 @@ export async function rotateConnectorTokens(
     await dependencies.onPersistenceMutation("parent_revoke", "after");
     await dependencies.onPersistenceMutation("replacement_insert", "before");
   }
+  // The access token issued with the presented refresh token stays valid until its own expiry:
+  // the iPhone app's processes refresh independently, and revoking it here would fail requests
+  // another process has in flight. Reuse detection, disconnect and account revocation end it.
   const replacement = await issueConnectorTokens(db, {
     userId: record.userId,
     clientId: record.clientId,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
+  isReservedUsername,
   normalizeUsername,
   usernameFormatError,
 } from "~/lib/username";
@@ -56,6 +57,12 @@ describe("usernameFormatError", () => {
     expect(usernameFormatError("...")).toBe(message);
     expect(usernameFormatError("-_-")).toBe(message);
     expect(usernameFormatError("_a_")).toBeNull();
+  });
+
+  it("reserves the deleted-chef username in any letter case", () => {
+    expect(isReservedUsername("deleted-chef")).toBe(true);
+    expect(isReservedUsername("DELETED-CHEF")).toBe(true);
+    expect(isReservedUsername("deleted-chef-1")).toBe(false);
   });
 
   it("rejects a username shaped like an account ID, whatever its case", () => {

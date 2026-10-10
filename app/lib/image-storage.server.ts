@@ -1,3 +1,4 @@
+import { photoVariantKeys } from "~/lib/photo-variants";
 import { FOOD_IMAGE_TYPES, IMAGE_MAX_FILE_SIZE } from "~/lib/recipe-image";
 import {
   captureEvent,
@@ -10,6 +11,7 @@ export const RECIPE_IMAGE_TYPES = FOOD_IMAGE_TYPES;
 
 const JPEG_SOI = 0xd8;
 const JPEG_APP1 = 0xe1;
+const JPEG_APP13 = 0xed;
 const JPEG_SOS = 0xda;
 const JPEG_EOI = 0xd9;
 const EXIF_HEADER = new Uint8Array([0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
@@ -186,10 +188,6 @@ export function getImageExtension(fileName: string): string {
   return extension || "jpg";
 }
 
-function isJpegUpload(file: File): boolean {
-  return file.type === "image/jpeg" || /\.(jpe?g)$/i.test(file.name);
-}
-
 function concatBytes(chunks: Uint8Array[], totalLength: number): Uint8Array {
   const result = new Uint8Array(totalLength);
   let offset = 0;
@@ -269,7 +267,8 @@ function parseExifOrientation(app1Payload: Uint8Array): number | null {
   return null;
 }
 
-function buildOrientationApp1Segment(orientation: number): Uint8Array {
+/** An Exif payload ("Exif\0\0" + big-endian TIFF) whose only tag is Orientation. */
+function buildOrientationExifPayload(orientation: number): Uint8Array {
   const payload = new Uint8Array(32);
   payload.set(EXIF_HEADER, 0);
   payload[6] = 0x4d;
@@ -292,7 +291,11 @@ function buildOrientationApp1Segment(orientation: number): Uint8Array {
   payload[23] = 0x01;
   payload[24] = 0x00;
   payload[25] = orientation;
+  return payload;
+}
 
+function buildOrientationApp1Segment(orientation: number): Uint8Array {
+  const payload = buildOrientationExifPayload(orientation);
   const segmentLength = payload.length + 2;
   return new Uint8Array([
     0xff,
@@ -303,11 +306,8 @@ function buildOrientationApp1Segment(orientation: number): Uint8Array {
   ]);
 }
 
+/** Called only for bytes already sniffed as JPEG, so they start with the SOI marker. */
 function stripJpegApp1Segments(bytes: Uint8Array): Uint8Array {
-  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== JPEG_SOI) {
-    return bytes;
-  }
-
   const keptSegments: Uint8Array[] = [];
   let offset = 2;
   let stripped = false;
@@ -325,7 +325,10 @@ function stripJpegApp1Segments(bytes: Uint8Array): Uint8Array {
       return bytes;
     }
 
-    if (marker === JPEG_APP1) {
+    if (marker === JPEG_APP13) {
+      // Photoshop IPTC block: can carry a city, a location and a byline.
+      stripped = true;
+    } else if (marker === JPEG_APP1) {
       stripped = true;
       orientation ??= parseExifOrientation(bytes.subarray(offset + 4, segmentEnd));
     } else {
@@ -350,13 +353,198 @@ function stripJpegApp1Segments(bytes: Uint8Array): Uint8Array {
   return concatBytes(chunks, totalLength);
 }
 
-async function stripUploadMetadata(file: File): Promise<File> {
-  if (!isJpegUpload(file)) {
-    return file;
+/**
+ * Orientation from an Exif block stored without the JPEG "Exif\0\0" prefix (PNG eXIf and WebP
+ * EXIF chunks are bare TIFF), tolerating writers that include the prefix anyway.
+ */
+function parseBareExifOrientation(payload: Uint8Array): number | null {
+  if (hasPrefix(payload, EXIF_HEADER)) {
+    return parseExifOrientation(payload);
+  }
+  return parseExifOrientation(concatBytes([EXIF_HEADER, payload], EXIF_HEADER.length + payload.length));
+}
+
+function bareOrientationExif(orientation: number): Uint8Array {
+  return buildOrientationExifPayload(orientation).subarray(EXIF_HEADER.length);
+}
+
+const PNG_SIGNATURE_LENGTH = 8;
+/** PNG ancillary chunks that carry Exif (with GPS), free text, XMP (iTXt "XML:com.adobe.xmp") or a timestamp. */
+const PNG_METADATA_CHUNKS = new Set(["eXIf", "tEXt", "zTXt", "iTXt", "tIME"]);
+
+let pngCrcTable: Uint32Array | null = null;
+
+function pngCrc32(bytes: Uint8Array): number {
+  if (!pngCrcTable) {
+    pngCrcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let c = n;
+      for (let k = 0; k < 8; k += 1) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      pngCrcTable[n] = c >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = pngCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
+  const chunk = new Uint8Array(12 + data.length);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  for (let index = 0; index < 4; index += 1) {
+    chunk[4 + index] = type.charCodeAt(index);
+  }
+  chunk.set(data, 8);
+  view.setUint32(8 + data.length, pngCrc32(chunk.subarray(4, 8 + data.length)));
+  return chunk;
+}
+
+function chunkTypeAt(bytes: Uint8Array, offset: number): string {
+  return String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+}
+
+/**
+ * Drops PNG metadata chunks. Every other chunk is copied byte for byte, so its CRC stays valid.
+ * An eXIf chunk with an orientation is replaced by one holding only that orientation, because
+ * browsers apply it when drawing. Bytes after IEND are dropped. A file whose chunk structure is
+ * broken before IEND is stored unchanged, as malformed JPEGs are, rather than guessed at: real
+ * camera and phone files are well formed, and only the uploader's own crafted file is affected.
+ */
+function stripPngMetadata(bytes: Uint8Array): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const kept: Uint8Array[] = [bytes.subarray(0, PNG_SIGNATURE_LENGTH)];
+  let offset = PNG_SIGNATURE_LENGTH;
+  let changed = false;
+
+  while (offset < bytes.length) {
+    if (offset + 12 > bytes.length) {
+      return bytes;
+    }
+    const chunkEnd = offset + 12 + view.getUint32(offset);
+    if (chunkEnd > bytes.length) {
+      return bytes;
+    }
+
+    const type = chunkTypeAt(bytes, offset + 4);
+    if (PNG_METADATA_CHUNKS.has(type)) {
+      changed = true;
+      const orientation =
+        type === "eXIf" ? parseBareExifOrientation(bytes.subarray(offset + 8, chunkEnd - 4)) : null;
+      if (orientation !== null) {
+        kept.push(buildPngChunk("eXIf", bareOrientationExif(orientation)));
+      }
+    } else {
+      kept.push(bytes.subarray(offset, chunkEnd));
+    }
+    offset = chunkEnd;
+
+    if (type === "IEND") {
+      changed ||= offset < bytes.length;
+      break;
+    }
   }
 
+  if (!changed) {
+    return bytes;
+  }
+  return concatBytes(kept, kept.reduce((sum, chunk) => sum + chunk.length, 0));
+}
+
+const WEBP_HEADER_LENGTH = 12;
+const WEBP_VP8X_EXIF_FLAG = 0x08;
+const WEBP_VP8X_XMP_FLAG = 0x04;
+
+function buildWebpChunk(fourcc: string, data: Uint8Array): Uint8Array {
+  const chunk = new Uint8Array(8 + data.length + (data.length % 2));
+  for (let index = 0; index < 4; index += 1) {
+    chunk[index] = fourcc.charCodeAt(index);
+  }
+  new DataView(chunk.buffer).setUint32(4, data.length, true);
+  chunk.set(data, 8);
+  return chunk;
+}
+
+/**
+ * Drops WebP "EXIF" and "XMP " chunks and clears their flags in the VP8X header. ICCP, ALPH,
+ * animation and bitstream chunks are copied byte for byte. An EXIF chunk with an orientation is
+ * replaced by one holding only that orientation (its flag stays set): most browsers ignore WebP
+ * Exif orientation, but keeping it means no browser draws the photo differently after upload.
+ * Bytes past the RIFF size are dropped. A file whose chunk structure is broken inside the RIFF
+ * size is stored unchanged, as malformed JPEGs and PNGs are.
+ */
+function stripWebpMetadata(bytes: Uint8Array): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const riffEnd = Math.min(bytes.length, 8 + view.getUint32(4, true));
+  const kept: Uint8Array[] = [];
+  let offset = WEBP_HEADER_LENGTH;
+  let changed = riffEnd < bytes.length;
+  let vp8xIndex = -1;
+  let keptExif = false;
+
+  while (offset < riffEnd) {
+    if (offset + 8 > riffEnd) {
+      return bytes;
+    }
+    const dataLength = view.getUint32(offset + 4, true);
+    const chunkEnd = offset + 8 + dataLength + (dataLength % 2);
+    if (chunkEnd > riffEnd) {
+      return bytes;
+    }
+
+    const fourcc = chunkTypeAt(bytes, offset);
+    if (fourcc === "EXIF" || fourcc === "XMP ") {
+      changed = true;
+      const orientation =
+        fourcc === "EXIF" ? parseBareExifOrientation(bytes.subarray(offset + 8, offset + 8 + dataLength)) : null;
+      if (orientation !== null) {
+        kept.push(buildWebpChunk("EXIF", bareOrientationExif(orientation)));
+        keptExif = true;
+      }
+    } else {
+      if (fourcc === "VP8X" && vp8xIndex === -1 && dataLength >= 1) {
+        vp8xIndex = kept.length;
+      }
+      kept.push(bytes.subarray(offset, chunkEnd));
+    }
+    offset = chunkEnd;
+  }
+
+  if (!changed) {
+    return bytes;
+  }
+
+  if (vp8xIndex !== -1) {
+    const vp8x = Uint8Array.from(kept[vp8xIndex]);
+    vp8x[8] &= ~(WEBP_VP8X_XMP_FLAG | (keptExif ? 0 : WEBP_VP8X_EXIF_FLAG));
+    kept[vp8xIndex] = vp8x;
+  }
+
+  const bodyLength = kept.reduce((sum, chunk) => sum + chunk.length, 0);
+  const header = Uint8Array.from(bytes.subarray(0, WEBP_HEADER_LENGTH));
+  new DataView(header.buffer).setUint32(4, 4 + bodyLength, true);
+  return concatBytes([header, ...kept], WEBP_HEADER_LENGTH + bodyLength);
+}
+
+/**
+ * Removes location and other private metadata from an upload before it is stored and served
+ * publicly. The format is taken from the bytes, not the declared type or file name.
+ */
+async function stripUploadMetadata(file: File): Promise<File> {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const stripped = stripJpegApp1Segments(bytes);
+  const detectedType = detectImageMimeType(bytes);
+  const stripped =
+    detectedType === "image/jpeg"
+      ? stripJpegApp1Segments(bytes)
+      : detectedType === "image/png"
+        ? stripPngMetadata(bytes)
+        : detectedType === "image/webp"
+          ? stripWebpMetadata(bytes)
+          : bytes;
 
   if (stripped === bytes) {
     return file;
@@ -420,6 +608,8 @@ export async function deleteStoredImage({ bucket, imageUrl }: DeleteStoredImageO
   }
 
   await bucket.delete(key);
+  // A deleted photo takes its size variants with it; R2 ignores keys that were never generated.
+  await bucket.delete(photoVariantKeys(key));
   return true;
 }
 

@@ -10,6 +10,7 @@
 
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { getUserId } from "~/lib/session.server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   clientAllowsRedirect,
   consumeAuthorizationCode,
@@ -19,7 +20,9 @@ import {
   hashOAuthOpaqueToken,
   issueConnectorTokens,
   normalizeScope,
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS,
   OAuthError,
+  type OAuthRefreshRefusal,
   registerOAuthClient,
   revokeConnectorRefreshToken,
   rotateConnectorTokens,
@@ -82,16 +85,16 @@ function bodyTooLargeError(): OAuthError {
 }
 
 async function readLimitedBodyText(request: Request, maxBytes: number): Promise<string> {
-  const declaredLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw bodyTooLargeError();
+  // Streams the body and stops as soon as it passes maxBytes, so a body with no Content-Length is
+  // never buffered whole.
+  try {
+    return await readLimitedTextBody(request, maxBytes);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      throw bodyTooLargeError();
+    }
+    throw error;
   }
-
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
-    throw bodyTooLargeError();
-  }
-  return text;
 }
 
 async function readLimitedJsonBody(request: Request): Promise<RegisterBody> {
@@ -360,11 +363,9 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
     token_type: "Bearer",
+    expires_in: tokens.expiresIn,
     scope: tokens.scope,
   };
-  if (tokens.expiresIn !== null) {
-    payload.expires_in = tokens.expiresIn;
-  }
 
   return Response.json(payload, {
     headers: {
@@ -374,8 +375,10 @@ function tokenResponse(tokens: IssuedConnectorTokens): Response {
   });
 }
 
+// "persistent" names the long-lived MCP-bound access token (90 days), as distinct from a
+// generic client's 15-minute one. The telemetry value predates MCP tokens having an expiry.
 function tokenLifetime(tokens: IssuedConnectorTokens): "expiring" | "persistent" {
-  return tokens.expiresIn === null ? "persistent" : "expiring";
+  return tokens.expiresIn > OAUTH_ACCESS_TOKEN_TTL_SECONDS ? "persistent" : "expiring";
 }
 
 /**
@@ -481,7 +484,9 @@ export async function handleOAuthToken(
         {
           outcome: "error",
           grantType: safeGrantType,
+          clientId,
           errorCode: error.code,
+          ...(error.refusal ? { refusal: error.refusal } : {}),
         },
       );
     }
@@ -641,6 +646,8 @@ export interface OAuthTokenTelemetryMetadata {
   scope?: string;
   resource?: string;
   tokenLifetime?: "expiring" | "persistent";
+  /** Why a refresh was refused: a replay in the grace window, reuse that revoked the connection, or expiry. */
+  refusal?: OAuthRefreshRefusal;
 }
 
 const oauthTokenTelemetrySymbol = Symbol("spoonjoy.oauth.token.telemetry");

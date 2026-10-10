@@ -24,7 +24,10 @@ export interface OpenAIRecipeLlmClient {
     completions: {
       create: (args: {
         model: string;
-        messages: { role: "system" | "user"; content: string }[];
+        messages: Array<
+          | { role: "system"; content: string }
+          | { role: "user"; content: string | RecipeLlmUserContentPart[] }
+        >;
         response_format: { type: "json_schema"; json_schema: unknown };
       }) => Promise<{
         choices: Array<{
@@ -38,20 +41,33 @@ export interface OpenAIRecipeLlmClient {
   };
 }
 
+export type RecipeLlmUserContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail: "high" } };
+
 export const RECIPE_LLM_PROVIDER = "openai";
+
+export interface ExtractedRecipe {
+  title: string;
+  description: string | null;
+  servings: string | null;
+  ingredients: string[];
+  steps: string[];
+}
+
+/** A photo of a recipe, as a base64 `data:` URL the model can read. */
+export interface RecipePhoto {
+  dataUrl: string;
+}
 
 export interface RecipeLlmRunner {
   /** LLM provider backing this runner (always `openai` today). */
   readonly provider?: string;
   /** Resolved model id (e.g. `gpt-4o-mini`). */
   readonly model?: string;
-  extract(text: string): Promise<{
-    title: string;
-    description: string | null;
-    servings: string | null;
-    ingredients: string[];
-    steps: string[];
-  }>;
+  extract(text: string): Promise<ExtractedRecipe>;
+  /** Reads a recipe out of a photo of a card, a cookbook page or a screen. */
+  extractFromPhoto?(photo: RecipePhoto): Promise<ExtractedRecipe>;
 }
 
 export class RecipeLlmError extends Error {
@@ -101,6 +117,13 @@ const RECIPE_RESPONSE_JSON_SCHEMA = {
 const SYSTEM_PROMPT =
   "You are an expert recipe parser. Extract a recipe from the given plain text. " +
   "If no recipe is present, return empty strings/arrays. Output strictly the schema fields. English only.";
+
+const PHOTO_SYSTEM_PROMPT =
+  "You are an expert recipe parser. Read the recipe in the photo: a handwritten card, a printed page or a screen. " +
+  "Transcribe the title, ingredients and steps as written, one ingredient or step per array item, without inventing anything. " +
+  "If the photo holds no recipe, return empty strings/arrays. Output strictly the schema fields. English only.";
+
+const PHOTO_USER_PROMPT = "Read the recipe in this photo.";
 
 function decodeEntities(s: string): string {
   return s
@@ -193,51 +216,68 @@ export function createOpenAIRecipeLlmRunner(
   const timeout = resolveTimeout(env.RECIPE_LLM_TIMEOUT_MS);
   const factory = opts.clientFactory ?? defaultClientFactory;
   const client = factory({ apiKey, timeout });
+  async function complete(
+    messages: Parameters<OpenAIRecipeLlmClient["chat"]["completions"]["create"]>[0]["messages"],
+  ): Promise<ExtractedRecipe> {
+    let response;
+    try {
+      response = await client.chat.completions.create({
+        model,
+        messages,
+        response_format: {
+          type: "json_schema",
+          json_schema: RECIPE_RESPONSE_JSON_SCHEMA,
+        },
+      });
+    } catch (err) {
+      throw mapOpenAIError(err);
+    }
+    const choice = response.choices[0];
+    if (!choice) {
+      throw new RecipeLlmError("OpenAI returned no choices");
+    }
+    if (choice.message.refusal) {
+      throw new RecipeLlmError(`OpenAI refused: ${choice.message.refusal}`);
+    }
+    const content = choice.message.content;
+    if (!content) {
+      throw new RecipeLlmError("OpenAI returned empty content");
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch (err) {
+      throw new RecipeLlmError("OpenAI returned non-JSON content", err);
+    }
+    const validated = ParsedLlmRecipeSchema.safeParse(parsed);
+    if (!validated.success) {
+      throw new RecipeLlmError(
+        `OpenAI response failed schema validation: ${validated.error.message}`,
+        validated.error,
+      );
+    }
+    return validated.data;
+  }
   return {
     provider: RECIPE_LLM_PROVIDER,
     model,
-    async extract(text) {
-      let response;
-      try {
-        response = await client.chat.completions.create({
-          model,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: text },
+    extract(text) {
+      return complete([
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: text },
+      ]);
+    },
+    extractFromPhoto(photo) {
+      return complete([
+        { role: "system", content: PHOTO_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: PHOTO_USER_PROMPT },
+            { type: "image_url", image_url: { url: photo.dataUrl, detail: "high" } },
           ],
-          response_format: {
-            type: "json_schema",
-            json_schema: RECIPE_RESPONSE_JSON_SCHEMA,
-          },
-        });
-      } catch (err) {
-        throw mapOpenAIError(err);
-      }
-      const choice = response.choices[0];
-      if (!choice) {
-        throw new RecipeLlmError("OpenAI returned no choices");
-      }
-      if (choice.message.refusal) {
-        throw new RecipeLlmError(`OpenAI refused: ${choice.message.refusal}`);
-      }
-      const content = choice.message.content;
-      if (!content) {
-        throw new RecipeLlmError("OpenAI returned empty content");
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(content);
-      } catch (err) {
-        throw new RecipeLlmError("OpenAI returned non-JSON content", err);
-      }
-      const validated = ParsedLlmRecipeSchema.safeParse(parsed);
-      if (!validated.success) {
-        throw new RecipeLlmError(
-          `OpenAI response failed schema validation: ${validated.error.message}`,
-          validated.error,
-        );
-      }
-      return validated.data;
+        },
+      ]);
     },
   };
 }

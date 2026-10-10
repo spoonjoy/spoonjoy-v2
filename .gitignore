@@ -48,6 +48,7 @@ storybook-pages-deploy/
 
 # Playwright
 playwright-report/
+screens/
 test-results/
 .playwright/
 e2e/.auth/
@@ -62,3 +63,19 @@ api-live-smoke-artifacts/
 
 # Claude Code local runtime state (e.g. scheduled_tasks.lock)
 .claude/
+
+# Agent working residue (task docs, evidence and logs belong on the agent's desk, not in git)
+/worker/
+/spoonjoy/
+/agent/
+/root/
+/slugger/
+/assistant/
+/feedback/
+/.progress/
+/.tasks/*
+!/.tasks/templates/
+/AUTOPILOT-STATE.md
+/auth-phase1-prompt.txt
+/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*/
+*.log
