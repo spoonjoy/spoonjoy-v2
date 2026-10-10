@@ -2609,7 +2609,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
       // Form should be hidden
       expect(screen.queryByPlaceholderText(/Enter ingredients/)).not.toBeInTheDocument();
-      // Button should be back to "+ Add Ingredient"
+      // Button should be back to "+ Add ingredient"
       expect(screen.getByRole("button", { name: "+ Add ingredient" })).toBeInTheDocument();
     });
 
@@ -3927,7 +3927,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         render(<Stub initialEntries={["/recipes/recipe-1/steps/step-1/edit"]} />);
 
         expect(await screen.findByText("No ingredients added yet")).toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "+ Add Ingredient" }));
+        fireEvent.click(screen.getByRole("button", { name: "+ Add ingredient" }));
         fireEvent.change(screen.getByPlaceholderText(/Enter ingredients/), { target: { value: "2 cups flour" } });
         expect(await screen.findByRole("button", { name: /Add all/ }, { timeout: 3000 })).toBeInTheDocument();
         expect(screen.queryByText("No ingredients added yet")).not.toBeInTheDocument();
