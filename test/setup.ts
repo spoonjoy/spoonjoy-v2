@@ -91,7 +91,81 @@ function testDatabaseAdapter(Adapter: typeof import('@prisma/adapter-better-sqli
   if (!url.startsWith('file:')) throw new Error(`The test database URL is not a file URL: ${url}`);
   const path = url.slice('file:'.length).split('?')[0];
   // The engine waited up to 60 s for a lock (socket_timeout=60 in workerDatabaseUrl).
-  return new Adapter({ url: path, timeout: 60_000 }, { timestampFormat: 'unixepoch-ms' });
+  return takingDatabaseTurns(new Adapter({ url: path, timeout: 60_000 }, { timestampFormat: 'unixepoch-ms' }));
+}
+
+type TestAdapterFactory = InstanceType<typeof import('@prisma/adapter-better-sqlite3').PrismaBetterSQLite3>;
+type TestAdapter = Awaited<ReturnType<TestAdapterFactory['connect']>>;
+type TestTransaction = Awaited<ReturnType<TestAdapter['startTransaction']>>;
+
+// better-sqlite3 waits for a lock synchronously, which stops the event loop. When one client has
+// written inside a transaction and is awaiting anything (a timer, a test's race hook), another
+// client's write in the same process would block the thread until the busy timeout, and the first
+// could never commit. So every client waits its turn here, asynchronously: a statement outside a
+// transaction takes the turn while it runs, a transaction holds it from BEGIN to commit or rollback,
+// and a client already holding the turn runs its own statements as before.
+const databaseTurn = (() => {
+  let holder: object | null = null;
+  let depth = 0;
+  const waiting: Array<() => void> = [];
+  async function acquire(owner: object) {
+    while (holder !== null && holder !== owner) await new Promise<void>((resolve) => waiting.push(resolve));
+    holder = owner;
+    depth += 1;
+  }
+  function release(owner: object) {
+    if (holder !== owner) return;
+    depth -= 1;
+    if (depth === 0) {
+      holder = null;
+      for (const resolve of waiting.splice(0)) resolve();
+    }
+  }
+  async function run<T>(owner: object, task: () => Promise<T>): Promise<T> {
+    await acquire(owner);
+    try {
+      return await task();
+    } finally {
+      release(owner);
+    }
+  }
+  return { acquire, release, run };
+})();
+
+function takingDatabaseTurns(factory: TestAdapterFactory): TestAdapterFactory {
+  const turns = (adapter: TestAdapter): TestAdapter => {
+    const owner = {};
+    return Object.assign(Object.create(adapter) as TestAdapter, {
+      queryRaw: (query: Parameters<TestAdapter['queryRaw']>[0]) => databaseTurn.run(owner, () => adapter.queryRaw(query)),
+      executeRaw: (query: Parameters<TestAdapter['executeRaw']>[0]) => databaseTurn.run(owner, () => adapter.executeRaw(query)),
+      executeScript: (script: string) => databaseTurn.run(owner, () => adapter.executeScript(script)),
+      async startTransaction(isolationLevel?: Parameters<TestAdapter['startTransaction']>[0]): Promise<TestTransaction> {
+        await databaseTurn.acquire(owner);
+        let transaction: TestTransaction;
+        try {
+          transaction = await adapter.startTransaction(isolationLevel);
+        } catch (error) {
+          databaseTurn.release(owner);
+          throw error;
+        }
+        let ended = false;
+        const end = () => {
+          if (!ended) {
+            ended = true;
+            databaseTurn.release(owner);
+          }
+        };
+        return Object.assign(Object.create(transaction) as TestTransaction, {
+          commit: () => transaction.commit().finally(end),
+          rollback: () => transaction.rollback().finally(end),
+        });
+      },
+    });
+  };
+  return Object.assign(Object.create(factory) as TestAdapterFactory, {
+    connect: async () => turns(await factory.connect()),
+    connectToShadowDb: async () => turns(await factory.connectToShadowDb()),
+  });
 }
 
 // Extend toBeDisabled to also check aria-disabled for better accessibility testing
