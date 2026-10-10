@@ -245,11 +245,11 @@ describe("recipes.$id action on a D1 binding", () => {
     expect(platform.getRequestDb).not.toHaveBeenCalled();
   });
 
-  it("leaves other intents, and a cookbook intent without a cookbook, to the Prisma path", async () => {
+  it("leaves an unknown intent, and a cookbook intent without a cookbook, to the Prisma path", async () => {
     platform.getRequestDb.mockImplementation(async () => db);
     // The chef does not own the recipe, so the owner check answers 403.
     await expect(post({ intent: "addToCookbook" })).rejects.toMatchObject({ status: 403 });
-    await expect(post({ intent: "createFirstPhotoCover" })).rejects.toMatchObject({ status: 403 });
+    await expect(post({ intent: "notAnIntent" })).rejects.toMatchObject({ status: 403 });
     expect(platform.getRequestDb).toHaveBeenCalledTimes(2);
   });
 });

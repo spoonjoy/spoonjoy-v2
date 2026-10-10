@@ -79,6 +79,35 @@ function recipeCoverUpdate(
   return [`${set} AND ${STILL_WITHOUT_REAL_COVER}`, ...values, previousActiveCoverId];
 }
 
+/** Inserts a cook's spoon, cooked now unless a time is given. */
+export function spoonInsertStatement(
+  spoon: {
+    id: string;
+    chefId: string;
+    recipeId: string;
+    cookedAt: Date | null;
+    photoUrl: string | null;
+    note: string | null;
+    nextTime: string | null;
+  },
+  nowDate: Date,
+): D1Query {
+  const now = d1Timestamp(nowDate);
+  return [
+    `INSERT INTO "RecipeSpoon" ("id", "chefId", "recipeId", "cookedAt", "photoUrl", "note", "nextTime", "createdAt", "updatedAt")
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    spoon.id,
+    spoon.chefId,
+    spoon.recipeId,
+    spoon.cookedAt ? d1Timestamp(spoon.cookedAt) : now,
+    spoon.photoUrl,
+    spoon.note,
+    spoon.nextTime,
+    now,
+    now,
+  ];
+}
+
 /**
  * Adds a cook's spoon to a recipe on D1. Answers 404 for a recipe that does not exist or is in the
  * trash; otherwise it decides and writes as `createSpoon` followed by the spoon-cover step on the Prisma path.
@@ -131,19 +160,10 @@ export async function createSpoonOnD1(
   const now = d1Timestamp(nowDate);
   const spoonId = input.id ?? crypto.randomUUID();
   const writes: D1Query[] = [
-    [
-      `INSERT INTO "RecipeSpoon" ("id", "chefId", "recipeId", "cookedAt", "photoUrl", "note", "nextTime", "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      spoonId,
-      input.chefId,
-      input.recipeId,
-      input.cookedAt ? d1Timestamp(input.cookedAt) : now,
-      photoUrl,
-      note,
-      nextTime,
-      now,
-      now,
-    ],
+    spoonInsertStatement(
+      { id: spoonId, chefId: input.chefId, recipeId: input.recipeId, cookedAt: input.cookedAt ?? null, photoUrl, note, nextTime },
+      nowDate,
+    ),
   ];
   let cover: { id: string } | null = null;
   if (decision.shouldCreateCover && photoUrl) {
