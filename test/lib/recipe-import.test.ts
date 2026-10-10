@@ -1,3 +1,4 @@
+import { IMPORT_DAILY_CAP } from "~/lib/image-gen-ledger.server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { readFile } from "node:fs/promises";
@@ -90,17 +91,9 @@ function gifBytes(): Uint8Array {
 }
 
 function makeIngredientParser(): ImportRecipeDeps["ingredientParser"] {
-  // Deterministic: yields one parsed ingredient per input string.
-  return vi.fn(async (text: string): Promise<ParsedIngredient[]> => {
-    if (!text.trim()) return [];
-    return [
-      {
-        quantity: 1,
-        unit: "whole",
-        ingredientName: text.trim(),
-      },
-    ];
-  });
+  // Deterministic: yields one parsed ingredient per input line, like the real parser.
+  return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+    text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ quantity: 1, unit: "whole", ingredientName: line })));
 }
 
 function makeLlmRunner(
@@ -488,6 +481,53 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(result.existingRecipeId).toBe(existing.id);
     });
 
+    it("stores one form of a link, so the same link written differently is a duplicate on every import path", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+
+      const first = await importRecipeFromUrl(
+        { url: "  https://Example.com/r?utm_source=newsletter&utm_medium=email#step-2 ", chefId: chef.id },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      const stored = await db.recipe.findUniqueOrThrow({ where: { id: first.recipeId! }, select: { sourceUrl: true } });
+      expect(stored.sourceUrl).toBe("https://example.com/r");
+
+      const again = await importRecipeFromUrl(
+        { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      expect(again.existingRecipeId).toBe(first.recipeId);
+
+      const fromJsonLd = await importRecipeFromSource(
+        {
+          chefId: chef.id,
+          dryRun: true,
+          source: {
+            type: "json-ld",
+            sourceUrl: "HTTPS://EXAMPLE.COM/r#top",
+            jsonLd: { "@type": "Recipe", name: "Pasta", recipeIngredient: ["1 cup flour"], recipeInstructions: ["Mix"] },
+          },
+        },
+        baseDeps(),
+      );
+      expect(fromJsonLd.existingRecipeId).toBe(first.recipeId);
+      expect(fromJsonLd.recipe.sourceUrl).toBe("https://example.com/r");
+    });
+
+    it("still finds a recipe whose link was stored before links were normalized", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const legacy = await db.recipe.create({
+        data: { title: "Old Import", chefId: chef.id, sourceUrl: "https://Example.com/r" },
+      });
+
+      const result = await importRecipeFromUrl(
+        { url: "https://Example.com/r", chefId: chef.id, dryRun: true },
+        baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
+      );
+      expect(result.existingRecipeId).toBe(legacy.id);
+    });
+
     it("existingRecipeId=null when only match is soft-deleted", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
@@ -559,17 +599,49 @@ describe("importRecipeFromUrl — extraction paths", () => {
       expect(count).toBe(0);
     });
 
-    it("does not consume rate-limit quota", async () => {
+    // A dry run still runs the extraction model, so it spends a unit like a real import.
+    it("consumes one unit of the daily import quota and the global AI budget", async () => {
       const fixture = await loadFixture("nyt-style-jsonld.html");
       const chef = await makeChef();
       await importRecipeFromUrl(
         { url: "https://example.com/r", chefId: chef.id, dryRun: true },
         baseDeps({ fetchImpl: makeFetchImpl(fixture) }),
       );
-      const count = await db.imageGenLedger.count({
+      const ledger = await db.imageGenLedger.findMany({
         where: { userId: chef.id, kind: "import" },
       });
-      expect(count).toBe(0);
+      expect(ledger.map((row) => row.count)).toEqual([1]);
+      const budget = await db.imageGenDailyBudget.findMany();
+      expect(budget.map((row) => row.count)).toEqual([1]);
+    });
+
+    it("is refused with 429, before running the model, once the daily import quota is spent", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      const now = new Date(Date.UTC(2026, 9, 9, 12, 0));
+      await db.imageGenLedger.create({
+        data: { userId: chef.id, kind: "import", bucketStart: new Date(Date.UTC(2026, 9, 9)), count: IMPORT_DAILY_CAP },
+      });
+      const llmRunner = makeLlmRunner();
+      const fetchImpl = makeFetchImpl(fixture);
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+          baseDeps({ fetchImpl, llmRunner, now: () => now }),
+        ),
+      ).rejects.toMatchObject({ code: "rate-limited", status: 429 });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("is refused with 429 when the global AI budget is spent", async () => {
+      const fixture = await loadFixture("nyt-style-jsonld.html");
+      const chef = await makeChef();
+      await expect(
+        importRecipeFromUrl(
+          { url: "https://example.com/r", chefId: chef.id, dryRun: true },
+          baseDeps({ fetchImpl: makeFetchImpl(fixture), env: { OPENAI_API_KEY: "test-key", SPOONJOY_AI_DAILY_GENERATION_BUDGET: "0" } }),
+        ),
+      ).rejects.toMatchObject({ code: "rate-limited", status: 429 });
     });
 
     it("does not enqueue cover upload (waitUntil not called)", async () => {
@@ -2208,6 +2280,178 @@ describe("importRecipeFromUrl — extraction paths", () => {
         ),
       ).rejects.toMatchObject({ code: "title-conflict", status: 409 });
     });
+  });
+});
+
+describe("importRecipeFromSource — photos", () => {
+  const recipe = {
+    title: "Card Scones",
+    description: null,
+    servings: "8",
+    ingredients: ["2 cups flour"],
+    steps: ["Rub in the butter."],
+  };
+
+  function photoRunner(read: RecipeLlmRunner["extractFromPhoto"] = vi.fn(async () => recipe)): RecipeLlmRunner {
+    return { extract: vi.fn(), extractFromPhoto: read };
+  }
+
+  function photoSource(contentType = "image/png", photo = new Uint8Array([1, 2, 3])) {
+    return { type: "photo" as const, photo, contentType };
+  }
+
+  it("reads a large photo whole, as one data URL", async () => {
+    const chef = await makeChef();
+    const runner = photoRunner();
+    const photo = new Uint8Array(100_000).map((_, i) => i % 251);
+    const result = await importRecipeFromSource(
+      { chefId: chef.id, source: photoSource("image/webp", photo) },
+      baseDeps({ llmRunner: runner }),
+    );
+    expect(runner.extractFromPhoto).toHaveBeenCalledWith({
+      dataUrl: `data:image/webp;base64,${Buffer.from(photo).toString("base64")}`,
+    });
+    expect(result).toMatchObject({ source: "llm", confidence: "low", existingRecipeId: null });
+    await expect(db.recipe.findUnique({ where: { id: result.recipeId! } })).resolves.toMatchObject({
+      title: "Card Scones",
+      servings: "8",
+      sourceUrl: null,
+    });
+  });
+
+  it.each([
+    ["a type the model can't read", photoSource("image/heic"), 415],
+    ["an empty photo", photoSource("image/png", new Uint8Array()), 413],
+    ["a photo over the limit", photoSource("image/png", new Uint8Array(10 * 1024 * 1024 + 1)), 413],
+  ])("refuses %s before spending a photo import", async (_name, source, status) => {
+    const chef = await makeChef();
+    const runner = photoRunner();
+    const error = await importRecipeFromSource({ chefId: chef.id, source }, baseDeps({ llmRunner: runner })).catch((e) => e);
+    expect(error).toBeInstanceOf(ImportRecipeError);
+    expect(error).toMatchObject({ code: "bad-image", status });
+    expect(runner.extractFromPhoto).not.toHaveBeenCalled();
+    await expect(db.imageGenLedger.count({ where: { userId: chef.id } })).resolves.toBe(0);
+  });
+
+  it("reports a model failure as llm-failed", async () => {
+    const chef = await makeChef();
+    const { RecipeLlmError } = await import("~/lib/recipe-import-llm.server");
+    const runner = photoRunner(vi.fn(async () => {
+      throw new RecipeLlmError("vision down");
+    }));
+    await expect(importRecipeFromSource({ chefId: chef.id, source: photoSource() }, baseDeps({ llmRunner: runner })))
+      .rejects.toMatchObject({ code: "llm-failed", status: 502, message: "vision down" });
+  });
+
+  it("lets an unexpected failure through", async () => {
+    const chef = await makeChef();
+    const runner = photoRunner(vi.fn(async () => {
+      throw new TypeError("bad bytes");
+    }));
+    await expect(importRecipeFromSource({ chefId: chef.id, source: photoSource() }, baseDeps({ llmRunner: runner })))
+      .rejects.toThrow("bad bytes");
+  });
+
+  it("needs a model key, like every other import", async () => {
+    const chef = await makeChef();
+    await expect(importRecipeFromSource(
+      { chefId: chef.id, source: photoSource() },
+      baseDeps({ llmRunner: undefined, env: {} }),
+    )).rejects.toMatchObject({ code: "llm-failed", message: "Photo reading is not configured" });
+  });
+
+  it("spends a photo import on a dry run, because the model still reads the photo, but writes nothing", async () => {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource(
+      { chefId: chef.id, source: photoSource(), dryRun: true },
+      baseDeps({ llmRunner: photoRunner() }),
+    );
+    expect(result.recipeId).toBeNull();
+    const ledger = await db.imageGenLedger.findMany({ where: { userId: chef.id } });
+    expect(ledger.map((row) => [row.kind, row.count])).toEqual([["import-photo", 1]]);
+    await expect(db.recipe.count({ where: { chefId: chef.id } })).resolves.toBe(0);
+  });
+});
+
+describe("importRecipeFromSource — ingredient parsing and placement", () => {
+  // Strips a leading quantity and unit, as the real parser does, so names read like the
+  // ingredient the steps talk about.
+  function namingParser() {
+    return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+      text.split("\n").map((line) => ({
+        quantity: 1,
+        unit: "whole",
+        ingredientName: line.replace(/^[\d/]+\s+(cups?|tbsp|tsp|cloves?)?\s*/, "").trim(),
+      })));
+  }
+
+  async function importText(ingredients: string[], steps: string[], parser = namingParser()) {
+    const chef = await makeChef();
+    const result = await importRecipeFromSource({
+      chefId: chef.id,
+      source: { type: "text", text: "a card", sourceUrl: null },
+    }, baseDeps({
+      ingredientParser: parser,
+      llmRunner: makeLlmRunner({ title: "Placement Soup", ingredients, steps }),
+    }));
+    const rows = await db.ingredient.findMany({
+      where: { recipeId: result.recipeId! },
+      include: { ingredientRef: true },
+    });
+    const stepOf = Object.fromEntries(rows.map((row) => [row.ingredientRef.name, row.stepNum]));
+    return { parser, stepOf };
+  }
+
+  it("parses every ingredient line in one call per recipe", async () => {
+    const { parser } = await importText(
+      ["2 cups flour", "1 tsp\nsalt", "3 eggs"],
+      ["Whisk the eggs.", "Fold in the flour and salt."],
+    );
+    expect(parser).toHaveBeenCalledTimes(1);
+    expect(parser).toHaveBeenCalledWith("2 cups flour\n1 tsp salt\n3 eggs", expect.anything());
+  });
+
+  it("puts each ingredient on the first step that mentions it", async () => {
+    const { stepOf } = await importText(
+      ["3 eggs", "2 cups flour", "1 tsp salt"],
+      ["Whisk the eggs until pale.", "Sift the flour over the eggs.", "Season with salt."],
+    );
+    expect(stepOf).toEqual({ eggs: 1, flour: 2, salt: 3 });
+  });
+
+  it("matches singular and plural, prep notes and the ingredient's last words", async () => {
+    const { stepOf } = await importText(
+      [
+        "1 onion, finely diced",
+        "2 tomatoes",
+        "1 cup fresh blueberries",
+        "4 cloves garlic",
+        "1 yellow bell pepper",
+        "1 cup extra virgin olive oil",
+      ],
+      [
+        "Warm the olive oil.",
+        "Soften the onions and garlic.",
+        "Add the tomato and the pepper.",
+        "Scatter over a blueberry or two.",
+      ],
+    );
+    expect(stepOf).toEqual({
+      "onion, finely diced": 2,
+      tomatoes: 3,
+      "fresh blueberries": 4,
+      garlic: 2,
+      "yellow bell pepper": 3,
+      "extra virgin olive oil": 1,
+    });
+  });
+
+  it("keeps ingredients no step names, or named only inside another word, on step 1", async () => {
+    const { stepOf } = await importText(
+      ["1 tsp salt", "1 egg", "1 pinch of sumac", "2 cups rice", "!!"],
+      ["Boil the water.", "Stir in the eggplant.", "Cook the riced cauliflower.", "Serve."],
+    );
+    expect(stepOf).toEqual({ salt: 1, egg: 1, "pinch of sumac": 1, rice: 1, "!!": 1 });
   });
 });
 

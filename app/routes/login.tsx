@@ -2,7 +2,8 @@ import type { Route } from "./+types/login";
 import { useRef } from "react";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
+import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1 } from "~/lib/auth.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
@@ -93,11 +94,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     return data({ errors }, { status: 400 });
   }
 
-  // Get the appropriate database instance
-  const database = await getRequestDb(context);
-
-  // Authenticate user by username or email
-  const user = await authenticateUserByEmailOrUsername(database, identifier, password);
+  // Authenticate user by username or email: on the D1 binding when there is one, so a login
+  // never builds a Prisma client.
+  const d1 = requestD1(context);
+  const user = d1
+    ? await authenticateUserByEmailOrUsernameOnD1(d1, identifier, password)
+    : await authenticateUserByEmailOrUsername(await getRequestDb(context), identifier, password);
 
   if (!user) {
     return data(

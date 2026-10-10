@@ -9,6 +9,13 @@
  *   2xx       → "delivered"
  *   404 / 410 → "expired"  (the dispatcher prunes these subscriptions)
  *   any other → "failed"   (transient — leave the subscription in place)
+ *
+ * Endpoints are checked against the known browser push services before any
+ * request is made. A subscription row whose endpoint is not on that list (rows
+ * saved before the subscribe route enforced it) is reported as "expired", so
+ * the dispatcher prunes it instead of letting the Worker POST to an arbitrary
+ * host. Each send is also bounded by a timeout so a slow host cannot hold the
+ * Worker open.
  */
 
 import {
@@ -47,6 +54,35 @@ export interface SendPushResult {
 }
 
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24; // 24h
+export const PUSH_SEND_TIMEOUT_MS = 10_000;
+
+/**
+ * Hosts of the Web Push services that real browsers hand out endpoints for:
+ *   - fcm.googleapis.com: Chrome, Android, Brave, Opera, Samsung Internet
+ *   - *.push.apple.com (web.push.apple.com): Safari on macOS and iOS
+ *   - *.push.services.mozilla.com (updates.push.services.mozilla.com): Firefox
+ *   - *.notify.windows.com (wns2-*.notify.windows.com): Microsoft Edge
+ */
+const EXACT_PUSH_HOSTS = new Set(["fcm.googleapis.com"]);
+const PUSH_HOST_SUFFIXES = [".push.apple.com", ".push.services.mozilla.com", ".notify.windows.com"];
+
+/**
+ * True when `endpoint` is an https URL on a known Web Push service, on the
+ * default port and with no credentials in it.
+ */
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.port !== "" || url.username !== "" || url.password !== "") {
+    return false;
+  }
+  const host = url.hostname.toLowerCase();
+  return EXACT_PUSH_HOSTS.has(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
 
 function classify(httpStatus: number): SendPushStatus {
   if (httpStatus >= 200 && httpStatus < 300) return "delivered";
@@ -61,6 +97,15 @@ export async function sendPush(
   deps: SendPushDeps = {},
 ): Promise<SendPushResult> {
   const fetchImpl = deps.fetch ?? globalThis.fetch;
+
+  if (!isAllowedPushEndpoint(subscription.endpoint)) {
+    return {
+      status: "expired",
+      httpStatus: 0,
+      providerEndpoint: subscription.endpoint,
+      error: "Endpoint is not on a known Web Push service",
+    };
+  }
 
   const libSub: LibPushSubscription = {
     endpoint: subscription.endpoint,
@@ -98,6 +143,7 @@ export async function sendPush(
       method: built.method,
       headers: built.headers as unknown as HeadersInit,
       body: built.body as unknown as BodyInit,
+      signal: AbortSignal.timeout(PUSH_SEND_TIMEOUT_MS),
     });
     return {
       status: classify(response.status),

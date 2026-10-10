@@ -4,6 +4,7 @@ import { createUserSessionCookie, sanitizeSessionRedirect } from "~/lib/session.
 import { getRequestDb } from "~/lib/route-platform.server";
 import { configFromRequest, finishAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
+import { requestD1 } from "~/lib/d1-read.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
 import { extractIdentifierFromBody, resolveIdentifierToEmail } from "~/lib/auth.server";
 
@@ -38,6 +39,8 @@ export async function action({ request, context }: Route.ActionArgs) {
       configFromRequest(request),
       body.response,
       authTelemetryFromContext(context),
+      // The counter rotation and challenge clear run as one D1 batch when there is a binding.
+      requestD1(context),
     );
 
     // Mint the session cookie and attach it to the JSON response (the client

@@ -651,6 +651,12 @@ describe("image storage helpers", () => {
         imageUrl: "/photos/recipes/user-1/recipe-1/photo.jpg",
       })).resolves.toBe(true);
       expect(bucket.delete).toHaveBeenCalledWith("recipes/user-1/recipe-1/photo.jpg");
+      expect(bucket.delete).toHaveBeenCalledWith([
+        "variants/w256/recipes/user-1/recipe-1/photo.jpg.webp",
+        "variants/w512/recipes/user-1/recipe-1/photo.jpg.webp",
+        "variants/w1024/recipes/user-1/recipe-1/photo.jpg.webp",
+        "variants/w1536/recipes/user-1/recipe-1/photo.jpg.webp",
+      ]);
     });
 
     it("skips deletion when no bucket or R2 key is available", async () => {

@@ -1,6 +1,8 @@
 import type { Route } from "./+types/agent.connect";
 import { Form, data, redirect, useLoaderData, useActionData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { enforceAgentCodeLookupRateLimit } from "~/lib/rate-limit.server";
+import { getUserId } from "~/lib/session.server";
 import {
   isSameSiteFormPost,
   normalizeUserCode,
@@ -16,6 +18,7 @@ type LookupData = {
 };
 
 const NOT_FOUND = "That connection code was not found or has expired.";
+const TOO_MANY = "Too many codes tried. Please wait a minute and try again.";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -35,8 +38,20 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (!isSameSiteFormPost(request, env)) {
     return data({ code: "", error: "Type the code your agent shows you on this page." } satisfies LookupData, { status: 403 });
   }
+  // Throttle before the lookup: a correct guess opens someone else's pending request.
+  const rateLimit = await enforceAgentCodeLookupRateLimit(
+    request,
+    env?.AUTH_IP_RATE_LIMITER,
+    () => getUserId(request, env),
+  );
   const formData = await request.formData();
   const code = normalizeUserCode(formData.get("code")?.toString() ?? "");
+  if (!rateLimit.allowed) {
+    return data({ code, error: TOO_MANY } satisfies LookupData, {
+      status: 429,
+      headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+    });
+  }
   if (!code) return { code, error: NOT_FOUND } satisfies LookupData;
   const db = await getRequestDb(context);
   const connection = await db.agentConnectionRequest.findUnique({ where: { userCode: code } });

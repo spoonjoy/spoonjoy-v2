@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
+// Ingredient names get digit-only random suffixes: the shopping list picks an icon and category by matching words such as "cod" or "egg" inside the name, and a random letter suffix can contain one.
 import { Request as UndiciRequest } from "undici";
 import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
@@ -90,9 +91,9 @@ async function createShoppingFixture(db: Awaited<ReturnType<typeof getLocalDb>>)
   const legacyCredential = await createApiCredential(db, user.id, "Legacy shopping reader", { scopes: ["kitchen:read"] });
   const writeOnlyCredential = await createApiCredential(db, user.id, "Shopping writer only", { scopes: ["shopping_list:write"] });
   const list = await db.shoppingList.create({ data: { authorId: user.id } });
-  const unit = await getOrCreateUnit(db, `unit ${faker.string.alphanumeric(6)}`);
-  const activeRef = await getOrCreateIngredientRef(db, `active item ${faker.string.alphanumeric(6)}`);
-  const deletedRef = await getOrCreateIngredientRef(db, `deleted item ${faker.string.alphanumeric(6)}`);
+  const unit = await getOrCreateUnit(db, `unit ${faker.string.numeric(10)}`);
+  const activeRef = await getOrCreateIngredientRef(db, `active item ${faker.string.numeric(10)}`);
+  const deletedRef = await getOrCreateIngredientRef(db, `deleted item ${faker.string.numeric(10)}`);
   const checkedAt = new Date();
   const active = await db.shoppingListItem.create({
     data: {
@@ -571,9 +572,9 @@ describe("API v1 shopping-list read and sync", () => {
   it("uses the active recipe identity and leaves its tombstone under the post-0025 index", async () => {
     const fixture = await createShoppingFixture(db);
     const recipe = await createRecipeWithIngredients(db, fixture.user.id, [{
-      name: `compat recipe active ${faker.string.alphanumeric(6)}`,
+      name: `compat recipe active ${faker.string.numeric(10)}`,
       quantity: 3,
-      unit: `compat recipe active unit ${faker.string.alphanumeric(6)}`,
+      unit: `compat recipe active unit ${faker.string.numeric(10)}`,
     }]);
     const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
 
@@ -651,9 +652,9 @@ describe("API v1 shopping-list read and sync", () => {
   it("restores the earliest sortIndex then BINARY id recipe tombstone under the post-0025 index", async () => {
     const fixture = await createShoppingFixture(db);
     const recipe = await createRecipeWithIngredients(db, fixture.user.id, [{
-      name: `compat recipe tombstone ${faker.string.alphanumeric(6)}`,
+      name: `compat recipe tombstone ${faker.string.numeric(10)}`,
       quantity: 3,
-      unit: `compat recipe tombstone unit ${faker.string.alphanumeric(6)}`,
+      unit: `compat recipe tombstone unit ${faker.string.numeric(10)}`,
     }]);
     const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
 
@@ -760,9 +761,9 @@ describe("API v1 shopping-list read and sync", () => {
         { recipeId: recipe.id, stepNum: 1, stepTitle: "First", description: "First step." },
       ],
     });
-    const unit = await getOrCreateUnit(db, `compat deterministic unit ${faker.string.alphanumeric(6)}`);
-    const firstRef = await getOrCreateIngredientRef(db, `compat deterministic apples ${faker.string.alphanumeric(6)}`);
-    const secondRef = await getOrCreateIngredientRef(db, `compat deterministic beans ${faker.string.alphanumeric(6)}`);
+    const unit = await getOrCreateUnit(db, `compat deterministic unit ${faker.string.numeric(10)}`);
+    const firstRef = await getOrCreateIngredientRef(db, `compat deterministic apples ${faker.string.numeric(10)}`);
+    const secondRef = await getOrCreateIngredientRef(db, `compat deterministic beans ${faker.string.numeric(10)}`);
     await db.ingredient.createMany({
       data: [
         {
@@ -830,8 +831,8 @@ describe("API v1 shopping-list read and sync", () => {
   it("rejects a non-finite coalesced quantity before opening a bulk transaction", async () => {
     const fixture = await createShoppingFixture(db);
     const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
-      { name: `compat overflow ${faker.string.alphanumeric(6)}`, quantity: 9e307, unit: "gram" },
-      { name: `compat overflow ${faker.string.alphanumeric(6)}`, quantity: 9e307, unit: "gram" },
+      { name: `compat overflow ${faker.string.numeric(10)}`, quantity: 9e307, unit: "gram" },
+      { name: `compat overflow ${faker.string.numeric(10)}`, quantity: 9e307, unit: "gram" },
     ]);
     const ingredients = await db.ingredient.findMany({ where: { recipeId: recipe.id }, orderBy: { id: "asc" } });
     await db.ingredient.update({
@@ -870,7 +871,7 @@ describe("API v1 shopping-list read and sync", () => {
   it("rejects a non-finite scaled product before opening a bulk transaction", async () => {
     const fixture = await createShoppingFixture(db);
     const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
-      { name: `compat product overflow ${faker.string.alphanumeric(6)}`, quantity: 1e300, unit: "gram" },
+      { name: `compat product overflow ${faker.string.numeric(10)}`, quantity: 1e300, unit: "gram" },
     ]);
     const ingredient = await db.ingredient.findFirstOrThrow({ where: { recipeId: recipe.id } });
     const transactionSpy = vi.spyOn(db as any, "$transaction");
@@ -906,8 +907,8 @@ describe("API v1 shopping-list read and sync", () => {
   it("rolls back every recipe item and releases idempotency when a later insert fails", async () => {
     const fixture = await createShoppingFixture(db);
     const recipe = await createRecipeWithIngredients(db, fixture.user.id, [
-      { name: `compat allowed ${faker.string.alphanumeric(6)}`, quantity: 1, unit: "cup" },
-      { name: `compat blocked ${faker.string.alphanumeric(6)}`, quantity: 2, unit: "cup" },
+      { name: `compat allowed ${faker.string.numeric(10)}`, quantity: 1, unit: "cup" },
+      { name: `compat blocked ${faker.string.numeric(10)}`, quantity: 2, unit: "cup" },
     ]);
     const ingredients = await db.ingredient.findMany({
       where: { recipeId: recipe.id },
@@ -1000,7 +1001,7 @@ describe("API v1 shopping-list read and sync", () => {
 
   it("updates existing shopping rows when adding ingredients from a recipe", async () => {
     const fixture = await createShoppingFixture(db);
-    const pantryUnit = await getOrCreateUnit(db, `pantry unit ${faker.string.alphanumeric(6)}`);
+    const pantryUnit = await getOrCreateUnit(db, `pantry unit ${faker.string.numeric(10)}`);
     const pantryRef = await getOrCreateIngredientRef(db, `pantry item ${faker.string.numeric(12)}`);
     const pantryItem = await db.shoppingListItem.create({
       data: {
@@ -1014,7 +1015,7 @@ describe("API v1 shopping-list read and sync", () => {
         iconKey: null,
       },
     });
-    const nullableUnit = await getOrCreateUnit(db, `nullable unit ${faker.string.alphanumeric(6)}`);
+    const nullableUnit = await getOrCreateUnit(db, `nullable unit ${faker.string.numeric(10)}`);
     const nullableRef = await getOrCreateIngredientRef(db, `nullable item ${faker.string.numeric(12)}`);
     const nullableQuantityItem = await db.shoppingListItem.create({
       data: {
@@ -1140,7 +1141,7 @@ describe("API v1 shopping-list read and sync", () => {
 
   it("clears completed and all shopping-list items through API v1", async () => {
     const fixture = await createShoppingFixture(db);
-    const uncheckedRef = await getOrCreateIngredientRef(db, `unchecked item ${faker.string.alphanumeric(6)}`);
+    const uncheckedRef = await getOrCreateIngredientRef(db, `unchecked item ${faker.string.numeric(10)}`);
     const unchecked = await db.shoppingListItem.create({
       data: {
         shoppingListId: fixture.list.id,

@@ -225,6 +225,8 @@ describe("spoonjoy-api import_recipe_from_url", () => {
         source: "json-ld",
         existingRecipeId: null,
         coverPending: true,
+        // A write that can be replayed says whether this answer is a replay, as the cover tools do.
+        mutation: { idempotencyKey: null, replayed: false },
       });
     });
 

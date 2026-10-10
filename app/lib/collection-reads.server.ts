@@ -37,6 +37,9 @@ export interface PublicRecipe {
 export interface PublicRecipesInput {
   query: string;
   limit: number;
+  // Browse only (no query): start after this recipe, the last one on the previous page. The order
+  // is newest change first with the id breaking ties, so every recipe is on exactly one page.
+  after?: string | null;
 }
 
 type CoverDisplayRecipe = Parameters<typeof getRecipeCoverDisplay>[0];
@@ -66,22 +69,36 @@ function inSearchOrder<T extends { id: string }>(recipes: T[], recipeIds: string
 
 export async function readPublicRecipesWithPrisma(
   database: PrismaClient,
-  { query, limit }: PublicRecipesInput,
+  { query, limit, after }: PublicRecipesInput,
 ): Promise<PublicRecipe[]> {
   const recipeIds = query
     ? (await searchSpoonjoy(database, { query, scope: "recipes", limit })).map((result) => result.id)
     : [];
+  // Keyset on the cursor row's own values, as on D1. (Prisma's `cursor` option would skip a row when
+  // the cursor recipe has since been deleted, because it is no longer in the result to skip.)
+  const cursorRow = !query && after
+    ? await database.recipe.findUnique({ where: { id: after }, select: { id: true, updatedAt: true } })
+    : null;
+  if (!query && after && !cursorRow) return [];
 
   const recipes = await database.recipe.findMany({
     where: {
       deletedAt: null,
       ...(query ? { id: { in: recipeIds } } : {}),
+      ...(cursorRow
+        ? {
+            OR: [
+              { updatedAt: { lt: cursorRow.updatedAt } },
+              { updatedAt: cursorRow.updatedAt, id: { lt: cursorRow.id } },
+            ],
+          }
+        : {}),
     },
     include: {
       chef: { select: { username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
     },
-    orderBy: query ? undefined : { updatedAt: "desc" },
+    orderBy: query ? undefined : [{ updatedAt: "desc" }, { id: "desc" }],
     take: limit,
   });
 
@@ -122,7 +139,7 @@ const PUBLIC_RECIPE_SELECT = `SELECT r."id", r."title", r."description", r."serv
  */
 export async function readPublicRecipesFromD1(
   db: D1ReadDatabase,
-  { query, limit }: PublicRecipesInput,
+  { query, limit, after }: PublicRecipesInput,
 ): Promise<PublicRecipe[]> {
   const recipeIds = query
     ? (await searchSpoonjoyFromD1(db, { query, scope: "recipes", limit })).map((result) => result.id)
@@ -136,7 +153,17 @@ export async function readPublicRecipesFromD1(
           ...recipeIds,
           limit,
         ]
-      : [`${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL ORDER BY r."updatedAt" DESC LIMIT ?`, limit],
+      : after
+        ? [
+            // Keyset: compare with the cursor row's stored values, so the page boundary uses exactly
+            // the ordering below, whatever format a row's timestamp was written in.
+            `${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL
+              AND (r."updatedAt", r."id") < (SELECT c."updatedAt", c."id" FROM "Recipe" c WHERE c."id" = ?)
+              ORDER BY r."updatedAt" DESC, r."id" DESC LIMIT ?`,
+            after,
+            limit,
+          ]
+        : [`${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL ORDER BY r."updatedAt" DESC, r."id" DESC LIMIT ?`, limit],
   ]);
   const recipes = rows!.map((row) => {
     const { chefUsername, ...recipe } = mapModel(PUBLIC_RECIPE_COLUMNS, row);

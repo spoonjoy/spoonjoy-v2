@@ -33,7 +33,7 @@ import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 
 // Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
-// loader (consent screen / login-gate redirect) and the action (Allow/Deny).
+// loader (consent screen / login-gate redirect) and the action (Approve/Deny).
 // Cheap to call; runs before any DB work.
 async function checkAuthorizeRateLimit(request: Request, env: { API_IP_RATE_LIMITER?: unknown } | null | undefined) {
   const rateLimit = await enforceRateLimit({
@@ -282,7 +282,15 @@ export default function OAuthAuthorize() {
   const appName = safeOAuthClientDisplayName(view.clientName);
   const redirectOrigin = new URL(view.params.redirectUri).origin;
   const resourceLabel = view.params.resource || "REST API";
-  const broadScopes = view.scope.split(" ").filter((scope) => scope === "kitchen:read" || scope === "kitchen:write");
+  // The warning names what the app can actually do: kitchen:write can change anything in the
+  // kitchen, while kitchen:read only reads it. A read-only request must not be told it can make
+  // changes (audit 2026-10-09).
+  const requestedScopes = view.scope.split(" ");
+  const kitchenWarning = requestedScopes.includes("kitchen:write")
+    ? `${appName} can make broad kitchen changes. Approve only if this is the connection you started.`
+    : requestedScopes.includes("kitchen:read")
+      ? `${appName} can read your whole kitchen, including your recipes, cookbooks and shopping list, but cannot change anything. Approve only if this is the connection you started.`
+      : null;
   const accessItems = scopeItems(view.scope);
   return (
     <ConnectorConsentShell>
@@ -313,13 +321,14 @@ export default function OAuthAuthorize() {
         </ul>
       </div>
 
-      {broadScopes.length ? (
+      {kitchenWarning ? (
         <Text className="mt-4" role="alert">
-          {appName} can make broad kitchen changes. Approve only if this is the connection you started.
+          {kitchenWarning}
         </Text>
       ) : null}
       <Text className="mt-4">
-        This connection stays active until you disconnect it in Account settings or from {appName}.
+        This connection stays active while {appName} keeps using it. It ends when you disconnect it, sign out
+        everywhere, or leave it unused for 180 days.
       </Text>
 
       <details className="mt-5 border-y border-[var(--sj-border)] py-4 text-sm text-[var(--sj-ink)]">
@@ -346,7 +355,7 @@ export default function OAuthAuthorize() {
         <form method="post">
           <input type="hidden" name="consent_token" value={view.consentToken} />
           <Button className="w-full sm:w-auto" type="submit" name="decision" value="approve">
-            Allow access
+            Approve access
           </Button>
         </form>
         <form method="post">

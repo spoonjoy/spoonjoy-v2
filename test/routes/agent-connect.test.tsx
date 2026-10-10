@@ -171,6 +171,62 @@ describe("agent connect route", () => {
     }
   });
 
+  it("limits code guesses per address and per signed-in chef, before looking the code up", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const seen: string[] = [];
+    // A limiter that has used up the budget for one key prefix only.
+    const limiterRefusing = (prefix: string) => ({
+      limit: async ({ key }: { key: string }) => {
+        seen.push(key);
+        return { success: !key.startsWith(prefix), reset: 42 };
+      },
+    });
+    const lookup = (prefix: string, headers: Record<string, string>) => {
+      const formData = new UndiciFormData();
+      formData.set("code", started.request.userCode);
+      return lookupAction({
+        request: new UndiciRequest("http://localhost/agent/connect", { method: "POST", body: formData, headers }),
+        context: { cloudflare: { env: { AUTH_IP_RATE_LIMITER: limiterRefusing(prefix) } } },
+      } as any);
+    };
+    const expectRefused = (response: any) => {
+      expect(response.init.status).toBe(429);
+      expect(response.init.headers).toEqual({ "Retry-After": "42" });
+      expect(response.data).toEqual({
+        code: started.request.userCode,
+        error: "Too many codes tried. Please wait a minute and try again.",
+      });
+    };
+    const signedIn = { Cookie: await sessionCookie(userId) };
+
+    // Even the right code is refused once this address has used its guesses.
+    expectRefused(await lookup("agent-code:ip:203.0.113.7", { "CF-Connecting-IP": "203.0.113.7" }));
+    // A chef who has used their guesses is refused from a fresh address too.
+    expectRefused(await lookup(`agent-code:user:${userId}`, { ...signedIn, "CF-Connecting-IP": "198.51.100.9" }));
+    // Lookups have their own budget, so they never use up the login and signup limit (keyed "ip:").
+    expect(seen).toEqual([
+      "agent-code:ip:203.0.113.7",
+      "agent-code:ip:198.51.100.9",
+      `agent-code:user:${userId}`,
+    ]);
+
+    // Within budget, the lookup goes through as before.
+    await expect(lookup("agent-code:none", { ...signedIn, "CF-Connecting-IP": "198.51.100.9" })).rejects.toSatisfy(
+      (response: Response) => response.status === 302
+        && response.headers.get("Location") === `/agent/connect/${started.request.id}`,
+    );
+  });
+
+  it("still looks codes up when the limiter is down", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const formData = new UndiciFormData();
+    formData.set("code", started.request.userCode);
+    await expect(lookupAction({
+      request: new UndiciRequest("http://localhost/agent/connect", { method: "POST", body: formData }),
+      context: { cloudflare: { env: { AUTH_IP_RATE_LIMITER: { limit: async () => { throw new Error("down"); } } } } },
+    } as any)).rejects.toSatisfy((response: Response) => response.status === 302);
+  });
+
   it("renders lookup errors for empty submissions", async () => {
     const emptyAction = await lookupAction(lookupArgs(lookupFormRequest("http://localhost/agent/connect", "")));
     expect(emptyAction).toEqual({
@@ -248,7 +304,7 @@ describe("agent connect route", () => {
     expect(JSON.stringify(loaded)).not.toContain(started.request.userCode);
   });
 
-  it("approves only with the code the chef typed, denies without one, and redirects unauthenticated actions", async () => {
+  it("approves and denies only with the code the chef typed, and redirects unauthenticated actions", async () => {
     const approveTarget = await startAgentConnection(db, { now: activeNow });
     const denyTarget = await startAgentConnection(db, { now: activeNow });
     const cookie = await sessionCookie(userId);
@@ -294,8 +350,21 @@ describe("agent connect route", () => {
     await expect(db.agentConnectionRequest.findUnique({ where: { id: approveTarget.request.id } }))
       .resolves.toMatchObject({ status: "approved", approvedById: userId });
 
+    // A leaked link or a guessed request is not enough to cancel someone's connection: deny needs
+    // the same code proof as approve.
+    for (const userCode of [undefined, "WRNG-0000"]) {
+      const refusedDeny = await action(routeArgs(
+        formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie, userCode),
+        denyTarget.request.id,
+      ));
+      expect((refusedDeny as any).init.status).toBe(400);
+      expect((refusedDeny as any).data.error).toBe("That code doesn't match. To deny, type the code your agent shows you.");
+    }
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: denyTarget.request.id } }))
+      .resolves.toMatchObject({ status: "pending" });
+
     await expect(action(routeArgs(
-      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie),
+      formRequest(`http://localhost/agent/connect/${denyTarget.request.id}`, "deny", cookie, denyTarget.request.userCode),
       denyTarget.request.id,
     ))).rejects.toSatisfy((response: Response) => {
       expect(response.status).toBe(302);
@@ -339,6 +408,27 @@ describe("agent connect route", () => {
       .resolves.toMatchObject({ status: "approved", approvedById: userId });
   });
 
+  it("denies with the code remembered from the lookup page, but not with another request's code", async () => {
+    const started = await startAgentConnection(db, { now: activeNow });
+    const other = await startAgentConnection(db, { now: activeNow });
+    const otherCookie = await rememberTypedCode(null, new Request("http://localhost/agent/connect"), other.request.id, other.request.userCode);
+    const refused = await action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${started.request.id}`, "deny", `${await sessionCookie(userId)}; ${otherCookie.split(";")[0]}`),
+      started.request.id,
+    ));
+    expect((refused as any).init.status).toBe(400);
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: started.request.id } }))
+      .resolves.toMatchObject({ status: "pending" });
+
+    const codeCookie = await rememberTypedCode(null, new Request("http://localhost/agent/connect"), started.request.id, started.request.userCode);
+    await expect(action(routeArgs(
+      formRequest(`http://localhost/agent/connect/${started.request.id}`, "deny", `${await sessionCookie(userId)}; ${codeCookie.split(";")[0]}`),
+      started.request.id,
+    ))).rejects.toSatisfy((response: Response) => response.status === 302);
+    await expect(db.agentConnectionRequest.findUnique({ where: { id: started.request.id } }))
+      .resolves.toMatchObject({ status: "denied" });
+  });
+
   it("reports a request that asks for account scopes instead of approving it", async () => {
     const started = await startAgentConnection(db, { now: activeNow });
     await db.agentConnectionRequest.update({ where: { id: started.request.id }, data: { scopes: "account:write" } });
@@ -371,6 +461,8 @@ describe("agent connect route", () => {
     render(<Stub initialEntries={["/"]} />);
     const codeInput = await screen.findByLabelText("Type the code your agent shows you");
     expect(screen.queryByText("Request details")).not.toBeInTheDocument();
+    // On its own, the scopes section draws its own top and bottom rules.
+    expect(screen.getByText("Requested scopes").parentElement).toHaveClass("mt-6", "border-y");
     fireEvent.change(codeInput, { target: { value: "WRNG-0000" } });
     fireEvent.click(screen.getByRole("button", { name: "Approve access" }));
     expect(await screen.findByText("That code doesn't match. Type the code your agent shows you.")).toBeInTheDocument();
@@ -395,7 +487,16 @@ describe("agent connect route", () => {
     expect(await screen.findByRole("heading", { name: "Connect Spoonjoy" })).toBeInTheDocument();
     expect(screen.getByText(/calling itself "slugger" wants permission/)).toBeInTheDocument();
     expect(screen.getByText(/did not verify who made this request/)).toBeInTheDocument();
+    // Deny needs the code, so a chef who didn't start the request is told to leave it, not deny it.
+    expect(screen.getByText(/close this page\. Without its code, nobody can approve it, and it expires on its own\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Deny it unless/)).not.toBeInTheDocument();
     expect(screen.getByText("2 minutes ago")).toBeInTheDocument();
+    // Under "Request details", the scopes section shares its rule: one divider, not two.
+    expect(screen.getByText("Request details").parentElement).toHaveClass("border-y");
+    const scopesSection = screen.getByText("Requested scopes").parentElement!;
+    expect(scopesSection).toHaveClass("border-b");
+    expect(scopesSection).not.toHaveClass("border-y", "mt-6");
+    expect(scopesSection.previousElementSibling).toBe(screen.getByText("Request details").parentElement);
     expect(screen.getByText("203.0.113.9 (NZ)")).toBeInTheDocument();
     expect(screen.getByText("curl/8.7.1")).toBeInTheDocument();
     expect(screen.getByText("US")).toBeInTheDocument();
@@ -416,8 +517,8 @@ describe("agent connect route", () => {
     expect(codeInput).toHaveAttribute("autocorrect", "off");
     expect(codeInput).toHaveAttribute("spellcheck", "false");
     expect(screen.getByRole("button", { name: "Approve access" })).toBeInTheDocument();
-    // Deny works without a code.
-    expect(screen.getByRole("button", { name: "Deny" })).toHaveAttribute("formnovalidate");
+    // Deny needs the code too, so the browser asks for it before either button submits.
+    expect(screen.getByRole("button", { name: "Deny" })).not.toHaveAttribute("formnovalidate");
 
     cleanupDom();
     renderWithData({

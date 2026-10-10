@@ -24,10 +24,14 @@ test.describe("Search", () => {
     await expect(page).toHaveURL(/[?&]q=saffron(?:&|$)/);
     await expect(page.getByRole("heading", { name: 'Results for "saffron"', exact: true })).toBeVisible();
     const results = page.getByRole("region", { name: "Search results" });
-    await expect(seededRecipeLink(results, "Recipe Saffron Risotto", RISOTTO)).toBeVisible();
+    await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toBeVisible();
+    // The result's link is named by the card's type, title and byline, not by its title alone, and
+    // described by the matching text.
+    await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toHaveAccessibleName("Recipe Saffron Risotto Recipe by qa_kitchen_friend");
+    await expect(seededRecipeLink(results, "Saffron Risotto", RISOTTO)).toHaveAccessibleDescription(/saffron/i);
     await expectAccessible();
 
-    await seededRecipeLink(results, "Recipe Saffron Risotto", RISOTTO).click();
+    await seededRecipeLink(results, "Saffron Risotto", RISOTTO).click();
     await expect(page).toHaveURL(/\/recipes\/qa-kitchen-recipe-risotto(?:[?#].*)?$/);
     await expect(page.getByRole("heading", { level: 1, name: "Saffron Risotto", exact: true })).toBeVisible();
     await expectAccessible();
@@ -75,7 +79,7 @@ test.describe("Search", () => {
     await page.getByLabel("Search terms", { exact: true }).press("Enter");
     await expect(page.getByRole("heading", { name: 'Results for "arborio"', exact: true })).toBeVisible();
     await expect(
-      seededRecipeLink(page.getByRole("region", { name: "Search results" }), "Recipe Saffron Risotto", RISOTTO),
+      seededRecipeLink(page.getByRole("region", { name: "Search results" }), "Saffron Risotto", RISOTTO),
     ).toBeVisible();
     await expectAccessible();
   });
@@ -88,14 +92,14 @@ test.describe("Search", () => {
     await main.getByRole("link", { name: "Recipes", exact: true }).click();
     await expect(page).toHaveURL(/[?&]scope=recipes(?:&|$)/);
     await expect(main.getByRole("heading", { name: "Recipes", exact: true })).toBeVisible();
-    await expect(seededRecipeLink(results, "Recipe Lemon Herb Rice", LEMON_RICE)).toBeVisible();
+    await expect(seededRecipeLink(results, "Lemon Herb Rice", LEMON_RICE)).toBeVisible();
     await expect(results.getByRole("link", { name: /^Cookbook / })).toHaveCount(0);
     await expectAccessible();
 
     await main.getByRole("link", { name: "Cookbooks", exact: true }).click();
     await expect(page).toHaveURL(/[?&]scope=cookbooks(?:&|$)/);
     await expect(main.getByRole("heading", { name: "Cookbooks", exact: true })).toBeVisible();
-    await expect(seededCookbookLink(results, "Cookbook Weeknight Dinners", WEEKNIGHT)).toBeVisible();
+    await expect(seededCookbookLink(results, "Weeknight Dinners", WEEKNIGHT)).toBeVisible();
     await expect(results.getByRole("link", { name: /^Recipe / })).toHaveCount(0);
     await expectAccessible();
   });
@@ -106,8 +110,8 @@ test.describe("Search", () => {
     await page.getByLabel("Search terms", { exact: true }).press("Enter");
     await expect(page.getByRole("heading", { name: 'Results for "tomato, lemon"', exact: true })).toBeVisible();
     const results = page.getByRole("region", { name: "Search results" });
-    await expect(seededRecipeLink(results, "Recipe Roasted Tomato Soup", TOMATO_SOUP)).toBeVisible();
-    await expect(seededRecipeLink(results, "Recipe Lemon Herb Rice", LEMON_RICE)).toBeVisible();
+    await expect(seededRecipeLink(results, "Roasted Tomato Soup", TOMATO_SOUP)).toBeVisible();
+    await expect(seededRecipeLink(results, "Lemon Herb Rice", LEMON_RICE)).toBeVisible();
     await expectAccessible();
   });
 

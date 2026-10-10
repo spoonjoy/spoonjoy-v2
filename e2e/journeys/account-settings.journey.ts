@@ -219,7 +219,7 @@ test.describe("Account settings", () => {
     await fillSecret(passwordSection.getByLabel("New password", { exact: true }), newPassword);
     await fillSecret(passwordSection.getByLabel("Confirm password", { exact: true }), newPassword);
     await passwordSection.getByRole("button", { name: "Change password", exact: true }).click();
-    await expect(confirmation(page, "Your password has been changed successfully.")).toBeVisible();
+    await expect(confirmation(page, "Your password has been changed.")).toBeVisible();
     // The form closes, so the typed passwords don't stay on screen.
     await expect(currentPasswordField).toBeHidden();
 

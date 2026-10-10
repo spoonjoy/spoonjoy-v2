@@ -68,7 +68,9 @@ const signedOutTabs: Tab[] = [
 ];
 
 function shouldHideTabBar(pathname: string, isAuthenticated: boolean) {
-  if (pathname === "/oauth/authorize") {
+  // The connector consent screen and the "Log out?" confirmation are single-decision pages: the
+  // bar would only cover their last choice ("Stay signed in" on /logout sat at its top edge).
+  if (pathname === "/oauth/authorize" || pathname === "/logout") {
     return true;
   }
 
