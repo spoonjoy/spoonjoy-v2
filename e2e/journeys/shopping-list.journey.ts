@@ -73,7 +73,12 @@ function recordShoppingListActions(page: Page, intent: string): number[] {
 }
 
 // Adds an item by hand and waits for its row. A successful add clears the field (R-M3-3).
-async function addByHand(page: Page, text: string, name: string, amount: string) {
+// A counted amount: the number alone at the end of the row ("lemons2"), never "2 whole".
+function counted(n: number) {
+  return new RegExp(`\\D${n}$`);
+}
+
+async function addByHand(page: Page, text: string, name: string, amount: string | RegExp) {
   await itemField(page).fill(text);
   await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
   await expect(row(page, name), FALLBACK_PARSER).toContainText(amount);
@@ -122,7 +127,7 @@ test.describe("Shopping list", () => {
     await waitForHydration(page);
     await expect(itemField(page)).toHaveValue("2 lemons");
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-    await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
+    await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
     await expect(lemons).toHaveAttribute("aria-checked", "false");
     // "lemons" is its own row: the "lemon" placeholder the reset just cleared doesn't come back.
     await expect(row(page, "lemon")).toBeHidden();
@@ -130,7 +135,7 @@ test.describe("Shopping list", () => {
     // empty field is required, so the browser doesn't submit it.
     await expect(itemField(page)).toHaveValue("");
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-    await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
+    await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
     await expect(view(page, "Need", 1)).toBeVisible();
     await expectAccessible();
 
@@ -151,7 +156,7 @@ test.describe("Shopping list", () => {
 
     await verifyAfterReload(async () => {
       await expect(lemons).toHaveAttribute("aria-checked", "true");
-      await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
+      await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
       await expect(view(page, "Basket", 1)).toBeVisible();
     });
 
@@ -177,13 +182,46 @@ test.describe("Shopping list", () => {
     // Adding it again starts from the amount typed: the removed row's 2 doesn't come back on top
     // (run 36310125579 showed a cleared "1 lemon" re-added as "2 whole").
     await waitForHydration(page);
-    await addByHand(page, "2 lemons", "lemons", "2 whole");
+    await addByHand(page, "2 lemons", "lemons", counted(2));
     await expect(view(page, "All", 1)).toBeVisible();
 
     await verifyAfterReload(async () => {
-      await expect(lemons, FALLBACK_PARSER).toContainText("2 whole");
+      await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
       await expect(view(page, "All", 1)).toBeVisible();
     });
+  });
+
+  test("a recipe's ingredients are filed under the aisle a shopper finds them in", async ({ page, expectAccessible }) => {
+    // Lemon Herb Rice's chicken stock was filed under Protein, because "chicken" matched first
+    // (product audit 2026-10-09, finding 9). The head noun, stock, decides: Pantry.
+    await page.goto("/recipes/qa-kitchen-recipe-lemon-rice");
+    await waitForHydration(page);
+    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-1-chicken-stock")).toContainText("Pantry");
+    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-1-chicken-stock")).not.toContainText("Protein");
+    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-2-parsley")).toContainText("Produce");
+    await expectAccessible();
+  });
+
+  test("a typed item keeps a describing word in its name and a real unit as its unit @mutates", async ({
+    page,
+    verifyAfterReload,
+    expectAccessible,
+  }) => {
+    await startWithAnEmptyList(page);
+    // "bell" is not a unit: the row is "bell pepper", not "pepper" with an amount of "1 bell".
+    await addByHand(page, "1 bell pepper", "bell pepper", "1");
+    await expect(row(page, "pepper")).toBeHidden();
+    await expect(row(page, "bell pepper"), FALLBACK_PARSER).not.toContainText("1 bell");
+    await addByHand(page, "2 cloves garlic", "garlic", "2 cloves");
+    await expect(view(page, "All", 2)).toBeVisible();
+    await expectAccessible();
+
+    await verifyAfterReload(async () => {
+      await expect(row(page, "bell pepper")).toBeVisible();
+      await expect(row(page, "pepper")).toBeHidden();
+      await expect(row(page, "garlic"), FALLBACK_PARSER).toContainText("2 cloves");
+    });
+    await clearAll(page);
   });
 
   test("a recipe's ingredients added from its page at 2x are on the list doubled @mutates", async ({
@@ -227,14 +265,14 @@ test.describe("Shopping list", () => {
     const garlic = row(page, "garlic");
     const stock = row(page, "vegetable stock");
     await page.goto(SHOPPING_LIST);
-    await expect(tomato).toContainText("12 whole");
+    await expect(tomato).toContainText(counted(12));
     await expect(garlic).toContainText("8 clove");
     await expect(stock).toContainText("4 cup");
     await expect(view(page, "All", 3)).toBeVisible();
     await expectAccessible();
 
     await verifyAfterReload(async () => {
-      await expect(tomato).toContainText("12 whole");
+      await expect(tomato).toContainText(counted(12));
       await expect(garlic).toContainText("8 clove");
       await expect(stock).toContainText("4 cup");
       await expect(view(page, "All", 3)).toBeVisible();
@@ -304,8 +342,8 @@ test.describe("Shopping list", () => {
     await startWithAnEmptyList(page);
     const onions = row(page, "onions");
     const carrots = row(page, "carrots");
-    await addByHand(page, "2 onions", "onions", "2 whole");
-    await addByHand(page, "3 carrots", "carrots", "3 whole");
+    await addByHand(page, "2 onions", "onions", counted(2));
+    await addByHand(page, "3 carrots", "carrots", counted(3));
 
     // Check both, back to back. Each tap must reach the server; a cancelled request never gets a
     // response, and its row would flip back once the list reloads (ui-map bug 11).
@@ -350,12 +388,12 @@ test.describe("Shopping list", () => {
     expect((await checked).status()).toBe(200);
     await page.getByRole("button", { name: "Clear checked", exact: true }).click();
     await expect(onions).toBeHidden();
-    await expect(carrots, FALLBACK_PARSER).toContainText("3 whole");
+    await expect(carrots, FALLBACK_PARSER).toContainText(counted(3));
     await expect(view(page, "All", 1)).toBeVisible();
 
     await verifyAfterReload(async () => {
       await expect(onions).toBeHidden();
-      await expect(carrots, FALLBACK_PARSER).toContainText("3 whole");
+      await expect(carrots, FALLBACK_PARSER).toContainText(counted(3));
       await expect(view(page, "All", 1)).toBeVisible();
     });
 

@@ -70,6 +70,7 @@ export default [
   route("mcp", "routes/mcp.tsx"),
   route("csp-report", "routes/csp-report.ts"),
   route("health", "routes/health.ts"),
+  route("health/ready", "routes/health.ready.ts"),
   route("oauth/register", "routes/oauth.register.ts"),
   route("oauth/authorize", "routes/oauth.authorize.tsx"),
   route("oauth/callback", "routes/oauth.callback.tsx"),

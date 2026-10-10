@@ -92,6 +92,7 @@ export async function cleanupDatabase() {
   await db.notificationEvent.deleteMany({});
   await db.pushSubscription.deleteMany({});
   await db.imageGenLedger.deleteMany({});
+  await db.imageGenDailyBudget.deleteMany({});
   await db.oAuthAuthCode.deleteMany({});
   await db.oAuthRefreshToken.deleteMany({});
   await db.oAuthClient.deleteMany({});

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useNavigate } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -351,6 +351,98 @@ describe("Recipes Index Route", () => {
     expect(await screen.findByText("No matching recipes yet")).toBeInTheDocument();
     expect(screen.getByText("Try a broader ingredient, dish name, or chef.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Clear Search" })).toHaveAttribute("href", "/recipes");
+  });
+
+  it("pages through every public recipe 48 at a time after a cursor", async () => {
+    const chef = await createUser(db, faker.internet.email(), `pager_${faker.string.alphanumeric(8)}`, "testPassword123");
+    const created = [];
+    for (let index = 0; index < 50; index += 1) {
+      const at = new Date(Date.UTC(2026, 0, 1, 0, index));
+      created.push(await db.recipe.create({ data: { title: `Paged recipe ${index}`, chefId: chef.id, createdAt: at, updatedAt: at } }));
+    }
+    const load = (path: string) =>
+      loader({ request: new UndiciRequest(`http://localhost:3000${path}`), context: { cloudflare: { env: null } }, params: {} } as any);
+
+    const first = await load("/recipes");
+    expect(first.recipes).toHaveLength(48);
+    expect(first.recipes[0]!.title).toBe("Paged recipe 49");
+    expect(first.after).toBeNull();
+    expect(first.nextCursor).toBe(first.recipes[47]!.id);
+
+    const second = await load(`/recipes?after=${first.nextCursor}`);
+    expect(second.recipes.map((recipe) => recipe.title)).toEqual(["Paged recipe 1", "Paged recipe 0"]);
+    expect(second.after).toBe(first.nextCursor);
+    expect(second.nextCursor).toBeNull();
+    // The two pages together hold every recipe once: the 49th and 50th newest are reachable.
+    expect(new Set([...first.recipes, ...second.recipes].map((recipe) => recipe.id)).size).toBe(created.length);
+
+    // A malformed cursor is ignored, and a search is one ranked page whatever the cursor.
+    expect((await load("/recipes?after=not%20a%20cursor!")).after).toBeNull();
+    const searched = await load(`/recipes?q=paged&after=${first.nextCursor}`);
+    expect(searched.after).toBeNull();
+    expect(searched.nextCursor).toBeNull();
+  });
+
+  it("shows more recipes in place, moves focus to the first new one and says how many are shown", async () => {
+    const recipe = (id: string, title: string) => ({
+      id,
+      title,
+      description: null,
+      servings: null,
+      chef: { username: "ari" },
+      coverImageUrl: null,
+      coverProvenanceLabel: null,
+    });
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes",
+        children: [
+          {
+            index: true,
+            Component: RecipesIndex,
+            loader: ({ request }: { request: Request }) => {
+              const after = new URL(request.url).searchParams.get("after");
+              return after === "r2"
+                ? { query: "", isAuthenticated: false, after, recipes: [recipe("r3", "Third Soup")], nextCursor: null }
+                : { query: "", isAuthenticated: false, after: null, recipes: [recipe("r1", "First Soup"), recipe("r2", "Second Soup")], nextCursor: "r2" };
+            },
+          },
+        ],
+      },
+    ]);
+
+    render(<Stub initialEntries={["/recipes"]} />);
+
+    const showMore = await screen.findByRole("link", { name: "Show more recipes" });
+    // Without JavaScript it is a plain link to the next page.
+    expect(showMore).toHaveAttribute("href", "/recipes?after=r2");
+    expect(screen.getByText("2 shown")).toBeInTheDocument();
+
+    fireEvent.click(showMore);
+
+    const third = await screen.findByRole("link", { name: "Third Soup" });
+    expect(screen.getByRole("link", { name: "First Soup" })).toBeInTheDocument();
+    await waitFor(() => expect(third).toHaveFocus());
+    expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 3 recipes");
+    expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
+    expect(screen.getByText("3 recipes")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("says when a later page has nothing left, with a way back to the newest", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes",
+        Component: RecipesIndex,
+        loader: () => ({ query: "", isAuthenticated: false, after: "r9", recipes: [], nextCursor: null }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/recipes?after=r9"]} />);
+
+    expect(await screen.findByRole("heading", { name: "That's every recipe" })).toBeInTheDocument();
+    expect(screen.getByText("Older recipes")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to the newest" })).toHaveAttribute("href", "/recipes");
   });
 
   it("returns public recipe metadata", () => {

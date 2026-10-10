@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { handleError } from "~/entry.server";
+import { formatQaErrorLog, QA_ERROR_LOGS_VAR } from "~/lib/qa-error-logs.server";
+import { expectNoSecrets, FAKE_SECRETS, secretLine, secretMessage } from "./fixtures/fake-secrets";
+import { expectConsoleError } from "./warning-policy";
 
 /**
  * `handleError` is React Router's catch-all for loader/action throws (the
@@ -116,5 +119,80 @@ describe("entry.server handleError", () => {
     expect(waitUntil).not.toHaveBeenCalled();
     expect(calls).toHaveLength(0);
     fetchMock.mockRestore();
+  });
+
+  // console.warn and console.error stay with the suite's warning policy (test/warning-policy.ts):
+  // any call these tests do not declare with expectConsoleError fails the test.
+  function consoleLogSpy() {
+    return vi.spyOn(console, "log").mockImplementation(() => {});
+  }
+
+  it("writes nothing to the console without the per-run QA switch, and still reports to PostHog", async () => {
+    for (const value of [undefined, "0", "true", ""]) {
+      const { calls, fetchMock } = postHogFetchStub();
+      const log = consoleLogSpy();
+      const scheduled: Promise<unknown>[] = [];
+      const env = { POSTHOG_KEY: "ph_test", ...(value === undefined ? {} : { [QA_ERROR_LOGS_VAR]: value }) };
+
+      handleError(new Error(`D1 read exploded for ${FAKE_SECRETS.email}`), loaderArgs(env, { waitUntil: (p) => scheduled.push(p) }));
+      handleError(new Error("no PostHog"), loaderArgs({ [QA_ERROR_LOGS_VAR]: value }));
+
+      await Promise.all(scheduled);
+      expect(log, `value ${value}`).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1);
+      expect(calls[0].event).toBe("$exception");
+      vi.restoreAllMocks();
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("with the per-run QA switch, writes one scrubbed line holding the class, message and five frames", async () => {
+    const { calls, fetchMock } = postHogFetchStub();
+    const log = consoleLogSpy();
+    const scheduled: Promise<unknown>[] = [];
+    const error = new TypeError(`login action failed: ${secretMessage}`);
+    error.stack = [
+      `TypeError: login action failed: ${secretMessage}`,
+      `    at action (https://chef:${FAKE_SECRETS.userinfo}@qa.example.test/build/server.js?code=${FAKE_SECRETS.query}#${FAKE_SECRETS.fragment}:1:2)`,
+      `    at loader (index.js:3:4) ${secretLine.split("\n")[0]}`,
+      `    at token (index.js:5:6) ${FAKE_SECRETS.jwt} ${FAKE_SECRETS.connectionKey}`,
+      ...Array.from({ length: 4 }, (_, index) => `    at frame${index} (index.js:${index + 7}:1)`),
+    ].join("\n");
+
+    const line = formatQaErrorLog(error);
+    // handleError must write exactly this one line, as console.error's only argument.
+    expectConsoleError(line);
+    handleError(error, loaderArgs({ POSTHOG_KEY: "ph_test", [QA_ERROR_LOGS_VAR]: "1" }, { waitUntil: (p) => scheduled.push(p) }));
+
+    await Promise.all(scheduled);
+    expect(line).not.toContain("\n");
+    expectNoSecrets(line);
+    const logged = JSON.parse(line) as { name: string; message: string; stack: string };
+    expect(logged.name).toBe("TypeError");
+    expect(logged.message).toMatch(/^login action failed: cookie \[cookie\]/);
+    expect(logged.stack.split("\n")).toEqual([
+      "at action (https://[userinfo]@qa.example.test/build/server.js?[query])",
+      "at loader (index.js:3:4) Cookie: [cookie]",
+      "at token (index.js:5:6) [token] [token]",
+      "at frame0 (index.js:7:1)",
+      "at frame1 (index.js:8:1)",
+    ]);
+    expect(log).not.toHaveBeenCalled();
+    // PostHog reporting is unchanged.
+    expect(calls).toHaveLength(1);
+    fetchMock.mockRestore();
+  });
+
+  it("never throws when writing the QA line fails", () => {
+    // Formatting and writing share one try block, so a line that cannot be built stands in for a
+    // console that throws, without overriding console.error.
+    const error = new Error("boom");
+    Object.defineProperty(error, "stack", {
+      get() {
+        throw new Error("stack unavailable");
+      },
+    });
+
+    expect(() => handleError(error, loaderArgs({ [QA_ERROR_LOGS_VAR]: "1" }))).not.toThrow();
   });
 });

@@ -1,4 +1,5 @@
 import type { Route } from "./+types/search";
+import { useId } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -19,6 +20,7 @@ import {
   type SearchResult,
   type SearchScope,
 } from "~/lib/search.server";
+import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const SCOPE_LABELS: Record<SearchScope, string> = {
   all: "Everything",
@@ -91,46 +93,52 @@ function resultCountLabel(count: number) {
   return `${count} ${count === 1 ? "result" : "results"}`;
 }
 
-function ResultCard({ result }: { result: SearchResult }) {
+function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: ImageLoadingProps }) {
   const Icon = RESULT_ICONS[result.type];
   const displayImageUrl = result.imageUrl && result.imageUrl.length > 0 ? result.imageUrl : undefined;
   const coverProvenanceLabel = typeof result.metadata.coverProvenanceLabel === "string"
     ? result.metadata.coverProvenanceLabel
     : null;
-  const accessibleLabel = result.type === "shopping-list-item"
-    ? `${RESULT_LABELS[result.type]} Private ${result.title}`
-    : `${RESULT_LABELS[result.type]} ${result.title}`;
-
+  // The link is named by the card's visible type, title and byline, so a screen reader hears what a
+  // sighted reader sees first and voice control can say any of it; a title-only aria-label hid the
+  // byline (product audit 2026-10-09, finding 19; WCAG 2.5.3). The cover note and the matching text
+  // describe the link rather than name it, so the name stays short enough to hear in a list.
+  const id = useId();
+  const isPrivate = result.type === "shopping-list-item";
+  const nameIds = [`${id}-type`, ...(isPrivate ? [`${id}-private`] : []), `${id}-title`, `${id}-subtitle`];
   return (
     <Link
       href={result.href}
-      aria-label={accessibleLabel}
+      aria-labelledby={nameIds.join(" ")}
+      aria-describedby={`${id}-cover ${id}-snippet`}
       className="group grid gap-4 border-t border-[var(--sj-border)] py-5 no-underline transition hover:border-[var(--sj-border-strong)] sm:grid-cols-[7rem_minmax(0,1fr)]"
     >
       <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[var(--sj-flour)] sm:aspect-square">
         {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+          <img src={displayImageUrl} alt="" {...imageProps} className="h-full w-full object-cover transition group-hover:scale-105" />
         ) : (
           <Icon className="size-5" aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0 self-center">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`font-sj-ui rounded-[var(--sj-radius-control)] border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] ${RESULT_TONES[result.type]}`}>
+          <span id={`${id}-type`} className={`font-sj-ui rounded-[var(--sj-radius-control)] border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] ${RESULT_TONES[result.type]}`}>
             {RESULT_LABELS[result.type]}
           </span>
-          {result.type === "shopping-list-item" ? (
-            <span className="font-sj-ui rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+          {isPrivate ? (
+            <span id={`${id}-private`} className="font-sj-ui rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
               Private
             </span>
           ) : null}
-          <CoverProvenanceBadge label={coverProvenanceLabel} />
+          <span id={`${id}-cover`} className="contents">
+            <CoverProvenanceBadge label={coverProvenanceLabel} />
+          </span>
         </div>
-        <Subheading level={2} className="mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]">
+        <Subheading id={`${id}-title`} level={2} className="mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]">
           {result.title}
         </Subheading>
-        <Text className="mt-1 text-sm">{result.subtitle}</Text>
-        <Text className="mt-3 line-clamp-2 text-sm/6">{result.snippet}</Text>
+        <Text id={`${id}-subtitle`} className="mt-1 text-sm">{result.subtitle}</Text>
+        <Text id={`${id}-snippet`} className="mt-3 line-clamp-2 text-sm/6">{result.snippet}</Text>
       </div>
     </Link>
   );
@@ -274,8 +282,8 @@ export default function Search() {
 
             {results.length > 0 ? (
               <div className="grid gap-3">
-                {results.map((result) => (
-                  <ResultCard key={`${result.type}:${result.id}`} result={result} />
+                {results.map((result, index) => (
+                  <ResultCard key={`${result.type}:${result.id}`} result={result} imageProps={listImageProps(index)} />
                 ))}
               </div>
             ) : (

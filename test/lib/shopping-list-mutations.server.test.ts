@@ -190,9 +190,11 @@ describe("shopping-list compatibility mutations", () => {
     });
     expect(updateGuard[0]).toContain('EXISTS (SELECT 1 FROM "ShoppingListItem" WHERE "id" = ? AND "shoppingListId" = ?)');
     expect(updateGuard.slice(1)).toEqual(["item-id", "list-id"]);
+    expect(update[0]).toContain('WHEN "deletedAt" IS NOT NULL THEN ?');
     expect(update[0]).toContain('COALESCE("quantity", 0) + ?');
     expect(update[0]).toContain('WHERE "id" = ? AND "shoppingListId" = ?');
     expect(update.slice(1)).toEqual([
+      1.5,
       1.5,
       1.5,
       1,
@@ -206,7 +208,7 @@ describe("shopping-list compatibility mutations", () => {
       "list-id",
     ]);
     expect(shoppingListItemWriteStatements({ ...base, mode: "create" })[1][6]).toBe(1);
-    expect(shoppingListItemWriteStatements({ ...base, mode: "update", quantityDelta: null, checked: false })[1][3]).toBe(0);
+    expect(shoppingListItemWriteStatements({ ...base, mode: "update", quantityDelta: null, checked: false })[1][4]).toBe(0);
   });
 
   it("removes a list's items in chunks under D1's bound-parameter limit, filtered by the list", () => {

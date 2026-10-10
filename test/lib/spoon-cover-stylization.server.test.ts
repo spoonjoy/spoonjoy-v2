@@ -150,7 +150,7 @@ describe("scheduleSpoonCoverStylization", () => {
     expect(runner.imageToImage).toHaveBeenCalledWith(
       expect.any(File),
       expect.stringContaining(`Additional direction: ${boundedAddition}.`),
-      { model: "gpt-image-2" },
+      { model: "gpt-image-2", signal: expect.any(AbortSignal) },
     );
     await expect(
       db.recipeCover.findUniqueOrThrow({
@@ -747,6 +747,84 @@ describe("scheduleSpoonCoverStylization", () => {
         select: { activeCoverId: true, activeCoverVariant: true },
       }),
     ).resolves.toEqual({ activeCoverId: null, activeCoverVariant: null });
+  });
+
+  // A provider that never answers used to hold the job until waitUntil was cancelled, leaving
+  // the cover in "processing" for good. Each attempt now has its own limit, and the job's budget
+  // ends it: a slow provider falls back to the next one, and a spent budget marks the cover failed.
+  function hangingAttempt(provider: string, model: string, signals: AbortSignal[]) {
+    return {
+      provider,
+      model,
+      runner: {
+        textToImage: vi.fn(),
+        imageToImage: vi.fn((_file: File, _prompt: string, opts: { signal?: AbortSignal }) => {
+          if (opts.signal) signals.push(opts.signal);
+          return new Promise<never>(() => undefined);
+        }),
+      } as unknown as ImageGenRunner,
+    };
+  }
+
+  it("falls back to the next provider when one outlasts its attempt limit", async () => {
+    const signals: AbortSignal[] = [];
+    const fast = makeRunner();
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      env: {},
+      createImageEditAttempts: () => [
+        hangingAttempt("openai", "gpt-image-2", signals),
+        { provider: "gemini", model: "gemini-test", runner: fast },
+      ],
+      bucket: mockR2(),
+      timeLimits: { totalMs: 5_000, attemptTimeoutMs: 50 },
+      logger: errorSpy,
+    });
+
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover).toMatchObject({ status: "ready", generationStatus: "succeeded" });
+    expect(fast.imageToImage).toHaveBeenCalledTimes(1);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
+  });
+
+  it("marks the cover failed, not processing, when every provider outlasts the job's budget", async () => {
+    const signals: AbortSignal[] = [];
+    const never = hangingAttempt("gemini", "gemini-never", signals);
+    const started = Date.now();
+    await scheduleSpoonCoverStylization({
+      db,
+      userId,
+      recipeId,
+      coverId,
+      rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+      recipeTitle: "Stylize Me",
+      env: {},
+      createImageEditAttempts: () => [
+        hangingAttempt("openai", "gpt-image-2", signals),
+        hangingAttempt("openai", "gpt-image-1", signals),
+        never,
+      ],
+      bucket: mockR2(),
+      timeLimits: { totalMs: 1_000, attemptTimeoutMs: 600 },
+      logger: errorSpy,
+    });
+
+    expect(Date.now() - started).toBeLessThan(5_000);
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    // The raw photo stays usable, so the cover is ready; its editorial generation failed.
+    expect(cover).toMatchObject({ status: "ready", generationStatus: "failed" });
+    expect(cover.failureReason).toContain("ran out of its 1000ms budget");
+    // The first attempt used its 600ms, the second got the remaining budget, and the third never ran.
+    expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    expect(never.runner.imageToImage).not.toHaveBeenCalled();
+    expect(errorSpy.error).toHaveBeenCalledWith("spoon cover stylization failed", expect.anything());
   });
 
   it("logs non-Error scheduler failures without throwing", async () => {

@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 
 const SALT_ROUNDS = 10;
 
@@ -133,6 +134,45 @@ export async function authenticateUserByEmailOrUsername(
         },
       });
 
+  return authenticatePasswordUser(user, password);
+}
+
+const LOGIN_USER_COLUMNS = '"id", "email", "username", "hashedPassword", "sessionVersion"';
+
+/**
+ * The same password login on the request's D1 binding: one statement finds the user by email
+ * (lowercased) or exact username, and the password check is the shared one, decoy included.
+ */
+export async function authenticateUserByEmailOrUsernameOnD1(
+  d1: D1ReadDatabase,
+  emailOrUsername: string,
+  password: string
+): Promise<AuthenticatedUser | null> {
+  const identifier = emailOrUsername.trim();
+  const [[row]] = await d1ReadBatch(d1, [
+    identifier.includes("@")
+      ? [`SELECT ${LOGIN_USER_COLUMNS} FROM "User" WHERE "email" = ?`, identifier.toLowerCase()]
+      : [`SELECT ${LOGIN_USER_COLUMNS} FROM "User" WHERE "username" = ?`, identifier],
+  ]);
+  if (
+    row &&
+    (typeof row.id !== "string" ||
+      typeof row.email !== "string" ||
+      typeof row.username !== "string" ||
+      (row.hashedPassword !== null && typeof row.hashedPassword !== "string") ||
+      typeof row.sessionVersion !== "number")
+  ) {
+    throw new Error("D1 user row is missing a login field");
+  }
+  const user = row
+    ? {
+        id: row.id as string,
+        email: row.email as string,
+        username: row.username as string,
+        hashedPassword: row.hashedPassword as string | null,
+        sessionVersion: row.sessionVersion as number,
+      }
+    : null;
   return authenticatePasswordUser(user, password);
 }
 

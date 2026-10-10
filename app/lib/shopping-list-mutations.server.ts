@@ -157,7 +157,10 @@ function d1Date(value: Date | null): string | null {
  * plan was read from: a create needs the identity still free (the unique index does not cover
  * a null unit), an update needs the row still on this list. If either changed, the guard stops
  * the whole batch and `runCompatibleShoppingListBatch` reads again. The write itself returns
- * the quantity it stored.
+ * the quantity it stored. An update follows mergedShoppingItemQuantity in SQL, against the row
+ * as it is when the statement runs: a removed or cleared row restarts from the added amount,
+ * and a live row adds on top. SQLite evaluates every SET expression against the row before the
+ * update, so the CASE sees the old "deletedAt".
  */
 export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan): D1Query[] {
   const updatedAt = d1Timestamp(plan.updatedAt);
@@ -201,11 +204,16 @@ export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan)
     ),
     [
       `UPDATE "ShoppingListItem"
-      SET "quantity" = CASE WHEN ? IS NULL THEN "quantity" ELSE COALESCE("quantity", 0) + ? END,
+      SET "quantity" = CASE
+            WHEN "deletedAt" IS NOT NULL THEN ?
+            WHEN ? IS NULL THEN "quantity"
+            ELSE COALESCE("quantity", 0) + ?
+          END,
           "checked" = ?, "checkedAt" = ?, "deletedAt" = ?,
           "sortIndex" = ?, "categoryKey" = ?, "iconKey" = ?, "updatedAt" = ?
       WHERE "id" = ? AND "shoppingListId" = ?
       RETURNING "quantity"`,
+      plan.quantityDelta,
       plan.quantityDelta,
       plan.quantityDelta,
       plan.checked ? 1 : 0,

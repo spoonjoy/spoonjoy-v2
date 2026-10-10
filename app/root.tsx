@@ -40,6 +40,7 @@ import { Text } from "~/components/ui/text";
 import { SkipLink } from "~/components/navigation/skip-link";
 import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
+import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
 import "./styles/tailwind.css";
 
 /**
@@ -204,6 +205,10 @@ export default function App() {
   // Record which page each history entry shows, for recipe "Back" (after the migration above,
   // which may clear app session storage on a schema change).
   useHistoryTrail();
+
+  // Warn before a full page unload drops unsaved form input (reloads, and the reload after a
+  // route chunk fails to load across a release).
+  useUnsavedFormGuard();
 
   // Track page views on route changes
   useEffect(() => {

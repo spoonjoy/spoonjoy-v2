@@ -97,10 +97,8 @@ function statusJsonResponse(status: number): Response {
 }
 
 function makeIngredientParser(): ImportRecipeDeps["ingredientParser"] {
-  return vi.fn(async (text: string): Promise<ParsedIngredient[]> => {
-    if (!text.trim()) return [];
-    return [{ quantity: 1, unit: "whole", ingredientName: text.trim() }];
-  });
+  return vi.fn(async (text: string): Promise<ParsedIngredient[]> =>
+    text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ quantity: 1, unit: "whole", ingredientName: line })));
 }
 
 function makeLlmRunner(
@@ -668,7 +666,7 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
       ).rejects.toMatchObject({ code: "rate-limited", status: 429 });
     });
 
-    it("dryRun on youtube → returns draft, no quota, no persistence", async () => {
+    it("dryRun on youtube → returns draft, spends one quota unit, no persistence", async () => {
       const chef = await makeChef();
       const fixture = loadVideoFixture("youtube-pasta.json");
       const { fetchImpl } = videoFetchSequence(jsonStreamingResponse(fixture));
@@ -688,10 +686,11 @@ describe("importRecipeFromUrl — I2 video dispatcher", () => {
       expect(result.recipeId).toBeNull();
       expect(result.confidence).toBe("low");
       expect(result.source).toBe("video-oembed-llm");
-      const ledger = await db.imageGenLedger.count({
+      // A dry run still runs the extraction model, so it counts like a real import.
+      const ledger = await db.imageGenLedger.findMany({
         where: { userId: chef.id, kind: "import" },
       });
-      expect(ledger).toBe(0);
+      expect(ledger.map((row) => row.count)).toEqual([1]);
       const recipeCount = await db.recipe.count({ where: { chefId: chef.id } });
       expect(recipeCount).toBe(0);
     });

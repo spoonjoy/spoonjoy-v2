@@ -1,3 +1,4 @@
+import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -9,11 +10,13 @@ import {
   createApiCredential,
   expandCredentialScopes,
   normalizeCredentialScopes,
+  resolvePersonalTokenExpiry,
   requireApiPrincipal,
   type ApiPrincipal,
 } from "~/lib/api-auth.server";
 import {
-  completeIdempotencyKey,
+  completeCommittedIdempotencyKey,
+  idempotencyCompletionFailureSummary,
   hashIdempotencyRequest,
   idempotencyClientKey,
   reserveIdempotencyKey,
@@ -21,12 +24,25 @@ import {
 import {
   pollAgentConnection,
   startAgentConnection,
+  type AgentConnectionRequester,
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
 import { d1Binding } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
 import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  applyRecipeStepsUpdateWithPrisma,
+  loadCurrentRecipeSteps,
+  planRecipeStepsUpdate,
+  type StepUpdate,
+} from "~/lib/recipe-steps-update.server";
+import {
+  RecipeWriteInFlightError,
+  type DedupedRecipeWriteRequest,
+  RecipeWriteKeyConflictError,
+  runDedupedRecipeWrite,
+} from "~/lib/recipe-write-dedupe.server";
 import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
@@ -87,7 +103,11 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
-import { addRecipeToCookbook, asCompatibleCookbookD1Database } from "~/lib/cookbook-membership-compat.server";
+import {
+  addRecipeToCookbook,
+  asCompatibleCookbookD1Database,
+  removeRecipeFromCookbook,
+} from "~/lib/cookbook-membership-compat.server";
 import {
   addShoppingListItem,
   asCompatibleD1Database,
@@ -110,6 +130,8 @@ export interface SpoonjoyApiContext {
   imageGenRunner?: ImageGenRunner;
   allowLocalImageFallback?: boolean;
   logger?: Pick<Console, "error">;
+  /** Network details of the caller, recorded on agent connection requests. Never verified. */
+  requester?: AgentConnectionRequester | null;
 }
 
 export interface SpoonjoyApiOperationInfo {
@@ -623,9 +645,9 @@ async function activeFullCoverPayload(
   recipe: { id: string; activeCoverId: string | null; activeCoverVariant: string | null },
 ): Promise<FullCoverPayload | null> {
   if (!recipe.activeCoverId) return null;
-  const cover = await context.db.recipeCover.findFirstOrThrow({
+  const [cover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, [await context.db.recipeCover.findFirstOrThrow({
     where: { id: recipe.activeCoverId, recipeId: recipe.id },
-  });
+  })]);
   return fullCoverPayload(cover, recipe);
 }
 
@@ -767,10 +789,17 @@ async function runIdempotentMcpCoverMutation<T>(
     throw error;
   }
 
-  await completeIdempotencyKey(context.db, reservation.record.id, {
+  // The write has committed: answer it even if its response cannot be saved on the key.
+  const completionFailure = await completeCommittedIdempotencyKey(context.db, reservation.record.id, {
     status: 200,
     body: result,
   });
+  if (completionFailure) {
+    console.error("[spoonjoy-api] idempotency_completion_failed", {
+      operation: input.operation,
+      error: idempotencyCompletionFailureSummary(completionFailure),
+    });
+  }
   return result;
 }
 
@@ -1168,11 +1197,11 @@ async function replaceRecipeSteps(db: PrismaClientType, recipeId: string, steps:
     ingredientRefIds.set(name, (await getOrCreateIngredientRef(db, name)).id);
   }
 
-  // Atomic swap as a single D1 batch: clear-then-rebuild as one transaction so
-  // a mid-sequence failure rolls back the deletes instead of permanently
-  // gutting the recipe. D1 doesn't support Prisma's interactive
-  // `$transaction(async tx => ...)` form, but it does support the batched
-  // PrismaPromise[] form, which is what we use here.
+  // Clear-then-rebuild as one Prisma array transaction, so a mid-sequence failure rolls back
+  // the deletes. This is atomic only without a D1 binding (SQLite in tests and scripts):
+  // Prisma's D1 adapter runs both the array and the interactive `$transaction` forms as
+  // separate statements. Production callers with a binding replace the steps with
+  // recipeStepsReplaceStatements in one d1WriteBatch instead.
   const ops: Prisma.PrismaPromise<unknown>[] = [
     db.stepOutputUse.deleteMany({ where: { recipeId } }),
     db.ingredient.deleteMany({ where: { recipeId } }),
@@ -1220,6 +1249,26 @@ function normalizedReplacementSteps(steps: ReturnType<typeof parseSteps>): Repla
       unit: normalizeName(ingredient.unit),
     })),
   }));
+}
+
+/**
+ * update_recipe's steps: each is a create_recipe step plus the optional `id` of the step it
+ * updates and the optional step numbers whose output it uses.
+ */
+function parseStepUpdates(value: unknown): StepUpdate[] {
+  const steps = parseSteps(value);
+  return normalizedReplacementSteps(steps).map((step, index) => {
+    const raw = (value as Array<Record<string, unknown>>)[index]!;
+    const update: StepUpdate = { ...step };
+    if (raw.id !== undefined) update.id = requiredString(raw, "id");
+    if (raw.outputStepNums !== undefined) {
+      if (!Array.isArray(raw.outputStepNums) || !raw.outputStepNums.every((num) => Number.isInteger(num))) {
+        throw new Error(`steps[${index}].outputStepNums must be an array of step numbers`);
+      }
+      update.outputStepNums = raw.outputStepNums as number[];
+    }
+    return update;
+  });
 }
 
 /** The recipe fields that make a new chef-upload cover the active one, as setActiveRecipeCover does. */
@@ -1313,7 +1362,7 @@ const authStatusTool: SpoonjoyApiOperation = {
 const startAgentConnectionTool: SpoonjoyApiOperation = {
   name: "start_agent_connection",
   description:
-    "Start a browser-approved delegated Spoonjoy connection for this agent. Send authorizationUrl to the user, then poll with deviceCode.",
+    "Start a browser-approved delegated Spoonjoy connection for this agent. Show the user authorizationUrl and, separately, userCode: they open the link, sign in and type the code to approve. Then poll with deviceCode. Grants kitchen and shopping-list scopes only, never account access.",
   inputSchema: {
     type: "object",
     properties: {
@@ -1328,6 +1377,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
       agentName: optionalString(args.agentName),
       baseUrl: context.env?.SPOONJOY_BASE_URL ?? optionalString(args.baseUrl),
       scopes: optionalString(args.scopes),
+      requester: context.requester,
     });
 
     return json({
@@ -1340,7 +1390,7 @@ const startAgentConnectionTool: SpoonjoyApiOperation = {
       expiresIn: started.expiresIn,
       interval: started.interval,
       message:
-        "Send authorizationUrl to the user, or show verificationUri plus userCode on constrained devices. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
+        "Show the user authorizationUrl (or verificationUri on constrained devices) and, separately, userCode. They type the code on that page to approve; the link alone cannot approve. After approval, call poll_agent_connection with deviceCode. Never ask for their Spoonjoy password.",
     });
   },
 };
@@ -1383,6 +1433,14 @@ const createApiTokenTool: SpoonjoyApiOperation = {
           { type: "array", items: { type: "string" } },
         ],
       },
+      expiresInDays: {
+        description: "Days until the token expires, 1 to 365. Defaults to 90. Pass null or \"never\" for a token that never expires.",
+        oneOf: [
+          { type: "integer", minimum: 1, maximum: 365 },
+          { type: "null" },
+          { type: "string", enum: ["never"] },
+        ],
+      },
     },
     additionalProperties: false,
   },
@@ -1390,7 +1448,8 @@ const createApiTokenTool: SpoonjoyApiOperation = {
     const owner = await getCredentialOwner(args, context);
     const name = optionalString(args.name) ?? "Spoonjoy API token";
     const scopes = normalizeCreateApiTokenScopes(args.scopes, context.principal);
-    const created = await createApiCredential(context.db, owner.id, name, { scopes });
+    const expiresAt = resolvePersonalTokenExpiry(args.expiresInDays);
+    const created = await createApiCredential(context.db, owner.id, name, { scopes, expiresAt });
 
     return json({
       token: created.token,
@@ -1459,13 +1518,14 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 
 const searchRecipesTool: SpoonjoyApiOperation = {
   name: "search_recipes",
-  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps, ingredients, and optional chef email. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
+  description: "Full-text search Spoonjoy recipes by title, description, source URL, steps and ingredients, optionally limited to one chef by username, or to your own recipes by your own chefEmail. Without commas every query word must match; commas separate alternatives, so a result matching any of them is returned, ordered by how many alternatives it matches, and at most 12 alternatives are used.",
   requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
     properties: {
       query: { type: "string" },
-      chefEmail: { type: "string" },
+      chefUsername: { type: "string", description: "Only recipes by the chef with this username." },
+      chefEmail: { type: "string", description: "Only your own recipes: must be your own email. Any other address returns no recipes." },
       limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
     },
     additionalProperties: false,
@@ -1473,12 +1533,32 @@ const searchRecipesTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const query = optionalString(args.query);
     const chefEmail = optionalString(args.chefEmail)?.toLowerCase();
+    const chefUsername = optionalString(args.chefUsername);
     const limit = normalizeLimit(args.limit);
-    const chef = chefEmail
-      ? await context.db.user.findUnique({ where: { email: chefEmail }, select: { id: true } })
-      : null;
 
-    if (chefEmail && !chef) {
+    // Emails are private (audit 2026-10-09, findings 1 and 14). A chefEmail filter that matched any
+    // account let anyone ask "does this address have a Spoonjoy account?" by comparing results, so
+    // it now matches only the caller's own address (or the local owner in stdio mode), and any
+    // other address returns nothing without looking it up. Usernames are public, so chefUsername
+    // filters by any chef.
+    // Without a principal, only a configured owner (stdio MCP mode) counts as the caller; the web
+    // API never configures one, so an anonymous web caller matches no email.
+    const callerEmail = (context.principal ? context.principal.email : context.defaultOwnerEmail)?.toLowerCase();
+    if (chefEmail && chefEmail !== callerEmail) {
+      return json({ recipes: [] });
+    }
+    const ownChef = chefEmail
+      ? context.principal
+        ? { id: context.principal.id }
+        : await context.db.user.findUnique({ where: { email: chefEmail }, select: { id: true } })
+      : null;
+    const namedChef = chefUsername
+      ? await context.db.user.findUnique({ where: { username: chefUsername }, select: { id: true } })
+      : null;
+    // Given both, they must name the same chef.
+    const chef = chefEmail && chefUsername ? (ownChef && namedChef?.id === ownChef.id ? ownChef : null) : ownChef ?? namedChef;
+
+    if ((chefEmail || chefUsername) && !chef) {
       return json({ recipes: [] });
     }
 
@@ -1600,7 +1680,7 @@ const getRecipeTool: SpoonjoyApiOperation = {
 
 const listRecipeCoversTool: SpoonjoyApiOperation = {
   name: "list_recipe_covers",
-  description: "List Recipe Photo Studio cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only.",
+  description: "List Recipe Photo Studio cover candidates. Owners with kitchen write access receive full cover history; other readers receive active public cover metadata only. May record that an abandoned generation failed: a cover still processing ten minutes after its generation started is reported, and stored, as failed.",
   requiredScopes: ["recipes:read"],
   inputSchema: {
     type: "object",
@@ -1632,11 +1712,14 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
     if (!recipe) throw new ApiAuthError("Recipe not found", 404);
 
     const canReadFullHistory = recipe.chefId === principal.id && principal.scopes.includes("kitchen:write");
-    const activeCover = recipe.activeCoverId
-      ? await context.db.recipeCover.findFirst({
-          where: { id: recipe.activeCoverId, recipeId: recipe.id },
-        })
-      : null;
+    // Settled first, so the history read below already sees it failed.
+    const [activeCover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, [
+      recipe.activeCoverId
+        ? await context.db.recipeCover.findFirst({
+            where: { id: recipe.activeCoverId, recipeId: recipe.id },
+          })
+        : null,
+    ]);
 
     if (!canReadFullHistory) {
       const publicActiveCover = activeCoverDisplayFields(recipe, activeCover ? [activeCover] : []).activeCover;
@@ -1649,7 +1732,8 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
     }
 
     const includeArchived = args.includeArchived === true;
-    const covers = await context.db.recipeCover.findMany({
+    // A generation whose job died reads as failed, not processing forever.
+    const covers = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipe.id, await context.db.recipeCover.findMany({
       where: {
         recipeId: recipe.id,
         ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
@@ -1657,7 +1741,7 @@ const listRecipeCoversTool: SpoonjoyApiOperation = {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       skip: offset,
-    });
+    }));
     const page = covers.slice(0, limit);
     const activePayload = activeCover ? fullCoverPayload(activeCover, recipe) : null;
     return json({
@@ -2124,6 +2208,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
           data: {
             status: "processing",
             generationStatus: "processing",
+            generationStartedAt: new Date(),
             failureReason: null,
             sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
             promptAddition,
@@ -2168,7 +2253,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
 
 const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
   name: "get_cover_generation_status",
-  description: "Fetch Recipe Photo Studio generation status and active-cover context.",
+  description: "Fetch Recipe Photo Studio generation status and active-cover context. May record that an abandoned generation failed: a cover still processing ten minutes after its generation started is reported, and stored, as failed, so polling can stop.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
@@ -2184,8 +2269,10 @@ const getCoverGenerationStatusTool: SpoonjoyApiOperation = {
     const recipeId = requiredString(args, "recipeId");
     const coverId = requiredString(args, "coverId");
     const recipe = await findOwnedCoverMutationRecipe(context, principal, recipeId);
-    const cover = await context.db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
-    if (!cover) throw new ApiAuthError("Cover not found", 404);
+    const found = await context.db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
+    if (!found) throw new ApiAuthError("Cover not found", 404);
+    // A generation whose job died reads as failed, so a client polling this stops.
+    const [cover] = await settleStuckCoverGenerations(stuckCoverStore(context.db, d1Binding(context.env?.DB)), recipeId, [found]);
     return json({
       cover: fullCoverPayload(cover, recipe),
       activeCover: await activeFullCoverPayload(context, recipe),
@@ -2518,7 +2605,11 @@ const createRecipeTool: SpoonjoyApiOperation = {
 
 const updateRecipeTool: SpoonjoyApiOperation = {
   name: "update_recipe",
-  description: "Update a recipe owned by the configured owner, optionally replacing its steps and ingredients.",
+  description:
+    "Update a recipe owned by the configured owner. With steps, the recipe's steps become the given list, in order: "
+    + "a step with an id updates that step, a step without one updates the step at its position or is added, and steps "
+    + "left out are removed. Updated steps keep their ids, their ingredients keep theirs, and a step keeps the steps "
+    + "whose output it uses unless outputStepNums says otherwise. Each ingredient appears in one step only.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
@@ -2535,9 +2626,15 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         items: {
           type: "object",
           properties: {
+            id: { type: "string", description: "The id of the step this one updates." },
             title: { type: "string" },
             description: { type: "string" },
             duration: { type: "number" },
+            outputStepNums: {
+              type: "array",
+              items: { type: "integer", minimum: 1 },
+              description: "Earlier step numbers, in this list's order, whose output this step uses.",
+            },
             ingredients: {
               type: "array",
               items: {
@@ -2570,8 +2667,7 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const servings = optionalNullableStringArgument(args, "servings");
       const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
       const imageUrl = optionalNullableStringArgument(args, "imageUrl");
-      const shouldReplaceSteps = hasArgument(args, "steps");
-      const steps = shouldReplaceSteps ? parseSteps(args.steps) : undefined;
+      const steps = hasArgument(args, "steps") ? parseStepUpdates(args.steps) : undefined;
 
       const owner = await getOrCreateOwner(context, email);
       const existing = await context.db.recipe.findFirst({
@@ -2579,6 +2675,9 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         select: { id: true, title: true },
       });
       if (!existing) throw new Error("Recipe not found");
+      const stepsPlan = steps
+        ? planRecipeStepsUpdate(existing.id, await loadCurrentRecipeSteps(context.db, existing.id), steps, new Date())
+        : undefined;
 
       const data: Pick<RecipeFields, "title" | "description" | "servings" | "sourceUrl"> = {};
       if (title !== undefined) {
@@ -2605,16 +2704,16 @@ const updateRecipeTool: SpoonjoyApiOperation = {
 
       const d1 = d1Binding(context.env?.DB);
       let coverId: string | null = null;
-      if (d1 && (Object.keys(data).length > 0 || steps || imageUrl)) {
-        // One atomic batch: the field changes, the step replacement and the new cover (created
+      if (d1 && (Object.keys(data).length > 0 || stepsPlan || imageUrl)) {
+        // One atomic batch: the field changes, the step update and the new cover (created
         // and made active) apply together. The guards re-check that the recipe is still active
-        // and a new title still free.
+        // and a new title still free, and that the steps are still the ones the update was planned from.
         const now = new Date();
         coverId = imageUrl ? crypto.randomUUID() : null;
         await d1WriteBatch(d1, [
           recipeActiveGuard(existing.id),
           ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
-          ...(steps ? recipeStepsReplaceStatements(existing.id, normalizedReplacementSteps(steps), now) : []),
+          ...(stepsPlan ? [stepsPlan.guard, ...stepsPlan.statements] : []),
           ...(coverId
             ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
             : []),
@@ -2626,8 +2725,8 @@ const updateRecipeTool: SpoonjoyApiOperation = {
           await context.db.recipe.update({ where: { id: existing.id }, data });
         }
 
-        if (steps) {
-          await replaceRecipeSteps(context.db, existing.id, steps);
+        if (stepsPlan) {
+          await applyRecipeStepsUpdateWithPrisma(context.db, stepsPlan);
           await context.db.recipe.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
         }
         if (imageUrl) {
@@ -3140,14 +3239,16 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
     const cookbook = await findOwnerCookbook(context.db, owner.id, args);
     if (!cookbook) throw new Error("Cookbook not found");
 
-    const deleted = await context.db.recipeInCookbook.deleteMany({
-      where: {
-        cookbookId: cookbook.id,
-        recipeId,
-      },
+    // The same membership write as the web and REST paths: the removal and the cookbook
+    // touch (native sync's change marker) land together, as one D1 batch on the Worker.
+    const removed = await removeRecipeFromCookbook({
+      database: context.db,
+      nativeDatabase: asCompatibleCookbookD1Database(context.env?.DB),
+      cookbookId: cookbook.id,
+      recipeId,
     });
     const result = {
-      removed: deleted.count > 0,
+      removed,
       cookbook: await reloadOwnerCookbook(context.db, owner.id, cookbook.id),
     };
 
@@ -3239,10 +3340,12 @@ const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
 
     await context.db.shoppingListItem.update({
       where: { id: item.id },
+      // Unchecking leaves the position alone rather than writing back the one read above, which a
+      // concurrent renumbering may already have changed.
       data: {
         checked,
         checkedAt: checked ? new Date() : null,
-        sortIndex: checked ? await nextSortIndex(context.db, shoppingList.id) : item.sortIndex,
+        ...(checked ? { sortIndex: await nextSortIndex(context.db, shoppingList.id) } : {}),
       },
     });
 
@@ -3664,13 +3767,16 @@ const deleteSpoonTool: SpoonjoyApiOperation = {
 const importRecipeFromUrlTool: SpoonjoyApiOperation = {
   name: "import_recipe_from_url",
   description:
-    "Import a recipe from a public web URL into the authenticated principal's library.",
+    "Import a recipe from a public web URL into the authenticated principal's library. Retrying the same import "
+    + "(the same idempotencyKey, or the same url without a key) within 24 hours returns the first import's recipe "
+    + "instead of creating another, unless that recipe was deleted.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
     properties: {
       url: { type: "string" },
       dryRun: { type: "boolean", default: false },
+      idempotencyKey: { type: "string", description: "Stable key for a replay-safe import; reuse it when retrying." },
     },
     required: ["url"],
     additionalProperties: false,
@@ -3679,28 +3785,55 @@ const importRecipeFromUrlTool: SpoonjoyApiOperation = {
     rejectOwnerEmail(args);
     const url = requiredString(args, "url");
     const dryRun = args.dryRun === true;
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
     const chefId = await resolveImportChefId(context);
-    const result = await recipeImport.importRecipeFromUrl(
-      { url, chefId, dryRun },
-      {
-        db: context.db,
-        env: context.env ?? undefined,
-        bucket: context.bucket,
-        waitUntil: context.waitUntil,
-        imageGenRunner: context.imageGenRunner,
-        logger: context.logger,
-      },
-    );
-    return json({
-      recipe: result.recipe,
-      recipeId: result.recipeId,
-      confidence: result.confidence,
-      source: result.source,
-      existingRecipeId: result.existingRecipeId,
-      coverPending: result.coverPending,
+    const runImport = async () => {
+      const result = await recipeImport.importRecipeFromUrl(
+        { url, chefId, dryRun },
+        {
+          db: context.db,
+          env: context.env ?? undefined,
+          bucket: context.bucket,
+          waitUntil: context.waitUntil,
+          imageGenRunner: context.imageGenRunner,
+          logger: context.logger,
+        },
+      );
+      return {
+        recipe: result.recipe,
+        recipeId: result.recipeId,
+        confidence: result.confidence,
+        source: result.source,
+        existingRecipeId: result.existingRecipeId,
+        coverPending: result.coverPending,
+      };
+    };
+    if (dryRun) return json(await runImport());
+    const { value, replayed } = await dedupedMcpRecipeWrite(context.db, {
+      chefId,
+      operation: "mcp.import_recipe_from_url",
+      key: idempotencyKey,
+      request: { url },
+      write: runImport,
     });
+    return json({ ...value, mutation: { idempotencyKey, replayed } });
   },
 };
+
+/** runDedupedRecipeWrite, with its key errors answered as MCP errors. */
+async function dedupedMcpRecipeWrite<T extends { recipeId: string | null }>(
+  db: PrismaClientType,
+  input: DedupedRecipeWriteRequest<T>,
+): Promise<{ value: T; replayed: boolean }> {
+  try {
+    return await runDedupedRecipeWrite({ db, ...input });
+  } catch (error) {
+    if (error instanceof RecipeWriteKeyConflictError || error instanceof RecipeWriteInFlightError) {
+      throw new ApiAuthError(error.message, 409);
+    }
+    throw error;
+  }
+}
 
 async function resolveImportChefId(context: SpoonjoyApiContext): Promise<string> {
   if (context.principal) return context.principal.id;
@@ -3721,7 +3854,8 @@ async function resolveImportChefId(context: SpoonjoyApiContext): Promise<string>
 const forkRecipeTool: SpoonjoyApiOperation = {
   name: "fork_recipe",
   description:
-    "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe.",
+    "Fork an existing Spoonjoy recipe into the authenticated principal's kitchen. Clones title, description, servings, steps, ingredients, and step-output uses; snapshots the source's latest cover; sets sourceRecipeId on the new recipe. "
+    + "Retrying the same fork (the same idempotencyKey, or the same source and title without a key) within 24 hours returns the first fork instead of creating another, unless that fork was deleted.",
   requiredScopes: ["kitchen:write"],
   inputSchema: {
     type: "object",
@@ -3732,6 +3866,7 @@ const forkRecipeTool: SpoonjoyApiOperation = {
         description:
           "Optional title override. Subject to the same `(chefId, title)` collision suffixing as the default title.",
       },
+      idempotencyKey: { type: "string", description: "Stable key for a replay-safe fork; reuse it when retrying." },
     },
     required: ["sourceRecipeId"],
     additionalProperties: false,
@@ -3741,45 +3876,17 @@ const forkRecipeTool: SpoonjoyApiOperation = {
     const principal = requireApiPrincipal(context.principal);
     const sourceRecipeId = requiredString(args, "sourceRecipeId");
     const titleOverride = optionalString(args.title) ?? null;
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
 
     try {
-      const result = await forkRecipe(context.db, {
-        sourceRecipeId,
-        viewerId: principal.id,
-        titleOverride,
-      }, d1Binding(context.env?.DB));
-
-      // Fire-and-forget: notify the source chef when someone else forked.
-      try {
-        const env = context.env ?? {};
-        const vapid = getVapidConfig(env as VapidEnv);
-        const notifyTask = notifyForkOfMyRecipe(
-          context.db,
-          {
-            forkedRecipeId: result.recipe.id,
-            sourceRecipeId: result.attribution.sourceRecipeId,
-            forkerId: principal.id,
-            sourceChefId: result.attribution.sourceChef.id,
-            appliedTitle: result.appliedTitle,
-          },
-          {
-            vapid,
-            waitUntil: context.waitUntil,
-            postHogConfig: resolvePostHogServerConfig(env),
-          },
-        );
-        await runOrSchedule(context, notifyTask);
-      } catch {
-        // VAPID not configured — skip silently.
-      }
-
-      return json({
-        recipeId: result.recipe.id,
-        recipe: formatRecipe(result.recipe),
-        attribution: result.attribution,
-        appliedTitle: result.appliedTitle,
-        titleWasSuffixed: result.titleWasSuffixed,
+      const { value, replayed } = await dedupedMcpRecipeWrite(context.db, {
+        chefId: principal.id,
+        operation: "mcp.fork_recipe",
+        key: idempotencyKey,
+        request: { sourceRecipeId, titleOverride },
+        write: () => forkAndNotify(context, principal.id, sourceRecipeId, titleOverride),
       });
+      return json({ ...value, mutation: { idempotencyKey, replayed } });
     } catch (err) {
       if (err instanceof ForkSourceNotFoundError) {
         throw new ApiAuthError("Source recipe not found", 404);
@@ -3794,6 +3901,52 @@ const forkRecipeTool: SpoonjoyApiOperation = {
     }
   },
 };
+
+/** Forks the recipe and notifies the source chef, as fork_recipe answers it. */
+async function forkAndNotify(
+  context: SpoonjoyApiContext,
+  viewerId: string,
+  sourceRecipeId: string,
+  titleOverride: string | null,
+) {
+  const result = await forkRecipe(context.db, {
+    sourceRecipeId,
+    viewerId,
+    titleOverride,
+  }, d1Binding(context.env?.DB));
+
+  // Fire-and-forget: notify the source chef when someone else forked.
+  try {
+    const env = context.env ?? {};
+    const vapid = getVapidConfig(env as VapidEnv);
+    const notifyTask = notifyForkOfMyRecipe(
+      context.db,
+      {
+        forkedRecipeId: result.recipe.id,
+        sourceRecipeId: result.attribution.sourceRecipeId,
+        forkerId: viewerId,
+        sourceChefId: result.attribution.sourceChef.id,
+        appliedTitle: result.appliedTitle,
+      },
+      {
+        vapid,
+        waitUntil: context.waitUntil,
+        postHogConfig: resolvePostHogServerConfig(env),
+      },
+    );
+    await runOrSchedule(context, notifyTask);
+  } catch {
+    // VAPID not configured — skip silently.
+  }
+
+  return {
+    recipeId: result.recipe.id,
+    recipe: formatRecipe(result.recipe),
+    attribution: result.attribution,
+    appliedTitle: result.appliedTitle,
+    titleWasSuffixed: result.titleWasSuffixed,
+  };
+}
 
 const tools: SpoonjoyApiOperation[] = [
   healthTool,

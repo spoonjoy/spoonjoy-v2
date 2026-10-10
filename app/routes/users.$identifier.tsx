@@ -13,13 +13,11 @@ import { CookbookCard } from "~/components/pantry/CookbookCard";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { listSpoonsByChef } from "~/lib/recipe-spoon.server";
+import { requestD1 } from "~/lib/d1-read.server";
+import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
+import { ShowMore, useAppendingList, useFocusFirstNew } from "~/components/ui/show-more";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { LocalDate } from "~/components/ui/local-date";
-import {
-  countFellowChefs,
-  countKitchenVisitors,
-} from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
@@ -69,88 +67,37 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     throw new Response("User not found", { status: 404 });
   }
 
-  const database = await getRequestDb(context);
   const currentUserId = await getUserId(request, context.cloudflare?.env);
 
-  const userByUsername = await database.user.findUnique({
-    where: { username: identifier },
-    select: {
-      id: true,
-      username: true,
-      photoUrl: true,
-      createdAt: true,
-    },
-  });
-
-  const profileUser = userByUsername ?? await database.user.findUnique({
-    where: { id: identifier },
-    select: {
-      id: true,
-      username: true,
-      photoUrl: true,
-      createdAt: true,
-    },
-  });
+  const d1 = requestD1(context);
+  const url = new URL(request.url);
+  // A page of recipes after the last one shown, as on the public recipe list; one extra
+  // row says whether there is another page.
+  const after = parseRecipeCursor(url.searchParams.get("after"));
+  const readInput = { identifier, recipeLimit: PROFILE_RECIPE_LIMIT + 1, recipeAfter: after };
+  const {
+    profileUser,
+    matchedBy,
+    recipes: recipeRows,
+    recipeCount,
+    cookbooks,
+    recentSpoons: recentSpoonsRaw,
+    fellowChefsCount,
+    kitchenVisitorsCount,
+  } = d1
+    ? await readChefProfileFromD1(d1, readInput)
+    : await readChefProfileWithPrisma(await getRequestDb(context), readInput);
 
   if (!profileUser) {
     throw new Response("User not found", { status: 404 });
   }
 
-  if (!userByUsername && identifier === profileUser.id) {
-    return redirect(`/users/${profileUser.username}`);
+  if (matchedBy === "id") {
+    return redirect(`/users/${profileUser.username}${after ? `?after=${encodeURIComponent(after)}` : ""}`);
   }
 
-  const [recipes, cookbooks, recentSpoonsRaw, fellowChefsCount, kitchenVisitorsCount] = await Promise.all([
-    database.recipe.findMany({
-      where: {
-        chefId: profileUser.id,
-        deletedAt: null,
-      },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        servings: true,
-        activeCoverId: true,
-        activeCoverVariant: true,
-        coverMode: true,
-        covers: {
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        },
-      },
-    }),
-    database.cookbook.findMany({
-      where: { authorId: profileUser.id },
-      orderBy: { updatedAt: "desc" },
-      include: {
-        _count: {
-          select: { recipes: true },
-        },
-        recipes: {
-          take: 4,
-          orderBy: { createdAt: "desc" },
-          include: {
-            recipe: {
-              select: {
-                id: true,
-                title: true,
-                activeCoverId: true,
-                activeCoverVariant: true,
-                coverMode: true,
-                covers: {
-                  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-                },
-              },
-            },
-          },
-        },
-      },
-    }),
-    listSpoonsByChef(database, profileUser.id, { limit: 10 }),
-    countFellowChefs(database, profileUser.id),
-    countKitchenVisitors(database, profileUser.id),
-  ]);
+  const recipes = recipeRows.slice(0, PROFILE_RECIPE_LIMIT);
+  const nextCursor = recipeRows.length > PROFILE_RECIPE_LIMIT ? recipes[recipes.length - 1]!.id : null;
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);
@@ -197,6 +144,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   });
 
   const publicOrigin = resolveIssuerOrigin(request.url, context.cloudflare?.env?.SPOONJOY_BASE_URL);
+  // Each page of recipes is its own canonical page, as search engines recommend.
   const canonicalUrl = absoluteUrlFromRequest(
     publicOrigin,
     `/users/${profileUser.username}`,
@@ -218,6 +166,9 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     ogImageUrl,
     isOwner: currentUserId === profileUser.id,
     recipes: recipesWithCover,
+    recipeCount,
+    after,
+    nextCursor,
     cookbooks: cookbooksWithCover,
     recentSpoons,
     // What the recent cooks' relative times ("3 hr ago") are measured from, so the server's
@@ -228,11 +179,28 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   };
 }
 
+export const PROFILE_RECIPE_LIMIT = 24;
+
+// Recipe ids are cuids; anything else is ignored rather than sent to the database.
+function parseRecipeCursor(raw: string | null): string | null {
+  return raw && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : null;
+}
+
+function profileRecipesHref(username: string, cursor: string): string {
+  return `/users/${encodeURIComponent(username)}?after=${encodeURIComponent(cursor)}`;
+}
+
+type ProfileData = Exclude<Awaited<ReturnType<typeof loader>>, Response>;
+const selectProfileRecipesPage = (data: ProfileData) => ({ items: data.recipes, nextCursor: data.nextCursor ?? null });
+
 export default function UserProfile() {
   const {
     profile,
     isOwner,
-    recipes,
+    recipes: firstPage,
+    recipeCount = firstPage.length,
+    after = null,
+    nextCursor = null,
     cookbooks,
     recentSpoons = EMPTY_SPOONS,
     renderedAt,
@@ -240,6 +208,15 @@ export default function UserProfile() {
     kitchenVisitorsCount = 0,
   } = useLoaderData<typeof loader>();
   const profileHref = `/users/${profile.username}`;
+  const list = useAppendingList({
+    page: { items: firstPage, nextCursor },
+    resetKey: `${profile.id}|${after ?? ""}|${firstPage[0]?.id ?? ""}`,
+    loadHref: (cursor: string) => profileRecipesHref(profile.username, cursor),
+    select: selectProfileRecipesPage,
+    noun: "recipes",
+  });
+  const recipes = list.items;
+  const firstNewRef = useFocusFirstNew<HTMLAnchorElement>(list.firstNewIndex);
 
   return (
     <CookbookPage>
@@ -258,7 +235,7 @@ export default function UserProfile() {
                 {profile.username}
               </Heading>
               <Text className="mt-1 text-sm">
-                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipes.length} {recipes.length === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-flex min-h-11 items-center text-sm">
                 Open kitchen view
@@ -299,10 +276,21 @@ export default function UserProfile() {
                 servings: recipe.servings ?? undefined,
                 chefName: profile.username,
               }))}
-              emptyTitle={isOwner ? "No recipes yet" : "No public recipes yet"}
-              emptyMessage={isOwner ? "Create your first recipe to start your kitchen." : `${profile.username} has not shared any recipes yet.`}
-              emptyCtaHref={isOwner ? "/recipes/new" : null}
+              totalCount={recipeCount}
+              firstNew={{ index: list.firstNewIndex, ref: firstNewRef }}
+              emptyTitle={after ? "That's every recipe" : isOwner ? "No recipes yet" : "No public recipes yet"}
+              emptyMessage={after
+                ? `You've reached ${profile.username}'s oldest recipe.`
+                : isOwner ? "Create your first recipe to start your kitchen." : `${profile.username} has not shared any recipes yet.`}
+              emptyCtaHref={isOwner && !after ? "/recipes/new" : null}
             />
+            {recipes.length > 0 ? (
+              <ShowMore
+                list={list}
+                href={list.nextCursor ? profileRecipesHref(profile.username, list.nextCursor) : null}
+                label="Show more recipes"
+              />
+            ) : null}
           </section>
 
           {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a

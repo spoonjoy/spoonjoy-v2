@@ -5,6 +5,8 @@ import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
+import { defaultPhotoCache, deliverPhoto, photoKeyFromPath } from "../app/lib/photo-delivery.server";
+import { serveReleaseAssetFallback } from "../app/lib/release-assets.server";
 import { generateNonce, withSecurityHeaders } from "../app/lib/security-headers.server";
 import {
   captureException,
@@ -282,12 +284,32 @@ export default {
       if (url.pathname.startsWith(COOK_SESSION_PREFIX)) {
         return finalizeResponse(await handleCookSessionRequest(request, env), env);
       }
+      // Photos skip React Router: a list screen asks for dozens at once, and each one only needs R2
+      // or the edge cache.
+      const photoKey = request.method === "GET" || request.method === "HEAD" ? photoKeyFromPath(url.pathname) : null;
+      if (photoKey && env.PHOTOS) {
+        const response = await deliverPhoto({
+          request,
+          key: photoKey,
+          bucket: env.PHOTOS,
+          cache: defaultPhotoCache(),
+          waitUntil: (promise) => ctx.waitUntil(promise),
+        });
+        return finalizeResponse(response, env);
+      }
 
       if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
         const response = await handleMcpRouteRequest(request, {
           cloudflare: { env, ctx },
         });
         return finalizeResponse(response, env);
+      }
+
+      // Static assets already served the current build; a hashed asset that reaches the Worker
+      // belongs to an earlier release, so serve it from the release archive before the 404 page.
+      const archivedAsset = await serveReleaseAssetFallback(request, env.PHOTOS);
+      if (archivedAsset) {
+        return finalizeResponse(archivedAsset, env);
       }
 
       // One nonce per request: it must appear identically in the selected CSP

@@ -22,7 +22,8 @@ describe('ParsedIngredientRow', () => {
         />
       )
 
-      expect(screen.getByText('1.5')).toBeInTheDocument()
+      // The parsed amount reads the way the recipe will show it, not as a raw decimal.
+      expect(screen.getByText('1 ½')).toBeInTheDocument()
     })
 
     it('displays unit', () => {
@@ -82,7 +83,7 @@ describe('ParsedIngredientRow', () => {
         />
       )
 
-      expect(screen.getByText('0.25')).toBeInTheDocument()
+      expect(screen.getByText('¼')).toBeInTheDocument()
     })
 
     it('formats whole number quantities without decimal', () => {
@@ -568,7 +569,7 @@ describe('ParsedIngredientRow', () => {
         />
       )
 
-      expect(screen.getByText('0.125')).toBeInTheDocument()
+      expect(screen.getByText('⅛')).toBeInTheDocument()
     })
 
     it('handles compound ingredient names with special characters', () => {
