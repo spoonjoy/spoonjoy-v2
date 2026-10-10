@@ -2,6 +2,7 @@ import { createRequestHandler } from "react-router";
 import * as serverBuild from "virtual:react-router/server-build";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
+import { d1Binding } from "../app/lib/d1-read.server";
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
@@ -149,10 +150,12 @@ async function handleCookSessionRequest(
   if (!requirement) return new Response(null, { status: 404 });
 
   try {
+    // A browser session is checked on D1; only a bearer token builds a Prisma client.
     const principal = await authenticateApiRequest(
-      await getDb({ DB: env.DB as D1Database }),
+      () => getDb({ DB: env.DB as D1Database }),
       request,
       env,
+      { d1: d1Binding(env.DB) },
     );
     if (!principal) {
       return cookErrorResponse(401, "authentication_required", "Authentication required.");

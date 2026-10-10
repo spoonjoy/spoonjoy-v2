@@ -66,6 +66,15 @@ export interface RecipeHeaderProps {
  * - Integrated ScaleSelector with scaled servings text
  * - Optional masthead actions for desktop and first-viewport clarity
  */
+// On paper the scale control is gone, so the printed page says what the quantities are for: the
+// (scaled) yield, and the scale whenever it is not the recipe as written.
+export function printYieldLine(scaledServings: string | undefined, scaleFactor: number): string | null {
+  const parts: string[] = []
+  if (scaledServings) parts.push(`Yield: ${scaledServings}`)
+  if (scaleFactor !== 1) parts.push(`Quantities at ${parseFloat(scaleFactor.toFixed(2))}× the recipe`)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
 export function RecipeHeader({
   title,
   description,
@@ -91,6 +100,7 @@ export function RecipeHeader({
   const resolvedChefHref = chefProfileHref ?? (chefId ? `/users/${chefId}` : undefined)
   const resolvedChefPhotoUrl = resolveChefAvatarUrl(chefPhotoUrl)
   const displayCoverPlaceholderLabel = normalizeCoverPlaceholderLabel(coverPlaceholderLabel)
+  const printYield = printYieldLine(scaledServings, scaleFactor)
 
   const chefIdentity = (
     <>
@@ -123,31 +133,31 @@ export function RecipeHeader({
   )
 
   return (
-    <header className="w-full overflow-hidden border-b border-[var(--sj-border-strong)]">
+    <header className="sj-recipe-header w-full overflow-hidden border-b border-[var(--sj-border-strong)]">
       <div
-        className="grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"
+        className="sj-recipe-header-layout grid lg:min-h-[clamp(34rem,72svh,50rem)] lg:grid-cols-[minmax(0,58vw)_minmax(28rem,1fr)] xl:grid-cols-[minmax(0,60vw)_minmax(30rem,1fr)]"
         data-testid="recipe-header-layout"
       >
         {displayImageUrl ? (
           <div
             data-testid="recipe-image"
-            className="relative h-[36svh] min-h-[16rem] max-h-[20rem] bg-[var(--sj-photo-charcoal)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0"
+            className="sj-recipe-hero relative h-[36svh] min-h-[16rem] max-h-[20rem] bg-[var(--sj-photo-charcoal)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:h-[3in] print:min-h-0 print:max-h-[3in] print:bg-transparent"
           >
             <img
               src={displayImageUrl}
               alt={`Photo of ${title}`}
               {...HERO_IMAGE_PROPS}
-              className="h-full min-h-[16rem] w-full object-cover lg:min-h-0"
+              className="h-full min-h-[16rem] w-full object-cover lg:min-h-0 print:min-h-0"
             />
             <CoverProvenanceBadge
               label={coverProvenanceLabel}
-              className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)]"
+              className="absolute bottom-4 left-4 max-w-[calc(100%-2rem)] print:hidden"
             />
             {activeCoverProcessing ? (
               <span
                 role="status"
                 aria-live="polite"
-                className="absolute left-4 top-4 inline-flex min-h-7 max-w-[calc(100%-2rem)] items-center gap-2 border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] [text-shadow:0_1px_1px_rgba(0,0,0,0.62)]"
+                className="print:hidden absolute left-4 top-4 inline-flex min-h-7 max-w-[calc(100%-2rem)] items-center gap-2 border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 font-sj-ui text-xs font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] [text-shadow:0_1px_1px_rgba(0,0,0,0.62)]"
               >
                 <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
                 Styling cover
@@ -157,7 +167,7 @@ export function RecipeHeader({
         ) : (
           <div
             data-testid="recipe-image-placeholder"
-            className="flex h-[36svh] min-h-[16rem] max-h-[20rem] items-center justify-center bg-[var(--sj-flour)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0"
+            className="flex h-[36svh] min-h-[16rem] max-h-[20rem] items-center justify-center bg-[var(--sj-flour)] lg:h-[clamp(34rem,72svh,50rem)] lg:max-h-none lg:min-h-0 print:hidden"
           >
             <div className="flex flex-col items-center gap-3 text-[var(--sj-ink-soft)]">
               <div className="rounded-[var(--sj-radius-control)] border border-[var(--sj-border-strong)] p-5">
@@ -168,15 +178,15 @@ export function RecipeHeader({
           </div>
         )}
 
-        <div className="flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14">
+        <div className="sj-recipe-header-body flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-8 lg:min-h-[clamp(34rem,72svh,50rem)] lg:px-10 lg:py-10 xl:px-14 print:min-h-0 print:px-0 print:py-4">
           {masthead ? (
-            <div className="border-b border-[var(--sj-border)] sm:pb-4" data-testid="recipe-masthead">
+            <div className="border-b border-[var(--sj-border)] sm:pb-4 print:hidden" data-testid="recipe-masthead">
               {masthead}
             </div>
           ) : null}
 
-          <div className="mt-6 max-w-[43rem] lg:mt-10">
-            <h1 className="font-sj-display max-w-4xl break-words text-5xl/12 font-extrabold text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18">
+          <div className="mt-6 max-w-[43rem] lg:mt-10 print:mt-0 print:max-w-none">
+            <h1 className="font-sj-display max-w-4xl break-words text-5xl/12 font-extrabold text-[var(--sj-ink)] sm:text-6xl/14 xl:text-7xl/16 2xl:text-8xl/18 print:text-4xl/11">
               {title}
             </h1>
             {chefLine}
@@ -192,7 +202,13 @@ export function RecipeHeader({
             )}
           </div>
 
-          <div className="mt-8 max-w-[43rem]" data-testid="recipe-header-controls">
+          {printYield ? (
+            <p className="hidden font-sj-ui text-sm font-semibold text-[var(--sj-ink)] print:mt-4 print:block" data-testid="recipe-print-yield">
+              {printYield}
+            </p>
+          ) : null}
+
+          <div className="mt-8 max-w-[43rem] print:hidden" data-testid="recipe-header-controls">
             <div className="grid gap-4 sm:grid-cols-[minmax(16rem,26rem)_auto] sm:items-center sm:justify-between">
               <ScaleSelector
                 value={scaleFactor}
