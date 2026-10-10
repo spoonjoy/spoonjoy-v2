@@ -48,10 +48,17 @@ import React from "react";
 // Mock Motion's Reorder components to render children directly in tests
 // This is needed because Reorder.Group and Reorder.Item have complex animation
 // logic that doesn't work well with happy-dom
+//
+// LazyMotion gets its features synchronously: the app loads them from a separate chunk after the
+// first render, and in a test that load would land after the render's act() scope and fail the
+// warning gate. test/components/motion/lazy-motion.test.tsx uses the real module to test the
+// lazy load itself.
 vi.mock('motion/react', async () => {
-  const actual = await vi.importActual('motion/react');
+  const actual = await vi.importActual<typeof import('motion/react')>('motion/react');
   return {
-    ...actual as object,
+    ...actual,
+    LazyMotion: ({ features, ...props }: React.ComponentProps<typeof actual.LazyMotion>) =>
+      React.createElement(actual.LazyMotion, { ...props, features: typeof features === 'function' ? actual.domMax : features }),
     Reorder: {
       Group: ({ children, className }: { children: React.ReactNode; className?: string }) =>
         React.createElement('div', { className }, children),
