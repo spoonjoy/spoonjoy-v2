@@ -811,8 +811,25 @@ describe("verify", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it("re-reads the secret list while it is still empty or partial right after deploy", async () => {
+    const lists = [[], ["SESSION_SECRET"], REQUIRED_RUN_SECRETS];
+    const live = verifyExec();
+    const exec = vi.fn(async (file: string, args: string[]) => {
+      if (args.slice(2).join(" ").startsWith("secret list")) {
+        return { stdout: JSON.stringify(lists.shift()!.map((name) => ({ name, type: "secret_text" }))), stderr: "" };
+      }
+      return live.exec(file, args);
+    });
+    const sleep = vi.fn(async () => {});
+    await verify({ env: RUN_ENV, exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, sleep, log: vi.fn() });
+    expect(lists).toEqual([]);
+    expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
   it("fails on a missing secret or a pending migration", async () => {
-    await expect(verify({ env: RUN_ENV, exec: verifyExec({ secrets: ["SESSION_SECRET"] }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
+    let clock = 0;
+    const late = () => (clock += 10 * 60 * 1000);
+    await expect(verify({ env: RUN_ENV, exec: verifyExec({ secrets: ["SESSION_SECRET"] }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: late, sleep: vi.fn(), log: vi.fn() }))
       .rejects.toThrow("The run's Worker is missing secret(s): VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT.");
     await expect(verify({ env: RUN_ENV, exec: verifyExec({ migrations: "0029_x.sql pending" }).exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/still has pending migrations/);
@@ -820,7 +837,7 @@ describe("verify", () => {
     await expect(verify({ env: RUN_ENV, exec: noJson.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
       .rejects.toThrow(/no JSON results/);
     const nullRows = fakeExec({ "secret list": "[null]" });
-    await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: Date.now, log: vi.fn() }))
+    await expect(verify({ env: RUN_ENV, exec: nullRows.exec, fs: scopedFiles().fs, fetchImpl: site(LIVE), now: late, sleep: vi.fn(), log: vi.fn() }))
       .rejects.toThrow(/missing secret/);
   });
 
