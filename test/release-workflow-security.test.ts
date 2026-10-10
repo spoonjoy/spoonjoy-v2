@@ -375,6 +375,14 @@ describe("web dependency advisory gate", () => {
     expect(ci).toContain("osv-scanner_linux_amd64");
     expect(ci).toContain("bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc");
     expect(ci).toContain("https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}");
+    // The tag lookup is authenticated with the job's read-only token, so it cannot hit the shared
+    // unauthenticated rate limit (2026-10-10: a 403 there failed a required advisory check).
+    for (const source of [ci, readFileSync(".github/workflows/advisory-scheduled.yml", "utf8")]) {
+      expect(source).toContain(
+        'curl -fsSL --retry 3 --retry-delay 2 -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}"',
+      );
+      expect(source).toContain("GITHUB_TOKEN: ${{ github.token }}");
+    }
     expect(ci).toContain(
       "node scripts/warning-gate.ts -- jq -e --arg expected \"$OSV_SCANNER_TAG_SHA\" '.object | select(.type == \"commit\" and .sha == $expected)' .cache/osv-scanner/tag.json",
     );

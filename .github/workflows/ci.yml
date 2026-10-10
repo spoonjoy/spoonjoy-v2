@@ -109,9 +109,11 @@ jobs:
           OSV_SCANNER_VERSION: v2.3.8
           OSV_SCANNER_TAG_SHA: 408fcd6f8707999a29e7ba45e15809764cf24f67
           OSV_SCANNER_LINUX_AMD64_SHA256: bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
+          # The tag lookup is an API call; unauthenticated, it shares the runner's rate limit and can answer 403.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node scripts/warning-gate.ts -- mkdir -p .cache/osv-scanner
-          node scripts/warning-gate.ts -- curl -fsSL --retry 3 --retry-delay 2 "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}" -o .cache/osv-scanner/tag.json
+          node scripts/warning-gate.ts -- curl -fsSL --retry 3 --retry-delay 2 -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/google/osv-scanner/git/ref/tags/${OSV_SCANNER_VERSION}" -o .cache/osv-scanner/tag.json
           node scripts/warning-gate.ts -- jq -e --arg expected "$OSV_SCANNER_TAG_SHA" '.object | select(.type == "commit" and .sha == $expected)' .cache/osv-scanner/tag.json
           node scripts/warning-gate.ts -- curl -fsSL --retry 3 --retry-delay 2 "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o .cache/osv-scanner/osv-scanner
           printf '%s  %s\n' "$OSV_SCANNER_LINUX_AMD64_SHA256" ".cache/osv-scanner/osv-scanner" > .cache/osv-scanner/checksums.txt
