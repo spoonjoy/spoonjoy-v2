@@ -294,12 +294,37 @@ describe("Recipes New Route", () => {
       expect(data.errors.parse).toBe("Ingredient text is required");
     });
 
-    it("should return a generic parse error for unexpected parser failures", async () => {
+    it("parses typed ingredients by rules when AI parsing is unavailable", async () => {
+      vi
+        .spyOn(ingredientParseModule, "parseIngredients")
+        .mockRejectedValueOnce(new IngredientParseError("OpenAI API key is required"));
+      const request = await createFormRequest(
+        { intent: "parseIngredients", ingredientText: "1 lb spaghetti\n2 tbsp kosher salt" },
+        testUserId
+      );
+
+      const response = await action({
+        request,
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      const { data, status } = extractResponseData(response);
+      expect(status).toBe(200);
+      expect(data).toEqual({
+        parsedIngredients: [
+          { quantity: 1, unit: "lb", ingredientName: "spaghetti" },
+          { quantity: 2, unit: "tbsp", ingredientName: "kosher salt" },
+        ],
+      });
+    });
+
+    it("should return a generic parse error for unexpected parser failures on text the rules cannot parse either", async () => {
       vi
         .spyOn(ingredientParseModule, "parseIngredients")
         .mockRejectedValueOnce(new Error("network down"));
       const request = await createFormRequest(
-        { intent: "parseIngredients", ingredientText: "2 cups flour" },
+        { intent: "parseIngredients", ingredientText: "2 cups" },
         testUserId
       );
 
