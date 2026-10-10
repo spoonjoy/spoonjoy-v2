@@ -4,10 +4,13 @@ import { PrismaD1 } from "@prisma/adapter-d1";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 
 // Cloudflare D1 for all environments (local + production)
-export async function getDb(env: { DB: D1Database }): Promise<PrismaClientType> {
-  const { PrismaClient } = await import("@prisma/client");
-  const adapter = new PrismaD1(env.DB as never);
-  return new PrismaClient({ adapter });
+let isolateClient: Promise<PrismaClientType> | null = null;
+export function getDb(env: { DB: D1Database }): Promise<PrismaClientType> {
+  isolateClient ??= (async () => {
+    const { PrismaClient } = await import("@prisma/client");
+    return new PrismaClient({ adapter: new PrismaD1(env.DB as never) });
+  })();
+  return isolateClient;
 }
 
 async function createLocalSqliteDb(): Promise<PrismaClientType> {
