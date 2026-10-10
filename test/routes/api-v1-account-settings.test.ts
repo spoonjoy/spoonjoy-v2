@@ -205,7 +205,7 @@ describe("API v1 native account settings", () => {
     ]));
   });
 
-  it("updates profile identity with session or account-write bearer auth and rejects collisions", async () => {
+  it("updates the username with account-write bearer auth, refuses email changes, and rejects collisions", async () => {
     const bearer = await createApiCredential(db, userId, "Native settings writer", { scopes: ["account:write"] });
     const other = await createUser(
       db,
@@ -213,46 +213,76 @@ describe("API v1 native account settings", () => {
       `${faker.internet.username()}_${faker.string.alphanumeric(8)}`,
       "testPassword123",
     );
-    const newEmail = faker.internet.email().toUpperCase();
+    const currentEmail = email.toLowerCase();
     const newUsername = `native_${faker.string.alphanumeric(8)}`;
 
+	    // The native app sends the email it shows; an unchanged address (in any case) is accepted.
 	    const response = await apiPatch("me", {
 	      Authorization: `Bearer ${bearer.token}`,
-	    }, "req_me_profile_update", { clientMutationId: "cm_me_profile_update", email: newEmail, username: newUsername });
+	    }, "req_me_profile_update", { clientMutationId: "cm_me_profile_update", email: currentEmail.toUpperCase(), username: newUsername });
 	    const payload = await readJson(response);
 
     expect(response.status).toBe(200);
     expectEnvelopeHeaders(response, "req_me_profile_update");
     expect(payload.data).toMatchObject({
 	      id: userId,
-	      email: newEmail.toLowerCase(),
+	      email: currentEmail,
 	      username: newUsername,
 	      mutation: { clientMutationId: "cm_me_profile_update", replayed: false },
 	    });
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
-      .resolves.toMatchObject({ email: newEmail.toLowerCase(), username: newUsername });
+      .resolves.toMatchObject({ email: currentEmail, username: newUsername });
 
 	    const noChange = await apiPatch("me", {
 	      Authorization: `Bearer ${bearer.token}`,
-	    }, "req_me_profile_no_change", { clientMutationId: "cm_me_profile_no_change", email: newEmail.toLowerCase(), username: newUsername });
+	    }, "req_me_profile_no_change", { clientMutationId: "cm_me_profile_no_change", email: currentEmail, username: newUsername });
 
     expect(noChange.status).toBe(200);
+
+	    // Audit 2026-10-09 finding 2: a token that could change the email could hand the account to
+	    // whoever controls the new address. The API refuses any different address, free or taken.
+	    const emailChange = await apiPatch("me", {
+	      Authorization: `Bearer ${bearer.token}`,
+	    }, "req_me_email_change", { clientMutationId: "cm_me_email_change", email: faker.internet.email(), username: newUsername });
+    const emailChangePayload = await readJson(emailChange);
+
+    expect(emailChange.status).toBe(403);
+    expect(emailChangePayload).toMatchObject({
+      ok: false,
+      requestId: "req_me_email_change",
+      error: {
+        code: "email_change_requires_web",
+        message: "Your email can only be changed in Account settings on the Spoonjoy website.",
+        details: { field: "email" },
+      },
+    });
 
 	    const emailConflict = await apiPatch("me", {
 	      Authorization: `Bearer ${bearer.token}`,
 	    }, "req_me_email_conflict", { clientMutationId: "cm_me_email_conflict", email: other.email.toUpperCase(), username: newUsername });
-    const emailConflictPayload = await readJson(emailConflict);
 
-    expect(emailConflict.status).toBe(400);
-    expect(emailConflictPayload).toMatchObject({
-      ok: false,
-      requestId: "req_me_email_conflict",
-      error: { code: "validation_error", details: { field: "email" } },
-    });
+    expect(emailConflict.status).toBe(403);
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: currentEmail, username: newUsername });
+
+    // A queued username edit can carry an email cached before a change on the web. The username
+    // saves and the stale email is ignored, never written.
+    const renamed = `${newUsername}x`.slice(0, 30);
+    const staleEmail = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_stale_email", { clientMutationId: "cm_me_stale_email", email: faker.internet.email(), username: renamed });
+    expect(staleEmail.status).toBe(200);
+    expect((await readJson(staleEmail)).data).toMatchObject({ email: currentEmail, username: renamed });
+    await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
+      .resolves.toMatchObject({ email: currentEmail, username: renamed });
+    const restored = await apiPatch("me", {
+      Authorization: `Bearer ${bearer.token}`,
+    }, "req_me_restore_username", { clientMutationId: "cm_me_restore_username", email: currentEmail, username: newUsername });
+    expect(restored.status).toBe(200);
 
 	    const usernameConflict = await apiPatch("me", {
 	      Authorization: `Bearer ${bearer.token}`,
-	    }, "req_me_username_conflict", { clientMutationId: "cm_me_username_conflict", email: newEmail, username: other.username });
+	    }, "req_me_username_conflict", { clientMutationId: "cm_me_username_conflict", email: currentEmail, username: other.username });
     const usernameConflictPayload = await readJson(usernameConflict);
 
     expect(usernameConflict.status).toBe(400);
@@ -295,12 +325,12 @@ describe("API v1 native account settings", () => {
 
     const trimmed = await apiPatch("me", auth, "req_me_rule_trimmed", {
       clientMutationId: "cm_me_rule_trimmed",
-      email: "  Spaced.Chef@Example.com  ",
+      email: `  ${email.toUpperCase()}  `,
       username: "  api_renamed  ",
     });
     expect(trimmed.status).toBe(200);
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
-      .resolves.toMatchObject({ email: "spaced.chef@example.com", username: "api_renamed" });
+      .resolves.toMatchObject({ email: email.toLowerCase(), username: "api_renamed" });
 
     const rejections = [
       { username: "admin/x", message: "Username can only use letters, numbers, periods, underscores and hyphens" },
@@ -314,7 +344,7 @@ describe("API v1 native account settings", () => {
     for (const [index, { username: candidate, message }] of rejections.entries()) {
       const response = await apiPatch("me", auth, `req_me_rule_${index}`, {
         clientMutationId: `cm_me_rule_${index}`,
-        email: "spaced.chef@example.com",
+        email: email.toLowerCase(),
         username: candidate,
       });
       const payload = await readJson(response);
@@ -324,16 +354,16 @@ describe("API v1 native account settings", () => {
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
       .resolves.toMatchObject({ username: "api_renamed" });
 
-    // An older username that predates the rule can still save its email.
+    // An older username that predates the rule can still be sent back unchanged.
     await db.user.update({ where: { id: userId }, data: { username: "legacy chef!" } });
     const legacy = await apiPatch("me", auth, "req_me_rule_legacy", {
       clientMutationId: "cm_me_rule_legacy",
-      email: "legacy@example.com",
+      email: email.toLowerCase(),
       username: " legacy chef! ",
     });
     expect(legacy.status).toBe(200);
     await expect(db.user.findUniqueOrThrow({ where: { id: userId } }))
-      .resolves.toMatchObject({ email: "legacy@example.com", username: "legacy chef!" });
+      .resolves.toMatchObject({ email: email.toLowerCase(), username: "legacy chef!" });
   });
 
   it("deletes the replaced profile photo's stored file on a native upload", async () => {
@@ -816,7 +846,7 @@ describe("API v1 native account settings", () => {
 	    const cookie = await sessionCookie(userId);
 	    const profileBody = {
 	      clientMutationId: "cm_account_profile_replay",
-	      email: faker.internet.email().toUpperCase(),
+	      email: email.toUpperCase(),
 	      username: `native_replay_${faker.string.alphanumeric(8)}`,
 	    };
 

@@ -85,6 +85,7 @@ describe("MobileNav signed in", () => {
     "/recipes/r-1/steps/new",
     "/recipes/r-1/steps/s-1/edit",
     "/oauth/authorize",
+    "/logout",
   ])("stays out of %s", (path) => {
     renderAt(path);
     expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();

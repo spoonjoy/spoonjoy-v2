@@ -256,6 +256,25 @@ describe("Cloudflare worker app", () => {
     expect(requestHandler).not.toHaveBeenCalled();
   });
 
+  it("serves an earlier release's hashed asset from the archive before the 404 page", async () => {
+    requestHandler.mockClear();
+    const get = vi.fn(async (key: string) => (
+      key === "release-assets/route-Ab12.js" ? { body: "export{}" } : null
+    ));
+    const env = versionedEnvironment({ PHOTOS: { get } as unknown as R2Bucket });
+
+    const archived = await worker.fetch(new Request("https://spoonjoy.app/assets/route-Ab12.js"), env, context());
+    expect(archived.status).toBe(200);
+    expect(await archived.text()).toBe("export{}");
+    expect(archived.headers.get("Content-Type")).toBe("text/javascript; charset=utf-8");
+    expect(archived.headers.get("X-Spoonjoy-Worker-Version")).toBe(WORKER_VERSION_ID);
+    expect(requestHandler).not.toHaveBeenCalled();
+
+    // An asset no release ever had still reaches the app's 404 handling.
+    await worker.fetch(new Request("https://spoonjoy.app/assets/missing-Zz99.js"), env, context());
+    expect(requestHandler).toHaveBeenCalledTimes(1);
+  });
+
   it("exposes the executing Worker version for release-canary verification", async () => {
     requestHandler.mockClear();
     const env = versionedEnvironment();
