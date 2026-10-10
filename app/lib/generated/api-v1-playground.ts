@@ -2336,7 +2336,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "409",
-          "description": "Errors: idempotency_conflict, idempotency_in_progress"
+          "description": "Errors: idempotency_conflict, idempotency_in_progress, edit_conflict"
         },
         {
           "status": "429",

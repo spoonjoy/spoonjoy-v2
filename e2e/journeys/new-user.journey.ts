@@ -48,7 +48,7 @@ test.describe("New user", () => {
       const username = page.getByLabel("Username", { exact: true });
       await page.getByLabel("Email", { exact: true }).fill(email);
       await username.fill("ab");
-      await page.getByRole("button", { name: "Sign Up", exact: true }).click();
+      await page.getByRole("button", { name: "Sign up", exact: true }).click();
 
       await expect(page.getByText("Username must be at least 3 characters", { exact: true })).toBeVisible();
       await expect(page).toHaveURL(pathUrl("/signup"));

@@ -13,7 +13,7 @@ export async function fillLoginEmail(page: Page, emailAddress: string) {
 export async function submitPasswordLogin(page: Page, emailAddress: string, password: string) {
   const emailInput = page.getByLabel('Username or email').first();
   const passwordInput = page.getByLabel('Password').first();
-  const loginButton = page.locator('form').getByRole('button', { name: 'Log In', exact: true });
+  const loginButton = page.locator('form').getByRole('button', { name: 'Log in', exact: true });
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await expect(async () => {
