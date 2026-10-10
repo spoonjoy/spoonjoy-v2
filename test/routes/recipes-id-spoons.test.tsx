@@ -482,6 +482,23 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(stored[0].note).toBe("delicious");
   });
 
+  it("action with intent=createSpoon answers 404 for a recipe in the trash and writes nothing", async () => {
+    await db.recipe.update({ where: { id: recipeId }, data: { deletedAt: new Date() } });
+    const fd = new UndiciFormData();
+    fd.append("intent", "createSpoon");
+    fd.append("note", "too late");
+    const request = new UndiciRequest("http://localhost/recipes/x", {
+      method: "POST",
+      headers: { cookie: cookSessionCookie },
+      body: fd,
+    }) as unknown as Request;
+
+    await expect(
+      action({ request, params: { id: recipeId }, context: { cloudflare: { env: null } } as any }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(db.recipeSpoon.count({ where: { recipeId } })).resolves.toBe(0);
+  });
+
   it("action with intent=createSpoon ignores forged cover opt-in from non-owners", async () => {
     const fd = new UndiciFormData();
     fd.append("intent", "createSpoon");

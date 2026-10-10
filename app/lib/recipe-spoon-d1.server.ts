@@ -80,8 +80,8 @@ function recipeCoverUpdate(
 }
 
 /**
- * Adds a cook's spoon to a recipe on D1. Answers 404 for a recipe that does not exist; otherwise
- * it decides and writes as `createSpoon` followed by the spoon-cover step on the Prisma path.
+ * Adds a cook's spoon to a recipe on D1. Answers 404 for a recipe that does not exist or is in the
+ * trash; otherwise it decides and writes as `createSpoon` followed by the spoon-cover step on the Prisma path.
  */
 export async function createSpoonOnD1(
   d1: D1ReadDatabase,
@@ -90,7 +90,7 @@ export async function createSpoonOnD1(
 ): Promise<CreateSpoonOnD1Result> {
   const [recipeRows, coverRows, priorRows, spoonerRows] = await d1ReadBatch(d1, [
     [
-      `SELECT "id", "title", "chefId", "coverMode", "activeCoverId", "activeCoverVariant" FROM "Recipe" WHERE "id" = ?`,
+      `SELECT "id", "title", "chefId", "coverMode", "activeCoverId", "activeCoverVariant" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`,
       input.recipeId,
     ],
     [
