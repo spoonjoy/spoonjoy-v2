@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import {
   PRODUCTION_R2_BUCKET,
   QA_BASE_URL,
+  QA_D1_DATABASE_NAME,
   QA_R2_BUCKET,
   arg,
   resolveScriptTarget,
@@ -386,6 +388,19 @@ SELECT action, key, reason
 FROM r2_reference_blockers
 WHERE key IS NOT NULL AND key != '';
 `.trim();
+}
+
+/** One row when the D1 database has been migrated; none when its schema was never created. */
+export function buildSchemaPresentSql() {
+  return "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'User';";
+}
+
+async function localSchemaPresent({ dbName, target, runCommand }) {
+  const result = await runCommand("pnpm", wranglerD1Args(dbName, buildSchemaPresentSql(), target), {
+    encoding: "utf8",
+    maxBuffer: MAX_WRANGLER_BUFFER,
+  });
+  return parseWranglerRows(result.stdout, "local schema preflight").length > 0;
 }
 
 export function buildQaR2SearchTableExistsSql() {
@@ -1217,6 +1232,20 @@ export function parseCleanupArgs(argv = process.argv.slice(2)) {
   };
 }
 
+// In a Journeys run, `qa-run-scope prepare` rewrites wrangler.json env.qa so the DB binding points
+// at that run's own database. Name it, so the log never claims shared QA was the target.
+export function resolveRunScopedQaTarget(target, dbName, wranglerConfig) {
+  if (target.targetEnv !== "qa") return target;
+  const qa = wranglerConfig?.env?.qa;
+  const name = qa?.d1_databases?.find((entry) => entry?.binding === dbName)?.database_name;
+  if (!name || name === QA_D1_DATABASE_NAME) return target;
+  return {
+    ...target,
+    baseUrl: qa.vars?.SPOONJOY_BASE_URL ?? target.baseUrl,
+    d1Target: `QA run D1 ${name} (--remote --env qa, rewritten by qa-run-scope)`,
+  };
+}
+
 export function formatCleanupTargetSummary(target) {
   return scriptTargetSummary(target);
 }
@@ -1266,6 +1295,7 @@ export async function runCleanupCli({
   stdout = process.stdout,
   stderr = process.stderr,
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  readWranglerConfig = () => JSON.parse(readFileSync("wrangler.json", "utf8")),
 } = {}) {
   if (argv.includes("--help") || argv.includes("-h")) {
     printHelp(stdout);
@@ -1273,7 +1303,10 @@ export async function runCleanupCli({
   }
 
   const options = parseCleanupArgs(argv);
-  for (const line of formatCleanupTargetSummary(options.target)) {
+  const summaryTarget = options.target.targetEnv === "qa"
+    ? resolveRunScopedQaTarget(options.target, options.dbName, readWranglerConfig())
+    : options.target;
+  for (const line of formatCleanupTargetSummary(summaryTarget)) {
     stdout.write(`${line}\n`);
   }
 
@@ -1292,6 +1325,17 @@ export async function runCleanupCli({
   if (options.apply) await removeScratchSchema();
 
   try {
+    // A CI job that failed before migrating its local D1 still runs this cleanup step. With no
+    // schema there is no disposable data, so say so once instead of failing on every query.
+    // QA and production always have a schema, so a missing one there is left to fail loudly.
+    if (
+      options.apply
+      && options.target.targetEnv === "local"
+      && !(await localSchemaPresent({ dbName: options.dbName, target: options.target, runCommand }))
+    ) {
+      stdout.write("Skipped local cleanup: the local D1 database has no schema yet (no User table).\n");
+      return;
+    }
     const existingSearchTables = options.apply
       ? await collectExistingSearchTables({
         dbName: options.dbName,

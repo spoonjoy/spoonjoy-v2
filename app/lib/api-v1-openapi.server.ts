@@ -696,6 +696,107 @@ const schemas = {
   AccountDeleteMutationRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
   }),
+  // Proof for DELETE /api/v1/me: the username typed back, plus the current password for an account
+  // with one, or a fresh native Sign in with Apple credential for the linked Apple ID.
+  DeleteAccountRequest: objectSchema(["confirmUsername"], {
+    confirmUsername: shortTextSchema,
+    password: { type: "string", minLength: 1, maxLength: 1024 },
+    appleIdentityToken: { type: "string", minLength: 1, maxLength: 8192 },
+    appleRawNonce: { type: "string", minLength: 1, maxLength: 256 },
+  }),
+  AccountDeletion: objectSchema(["deleted", "reassignedRecipes", "deletedRecipes"], {
+    deleted: { const: true },
+    reassignedRecipes: { type: "integer", minimum: 0 },
+    deletedRecipes: { type: "integer", minimum: 0 },
+  }),
+  AccountExport: objectSchema(["format", "exportedAt", "account", "recipes", "cookbooks", "shoppingList", "cooks"], {
+    format: { const: "spoonjoy.account-export.v1" },
+    exportedAt: dateTimeSchema,
+    account: objectSchema(["id", "username", "email", "photoUrl", "createdAt", "signInMethods"], {
+      id: idSchema,
+      username: idSchema,
+      email: idSchema,
+      photoUrl: nullableStringSchema,
+      createdAt: nullableDateTimeSchema,
+      signInMethods: { type: "array", items: idSchema },
+    }),
+    recipes: {
+      type: "array",
+      items: objectSchema(["id", "title", "description", "servings", "sourceUrl", "forkedFromRecipeId", "createdAt", "updatedAt", "deletedAt", "url", "steps", "covers"], {
+        id: idSchema,
+        title: idSchema,
+        description: nullableStringSchema,
+        servings: nullableStringSchema,
+        sourceUrl: nullableStringSchema,
+        forkedFromRecipeId: nullableStringSchema,
+        createdAt: nullableDateTimeSchema,
+        updatedAt: nullableDateTimeSchema,
+        deletedAt: nullableDateTimeSchema,
+        url: idSchema,
+        steps: {
+          type: "array",
+          items: objectSchema(["stepNum", "title", "description", "durationMinutes", "usesOutputOfSteps", "ingredients"], {
+            stepNum: { type: "integer" },
+            title: nullableStringSchema,
+            description: { type: "string" },
+            durationMinutes: { type: ["integer", "null"] },
+            usesOutputOfSteps: { type: "array", items: { type: "integer" } },
+            ingredients: {
+              type: "array",
+              items: objectSchema(["quantity", "unit", "name"], { quantity: { type: "number" }, unit: { type: "string" }, name: { type: "string" } }),
+            },
+          }),
+        },
+        covers: {
+          type: "array",
+          items: objectSchema(["id", "active", "status", "sourceType", "imageUrl", "stylizedImageUrl", "sourceImageUrl", "createdAt"], {
+            id: idSchema,
+            active: { type: "boolean" },
+            status: idSchema,
+            sourceType: idSchema,
+            imageUrl: nullableStringSchema,
+            stylizedImageUrl: nullableStringSchema,
+            sourceImageUrl: nullableStringSchema,
+            createdAt: nullableDateTimeSchema,
+          }),
+        },
+      }),
+    },
+    cookbooks: {
+      type: "array",
+      items: objectSchema(["id", "title", "createdAt", "recipes"], {
+        id: idSchema,
+        title: idSchema,
+        createdAt: nullableDateTimeSchema,
+        recipes: {
+          type: "array",
+          items: objectSchema(["id", "title", "chef", "addedAt"], { id: idSchema, title: idSchema, chef: idSchema, addedAt: nullableDateTimeSchema }),
+        },
+      }),
+    },
+    shoppingList: {
+      type: "array",
+      items: objectSchema(["name", "quantity", "unit", "checked", "category"], {
+        name: idSchema,
+        quantity: { type: ["number", "null"] },
+        unit: nullableStringSchema,
+        checked: { type: "boolean" },
+        category: nullableStringSchema,
+      }),
+    },
+    cooks: {
+      type: "array",
+      items: objectSchema(["id", "recipeId", "recipeTitle", "cookedAt", "note", "nextTime", "photoUrl"], {
+        id: idSchema,
+        recipeId: idSchema,
+        recipeTitle: idSchema,
+        cookedAt: nullableDateTimeSchema,
+        note: nullableStringSchema,
+        nextTime: nullableStringSchema,
+        photoUrl: nullableStringSchema,
+      }),
+    },
+  }),
   NativeChefRef: objectSchema(["id", "username", "photoUrl"], { id: shortTextSchema, username: shortTextSchema, photoUrl: nullableStringSchema }),
   NativeChefRow: objectSchema(["chefId", "username", "photoUrl", "interactionCounts", "latestInteractionAt"], {
     chefId: shortTextSchema,
@@ -1057,6 +1158,10 @@ const schemas = {
     title: { type: "string", minLength: 1, maxLength: 200 },
     description: { type: ["string", "null"], maxLength: 2000 },
     servings: { type: ["string", "null"], maxLength: 100 },
+    expectedUpdatedAt: {
+      ...dateTimeSchema,
+      description: "Optional precondition: the recipe's updatedAt as the client last read it. When given and the recipe has changed since, nothing is updated and the answer is 409 edit_conflict with the current recipe in error.details.recipe. Omit it to update whatever changed in between.",
+    },
   }),
   DeleteRecipeRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
@@ -1410,6 +1515,8 @@ const schemas = {
   CookbookRecipeRemoveEnvelope: successEnvelope(ref("CookbookRecipeMutationData")),
   AccountProfileEnvelope: successEnvelope(ref("AccountProfile")),
   AccountProfileMutationEnvelope: successEnvelope(ref("AccountProfileMutationData")),
+  AccountDeletionEnvelope: successEnvelope(ref("AccountDeletion")),
+  AccountExportEnvelope: successEnvelope(ref("AccountExport")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
   NativeChefsEnvelope: successEnvelope(ref("NativeChefs")),
   NotificationPreferencesMutationEnvelope: successEnvelope(ref("NotificationPreferencesMutationData")),
@@ -1513,7 +1620,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}": {
     GET: { operationId: "getApiV1Recipe", tags: ["Recipes"], summary: "Read one public recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeDetailEnvelope" }, errors: ["validation_error", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id] },
-    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
+    PATCH: { operationId: "patchApiV1Recipe", tags: ["Recipes"], summary: "Update a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "edit_conflict", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "UpdateRecipeRequest" },
     DELETE: { operationId: "deleteApiV1Recipe", tags: ["Recipes"], summary: "Delete a recipe", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "DeleteRecipeEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: deleteIdempotencyParameters(pathParameters.id), requestBody: "DeleteRecipeRequest", requestBodyRequired: false },
   },
   "/api/v1/recipes/{id}/fork": {
@@ -1586,6 +1693,10 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   "/api/v1/me": {
     GET: { operationId: "getApiV1Me", tags: ["Account"], summary: "Read the authenticated account profile", auth: "bearer", scopes: ["account:read"], success: { 200: "AccountProfileEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
     PATCH: { operationId: "patchApiV1Me", tags: ["Account"], summary: "Update the authenticated account username (the email cannot be changed through the API)", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountProfileMutationEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "email_change_requires_web", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "UpdateAccountProfileRequest" },
+    DELETE: { operationId: "deleteApiV1Me", tags: ["Account"], summary: "Permanently delete the authenticated account after re-authentication", auth: "bearer", scopes: ["account:write"], success: { 200: "AccountDeletionEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], requestBody: "DeleteAccountRequest" },
+  },
+  "/api/v1/me/export": {
+    GET: { operationId: "getApiV1MeExport", tags: ["Account"], summary: "Download everything the authenticated account put into Spoonjoy as JSON", auth: "bearer", scopes: ["account:read", "kitchen:read"], success: { 200: "AccountExportEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"] },
   },
   "/api/v1/me/sync": {
     GET: { operationId: "getApiV1MeSync", tags: ["Account"], summary: "Bootstrap native offline account data", auth: "bearer", scopes: ["account:read", "kitchen:read"], success: { 200: "NativeAccountSyncEnvelope" }, errors: ["invalid_cursor", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [queryParameters.cursor, queryParameters.limit] },
@@ -2332,6 +2443,20 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   AccountProfileEnvelope: { ok: true, requestId: "req_example", data: exampleAccountProfile },
+  AccountDeletionEnvelope: { ok: true, requestId: "req_example", data: { deleted: true, reassignedRecipes: 2, deletedRecipes: 5 } },
+  AccountExportEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      format: "spoonjoy.account-export.v1",
+      exportedAt: exampleTimestamp,
+      account: { id: "chef_1", username: "ari", email: "ari@spoonjoy.app", photoUrl: null, createdAt: exampleTimestamp, signInMethods: ["password"] },
+      recipes: [],
+      cookbooks: [],
+      shoppingList: [],
+      cooks: [],
+    },
+  },
   AccountProfileMutationEnvelope: {
     ok: true,
     requestId: "req_example",
@@ -2597,6 +2722,7 @@ const requestExamples: Record<string, unknown> = {
   UpdateAccountProfileRequest: { clientMutationId: "device-uuid-account-update", email: "ari@spoonjoy.app", username: "ari" },
   ProfilePhotoUploadRequest: { clientMutationId: "device-uuid-profile-photo", photo: "(binary image file)" },
   AccountDeleteMutationRequest: { clientMutationId: "device-uuid-account-delete" },
+  DeleteAccountRequest: { confirmUsername: "ari", password: "current password" },
   UpdateNotificationPreferencesRequest: {
     clientMutationId: "device-uuid-notification-preferences",
     notifySpoonOnMyRecipe: true,
@@ -2786,6 +2912,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   method_not_allowed: "Method not allowed",
   idempotency_conflict: "Idempotency key was already used for a different request",
   idempotency_in_progress: "Idempotency key is already in progress; retry shortly",
+  edit_conflict: "The recipe changed after expectedUpdatedAt; nothing was updated",
   rate_limited: "Too many requests",
   upstream_error: "Upstream import provider failed",
   product_activation_pending: PRODUCT_ACTIVATION_PENDING_MESSAGE,
@@ -2981,7 +3108,8 @@ function isIdempotentCookbookMutation(path: ResourcePath, method: HttpMethod) {
 
 function isIdempotentAccountMutation(path: ResourcePath, method: HttpMethod) {
   if (method !== "POST" && method !== "PATCH" && method !== "DELETE") return false;
-  return path === "/api/v1/me" ||
+  // Deleting the account removes its idempotency keys with it, so DELETE /api/v1/me never replays.
+  return (path === "/api/v1/me" && method !== "DELETE") ||
     path === "/api/v1/me/photo" ||
     path === "/api/v1/me/notification-preferences" ||
     path === "/api/v1/me/apns-devices" ||
@@ -4155,6 +4283,7 @@ const SDK_PATHS = new Set([
   "/api/v1/cookbooks/{id}",
   "/api/v1/cookbooks/{id}/recipes/{recipeId}",
   "/api/v1/me",
+  "/api/v1/me/export",
   "/api/v1/me/sync",
   "/api/v1/me/chefs",
   "/api/v1/me/photo",

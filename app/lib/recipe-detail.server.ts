@@ -14,6 +14,7 @@ import { d1StuckCoverStore, prismaStuckCoverStore, settleStuckCoverGenerations }
 import {
   archiveRecipeCover,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
@@ -63,6 +64,7 @@ import type { RecipeCover } from "@prisma/client";
 import type { ScheduleSpoonStylizationInput } from "~/lib/spoon-cover-stylization.server";
 import {
   deleteStoredImage,
+  imageUploadFormDataWithinLimit,
   RECIPE_IMAGE_TYPES,
   storeImage,
   validateImageFileForStorage,
@@ -741,7 +743,12 @@ async function handleDeleteSpoon(
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
   const { id } = params;
-  const formData = await request.formData();
+  // A spoon photo is the only large field, so the body is read through the image upload limit: an
+  // oversized upload is refused before it is buffered whole.
+  const formData = await imageUploadFormDataWithinLimit(request);
+  if (!formData) {
+    throw new Response(FOOD_IMAGE_SIZE_MESSAGE, { status: 413 });
+  }
   const intent = formData.get("intent");
 
   const database = await getRequestDb(context);
@@ -1023,30 +1030,19 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       throw new Response("Cover has no source image", { status: 400 });
     }
     const { bucket, env, waitUntil } = getCloudflareCtx(context);
-    await database.recipeCover.update({
-      where: { id: cover.id },
-      data: {
-        status: "processing",
-        generationStatus: "processing",
-        generationStartedAt: new Date(),
-        failureReason: null,
-        sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-        promptAddition,
-        parentCoverId: cover.id,
-      },
-    });
+    const regeneration = await startRecipeCoverRegeneration(database, cover, { createdById: userId, rawPhotoUrl, promptAddition });
     await runOrQueueSpoonCoverStylization(
       {
         db: database,
         userId,
         recipeId: id,
-        coverId: cover.id,
+        coverId: regeneration.coverId,
         rawPhotoUrl,
         recipeTitle: recipe.title,
         env,
         bucket,
         sourceType: cover.sourceType === "spoon" ? "spoon" : "chef-upload",
-        parentCoverId: cover.id,
+        parentCoverId: regeneration.parentCoverId,
         promptAddition,
         activateWhenReady,
         suppressAutoActivation: !activateWhenReady,
@@ -1060,7 +1056,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
       },
       waitUntil,
     );
-    return { success: true, intent: "regenerateRecipeCover", coverId: cover.id };
+    return { success: true, intent: "regenerateRecipeCover", coverId: regeneration.coverId };
   }
 
   if (intent === "archiveRecipeCover") {

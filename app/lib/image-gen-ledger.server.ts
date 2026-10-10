@@ -9,8 +9,10 @@ import {
 export const PLACEHOLDER_DAILY_CAP = 30;
 export const STYLIZATION_DAILY_CAP = 50;
 export const IMPORT_DAILY_CAP = 50;
+/** A photo import is one vision-model read, dearer than a text one, so it has its own lower cap. */
+export const PHOTO_IMPORT_DAILY_CAP = 10;
 
-export type ImageGenKind = "placeholder" | "stylization" | "import";
+export type ImageGenKind = "placeholder" | "stylization" | "import" | "import-photo";
 
 /**
  * Default ceiling on AI generations per UTC day across every user and kind. The
@@ -93,6 +95,8 @@ function capFor(kind: ImageGenKind): number {
       return STYLIZATION_DAILY_CAP;
     case "import":
       return IMPORT_DAILY_CAP;
+    case "import-photo":
+      return PHOTO_IMPORT_DAILY_CAP;
   }
 }
 

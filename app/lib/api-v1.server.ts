@@ -1,5 +1,5 @@
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
-import { prismaStuckCoverStore, settleStuckCoverGenerations } from "~/lib/recipe-cover-stuck.server";
+import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
@@ -21,6 +21,7 @@ import {
   type NotificationPreferenceFlags,
 } from "~/lib/account-settings.server";
 import { saveAccountIdentity } from "~/lib/account-identity.server";
+import { sampleApiEvent } from "~/lib/api-v1-event-sampling.server";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import {
@@ -100,7 +101,11 @@ import { getAppleNativeAuthConfig, getVapidConfig, type OAuthEnv, type VapidEnv 
 import {
   handleNativeAppleSignIn,
   NativeAppleAuthError,
+  verifyNativeAppleIdentityToken,
 } from "~/lib/apple-native-auth.server";
+import { AccountDeletionError, deleteAccount } from "~/lib/account-deletion.server";
+import { accountExportFileName, buildAccountExport } from "~/lib/account-export.server";
+import { verifyAccountOwnerProof } from "~/lib/account-reauthentication.server";
 import {
   handleNativePasswordSignIn,
   NativePasswordAuthError,
@@ -153,6 +158,7 @@ import {
   validateImageFile,
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
+import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   FOOD_IMAGE_SIZE_MESSAGE,
   FOOD_IMAGE_TYPE_MESSAGE,
@@ -164,6 +170,7 @@ import {
   archiveRecipeCover,
   clearActiveRecipeCover,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   getScopedActiveCover,
@@ -628,6 +635,10 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.read";
     case "PATCH me":
       return "account.update";
+    case "DELETE me":
+      return "account.delete";
+    case "GET me-export":
+      return "account.export";
     case "POST me-photo":
       return "account.photo.upload";
     case "DELETE me-photo":
@@ -747,6 +758,12 @@ function observeApiV1Response(
     ?? responseMetadata.idempotencyOutcome
     ?? defaultIdempotencyOutcome(operation, errorCode);
   const rateLimitScope = input.telemetry?.rateLimitScope ?? responseMetadata.rateLimitScope;
+  const latencyMs = Math.max(0, Date.now() - input.startedAt);
+  const sample = sampleApiEvent(
+    { method: args.request.method, status: input.response.status, errorCode, latencyMs },
+    env,
+  );
+  if (!sample.send) return input.response;
   waitUntil(
     captureEvent(postHogConfig, {
       event: "spoonjoy.api_v1.request",
@@ -773,7 +790,9 @@ function observeApiV1Response(
         user_agent_family: userAgentFamily(args.request.headers.get("User-Agent")),
         idempotency_outcome: idempotencyOutcome,
         rate_limit_scope: rateLimitScope,
-        latency_ms: Math.max(0, Date.now() - input.startedAt),
+        latency_ms: latencyMs,
+        sample_rate: sample.sampleRate,
+        sample_reason: sample.reason,
       },
     }),
   );
@@ -819,13 +838,16 @@ export async function parseApiV1JsonBody(request: Request): Promise<Record<strin
   const contentType = request.headers.get("Content-Type") ?? "";
   if (!contentType.includes("application/json")) return {};
 
-  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > MAX_JSON_BODY_BYTES) {
-    throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
-  }
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_JSON_BODY_BYTES) {
-    throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
+  // Read through the limit so a body with no Content-Length is cut off as soon as it passes it,
+  // instead of being buffered whole first.
+  let text: string;
+  try {
+    text = await readLimitedTextBody(request, MAX_JSON_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      throw new ApiV1Error("validation_error", `JSON body must be at most ${MAX_JSON_BODY_BYTES} bytes`);
+    }
+    throw error;
   }
   if (!text.trim()) return {};
 
@@ -1586,9 +1608,9 @@ function coverMutationError(error: unknown, coverId: string): ApiV1Error {
   return new ApiV1Error("validation_error", message);
 }
 
-async function activeFullCoverPayload(db: ApiV1Db, recipe: RecipeCoverOwnerRow, origin: string) {
+async function activeFullCoverPayload(db: ApiV1Db, recipe: RecipeCoverOwnerRow, origin: string, d1: D1ReadDatabase | null) {
   if (!recipe.activeCoverId) return null;
-  const [cover] = await settleStuckCoverGenerations(prismaStuckCoverStore(db), recipe.id, [await db.recipeCover.findFirst({
+  const [cover] = await settleStuckCoverGenerations(stuckCoverStore(db, d1), recipe.id, [await db.recipeCover.findFirst({
     where: { id: recipe.activeCoverId, recipeId: recipe.id },
   })]);
   return cover ? fullCoverPayload(cover, recipe, origin) : null;
@@ -2034,7 +2056,7 @@ async function maybeCreateSpoonCover(
 ) {
   if (!input.spoon.photoUrl) {
     return {
-      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin),
+      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin, requestD1(args.context)),
       previousActiveCover: null,
       createdCover: null,
       generationStatus: null,
@@ -2049,14 +2071,14 @@ async function maybeCreateSpoonCover(
   });
   if (!decision.shouldCreateCover) {
     return {
-      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin),
+      activeCover: await activeFullCoverPayload(input.db, input.recipe, input.origin, requestD1(args.context)),
       previousActiveCover: null,
       createdCover: null,
       generationStatus: null,
     };
   }
 
-  const previousActiveCover = await activeFullCoverPayload(input.db, input.recipe, input.origin);
+  const previousActiveCover = await activeFullCoverPayload(input.db, input.recipe, input.origin, requestD1(args.context));
   const cover = await createCover(input.db, {
     recipeId: input.recipe.id,
     imageUrl: input.spoon.photoUrl,
@@ -2088,7 +2110,7 @@ async function maybeCreateSpoonCover(
   const nextRecipe = await loadActiveRecipeForSpoons(input.db, input.recipe.id);
   const createdCover = await input.db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId: input.recipe.id } });
   return {
-    activeCover: await activeFullCoverPayload(input.db, nextRecipe, input.origin),
+    activeCover: await activeFullCoverPayload(input.db, nextRecipe, input.origin, requestD1(args.context)),
     previousActiveCover,
     createdCover: fullCoverPayload(createdCover, nextRecipe, input.origin),
     generationStatus: createdCover.generationStatus,
@@ -2111,7 +2133,7 @@ async function isRecoveredOriginCook(db: ApiV1Db, recipe: RecipeForApiV1SpoonCov
   return !earlierSpoon;
 }
 
-async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, origin: string) {
+async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1SpoonCoverRow, spoon: RecipeSpoon, origin: string, d1: D1ReadDatabase | null) {
   const existingCover = await db.recipeCover.findFirst({
     where: {
       recipeId: recipe.id,
@@ -2122,7 +2144,7 @@ async function existingSpoonCoverPayload(db: ApiV1Db, recipe: RecipeForApiV1Spoo
   if (!existingCover) return null;
   const nextRecipe = await loadActiveRecipeForSpoons(db, recipe.id);
   return {
-    activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+    activeCover: await activeFullCoverPayload(db, nextRecipe, origin, d1),
     previousActiveCover: null,
     createdCover: fullCoverPayload(existingCover, nextRecipe, origin),
     generationStatus: existingCover.generationStatus,
@@ -2147,7 +2169,7 @@ async function recipeSpoonCreateData(
     where: { id: input.spoonId, recipeId: input.recipeId },
     include: { chef: { select: API_V1_SPOON_CHEF_SELECT } },
   });
-  const existingCoverData = await existingSpoonCoverPayload(input.db, recipe, spoon, origin);
+  const existingCoverData = await existingSpoonCoverPayload(input.db, recipe, spoon, origin, requestD1(args.context));
   const coverData = existingCoverData ?? await maybeCreateSpoonCover(args, {
     db: input.db,
     origin,
@@ -2354,7 +2376,7 @@ async function recipeImageUploadData(
     : null;
   return {
     spoon: spoon ? spoonPayload(spoon, origin) : null,
-    activeCover: await activeFullCoverPayload(input.db, recipe, origin),
+    activeCover: await activeFullCoverPayload(input.db, recipe, origin, requestD1(args.context)),
     previousActiveCover: input.previousActiveCover,
     createdCover: fullCoverPayload(cover, recipe, origin),
     generationStatus: cover.generationStatus,
@@ -2467,7 +2489,7 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.image.upload", async (db, reservation) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
 
     if (!hasUploadedImageFile(photo)) {
       throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
@@ -2610,7 +2632,7 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
   const offset = parseCoverOffset(url);
   const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
   // A generation whose job died reads as failed, not processing forever.
-  const covers = await settleStuckCoverGenerations(prismaStuckCoverStore(db), recipeId, await db.recipeCover.findMany({
+  const covers = await settleStuckCoverGenerations(stuckCoverStore(db, requestD1(args.context)), recipeId, await db.recipeCover.findMany({
     where: {
       recipeId,
       ...(includeArchived ? {} : { status: { not: "archived" }, archivedAt: null }),
@@ -2643,7 +2665,7 @@ async function handleRecipeCoverList(args: ApiV1RouteArgs, requestId: string, pr
 
   return apiV1PrivateSuccess(requestId, {
     covers: page.map((cover) => fullCoverPayload(cover, recipe, origin)),
-    activeCover: await activeFullCoverPayload(db, recipe, origin),
+    activeCover: await activeFullCoverPayload(db, recipe, origin, requestD1(args.context)),
     spoonImages: spoonImages
       .filter((spoon): spoon is typeof spoon & { photoUrl: string } => Boolean(spoon.photoUrl))
       .map((spoon) => ({
@@ -2678,7 +2700,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.create", async (db) => {
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     await validateApiV1RecipeCoverImageUrl(args, principal, imageUrl);
     const cover = await createCover(db, {
       recipeId,
@@ -2725,7 +2747,7 @@ async function handleRecipeCoverCreate(args: ApiV1RouteArgs, requestId: string, 
     return {
       status: 201,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
         generationStatus: createdCover.generationStatus,
@@ -2746,7 +2768,7 @@ async function handleRecipeCoverGenerate(args: ApiV1RouteArgs, requestId: string
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.generate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const cover = await createCover(db, {
       recipeId,
       imageUrl: "",
@@ -2780,7 +2802,7 @@ async function handleRecipeCoverGenerate(args: ApiV1RouteArgs, requestId: string
     return {
       status: 201,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
         generationStatus: createdCover.generationStatus,
@@ -2802,12 +2824,12 @@ async function handleRecipeCoverSetNoCover(args: ApiV1RouteArgs, requestId: stri
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.set-no-cover", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const nextRecipe = await clearActiveRecipeCover(db, recipe.id, requestD1(args.context));
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         mutation: { clientMutationId, replayed: false },
       },
@@ -2824,7 +2846,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.activate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     try {
       await setActiveRecipeCover(db, { recipeId, coverId, variant }, requestD1(args.context));
     } catch (error) {
@@ -2834,7 +2856,7 @@ async function handleRecipeCoverActivate(args: ApiV1RouteArgs, requestId: string
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         mutation: { clientMutationId, replayed: false },
       },
@@ -2859,7 +2881,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.archive", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     let archivedCoverId: string;
     try {
       const result = await archiveRecipeCover(db, {
@@ -2878,7 +2900,7 @@ async function handleRecipeCoverArchive(args: ApiV1RouteArgs, requestId: string,
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         archivedCover: fullCoverPayload(archivedCover, nextRecipe, origin),
         warnings: deleteSafeObjects ? ["deleteSafeObjects is not implemented; the cover record was archived without deleting image objects."] : [],
@@ -2900,7 +2922,7 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
   return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.covers.regenerate", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const cover = await db.recipeCover.findFirst({ where: { id: coverId, recipeId } });
     if (!cover) {
       throw new ApiV1Error("not_found", "Cover not found", { resource: "recipe_cover", coverId });
@@ -2912,24 +2934,13 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
     if (!rawPhotoUrl.trim()) {
       throw new ApiV1Error("validation_error", "Cover has no source image");
     }
-    await db.recipeCover.update({
-      where: { id: cover.id },
-      data: {
-        status: "processing",
-        generationStatus: "processing",
-        generationStartedAt: new Date(),
-        failureReason: null,
-        sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-        promptAddition,
-        parentCoverId: cover.id,
-      },
-    });
+    const regeneration = await startRecipeCoverRegeneration(db, cover, { createdById: principal.id, rawPhotoUrl, promptAddition });
     await queueApiRecipeCoverStylization(args, {
       db,
       userId: principal.id,
       recipeId,
-      coverId: cover.id,
-      parentCoverId: cover.id,
+      coverId: regeneration.coverId,
+      parentCoverId: regeneration.parentCoverId,
       promptAddition,
       rawPhotoUrl,
       recipeTitle: recipe.title,
@@ -2943,11 +2954,11 @@ async function handleRecipeCoverRegenerate(args: ApiV1RouteArgs, requestId: stri
       } : undefined,
     });
     const nextRecipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const regeneratedCover = await db.recipeCover.findFirstOrThrow({ where: { id: cover.id, recipeId } });
+    const regeneratedCover = await db.recipeCover.findFirstOrThrow({ where: { id: regeneration.coverId, recipeId } });
     return {
       status: 200,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(regeneratedCover, nextRecipe, origin),
         generationStatus: regeneratedCover.generationStatus,
@@ -2967,7 +2978,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "recipes.covers.from-spoon", async (db) => {
     const origin = publicContentOrigin(args);
     const recipe = await loadOwnedCoverRecipe(db, principal, recipeId);
-    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin);
+    const previousActiveCover = await activeFullCoverPayload(db, recipe, origin, requestD1(args.context));
     const spoon = await db.recipeSpoon.findFirst({
       where: { id: spoonId, recipeId, deletedAt: null, photoUrl: { not: null } },
       select: { id: true, photoUrl: true },
@@ -3010,7 +3021,7 @@ async function handleRecipeCoverFromSpoon(args: ApiV1RouteArgs, requestId: strin
     return {
       status: 201,
       data: {
-        activeCover: await activeFullCoverPayload(db, nextRecipe, origin),
+        activeCover: await activeFullCoverPayload(db, nextRecipe, origin, requestD1(args.context)),
         previousActiveCover,
         createdCover: fullCoverPayload(createdCover, nextRecipe, origin),
         generationStatus: createdCover.generationStatus,
@@ -4834,6 +4845,92 @@ async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string,
   });
 }
 
+/**
+ * DELETE /api/v1/me: deletes the account (account-deletion.server.ts) after the owner proves it is
+ * them (account-reauthentication.server.ts) and types the username. Not idempotent by design: the
+ * account's idempotency keys go with it, and every token stops working, so a retry after success
+ * gets 401.
+ */
+async function handleAccountDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const env = args.context.cloudflare?.env;
+  // A stolen token must not become a password-guessing oracle.
+  const authRateLimit = await enforceAuthRateLimit(args.request, env?.AUTH_IP_RATE_LIMITER);
+  if (!authRateLimit.allowed) {
+    throw new ApiV1Error("rate_limited", "Too many requests. Try again later.", {
+      retryAfterSeconds: authRateLimit.retryAfterSeconds,
+      scope: authRateLimit.scope,
+    });
+  }
+
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["confirmUsername", "password", "appleIdentityToken", "appleRawNonce"]);
+  const confirmUsername = nonblankString(body.confirmUsername, "confirmUsername");
+  const password = typeof body.password === "string" && body.password ? body.password : null;
+  const hasApple = body.appleIdentityToken !== undefined || body.appleRawNonce !== undefined;
+  const apple = hasApple
+    ? {
+      identityToken: nonblankString(body.appleIdentityToken, "appleIdentityToken", 8192),
+      rawNonce: nonblankString(body.appleRawNonce, "appleRawNonce", 256),
+    }
+    : null;
+
+  if (confirmUsername !== principal.username) {
+    throw new ApiV1Error("validation_error", "Type your username exactly to confirm.", { field: "confirmUsername", reason: "confirmation_mismatch" });
+  }
+
+  const db = await getRequestDb(args.context);
+  let proof;
+  try {
+    proof = await verifyAccountOwnerProof(db, principal.id, { password, apple }, {
+      verifyAppleCredential: async (credential) =>
+        (await verifyNativeAppleIdentityToken(credential, getAppleNativeAuthConfig((env ?? {}) as OAuthEnv))).id,
+    });
+  } catch (error) {
+    if (error instanceof NativeAppleAuthError) {
+      throw new ApiV1Error("validation_error", error.message, { field: "appleIdentityToken", reason: "apple_credential_invalid", providerCode: error.code });
+    }
+    if (error instanceof Error && error.message.startsWith("Missing required environment variable")) {
+      throw new ApiV1Error("validation_error", "Native Apple sign-in is not configured", { providerCode: "apple_native_unconfigured" });
+    }
+    throw error;
+  }
+  if (!proof.ok) {
+    /* istanbul ignore if -- @preserve auth resolved the account; this is a race guard. */
+    if (proof.reason === "account_not_found") throw new ApiV1Error("not_found", "Account not found");
+    throw new ApiV1Error("validation_error", proof.message, { reason: proof.reason });
+  }
+
+  const d1 = requestD1(args.context);
+  if (!d1) throw new ApiV1Error("internal_error", "Account deletion needs the database binding");
+  try {
+    const result = await deleteAccount(d1, principal.id);
+    return withApiV1Telemetry(
+      apiV1PrivateSuccess(requestId, { deleted: true, ...result }),
+      { idempotencyOutcome: "none" },
+    );
+  } catch (error) {
+    /* istanbul ignore next -- @preserve the account existed when auth ran; a concurrent deletion lands here. */
+    if (error instanceof AccountDeletionError) throw new ApiV1Error("not_found", "Account not found");
+    /* istanbul ignore next -- @preserve D1 failures propagate as internal errors. */
+    throw error;
+  }
+}
+
+/** GET /api/v1/me/export: everything the account put into Spoonjoy, as a JSON download. */
+async function handleAccountExport(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const now = new Date();
+  const exported = await buildAccountExport(db, principal.id, publicContentOrigin(args), now);
+  /* istanbul ignore if -- @preserve auth resolved the account; this keeps the read honest if the row disappears mid-request. */
+  if (!exported) throw new ApiV1Error("not_found", "Account not found");
+  return withApiV1Telemetry(
+    apiV1PrivateSuccess(requestId, exported, 200, {
+      "Content-Disposition": `attachment; filename="${accountExportFileName(principal.username, now)}"`,
+    }),
+    { idempotencyOutcome: "none" },
+  );
+}
+
 async function handleNativeChefsRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
@@ -5884,7 +5981,14 @@ async function handleRecipeUpdate(args: ApiV1RouteArgs, requestId: string, princ
   const updated = Object.keys(parsed.data.fields).length > 0;
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, parsed.data.clientMutationId, "recipes.update", async (db) => {
-    const updated = recipeWriteResultOrThrow(await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context)));
+    const result = await updateNativeRecipe(db, principal.id, recipeId, parsed.data, requestD1(args.context));
+    if (!result.ok && result.code === "edit_conflict") {
+      // The recipe changed after the client's expectedUpdatedAt. Nothing was written; the
+      // answer carries the recipe as it is now, so the client can merge and retry.
+      const current = await serializedRecipeOrThrow(db, recipeId, origin);
+      throw new ApiV1Error(result.code, result.message, { ...(result.details as object), recipe: current });
+    }
+    const updated = recipeWriteResultOrThrow(result);
     const recipe = await serializedRecipeOrThrow(db, updated.data.recipeId, origin);
     return {
       status: updated.status,
@@ -7207,6 +7311,18 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && path === "me") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleAccountRead(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && path === "me") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountDelete(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "me/export") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleAccountExport(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

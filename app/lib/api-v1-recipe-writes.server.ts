@@ -19,6 +19,7 @@ import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
   recipeActiveGuard,
+  recipeUpdatedAtGuard,
   recipeUpdateStatement,
 } from "~/lib/recipe-d1-writes.server";
 import {
@@ -61,7 +62,16 @@ export interface NativeRecipeCreateInput {
 export interface NativeRecipePatchInput {
   clientMutationId: string;
   fields: MutableRecipeFields;
+  /**
+   * The recipe's `updatedAt` as the client last read it. When given, the update applies only
+   * if the recipe has not changed since; otherwise it fails with `edit_conflict`. Omitted, the
+   * update applies whatever changed in between, as it always has.
+   */
+  expectedUpdatedAt?: Date;
 }
+
+/** The message of an `edit_conflict` failure. */
+export const RECIPE_EDIT_CONFLICT_MESSAGE = "The recipe changed after expectedUpdatedAt; nothing was updated";
 
 export interface NativeRecipeDeleteInput {
   clientMutationId: string;
@@ -289,11 +299,17 @@ export function parseNativeRecipeCreateBody(body: Record<string, unknown>): ApiV
 }
 
 export function parseNativeRecipePatchBody(body: Record<string, unknown>): ApiV1RecipeWriteResult<NativeRecipePatchInput> {
-  const unknown = assertKnownFields<NativeRecipePatchInput>(body, ["clientMutationId", "title", "description", "servings"]);
+  const unknown = assertKnownFields<NativeRecipePatchInput>(
+    body,
+    ["clientMutationId", "title", "description", "servings", "expectedUpdatedAt"],
+  );
   if (unknown) return unknown;
 
   const clientMutationId = clientMutationIdFrom(body.clientMutationId);
   if (!clientMutationId.ok) return clientMutationId;
+
+  const expectedUpdatedAt = parseExpectedUpdatedAt(body);
+  if (!expectedUpdatedAt.ok) return expectedUpdatedAt;
 
   const fields: MutableRecipeFields = {};
   if (hasOwn(body, "title")) {
@@ -310,7 +326,21 @@ export function parseNativeRecipePatchBody(body: Record<string, unknown>): ApiV1
   if (!servings.ok) return servings;
   if (servings.data !== undefined) fields.servings = servings.data;
 
-  return success({ clientMutationId: clientMutationId.data, fields });
+  return success({
+    clientMutationId: clientMutationId.data,
+    fields,
+    ...(expectedUpdatedAt.data ? { expectedUpdatedAt: expectedUpdatedAt.data } : {}),
+  });
+}
+
+function parseExpectedUpdatedAt(body: Record<string, unknown>): ApiV1RecipeWriteResult<Date | undefined> {
+  if (!hasOwn(body, "expectedUpdatedAt")) return success(undefined);
+  const value = body.expectedUpdatedAt;
+  const parsed = typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value) ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return fieldFailure("expectedUpdatedAt", "expectedUpdatedAt must be the recipe's updatedAt, an ISO 8601 date-time");
+  }
+  return success(parsed);
 }
 
 export function parseNativeRecipeDeleteBody(
@@ -422,13 +452,21 @@ async function updateNativeRecipeOnce(
 ): Promise<ApiV1RecipeWriteResult<{ recipeId: string; updated: boolean }>> {
   const existing = await db.recipe.findUnique({
     where: { id: recipeId },
-    select: { id: true, chefId: true, deletedAt: true },
+    select: { id: true, chefId: true, deletedAt: true, updatedAt: true },
   });
   if (!existing || existing.deletedAt) {
     return failure("not_found", "Recipe not found");
   }
   if (existing.chefId !== chefId) {
     return failure("insufficient_scope", "Recipe does not belong to the authenticated chef");
+  }
+  const { expectedUpdatedAt } = input;
+  if (expectedUpdatedAt && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+    return failure("edit_conflict", RECIPE_EDIT_CONFLICT_MESSAGE, {
+      reason: "recipe_changed",
+      expectedUpdatedAt: expectedUpdatedAt.toISOString(),
+      currentUpdatedAt: existing.updatedAt.toISOString(),
+    });
   }
 
   if (input.fields.title !== undefined) {
@@ -445,10 +483,12 @@ async function updateNativeRecipeOnce(
   const updated = Object.keys(input.fields).length > 0;
   if (updated && d1) {
     const updatedAt = new Date();
-    // The guards re-check that the recipe is still active and the new title still free.
+    // The guards re-check that the recipe is still active, the new title still free and, when
+    // the client gave one, the recipe still unchanged since expectedUpdatedAt.
     await d1WriteBatch(d1, [
       recipeActiveGuard(recipeId),
       ...(input.fields.title === undefined ? [] : [activeRecipeTitleFreeGuard(chefId, input.fields.title, recipeId)]),
+      ...(expectedUpdatedAt ? [recipeUpdatedAtGuard(recipeId, expectedUpdatedAt)] : []),
       recipeUpdateStatement(recipeId, input.fields, updatedAt),
       cookbooksForRecipeTouchStatement(recipeId, updatedAt),
     ]);

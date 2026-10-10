@@ -38,11 +38,19 @@ describe('RecipeGrid', () => {
     expect(screen.getByRole('link', { name: /spiced chickpea bowl/i })).toHaveAttribute('href', '/recipes/r-2')
   })
 
-  it('renders hero images with correct alt text', () => {
+  it('marks the cover decorative because the title already names the link', () => {
+    const { container } = renderWithRouter(<RecipeGrid recipes={recipes} />)
+
+    const img = container.querySelector('img[src="https://images.example.com/lemon-pasta.jpg"]')
+    expect(img).toHaveAttribute('alt', '')
+  })
+
+  it('names each row link from its visible text, so the chef and yield are read too (WCAG 2.5.3)', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 
-    const img = screen.getByAltText('Lemon Pasta')
-    expect(img).toHaveAttribute('src', 'https://images.example.com/lemon-pasta.jpg')
+    const link = screen.getByRole('link', { name: /\bLemon Pasta\b/ })
+    expect(link).not.toHaveAttribute('aria-label')
+    expect(link).toHaveAccessibleName(/Serves 4.*Chef Mario/i)
   })
 
   it('renders placeholder when image is missing', () => {

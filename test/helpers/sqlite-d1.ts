@@ -32,8 +32,8 @@ export interface SqliteD1 {
   close(): void;
 }
 
-export function sqliteD1(path = workerDbPath()): SqliteD1 {
-  const sqlite = new Database(path);
+export function sqliteD1(source: string | Database.Database = workerDbPath()): SqliteD1 {
+  const sqlite = typeof source === "string" ? new Database(source) : source;
   const statements: RecordedStatement[] = [];
   let roundTrips = 0;
 
