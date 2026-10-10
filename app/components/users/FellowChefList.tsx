@@ -1,4 +1,5 @@
 import { Avatar } from "~/components/ui/avatar";
+import { chefDisplayName } from "~/lib/username";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
@@ -51,13 +52,13 @@ export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
             >
               <Avatar
                 src={resolveChefAvatarUrl(row.photoUrl)}
-                alt={row.username}
+                alt={chefDisplayName(row.username)}
                 initials={initials}
                 className="size-10 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)]"
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="sj-link font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-                  {row.username}
+                  {chefDisplayName(row.username)}
                 </span>
               {summary ? (
                 <Text className="text-xs text-[var(--sj-ink-soft)]">

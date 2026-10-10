@@ -131,6 +131,20 @@ describe("Recipes $id Steps New callback rendering", () => {
     expect((document.querySelector('input[name="ingredientsJson"]') as HTMLInputElement).value).toBe("[]");
   });
 
+  it("does not say no ingredients were added while parsed ones are waiting to be added", async () => {
+    renderNewStep();
+
+    expect(await screen.findByText("No ingredients added yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Emit parsed ingredients" }));
+    expect(screen.getByText("2 tbsp parsed butter")).toBeInTheDocument();
+    expect(screen.queryByText("No ingredients added yet")).not.toBeInTheDocument();
+
+    // In manual mode the parsed list is hidden, so the empty state is true again.
+    fireEvent.click(screen.getByRole("button", { name: "Use manual mode" }));
+    expect(screen.queryByLabelText("Parsed ingredient mock")).not.toBeInTheDocument();
+    expect(screen.getByText("No ingredients added yet")).toBeInTheDocument();
+  });
+
   it("switches to manual mode from both toggle and parse callback and adds manual ingredients", async () => {
     renderNewStep();
 

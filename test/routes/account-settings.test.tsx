@@ -1614,6 +1614,7 @@ describe("Account Settings Route", () => {
         data: { clientName: "Durable web connector", redirectUris: "https://example.com/callback", issuer },
       });
       await issueConnectorTokens(db, {
+        sessionVersion: 0,
         userId: testUserId,
         clientId: client.id,
         issuer,
@@ -1621,6 +1622,7 @@ describe("Account Settings Route", () => {
         resource: null,
       });
       await issueConnectorTokens(db, {
+        sessionVersion: 0,
         userId: testUserId,
         clientId: client.id,
         issuer,

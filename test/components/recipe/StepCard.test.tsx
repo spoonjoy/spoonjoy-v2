@@ -77,6 +77,9 @@ describe('StepCard', () => {
 
     expect(screen.getByTestId('step-ingredients-block')).toHaveClass('mx-auto')
     expect(screen.getByTestId('step-ingredients-block')).toHaveClass('max-w-[38rem]')
+    // Print moves the block to the left margin through this class (app/styles/tailwind.css).
+    expect(screen.getByTestId('step-ingredients-block')).toHaveClass('sj-step-ingredients')
+    expect(screen.getByTestId('step-ingredients-block').closest('.sj-step-card')).not.toBeNull()
     expect(screen.getByText('This prose can keep a comfortable cookbook reading measure.')).not.toHaveClass(
       'max-w-[38rem]'
     )

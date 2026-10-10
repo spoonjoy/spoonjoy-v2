@@ -97,6 +97,108 @@
   --sj-shadow-soft: 0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
 }
 
+/* Print: a recipe on paper is the title, the ingredients and the method in dark ink on white, whatever
+ * theme the screen uses. Dark mode's tokens are put back to the light palette, on white paper, so a
+ * phone in dark mode never prints pale text on a charcoal page (product audit 2026-10-09, finding 14). */
+@media print {
+  @page {
+    margin: 0.6in;
+  }
+
+  :root,
+  .dark {
+    color-scheme: light;
+    --sj-bone: #ffffff;
+    --sj-bone-lift: #ffffff;
+    --sj-vellum: #f1f0ea;
+    --sj-charcoal: #1f1b17;
+    --sj-charcoal-soft: #4f4943;
+    --sj-brass: #7d5226;
+    --sj-action: #1f1b17;
+    --sj-action-deep: #1f1b17;
+    --sj-on-action: #ffffff;
+    --sj-tomato: #8f3e2e;
+    --sj-herb: #4b5a42;
+    --sj-ink: var(--sj-charcoal);
+    --sj-ink-soft: var(--sj-charcoal-soft);
+    --sj-paper: #ffffff;
+    --sj-page: #ffffff;
+    --sj-panel: #ffffff;
+    --sj-panel-solid: #ffffff;
+    --sj-field: #ffffff;
+    --sj-flour: var(--sj-vellum);
+    --sj-border: color-mix(in srgb, var(--sj-charcoal) 22%, transparent);
+    --sj-border-strong: color-mix(in srgb, var(--sj-charcoal) 40%, transparent);
+    --sj-shadow: none;
+    --sj-shadow-soft: none;
+  }
+
+  /* Navigation, the skip link and floating notices are screen controls with nothing to say on paper. */
+  .sj-skip-link,
+  .sj-desktop-topbar,
+  .sj-route-progress {
+    display: none !important;
+  }
+
+  /* Ticked ingredients are this cook's progress, not part of the recipe: print every ingredient plain,
+   * without its tick box or strike-through. */
+  #steps .sj-checklist-box,
+  #steps .sj-checklist-strike {
+    display: none !important;
+  }
+
+  /* Without its box, a row is one column. Left at the screen's 2rem box column, the name and amount
+   * would be squeezed into it and the name would print at no width at all. */
+  #steps .sj-checklist-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #steps .sj-checklist-name {
+    color: var(--sj-ink) !important;
+  }
+
+  /* The rules below are unlayered, so they beat Tailwind's layered utilities at every breakpoint. A
+   * print: utility can lose to a component class (.sj-eyebrow sets display) or to an lg: utility,
+   * and a desktop-width print still matches lg. */
+  .sj-print-hidden {
+    display: none !important;
+  }
+
+  /* The masthead is one column on paper: no screen-height minimum, which would leave the title
+   * centred in a tall empty box, and no photo column beside the text. */
+  .sj-recipe-header {
+    border-bottom: 0 !important;
+  }
+
+  .sj-recipe-header-layout {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  .sj-recipe-header-body {
+    min-height: 0 !important;
+    padding: 0 0 1rem !important;
+  }
+
+  .sj-recipe-hero {
+    height: 3in !important;
+    min-height: 0 !important;
+    max-height: 3in !important;
+  }
+
+  /* Steps line up with the title, and each step's ingredients start at the left margin instead of
+   * sitting in a centred column. */
+  #steps .sj-step-card {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  #steps .sj-step-ingredients {
+    margin-left: 0 !important;
+    max-width: 32rem !important;
+  }
+}
+
 html {
   background: var(--sj-page);
   /* Below 1024px the phone tab bar is fixed to the bottom of the screen. Scrolling something into
@@ -193,6 +295,7 @@ select {
   overflow: hidden;
 }
 
+body:has(#cook) .sj-phone-brandbar,
 body:has(#cook) .sj-desktop-topbar {
   display: none;
 }

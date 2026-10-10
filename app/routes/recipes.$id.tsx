@@ -1,4 +1,5 @@
 import type { Route } from "./+types/recipes.$id";
+import { chefDisplayName } from "~/lib/username";
 import {
   useActionData,
   useFetcher,
@@ -66,7 +67,7 @@ export function meta({ data }: Route.MetaArgs) {
   }
 
   const description = data.recipe.description?.trim()
-    || `A Spoonjoy recipe by ${data.recipe.chef.username}.`;
+    || `A Spoonjoy recipe by ${chefDisplayName(data.recipe.chef.username)}.`;
 
   return [
     { title: `${data.recipe.title} - Spoonjoy` },
@@ -1014,7 +1015,7 @@ export default function RecipeDetail() {
       <RecipeHeader
         title={recipe.title}
         description={recipe.description ?? undefined}
-        chefName={recipe.chef.username}
+        chefName={chefDisplayName(recipe.chef.username)}
         chefId={recipe.chef.id}
         chefProfileHref={`/users/${recipe.chef.username}`}
         chefPhotoUrl={recipe.chef.photoUrl ?? undefined}
@@ -1214,15 +1215,15 @@ export default function RecipeDetail() {
       </Dialog>
 
       {/* Steps Section */}
-      <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
         <div className="mb-6 flex flex-col gap-2 border-t border-[var(--sj-border-strong)] pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="sj-eyebrow">Cook mode</p>
-            <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
+            <p className="sj-eyebrow sj-print-hidden">Cook mode</p>
+            <Heading level={2} className="mt-3 print:mt-0 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
               Steps
             </Heading>
           </div>
-          <Text className="font-sj-ui text-xs uppercase tracking-[0.18em]">Tap ingredients as you go</Text>
+          <Text className="font-sj-ui text-xs uppercase tracking-[0.18em] print:hidden">Tap ingredients as you go</Text>
         </div>
 
         {recipe.steps.length === 0 ? (
@@ -1238,7 +1239,7 @@ export default function RecipeDetail() {
         ) : (
           <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0">
             {recipe.steps.map((step) => (
-              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0">
+              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0 print:break-inside-avoid">
                 <StepCard
                   stepNumber={step.stepNum}
                   title={step.stepTitle ?? undefined}
@@ -1257,7 +1258,13 @@ export default function RecipeDetail() {
           </div>
         )}
 
-        <div className="mt-10 space-y-4">
+        {loaderData.canonicalUrl ? (
+          <p className="hidden font-sj-ui text-sm text-[var(--sj-ink-soft)] print:mt-6 print:block" data-testid="recipe-print-source">
+            From Spoonjoy: {loaderData.canonicalUrl}
+          </p>
+        ) : null}
+
+        <div className="mt-10 space-y-4 print:hidden" data-testid="recipe-cooks">
           <Heading level={2} className="text-2xl font-semibold tracking-normal">
             Cooks
           </Heading>

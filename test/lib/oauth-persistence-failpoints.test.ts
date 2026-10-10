@@ -76,6 +76,7 @@ describe("OAuth persistence failpoints", () => {
 
   async function issueTokens() {
     return issueConnectorTokens(db, {
+      sessionVersion: 0,
       userId,
       clientId: CLIENT_ID,
       scope: "kitchen:read",
@@ -113,6 +114,7 @@ describe("OAuth persistence failpoints", () => {
     "fails %s access insertion and exposes any orphaned credential",
     async (timing) => {
       await expect(issueConnectorTokens(db, {
+        sessionVersion: 0,
         userId,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
@@ -132,6 +134,7 @@ describe("OAuth persistence failpoints", () => {
     "fails %s refresh insertion after the access write",
     async (timing) => {
       await expect(issueConnectorTokens(db, {
+        sessionVersion: 0,
         userId,
         clientId: CLIENT_ID,
         scope: "kitchen:read",
@@ -233,6 +236,7 @@ describe("OAuth persistence failpoints", () => {
       data: { clientName: "Claude", redirectUris: "https://claude.ai/api/mcp/auth_callback" },
     });
     const original = await issueConnectorTokens(db, {
+      sessionVersion: 0,
       userId,
       clientId: CLIENT_ID,
       scope: "kitchen:read",

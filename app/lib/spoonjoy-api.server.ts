@@ -7,7 +7,7 @@ import type {
 import {
   ApiAuthError,
   assertCanUseOwnerEmail,
-  createApiCredential,
+  createApiCredentialForPrincipal,
   expandCredentialScopes,
   normalizeCredentialScopes,
   resolvePersonalTokenExpiry,
@@ -58,6 +58,7 @@ import {
   clearActiveRecipeCover,
   coverInsertStatement,
   createCover,
+  startRecipeCoverRegeneration,
   getRecipeCoverDisplay,
   getRecipeCoverProvenanceLabel,
   setActiveRecipeCover,
@@ -1449,7 +1450,13 @@ const createApiTokenTool: SpoonjoyApiOperation = {
     const name = optionalString(args.name) ?? "Spoonjoy API token";
     const scopes = normalizeCreateApiTokenScopes(args.scopes, context.principal);
     const expiresAt = resolvePersonalTokenExpiry(args.expiresInDays);
-    const created = await createApiCredential(context.db, owner.id, name, { scopes, expiresAt });
+    // A signed-in caller's token is fenced on the session version it authenticated with.
+    const created = await createApiCredentialForPrincipal(
+      context.db,
+      { id: owner.id, sessionVersion: context.principal?.sessionVersion, credentialId: context.principal?.credentialId },
+      name,
+      { scopes, expiresAt, d1: d1Binding(context.env?.DB) },
+    );
 
     return json({
       token: created.token,
@@ -2203,23 +2210,16 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
           });
         }
 
-        await context.db.recipeCover.update({
-          where: { id: cover.id },
-          data: {
-            status: "processing",
-            generationStatus: "processing",
-            generationStartedAt: new Date(),
-            failureReason: null,
-            sourceImageUrl: cover.sourceImageUrl ?? rawPhotoUrl,
-            promptAddition,
-            parentCoverId: cover.id,
-          },
+        const regeneration = await startRecipeCoverRegeneration(context.db, cover, {
+          createdById: principal.id,
+          rawPhotoUrl,
+          promptAddition,
         });
         await scheduleRecipeCoverStylization(context, {
           userId: principal.id,
           recipeId,
-          coverId: cover.id,
-          parentCoverId: cover.id,
+          coverId: regeneration.coverId,
+          parentCoverId: regeneration.parentCoverId,
           promptAddition,
           rawPhotoUrl,
           recipeTitle: recipe.title,
@@ -2236,7 +2236,7 @@ const regenerateRecipeCoverTool: SpoonjoyApiOperation = {
         });
 
         const nextRecipe = await reloadCoverMutationRecipe(context, recipeId);
-        const regeneratedCover = await reloadFullCoverPayload(context, nextRecipe, cover.id);
+        const regeneratedCover = await reloadFullCoverPayload(context, nextRecipe, regeneration.coverId);
         const activeCover = await activeFullCoverPayload(context, nextRecipe);
         return coverMutationResponse({
           activeCover,

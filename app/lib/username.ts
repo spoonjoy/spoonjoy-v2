@@ -7,6 +7,9 @@
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 50;
 
+// The rule in a sentence, shown under the sign-up field before anyone gets it wrong.
+export const USERNAME_HINT = `${USERNAME_MIN_LENGTH} to ${USERNAME_MAX_LENGTH} letters, numbers, periods, underscores or hyphens.`;
+
 // Also the OpenAPI schema's pattern for UpdateAccountProfileRequest.username.
 export const USERNAME_PATTERN_SOURCE = "^[A-Za-z0-9._-]+$";
 const USERNAME_PATTERN = new RegExp(USERNAME_PATTERN_SOURCE);
@@ -19,6 +22,12 @@ const ACCOUNT_ID_SHAPE = /^c[a-z0-9]{24}$/i;
 // built on after their chef deletes their account (account-deletion.server.ts).
 export const DELETED_CHEF_USERNAME = "deleted-chef";
 const RESERVED_USERNAMES = new Set([DELETED_CHEF_USERNAME]);
+
+/** What bylines show for a chef: the username, or "Deleted chef" for the account that keeps a deleted chef's shared recipes. */
+export const DELETED_CHEF_DISPLAY_NAME = "Deleted chef";
+export function chefDisplayName(username: string): string {
+  return username === DELETED_CHEF_USERNAME ? DELETED_CHEF_DISPLAY_NAME : username;
+}
 
 // True for a username reserved for Spoonjoy itself, in any letter case. It counts as taken.
 export function isReservedUsername(username: string): boolean {

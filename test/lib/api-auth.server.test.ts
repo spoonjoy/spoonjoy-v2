@@ -19,6 +19,7 @@ import {
   requireApiPrincipal,
 } from "~/lib/api-auth.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { sqliteD1 } from "../helpers/sqlite-d1";
 import { expectConsoleWarning } from "../warning-policy";
 
 const authenticateApiToken = (db: any, token: string, issuer = "https://spoonjoy.app") => (
@@ -224,6 +225,45 @@ describe("API authentication helpers", () => {
     await db.oAuthClient.delete({ where: { id: client.id } });
 
     await expect(authenticateApiToken(db, created.token)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("rejects an OAuth credential whose grant is no longer active, found by grant id or connection key", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const client = await db.oAuthClient.create({
+      data: { clientName: "Example App", redirectUris: "https://example.com/cb" },
+    });
+    const grant = await db.oAuthGrant.create({
+      data: {
+        userId: user.id,
+        clientId: client.id,
+        issuer: "http://localhost",
+        scope: "kitchen:read",
+        connectionKey: `key-${faker.string.alphanumeric(12)}`,
+        status: "active",
+        statusChangedAt: new Date(),
+      },
+    });
+    const mint = async (link: { oauthGrantId?: string; oauthConnectionKey?: string }) => {
+      const created = await createApiCredential(db, user.id, "OAuth token", { oauthClientId: client.id, scopes: ["kitchen:read"] });
+      await db.apiCredential.update({ where: { id: created.credential.id }, data: link });
+      return created.token;
+    };
+    const byId = await mint({ oauthGrantId: grant.id });
+    const byKey = await mint({ oauthConnectionKey: grant.connectionKey });
+    const unlinked = await mint({});
+
+    await expect(authenticateApiToken(db, byId)).resolves.toMatchObject({ id: user.id });
+    await expect(authenticateApiToken(db, byKey)).resolves.toMatchObject({ id: user.id });
+
+    await db.oAuthGrant.update({
+      where: { id: grant.id },
+      data: { status: "revoked", statusReason: "security_event", statusChangedAt: new Date() },
+    });
+
+    await expect(authenticateApiToken(db, byId)).rejects.toMatchObject({ status: 401 });
+    await expect(authenticateApiToken(db, byKey)).rejects.toMatchObject({ status: 401 });
+    // A credential with no grant link (issued before grants existed) is judged by its own row.
+    await expect(authenticateApiToken(db, unlinked)).resolves.toMatchObject({ id: user.id });
   });
 
   it("binds legacy OAuth credentials once and rejects a different issuer before usage mutation", async () => {
@@ -491,6 +531,79 @@ describe("API authentication helpers", () => {
 
     await db.user.delete({ where: { id: user.id } });
     await expect(sessionRequest(await sessionCookie(user.id, 2))).resolves.toBeNull();
+  });
+
+  it("checks a browser session on D1 without building a Prisma client, as the Prisma read does", async () => {
+    const user = await db.user.create({
+      data: { email: uniqueEmail("d1"), username: faker.internet.username(), sessionVersion: 2 },
+    });
+    const d1 = sqliteD1();
+    const getPrisma = vi.fn(async () => db);
+    const sessionRequest = async (cookie: string) => authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: cookie },
+    }), null, { d1: d1.binding });
+
+    try {
+      const current = await sessionCookie(user.id, 2);
+      const before = d1.roundTrips();
+      const principal = await sessionRequest(current);
+      expect(d1.roundTrips() - before).toBe(1);
+      expect(principal).toEqual(await authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+        headers: { Cookie: current },
+      })));
+      expect(principal).toMatchObject({ source: "session", id: user.id, email: user.email, username: user.username });
+
+      await expect(sessionRequest(await sessionCookie(user.id, 1))).resolves.toBeNull();
+      await expect(sessionRequest(await sessionCookie(user.id))).resolves.toBeNull();
+      await db.user.delete({ where: { id: user.id } });
+      await expect(sessionRequest(current)).resolves.toBeNull();
+      expect(getPrisma).not.toHaveBeenCalled();
+    } finally {
+      d1.close();
+    }
+  });
+
+  it("builds the Prisma client from the getter only for a bearer token", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("lazy"), username: faker.internet.username() } });
+    const created = await createApiCredential(db, user.id, "Script");
+    const getPrisma = vi.fn(async () => db);
+
+    await expect(authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: "other=1" },
+    }))).resolves.toBeNull();
+    expect(getPrisma).not.toHaveBeenCalled();
+
+    await expect(authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Cookie: await sessionCookie(user.id) },
+    }))).resolves.toMatchObject({ source: "session", id: user.id });
+    expect(getPrisma).toHaveBeenCalledTimes(1);
+
+    await expect(authenticateApiRequest(getPrisma, new UndiciRequest("http://localhost/api", {
+      headers: { Authorization: `Bearer ${created.token}` },
+    }), null, { d1: null })).resolves.toMatchObject({ source: "bearer", id: user.id });
+    expect(getPrisma).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed on a D1 user row missing a field", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail("bad"), username: faker.internet.username() } });
+    const cookie = await sessionCookie(user.id);
+    for (const field of ["id", "email", "username", "sessionVersion"]) {
+      const d1 = sqliteD1();
+      const corrupt = {
+        prepare: d1.binding.prepare.bind(d1.binding),
+        batch: async (statements: never) => (await d1.binding.batch(statements)).map((result) => ({
+          ...result,
+          results: (result.results as Array<Record<string, unknown>>).map((row) => ({ ...row, [field]: null })),
+        })),
+      };
+      try {
+        await expect(authenticateApiRequest(db, new UndiciRequest("http://localhost/api", {
+          headers: { Cookie: cookie },
+        }), null, { d1: corrupt as never })).rejects.toThrow("D1 user row is missing its id, email, username or session version");
+      } finally {
+        d1.close();
+      }
+    }
   });
 
   it("accepts a browser session cookie issued before session versions existed as version 0", async () => {
