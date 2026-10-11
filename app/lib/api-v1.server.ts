@@ -3373,30 +3373,36 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
   const title = nonblankString(body.title, "title");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
-    let cookbookId: string;
+  const createdResult = async (db: ApiV1WriteDb, cookbookId: string): Promise<ApiV1IdempotentMutationResult> => ({
+    status: 201,
+    data: {
+      created: true,
+      cookbook: cookbookDetail(await loadExistingCookbookById(db, cookbookId), origin),
+      mutation: { clientMutationId, replayed: false },
+    },
+  });
+
+  // The cookbook takes its reservation's id, so a create that committed although its answer was
+  // lost is found again by that id rather than made twice (or refused as a duplicate title).
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db, reservation) => {
     try {
-      const created = await db.cookbook.create({
-        data: { title, authorId: principal.id },
+      await db.cookbook.create({
+        data: { id: reservation.id, title, authorId: principal.id },
         select: { id: true },
       });
-      cookbookId = created.id;
     } catch (error) {
       if (isPrismaErrorCode(error, "P2002")) {
         throw duplicateCookbookTitleError();
       }
       throw error;
     }
-
-    const cookbook = await loadExistingCookbookById(db, cookbookId);
-    return {
-      status: 201,
-      data: {
-        created: true,
-        cookbook: cookbookDetail(cookbook, origin),
-        mutation: { clientMutationId, replayed: false },
-      },
-    };
+    return await createdResult(db, reservation.id);
+  }, async (db, reservation) => {
+    const committed = await db.cookbook.findFirst({
+      where: { id: reservation.id, authorId: principal.id, title },
+      select: { id: true },
+    });
+    return committed ? await createdResult(db, committed.id) : null;
   });
 }
 

@@ -91,6 +91,7 @@ import {
   removeRecipeFromCookbook,
 } from "~/lib/cookbook-membership-compat.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
+import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -172,8 +173,25 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
 export async function action({ request, params, context }: Route.ActionArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  const { id } = params;
   const formData = await request.formData();
+  try {
+    return await handleCookbookAction(request, params.id, context, userId, formData);
+  } catch (error) {
+    // The database was briefly unavailable: a retryable 503 with the intent, so the page shows it
+    // where the cook acted (a rename keeps its editor open with the new title in it).
+    const unavailable = d1UnavailableWebResponse(error, formData.get("intent"));
+    if (unavailable) return unavailable;
+    throw error;
+  }
+}
+
+async function handleCookbookAction(
+  request: Request,
+  id: string,
+  context: AppLoadContext,
+  userId: string,
+  formData: FormData,
+) {
   const intent = formData.get("intent");
 
   const database = await getRequestDb(context);
@@ -200,10 +218,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       return data({ error: "Title is required", intent: "updateTitle" }, { status: 400 });
     }
     try {
-      await database.cookbook.update({
+      // Sets a fixed title, so it simply runs again after a transient D1 error.
+      await retryD1Write({ scope: "cookbook.rename" }, () => database.cookbook.update({
         where: { id },
         data: { title: title.trim() },
-      });
+      }));
       return data({ success: true, intent: "updateTitle" });
     } catch (error: any) {
       if (error.code === "P2002") {
@@ -212,6 +231,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           { status: 400 },
         );
       }
+      const unavailable = d1UnavailableWebResponse(error, intent);
+      if (unavailable) return unavailable;
       captureCookbookActionFailure(request, context, userId, "updateTitle", error);
       throw error;
     }
@@ -280,6 +301,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         if (cutoverResponse) {
           return cutoverResponse;
         }
+        const unavailable = d1UnavailableWebResponse(error, intent);
+        if (unavailable) return unavailable;
         captureCookbookActionFailure(request, context, userId, "addRecipe", error);
         throw error;
       }
@@ -314,6 +337,8 @@ interface CookbookActionData {
   intent?: string;
   success?: boolean;
   error?: unknown;
+  errorCode?: string;
+  retryable?: boolean;
 }
 
 export default function CookbookDetail() {
@@ -337,6 +362,16 @@ export default function CookbookDetail() {
   // A rename either closes the editor with a short confirmation (R-M3-3) or keeps it open with
   // the error. Each submission yields a new actionData object, so this runs once per result.
   useEffect(() => {
+    // Saving, removing or deleting when the database was briefly unavailable: say so, so the cook
+    // can try again.
+    if (
+      actionData?.intent !== "updateTitle" &&
+      actionData?.retryable === true &&
+      typeof actionData.error === "string"
+    ) {
+      showToast({ message: actionData.error });
+      return;
+    }
     if (actionData?.intent !== "updateTitle") return;
     if (typeof actionData.error === "string") {
       setTitleError(actionData.error);
