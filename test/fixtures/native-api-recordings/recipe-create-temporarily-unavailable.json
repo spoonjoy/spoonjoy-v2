@@ -1,0 +1,17 @@
+{
+  "name": "recipe-create-temporarily-unavailable",
+  "endpoint": "POST /api/v1/recipes",
+  "status": 503,
+  "body": {
+    "ok": false,
+    "requestId": "opaque_005",
+    "error": {
+      "code": "temporarily_unavailable",
+      "message": "The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.",
+      "status": 503,
+      "details": {
+        "retryAfterSeconds": 1
+      }
+    }
+  }
+}

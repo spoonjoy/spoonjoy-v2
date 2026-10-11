@@ -4,13 +4,13 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_107",
+    "requestId": "opaque_108",
     "data": {
       "revoked": true,
       "revokedCount": 1,
       "device": {
         "id": "id_021",
-        "deviceId": "opaque_105",
+        "deviceId": "opaque_106",
         "platform": "ios",
         "environment": "development",
         "tokenPrefix": "aaaaaaaaaaaa",
@@ -25,7 +25,7 @@
       "devices": [
         {
           "id": "id_021",
-          "deviceId": "opaque_105",
+          "deviceId": "opaque_106",
           "platform": "ios",
           "environment": "development",
           "tokenPrefix": "aaaaaaaaaaaa",
@@ -39,7 +39,7 @@
         }
       ],
       "mutation": {
-        "clientMutationId": "opaque_108",
+        "clientMutationId": "opaque_109",
         "replayed": false
       }
     }

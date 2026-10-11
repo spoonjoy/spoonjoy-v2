@@ -2,7 +2,16 @@ import type { Route } from "./+types/api.$";
 import { ApiAuthError, type ApiPrincipal } from "~/lib/api-auth.server";
 import { enforceRateLimit, rateLimitedResponse, type RateLimitScope } from "~/lib/rate-limit.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { callSpoonjoyApiOperation, listSpoonjoyApiOperations } from "~/lib/spoonjoy-api.server";
+import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+} from "~/lib/d1-write-retry.server";
+import {
+  callSpoonjoyApiOperation,
+  isSpoonjoyOperationRetryableAfterD1Error,
+  listSpoonjoyApiOperations,
+} from "~/lib/spoonjoy-api.server";
 import { buildSpoonjoyApiContext, resolveApiPrincipal } from "~/lib/spoonjoy-api-request.server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import { ImportRecipeError, type ImportRecipeCode } from "~/lib/recipe-import.server";
@@ -399,6 +408,27 @@ async function handleApiRequest({ request, context, params }: Route.LoaderArgs |
         operation,
         principal,
         errorCode: PRODUCT_ACTIVATION_PENDING_CODE,
+      });
+    }
+    if (operation && isSpoonjoyOperationRetryableAfterD1Error(operation, error)) {
+      // D1 was briefly unavailable, and sending the request again cannot apply a write twice,
+      // so tell the caller to retry rather than reporting a bug.
+      const response = apiJson(
+        {
+          ok: false,
+          error: { message: D1_WRITE_UNAVAILABLE_MESSAGE, status: 503, code: D1_WRITE_UNAVAILABLE_CODE },
+        },
+        503,
+        d1UnavailableHeaders(),
+      );
+      return observeLegacyApiResponse({
+        request,
+        context,
+        response,
+        startedAt,
+        operation,
+        principal,
+        errorCode: D1_WRITE_UNAVAILABLE_CODE,
       });
     }
     if (error instanceof ApiAuthError) {

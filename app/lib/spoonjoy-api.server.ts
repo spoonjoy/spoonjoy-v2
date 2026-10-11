@@ -1,4 +1,5 @@
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
+import { D1WriteUnavailableError, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -28,9 +29,10 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
-import { d1Binding, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
-import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
 import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
 import {
@@ -106,6 +108,7 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { retryD1Write as retryApiTokenRevoke } from "~/lib/d1-write-retry.server";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -1511,12 +1514,14 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 
     if (!credential) throw new Error("API token not found");
 
+    // Sets a time chosen once, so running it again after a lost answer leaves the same row.
+    const revokedAt = new Date();
     const updated = credential.revokedAt
       ? credential
-      : await context.db.apiCredential.update({
+      : await retryApiTokenRevoke({ scope: "api_credential.revoke" }, () => context.db.apiCredential.update({
           where: { id: credential.id },
-          data: { revokedAt: new Date() },
-        });
+          data: { revokedAt },
+        }));
 
     return json({
       revoked: !credential.revokedAt,
@@ -2668,15 +2673,21 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const description = optionalNullableStringArgument(args, "description");
       const servings = optionalNullableStringArgument(args, "servings");
       const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
-      const imageUrl = optionalNullableStringArgument(args, "imageUrl");
+      const requestedImageUrl = optionalNullableStringArgument(args, "imageUrl");
       const steps = hasArgument(args, "steps") ? parseStepUpdates(args.steps) : undefined;
 
       const owner = await getOrCreateOwner(context, email);
       const existing = await context.db.recipe.findFirst({
         where: { id, chefId: owner.id, deletedAt: null },
-        select: { id: true, title: true },
+        select: { id: true, title: true, activeCoverId: true },
       });
       if (!existing) throw new Error("Recipe not found");
+      // The same image as the active cover is that cover, not a new one, so an agent repeating
+      // the call (after a lost answer or a retryable error) never adds a second cover.
+      const repeatsActiveCover = Boolean(requestedImageUrl && existing.activeCoverId) && (await context.db.recipeCover.count({
+        where: { id: existing.activeCoverId!, recipeId: existing.id, imageUrl: requestedImageUrl!, archivedAt: null },
+      })) > 0;
+      const imageUrl = repeatsActiveCover ? null : requestedImageUrl;
       const stepsPlan = steps
         ? planRecipeStepsUpdate(existing.id, await loadCurrentRecipeSteps(context.db, existing.id), steps, new Date())
         : undefined;
@@ -2712,16 +2723,27 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         // and a new title still free, and that the steps are still the ones the update was planned from.
         const now = new Date();
         coverId = imageUrl ? crypto.randomUUID() : null;
-        await d1WriteBatch(d1, [
-          recipeActiveGuard(existing.id),
-          ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
-          ...(stepsPlan ? [stepsPlan.guard, ...stepsPlan.statements] : []),
-          ...(coverId
-            ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
-            : []),
-          recipeUpdateStatement(existing.id, { ...data, ...(coverId ? activeImageCover(coverId) : {}) }, now),
-          ...(coverId ? [cookbooksForRecipeTouchStatement(existing.id, now)] : []),
-        ]);
+        const appliedMarker = coverId
+          ? ([`SELECT 1 FROM "RecipeCover" WHERE "id" = ? AND "recipeId" = ?`, coverId, existing.id] as const)
+          : ([`SELECT 1 FROM "Recipe" WHERE "id" = ? AND "updatedAt" = ?`, existing.id, d1Timestamp(now)] as const);
+        // The batch's ids and timestamp are chosen once, so after a transient D1 error it either
+        // finds its earlier try's cover (or its stamp on the recipe) or writes once.
+        await retryD1Write({
+          scope: "recipe.update.mcp",
+          applied: async () => ((await d1ReadBatch(d1, [[...appliedMarker]]))[0]!.length > 0 ? true : null),
+        }, async () => {
+          await d1WriteBatch(d1, [
+            recipeActiveGuard(existing.id),
+            ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
+            ...(stepsPlan ? [stepsPlan.guard, ...stepsPlan.statements] : []),
+            ...(coverId
+              ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
+              : []),
+            recipeUpdateStatement(existing.id, { ...data, ...(coverId ? activeImageCover(coverId) : {}) }, now),
+            ...(coverId ? [cookbooksForRecipeTouchStatement(existing.id, now)] : []),
+          ]);
+          return true;
+        });
       } else {
         if (Object.keys(data).length > 0) {
           await context.db.recipe.update({ where: { id: existing.id }, data });
@@ -4086,6 +4108,19 @@ const TOOL_ANNOTATIONS = {
   list_spoons_for_recipe: { title: "List cooks for recipe", readOnlyHint: true },
   list_spoons_by_chef: { title: "List cooks by chef", readOnlyHint: true },
 } satisfies Record<string, McpToolAnnotations>;
+
+/**
+ * Whether a call that failed because D1 was briefly unavailable can be sent again as it was: the
+ * error came from a write that `retryD1Write` gave up on (which either did not apply, or is safe
+ * to run again), or the operation reads only or repeats with no extra effect. Any other write
+ * may have committed, so a second call could apply it twice; it stays an internal error.
+ */
+export function isSpoonjoyOperationRetryableAfterD1Error(name: string, error: unknown): boolean {
+  if (!isD1Unavailable(error)) return false;
+  if (error instanceof D1WriteUnavailableError) return true;
+  const annotations: McpToolAnnotations | undefined = TOOL_ANNOTATIONS[name as keyof typeof TOOL_ANNOTATIONS];
+  return Boolean(annotations && (annotations.readOnlyHint || annotations.idempotentHint));
+}
 
 export function listSpoonjoyApiOperations(): SpoonjoyMcpToolDescriptor[] {
   return tools.map(({ name, description, inputSchema, requiredScopes }) => {

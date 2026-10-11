@@ -10,6 +10,16 @@ import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { ValidationError } from "~/components/ui/validation-error";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
+import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+  formWriteToken,
+  idForWriteToken,
+  isD1Unavailable,
+  retryD1Write,
+} from "~/lib/d1-write-retry.server";
+import { useWriteToken } from "~/hooks/use-write-token";
 
 interface ActionData {
   errors?: {
@@ -49,16 +59,44 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const database = await getRequestDb(context);
 
-  try {
-    const cookbook = await database.cookbook.create({
-      data: {
-        title: title.trim(),
-        authorId: userId,
-      },
-    });
+  // The cookbook's id comes from the form's token, made when the page opened, so a resubmit (after
+  // a 503, or a double tap) finds the cookbook the first submit made and goes to it.
+  const token = formWriteToken(formData.get("cookbookToken"));
+  const cookbookId = token ? await idForWriteToken("cookbook", userId, token) : crypto.randomUUID();
+  const made = async () =>
+    (await database.cookbook.findFirst({ where: { id: cookbookId, authorId: userId }, select: { id: true } })) !== null;
+  if (token && (await made())) {
+    return redirect(`/cookbooks/${cookbookId}`);
+  }
 
-    return redirect(`/cookbooks/${cookbook.id}`);
+  try {
+    // After a transient D1 error the create asks whether its cookbook is in; if so it is done, and
+    // if not it runs again with the same id. A retry that loses to its earlier try, landing late,
+    // fails on the title that try took, and the same check then finds the cookbook.
+    await retryD1Write(
+      { scope: "cookbook.create", applied: async () => ((await made()) ? true : null) },
+      async () => {
+        await database.cookbook.create({
+          data: {
+            id: cookbookId,
+            title: title.trim(),
+            authorId: userId,
+          },
+        });
+        return true;
+      },
+    );
+
+    return redirect(`/cookbooks/${cookbookId}`);
   } catch (error: any) {
+    // The database was briefly unavailable: a retryable 503 the form shows, keeping the title,
+    // with the same token, so creating again makes the cookbook once.
+    if (isD1Unavailable(error)) {
+      return data(
+        { errors: { general: D1_WRITE_UNAVAILABLE_MESSAGE }, errorCode: D1_WRITE_UNAVAILABLE_CODE, retryable: true as const },
+        { status: 503, headers: d1UnavailableHeaders() },
+      );
+    }
     // Check for unique constraint violation
     if (error.code === "P2002") {
       return data(
@@ -94,6 +132,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function NewCookbook() {
   const actionData = useActionData<ActionData>();
+  // One cookbook per opening of the page: a create after a 503, or a double tap, makes it once.
+  const [cookbookToken] = useWriteToken();
 
   return (
     <CookbookPage>
@@ -116,6 +156,7 @@ export default function NewCookbook() {
 
         <SettingsPanel title="Cookbook title">
         <Form method="post">
+          <input type="hidden" name="cookbookToken" value={cookbookToken} />
           <Fieldset className="space-y-6">
             <Field>
               <Label>Cookbook Title *</Label>

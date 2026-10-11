@@ -49,9 +49,11 @@ import {
   hashIdempotencyRequest,
   IDEMPOTENCY_RETRY_AFTER_SECONDS,
   idempotencyClientKey,
+  releaseIdempotencyKeyForRetry,
   replayIdempotencyResponse,
   reserveIdempotencyKey,
 } from "~/lib/api-idempotency.server";
+import { D1_WRITE_RETRY_AFTER_SECONDS, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import {
   buildApiV1ConnectorOpenApiDocument,
   buildApiV1OpenApiDocument,
@@ -140,6 +142,7 @@ import {
   API_V1_ERROR_STATUS,
   API_V1_RESOURCES,
   API_V1_SCOPE_REQUIREMENTS,
+  API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import {
@@ -220,6 +223,7 @@ import {
   type NativeRecipeImportSource,
 } from "~/lib/recipe-import.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
+import { retryD1Write as retryAccountD1Write } from "~/lib/d1-write-retry.server";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
@@ -406,7 +410,8 @@ export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Respon
   const headers = apiV1PrivateHeaders(requestId);
   if (
     error.code === "idempotency_in_progress" ||
-    error.code === PRODUCT_ACTIVATION_PENDING_CODE
+    error.code === PRODUCT_ACTIVATION_PENDING_CODE ||
+    error.code === "temporarily_unavailable"
   ) {
     headers.set("Retry-After", String(retryAfterSecondsFromError(error)));
   }
@@ -443,7 +448,7 @@ function apiV1SamePartyErrorResponse(requestId: string, error: ApiV1Error): Resp
     body.error.details = error.details;
   }
   const headers = apiV1SamePartyPrivateHeaders(requestId);
-  if (error.code === "rate_limited") {
+  if (error.code === "rate_limited" || error.code === "temporarily_unavailable") {
     headers.set("Retry-After", String(retryAfterSecondsFromError(error)));
   }
   if (
@@ -3372,30 +3377,36 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
   const title = nonblankString(body.title, "title");
   const origin = publicContentOrigin(args);
 
-  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db) => {
-    let cookbookId: string;
+  const createdResult = async (db: ApiV1WriteDb, cookbookId: string): Promise<ApiV1IdempotentMutationResult> => ({
+    status: 201,
+    data: {
+      created: true,
+      cookbook: cookbookDetail(await loadExistingCookbookById(db, cookbookId), origin),
+      mutation: { clientMutationId, replayed: false },
+    },
+  });
+
+  // The cookbook takes its reservation's id, so a create that committed although its answer was
+  // lost is found again by that id rather than made twice (or refused as a duplicate title).
+  return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db, reservation) => {
     try {
-      const created = await db.cookbook.create({
-        data: { title, authorId: principal.id },
+      await db.cookbook.create({
+        data: { id: reservation.id, title, authorId: principal.id },
         select: { id: true },
       });
-      cookbookId = created.id;
     } catch (error) {
       if (isPrismaErrorCode(error, "P2002")) {
         throw duplicateCookbookTitleError();
       }
       throw error;
     }
-
-    const cookbook = await loadExistingCookbookById(db, cookbookId);
-    return {
-      status: 201,
-      data: {
-        created: true,
-        cookbook: cookbookDetail(cookbook, origin),
-        mutation: { clientMutationId, replayed: false },
-      },
-    };
+    return await createdResult(db, reservation.id);
+  }, async (db, reservation) => {
+    const committed = await db.cookbook.findFirst({
+      where: { id: reservation.id, authorId: principal.id, title },
+      select: { id: true },
+    });
+    return committed ? await createdResult(db, committed.id) : null;
   });
 }
 
@@ -4155,11 +4166,35 @@ export async function runIdempotentApiV1Mutation(
     throw new ApiV1Error("idempotency_conflict", "clientMutationId was already used for a different request");
   }
 
+  if (reservation.resumed) {
+    // This retry took over the key of a write that failed because D1 was briefly unavailable.
+    // That write may have committed after all; if the operation finds it, answer it.
+    const recovered = await options.recoverInFlight?.(db, reservation.record, { stopped: true });
+    if (recovered) {
+      await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
+      return apiV1RecoveredReplayResponse(requestId, operation, recovered);
+    }
+  }
+
   let result: Awaited<ReturnType<typeof write>>;
   try {
     await options.beforeWrite?.(db, reservation.record);
     result = await write(db, reservation.record);
   } catch (error) {
+    if (isD1Unavailable(error)) {
+      // The write may have committed before its answer was lost: if the operation finds it,
+      // answer it as committed. A recovery that D1 also refuses counts as not found.
+      const committed = await options.recoverInFlight?.(db, reservation.record, { stopped: true }).catch(() => null);
+      if (committed) {
+        await completeRecoveredIdempotencyKey(db, reservation.record, requestId, committed);
+        return apiV1IdempotentResponse(requestId, operation, committed, "committed");
+      }
+      // The write may still commit. Keep its key, released for the client's retry of the same
+      // clientMutationId, which takes it over with the same key id (see api-idempotency.server).
+      // If D1 is still down, the key stays in flight, as before.
+      await releaseIdempotencyKeyForRetry(db, reservation.record.id).catch(() => undefined);
+      throw error;
+    }
     const recovered = error instanceof ApiV1Error
       ? null
       : await options.recoverInFlight?.(db, reservation.record, { stopped: true });
@@ -4983,10 +5018,10 @@ async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string,
       file: normalizedPhoto,
       namespace: `profiles/${principal.id}`,
     });
-    await db.user.update({
+    await retryAccountD1Write({ scope: "account.set_photo" }, () => db.user.update({
       where: { id: principal.id },
       data: { photoUrl },
-    });
+    }));
     // The replaced photo's stored file is no longer referenced (see account settings' upload).
     await deleteAvatarBestEffort(args.context, principal.id, previous?.photoUrl);
 
@@ -5021,10 +5056,10 @@ async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string,
       waitUntil: apiV1WaitUntilFor(args),
       distinctId: principal.id,
     });
-    await db.user.update({
+    await retryAccountD1Write({ scope: "account.remove_photo" }, () => db.user.update({
       where: { id: principal.id },
       data: { photoUrl: null },
-    });
+    }));
 
     return {
       status: 200,
@@ -5406,14 +5441,14 @@ async function handleNotificationPreferencesUpdate(args: ApiV1RouteArgs, request
     clientMutationId,
     ...preferences,
   }, clientMutationId, "account.notification-preferences.update", async (db) => {
-    await db.notificationPreference.upsert({
+    await retryAccountD1Write({ scope: "notification_preference.save" }, () => db.notificationPreference.upsert({
       where: { userId: principal.id },
       create: {
         userId: principal.id,
         ...preferences,
       },
       update: preferences,
-    });
+    }));
 
     return {
       status: 200,
@@ -5527,8 +5562,10 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
     const tokenHash = await hashApnsToken(token);
+    // Every write sets fixed values chosen here, once, so each runs again safely after a lost
+    // answer; a retried create recognises its row by the device key and this registration time.
     const now = new Date();
-    await db.nativePushDevice.updateMany({
+    await retryAccountD1Write({ scope: "apns.revoke_token_elsewhere" }, () => db.nativePushDevice.updateMany({
       where: {
         tokenHash,
         platform,
@@ -5542,12 +5579,12 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
         },
       },
       data: { revokedAt: now.toISOString() },
-    });
+    }));
     const existing = await db.nativePushDevice.findFirst({
       where: { userId: principal.id, deviceId, platform, environment },
     });
     const device = existing
-      ? await db.nativePushDevice.update({
+      ? await retryAccountD1Write({ scope: "apns.register_existing" }, () => db.nativePushDevice.update({
           where: { id: existing.id },
           data: {
             tokenHash,
@@ -5558,8 +5595,13 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
             revokedAt: null,
             lastRegisteredAt: now,
           },
-        })
-      : await db.nativePushDevice.create({
+        }))
+      : await retryAccountD1Write({
+        scope: "apns.register_new",
+        applied: () => db.nativePushDevice.findFirst({
+          where: { userId: principal.id, deviceId, platform, environment, tokenHash, lastRegisteredAt: now },
+        }),
+      }, () => db.nativePushDevice.create({
           data: {
             userId: principal.id,
             deviceId,
@@ -5572,7 +5614,7 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
             enabledAt: now,
             lastRegisteredAt: now,
           },
-        });
+        }));
 
     return {
       status: existing ? 200 : 201,
@@ -5604,10 +5646,11 @@ async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, p
       .filter((device) => device.revokedAt === null)
       .map((device) => device.id);
     if (activeDeviceIds.length > 0) {
-      await db.nativePushDevice.updateMany({
+      const revokedAt = new Date().toISOString();
+      await retryAccountD1Write({ scope: "apns.revoke" }, () => db.nativePushDevice.updateMany({
         where: { id: { in: activeDeviceIds } },
-        data: { revokedAt: new Date().toISOString() },
-      });
+        data: { revokedAt },
+      }));
     }
     const devices = await db.nativePushDevice.findMany({
       where: { userId: principal.id, deviceId },
@@ -5817,16 +5860,18 @@ async function handleOAuthConnectionDisconnect(
     resource: connection.resource,
     connectionKeys: connection.connectionKeys,
   });
-  const refresh = await db.oAuthRefreshToken.updateMany({
-    where: {
-      userId: principal.id,
-      clientId: connection.clientId,
-      issuer: connection.issuer,
-      resource: connection.resource,
-      revokedAt: null,
-      ...ownership,
-    },
-    data: { revokedAt: now },
+  // Each sweep answers how many rows it revoked. A retry after a lost answer would count none, so
+  // the count is of the rows revoked at exactly `now`, chosen once: this request's revocations.
+  const connectionRefresh = {
+    userId: principal.id,
+    clientId: connection.clientId,
+    issuer: connection.issuer,
+    resource: connection.resource,
+    ...ownership,
+  };
+  const refresh = await retryAccountD1Write({ scope: "oauth.disconnect_refresh" }, async () => {
+    await db.oAuthRefreshToken.updateMany({ where: { ...connectionRefresh, revokedAt: null }, data: { revokedAt: now } });
+    return { count: await db.oAuthRefreshToken.count({ where: { ...connectionRefresh, revokedAt: now } }) };
   });
   const cleanupCutoff = (await db.oAuthRefreshToken.findFirst({
         where: {
@@ -5843,16 +5888,16 @@ async function handleOAuthConnectionDisconnect(
   if (!cleanupCutoff) {
     throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
   }
-  const access = await db.apiCredential.updateMany({
-    where: {
-      userId: principal.id,
-      oauthClientId: connection.clientId,
-      oauthIssuer: connection.issuer,
-      oauthResource: connection.resource,
-      revokedAt: null,
-      ...oauthAccessConnectionOwnership(connection.connectionKeys, cleanupCutoff),
-    },
-    data: { revokedAt: now },
+  const connectionAccess = {
+    userId: principal.id,
+    oauthClientId: connection.clientId,
+    oauthIssuer: connection.issuer,
+    oauthResource: connection.resource,
+    ...oauthAccessConnectionOwnership(connection.connectionKeys, cleanupCutoff),
+  };
+  const access = await retryAccountD1Write({ scope: "oauth.disconnect_access" }, async () => {
+    await db.apiCredential.updateMany({ where: { ...connectionAccess, revokedAt: null }, data: { revokedAt: now } });
+    return { count: await db.apiCredential.count({ where: { ...connectionAccess, revokedAt: now } }) };
   });
   await revokeConnectorGrantsByConnectionKeys(db, {
     userId: principal.id,
@@ -7399,11 +7444,13 @@ async function handleTokenRevoke(args: ApiV1RouteArgs, requestId: string, authen
   }
 
   const revoked = credential.revokedAt === null;
+  // Sets a time chosen once, so running it again after a lost answer leaves the same row.
+  const revokedAt = new Date();
   const updated = revoked
-    ? await db.apiCredential.update({
+    ? await retryAccountD1Write({ scope: "api_credential.revoke" }, () => db.apiCredential.update({
         where: { id: credential.id },
-        data: { revokedAt: new Date() },
-      })
+        data: { revokedAt },
+      }))
     : credential;
 
   return withApiV1Telemetry(apiV1PrivateSuccess(requestId, {
@@ -7928,9 +7975,14 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       });
     }
 
-    logApiV1InternalError(args, requestId, error);
-    captureApiV1InternalException(args, error);
     const internalError = normalizeApiV1InternalError(error);
+    // A transient D1 failure is expected now and then and is answered as retryable (the request
+    // event records its code, and retried writes log their own decisions); only unexpected
+    // failures are logged and go to exception telemetry.
+    if (internalError.code === "internal_error") {
+      logApiV1InternalError(args, requestId, error);
+      captureApiV1InternalException(args, error);
+    }
     const response = isNativeAuthPath(path)
       ? apiV1SamePartyErrorResponse(requestId, internalError)
       : apiV1ErrorResponse(requestId, internalError);
@@ -7946,6 +7998,11 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 }
 
 export function normalizeApiV1InternalError(error: unknown): ApiV1Error {
+  if (isD1Unavailable(error)) {
+    return new ApiV1Error("temporarily_unavailable", API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE, {
+      retryAfterSeconds: D1_WRITE_RETRY_AFTER_SECONDS,
+    });
+  }
   return new ApiV1Error("internal_error", "Internal error");
 }
 
