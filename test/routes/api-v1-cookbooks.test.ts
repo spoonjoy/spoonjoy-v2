@@ -727,6 +727,37 @@ describe("API v1 public cookbook reads", () => {
     }
   });
 
+  it("answers the cookbook a create made when its answer was lost, and makes it once", async () => {
+    const owner = await db.user.create({ data: createTestUser() });
+    const token = await createApiCredential(db, owner.id, "Cookbook lost-answer writer", { scopes: ["kitchen:write"] });
+    const title = `Api V1 Lost Answer ${faker.string.alphanumeric(8)}`;
+    const body = { clientMutationId: "cm_cookbook_create_lost_answer", title };
+    const originalCreate = db.cookbook.create;
+    db.cookbook.create = vi.fn(async (args: Parameters<typeof originalCreate>[0]) => {
+      await originalCreate(args);
+      throw new Error("D1_ERROR: Network connection lost.");
+    }) as unknown as typeof db.cookbook.create;
+
+    let created: Response;
+    try {
+      created = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_lost_answer", body), "cookbooks"));
+    } finally {
+      db.cookbook.create = originalCreate;
+    }
+
+    expect(created.status).toBe(201);
+    const payload = await readJson(created);
+    const key = await db.apiIdempotencyKey.findFirstOrThrow({ where: { key: body.clientMutationId } });
+    expect(payload.data).toMatchObject({ created: true, cookbook: { id: key.id, title } });
+    expect(await db.cookbook.count({ where: { authorId: owner.id, title } })).toBe(1);
+
+    const replay = await action(routeArgs(jsonRequest("http://localhost/api/v1/cookbooks", "POST", token.token, "req_cookbook_lost_answer_replay", body), "cookbooks"));
+    expect(replay.status).toBe(201);
+    await expect(readJson(replay)).resolves.toMatchObject({
+      data: { cookbook: { id: key.id }, mutation: { clientMutationId: body.clientMutationId, replayed: true } },
+    });
+  });
+
   it("adds and removes cookbook recipes with owner checks and idempotent no-op duplicate adds", async () => {
     const fixture = await createCookbookFixture(db, "Api V1 Membership Cookbook");
     const ownerToken = await createApiCredential(db, fixture.chef.id, "Cookbook membership writer", { scopes: ["kitchen:write"] });

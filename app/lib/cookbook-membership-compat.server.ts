@@ -1,4 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
+
+// Cookbook writes shared by the cookbook page, the recipe page's Prisma path, API v1 and the
+// tools API. With the D1 binding each write is one batch, and each runs again after a transient
+// D1 error (retryD1Write) only where that is safe: a new cookbook or membership has its id chosen
+// before the first try, and after an ambiguous failure a read by that id says whether the earlier
+// try committed; a removal touches the cookbook at a time chosen once, which says the same; a
+// delete and a touch set fixed values. The Prisma branches run only without a binding.
 
 interface CompatibleD1PreparedStatement {
   bind(...values: unknown[]): CompatibleD1PreparedStatement;
@@ -6,6 +14,7 @@ interface CompatibleD1PreparedStatement {
 
 interface CompatibleD1Result {
   meta?: { changes?: number };
+  results?: unknown[];
 }
 
 export interface CompatibleCookbookD1Database {
@@ -92,12 +101,30 @@ export function isCookbookTitleUniqueConflict(error: unknown): boolean {
     /UNIQUE constraint failed: Cookbook\.authorId, Cookbook\.title(?![A-Za-z0-9_.]|\s*,)/.test(candidate.message);
 }
 
-function requiredD1Changes(results: CompatibleD1Result[]): number {
-  const changes = results[0]?.meta?.changes;
+function requiredD1Changes(results: CompatibleD1Result[], index: number): number {
+  const changes = results[index]?.meta?.changes;
   if (typeof changes !== "number") {
     throw new Error("D1 cookbook batch did not report mutation changes");
   }
   return changes;
+}
+
+/** Whether a read on the binding finds any row. */
+async function nativeRowExists(
+  nativeDatabase: CompatibleCookbookD1Database,
+  sql: string,
+  ...values: unknown[]
+): Promise<true | null> {
+  const [result] = await nativeDatabase.batch([nativeDatabase.prepare(sql).bind(...values)]);
+  return (result?.results?.length ?? 0) > 0 ? true : null;
+}
+
+/** Sets the cookbook's last change: a fixed value, so it simply runs again after a transient error. */
+async function touchCookbook(database: PrismaClient, cookbookId: string, updatedAt: Date): Promise<void> {
+  await retryD1Write({ scope: "cookbook.touch" }, () => database.cookbook.update({
+    where: { id: cookbookId },
+    data: { updatedAt },
+  }));
 }
 
 function membershipDeleteWhere(input: RemoveCookbookMembershipInput) {
@@ -121,26 +148,40 @@ export async function createCookbookWithRecipe(
   const membershipId = crypto.randomUUID();
   const timestamp = new Date();
 
-  if (input.nativeDatabase) {
+  const nativeDatabase = input.nativeDatabase;
+  if (nativeDatabase) {
     const storedAt = timestamp.toISOString();
-    await input.nativeDatabase.batch([
-      input.nativeDatabase.prepare(`
-        INSERT INTO "Cookbook" ("id", "title", "authorId", "createdAt", "updatedAt")
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(cookbookId, input.title, input.userId, storedAt, storedAt),
-      input.nativeDatabase.prepare(`
-        INSERT INTO "RecipeInCookbook" (
-          "id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?)
-      `).bind(
-        membershipId,
-        cookbookId,
-        input.recipeId,
-        input.userId,
-        storedAt,
-        storedAt,
-      ),
-    ]);
+    // A retry after a late commit fails on the title the earlier try took; the read by the
+    // cookbook's id finds that try's cookbook (with its membership: the batch is atomic).
+    await retryD1Write(
+      {
+        scope: "cookbook.create_with_recipe.compat",
+        applied: () => nativeRowExists(
+          nativeDatabase,
+          `SELECT 1 AS "made" FROM "Cookbook" WHERE "id" = ? AND "authorId" = ?`,
+          cookbookId,
+          input.userId,
+        ),
+      },
+      () => nativeDatabase.batch([
+        nativeDatabase.prepare(`
+          INSERT INTO "Cookbook" ("id", "title", "authorId", "createdAt", "updatedAt")
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(cookbookId, input.title, input.userId, storedAt, storedAt),
+        nativeDatabase.prepare(`
+          INSERT INTO "RecipeInCookbook" (
+            "id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(
+          membershipId,
+          cookbookId,
+          input.recipeId,
+          input.userId,
+          storedAt,
+          storedAt,
+        ),
+      ]).then(() => true as const),
+    );
   } else {
     await input.database.$transaction(async (transaction) => {
       await transaction.cookbook.create({
@@ -182,34 +223,44 @@ export async function addRecipeToCookbook(
   });
   const updatedAt = new Date();
   if (existing) {
-    await input.database.cookbook.update({
-      where: { id: input.cookbookId },
-      data: { updatedAt },
-    });
+    await touchCookbook(input.database, input.cookbookId, updatedAt);
     return false;
   }
 
   try {
-    if (input.nativeDatabase) {
+    const nativeDatabase = input.nativeDatabase;
+    if (nativeDatabase) {
       const membershipId = crypto.randomUUID();
       const storedAt = updatedAt.toISOString();
-      await input.nativeDatabase.batch([
-        input.nativeDatabase.prepare(`
-          INSERT INTO "RecipeInCookbook" (
-            "id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt"
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `).bind(
-          membershipId,
-          input.cookbookId,
-          input.recipeId,
-          input.userId,
-          storedAt,
-          storedAt,
-        ),
-        input.nativeDatabase.prepare(`
-          UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?
-        `).bind(storedAt, input.cookbookId),
-      ]);
+      // The membership's id is chosen before the first try. A retry after a late commit fails on
+      // the membership that try wrote; the read by id says it was this request's, so it was added.
+      await retryD1Write(
+        {
+          scope: "cookbook.add_recipe.compat",
+          applied: () => nativeRowExists(
+            nativeDatabase,
+            `SELECT 1 AS "added" FROM "RecipeInCookbook" WHERE "id" = ?`,
+            membershipId,
+          ),
+        },
+        () => nativeDatabase.batch([
+          nativeDatabase.prepare(`
+            INSERT INTO "RecipeInCookbook" (
+              "id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt"
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `).bind(
+            membershipId,
+            input.cookbookId,
+            input.recipeId,
+            input.userId,
+            storedAt,
+            storedAt,
+          ),
+          nativeDatabase.prepare(`
+            UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?
+          `).bind(storedAt, input.cookbookId),
+        ]).then(() => true as const),
+      );
     } else {
       await input.database.$transaction(async (transaction) => {
         await transaction.recipeInCookbook.create({
@@ -228,10 +279,7 @@ export async function addRecipeToCookbook(
     return true;
   } catch (error) {
     if (!isCookbookMembershipUniqueConflict(error)) throw error;
-    await input.database.cookbook.update({
-      where: { id: input.cookbookId },
-      data: { updatedAt },
-    });
+    await touchCookbook(input.database, input.cookbookId, updatedAt);
     return false;
   }
 }
@@ -242,7 +290,8 @@ export async function removeRecipeFromCookbook(
   const where = membershipDeleteWhere(input);
   const updatedAt = new Date();
 
-  if (input.nativeDatabase) {
+  const nativeDatabase = input.nativeDatabase;
+  if (nativeDatabase) {
     const storedAt = updatedAt.toISOString();
     const condition = input.membershipId
       ? `"id" = ? AND "cookbookId" = ?`
@@ -250,15 +299,36 @@ export async function removeRecipeFromCookbook(
     const values = input.membershipId
       ? [input.membershipId, input.cookbookId]
       : [input.cookbookId, input.recipeId];
-    const results = await input.nativeDatabase.batch([
-      input.nativeDatabase.prepare(`
-        DELETE FROM "RecipeInCookbook" WHERE ${condition}
-      `).bind(...values),
-      input.nativeDatabase.prepare(`
-        UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?
-      `).bind(storedAt, input.cookbookId),
-    ]);
-    return requiredD1Changes(results) > 0;
+    // Whether there is a membership to remove is read before the first try. After an ambiguous
+    // failure, the cookbook carrying this request's touch time says an earlier try committed, and
+    // then it removed the membership if there was one. A later try that finds nothing to remove
+    // answers the same way: its earlier try, landing late, removed it.
+    const membershipSql = `SELECT 1 AS "present" FROM "RecipeInCookbook" WHERE ${condition}`;
+    const present = (await nativeRowExists(nativeDatabase, membershipSql, ...values)) === true;
+    let tries = 0;
+    return retryD1Write(
+      {
+        scope: "cookbook.remove_recipe.compat",
+        applied: async () => (await nativeRowExists(
+          nativeDatabase,
+          `SELECT 1 AS "touched" FROM "Cookbook" WHERE "id" = ? AND "updatedAt" = ?`,
+          input.cookbookId,
+          storedAt,
+        )) ? present : null,
+      },
+      async () => {
+        tries += 1;
+        const results = await nativeDatabase.batch([
+          nativeDatabase.prepare(`
+            DELETE FROM "RecipeInCookbook" WHERE ${condition}
+          `).bind(...values),
+          nativeDatabase.prepare(`
+            UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ?
+          `).bind(storedAt, input.cookbookId),
+        ]);
+        return requiredD1Changes(results, 0) > 0 || (tries > 1 && present);
+      },
+    );
   }
 
   return input.database.$transaction(async (transaction) => {
@@ -275,10 +345,14 @@ export async function deleteCookbookWithTombstone(
   input: DeleteCookbookInput,
 ): Promise<void> {
   const deletedAt = new Date();
-  if (input.nativeDatabase) {
+  const nativeDatabase = input.nativeDatabase;
+  if (nativeDatabase) {
     const storedAt = deletedAt.toISOString();
-    await input.nativeDatabase.batch([
-      input.nativeDatabase.prepare(`
+    const tombstoneId = crypto.randomUUID();
+    // The tombstone is an upsert by its natural key with fixed values and the delete is by id, so
+    // running the batch again leaves the same rows.
+    await retryD1Write({ scope: "cookbook.delete" }, () => nativeDatabase.batch([
+      nativeDatabase.prepare(`
         INSERT INTO "NativeSyncTombstone" (
           "id", "accountId", "resourceType", "resourceId", "parentResourceId",
           "title", "deletedAt", "updatedAt", "createdAt"
@@ -289,7 +363,7 @@ export async function deleteCookbookWithTombstone(
           "deletedAt" = excluded."deletedAt",
           "updatedAt" = excluded."updatedAt"
       `).bind(
-        crypto.randomUUID(),
+        tombstoneId,
         input.accountId,
         input.cookbookId,
         input.title,
@@ -297,10 +371,10 @@ export async function deleteCookbookWithTombstone(
         storedAt,
         storedAt,
       ),
-      input.nativeDatabase.prepare(`
+      nativeDatabase.prepare(`
         DELETE FROM "Cookbook" WHERE "id" = ?
       `).bind(input.cookbookId),
-    ]);
+    ]));
     return;
   }
 
