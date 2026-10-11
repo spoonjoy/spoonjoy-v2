@@ -3,6 +3,8 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { isAllowedPushEndpoint } from "~/lib/web-push.server";
+import { d1UnavailableJsonResponse } from "~/lib/push-route-errors.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
@@ -78,32 +80,35 @@ export async function action({ request, context }: Route.ActionArgs) {
     const userAgent = typeof body.userAgent === "string" ? body.userAgent : null;
 
     const db = await getRequestDb(context);
+    // Every write below sets fixed values, chosen once, so running one again leaves the same row.
+    const now = new Date();
     try {
       const existing = await db.pushSubscription.findUnique({
         where: { endpoint },
         select: { id: true, userId: true },
       });
-      if (existing && existing.userId === userId) {
-        await db.pushSubscription.update({
+      if (existing) {
+        // An endpoint another account holds (e.g. the user switched accounts on the same device)
+        // is re-assigned to the current user: endpoints are device-scoped, not user-scoped.
+        await retryD1Write({ scope: "push_subscription.refresh" }, () => db.pushSubscription.update({
           where: { id: existing.id },
-          data: { p256dh, authSecret: auth, userAgent, lastSeenAt: new Date() },
-        });
+          data: { userId, p256dh, authSecret: auth, userAgent, lastSeenAt: now },
+        }));
         return Response.json({ ok: true, created: false }, { status: 200 });
       }
-      if (existing && existing.userId !== userId) {
-        // Endpoint owned by someone else (e.g. user switched accounts on the same device).
-        // Re-assign to the current user — endpoints are device-scoped, not user-scoped.
-        await db.pushSubscription.update({
-          where: { id: existing.id },
-          data: { userId, p256dh, authSecret: auth, userAgent, lastSeenAt: new Date() },
-        });
-        return Response.json({ ok: true, created: false }, { status: 200 });
-      }
-      await db.pushSubscription.create({
-        data: { userId, endpoint, p256dh, authSecret: auth, userAgent },
-      });
+      // The id is chosen before the first try, so a retry after a lost answer finds this row (it
+      // then fails on the unique endpoint) instead of answering an error.
+      const id = crypto.randomUUID();
+      await retryD1Write({
+        scope: "push_subscription.create",
+        applied: async () => (await db.pushSubscription.findFirst({ where: { id, userId }, select: { id: true } })) ?? null,
+      }, () => db.pushSubscription.create({
+        data: { id, userId, endpoint, p256dh, authSecret: auth, userAgent, lastSeenAt: now },
+      }));
       return Response.json({ ok: true, created: true }, { status: 201 });
     } catch (error) {
+      const unavailable = d1UnavailableJsonResponse(error);
+      if (unavailable) return unavailable;
       captureSubscriptionFailure(request, context, userId, "subscribe", error);
       return jsonError(500, "Failed to save push subscription");
     }
@@ -121,9 +126,13 @@ export async function action({ request, context }: Route.ActionArgs) {
         select: { id: true, userId: true },
       });
       if (!row || row.userId !== userId) return jsonError(404, "Subscription not found");
-      await db.pushSubscription.delete({ where: { id: row.id } });
+      // A delete by id and owner: running it again after a lost answer deletes nothing more.
+      await retryD1Write({ scope: "push_subscription.delete" }, () =>
+        db.pushSubscription.deleteMany({ where: { id: row.id, userId } }));
       return new Response(null, { status: 204 });
     } catch (error) {
+      const unavailable = d1UnavailableJsonResponse(error);
+      if (unavailable) return unavailable;
       captureSubscriptionFailure(request, context, userId, "unsubscribe", error);
       return jsonError(500, "Failed to delete push subscription");
     }
