@@ -39,9 +39,10 @@ afterEach(async () => {
 
 describe("shared cover and cook creates on Prisma", () => {
   it.each(OUTCOMES)("creates one cover with an id chosen before the first try (%s)", async (outcome) => {
-    const flaky = flakyPrisma(db, "recipeCover", "create", outcome);
+    const flaky = flakyPrisma(db);
+    flaky.failNext("recipeCover", "create", outcome);
 
-    const cover = await createCover(flaky.client, { recipeId, imageUrl: "/c.jpg", sourceType: "chef-upload" });
+    const cover = await createCover(flaky.db, { recipeId, imageUrl: "/c.jpg", sourceType: "chef-upload" });
 
     expect(flaky.failures()).toBe(1);
     expect(cover.id).toMatch(/^c[a-z0-9]{24}$/);
@@ -49,9 +50,10 @@ describe("shared cover and cook creates on Prisma", () => {
   });
 
   it.each(OUTCOMES)("logs one cook, as MCP create_spoon does (%s)", async (outcome) => {
-    const flaky = flakyPrisma(db, "recipeSpoon", "create", outcome);
+    const flaky = flakyPrisma(db);
+    flaky.failNext("recipeSpoon", "create", outcome);
 
-    const { spoon, isOriginCook } = await createSpoon(flaky.client, { chefId, recipeId, note: "Crusty" });
+    const { spoon, isOriginCook } = await createSpoon(flaky.db, { chefId, recipeId, note: "Crusty" });
 
     expect(flaky.failures()).toBe(1);
     expect(isOriginCook).toBe(true);
@@ -66,9 +68,10 @@ describe("shared cover and cook creates on Prisma", () => {
   });
 
   it("gives up with D1WriteUnavailableError when every try is lost, writing nothing", async () => {
-    const flaky = flakyPrisma(db, "recipeCover", "create", "lost", "lost", "lost", "lost");
+    const flaky = flakyPrisma(db);
+    flaky.failNext("recipeCover", "create", "lost", "lost", "lost", "lost");
 
-    await expect(createCover(flaky.client, { recipeId, imageUrl: "/c.jpg", sourceType: "chef-upload" }))
+    await expect(createCover(flaky.db, { recipeId, imageUrl: "/c.jpg", sourceType: "chef-upload" }))
       .rejects.toBeInstanceOf(D1WriteUnavailableError);
     expect(await db.recipeCover.count({ where: { recipeId } })).toBe(0);
   });
@@ -77,9 +80,10 @@ describe("shared cover and cook creates on Prisma", () => {
     const cover = await db.recipeCover.create({
       data: { recipeId, imageUrl: "/plain.jpg", sourceType: "chef-upload", status: "failed", failureReason: "timeout" },
     });
-    const flaky = flakyPrisma(db, "recipeCover", "update", "lost-answer");
+    const flaky = flakyPrisma(db);
+    flaky.failNext("recipeCover", "update", "lost-answer");
 
-    await expect(startRecipeCoverRegeneration(flaky.client, cover, { createdById: chefId, rawPhotoUrl: "/plain.jpg", promptAddition: null }))
+    await expect(startRecipeCoverRegeneration(flaky.db, cover, { createdById: chefId, rawPhotoUrl: "/plain.jpg", promptAddition: null }))
       .resolves.toEqual({ coverId: cover.id, parentCoverId: undefined });
     expect(flaky.failures()).toBe(1);
     await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } })).resolves.toMatchObject({
