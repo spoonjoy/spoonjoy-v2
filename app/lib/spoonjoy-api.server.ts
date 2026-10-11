@@ -29,10 +29,12 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
-import { d1Binding, d1ReadBatch } from "~/lib/d1-read.server";
+import { d1Binding, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
 import { d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
+import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
 import {
   applyRecipeStepsUpdateWithPrisma,
   loadCurrentRecipeSteps,
@@ -2902,6 +2904,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     properties: {
       ownerEmail: { type: "string" },
       recipeId: { type: "string" },
+      idempotencyKey: { type: "string", description: "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the items are added once." },
     },
     required: ["recipeId"],
     additionalProperties: false,
@@ -2909,6 +2912,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
 
     const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
@@ -2935,6 +2939,17 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
       1,
     );
     const nativeD1 = asCompatibleD1Database(context.env?.DB);
+    // Quantities add up, so on D1 the batch writes once under a key: the caller's idempotencyKey,
+    // so a repeat of the call adds nothing more, or else this request's own, so a retry after a
+    // transient D1 error within it adds nothing more.
+    const writeKey = nativeD1
+      ? await d1WriteOnceKey({ userId: owner.id, operation: "mcp.add_recipe_to_shopping_list", token: mcpWriteToken(idempotencyKey), request: { recipeId } })
+      : null;
+    // The winning try noted the items it created; the tool answers counts, not items.
+    const replay = async (createdIds: string[]) => ({
+      items: [],
+      metadata: { created: createdIds.length, updated: coalesced.length - createdIds.length },
+    });
 
     const batch = await runCompatibleShoppingListBatch(context.db, async () => {
       const existingItems: Array<ShoppingListItem | null> = [];
@@ -3027,6 +3042,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
         operations,
         metadata: { created, updated },
         native: createCompatibleShoppingListD1Batch(nativeD1, writePlans),
+        writeOnce: writeKey ? { key: writeKey, replay } : undefined,
       };
     });
 
@@ -3278,6 +3294,26 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
   },
 };
 
+/** The write-once token for a tool's add: the caller's idempotencyKey, or none (the request's own key). */
+function mcpWriteToken(idempotencyKey: string | null): string | null {
+  return idempotencyKey ? `mcp:${idempotencyKey}` : null;
+}
+
+/**
+ * The tool's single add on D1: one batch under a write-once key, the caller's idempotencyKey or
+ * else this request's own, so a repeat of the call or a retry after a transient D1 error adds the
+ * quantity once.
+ */
+async function addShoppingListItemOnceOnD1(
+  d1: D1ReadDatabase,
+  userId: string,
+  idempotencyKey: string | null,
+  put: Omit<D1ShoppingItemPut, "itemId" | "writeKey" | "now">,
+): Promise<{ created: boolean; id: string } | null> {
+  const writeKey = await d1WriteOnceKey({ userId, operation: "mcp.add_shopping_list_item", token: mcpWriteToken(idempotencyKey), request: put });
+  return putShoppingListItemOnceOnD1(d1, { ...put, itemId: crypto.randomUUID(), writeKey, now: new Date() });
+}
+
 const addShoppingListItemTool: SpoonjoyApiOperation = {
   name: "add_shopping_list_item",
   description: "Add or restore one manual item on the configured owner shopping list. It adds to the quantity of a matching item still on the list (same ingredient and unit); a removed or cleared matching item comes back at the added quantity, not on top of its old one.",
@@ -3291,6 +3327,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
       unit: { type: "string" },
       categoryKey: { type: "string" },
       iconKey: { type: "string" },
+      idempotencyKey: { type: "string", description: "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the item is added once." },
     },
     required: ["name"],
     additionalProperties: false,
@@ -3302,6 +3339,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     const unitName = optionalString(args.unit);
     const categoryKey = optionalString(args.categoryKey) ?? null;
     const iconKey = optionalString(args.iconKey) ?? null;
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
 
     const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
@@ -3312,13 +3350,16 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const mutation = await addShoppingListItem(context.db, {
-      identity,
-      quantity,
-      categoryKey,
-      iconKey,
-      nextSortIndex: () => nextSortIndex(context.db, shoppingList.id),
-    });
+    const d1 = asCompatibleD1Database(context.env?.DB);
+    const mutation = d1
+      ? await addShoppingListItemOnceOnD1(d1, owner.id, idempotencyKey, { ...identity, quantity, categoryKey, iconKey })
+      : await addShoppingListItem(context.db, {
+        identity,
+        quantity,
+        categoryKey,
+        iconKey,
+        nextSortIndex: () => nextSortIndex(context.db, shoppingList.id),
+      });
     if (!mutation) throw new Error("Shopping list not found");
     const result = {
       created: mutation.created ? 1 : 0,

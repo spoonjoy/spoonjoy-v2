@@ -134,7 +134,9 @@ describe("adding a recipe to the shopping list on a D1 binding", () => {
       context(viaD1.principal, d1.binding),
     );
 
-    expect(d1.statements.length - before).toBe(8);
+    // The write-once claim (drop expired keys, claim, check it), a guard and a write per item,
+    // then the claim's note.
+    expect(d1.statements.length - before).toBe(3 + 8 + 1);
     expect(d1Result).toMatchObject({ created: 1, updated: 3 });
     expect(prismaResult).toMatchObject({ created: 1, updated: 3 });
     const rows = await listRows(viaD1.listId);

@@ -48,10 +48,16 @@ export interface D1WriteOnceClaim {
   /** An SQL condition, with `guardValues`, that holds only when this try's claim is the one in the table. */
   guard: string;
   guardValues: unknown[];
+  /** Reads the note of whichever try holds the key (null when none does), as a "note" column. */
+  readNote: D1Query;
 }
 
-/** One try's claim of the key. Build a new one for each try, so each has its own id. */
-export function d1WriteOnceClaim(key: D1WriteOnceKey, now: Date): D1WriteOnceClaim {
+/**
+ * One try's claim of the key. Build a new one for each try, so each has its own id. `note` is
+ * kept with the claim, so a later try that finds the key taken can read what the winning try
+ * wrote (such as the ids of the items it created).
+ */
+export function d1WriteOnceClaim(key: D1WriteOnceKey, now: Date, note = "{}"): D1WriteOnceClaim {
   const id = crypto.randomUUID();
   const clientKey = `${CLIENT_KEY_PREFIX}${key.userId}`;
   return {
@@ -68,7 +74,7 @@ export function d1WriteOnceClaim(key: D1WriteOnceKey, now: Date): D1WriteOnceCla
         `INSERT INTO "ApiIdempotencyKey"
            ("id", "userId", "credentialId", "clientKey", "key", "operation", "requestHash",
             "responseStatus", "responseBody", "expiresAt", "createdAt", "updatedAt")
-         VALUES (?, ?, NULL, ?, ?, ?, ?, 200, '{}', ?, ?, ?)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, 200, ?, ?, ?, ?)
          ON CONFLICT ("userId", "clientKey", "key") DO NOTHING`,
         id,
         key.userId,
@@ -76,6 +82,7 @@ export function d1WriteOnceClaim(key: D1WriteOnceKey, now: Date): D1WriteOnceCla
         key.key,
         key.operation,
         key.requestHash,
+        note,
         d1Timestamp(new Date(now.getTime() + IDEMPOTENCY_TTL_MS)),
         d1Timestamp(now),
         d1Timestamp(now),
@@ -83,5 +90,11 @@ export function d1WriteOnceClaim(key: D1WriteOnceKey, now: Date): D1WriteOnceCla
     ],
     guard: `EXISTS (SELECT 1 FROM "ApiIdempotencyKey" WHERE "id" = ?)`,
     guardValues: [id],
+    readNote: [
+      `SELECT "responseBody" AS "note" FROM "ApiIdempotencyKey" WHERE "userId" = ? AND "clientKey" = ? AND "key" = ?`,
+      key.userId,
+      clientKey,
+      key.key,
+    ],
   };
 }
