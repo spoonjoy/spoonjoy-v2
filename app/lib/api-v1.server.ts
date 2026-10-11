@@ -2224,7 +2224,35 @@ async function recoverRecipeSpoonCreate(
   };
 }
 
+function recipeSpoonCreateRecoveryOptions(
+  args: ApiV1RouteArgs,
+  input: { principal: ApiPrincipal; recipeId: string; clientMutationId: string; useAsRecipeCover: boolean },
+): ApiV1IdempotentMutationOptions {
+  return {
+    deleteReservationOnWriteError: false,
+    hasRecoverableWrite: async (db, record) => Boolean(await db.recipeSpoon.findFirst({
+      where: {
+        id: record.id,
+        chefId: input.principal.id,
+        recipeId: input.recipeId,
+      },
+      select: { id: true },
+    })),
+    recoverInFlight: async (db, record) => recoverRecipeSpoonCreate(args, {
+      db,
+      principal: input.principal,
+      recipeId: input.recipeId,
+      clientMutationId: input.clientMutationId,
+      useAsRecipeCover: input.useAsRecipeCover,
+      record,
+    }),
+  };
+}
+
 async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  if ((args.request.headers.get("Content-Type") ?? "").includes("multipart/form-data")) {
+    return await handleRecipeSpoonCreateWithPhoto(args, requestId, principal, recipeId);
+  }
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["clientMutationId", "note", "nextTime", "cookedAt", "photoUrl", "useAsRecipeCover"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
@@ -2267,24 +2295,97 @@ async function handleRecipeSpoonCreate(args: ApiV1RouteArgs, requestId: string, 
       principal,
       photoUrl,
     }),
-    deleteReservationOnWriteError: false,
-    hasRecoverableWrite: async (db, record) => Boolean(await db.recipeSpoon.findFirst({
-      where: {
-        id: record.id,
+    ...recipeSpoonCreateRecoveryOptions(args, { principal, recipeId, clientMutationId, useAsRecipeCover }),
+  });
+}
+
+const RECIPE_SPOON_PHOTO_CREATE_FIELDS = [
+  "clientMutationId",
+  "photo",
+  "note",
+  "nextTime",
+  "cookedAt",
+  "useAsRecipeCover",
+] as const;
+
+/**
+ * POST /recipes/{id}/spoons as multipart/form-data: the native app's spoon with a photo file.
+ * The photo is checked and stored first, then the spoon is created with its URL under the
+ * reservation's id, exactly as the JSON create does, so replay and recovery are shared. If the
+ * spoon is not written, the stored photo is deleted again.
+ */
+async function handleRecipeSpoonCreateWithPhoto(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
+  const formData = await accountPhotoFormDataWithinLimit(args.request);
+  assertKnownFormDataFields(formData, RECIPE_SPOON_PHOTO_CREATE_FIELDS);
+  const clientMutationId = clientMutationIdFromFormDataHeaderOrQuery(args, formData);
+  const photo = singleFormDataValue(formData, "photo");
+  const note = optionalFormDataString(formData, "note");
+  const nextTime = optionalFormDataString(formData, "nextTime");
+  const cookedAt = optionalFormDataIsoDate(formData, "cookedAt");
+  const useAsRecipeCover = optionalFormDataBoolean(formData, "useAsRecipeCover", false);
+  const idempotencyBody = {
+    clientMutationId,
+    photo: await accountPhotoIdempotencyValue(photo),
+    note,
+    nextTime,
+    cookedAt: cookedAt?.toISOString() ?? null,
+    useAsRecipeCover,
+  };
+
+  return await runIdempotentApiV1Mutation(args, requestId, principal, idempotencyBody, clientMutationId, "recipes.spoons.create", async (db, reservation) => {
+    await loadActiveRecipeForSpoons(db, recipeId);
+
+    if (!hasUploadedImageFile(photo)) {
+      throw new ApiV1Error("validation_error", "Please select a photo to upload", { field: "photo", reason: "missing" });
+    }
+    const photoError = await validateImageFileForStorage(photo, {
+      allowedTypes: RECIPE_IMAGE_TYPES,
+      messages: {
+        invalidType: FOOD_IMAGE_TYPE_MESSAGE,
+        fileTooLarge: FOOD_IMAGE_SIZE_MESSAGE,
+      },
+    });
+    if (photoError) {
+      throw new ApiV1Error("validation_error", photoError, { field: "photo" });
+    }
+
+    const photoUrl = await storeImage({
+      bucket: apiV1CloudflareFor(args)?.env?.PHOTOS,
+      file: photo,
+      namespace: `spoons/${principal.id}/${recipeId}`,
+    });
+    let created: Awaited<ReturnType<typeof createSpoon>>;
+    try {
+      created = await createSpoon(db, {
+        id: reservation.id,
         chefId: principal.id,
         recipeId,
-      },
-      select: { id: true },
-    })),
-    recoverInFlight: async (db, record) => recoverRecipeSpoonCreate(args, {
-      db,
-      principal,
-      recipeId,
-      clientMutationId,
-      useAsRecipeCover,
-      record,
-    }),
-  });
+        note,
+        nextTime,
+        cookedAt,
+        photoUrl,
+      });
+    } catch (error) {
+      // Keep the photo if the spoon row exists after all (or cannot be checked): recovery serves
+      // that spoon, and its photo must still be there.
+      const written = await db.recipeSpoon.findFirst({ where: { id: reservation.id }, select: { id: true } })
+        .catch(() => ({ id: reservation.id }));
+      if (!written) await cleanupUploadedSpoonPhotoObject(args, principal, photoUrl);
+      throw mapSpoonDomainErrorForApiV1(error);
+    }
+    return {
+      status: 201,
+      data: await recipeSpoonCreateData(args, {
+        db,
+        principal,
+        recipeId,
+        spoonId: created.spoon.id,
+        clientMutationId,
+        isOriginCook: created.isOriginCook,
+        useAsRecipeCover,
+      }),
+    };
+  }, recipeSpoonCreateRecoveryOptions(args, { principal, recipeId, clientMutationId, useAsRecipeCover }));
 }
 
 async function handleRecipeSpoonUpdate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string, spoonId: string) {
@@ -4632,6 +4733,17 @@ async function cleanupUploadedRecipeImageObject(args: ApiV1RouteArgs, principal:
     bucket: apiV1CloudflareFor(args)?.env?.PHOTOS,
     imageUrl,
     event: "spoonjoy.storage.recipe_image_upload_cleanup_failed",
+    postHogConfig: recipeImageUploadPostHogConfig(args),
+    waitUntil: apiV1WaitUntilFor(args),
+    distinctId: principal.id,
+  });
+}
+
+async function cleanupUploadedSpoonPhotoObject(args: ApiV1RouteArgs, principal: ApiPrincipal, imageUrl: string) {
+  await deleteStoredImageWithCapture({
+    bucket: apiV1CloudflareFor(args)?.env?.PHOTOS,
+    imageUrl,
+    event: "spoonjoy.storage.spoon_photo_upload_cleanup_failed",
     postHogConfig: recipeImageUploadPostHogConfig(args),
     waitUntil: apiV1WaitUntilFor(args),
     distinctId: principal.id,

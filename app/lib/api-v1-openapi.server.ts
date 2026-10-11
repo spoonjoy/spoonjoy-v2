@@ -45,6 +45,8 @@ interface OperationConfig {
   requestBodyRequired?: boolean;
   requestBodyContentType?: "application/json" | "multipart/form-data";
   requestBodyEncoding?: Record<string, { contentType: string }>;
+  /** A multipart/form-data body the operation also accepts beside its JSON requestBody. */
+  alternateMultipartRequestBody?: { schema: string; encoding: Record<string, { contentType: string }> };
 }
 
 interface BuildOpenApiOptions {
@@ -956,6 +958,14 @@ const schemas = {
     photoUrl: { type: ["string", "null"], maxLength: 2048 },
     useAsRecipeCover: { type: "boolean", default: false },
   }),
+  CreateRecipeSpoonWithPhotoRequest: objectSchema(["clientMutationId", "photo"], {
+    clientMutationId: shortTextSchema,
+    photo: { type: "string", format: "binary", description: "JPG, PNG, or WebP spoon photo up to 5MB. Stored as the spoon's photo." },
+    note: boundedNullableStringSchema,
+    nextTime: boundedNullableStringSchema,
+    cookedAt: dateTimeSchema,
+    useAsRecipeCover: { type: "boolean", default: false },
+  }),
   UpdateRecipeSpoonRequest: objectSchema(["clientMutationId"], {
     clientMutationId: shortTextSchema,
     note: boundedNullableStringSchema,
@@ -1655,7 +1665,7 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/recipes/{id}/spoons": {
     GET: { operationId: "getApiV1RecipeSpoons", tags: ["Recipe Spoons"], summary: "List recent public cook events for one recipe", auth: "optional", scopes: ["recipes:read"], success: { 200: "RecipeSpoonListEnvelope" }, errors: ["validation_error", "invalid_cursor", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, queryParameters.cursor, queryParameters.limit] },
-    POST: { operationId: "postApiV1RecipeSpoons", tags: ["Recipe Spoons"], summary: "Create a recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "CreateRecipeSpoonRequest" },
+    POST: { operationId: "postApiV1RecipeSpoons", tags: ["Recipe Spoons"], summary: "Create a recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 201: "CreateRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id], requestBody: "CreateRecipeSpoonRequest", alternateMultipartRequestBody: { schema: "CreateRecipeSpoonWithPhotoRequest", encoding: { photo: { contentType: "image/jpeg,image/png,image/webp" } } } },
   },
   "/api/v1/recipes/{id}/spoons/{spoonId}": {
     PATCH: { operationId: "patchApiV1RecipeSpoon", tags: ["Recipe Spoons"], summary: "Update one owned recipe spoon cook event", auth: "bearer", scopes: ["kitchen:write"], success: { 200: "UpdateRecipeSpoonEnvelope" }, errors: ["invalid_json", "validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "idempotency_conflict", "idempotency_in_progress", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.id, pathParameters.spoonId], requestBody: "UpdateRecipeSpoonRequest" },
@@ -2777,6 +2787,14 @@ const requestExamples: Record<string, unknown> = {
     photoUrl: "/photos/spoons/chef_1/uploads/cover-raw.jpg",
     useAsRecipeCover: true,
   },
+  CreateRecipeSpoonWithPhotoRequest: {
+    clientMutationId: "device-uuid-spoon-create-photo",
+    photo: "(binary image file)",
+    note: "Added more lemon.",
+    nextTime: "Try a wider pan.",
+    cookedAt: exampleTimestamp,
+    useAsRecipeCover: true,
+  },
   UpdateRecipeSpoonRequest: {
     clientMutationId: "device-uuid-spoon-update",
     note: "After dinner notes.",
@@ -3327,12 +3345,16 @@ function idempotencyPolicyFor(path: ResourcePath, method: HttpMethod) {
   if (isIdempotentRecipeSpoonMutation(path, method)) {
     return {
       key: "clientMutationId",
-      location: method === "DELETE" ? "jsonBody, query, or X-Client-Mutation-Id" : "jsonBody",
+      location: method === "DELETE"
+        ? "jsonBody, query, or X-Client-Mutation-Id"
+        : method === "POST" && path === "/api/v1/recipes/{id}/spoons"
+          ? "jsonBody or multipartFormData"
+          : "jsonBody",
       retentionHours: 24,
       replayStatus: method === "POST" ? [201] : [200],
       conflictStatus: 409,
       inProgressRetryAfterSeconds: 2,
-      retryBodyRule: "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
+      retryBodyRule: "Persist and retry the same mutation body and path for this clientMutationId. A multipart spoon create with a photo is matched on the uploaded file digest, size, type, and field values. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header.",
     };
   }
   if (path === "/api/v1/recipes/{id}/image" && method === "POST") {
@@ -3801,7 +3823,16 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
                 required: meta.requestBodyRequired ?? true,
                 content: meta.requestBodyContentType === "multipart/form-data"
                   ? multipartContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method), meta.requestBodyEncoding!)
-                  : jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method)),
+                  : {
+                      ...jsonContent(ref(meta.requestBody), requestExampleFor(meta.requestBody, path, method)),
+                      ...(meta.alternateMultipartRequestBody
+                        ? multipartContent(
+                          ref(meta.alternateMultipartRequestBody.schema),
+                          requestExampleFor(meta.alternateMultipartRequestBody.schema, path, method),
+                          meta.alternateMultipartRequestBody.encoding,
+                        )
+                        : {}),
+                    },
               },
             }
           : {}),

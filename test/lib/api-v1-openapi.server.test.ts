@@ -438,8 +438,28 @@ describe("API v1 OpenAPI document", () => {
       "x-scopes": ["kitchen:write"],
       "x-idempotency": expect.objectContaining({
         key: "clientMutationId",
-        location: "jsonBody",
+        location: "jsonBody or multipartFormData",
         replayStatus: [201],
+      }),
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/CreateRecipeSpoonRequest" },
+          },
+          "multipart/form-data": {
+            schema: { $ref: "#/components/schemas/CreateRecipeSpoonWithPhotoRequest" },
+            encoding: { photo: { contentType: "image/jpeg,image/png,image/webp" } },
+            examples: { example: { value: expect.objectContaining({ photo: "(binary image file)", useAsRecipeCover: true }) } },
+          },
+        },
+      },
+    });
+    expect(document.components.schemas.CreateRecipeSpoonWithPhotoRequest).toMatchObject({
+      required: ["clientMutationId", "photo"],
+      properties: expect.objectContaining({
+        photo: expect.objectContaining({ type: "string", format: "binary" }),
+        useAsRecipeCover: { type: "boolean", default: false },
       }),
     });
     expect(operation(document, "/api/v1/recipes/{id}/spoons/{spoonId}", "PATCH")).toMatchObject({
