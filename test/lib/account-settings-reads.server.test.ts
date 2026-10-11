@@ -5,6 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 import { Request as UndiciRequest } from "undici";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { promoteLegacyOAuthIssuerForUser, promoteLegacyOAuthIssuerForUserOnD1 } from "~/lib/oauth-server.server";
+import { flakyD1 } from "../helpers/flaky-d1";
 import { getLocalDb } from "~/lib/db.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -342,5 +343,21 @@ describe("legacy OAuth issuer promotion on D1", () => {
   it("fails closed when D1 rejects the batch", async () => {
     const failing = { prepare: d1.binding.prepare, batch: async () => { throw new Error("D1_ERROR: lost"); } };
     await expect(promoteLegacyOAuthIssuerForUserOnD1(failing as never, "u", ISSUER)).rejects.toThrow("D1_ERROR: lost");
+  });
+
+  it("runs again after a lost connection, ending as one run would", async () => {
+    const user = await seedLegacy();
+    const now = new Date("2026-09-27T12:00:00.000Z");
+    await promoteLegacyOAuthIssuerForUserOnD1(d1.binding, user.id, ISSUER, now);
+    const once = await snapshot();
+
+    await cleanupDatabase();
+    await seedLegacy();
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(/UPDATE "OAuthClient" SET "issuer"/, "lost-answer");
+    await promoteLegacyOAuthIssuerForUserOnD1(flaky.binding, user.id, ISSUER, now);
+
+    expect(flaky.failures()).toBe(1);
+    expect(await snapshot()).toEqual(once);
   });
 });

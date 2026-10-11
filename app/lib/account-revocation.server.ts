@@ -1,6 +1,7 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 type Database = PrismaClientType;
 
@@ -9,6 +10,10 @@ type Database = PrismaClientType;
 // password change are both security events.
 export const ACCOUNT_REVOCATION_GRANT_REASON = "security_event";
 
+/**
+ * How many rows the revocation changed. A try whose answer a transient D1 error lost, but which
+ * committed, is not run again, so its rows are counted as zero.
+ */
 export interface AccountRevocationCounts {
   apiCredentials: number;
   refreshTokens: number;
@@ -56,6 +61,11 @@ export interface AccountRevocationOptions {
  * Everything, including the user write, applies atomically (one D1 batch, or one Prisma
  * transaction without a binding), so a failure leaves the account exactly as it was.
  *
+ * On D1 the session version moves from the value just read to the next one, and the batch stops if
+ * it changed in between, so the revocation never bumps it twice: after a transient D1 error it
+ * runs again only once a read shows the failed try did not commit. Every sweep sets fixed values,
+ * so running one again changes nothing.
+ *
  * Passkeys and linked Google, GitHub or Apple sign-ins are kept: they are how the chef signs in.
  */
 export async function revokeAllAccountAccess(
@@ -92,34 +102,114 @@ function revocationStatements(userId: string, now: Date): D1Query[] {
   ];
 }
 
+// Another sign-out or password change moved the session version between the read and the batch
+// this many times at most before the revocation gives up.
+const SESSION_VERSION_RACE_ATTEMPTS = 3;
+
 async function revokeOnD1(
   d1: D1ReadDatabase,
   userId: string,
   now: Date,
   password: AccountRevocationOptions["password"],
 ): Promise<AccountRevocationResult> {
-  const sets = [`"sessionVersion" = "sessionVersion" + 1`, `"updatedAt" = ?`];
-  const values: unknown[] = [d1Timestamp(now)];
-  if (password) {
-    sets.push(`"hashedPassword" = ?`, `"salt" = ?`);
-    values.push(password.hashedPassword, password.salt);
+  for (let race = 1; ; race += 1) {
+    const from = await readSessionVersion(d1, userId);
+    if (from === null) throw new Error("Account revocation found no user to update");
+    const to = from + 1;
+    const sets = [`"sessionVersion" = ?`, `"updatedAt" = ?`];
+    const values: unknown[] = [to, d1Timestamp(now)];
+    if (password) {
+      sets.push(`"hashedPassword" = ?`, `"salt" = ?`);
+      values.push(password.hashedPassword, password.salt);
+    }
+    try {
+      return await retryD1Write(
+        {
+          scope: "account.revoke_all",
+          applied: async () => (await revocationCommitted(d1, userId, to, password) ? committedResult(to) : null),
+        },
+        async () => {
+          const results = await d1WriteBatch(d1, [
+            d1Guard(`(SELECT "sessionVersion" FROM "User" WHERE "id" = ?) = ?`, userId, from),
+            [`UPDATE "User" SET ${sets.join(", ")} WHERE "id" = ?`, ...values, userId],
+            ...revocationStatements(userId, now),
+          ]);
+          const [agents, grants, codes, consents, refresh, credentials] = results.slice(2).map((result) => result.changes);
+          return {
+            pendingAgentConnections: agents,
+            oauthGrants: grants,
+            authorizationCodes: codes,
+            consentTransactions: consents,
+            refreshTokens: refresh,
+            apiCredentials: credentials,
+            sessionVersion: to,
+          };
+        },
+      );
+    } catch (error) {
+      if (!isD1GuardFailure(error) || race === SESSION_VERSION_RACE_ATTEMPTS) throw error;
+    }
   }
-  const results = await d1WriteBatch(d1, [
-    [`UPDATE "User" SET ${sets.join(", ")} WHERE "id" = ? RETURNING "sessionVersion"`, ...values, userId],
-    ...revocationStatements(userId, now),
-  ]);
-  const userResult = results.shift()!;
-  if (userResult.rows.length !== 1) throw new Error("Account revocation found no user to update");
-  const [agents, grants, codes, consents, refresh, credentials] = results.map((result) => result.changes);
+}
+
+async function readSessionVersion(d1: D1ReadDatabase, userId: string): Promise<number | null> {
+  const [[user]] = await d1ReadBatch(d1, [[`SELECT "sessionVersion" FROM "User" WHERE "id" = ?`, userId]]);
+  return user ? Number(user.sessionVersion) : null;
+}
+
+/** Whether the revocation that moves the session version to `to` (and sets this password) is in. */
+async function revocationCommitted(
+  d1: D1ReadDatabase,
+  userId: string,
+  to: number,
+  password: AccountRevocationOptions["password"],
+): Promise<boolean> {
+  const [[user]] = await d1ReadBatch(d1, [[`SELECT "sessionVersion", "hashedPassword" FROM "User" WHERE "id" = ?`, userId]]);
+  return Boolean(user) && Number(user.sessionVersion) === to && (!password || user.hashedPassword === password.hashedPassword);
+}
+
+function committedResult(sessionVersion: number): AccountRevocationResult {
   return {
-    pendingAgentConnections: agents,
-    oauthGrants: grants,
-    authorizationCodes: codes,
-    consentTransactions: consents,
-    refreshTokens: refresh,
-    apiCredentials: credentials,
-    sessionVersion: Number(userResult.rows[0].sessionVersion),
+    pendingAgentConnections: 0,
+    oauthGrants: 0,
+    authorizationCodes: 0,
+    consentTransactions: 0,
+    refreshTokens: 0,
+    apiCredentials: 0,
+    sessionVersion,
   };
+}
+
+/**
+ * A password change that keeps the account's connections: the new password and the session
+ * version bump (which signs out every other browser) in one write, moving the version from the
+ * value just read so that a retry after a transient D1 error never bumps it twice. Answers the new
+ * session version.
+ */
+export async function changePasswordKeepingConnections(
+  db: Database,
+  userId: string,
+  password: { hashedPassword: string; salt: string },
+): Promise<number> {
+  for (let race = 1; ; race += 1) {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });
+    if (!user) throw new Error("Password change found no user to update");
+    const to = user.sessionVersion + 1;
+    const committed = async () => {
+      const now = await db.user.findUnique({ where: { id: userId }, select: { sessionVersion: true, hashedPassword: true } });
+      return now?.sessionVersion === to && now.hashedPassword === password.hashedPassword ? to : null;
+    };
+    const changed = await retryD1Write({ scope: "account.change_password", applied: committed }, async () => {
+      const { count } = await db.user.updateMany({
+        where: { id: userId, sessionVersion: user.sessionVersion },
+        data: { ...password, sessionVersion: to },
+      });
+      // Nothing matched: an earlier try of this change committed, or another change moved the version.
+      return count === 1 ? to : await committed();
+    });
+    if (changed !== null) return changed;
+    if (race === SESSION_VERSION_RACE_ATTEMPTS) throw new Error("Password change lost a race with another account change");
+  }
 }
 
 async function revokeWithPrisma(

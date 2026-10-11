@@ -24,7 +24,13 @@ import { normalizeUsername, usernameFormatError } from "~/lib/username";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { saveAccountIdentity } from "~/lib/account-identity.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
+import { changePasswordKeepingConnections, revokeAllAccountAccess } from "~/lib/account-revocation.server";
+import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+  isD1Unavailable,
+} from "~/lib/d1-write-retry.server";
 import {
   oauthAccessConnectionOwnership,
   OAUTH_CONNECTION_KEY_BATCH_SIZE,
@@ -145,7 +151,8 @@ export interface AccountSettingsActionResult {
     | "password_incorrect"
     | "recent_sign_in_required"
     | "apple_account_mismatch"
-    | "rate_limited";
+    | "rate_limited"
+    | typeof D1_WRITE_UNAVAILABLE_CODE;
   message?: string;
   fieldErrors?: {
     email?: string;
@@ -338,7 +345,21 @@ export async function deleteAvatarBestEffort(
   });
 }
 
-export async function handleAccountSettingsAction({
+export async function handleAccountSettingsAction(args: AccountSettingsRouteArgs): Promise<AccountSettingsActionResponse> {
+  try {
+    return await handleAccountSettingsIntent(args);
+  } catch (error) {
+    // The database was briefly unavailable: say so on the page, which keeps what the chef typed,
+    // instead of replacing it with a 500.
+    if (!isD1Unavailable(error)) throw error;
+    return data(
+      { success: false, error: D1_WRITE_UNAVAILABLE_CODE, message: D1_WRITE_UNAVAILABLE_MESSAGE },
+      { status: 503, headers: d1UnavailableHeaders() },
+    );
+  }
+}
+
+async function handleAccountSettingsIntent({
   request,
   context,
 }: AccountSettingsRouteArgs): Promise<AccountSettingsActionResponse> {
@@ -842,11 +863,7 @@ export async function handleAccountSettingsAction({
         d1: requestD1(context),
         password: { hashedPassword, salt },
       })).sessionVersion
-      : (await database.user.update({
-        where: { id: userId },
-        data: { hashedPassword, salt, sessionVersion: { increment: 1 } },
-        select: { sessionVersion: true },
-      })).sessionVersion;
+      : await changePasswordKeepingConnections(database, userId, { hashedPassword, salt });
 
     return withSessionForVersion({
       success: true,

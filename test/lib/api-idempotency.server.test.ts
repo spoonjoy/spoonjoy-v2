@@ -10,6 +10,7 @@ import {
   IdempotencyConflictError,
   IDEMPOTENCY_TTL_MS,
   replayIdempotencyResponse,
+  newReservationId,
   reserveIdempotencyKey,
 } from "~/lib/api-idempotency.server";
 import { getLocalDb } from "~/lib/db.server";
@@ -545,3 +546,79 @@ describe("API idempotency helpers", () => {
     expect(idempotencyCompletionFailureSummary(null)).toBe("null");
   });
 });
+
+describe("API idempotency keys when D1's connection drops", () => {
+  let db: Awaited<ReturnType<typeof getLocalDb>>;
+  let userId: string;
+  const NETWORK_LOST = "D1_ERROR: Network connection lost.";
+
+  beforeEach(async () => {
+    await cleanupDatabase();
+    db = await getLocalDb();
+    userId = (await db.user.create({ data: createTestUser() })).id;
+  });
+
+  afterEach(async () => {
+    await cleanupDatabase();
+  });
+
+  /** The client, with one method on idempotency keys failing once with a lost connection, after (`answer`) or before running. */
+  function losing(method: "create" | "update", lost: "answer" | "write") {
+    let failed = false;
+    return new Proxy(db, {
+      get: (target, prop) => prop === "apiIdempotencyKey"
+        ? new Proxy(target.apiIdempotencyKey, {
+          get: (keys, name) => name !== method ? Reflect.get(keys, name) : async (args: never) => {
+            if (failed) return (keys[method] as (args: never) => Promise<unknown>)(args);
+            failed = true;
+            if (lost === "answer") await (keys[method] as (args: never) => Promise<unknown>)(args);
+            throw new Error(NETWORK_LOST);
+          },
+        })
+        : Reflect.get(target, prop),
+    }) as typeof db;
+  }
+
+  const input = (requestHash = "hash-a") => ({
+    userId,
+    clientKey: `chef:${userId}`,
+    key: "retry-key",
+    operation: "recipes.create",
+    requestHash,
+  });
+
+  it("answers its own reservation when the create committed but its answer was lost", async () => {
+    const reservation = await reserveIdempotencyKey(losing("create", "answer"), input());
+
+    expect(reservation.status).toBe("reserved");
+    expect(await db.apiIdempotencyKey.count()).toBe(1);
+    // Another request with the same key still sees the reservation in flight.
+    await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({ status: "in_flight", record: { id: reservation.record.id } });
+  });
+
+  it("reserves once when the create never reached the database", async () => {
+    const reservation = await reserveIdempotencyKey(losing("create", "write"), input());
+    expect(reservation.status).toBe("reserved");
+    expect(await db.apiIdempotencyKey.count()).toBe(1);
+  });
+
+  it("saves the response again after a lost connection, leaving one saved response", async () => {
+    const reservation = await reserveIdempotencyKey(db, input());
+    await completeIdempotencyKey(losing("update", "answer"), reservation.record.id, { status: 201, body: { ok: true } });
+
+    await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({
+      status: "replay",
+      record: { responseStatus: 201, responseBody: JSON.stringify({ ok: true }) },
+    });
+  });
+
+  it("makes reservation ids shaped like Prisma's cuids, in time order", () => {
+    const first = newReservationId(new Date("2026-06-01T20:00:00.000Z"));
+    const later = newReservationId(new Date("2026-06-01T20:00:00.001Z"));
+    expect(first).toMatch(/^c[a-z0-9]{24}$/);
+    expect(later).toMatch(/^c[a-z0-9]{24}$/);
+    expect(later > first).toBe(true);
+    expect(newReservationId(new Date(0))).toMatch(/^c00000000[a-z0-9]{16}$/);
+  });
+});
+

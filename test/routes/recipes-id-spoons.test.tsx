@@ -6,6 +6,8 @@ import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
+import { data } from "react-router";
+import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 
 vi.mock("~/components/navigation", async () => {
   const actual = await vi.importActual<typeof import("~/components/navigation")>(
@@ -441,6 +443,69 @@ describe("Recipes $id route — spoons + provenance", () => {
     });
     expect(actionCalls).toBe(1);
     expect(screen.getByRole("status")).toHaveTextContent("Cook logged.");
+  });
+
+  it("keeps the SpoonDialog open with the note and a retryable message when the cook could not be saved", async () => {
+    const mockData = {
+      recipe: {
+        id: "r1",
+        title: "Mock Recipe",
+        description: null,
+        servings: null,
+        sourceUrl: null,
+        chef: { id: "c1", username: "testchef", photoUrl: null },
+        steps: [],
+      },
+      coverImageUrl: "/p.png",
+      isOwner: false,
+      cookbooks: [],
+      savedInCookbookIds: [],
+      hasIngredientsInShoppingList: false,
+      spoons: [],
+      isOriginCookCandidate: false,
+    };
+    const tokens: unknown[] = [];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes/:id",
+        Component: () => (
+          <ToastProvider>
+            <RecipeDetail />
+          </ToastProvider>
+        ),
+        loader: () => mockData,
+        action: async ({ request }: { request: Request }) => {
+          tokens.push((await request.formData()).get("spoonToken"));
+          return data(
+            { intent: "createSpoon", error: D1_WRITE_UNAVAILABLE_MESSAGE, errorCode: "temporarily_unavailable", retryable: true },
+            { status: 503 },
+          );
+        },
+      },
+    ]);
+
+    render(<Stub initialEntries={["/recipes/r1"]} />);
+    await userEvent.click(await screen.findByRole("button", { name: /log cook/i }));
+    await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
+    await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(D1_WRITE_UNAVAILABLE_MESSAGE);
+    expect(screen.getByLabelText(/^note/i)).toHaveValue("saved once");
+    expect(screen.queryByRole("status")).toBeNull();
+
+    // Trying again sends the same cook token, so the server logs it at most once.
+    await waitFor(() => expect(screen.getByRole("button", { name: /^log cook$/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
+    await waitFor(() => expect(tokens).toHaveLength(2));
+    expect(tokens[1]).toBe(tokens[0]);
+    expect(tokens[0]).toMatch(/^[0-9a-f-]{36}$/);
+
+    // A fresh opening starts without the old message.
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: /log cook/i }));
+    await screen.findByRole("heading", { name: /log a cook/i });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("refuses an oversized spoon upload with 413 before buffering the whole body", async () => {

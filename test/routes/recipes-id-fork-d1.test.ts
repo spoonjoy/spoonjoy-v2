@@ -7,6 +7,9 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1 } from "../helpers/flaky-d1";
+import { D1_WRITE_UNAVAILABLE_MESSAGE, idForWriteToken } from "~/lib/d1-write-retry.server";
+import { forkRecipeOnD1 } from "~/lib/recipe-fork.server";
 
 // The request's Prisma client, counted: with a D1 binding the fork must not build one until the
 // background notification runs.
@@ -55,7 +58,7 @@ describe("recipes.$id.fork action on a D1 binding", () => {
     await cleanupDatabase();
   });
 
-  async function fork(userId: string, options: { token?: string; id?: string; scheduled?: Promise<unknown>[] } = {}) {
+  async function fork(userId: string, options: { token?: string; id?: string; scheduled?: Promise<unknown>[]; binding?: unknown } = {}) {
     const body = new UndiciFormData();
     if (options.token) body.append("forkToken", options.token);
     const id = options.id ?? recipeId;
@@ -68,7 +71,7 @@ describe("recipes.$id.fork action on a D1 binding", () => {
       params: { id },
       context: {
         cloudflare: {
-          env: { ...VAPID_ENV, DB: d1.binding },
+          env: { ...VAPID_ENV, DB: options.binding ?? d1.binding },
           ...(options.scheduled ? { ctx: { waitUntil: (p: Promise<unknown>) => options.scheduled!.push(p) } } : {}),
         },
       } as never,
@@ -122,5 +125,54 @@ describe("recipes.$id.fork action on a D1 binding", () => {
     expect(platform.getRequestDb).not.toHaveBeenCalled();
     // The failed fork forgot its key, so nothing is left reserved.
     expect(await db.apiIdempotencyKey.count()).toBe(0);
+  });
+
+  describe("when D1's connection drops", () => {
+    const FORK_WRITE = /INSERT INTO "Recipe" \(/;
+    const forks = () => db.recipe.findMany({ where: { chefId: forkerId, sourceRecipeId: recipeId }, select: { id: true, title: true } });
+    const notifications = () => db.notificationEvent.count({ where: { recipientId: ownerId } });
+
+    it("makes one fork, and notifies once, when the write committed but its answer was lost", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(FORK_WRITE, "lost-answer");
+      const answer = await fork(forkerId, { token: "fork-token-lost", binding: flaky.binding });
+
+      expect(answer.status).toBe(302);
+      expect(flaky.failures()).toBe(1);
+      const made = await forks();
+      expect(made).toEqual([{ id: answer.headers.get("Location")!.split("/").pop(), title: "Bread" }]);
+      expect(await notifications()).toBe(1);
+    });
+
+    it("answers a retryable 503 the dialog shows when every try fails, and the resubmit makes one fork", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(FORK_WRITE, "lost", "lost", "lost", "lost");
+      const answer = await fork(forkerId, { token: "fork-token-down", binding: flaky.binding }) as unknown as {
+        data: unknown;
+        init: { status: number };
+      };
+
+      expect(answer.init.status).toBe(503);
+      expect(answer.data).toEqual({ intent: "fork", error: D1_WRITE_UNAVAILABLE_MESSAGE, errorCode: "temporarily_unavailable", retryable: true });
+      expect(await forks()).toEqual([]);
+      expect(await notifications()).toBe(0);
+
+      const again = await fork(forkerId, { token: "fork-token-down", binding: flaky.binding });
+      expect(again.status).toBe(302);
+      expect(await forks()).toHaveLength(1);
+      expect(await notifications()).toBe(1);
+    });
+
+    it("sends a resubmit to the fork an earlier try committed late, without a second fork or notification", async () => {
+      // The earlier try's fork landed after its request gave up and released the form's key.
+      const id = await idForWriteToken(`fork:${recipeId}`, forkerId, "fork-token-late");
+      await forkRecipeOnD1(d1.binding, { sourceRecipeId: recipeId, viewerId: forkerId, recipeId: id });
+
+      const answer = await fork(forkerId, { token: "fork-token-late" });
+
+      expect(answer.headers.get("Location")).toBe(`/recipes/${id}`);
+      expect(await forks()).toEqual([{ id, title: "Bread" }]);
+      expect(await notifications()).toBe(0);
+    });
   });
 });

@@ -11,8 +11,10 @@ import { sessionStorage } from "~/lib/session.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { createSpoonOnD1 } from "~/lib/recipe-spoon-d1.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
+import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1 } from "../helpers/flaky-d1";
 
 const platform = vi.hoisted(() => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
@@ -210,6 +212,86 @@ describe("logging a cook on a D1 binding", () => {
     expect((await post(ownerId, { note: "Two" })).isOriginCook).toBe(false);
     await db.recipeSpoon.updateMany({ where: { recipeId }, data: { deletedAt: new Date() } });
     expect((await post(ownerId, { note: "Three" })).isOriginCook).toBe(true);
+  });
+
+  describe("when D1's connection drops", () => {
+    const TOKEN = "6f1c2d3e-aaaa-4bbb-8ccc-0123456789ab";
+    const SPOON_WRITE = /INSERT INTO "RecipeSpoon"/;
+    const spoons = () => db.recipeSpoon.findMany({ where: { recipeId }, select: { id: true, note: true } });
+
+    it("logs the cook once when the write committed but its answer was lost", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(SPOON_WRITE, "lost-answer");
+      const answer = await post(cookId, { note: "Crusty", spoonToken: TOKEN }, { env: { DB: flaky.binding as never } });
+
+      expect(answer).toMatchObject({ success: true, intent: "createSpoon", isOriginCook: false });
+      expect(flaky.failures()).toBe(1);
+      expect(await spoons()).toEqual([{ id: (answer.spoon as { id: string }).id, note: "Crusty" }]);
+    });
+
+    it("logs the cook once when the write never reached the database", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(SPOON_WRITE, "lost", "lost");
+      const answer = await post(cookId, { note: "Crusty", spoonToken: TOKEN }, { env: { DB: flaky.binding as never } });
+
+      expect(answer).toMatchObject({ success: true });
+      expect(flaky.failures()).toBe(2);
+      expect(await spoons()).toHaveLength(1);
+    });
+
+    it("answers a resubmit of the same cook with the spoon already logged, writing and notifying nothing more", async () => {
+      const first = await post(cookId, { note: "Crusty", spoonToken: TOKEN });
+      const queued = background.length;
+      const roundTrips = d1.roundTrips();
+      const again = await post(cookId, { note: "Crusty", spoonToken: TOKEN, photo: photo() });
+
+      expect(again).toEqual({ success: true, intent: "createSpoon", spoon: first.spoon, isOriginCook: false });
+      expect(await spoons()).toHaveLength(1);
+      expect(background).toHaveLength(queued);
+      expect(bucket.put).not.toHaveBeenCalled();
+      // The session check and the read batch; no write.
+      expect(d1.roundTrips() - roundTrips).toBe(2);
+      // Another opening of the dialog is another cook.
+      await post(cookId, { note: "Again", spoonToken: "0d9e8f7a-bbbb-4ccc-8ddd-0123456789ab" });
+      expect(await spoons()).toHaveLength(2);
+    });
+
+    it("answers a retryable 503 that keeps the page when every try fails, and the resubmit logs the cook once", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(SPOON_WRITE, "lost", "lost", "lost", "lost");
+      const answer = await post(cookId, { note: "Crusty", spoonToken: TOKEN }, { env: { DB: flaky.binding as never } }) as unknown as {
+        data: unknown;
+        init: { status: number; headers: Record<string, string> };
+      };
+
+      expect(answer.init.status).toBe(503);
+      expect(answer.init.headers).toMatchObject({ "Retry-After": "1" });
+      expect(answer.data).toEqual({
+        intent: "createSpoon",
+        error: D1_WRITE_UNAVAILABLE_MESSAGE,
+        errorCode: "temporarily_unavailable",
+        retryable: true,
+      });
+      expect(await spoons()).toEqual([]);
+      expect(background).toEqual([]);
+
+      await post(cookId, { note: "Crusty", spoonToken: TOKEN }, { env: { DB: flaky.binding as never } });
+      await post(cookId, { note: "Crusty", spoonToken: TOKEN }, { env: { DB: flaky.binding as never } });
+      expect(await spoons()).toHaveLength(1);
+    });
+
+    it("refuses an id already used for another chef's cook or another recipe", async () => {
+      const id = (await createSpoonOnD1(d1.binding, { id: "fixed-spoon", chefId: cookId, recipeId, note: "Mine", useAsRecipeCover: false })).spoon.id;
+      const otherRecipe = (await db.recipe.create({ data: { title: "Soup", chefId: ownerId } })).id;
+
+      for (const input of [{ chefId: ownerId, recipeId }, { chefId: cookId, recipeId: otherRecipe }]) {
+        const refused = await createSpoonOnD1(d1.binding, { id, ...input, note: "Theirs", useAsRecipeCover: false })
+          .catch((error: unknown) => error);
+        expect(refused).toBeInstanceOf(Response);
+        expect((refused as Response).status).toBe(409);
+      }
+      expect(await db.recipeSpoon.count()).toBe(1);
+    });
   });
 });
 

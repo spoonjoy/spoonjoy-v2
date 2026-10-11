@@ -335,4 +335,22 @@ describe("SpoonDialog", () => {
     renderDialog({ errorMessage: "Server said no" });
     expect(await screen.findByText("Server said no")).toBeInTheDocument();
   });
+
+  it("sends one cook token per opening, so a resubmit of the same cook logs it once", async () => {
+    const { rerender } = renderDialog();
+    const token = () => (document.querySelector("input[name='spoonToken']") as HTMLInputElement).value;
+    await waitFor(() => expect(token()).toMatch(/^[0-9a-f-]{36}$/));
+    const first = token();
+
+    const Closed = createTestRoutesStub([
+      { path: "/", Component: () => <SpoonDialog isOpen={false} onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} /> },
+    ]);
+    rerender(<Closed />);
+    const Reopened = createTestRoutesStub([
+      { path: "/", Component: () => <SpoonDialog isOpen={true} onClose={vi.fn()} actionUrl="/recipes/r1" isOriginCookCandidate={false} /> },
+    ]);
+    rerender(<Reopened />);
+    await waitFor(() => expect(token()).toMatch(/^[0-9a-f-]{36}$/));
+    expect(token()).not.toBe(first);
+  });
 });

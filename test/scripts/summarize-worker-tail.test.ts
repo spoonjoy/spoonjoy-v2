@@ -103,7 +103,7 @@ describe("summarize-worker-tail.jq", () => {
       "tailReconnects",
       "totalInvocations",
     ]);
-    expect(Object.keys(summary.d1TransientErrors).sort()).toEqual(["notRetried", "notRetriedWrites", "retried", "total"]);
+    expect(Object.keys(summary.d1TransientErrors).sort()).toEqual(["notRetried", "notRetriedWrites", "retried", "total", "writeOperations"]);
     for (const invocation of [...summary.nonOkInvocations, ...summary.firstExceptions, ...summary.slowest, ...summary.serverErrorInvocations]) {
       expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
@@ -212,9 +212,45 @@ describe("summarize-worker-tail.jq", () => {
       hostileEvent({ logs: "not an array" }),
       hostileEvent({ logs: undefined }),
     ]);
-    expect(summary.d1TransientErrors).toEqual({ total: 4, retried: 1, notRetried: 3, notRetriedWrites: 2 });
+    const none = { retried: 0, applied: 0, gaveUp: 0 };
+    expect(summary.d1TransientErrors).toEqual({ total: 4, retried: 1, notRetried: 3, notRetriedWrites: 2, writeOperations: none });
     expect(raw).not.toContain(CANARIES.logLine);
-    expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0 });
+    expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0, writeOperations: none });
+  });
+
+  it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
+    const transient = (fields: Record<string, unknown>) =>
+      JSON.stringify({ event: "d1_transient_error", call: "batch", attempt: 1, kind: "network_connection_lost", ...fields });
+    const operation = (outcome: unknown, extra: Record<string, unknown> = {}) =>
+      JSON.stringify({ event: "d1_write_retry", scope: "spoon.create", attempt: 1, kind: "network_connection_lost", outcome, ...extra });
+    const { summary, raw } = summarize([
+      hostileEvent({
+        outcome: "ok",
+        logs: [
+          { level: "warn", message: [transient({ operation: "write", willRetry: false })] },
+          { level: "warn", message: [operation("retry", { scope: CANARIES.logLine })] },
+          { level: "warn", message: [transient({ operation: "write", willRetry: false })] },
+          { level: "warn", message: [operation("applied")] },
+          { level: "warn", message: [transient({ operation: "write", willRetry: false })] },
+          { level: "warn", message: [operation("gave_up")] },
+          { level: "warn", message: [transient({ operation: "write", willRetry: false })] },
+          { level: "warn", message: [operation("bogus")] },
+          { level: "warn", message: [transient({ operation: "write", willRetry: false })] },
+        ],
+      }),
+      // An operation's failure that was a read out of retries is never counted below zero writes.
+      hostileEvent({ logs: [{ level: "warn", message: [operation("retry")] }] }),
+    ]);
+    expect(summary.d1TransientErrors).toEqual({
+      total: 5,
+      retried: 0,
+      notRetried: 5,
+      notRetriedWrites: 0,
+      writeOperations: { retried: 2, applied: 1, gaveUp: 1 },
+    });
+    expect(raw).not.toContain(CANARIES.logLine);
+    const unhandled = summarize([hostileEvent({ logs: [{ level: "warn", message: [transient({ operation: "write", willRetry: false })] }] })]);
+    expect(unhandled.summary.d1TransientErrors.notRetriedWrites).toBe(1);
   });
 
   it("records the time window the tail covered", () => {
@@ -617,8 +653,14 @@ describe("Journeys workflow tail wiring", () => {
     const filter = /jq -r '(select\(\.d1TransientErrors[\s\S]*?)' \\\n/.exec(run)?.[1];
     expect(filter).toBeDefined();
     const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
-    expect(warn({ d1TransientErrors: { total: 3, retried: 2, notRetried: 1, notRetriedWrites: 1 } }).trimEnd()).toBe(
-      "::warning::D1 transient errors: 3 (2 retried; 1 not retried, of which 1 on writes). See d1TransientErrors in worker-tail-summary.json.",
+    expect(warn({
+      d1TransientErrors: { total: 3, retried: 2, notRetried: 1, notRetriedWrites: 1, writeOperations: { retried: 4, applied: 1, gaveUp: 2 } },
+    }).trimEnd()).toBe(
+      "::warning::D1 transient errors: 3 (2 retried; 1 not retried, of which 1 on writes nothing handled). Write operations: 4 retried safely, 1 found already applied, 2 gave up with a retryable 503. See d1TransientErrors in worker-tail-summary.json.",
+    );
+    // A summary from before write operations were counted.
+    expect(warn({ d1TransientErrors: { total: 1, retried: 1, notRetried: 0, notRetriedWrites: 0 } }).trimEnd()).toBe(
+      "::warning::D1 transient errors: 1 (1 retried; 0 not retried, of which 0 on writes nothing handled). Write operations: 0 retried safely, 0 found already applied, 0 gave up with a retryable 503. See d1TransientErrors in worker-tail-summary.json.",
     );
     expect(warn({ d1TransientErrors: { total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0 } })).toBe("");
     expect(warn({})).toBe("");

@@ -4,6 +4,7 @@ import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server"
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { d1Binding } from "../app/lib/d1-read.server";
 import { withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
+import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
@@ -266,87 +267,92 @@ function finalizeResponse(
   return finalized;
 }
 
+async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: ExecutionContext): Promise<Response> {
+  const oauthPreflight = oauthCorsPreflightResponse(request);
+  if (oauthPreflight) {
+    return finalizeResponse(oauthPreflight, env);
+  }
+
+  const canonicalUrl =
+    canonicalizeRequestUrlForHost(request.url, request.headers.get("X-Forwarded-Host")) ??
+    canonicalizeRequestUrlForHost(request.url, request.headers.get("Host"));
+
+  if (canonicalUrl) {
+    return finalizeResponse(Response.redirect(canonicalUrl.toString(), 308), env);
+  }
+
+  try {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith(COOK_SESSION_BOOTSTRAP_PATH)) {
+      return finalizeResponse(await handleCookSessionBootstrapRequest(request, env), env);
+    }
+    if (url.pathname.startsWith(COOK_SESSION_PREFIX)) {
+      return finalizeResponse(await handleCookSessionRequest(request, env), env);
+    }
+    // Photos skip React Router: a list screen asks for dozens at once, and each one only needs R2
+    // or the edge cache.
+    const photoKey = request.method === "GET" || request.method === "HEAD" ? photoKeyFromPath(url.pathname) : null;
+    // Quarantined photos (moved there by the photo sweep) are never served.
+    if (photoKey && !isServablePhotoKey(photoKey)) {
+      return finalizeResponse(new Response("Not Found", { status: 404 }), env);
+    }
+    if (photoKey && env.PHOTOS) {
+      const response = await deliverPhoto({
+        request,
+        key: photoKey,
+        bucket: env.PHOTOS,
+        cache: defaultPhotoCache(),
+        waitUntil: (promise) => ctx.waitUntil(promise),
+      });
+      return finalizeResponse(response, env);
+    }
+
+    if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
+      const response = await handleMcpRouteRequest(request, {
+        cloudflare: { env, ctx },
+      });
+      return finalizeResponse(response, env);
+    }
+
+    // Static assets already served the current build; a hashed asset that reaches the Worker
+    // belongs to an earlier release, so serve it from the release archive before the 404 page.
+    const archivedAsset = await serveReleaseAssetFallback(request, env.PHOTOS);
+    if (archivedAsset) {
+      return finalizeResponse(archivedAsset, env);
+    }
+
+    // One nonce per request: it must appear identically in the selected CSP
+    // header (below) and in the SSR shell's inline <script> nonces,
+    // threaded via loadContext → entry.server → NonceContext.
+    const nonce = generateNonce();
+    const response = await requestHandler(request, {
+      cloudflare: { env, ctx },
+      nonce,
+    });
+    return finalizeResponse(response, env, nonce);
+  } catch (error) {
+    // Outer catch: errors that escaped React Router's onError (e.g. thrown
+    // before the response stream started, or from a non-route boundary).
+    const postHogConfig = resolvePostHogServerConfig(env);
+    if (postHogConfig.enabled) {
+      ctx.waitUntil(
+        captureException(postHogConfig, {
+          error,
+          distinctId: "server",
+          route: new URL(request.url).pathname,
+          method: request.method,
+        }),
+      );
+    }
+    throw error;
+  }
+}
+
 export default {
   async fetch(request, rawEnv, ctx) {
     const env = withTransientD1Retry(rawEnv);
-    const oauthPreflight = oauthCorsPreflightResponse(request);
-    if (oauthPreflight) {
-      return finalizeResponse(oauthPreflight, env);
-    }
-
-    const canonicalUrl =
-      canonicalizeRequestUrlForHost(request.url, request.headers.get("X-Forwarded-Host")) ??
-      canonicalizeRequestUrlForHost(request.url, request.headers.get("Host"));
-
-    if (canonicalUrl) {
-      return finalizeResponse(Response.redirect(canonicalUrl.toString(), 308), env);
-    }
-
-    try {
-      const url = new URL(request.url);
-      if (url.pathname.startsWith(COOK_SESSION_BOOTSTRAP_PATH)) {
-        return finalizeResponse(await handleCookSessionBootstrapRequest(request, env), env);
-      }
-      if (url.pathname.startsWith(COOK_SESSION_PREFIX)) {
-        return finalizeResponse(await handleCookSessionRequest(request, env), env);
-      }
-      // Photos skip React Router: a list screen asks for dozens at once, and each one only needs R2
-      // or the edge cache.
-      const photoKey = request.method === "GET" || request.method === "HEAD" ? photoKeyFromPath(url.pathname) : null;
-      // Quarantined photos (moved there by the photo sweep) are never served.
-      if (photoKey && !isServablePhotoKey(photoKey)) {
-        return finalizeResponse(new Response("Not Found", { status: 404 }), env);
-      }
-      if (photoKey && env.PHOTOS) {
-        const response = await deliverPhoto({
-          request,
-          key: photoKey,
-          bucket: env.PHOTOS,
-          cache: defaultPhotoCache(),
-          waitUntil: (promise) => ctx.waitUntil(promise),
-        });
-        return finalizeResponse(response, env);
-      }
-
-      if (request.method === "POST" && new URL(request.url).pathname === "/mcp") {
-        const response = await handleMcpRouteRequest(request, {
-          cloudflare: { env, ctx },
-        });
-        return finalizeResponse(response, env);
-      }
-
-      // Static assets already served the current build; a hashed asset that reaches the Worker
-      // belongs to an earlier release, so serve it from the release archive before the 404 page.
-      const archivedAsset = await serveReleaseAssetFallback(request, env.PHOTOS);
-      if (archivedAsset) {
-        return finalizeResponse(archivedAsset, env);
-      }
-
-      // One nonce per request: it must appear identically in the selected CSP
-      // header (below) and in the SSR shell's inline <script> nonces,
-      // threaded via loadContext → entry.server → NonceContext.
-      const nonce = generateNonce();
-      const response = await requestHandler(request, {
-        cloudflare: { env, ctx },
-        nonce,
-      });
-      return finalizeResponse(response, env, nonce);
-    } catch (error) {
-      // Outer catch: errors that escaped React Router's onError (e.g. thrown
-      // before the response stream started, or from a non-route boundary).
-      const postHogConfig = resolvePostHogServerConfig(env);
-      if (postHogConfig.enabled) {
-        ctx.waitUntil(
-          captureException(postHogConfig, {
-            error,
-            distinctId: "server",
-            route: new URL(request.url).pathname,
-            method: request.method,
-          }),
-        );
-      }
-      throw error;
-    }
+    // A per-run QA Worker logs each write retry for the Journeys tail summary.
+    return runWithD1WriteRetryReporter(rawEnv, () => handleFetch(request, env, ctx));
   },
 
   // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry

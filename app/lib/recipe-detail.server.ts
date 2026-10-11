@@ -86,6 +86,7 @@ import {
 import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
+import { d1UnavailableWebResponse, formWriteToken, idForWriteToken } from "~/lib/d1-write-retry.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -444,8 +445,16 @@ async function handleCreateSpoonOnD1(
   const { bucket, env, vapidEnv, waitUntil } = getCloudflareCtx(context);
   // The D1 binding comes from the environment, so it is always present here.
   const postHogConfig = resolvePostHogServerConfig(env as NonNullable<typeof env>);
-  const result = await createSpoonOnD1(d1, { chefId: userId, recipeId, useAsRecipeCover, ...fields }, { bucket })
+  // The dialog sends a token made when it opened, and the spoon's id comes from it, so a resubmit
+  // of the same cook (after a 503, or a double tap) answers the spoon already logged.
+  const token = formWriteToken(formData.get("spoonToken"));
+  const id = token ? await idForWriteToken(`spoon:${recipeId}`, userId, token) : undefined;
+  const result = await createSpoonOnD1(d1, { id, chefId: userId, recipeId, useAsRecipeCover, ...fields }, { bucket })
     .catch(spoonErrorToResponse);
+  // A resubmit of a cook already logged: its notifications and cover work went with the first one.
+  if (result.replayed) {
+    return { success: true, intent: "createSpoon", spoon: { id: result.spoon.id }, isOriginCook: false };
+  }
 
   // One Prisma client for all of this cook's background work, built when the first task starts.
   const later = backgroundWithRequestDb(context, waitUntil);
@@ -1262,13 +1271,29 @@ async function handleRecipeDetailActionOnD1(
 
 export async function handleRecipeDetailAction({ request, params, context }: RecipeDetailRouteArgs) {
   const userId = await requireUserId(request, "/login", context.cloudflare?.env);
-  const { id } = params;
   // A spoon photo is the only large field, so the body is read through the image upload limit: an
   // oversized upload is refused before it is buffered whole.
   const formData = await imageUploadFormDataWithinLimit(request);
   if (!formData) {
     throw new Response(FOOD_IMAGE_SIZE_MESSAGE, { status: 413 });
   }
+  try {
+    return await handleRecipeDetailIntent(userId, params.id, formData, context);
+  } catch (error) {
+    // The database was briefly unavailable: answer a retryable 503 the page shows where the user
+    // acted, with their input still there, instead of replacing the page with a 500.
+    const unavailable = d1UnavailableWebResponse(error, formData.get("intent"));
+    if (unavailable) return unavailable;
+    throw error;
+  }
+}
+
+async function handleRecipeDetailIntent(
+  userId: string,
+  id: string,
+  formData: FormData,
+  context: AppLoadContext,
+) {
   const intent = formData.get("intent");
 
   // With a D1 binding, the everyday actions run as one D1 batch each and never build a Prisma

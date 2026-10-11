@@ -312,13 +312,14 @@ describe("Account settings - revocable sessions", () => {
       await expect(authenticateApiToken(seed.db, seed.mcp.accessToken, ISSUER)).resolves.toMatchObject({ id: userId });
     });
 
-    it("runs as one D1 batch, with the same effect, when the request has a D1 binding", async () => {
+    it("reads the session version, then writes everything in one D1 batch, when the request has a D1 binding", async () => {
       const seed = await seedAccess();
       const d1 = sqliteD1();
       try {
         const result = await revokeAllAccountAccess(seed.db, userId, { d1: d1.binding });
 
-        expect(d1.roundTrips()).toBe(1);
+        // One read of the current version, one batch that moves it on only from that version.
+        expect(d1.roundTrips()).toBe(2);
         expect(result).toMatchObject({ sessionVersion: 1, refreshTokens: 2, oauthGrants: 2, pendingAgentConnections: 1, authorizationCodes: 1, consentTransactions: 1 });
         expect(result.apiCredentials).toBe(4);
       } finally {
@@ -338,7 +339,7 @@ describe("Account settings - revocable sessions", () => {
           password: { hashedPassword: "new-hash", salt: "new-salt" },
         });
         expect(result.sessionVersion).toBe(1);
-        expect(d1.roundTrips()).toBe(1);
+        expect(d1.roundTrips()).toBe(2);
 
         await expect(revokeAllAccountAccess(seed.db, "no-such-user", { d1: d1.binding }))
           .rejects.toThrow("Account revocation found no user to update");

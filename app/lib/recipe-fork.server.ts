@@ -9,6 +9,7 @@ import {
   selectColumns,
 } from "~/lib/d1-models.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   activeRecipeTitleFreeGuard,
   ingredientInsertStatement,
@@ -150,6 +151,11 @@ function copiedCoverInput(source: ForkSource, recipeId: string) {
  * The fork as one atomic D1 batch: the recipe, its steps, ingredients, step output uses and
  * copied cover all apply, or none do. The batch re-checks the title as it writes; if another
  * recipe took it in between, the title is resolved again.
+ *
+ * The fork's id is fixed before the first try, so after a transient D1 error the batch runs again
+ * only once a read shows the earlier try did not commit. A caller that passes the id of a fork
+ * this chef already made of this source (the web fork derives it from the dialog's token) gets
+ * that fork back instead of a second one.
  */
 async function writeForkOnD1(
   d1: D1ReadDatabase,
@@ -158,57 +164,73 @@ async function writeForkOnD1(
   input: ForkRecipeInput,
   baseTitle: string,
   chooseTitle: (attempt: number) => Promise<string>,
-): Promise<{ recipeId: string; title: string }> {
+): Promise<{ recipeId: string; title: string; replayed?: true }> {
   const recipeId = input.recipeId ?? crypto.randomUUID();
   const activeVariant = source.coverMode === "none" ? null : copyableActiveVariant(source);
+  // The fork this chef made of this source with this id, if it is in.
+  const written = async (): Promise<{ recipeId: string; title: string } | null> => {
+    const [[row]] = await d1ReadBatch(d1, [[
+      `SELECT "title" FROM "Recipe" WHERE "id" = ? AND "chefId" = ? AND "sourceRecipeId" = ?`,
+      recipeId,
+      input.viewerId,
+      source.id,
+    ]]);
+    return row ? { recipeId, title: row.title as string } : null;
+  };
   for (let attempt = 1; ; attempt++) {
     const title = await chooseTitle(attempt);
     const now = new Date();
     const coverId = crypto.randomUUID();
     try {
-      await d1WriteBatch(d1, [
-        activeRecipeTitleFreeGuard(input.viewerId, title),
-        recipeInsertStatement({
-          id: recipeId,
-          title,
-          description: source.description,
-          servings: source.servings,
-          chefId: input.viewerId,
-          sourceRecipeId: source.id,
-          // sourceUrl intentionally NOT propagated
-          coverMode: source.coverMode === "none" ? "none" : "auto",
-          now,
-        }),
-        ...source.steps.map((step) => stepInsertStatement({
-          recipeId,
-          stepNum: step.stepNum,
-          stepTitle: step.stepTitle,
-          description: step.description,
-          duration: step.duration,
-          now,
-        })),
-        ...source.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredientInsertStatement({
-          recipeId,
-          stepNum: step.stepNum,
-          quantity: ingredient.quantity,
-          unitId: ingredient.unitId,
-          ingredientRefId: ingredient.ingredientRefId,
-          now,
-        }))),
-        ...stepOutputUses.map((use) => stepOutputUseInsertStatement(recipeId, use.inputStepNum, use.outputStepNum, now)),
-        ...(activeVariant
-          ? [
-            coverInsertStatement({ ...copiedCoverInput(source, recipeId), id: coverId }, now),
-            recipeUpdateStatement(recipeId, {
-              activeCoverId: coverId,
-              activeCoverVariant: activeVariant,
-              coverMode: source.coverMode,
-            }, now),
-          ]
-          : []),
-      ]);
-      return { recipeId, title };
+      return await retryD1Write({ scope: "recipe.fork", applied: written }, async () => {
+        await d1WriteBatch(d1, [
+          activeRecipeTitleFreeGuard(input.viewerId, title),
+          recipeInsertStatement({
+            id: recipeId,
+            title,
+            description: source.description,
+            servings: source.servings,
+            chefId: input.viewerId,
+            sourceRecipeId: source.id,
+            // sourceUrl intentionally NOT propagated
+            coverMode: source.coverMode === "none" ? "none" : "auto",
+            now,
+          }),
+          ...source.steps.map((step) => stepInsertStatement({
+            recipeId,
+            stepNum: step.stepNum,
+            stepTitle: step.stepTitle,
+            description: step.description,
+            duration: step.duration,
+            now,
+          })),
+          ...source.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredientInsertStatement({
+            recipeId,
+            stepNum: step.stepNum,
+            quantity: ingredient.quantity,
+            unitId: ingredient.unitId,
+            ingredientRefId: ingredient.ingredientRefId,
+            now,
+          }))),
+          ...stepOutputUses.map((use) => stepOutputUseInsertStatement(recipeId, use.inputStepNum, use.outputStepNum, now)),
+          ...(activeVariant
+            ? [
+              coverInsertStatement({ ...copiedCoverInput(source, recipeId), id: coverId }, now),
+              recipeUpdateStatement(recipeId, {
+                activeCoverId: coverId,
+                activeCoverVariant: activeVariant,
+                coverMode: source.coverMode,
+              }, now),
+            ]
+            : []),
+        ]);
+        return { recipeId, title };
+      });
     } catch (error) {
+      // A batch that failed on a fork an earlier submission with this id made: on its title (the
+      // guard) or, when it chose another title, on its id. Either way, that fork is the answer.
+      const earlier = input.recipeId && !isD1Unavailable(error) ? await written() : null;
+      if (earlier) return { ...earlier, replayed: true };
       if (!isD1GuardFailure(error)) throw error;
       if (attempt === D1_TITLE_RACE_ATTEMPTS) throw new ForkTitleExhaustedError(baseTitle);
     }
@@ -348,6 +370,8 @@ export async function forkRecipe(
 
 export interface ForkedRecipeSummary {
   recipeId: string;
+  /** The fork was made earlier, by a submission with the same id; nothing new was written. */
+  replayed?: true;
   attribution: ForkedRecipeResult["attribution"];
   appliedTitle: string;
   titleWasSuffixed: boolean;
@@ -447,7 +471,7 @@ export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput)
   const override = input.titleOverride?.trim();
   const baseTitle = override && override.length > 0 ? override : source.title;
 
-  const { recipeId, title } = await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async (attempt) => {
+  const { recipeId, title, replayed } = await writeForkOnD1(d1, source, stepOutputUses, input, baseTitle, async (attempt) => {
     if (attempt === 1) return firstFreeTitle(baseTitle, read.takenTitles);
     const [rows] = await d1ReadBatch(d1, [takenTitlesQuery(input.viewerId, baseTitle, source.id)]);
     return firstFreeTitle(baseTitle, titleSet(rows));
@@ -455,6 +479,7 @@ export async function forkRecipeOnD1(d1: D1ReadDatabase, input: ForkRecipeInput)
 
   return {
     recipeId,
+    ...(replayed ? { replayed } : {}),
     attribution: {
       sourceRecipeId: source.id,
       sourceChef: { id: source.chef.id, username: source.chef.username },

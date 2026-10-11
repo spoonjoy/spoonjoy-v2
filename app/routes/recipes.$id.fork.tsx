@@ -18,6 +18,7 @@ import {
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
 import { RecipeWriteInFlightError, RecipeWriteKeyConflictError, runDedupedRecipeWrite } from "~/lib/recipe-write-dedupe.server";
+import { d1UnavailableWebResponse, formWriteToken, idForWriteToken } from "~/lib/d1-write-retry.server";
 
 /** How long a repeated submit waits for the first one, which the browser no longer follows. */
 const IN_FLIGHT_WAIT_MS = 10_000;
@@ -57,8 +58,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   // The fork dialog sends a token made when it opened, so a double submit or a resubmitted form
   // makes one fork, and the repeat is sent to it. A post without one forks every time, as before.
   const formData = await request.formData().catch(() => null);
-  const forkToken = formData?.get("forkToken");
-  const token = typeof forkToken === "string" && /^[\w-]{8,100}$/.test(forkToken) ? forkToken : null;
+  const token = formWriteToken(formData?.get("forkToken"));
+  // The fork's id comes from the token too, so even after its key is gone (a write that failed
+  // ambiguously releases it) a resubmit finds the fork the first one made instead of a second.
+  const recipeId = token ? await idForWriteToken(`fork:${sourceRecipeId}`, viewerId, token) : undefined;
 
   // With a D1 binding the fork, its duplicate-submit key and its reads all run on D1, so a fork
   // never builds a Prisma client in the request (only the background notification does).
@@ -66,8 +69,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
   let prismaClient: ReturnType<typeof getRequestDb> | undefined;
   const prisma = () => (prismaClient ??= getRequestDb(context));
   const fork = d1
-    ? () => forkOnD1AndNotify(d1, context, viewerId, sourceRecipeId)
-    : async () => forkAndNotify(await prisma(), context, viewerId, sourceRecipeId);
+    ? () => forkOnD1AndNotify(d1, context, viewerId, sourceRecipeId, recipeId)
+    : async () => forkAndNotify(await prisma(), context, viewerId, sourceRecipeId, recipeId);
   try {
     if (token) {
       const { value } = await runDedupedRecipeWrite({
@@ -89,6 +92,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     if (err instanceof ForkTitleExhaustedError || err instanceof RecipeWriteInFlightError || err instanceof RecipeWriteKeyConflictError) {
       throw new Response("Conflict", { status: 409 });
     }
+    // The database was briefly unavailable: the fork dialog shows a retryable message, and its
+    // token makes a second try find any fork the first one made.
+    const unavailable = d1UnavailableWebResponse(err, "fork");
+    if (unavailable) return unavailable;
     // Source-missing (404) and title-exhausted (409) are expected client
     // outcomes handled above. Anything else is an unexpected fork failure
     // (DB/infra fault) that rethrows into the error boundary as an opaque 500 —
@@ -118,8 +125,9 @@ async function forkAndNotify(
   context: AppLoadContext,
   viewerId: string,
   sourceRecipeId: string,
+  recipeId: string | undefined,
 ): Promise<string> {
-  const result = await forkRecipe(db, { sourceRecipeId, viewerId });
+  const result = await forkRecipe(db, { sourceRecipeId, viewerId, recipeId });
   await notifySourceChef(context, viewerId, {
     recipeId: result.recipe.id,
     attribution: result.attribution,
@@ -134,9 +142,11 @@ async function forkOnD1AndNotify(
   context: AppLoadContext,
   viewerId: string,
   sourceRecipeId: string,
+  recipeId: string | undefined,
 ): Promise<string> {
-  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId });
-  await notifySourceChef(context, viewerId, result, () => getRequestDb(context));
+  const result = await forkRecipeOnD1(d1, { sourceRecipeId, viewerId, recipeId });
+  // A fork made by an earlier submission already notified the source chef.
+  if (!result.replayed) await notifySourceChef(context, viewerId, result, () => getRequestDb(context));
   return result.recipeId;
 }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form } from "react-router";
+import { useFetcher } from "react-router";
 import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
 import { Button } from "../ui/button";
 
@@ -27,10 +27,18 @@ export function ForkRecipeButton({
   // the server makes one fork for it.
   // It is made when the dialog opens (in the browser), never during server rendering.
   const [forkToken, setForkToken] = useState("");
+  // A fetcher, so a fork the server could not save leaves the dialog open with its message (the
+  // token stays, so trying again cannot make a second fork); a fork that succeeds redirects to it.
+  const fetcher = useFetcher<{ error?: unknown }>();
+  const [submittedToken, setSubmittedToken] = useState<string | null>(null);
   const open = () => {
     setForkToken(crypto.randomUUID());
+    setSubmittedToken(null);
     setIsOpen(true);
   };
+  const failure = submittedToken === forkToken && fetcher.state === "idle" && typeof fetcher.data?.error === "string"
+    ? fetcher.data.error
+    : null;
 
   const triggerLabel = isOwner ? "Make a variation" : "Fork";
   const submitLabel = isOwner ? "Make variation" : "Fork";
@@ -67,15 +75,22 @@ export function ForkRecipeButton({
       )}
       <Dialog open={isOpen} onClose={setIsOpen} size="md">
         <DialogTitle>{dialogTitle}</DialogTitle>
-        <DialogBody>{dialogBody}</DialogBody>
+        <DialogBody>
+          {dialogBody}
+          {failure ? (
+            <p role="alert" className="mt-3 text-sm text-[var(--sj-tomato)]">
+              {failure}
+            </p>
+          ) : null}
+        </DialogBody>
         <DialogActions>
           <Button plain type="button" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Form method="post" action={`/recipes/${recipeId}/fork`}>
+          <fetcher.Form method="post" action={`/recipes/${recipeId}/fork`} onSubmit={() => setSubmittedToken(forkToken)}>
             <input type="hidden" name="forkToken" value={forkToken} />
-            <Button type="submit">{submitLabel}</Button>
-          </Form>
+            <Button type="submit" disabled={fetcher.state !== "idle"}>{submitLabel}</Button>
+          </fetcher.Form>
         </DialogActions>
       </Dialog>
     </>

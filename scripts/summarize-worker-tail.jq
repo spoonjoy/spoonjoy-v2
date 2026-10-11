@@ -23,8 +23,9 @@
 #   (default 0). Events between connections are lost, so a reconnected tail is incomplete too.
 #
 # Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
-# d1_transient_error report (app/lib/d1-transient-retry.server.ts): only its fixed fields are read,
-# and only counts leave the program.
+# d1_transient_error report (app/lib/d1-transient-retry.server.ts) or a d1_write_retry report
+# (app/lib/d1-write-retry.server.ts): only their fixed fields are read, and only counts leave the
+# program.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
@@ -37,6 +38,15 @@ def d1_transient_reports:
     | (if type == "string" then (try fromjson catch null) else . end)
     | select(type == "object" and .event == "d1_transient_error")
     | { operation: (if .operation == "read" then "read" else "write" end), willRetry: (.willRetry == true) }];
+
+# The d1_write_retry reports in an event's log lines: what a write operation did after one of its
+# tries failed with a transient D1 error, with only the fixed outcome field.
+def d1_write_retry_reports:
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == "d1_write_retry")
+    | { outcome: (if .outcome == "retry" or .outcome == "applied" or .outcome == "gave_up" then .outcome else "other" end) }];
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:
@@ -215,11 +225,22 @@ def by_path: group_by(path_pattern)
   firstExceptions: [$exceptionIndexes[] | with_error_logs(.)],
   # Transient D1 failures the Worker reported: retried ones a later attempt may have absorbed,
   # and ones that reached the caller (a write whose outcome is unknown, or a read out of retries).
+  # A write the binding did not retry may still be handled by its operation (`retryD1Write`),
+  # which runs it again only when that is safe, or finds that the failed try had committed;
+  # `writeOperations` counts those decisions. `notRetriedWrites` is the writes nothing handled:
+  # the binding's unretried writes less the failures an operation handled (each such failure is
+  # one of them, unless it was a read out of retries inside the operation), never below zero.
   d1TransientErrors: ([.[] | d1_transient_reports[]] as $reports
+    | ([.[] | d1_write_retry_reports[]] as $operations
+    | ([$reports[] | select((.willRetry | not) and .operation == "write")] | length) as $unretriedWrites
     | { total: ($reports | length),
         retried: ([$reports[] | select(.willRetry)] | length),
         notRetried: ([$reports[] | select(.willRetry | not)] | length),
-        notRetriedWrites: ([$reports[] | select((.willRetry | not) and .operation == "write")] | length) }),
+        notRetriedWrites: ([$unretriedWrites - ($operations | length), 0] | max),
+        writeOperations: {
+          retried: ([$operations[] | select(.outcome == "retry")] | length),
+          applied: ([$operations[] | select(.outcome == "applied")] | length),
+          gaveUp: ([$operations[] | select(.outcome == "gave_up")] | length) } })),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints

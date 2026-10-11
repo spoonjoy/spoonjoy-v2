@@ -133,6 +133,8 @@ type RecipeDetailActionData = {
   success?: boolean;
   intent?: string;
   spoon?: { id?: string };
+  /** Why the action failed, such as the database being briefly unavailable (a 503). */
+  error?: unknown;
 };
 
 const recipeMastheadLinkClass =
@@ -647,6 +649,12 @@ export default function RecipeDetail() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
+  // A cook the server could not save shows its message in the open dialog, which keeps the input.
+  const [spoonError, setSpoonError] = useState<string | null>(null);
+  const openSpoonDialog = useCallback(() => {
+    setSpoonError(null);
+    setIsSpoonDialogOpen(true);
+  }, []);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   const [createCookbookError, setCreateCookbookError] = useState<string | null>(null);
@@ -664,6 +672,12 @@ export default function RecipeDetail() {
     setIsSpoonDialogOpen(false);
     showToast({ message: "Cook logged." });
   }, [actionData, showToast]);
+
+  useEffect(() => {
+    if (actionData?.intent === "createSpoon" && typeof actionData.error === "string") {
+      setSpoonError(actionData.error);
+    }
+  }, [actionData]);
 
   const handleOpenSaveModal = useCallback(() => {
     if (!isAuthenticated) {
@@ -810,7 +824,7 @@ export default function RecipeDetail() {
         {isAuthenticated ? (
           <button
             type="button"
-            onClick={() => setIsSpoonDialogOpen(true)}
+            onClick={openSpoonDialog}
             className={`${recipeMastheadActionClass} bg-transparent`}
             data-testid="recipe-header-log-cook-action"
           >
@@ -892,23 +906,21 @@ export default function RecipeDetail() {
   }, [hasIngredientsInShoppingList]);
 
   useEffect(() => {
+    const result = createCookbookFetcher.data as { success?: unknown; newCookbook?: CookbookListItem } | undefined;
     if (
-      createCookbookFetcher.data &&
-      "success" in createCookbookFetcher.data &&
-      createCookbookFetcher.data.success &&
-      "newCookbook" in createCookbookFetcher.data &&
-      createCookbookFetcher.data.newCookbook &&
-      lastHandledCreatedCookbookId.current !== createCookbookFetcher.data.newCookbook.id
+      result?.success === true &&
+      result.newCookbook &&
+      lastHandledCreatedCookbookId.current !== result.newCookbook.id
     ) {
       const nextState = applyCreatedCookbookState(
         availableCookbooks,
         savedCookbookIds,
-        createCookbookFetcher.data.newCookbook
+        result.newCookbook
       );
       setAvailableCookbooks(nextState.cookbooks);
       setSavedCookbookIds(nextState.savedCookbookIds);
       setNewCookbookTitle("");
-      lastHandledCreatedCookbookId.current = createCookbookFetcher.data.newCookbook.id;
+      lastHandledCreatedCookbookId.current = result.newCookbook.id;
     }
   }, [createCookbookFetcher.data, availableCookbooks, savedCookbookIds]);
 
@@ -1132,6 +1144,7 @@ export default function RecipeDetail() {
         actionUrl={`/recipes/${recipe.id}`}
         isOriginCookCandidate={isOriginCookCandidate}
         coverPromptMode={coverPromptMode}
+        errorMessage={spoonError}
       />
 
       {/* Save to Cookbook: Ouro UI's Dialog, a bottom sheet on phones and centred from 640px up. It
@@ -1299,7 +1312,7 @@ export default function RecipeDetail() {
             now={renderedAt}
             emptyAction={
               isAuthenticated ? (
-                <Button type="button" plain onClick={() => setIsSpoonDialogOpen(true)}>
+                <Button type="button" plain onClick={openSpoonDialog}>
                   Log the first cook
                 </Button>
               ) : (

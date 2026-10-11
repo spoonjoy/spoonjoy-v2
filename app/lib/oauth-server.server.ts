@@ -18,6 +18,7 @@
 import type { OAuthRefreshToken as OAuthRefreshTokenRecord, PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential, normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   hasProhibitedOAuthClientNameCharacters,
   MAX_OAUTH_CLIENT_NAME_CODE_POINTS,
@@ -490,14 +491,18 @@ export function legacyOAuthIssuerPromotionStatements(userId: string, issuer: str
   ];
 }
 
-/** `promoteLegacyOAuthIssuerForUser` on a D1 binding, as one atomic batch. */
+/**
+ * `promoteLegacyOAuthIssuerForUser` on a D1 binding, as one atomic batch. It only fills issuers
+ * that are still empty, so after a transient D1 error it simply runs again.
+ */
 export async function promoteLegacyOAuthIssuerForUserOnD1(
   db: D1ReadDatabase,
   userId: string,
   issuer: string,
   now: Date = new Date(),
 ): Promise<void> {
-  await d1ReadBatch(db, legacyOAuthIssuerPromotionStatements(userId, issuer, now));
+  const statements = legacyOAuthIssuerPromotionStatements(userId, issuer, now);
+  await retryD1Write({ scope: "oauth.promote_legacy_issuer" }, () => d1ReadBatch(db, statements));
 }
 
 /** Whether `redirectUri` exactly matches one the client registered. */
