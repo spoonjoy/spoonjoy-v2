@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '../../../app/components/ui/button'
-import { Heading } from '../../../app/components/ui/heading'
 import { Text } from '../../../app/components/ui/text'
 import { RecipeHeader } from '../../../app/components/recipe/RecipeHeader'
 import { StepCard } from '../../../app/components/recipe/StepCard'
+import { StepsSectionHeading } from '../../../app/components/recipe/StepsSectionHeading'
 import type { Ingredient } from '../../../app/components/recipe/IngredientList'
 import type { StepReference } from '../../../app/components/recipe/StepOutputUseCallout'
 
@@ -153,16 +153,13 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
         servings={recipe.servings}
         scaleFactor={scaleFactor}
         onScaleChange={setScaleFactor}
-        onClearProgress={clearProgress}
       />
 
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <div className="mb-6">
-          <p className="sj-eyebrow">Cook mode</p>
-          <Heading level={2} className="mt-3 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
-            Steps
-          </Heading>
-        </div>
+        <StepsSectionHeading
+          hasProgress={checkedIngredients.size + checkedStepOutputs.size > 0}
+          onClearProgress={clearProgress}
+        />
 
         {recipe.steps.length === 0 ? (
           <div className="sj-card rounded-[var(--sj-radius-surface)] p-8 text-center">

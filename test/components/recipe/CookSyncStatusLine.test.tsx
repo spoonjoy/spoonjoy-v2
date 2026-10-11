@@ -55,4 +55,40 @@ describe('CookSyncStatusLine', () => {
     expect(reload).toHaveBeenCalledTimes(1)
     location.mockRestore()
   })
+
+  it('reserves room for every status, so a change of status never moves the page', () => {
+    const { rerender } = render(<CookSyncStatusLine status="syncing" />)
+    const reserves = () => screen.getAllByTestId('cook-sync-status-reserve')
+    const statuses = Object.keys(COOK_SYNC_STATUS_TEXT) as CookSyncStatus[]
+
+    expect(reserves()).toHaveLength(statuses.length)
+    expect(reserves().map((reserve) => reserve.textContent)).toEqual(
+      statuses.map((status) =>
+        status === 'account_changed' || status === 'update_required'
+          ? `${COOK_SYNC_STATUS_TEXT[status]}Reload`
+          : COOK_SYNC_STATUS_TEXT[status]),
+    )
+    // The copies share the shown line's grid cell, take no part in the page's meaning, hold no controls,
+    // and do not change with the status.
+    const before = reserves().map((reserve) => reserve.outerHTML)
+    reserves().forEach((reserve) => {
+      expect(reserve).toHaveClass('invisible', '[grid-area:1/1]')
+      expect(reserve).toHaveAttribute('aria-hidden', 'true')
+      expect(reserve.querySelector('button, a, input, [tabindex]')).toBeNull()
+    })
+    expect(screen.getByTestId('cook-sync-status').parentElement).toHaveClass('[grid-area:1/1]')
+    expect(screen.getByTestId('cook-sync-status-line')).toHaveClass('grid')
+
+    rerender(<CookSyncStatusLine status="update_required" />)
+    expect(reserves().map((reserve) => reserve.outerHTML)).toEqual(before)
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('keeps Reload on the message line, as tall as the text, with a 44px tap area', () => {
+    render(<CookSyncStatusLine status="account_changed" />)
+    const reload = screen.getByRole('button', { name: 'Reload' })
+    expect(reload).toHaveClass('inline-block', 'text-xs/4', 'after:-inset-y-3.5')
+    expect(reload).not.toHaveClass('min-h-11')
+    expect(reload.parentElement).toBe(screen.getByTestId('cook-sync-status').parentElement)
+  })
 })
