@@ -13,6 +13,8 @@ import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, Recipe
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
+import { d1WriteOnceKey, type D1WriteOnceKey } from "~/lib/d1-write-once.server";
+import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -4192,6 +4194,31 @@ export async function runIdempotentApiV1Mutation(
   }), { idempotencyOutcome: "committed", operation });
 }
 
+/** A uuid-shaped id derived from a write-once key, the same on every try of the write. */
+async function writeOnceItemId(key: D1WriteOnceKey): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${key.userId}\n${key.key}`)));
+  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function addShoppingItemOnceOnD1(
+  d1: D1ReadDatabase,
+  principal: ApiPrincipal,
+  clientMutationId: string,
+  body: Record<string, unknown>,
+  put: Omit<D1ShoppingItemPut, "itemId" | "writeKey" | "now">,
+): Promise<{ created: boolean; id: string } | null> {
+  const writeKey = await d1WriteOnceKey({
+    userId: principal.id,
+    operation: "api_v1.shopping_item_create",
+    token: `${idempotencyClientKey(principal)}:${clientMutationId}`,
+    request: body,
+  });
+  const itemId = await writeOnceItemId(writeKey);
+  const id = await putShoppingListItemOnceOnD1(d1, { ...put, itemId, writeKey, now: new Date() });
+  return id ? { created: id === itemId, id } : null;
+}
+
 async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["clientMutationId", "name", "quantity", "unit", "categoryKey", "iconKey"]);
@@ -4211,13 +4238,27 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const result = await addShoppingListItem(db, {
-      identity,
-      quantity,
-      categoryKey,
-      iconKey,
-      nextSortIndex: () => nextShoppingSortIndex(db, list.id),
-    });
+    // Quantities add up, so on D1 the add claims a write-once key in its own batch: a retry after
+    // a transient D1 error, or the client's resubmit of this mutation after a 503, adds nothing
+    // more. The key is this client's mutation and its body; the new item's id comes from it, so
+    // every try agrees on whether this mutation created the item.
+    const d1 = requestD1(args.context);
+    const result = d1
+      ? await addShoppingItemOnceOnD1(d1, principal, clientMutationId, body, {
+        shoppingListId: list.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+        quantity,
+        categoryKey,
+        iconKey,
+      })
+      : await addShoppingListItem(db, {
+        identity,
+        quantity,
+        categoryKey,
+        iconKey,
+        nextSortIndex: () => nextShoppingSortIndex(db, list.id),
+      });
     if (!result) throw new ApiV1Error("not_found", "Shopping list not found", { resource: "shopping_list" });
     const item = await db.shoppingListItem.findUniqueOrThrow({
       where: { id: result.id },
