@@ -14,6 +14,7 @@
 // one statement so two renames can't both win.
 import type { PrismaClient } from "@prisma/client";
 import { isReservedUsername } from "~/lib/username";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 type IdentityDb = Pick<PrismaClient, "$queryRaw" | "$executeRaw" | "user">;
 
@@ -54,7 +55,9 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
   // dynamically for the Worker bundle).
   const checkEmail = emailChanged ? 1 : 0;
   const checkUsername = usernameChanged ? 1 : 0;
-  const updated = await db.$executeRaw`
+  // The write sets fixed values and its guards look only at other accounts, so running it again
+  // after a lost answer matches this account again and answers the same: it is simply retried.
+  const updated = await retryD1Write({ scope: "account.save_identity" }, () => db.$executeRaw`
     UPDATE "User" SET
       "email" = CASE WHEN ${checkEmail} = 1 THEN ${email} ELSE "email" END,
       "username" = ${username},
@@ -68,7 +71,7 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
         WHERE "other"."id" != ${userId}
           AND (lower("other"."username") = lower(${username}) OR "other"."id" = ${username})
       ))
-  `;
+  `);
 
   if (updated === 0) {
     if (emailChanged) {
@@ -84,6 +87,7 @@ export async function saveAccountIdentity(db: IdentityDb, change: AccountIdentit
   // the same statement (Google and GitHub sign-in will not link to it until it is confirmed): no
   // moment, and no failed second write, leaves the old verification on the new address. The raw
   // write leaves updatedAt alone; native sync reads it.
-  await db.user.update({ where: { id: userId }, data: { updatedAt: new Date() } });
+  const updatedAt = new Date();
+  await retryD1Write({ scope: "account.touch_updated_at" }, () => db.user.update({ where: { id: userId }, data: { updatedAt } }));
   return "saved";
 }

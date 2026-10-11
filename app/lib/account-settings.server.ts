@@ -30,6 +30,7 @@ import {
   D1_WRITE_UNAVAILABLE_MESSAGE,
   d1UnavailableHeaders,
   isD1Unavailable,
+  retryD1Write,
 } from "~/lib/d1-write-retry.server";
 import {
   oauthAccessConnectionOwnership,
@@ -571,10 +572,10 @@ async function handleAccountSettingsIntent({
       namespace: `profiles/${userId}`,
     });
 
-    await database.user.update({
+    await retryD1Write({ scope: "account.set_photo" }, () => database.user.update({
       where: { id: userId },
       data: { photoUrl },
-    });
+    }));
 
     // The replaced photo's stored file is no longer referenced; without this it stays in R2
     // forever, where not even the disposable-data cleanup (which follows User.photoUrl) finds it.
@@ -592,10 +593,10 @@ async function handleAccountSettingsIntent({
 
     await deleteAvatarBestEffort(context, userId, user?.photoUrl);
 
-    await database.user.update({
+    await retryD1Write({ scope: "account.remove_photo" }, () => database.user.update({
       where: { id: userId },
       data: { photoUrl: null },
-    });
+    }));
 
     return { success: true };
   }
@@ -646,12 +647,20 @@ async function handleAccountSettingsIntent({
       };
     }
 
-    const result = await database.apiCredential.updateMany({
-      where: { id: credentialId, userId, revokedAt: null },
-      data: { revokedAt: new Date() },
+    // The revocation time is chosen once, so a retry after a lost answer recognises its own
+    // earlier try (the row revoked at exactly this time) instead of answering "already revoked".
+    const revokedAt = new Date();
+    const revokedByThisRequest = async () =>
+      (await database.apiCredential.findFirst({ where: { id: credentialId, userId, revokedAt }, select: { id: true } })) ? true : null;
+    const revoked = await retryD1Write({ scope: "api_credential.revoke", applied: revokedByThisRequest }, async () => {
+      const { count } = await database.apiCredential.updateMany({
+        where: { id: credentialId, userId, revokedAt: null },
+        data: { revokedAt },
+      });
+      return count === 1 || (await revokedByThisRequest()) === true;
     });
 
-    if (result.count === 0) {
+    if (!revoked) {
       return {
         success: false,
         error: "credential_not_found",
@@ -695,10 +704,11 @@ async function handleAccountSettingsIntent({
       resource,
       connectionKeys,
     });
-    const refresh = await database.oAuthRefreshToken.updateMany({
+    // Both sweeps set fixed values and their counts are not used, so each simply runs again.
+    await retryD1Write({ scope: "oauth.disconnect_refresh" }, () => database.oAuthRefreshToken.updateMany({
       where: { userId, clientId, issuer, resource, revokedAt: null, ...ownership },
       data: { revokedAt: now },
-    });
+    }));
     const cleanupCutoff = (await database.oAuthRefreshToken.findFirst({
       where: { userId, clientId, issuer, resource, revokedAt: { not: null }, ...ownership },
       orderBy: { revokedAt: "desc" },
@@ -711,7 +721,7 @@ async function handleAccountSettingsIntent({
         message: "OAuth connection not found or already disconnected",
       };
     }
-    const access = await database.apiCredential.updateMany({
+    await retryD1Write({ scope: "oauth.disconnect_access" }, () => database.apiCredential.updateMany({
       where: {
         userId,
         oauthClientId: clientId,
@@ -721,7 +731,7 @@ async function handleAccountSettingsIntent({
         ...oauthAccessConnectionOwnership(connectionKeys, cleanupCutoff),
       },
       data: { revokedAt: now },
-    });
+    }));
     await revokeConnectorGrantsByConnectionKeys(database, {
       userId,
       clientId,
@@ -947,10 +957,10 @@ async function handleAccountSettingsIntent({
 
     // Hash and save password
     const { hashedPassword, salt } = await hashPassword(newPassword);
-    await database.user.update({
+    await retryD1Write({ scope: "account.set_password" }, () => database.user.update({
       where: { id: userId },
       data: { hashedPassword, salt },
-    });
+    }));
 
     return {
       success: true,
@@ -1004,10 +1014,10 @@ async function handleAccountSettingsIntent({
     }
 
     // Remove password
-    await database.user.update({
+    await retryD1Write({ scope: "account.remove_password" }, () => database.user.update({
       where: { id: userId },
       data: { hashedPassword: null, salt: null },
-    });
+    }));
 
     return {
       success: true,

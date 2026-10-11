@@ -218,6 +218,7 @@ import {
   type NativeRecipeImportSource,
 } from "~/lib/recipe-import.server";
 import type { PostHogServerEnv } from "~/lib/analytics-server";
+import { retryD1Write as retryAccountD1Write } from "~/lib/d1-write-retry.server";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
@@ -4932,10 +4933,10 @@ async function handleAccountPhotoUpload(args: ApiV1RouteArgs, requestId: string,
       file: normalizedPhoto,
       namespace: `profiles/${principal.id}`,
     });
-    await db.user.update({
+    await retryAccountD1Write({ scope: "account.set_photo" }, () => db.user.update({
       where: { id: principal.id },
       data: { photoUrl },
-    });
+    }));
     // The replaced photo's stored file is no longer referenced (see account settings' upload).
     await deleteAvatarBestEffort(args.context, principal.id, previous?.photoUrl);
 
@@ -4970,10 +4971,10 @@ async function handleAccountPhotoRemove(args: ApiV1RouteArgs, requestId: string,
       waitUntil: apiV1WaitUntilFor(args),
       distinctId: principal.id,
     });
-    await db.user.update({
+    await retryAccountD1Write({ scope: "account.remove_photo" }, () => db.user.update({
       where: { id: principal.id },
       data: { photoUrl: null },
-    });
+    }));
 
     return {
       status: 200,
@@ -5355,14 +5356,14 @@ async function handleNotificationPreferencesUpdate(args: ApiV1RouteArgs, request
     clientMutationId,
     ...preferences,
   }, clientMutationId, "account.notification-preferences.update", async (db) => {
-    await db.notificationPreference.upsert({
+    await retryAccountD1Write({ scope: "notification_preference.save" }, () => db.notificationPreference.upsert({
       where: { userId: principal.id },
       create: {
         userId: principal.id,
         ...preferences,
       },
       update: preferences,
-    });
+    }));
 
     return {
       status: 200,
@@ -5476,8 +5477,10 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
     const tokenHash = await hashApnsToken(token);
+    // Every write sets fixed values chosen here, once, so each runs again safely after a lost
+    // answer; a retried create recognises its row by the device key and this registration time.
     const now = new Date();
-    await db.nativePushDevice.updateMany({
+    await retryAccountD1Write({ scope: "apns.revoke_token_elsewhere" }, () => db.nativePushDevice.updateMany({
       where: {
         tokenHash,
         platform,
@@ -5491,12 +5494,12 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
         },
       },
       data: { revokedAt: now.toISOString() },
-    });
+    }));
     const existing = await db.nativePushDevice.findFirst({
       where: { userId: principal.id, deviceId, platform, environment },
     });
     const device = existing
-      ? await db.nativePushDevice.update({
+      ? await retryAccountD1Write({ scope: "apns.register_existing" }, () => db.nativePushDevice.update({
           where: { id: existing.id },
           data: {
             tokenHash,
@@ -5507,8 +5510,13 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
             revokedAt: null,
             lastRegisteredAt: now,
           },
-        })
-      : await db.nativePushDevice.create({
+        }))
+      : await retryAccountD1Write({
+        scope: "apns.register_new",
+        applied: () => db.nativePushDevice.findFirst({
+          where: { userId: principal.id, deviceId, platform, environment, tokenHash, lastRegisteredAt: now },
+        }),
+      }, () => db.nativePushDevice.create({
           data: {
             userId: principal.id,
             deviceId,
@@ -5521,7 +5529,7 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
             enabledAt: now,
             lastRegisteredAt: now,
           },
-        });
+        }));
 
     return {
       status: existing ? 200 : 201,
@@ -5553,10 +5561,11 @@ async function handleApnsDeviceRevoke(args: ApiV1RouteArgs, requestId: string, p
       .filter((device) => device.revokedAt === null)
       .map((device) => device.id);
     if (activeDeviceIds.length > 0) {
-      await db.nativePushDevice.updateMany({
+      const revokedAt = new Date().toISOString();
+      await retryAccountD1Write({ scope: "apns.revoke" }, () => db.nativePushDevice.updateMany({
         where: { id: { in: activeDeviceIds } },
-        data: { revokedAt: new Date().toISOString() },
-      });
+        data: { revokedAt },
+      }));
     }
     const devices = await db.nativePushDevice.findMany({
       where: { userId: principal.id, deviceId },
@@ -5766,16 +5775,18 @@ async function handleOAuthConnectionDisconnect(
     resource: connection.resource,
     connectionKeys: connection.connectionKeys,
   });
-  const refresh = await db.oAuthRefreshToken.updateMany({
-    where: {
-      userId: principal.id,
-      clientId: connection.clientId,
-      issuer: connection.issuer,
-      resource: connection.resource,
-      revokedAt: null,
-      ...ownership,
-    },
-    data: { revokedAt: now },
+  // Each sweep answers how many rows it revoked. A retry after a lost answer would count none, so
+  // the count is of the rows revoked at exactly `now`, chosen once: this request's revocations.
+  const connectionRefresh = {
+    userId: principal.id,
+    clientId: connection.clientId,
+    issuer: connection.issuer,
+    resource: connection.resource,
+    ...ownership,
+  };
+  const refresh = await retryAccountD1Write({ scope: "oauth.disconnect_refresh" }, async () => {
+    await db.oAuthRefreshToken.updateMany({ where: { ...connectionRefresh, revokedAt: null }, data: { revokedAt: now } });
+    return { count: await db.oAuthRefreshToken.count({ where: { ...connectionRefresh, revokedAt: now } }) };
   });
   const cleanupCutoff = (await db.oAuthRefreshToken.findFirst({
         where: {
@@ -5792,16 +5803,16 @@ async function handleOAuthConnectionDisconnect(
   if (!cleanupCutoff) {
     throw new ApiV1Error("not_found", "OAuth connection not found or already disconnected");
   }
-  const access = await db.apiCredential.updateMany({
-    where: {
-      userId: principal.id,
-      oauthClientId: connection.clientId,
-      oauthIssuer: connection.issuer,
-      oauthResource: connection.resource,
-      revokedAt: null,
-      ...oauthAccessConnectionOwnership(connection.connectionKeys, cleanupCutoff),
-    },
-    data: { revokedAt: now },
+  const connectionAccess = {
+    userId: principal.id,
+    oauthClientId: connection.clientId,
+    oauthIssuer: connection.issuer,
+    oauthResource: connection.resource,
+    ...oauthAccessConnectionOwnership(connection.connectionKeys, cleanupCutoff),
+  };
+  const access = await retryAccountD1Write({ scope: "oauth.disconnect_access" }, async () => {
+    await db.apiCredential.updateMany({ where: { ...connectionAccess, revokedAt: null }, data: { revokedAt: now } });
+    return { count: await db.apiCredential.count({ where: { ...connectionAccess, revokedAt: now } }) };
   });
   await revokeConnectorGrantsByConnectionKeys(db, {
     userId: principal.id,
@@ -7348,11 +7359,13 @@ async function handleTokenRevoke(args: ApiV1RouteArgs, requestId: string, authen
   }
 
   const revoked = credential.revokedAt === null;
+  // Sets a time chosen once, so running it again after a lost answer leaves the same row.
+  const revokedAt = new Date();
   const updated = revoked
-    ? await db.apiCredential.update({
+    ? await retryAccountD1Write({ scope: "api_credential.revoke" }, () => db.apiCredential.update({
         where: { id: credential.id },
-        data: { revokedAt: new Date() },
-      })
+        data: { revokedAt },
+      }))
     : credential;
 
   return withApiV1Telemetry(apiV1PrivateSuccess(requestId, {

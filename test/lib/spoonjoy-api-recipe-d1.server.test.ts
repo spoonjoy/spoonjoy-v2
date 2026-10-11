@@ -5,11 +5,13 @@ import type { ApiPrincipal } from "~/lib/api-auth.server";
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import * as placeholderCoverModule from "~/lib/ai-placeholder-cover.server";
 import { getLocalDb } from "~/lib/db.server";
+import { D1WriteUnavailableError } from "~/lib/d1-write-retry.server";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } from "~/lib/recipe-title-uniqueness.server";
 import { callSpoonjoyApiOperation, type SpoonjoyApiContext } from "~/lib/spoonjoy-api.server";
 import { expectConsoleError } from "../warning-policy";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 import { createTestUser } from "../utils";
 
 // The MCP create_recipe and update_recipe tools with a D1 binding: the recipe, its fields
@@ -318,6 +320,59 @@ describe("MCP recipe tools on a D1 binding", () => {
       await callSpoonjoyApiOperation("update_recipe", { id: plainPrisma, imageUrl: image }, imageContext());
       await callSpoonjoyApiOperation("update_recipe", { id: plainD1, imageUrl: image }, imageContext(d1.binding));
       expect(await coverState(plainD1)).toEqual(await coverState(plainPrisma));
+    });
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("adds a cover once when D1 drops the connection during the update (%s)", async (outcome) => {
+      const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Flaky cover", steps }, context()));
+      const flaky = flakyD1(d1.binding);
+      // The update's batch opens with the "recipe is still active" guard.
+      flaky.failNext(/"deletedAt" IS NULL\) THEN/, outcome);
+
+      await callSpoonjoyApiOperation("update_recipe", { id, title: "Flaky cover renamed", imageUrl: image }, imageContext(flaky.binding));
+
+      expect(flaky.failures()).toBe(1);
+      // create_recipe without an image also queued an AI placeholder; the chef's own covers are what count.
+      const recipe = await db.recipe.findUniqueOrThrow({ where: { id }, include: { covers: { where: { sourceType: "chef-upload" } } } });
+      expect(recipe.title).toBe("Flaky cover renamed");
+      expect(recipe.covers).toHaveLength(1);
+      expect(recipe.activeCoverId).toBe(recipe.covers[0]!.id);
+    });
+
+    it.each<FlakyOutcome>(["lost-answer", "late"])("finds its own stamp on the recipe when an update without an image loses its answer (%s)", async (outcome) => {
+      const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Stamped", steps }, context()));
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/"deletedAt" IS NULL\) THEN/, outcome);
+
+      await callSpoonjoyApiOperation("update_recipe", { id, title: "Stamped again" }, context(flaky.binding));
+
+      expect(flaky.failures()).toBe(1);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ title: "Stamped again" });
+    });
+
+    it("answers a retryable error, writing nothing, when D1 stays unavailable", async () => {
+      const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Down cover", steps }, context()));
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/"deletedAt" IS NULL\) THEN/, "lost", "lost", "lost", "lost");
+
+      await expect(callSpoonjoyApiOperation("update_recipe", { id, imageUrl: image }, imageContext(flaky.binding)))
+        .rejects.toBeInstanceOf(D1WriteUnavailableError);
+      await expect(db.recipeCover.count({ where: { recipeId: id, sourceType: "chef-upload" } })).resolves.toBe(0);
+    });
+
+    it("keeps one cover when an agent repeats the update with the same image", async () => {
+      const id = await createdId(await callSpoonjoyApiOperation("create_recipe", { title: "Repeat cover", steps }, context()));
+      await callSpoonjoyApiOperation("update_recipe", { id, imageUrl: image }, imageContext(d1.binding));
+      const first = await db.recipe.findUniqueOrThrow({ where: { id } });
+
+      await callSpoonjoyApiOperation("update_recipe", { id, imageUrl: image }, imageContext(d1.binding));
+
+      await expect(db.recipeCover.count({ where: { recipeId: id, sourceType: "chef-upload" } })).resolves.toBe(1);
+      await expect(db.recipe.findUniqueOrThrow({ where: { id } })).resolves.toMatchObject({ activeCoverId: first.activeCoverId });
+
+      // A different image is a new cover.
+      const other = image.replace(/.$/, "A");
+      await callSpoonjoyApiOperation("update_recipe", { id, imageUrl: other }, imageContext(d1.binding));
+      await expect(db.recipeCover.count({ where: { recipeId: id, sourceType: "chef-upload" } })).resolves.toBe(2);
     });
 
     it("writes nothing when the cover insert fails", async () => {
