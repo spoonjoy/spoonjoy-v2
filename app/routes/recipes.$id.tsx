@@ -50,6 +50,7 @@ import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
 import { useCookTimers, type CookTimersController } from "~/hooks/use-cook-timers";
 import { useScreenWakeLock } from "~/hooks/use-screen-wake-lock";
+import { useWriteToken } from "~/hooks/use-write-token";
 import {
   DEFAULT_COOK_PROGRESS,
   normalizeCookProgress,
@@ -403,6 +404,9 @@ export default function RecipeDetail() {
   const lastHandledCreatedCookbookId = useRef<string | null>(null);
   const addToListSubmissionCount = useRef(0);
   const lastHandledAddToListSubmissionCount = useRef(0);
+  // One add per tap that succeeds: a tap after a 503, or a double tap, carries the same token and
+  // adds the ingredients once; a success makes a fresh token for the next add.
+  const [addToListToken, renewAddToListToken] = useWriteToken();
   const pendingCookModeScroll = useRef(false);
   const lastHandledLoggedSpoonId = useRef<string | null>(null);
   const ingredientCount = recipe.steps.reduce((count, step) => count + step.ingredients.length, 0);
@@ -701,6 +705,7 @@ export default function RecipeDetail() {
         intent: "addFromRecipe",
         recipeId: recipe.id,
         scaleFactor: String(scaleFactor),
+        writeToken: addToListToken,
       },
       { method: "post", action: "/shopping-list" }
     );
@@ -713,7 +718,7 @@ export default function RecipeDetail() {
         scale_factor: scaleFactor,
       });
     }
-  }, [addToListFetcher, recipe.id, scaleFactor, posthog, isAuthenticated, loginRedirect]);
+  }, [addToListFetcher, recipe.id, scaleFactor, addToListToken, posthog, isAuthenticated, loginRedirect]);
 
   // Entering cook mode pushes one `#cook` entry through the router, so the entry carries the
   // router's history index (the recipe's Back reads it) and Back closes cook mode.
@@ -865,26 +870,31 @@ export default function RecipeDetail() {
   );
 
   useEffect(() => {
-    const wasSuccessful =
-      addToListFetcher.state === "idle" &&
-      Boolean(addToListFetcher.data) &&
-      typeof addToListFetcher.data === "object" &&
-      "success" in addToListFetcher.data &&
-      addToListFetcher.data.success === true;
+    const answer = addToListFetcher.state === "idle" && addToListFetcher.data && typeof addToListFetcher.data === "object"
+      ? addToListFetcher.data as { success?: unknown; retryable?: unknown; error?: unknown }
+      : null;
+    const wasSuccessful = answer?.success === true;
+    // The database was briefly unavailable: say so, and keep the token, so tapping again adds once.
+    const unavailable = answer?.retryable === true && typeof answer.error === "string" ? answer.error : null;
 
     if (
-      !wasSuccessful ||
+      (!wasSuccessful && !unavailable) ||
       addToListSubmissionCount.current === lastHandledAddToListSubmissionCount.current
     ) {
       return;
     }
 
     lastHandledAddToListSubmissionCount.current = addToListSubmissionCount.current;
+    if (unavailable) {
+      showToast({ message: unavailable });
+      return;
+    }
+    renewAddToListToken();
     setIsAlreadyInList(true);
     showToast({
       message: `${ingredientCount} items added at ${scaleFactor}x`,
     });
-  }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast]);
+  }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast, renewAddToListToken]);
 
   // The tab bar is hidden in cook mode so it never covers the step controls.
   useDockSuppressed(showOwnerTools || (isCookMode && recipe.steps.length > 0));

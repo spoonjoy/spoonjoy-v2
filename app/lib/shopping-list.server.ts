@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, ShoppingListItem } from "@prisma/client";
-import { d1UnavailableWebResponse } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse, formWriteToken } from "~/lib/d1-write-retry.server";
+import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -30,7 +31,7 @@ import {
   clearShoppingListOnD1,
   ensureShoppingListIdOnD1,
   removeShoppingListItemOnD1,
-  toggleShoppingListItemOnD1,
+  setShoppingListItemCheckedOnD1,
 } from "~/lib/shopping-list-d1-actions.server";
 
 type ShoppingListItemPosition = {
@@ -213,6 +214,10 @@ async function handleShoppingListIntent(userId: string, formData: FormData, cont
       quantity: quantity ? parseFloat(quantity) : null,
       categoryKey: affordance.categoryKey,
       iconKey: affordance.iconKey,
+    }, {
+      token: formWriteToken(formData.get("writeToken")),
+      // What the chef submitted, not what the parser made of it, which could differ on a resubmit.
+      request: { ingredientText, manualQuantity, manualUnitName, manualIngredientName, submittedCategoryKey, submittedIconKey },
     });
     if (!added) throw new Response("Shopping list not found", { status: 404 });
 
@@ -225,17 +230,26 @@ async function handleShoppingListIntent(userId: string, formData: FormData, cont
     const parsedScaleFactor = scaleFactorRaw ? Number.parseFloat(scaleFactorRaw) : 1;
     const scaleFactor = Number.isFinite(parsedScaleFactor) && parsedScaleFactor > 0 ? parsedScaleFactor : 1;
 
-    if (recipeId && !(await writes.addRecipe(recipeId, scaleFactor))) {
+    if (recipeId && !(await writes.addRecipe(recipeId, scaleFactor, {
+      token: formWriteToken(formData.get("writeToken")),
+      request: { recipeId, scaleFactor },
+    }))) {
       throw new Response("Recipe not found", { status: 404 });
     }
-    return data({ success: true });
+    return data({ success: true, intent: "addFromRecipe" as const });
   }
 
   if (intent === "toggleCheck") {
     const itemId = formData.get("itemId")?.toString();
-    const nextCheckedRaw = formData.get("nextChecked")?.toString();
+    const nextChecked = formData.get("nextChecked")?.toString();
 
-    if (itemId) await writes.toggle(itemId, nextCheckedRaw ? nextCheckedRaw === "true" : null);
+    if (!itemId) return data({ success: true });
+    // The page always says which state it sets, so a retry or a resubmit ends in that state; a
+    // flip with no target could undo itself.
+    if (nextChecked !== "true" && nextChecked !== "false") {
+      return data({ errors: { toggle: "Say whether the item is checked." } }, { status: 400 });
+    }
+    await writes.setChecked(itemId, nextChecked === "true");
     return data({ success: true });
   }
 
@@ -268,14 +282,22 @@ interface ShoppingListItemInput {
   iconKey: string | null;
 }
 
-/** The shopping list page's writes for one chef's list, on D1 or on Prisma. */
+/** What makes an add the same add: the form's write token and what was submitted. */
+interface AddSubmission {
+  token: string | null;
+  request: unknown;
+}
+
+/**
+ * The shopping list page's writes for one chef's list, on D1 or on Prisma. On D1 an add claims a
+ * write-once key from its submission, so a retry or a resubmit of the same form adds once.
+ */
 interface ShoppingListWrites {
   /** False when the list no longer exists. */
-  addItem(item: ShoppingListItemInput): Promise<boolean>;
+  addItem(item: ShoppingListItemInput, submission: AddSubmission): Promise<boolean>;
   /** False when the recipe does not exist or was deleted. */
-  addRecipe(recipeId: string, scaleFactor: number): Promise<boolean>;
-  /** With `nextChecked` null, flips the item. */
-  toggle(itemId: string, nextChecked: boolean | null): Promise<void>;
+  addRecipe(recipeId: string, scaleFactor: number, submission: AddSubmission): Promise<boolean>;
+  setChecked(itemId: string, checked: boolean): Promise<void>;
   remove(itemId: string): Promise<void>;
   clearCompleted(): Promise<void>;
   clearAll(): Promise<void>;
@@ -284,11 +306,21 @@ interface ShoppingListWrites {
 async function d1ShoppingListWrites(d1: D1ReadDatabase, userId: string): Promise<ShoppingListWrites> {
   const shoppingListId = await ensureShoppingListIdOnD1(d1, userId, new Date());
   return {
-    addItem: (item) => addShoppingListItemOnD1(d1, { ...item, shoppingListId, now: new Date() }),
-    addRecipe: (recipeId, scaleFactor) =>
-      addRecipeToShoppingListOnD1(d1, { shoppingListId, recipeId, scaleFactor, now: new Date() }),
-    toggle: (itemId, nextChecked) =>
-      toggleShoppingListItemOnD1(d1, { shoppingListId, itemId, nextChecked, now: new Date() }),
+    addItem: async (item, submission) => addShoppingListItemOnD1(d1, {
+      ...item,
+      shoppingListId,
+      writeKey: await d1WriteOnceKey({ userId, operation: "shopping_list.add_item", ...submission }),
+      now: new Date(),
+    }),
+    addRecipe: async (recipeId, scaleFactor, submission) => addRecipeToShoppingListOnD1(d1, {
+      shoppingListId,
+      recipeId,
+      scaleFactor,
+      writeKey: await d1WriteOnceKey({ userId, operation: "shopping_list.add_recipe", ...submission }),
+      now: new Date(),
+    }),
+    setChecked: (itemId, checked) =>
+      setShoppingListItemCheckedOnD1(d1, { shoppingListId, itemId, checked, now: new Date() }),
     remove: (itemId) => removeShoppingListItemOnD1(d1, { shoppingListId, itemId, now: new Date() }),
     clearCompleted: () => clearCompletedShoppingListItemsOnD1(d1, { shoppingListId, now: new Date() }),
     clearAll: () => clearShoppingListOnD1(d1, { shoppingListId, now: new Date() }),
@@ -448,7 +480,7 @@ async function prismaShoppingListWrites(database: PrismaClient, userId: string):
       return true;
     },
 
-    async toggle(itemId, nextChecked) {
+    async setChecked(itemId, willBeChecked) {
       const item = await database.shoppingListItem.findFirst({
         where: {
           id: itemId,
@@ -458,8 +490,6 @@ async function prismaShoppingListWrites(database: PrismaClient, userId: string):
 
       /* istanbul ignore else -- @preserve item should exist if toggling */
       if (item) {
-        const willBeChecked = nextChecked ?? !item.checked;
-
         // One write to this row only. Checking keeps the row where it is, so the list needs no
         // renumbering, and renumbering here would race the user's next tap on another row.
         await database.shoppingListItem.update({

@@ -6,6 +6,8 @@ import { getLocalDb } from "~/lib/db.server";
 import { createUserSessionCookie } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
+import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 import { createTestUser } from "../utils";
 
 // The new-step page writes the step, its step output uses and its ingredients as one D1 batch,
@@ -190,5 +192,74 @@ describe("adding a step on a D1 binding", () => {
 
     expect(answer).toMatchObject({ status: 500, errors: { general: "Failed to create step. Please try again." } });
     expect((await steps()).map((step) => step.stepNum)).toEqual([1]);
+  });
+});
+
+describe("adding a step when D1's connection drops", () => {
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    d1 = sqliteD1();
+    chefId = (await db.user.create({ data: createTestUser() })).id;
+    cookie = (await createUserSessionCookie(chefId)).split(";")[0]!;
+    recipeId = await seed();
+  });
+
+  afterEach(async () => {
+    vi.doUnmock("~/lib/route-platform.server");
+    d1.close();
+    await cleanupDatabase();
+  });
+
+  const STEP_WRITE = /INSERT INTO "RecipeStep"/;
+  const withToken = (body: UndiciFormData, token: string | null) => {
+    if (token) body.append("stepToken", token);
+    return body;
+  };
+  const cases = [
+    { name: "no ingredients", ingredients: [], usesSteps: [1] },
+    { name: "an ingredient", ingredients: [{ quantity: 1, unit: "tbsp", ingredientName: "butter" }], usesSteps: [] },
+  ];
+  const outcomes: FlakyOutcome[] = ["lost", "lost-answer", "late"];
+
+  it.each(cases.flatMap((entry) => outcomes.flatMap((outcome) =>
+    [null, "step-form-token"].map((token) => ({ ...entry, outcome, token })))))(
+    "writes the step with $name once when its batch is $outcome (token: $token)",
+    async ({ ingredients, usesSteps, outcome, token }) => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(STEP_WRITE, outcome);
+
+      const answer = await submit(withToken(fields(ingredients, usesSteps), token), flaky.binding);
+
+      const written = await steps();
+      expect(written.map((step) => step.stepNum)).toEqual([1, 2]);
+      expect(answer).toEqual({ status: 302, location: `/recipes/${recipeId}/steps/${written[1]!.id}/edit?created=1`, errors: undefined });
+      expect(written[1]!.ingredients.map((ingredient) => ingredient.ingredientRef.name)).toEqual(ingredients.map((entry) => entry.ingredientName));
+      expect(await db.stepOutputUse.count({ where: { recipeId } })).toBe(usesSteps.length);
+      expect(flaky.failures()).toBe(1);
+
+      if (token) {
+        // A resubmit of the same form goes to the step the first submit wrote.
+        expect(await submit(withToken(fields(ingredients, usesSteps), token))).toEqual(answer);
+        expect((await steps()).map((step) => step.stepNum)).toEqual([1, 2]);
+      }
+    },
+  );
+
+  it("answers a retryable 503 the form shows when every try fails, and the resubmit writes the step once", async () => {
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(STEP_WRITE, "lost", "lost", "lost", "late");
+    const body = () => withToken(fields([{ quantity: 1, unit: "tbsp", ingredientName: "butter" }]), "step-503-token");
+
+    const answer = await submit(body(), flaky.binding);
+
+    expect(answer).toEqual({ status: 503, location: null, errors: { general: D1_WRITE_UNAVAILABLE_MESSAGE } });
+    expect((await steps()).map((step) => step.stepNum)).toEqual([1]);
+
+    // The last try lands just as the cook saves again: one step, and the save goes to it.
+    const resubmitted = await submit(body(), flaky.binding);
+    const written = await steps();
+    expect(written.map((step) => step.stepNum)).toEqual([1, 2]);
+    expect(resubmitted).toMatchObject({ status: 302, location: `/recipes/${recipeId}/steps/${written[1]!.id}/edit?created=1` });
   });
 });

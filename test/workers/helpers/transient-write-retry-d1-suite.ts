@@ -12,6 +12,8 @@ import { createSpoonOnD1 } from "../../../app/lib/recipe-spoon-d1.server";
 import { createUserSessionCookie } from "../../../app/lib/session.server";
 import { createCookbookWithRecipeOnD1, deleteSpoonOnD1 } from "../../../app/lib/recipe-detail-d1-actions.server";
 import { flakyD1 } from "../../helpers/flaky-d1";
+import { d1WriteOnceKey } from "../../../app/lib/d1-write-once.server";
+import { addShoppingListItemOnD1, ensureShoppingListIdOnD1, setShoppingListItemCheckedOnD1 } from "../../../app/lib/shopping-list-d1-actions.server";
 import { applyRepositoryMigrations } from "./repository-migrations";
 
 // Writes that meet a dropped D1 connection, against Wrangler's real D1 (workerd). D1 may have
@@ -149,6 +151,54 @@ describe("writes on Wrangler D1 when its connection drops", () => {
 
       expect(flaky.failures()).toBe(1);
       expect(await count(`SELECT COUNT(*) AS "count" FROM "RecipeSpoon" WHERE "id" = 'transient-spoon-1' AND "deletedAt" IS NOT NULL`)).toBe(1);
+    });
+  });
+
+  describe("the shopping list's adds and checks", () => {
+    const lemons = async (listId: string, outcome: "lost-answer" | "late" | null, token: string) => {
+      const flaky = flakyD1(database());
+      if (outcome) flaky.failNext(/"ApiIdempotencyKey"[\s\S]*"ShoppingListItem"/, outcome);
+      const request = { ingredientText: "2 lemons" };
+      await addShoppingListItemOnD1(flaky.binding, {
+        shoppingListId: listId,
+        ingredientName: "transient lemon",
+        unitName: null,
+        quantity: 2,
+        categoryKey: null,
+        iconKey: null,
+        writeKey: await d1WriteOnceKey({ userId: COOK, operation: "shopping_list.add_item", token, request }),
+        now: new Date(),
+      });
+      return flaky.failures();
+    };
+    const quantity = async (listId: string) => (await database().prepare(
+      `SELECT i."quantity" AS "count" FROM "ShoppingListItem" i JOIN "IngredientRef" r ON r."id" = i."ingredientRefId"
+       WHERE i."shoppingListId" = ? AND r."name" = 'transient lemon'`,
+    ).bind(listId).first<{ count: number }>())!.count;
+
+    it("adds once when the add committed but its answer was lost, or landed late, and once more for a new token", async () => {
+      const listId = await ensureShoppingListIdOnD1(database(), COOK, new Date());
+
+      expect(await lemons(listId, "lost-answer", "lemon-token-1")).toBe(1);
+      expect(await quantity(listId)).toBe(2);
+      expect(await lemons(listId, "late", "lemon-token-2")).toBe(1);
+      expect(await quantity(listId)).toBe(4);
+      // A resubmit of either form adds nothing more.
+      await lemons(listId, null, "lemon-token-1");
+      await lemons(listId, null, "lemon-token-2");
+      expect(await quantity(listId)).toBe(4);
+    });
+
+    it("sets an item's checked state once when the answer was lost", async () => {
+      const listId = await ensureShoppingListIdOnD1(database(), COOK, new Date());
+      const item = await database().prepare(`SELECT "id" FROM "ShoppingListItem" WHERE "shoppingListId" = ?`).bind(listId).first<{ id: string }>();
+      const flaky = flakyD1(database());
+      flaky.failNext(/UPDATE "ShoppingListItem"/, "lost-answer");
+
+      await setShoppingListItemCheckedOnD1(flaky.binding, { shoppingListId: listId, itemId: item!.id, checked: true, now: new Date() });
+
+      expect(flaky.failures()).toBe(1);
+      expect(await count(`SELECT "checked" AS "count" FROM "ShoppingListItem" WHERE "id" = ?`, item!.id)).toBe(1);
     });
   });
 

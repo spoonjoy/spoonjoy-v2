@@ -1490,8 +1490,9 @@ describe("connector token issuance + rotation", () => {
           },
         },
       ),
-    ).rejects.toMatchObject({ code: "invalid_grant" });
-    expect(observedMutations).toEqual(["parent_revoke:before"]);
+    ).rejects.toMatchObject({ code: "invalid_grant", message: "Refresh token already used" });
+    // A lost race reads the token once more before giving up.
+    expect(observedMutations).toEqual(["parent_revoke:before", "parent_revoke:before"]);
   });
 });
 

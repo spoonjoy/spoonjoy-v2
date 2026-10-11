@@ -3,6 +3,8 @@ import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/ses
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { d1Boolean, d1Count, d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { newReservationId } from "~/lib/api-idempotency.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
 
@@ -231,16 +233,42 @@ export function resolvePersonalTokenExpiry(value: unknown, now: Date = new Date(
   return new Date(now.getTime() + value * DAY_MS);
 }
 
+export interface ApiCredentialOptions {
+  expiresAt?: Date | null;
+  scopes?: string | string[] | null;
+  oauthClientId?: string | null;
+  oauthIssuer?: string | null;
+  oauthResource?: string | null;
+  oauthConnectionKey?: string | null;
+  oauthGrantId?: string | null;
+  /** The secret to store, when the caller chose it (an OAuth rotation derives it); otherwise a new one. */
+  token?: string;
+}
+
+/**
+ * Creates a credential and answers its secret. The secret and the row id are chosen before the
+ * first try, so after a transient D1 error the insert runs again with both: a try that had
+ * committed makes the retry fail on the id, and the row it wrote is answered with the same secret.
+ * The caller therefore always holds the secret of the one row that exists. If every try fails,
+ * a try that commits later leaves a row whose secret nobody holds (only its hash is stored), so
+ * it can authenticate no one; the owner sees it in their token list and can revoke it.
+ */
 export async function createApiCredential(
   db: PrismaClientType,
   userId: string,
   name: string,
-  options: { expiresAt?: Date | null; scopes?: string | string[] | null; oauthClientId?: string | null; oauthIssuer?: string | null; oauthResource?: string | null; oauthConnectionKey?: string | null; oauthGrantId?: string | null } = {}
+  options: ApiCredentialOptions = {}
 ): Promise<CreatedApiCredential> {
-  const token = generateApiToken();
+  const token = options.token ?? generateApiToken();
   const tokenHash = await hashApiToken(token);
-  const credential = await db.apiCredential.create({
+  // Shaped like the cuid Prisma would choose, as every credential id was before.
+  const id = newReservationId(new Date());
+  const credential = await retryD1Write({
+    scope: "api_credential.create",
+    applied: () => db.apiCredential.findFirst({ where: { id, tokenHash } }),
+  }, () => db.apiCredential.create({
     data: {
+      id,
       userId,
       name: name.trim(),
       tokenHash,
@@ -253,7 +281,7 @@ export async function createApiCredential(
       oauthGrantId: options.oauthGrantId ?? null,
       expiresAt: options.expiresAt ?? null,
     },
-  });
+  }));
 
   return { token, credential };
 }
@@ -312,13 +340,26 @@ export async function createApiCredentialForPrincipal(
     ...guardValues,
   ];
   const [sql, ...values] = query;
-  const inserted = options.d1
-    ? (await d1WriteBatch(options.d1, [query]))[0].changes
-    : await db.$executeRawUnsafe(sql, ...values);
-  if (inserted !== 1) {
-    throw new ApiAuthError("Your session was signed out. Sign in again to create a token.", 401);
-  }
+  const d1 = options.d1;
+  // The id and secret are chosen before the first try, so a retry after a transient D1 error
+  // fails on the id when an earlier try committed, and that try's row is the one answered, with
+  // the secret this request holds (see `createApiCredential`).
+  const inserted = await retryD1Write({
+    scope: "api_credential.create_fenced",
+    applied: async () => {
+      const row = await db.apiCredential.findUnique({ where: { id }, select: { revokedAt: true } });
+      if (!row) return null;
+      // Signed out everywhere after the earlier try committed: the token it wrote is already revoked.
+      if (row.revokedAt) throw signedOutError();
+      return 1;
+    },
+  }, async () => d1 ? (await d1WriteBatch(d1, [query]))[0].changes : await db.$executeRawUnsafe(sql, ...values));
+  if (inserted !== 1) throw signedOutError();
   return { token, credential: await db.apiCredential.findUniqueOrThrow({ where: { id } }) };
+}
+
+function signedOutError(): ApiAuthError {
+  return new ApiAuthError("Your session was signed out. Sign in again to create a token.", 401);
 }
 
 function isRecordNotFound(error: unknown): boolean {
