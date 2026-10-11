@@ -91,33 +91,40 @@ function interleaved(before: () => Promise<unknown>, statement?: RegExp): D1Data
     pending = false;
     await before();
   };
-  const hooked = (bound: D1PreparedStatement): D1PreparedStatement => ({
-    bind: (...values: unknown[]) => hooked(bound.bind(...values)),
-    first: async (...args: unknown[]) => {
-      await runBefore();
-      return (bound.first as (...a: unknown[]) => Promise<unknown>)(...args);
-    },
-    all: async () => {
-      await runBefore();
-      return bound.all();
-    },
-    raw: async (...args: unknown[]) => {
-      await runBefore();
-      return (bound.raw as (...a: unknown[]) => Promise<unknown>)(...args);
-    },
-    run: async () => {
-      await runBefore();
-      return bound.run();
-    },
-  }) as never;
+  // A hooked statement in a batch runs `before` ahead of the batch: a batch is one transaction, so
+  // that is the only place another write can land.
+  const unwrapped = new WeakMap<object, D1PreparedStatement>();
+  const hooked = (bound: D1PreparedStatement): D1PreparedStatement => {
+    const hook = {
+      bind: (...values: unknown[]) => hooked(bound.bind(...values)),
+      first: async (...args: unknown[]) => {
+        await runBefore();
+        return (bound.first as (...a: unknown[]) => Promise<unknown>)(...args);
+      },
+      all: async () => {
+        await runBefore();
+        return bound.all();
+      },
+      raw: async (...args: unknown[]) => {
+        await runBefore();
+        return (bound.raw as (...a: unknown[]) => Promise<unknown>)(...args);
+      },
+      run: async () => {
+        await runBefore();
+        return bound.run();
+      },
+    };
+    unwrapped.set(hook, bound);
+    return hook as never;
+  };
   return {
     prepare: (sql: string) => (statement?.test(sql) && pending ? hooked(real.prepare(sql)) : real.prepare(sql)),
     exec: (sql: string) => real.exec(sql),
     dump: () => real.dump(),
     withSession: (...args: unknown[]) => (real.withSession as (...a: unknown[]) => unknown)(...args),
     async batch(statements: D1PreparedStatement[]) {
-      if (!statement) await runBefore();
-      return real.batch(statements);
+      if (!statement || statements.some((each) => unwrapped.has(each))) await runBefore();
+      return real.batch(statements.map((each) => unwrapped.get(each) ?? each));
     },
   } as never;
 }
@@ -345,12 +352,13 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
           context: routeContext() as never,
         });
       };
-      const interleavedPrisma = await getDb({ DB: interleaved(webAdd, addition) });
+      const binding = interleaved(webAdd, addition);
+      const interleavedPrisma = await getDb({ DB: binding });
 
       await callSpoonjoyApiOperation(
         "add_shopping_list_item",
         { name: "sca apples", unit: "sca each", quantity: 2 },
-        { ...mcp(), db: interleavedPrisma },
+        { ...mcp(binding), db: interleavedPrisma },
       );
 
       expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 1 + 3 + 2, deleted: 0, checked: 0 }]);
