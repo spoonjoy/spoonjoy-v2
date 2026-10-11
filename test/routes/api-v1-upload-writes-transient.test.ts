@@ -225,30 +225,16 @@ describe("recipe image upload writes after a transient D1 error", () => {
     await expect(db.apiIdempotencyKey.count({ where: { key: clientMutationId } })).resolves.toBe(0);
   });
 
-  it("answers a cook link the database never takes as a failure, and undoes the upload", async () => {
+  it("answers a cook link the database never takes as retryable, and undoes the upload", async () => {
     failNext(db, "recipeCover", "update", (args) => args?.data?.sourceSpoonId !== undefined, ...GIVE_UP);
-    // The logged error carries its stack; a fixed stack lets the warning policy match the line.
-    const prepareStackTrace = Error.prepareStackTrace;
-    Error.prepareStackTrace = () => "stack";
-    expectConsoleError("[api-v1] internal_error", {
-      requestId: "req_link_give_up",
-      method: "POST",
-      path: `/api/v1/recipes/${recipeId}/image`,
-      error: {
-        name: "D1WriteUnavailableError",
-        message: "The database was briefly unavailable, so cover.link_spoon was not saved",
-        stack: "stack",
-      },
-    });
     const photos = photoBucket();
 
-    try {
-      const response = await upload("req_link_give_up", "link-give-up", photos.bucket);
+    const response = await upload("req_link_give_up", "link-give-up", photos.bucket);
 
-      expect(response.status).toBeGreaterThanOrEqual(500);
-    } finally {
-      Error.prepareStackTrace = prepareStackTrace;
-    }
+    // A D1 outage is answered as retryable, so the client sends the same upload again.
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "temporarily_unavailable" } });
     await expect(rows()).resolves.toEqual({ covers: [], spoons: [], markers: 0 });
     expect(photos.keys.size).toBe(0);
   });
