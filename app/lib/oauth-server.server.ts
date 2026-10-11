@@ -16,8 +16,10 @@
  */
 
 import type { OAuthRefreshToken as OAuthRefreshTokenRecord, PrismaClient as PrismaClientType } from "@prisma/client";
-import { createApiCredential, normalizeCredentialScopes } from "~/lib/api-auth.server";
+import { createApiCredential, generateApiToken, hashApiToken, normalizeCredentialScopes } from "~/lib/api-auth.server";
+import { newReservationId } from "~/lib/api-idempotency.server";
 import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   hasProhibitedOAuthClientNameCharacters,
@@ -618,10 +620,19 @@ export async function consumeAuthorizationCode(
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("code_consumption", "before");
   }
-  const burned = await db.oAuthAuthCode.updateMany({
-    where: { id: record.id, consumedAt: null },
+  // After a transient D1 error the burn runs again; a try that had committed left the code
+  // consumed at this request's own time, which the retry recognises as its own burn.
+  const codeId = record.id;
+  const burned = await retryD1Write({
+    scope: "oauth.consume_code",
+    applied: async () => {
+      const code = await db.oAuthAuthCode.findUnique({ where: { id: codeId }, select: { consumedAt: true } });
+      return code?.consumedAt?.getTime() === now.getTime() ? { count: 1 } : null;
+    },
+  }, () => db.oAuthAuthCode.updateMany({
+    where: { id: codeId, consumedAt: null },
     data: { consumedAt: now },
-  });
+  }));
   if (burned.count !== 1) {
     throw new OAuthError("invalid_grant", "Authorization code already used");
   }
@@ -856,8 +867,15 @@ async function resolveConnectorGrant(
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("grant_insert", "before");
   }
-  const created = await db.oAuthGrant.create({
+  // The id is chosen before the first try, so a retry after a transient D1 error fails on it
+  // when an earlier try committed, and that grant is the one used.
+  const newGrantId = newReservationId(input.now);
+  const created = await retryD1Write({
+    scope: "oauth.grant_create",
+    applied: () => db.oAuthGrant.findUnique({ where: { id: newGrantId } }),
+  }, () => db.oAuthGrant.create({
     data: {
+      id: newGrantId,
       userId: input.userId,
       clientId: input.clientId,
       issuer: input.issuer,
@@ -869,7 +887,7 @@ async function resolveConnectorGrant(
       createdAt: input.now,
       updatedAt: input.now,
     },
-  });
+  }));
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("grant_insert", "after");
   }
@@ -891,32 +909,79 @@ function oauthCredentialName(clientName: string | null): string {
   return `${clientName?.trim() || "OAuth client"} (OAuth)`;
 }
 
+/** The secrets of one access and refresh token pair. */
+export interface ConnectorTokenSecrets {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface IssueConnectorTokensInput {
+  userId: string;
+  clientId: string;
+  scope: string;
+  resource?: string | null;
+  persistentMcpResource?: string | null;
+  issuer: string;
+  now?: Date;
+  connectionKey?: string | null;
+  grantId?: string | null;
+  /**
+   * The account's session version, read at the start of the flow (see
+   * `requireSessionVersionFence`). A new grant is kept only while it is unchanged.
+   */
+  sessionVersion: number;
+  /** The pair's secrets when the caller chose them (a rotation derives them); otherwise new ones. */
+  secrets?: ConnectorTokenSecrets;
+}
+
+const SUCCESSOR_DERIVATION_LABEL = "spoonjoy.oauth.refresh-successor.v1";
+
 /**
- * Mint a fresh access token plus a refresh token bound to the same
- * user/client/scope. Used by both the authorization_code grant and refresh
- * rotation.
+ * The token pair a refresh token rotates to. With a key (the deployment's SESSION_SECRET), the
+ * pair is derived from the presented refresh token and its row id, so every request that rotates
+ * the same refresh token computes the same pair. That is what lets a client whose rotation
+ * committed after its answer was lost (the request gave up with a 503, and D1 applied the write
+ * late) present the old token again and receive the pair that is now live, rather than nothing
+ * (see `replayUnusedSuccessor`). Deriving needs the presented secret, which only its holder has,
+ * the row id, which only the database has, and the key; with all three one already holds an
+ * account's sessions, so it gives nothing new. Without a key the pair is random and is never
+ * replayed: a lost answer then leaves the client to sign in again, as before.
  */
-export async function issueConnectorTokens(
+export async function successorTokenSecrets(
+  parentRefreshToken: string,
+  parentId: string,
+  key: string | null | undefined,
+): Promise<ConnectorTokenSecrets> {
+  if (!key) return newConnectorTokenSecrets();
+  const encoder = new TextEncoder();
+  const hmac = await crypto.subtle.importKey("raw", encoder.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const derive = async (kind: string) => base64UrlEncode(new Uint8Array(await crypto.subtle.sign(
+    "HMAC",
+    hmac,
+    encoder.encode(`${SUCCESSOR_DERIVATION_LABEL}\u0000${kind}\u0000${parentId}\u0000${parentRefreshToken}`),
+  )));
+  return { accessToken: `sj_${await derive("access")}`, refreshToken: `ort_${await derive("refresh")}` };
+}
+
+function newConnectorTokenSecrets(): ConnectorTokenSecrets {
+  return { accessToken: generateApiToken(), refreshToken: createOAuthOpaqueToken("ort_") };
+}
+
+/** What a new pair is bound to: the client, the connection, its grant and the access lifetime. */
+interface PreparedConnectorIssue {
+  clientName: string | null;
+  clientIssuer: string | null;
+  connectionKey: string;
+  canonicalScope: string;
+  grantId: string;
+  expiresIn: number;
+}
+
+async function prepareConnectorIssue(
   db: Database,
-  input: {
-    userId: string;
-    clientId: string;
-    scope: string;
-    resource?: string | null;
-    persistentMcpResource?: string | null;
-    issuer: string;
-    now?: Date;
-    connectionKey?: string | null;
-    grantId?: string | null;
-    /**
-     * The account's session version, read at the start of the flow (see
-     * `requireSessionVersionFence`). A new grant is kept only while it is unchanged.
-     */
-    sessionVersion: number;
-  },
-  dependencies: OAuthPersistenceDependencies = {},
-): Promise<IssuedConnectorTokens> {
-  const now = input.now ?? new Date();
+  input: IssueConnectorTokensInput & { now: Date },
+  dependencies: OAuthPersistenceDependencies,
+): Promise<PreparedConnectorIssue> {
   const client = await getOAuthClient(db, input.clientId, input.issuer);
   if (!client) throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
   const connectionKey = input.connectionKey ?? createOAuthOpaqueToken("ocn_", 16);
@@ -930,53 +995,82 @@ export async function issueConnectorTokens(
     connectionKey,
     grantId: input.grantId,
     sessionVersion: input.sessionVersion,
-    now,
+    now: input.now,
   }, dependencies);
   const persistentAccessToken = Boolean(
     input.resource &&
     input.persistentMcpResource &&
     input.resource === input.persistentMcpResource,
   );
-  const expiresIn = persistentAccessToken ? OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS : OAUTH_ACCESS_TOKEN_TTL_SECONDS;
+  return {
+    clientName: client.clientName,
+    clientIssuer: client.issuer,
+    connectionKey,
+    canonicalScope,
+    grantId,
+    expiresIn: persistentAccessToken ? OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS : OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+  };
+}
+
+/**
+ * Mint a fresh access token plus a refresh token bound to the same
+ * user/client/scope. Used by the authorization_code grant, native sign-in and,
+ * without a D1 binding, refresh rotation.
+ *
+ * Each insert chooses its id and secret before the first try, so after a transient D1 error it
+ * runs again and, if an earlier try had committed, answers that row with the same secret.
+ */
+export async function issueConnectorTokens(
+  db: Database,
+  input: IssueConnectorTokensInput,
+  dependencies: OAuthPersistenceDependencies = {},
+): Promise<IssuedConnectorTokens> {
+  const now = input.now ?? new Date();
+  const issue = await prepareConnectorIssue(db, { ...input, now }, dependencies);
+  const secrets = input.secrets ?? newConnectorTokenSecrets();
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("access_insert", "before");
   }
-  const { token: accessToken } = await createApiCredential(db, input.userId, oauthCredentialName(client.clientName), {
-    expiresAt: new Date(now.getTime() + expiresIn * 1000),
-    scopes: canonicalScope,
+  await createApiCredential(db, input.userId, oauthCredentialName(issue.clientName), {
+    token: secrets.accessToken,
+    expiresAt: new Date(now.getTime() + issue.expiresIn * 1000),
+    scopes: issue.canonicalScope,
     oauthClientId: input.clientId,
-    oauthIssuer: client.issuer,
+    oauthIssuer: issue.clientIssuer,
     oauthResource: input.resource ?? null,
-    oauthConnectionKey: connectionKey,
-    oauthGrantId: grantId,
+    oauthConnectionKey: issue.connectionKey,
+    oauthGrantId: issue.grantId,
   });
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("access_insert", "after");
-  }
-  const refreshToken = createOAuthOpaqueToken("ort_");
-  if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("refresh_insert", "before");
   }
-  await db.oAuthRefreshToken.create({
+  const refreshId = newReservationId(now);
+  const tokenHash = await hashOAuthOpaqueToken(secrets.refreshToken);
+  await retryD1Write({
+    scope: "oauth.refresh_create",
+    applied: () => db.oAuthRefreshToken.findFirst({ where: { id: refreshId, tokenHash } }),
+  }, () => db.oAuthRefreshToken.create({
     data: {
-      tokenHash: await hashOAuthOpaqueToken(refreshToken),
+      id: refreshId,
+      tokenHash,
       userId: input.userId,
       clientId: input.clientId,
-      issuer: client.issuer,
+      issuer: issue.clientIssuer,
       scope: input.scope,
       resource: input.resource ?? null,
-      connectionKey,
-      grantId,
+      connectionKey: issue.connectionKey,
+      grantId: issue.grantId,
       expiresAt: new Date(now.getTime() + OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000),
     },
-  });
+  }));
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("refresh_insert", "after");
   }
   return {
-    accessToken,
-    refreshToken,
-    expiresIn,
+    accessToken: secrets.accessToken,
+    refreshToken: secrets.refreshToken,
+    expiresIn: issue.expiresIn,
     scope: input.scope,
     resource: input.resource ?? null,
   };
@@ -1125,10 +1219,7 @@ async function revokeConnectionOnRefreshReuse(
   const revokedAt = record.revokedAt;
   /* istanbul ignore if -- @preserve callers pass only revoked records */
   if (!revokedAt) return undefined;
-  const graceSeconds = await isFirstPartyNativeClient(db, record.clientId)
-    ? FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS
-    : OAUTH_REFRESH_REUSE_GRACE_SECONDS;
-  if (now.getTime() - revokedAt.getTime() <= graceSeconds * 1000) return "grace_replay";
+  if (await withinReuseGrace(db, record.clientId, revokedAt, now)) return "grace_replay";
   const connectionKey = connectionKeyOf(record);
   const stillActive = await db.oAuthRefreshToken.count({
     where: {
@@ -1141,6 +1232,81 @@ async function revokeConnectionOnRefreshReuse(
   if (stillActive === 0) return undefined;
   await revokeConnection(db, record, now, { status: "compromised", statusReason: "refresh_reuse" });
   return "reuse_revoked";
+}
+
+/** Whether a refresh token revoked at `revokedAt` is still inside its client's reuse grace. */
+async function withinReuseGrace(db: Database, clientId: string, revokedAt: Date, now: Date): Promise<boolean> {
+  const graceSeconds = await isFirstPartyNativeClient(db, clientId)
+    ? FIRST_PARTY_NATIVE_REFRESH_REUSE_GRACE_SECONDS
+    : OAUTH_REFRESH_REUSE_GRACE_SECONDS;
+  return now.getTime() - revokedAt.getTime() <= graceSeconds * 1000;
+}
+
+/**
+ * The pair a rotated refresh token rotated to, when its holder presents it again inside the reuse
+ * grace and nobody has used that pair yet: the rotation committed, but its answer never reached
+ * the client (the request gave up with a 503 and D1 applied the write late). The client gets the
+ * one pair that is live, so it is neither left with no valid token nor given a second pair.
+ *
+ * The pair is found by its derived secrets (`successorTokenSecrets`), so this needs the key.
+ * It must still be untouched: its refresh token not rotated or revoked, its access token never
+ * used and not expired, and its grant active. A pair already in use means its holder got it, so
+ * the replay is refused as before (`grace_replay`), which also keeps a copy of an old refresh
+ * token from picking up a pair someone is using.
+ */
+async function replayUnusedSuccessor(
+  db: Database,
+  parent: OAuthRefreshTokenRecord,
+  input: { refreshToken: string; issuer: string; successorKey?: string | null },
+  now: Date,
+): Promise<IssuedConnectorTokens | null> {
+  if (!input.successorKey || !parent.revokedAt) return null;
+  if (!(await withinReuseGrace(db, parent.clientId, parent.revokedAt, now))) return null;
+  const secrets = await successorTokenSecrets(input.refreshToken, parent.id, input.successorKey);
+  const successor = await db.oAuthRefreshToken.findUnique({
+    where: { tokenHash: await hashOAuthOpaqueToken(secrets.refreshToken) },
+  });
+  if (
+    !successor
+    || successor.revokedAt
+    || successor.userId !== parent.userId
+    || successor.clientId !== parent.clientId
+    || successor.issuer !== input.issuer
+    || successor.connectionKey !== connectionKeyOf(parent)
+    || !successor.expiresAt
+    || successor.expiresAt.getTime() <= now.getTime()
+  ) {
+    return null;
+  }
+  const access = await db.apiCredential.findUnique({
+    where: { tokenHash: await hashApiToken(secrets.accessToken) },
+    select: { revokedAt: true, lastUsedAt: true, expiresAt: true, oauthConnectionKey: true },
+  });
+  if (
+    !access
+    || access.revokedAt
+    || access.lastUsedAt
+    || access.oauthConnectionKey !== successor.connectionKey
+    || !access.expiresAt
+    || access.expiresAt.getTime() - now.getTime() < 1000
+  ) {
+    return null;
+  }
+  const expiresIn = Math.floor((access.expiresAt.getTime() - now.getTime()) / 1000);
+  try {
+    await requireLinkedConnectorGrant(db, successor);
+  } catch (error) {
+    /* istanbul ignore if -- @preserve the grant check throws only OAuthError */
+    if (!(error instanceof OAuthError)) throw error;
+    return null;
+  }
+  return {
+    accessToken: secrets.accessToken,
+    refreshToken: secrets.refreshToken,
+    expiresIn,
+    scope: successor.scope,
+    resource: successor.resource,
+  };
 }
 
 /**
@@ -1171,15 +1337,52 @@ async function expireConnection(db: Database, record: OAuthRefreshTokenRecord, n
   await revokeConnection(db, record, now, { status: "revoked", statusReason: "inactivity_expiry" });
 }
 
+export interface RotateConnectorTokensInput {
+  refreshToken: string;
+  clientId: string;
+  issuer: string;
+  now?: Date;
+  legacyMcpResource?: string | null;
+  /**
+   * The request's D1 binding. With it, revoking the presented refresh token and inserting the new
+   * pair are one D1 batch, so either all of it applies or none does.
+   */
+  d1?: D1ReadDatabase | null;
+  /** The key the new pair is derived with (the deployment's SESSION_SECRET); see `successorTokenSecrets`. */
+  successorKey?: string | null;
+}
+
 /**
  * Exchange a refresh token for a new token pair (RFC 6749 §6) with rotation:
- * the presented token is revoked before a new pair is issued, so a replayed
- * refresh token is rejected. Native D1 transaction hardening is tracked in PR5.
+ * the presented token is revoked as the new pair is issued, so a replayed
+ * refresh token is rejected.
+ *
+ * After a transient D1 error the rotation is safe to retry, and a lost answer never leaves the
+ * client without a valid token or with a second live pair:
+ *
+ * - With a D1 binding, the revoke and both inserts are one batch, guarded on the presented token
+ *   still being unrevoked and its grant active. A batch that never ran is run again with the same
+ *   ids and secrets. One that committed but whose answer was lost makes the retry stop on the
+ *   guard; the retry then finds its own new refresh token by id and answers the pair it holds.
+ * - If every try fails, the request answers a retryable 503. Either nothing committed, and the
+ *   presented token still works, or the batch commits late, and presenting the old token again
+ *   inside the reuse grace answers the pair it rotated to (`replayUnusedSuccessor`).
+ * - A rotation that loses a race with another request for the same token reads it again: the
+ *   other request's pair is answered when it is unused, otherwise the replay is refused as before.
  */
 export async function rotateConnectorTokens(
   db: Database,
-  input: { refreshToken: string; clientId: string; issuer: string; now?: Date; legacyMcpResource?: string | null },
+  input: RotateConnectorTokensInput,
   dependencies: OAuthPersistenceDependencies = {},
+): Promise<IssuedConnectorTokens> {
+  return rotate(db, input, dependencies, false);
+}
+
+async function rotate(
+  db: Database,
+  input: RotateConnectorTokensInput,
+  dependencies: OAuthPersistenceDependencies,
+  afterLostRace: boolean,
 ): Promise<IssuedConnectorTokens> {
   const now = input.now ?? new Date();
   if (!input.refreshToken) throw new OAuthError("invalid_grant", "Missing refresh token");
@@ -1194,6 +1397,8 @@ export async function rotateConnectorTokens(
     if (record.clientId !== input.clientId) {
       throw new OAuthError("invalid_grant", "Unknown or revoked refresh token");
     }
+    const replayed = await replayUnusedSuccessor(db, record, input, now);
+    if (replayed) return replayed;
     // Reuse detection runs first: it leaves a connection the chef already ended as it is, so the
     // reason below still sees that revocation.
     const refusal = await revokeConnectionOnRefreshReuse(db, record, now);
@@ -1245,24 +1450,10 @@ export async function rotateConnectorTokens(
   // the revoke below fails; one that lands later moves the version, so a legacy token's new grant
   // is refused.
   const sessionVersion = await requireSessionVersionFence(db, record.userId);
-  if (dependencies.onPersistenceMutation) {
-    await dependencies.onPersistenceMutation("parent_revoke", "before");
-  }
-  const revoked = await db.oAuthRefreshToken.updateMany({
-    where: { id: record.id, revokedAt: null },
-    data: { revokedAt: now },
-  });
-  if (revoked.count !== 1) {
-    throw new OAuthError("invalid_grant", "Refresh token already used");
-  }
-  if (dependencies.onPersistenceMutation) {
-    await dependencies.onPersistenceMutation("parent_revoke", "after");
-    await dependencies.onPersistenceMutation("replacement_insert", "before");
-  }
   // The access token issued with the presented refresh token stays valid until its own expiry:
   // the iPhone app's processes refresh independently, and revoking it here would fail requests
   // another process has in flight. Reuse detection, disconnect and account revocation end it.
-  const replacement = await issueConnectorTokens(db, {
+  const issueInput = {
     userId: record.userId,
     clientId: record.clientId,
     scope: record.scope,
@@ -1273,9 +1464,119 @@ export async function rotateConnectorTokens(
     connectionKey: record.connectionKey ?? record.id,
     grantId: record.grantId,
     sessionVersion,
-  }, dependencies);
+    secrets: await successorTokenSecrets(input.refreshToken, record.id, input.successorKey),
+  };
+  const lostRace = () => {
+    // Revoking is one-way, so the second read finds the token revoked; if it somehow does not, give up.
+    if (afterLostRace) throw new OAuthError("invalid_grant", "Refresh token already used");
+    return rotate(db, input, dependencies, true);
+  };
+  if (input.d1) {
+    try {
+      return await rotateOnD1(db, input.d1, record.id, issueInput, dependencies);
+    } catch (error) {
+      if (!isD1GuardFailure(error)) throw error;
+      return lostRace();
+    }
+  }
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("parent_revoke", "before");
+  }
+  const revoked = await db.oAuthRefreshToken.updateMany({
+    where: { id: record.id, revokedAt: null },
+    data: { revokedAt: now },
+  });
+  if (revoked.count !== 1) return lostRace();
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("parent_revoke", "after");
+    await dependencies.onPersistenceMutation("replacement_insert", "before");
+  }
+  const replacement = await issueConnectorTokens(db, issueInput, dependencies);
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("replacement_insert", "after");
   }
   return replacement;
+}
+
+/**
+ * Rotation as one D1 batch: guards that the presented refresh token is still unrevoked and its
+ * grant active, then its revoke and the new access and refresh tokens. A guard that stops it
+ * throws a D1 guard failure, and nothing in the batch applies.
+ */
+async function rotateOnD1(
+  db: Database,
+  d1: D1ReadDatabase,
+  parentId: string,
+  input: IssueConnectorTokensInput & { now: Date; secrets: ConnectorTokenSecrets },
+  dependencies: OAuthPersistenceDependencies,
+): Promise<IssuedConnectorTokens> {
+  const issue = await prepareConnectorIssue(db, input, dependencies);
+  const { now, secrets } = input;
+  const at = d1Timestamp(now);
+  const accessId = newReservationId(now);
+  const refreshId = newReservationId(now);
+  const tokens: IssuedConnectorTokens = {
+    accessToken: secrets.accessToken,
+    refreshToken: secrets.refreshToken,
+    expiresIn: issue.expiresIn,
+    scope: input.scope,
+    resource: input.resource ?? null,
+  };
+  const statements: D1Query[] = [
+    d1Guard(`EXISTS (SELECT 1 FROM "OAuthRefreshToken" WHERE "id" = ? AND "revokedAt" IS NULL)`, parentId),
+    d1Guard(`EXISTS (SELECT 1 FROM "OAuthGrant" WHERE "id" = ? AND "status" = 'active')`, issue.grantId),
+    [`UPDATE "OAuthRefreshToken" SET "revokedAt" = ? WHERE "id" = ? AND "revokedAt" IS NULL`, at, parentId],
+    [
+      `INSERT INTO "ApiCredential" (
+         "id", "userId", "name", "tokenHash", "tokenPrefix", "scopes", "oauthClientId", "oauthIssuer",
+         "oauthResource", "oauthConnectionKey", "oauthGrantId", "expiresAt", "createdAt", "updatedAt"
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      accessId,
+      input.userId,
+      oauthCredentialName(issue.clientName),
+      await hashApiToken(secrets.accessToken),
+      secrets.accessToken.slice(0, 12),
+      issue.canonicalScope,
+      input.clientId,
+      issue.clientIssuer,
+      input.resource ?? null,
+      issue.connectionKey,
+      issue.grantId,
+      d1Timestamp(new Date(now.getTime() + issue.expiresIn * 1000)),
+      at,
+      at,
+    ],
+    [
+      `INSERT INTO "OAuthRefreshToken" (
+         "id", "tokenHash", "userId", "clientId", "issuer", "scope", "resource", "connectionKey",
+         "grantId", "expiresAt", "createdAt"
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      refreshId,
+      await hashOAuthOpaqueToken(secrets.refreshToken),
+      input.userId,
+      input.clientId,
+      issue.clientIssuer,
+      input.scope,
+      input.resource ?? null,
+      issue.connectionKey,
+      issue.grantId,
+      d1Timestamp(new Date(now.getTime() + OAUTH_REFRESH_TOKEN_TTL_SECONDS * 1000)),
+      at,
+    ],
+  ];
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("parent_revoke", "before");
+  }
+  await retryD1Write({
+    scope: "oauth.rotate_refresh",
+    // The new refresh token's id is this request's own, so finding it means an earlier try committed.
+    applied: async () => (await db.oAuthRefreshToken.findUnique({ where: { id: refreshId }, select: { id: true } })) ? tokens : null,
+  }, async () => {
+    await d1WriteBatch(d1, statements);
+    return tokens;
+  });
+  if (dependencies.onPersistenceMutation) {
+    await dependencies.onPersistenceMutation("replacement_insert", "after");
+  }
+  return tokens;
 }

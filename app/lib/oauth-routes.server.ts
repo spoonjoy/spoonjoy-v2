@@ -11,6 +11,13 @@
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { getCurrentSessionIdentity, getUserId } from "~/lib/session.server";
 import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
+import { d1Binding } from "~/lib/d1-read.server";
+import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+  isD1Unavailable,
+} from "~/lib/d1-write-retry.server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
   clientAllowsRedirect,
@@ -41,6 +48,8 @@ type Database = PrismaClientType;
 interface OAuthEnv {
   SESSION_SECRET?: string;
   SPOONJOY_BASE_URL?: string;
+  /** The D1 binding, so a refresh rotation writes as one batch. */
+  DB?: unknown;
 }
 
 export interface OAuthRegisterTelemetryMetadata {
@@ -458,6 +467,8 @@ export async function handleOAuthToken(
         clientId: field("client_id"),
         issuer,
         legacyMcpResource: mcpResourceUrl(issuer),
+        d1: d1Binding(env?.DB),
+        successorKey: env?.SESSION_SECRET,
       });
       return withOAuthTokenTelemetry(
         tokenResponse(tokens),
@@ -490,6 +501,18 @@ export async function handleOAuthToken(
           errorCode: error.code,
           ...(error.refusal ? { refusal: error.refusal } : {}),
         },
+      );
+    }
+    // The database was briefly unavailable and the write could not be made safely: a retryable
+    // 503. Either nothing was written, so the same request works again, or a rotation committed
+    // late, and presenting the same refresh token again answers the pair it rotated to.
+    if (isD1Unavailable(error)) {
+      return withOAuthTokenTelemetry(
+        Response.json(
+          { error: D1_WRITE_UNAVAILABLE_CODE, error_description: D1_WRITE_UNAVAILABLE_MESSAGE },
+          { status: 503, headers: d1UnavailableHeaders() },
+        ),
+        { outcome: "error", grantType: safeGrantType, clientId, errorCode: D1_WRITE_UNAVAILABLE_CODE },
       );
     }
     return oauthErrorResponse(error);

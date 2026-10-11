@@ -1,5 +1,6 @@
 import type { AgentConnectionRequest, PrismaClient as PrismaClientType } from "@prisma/client";
 import { ApiAuthError, createApiCredential, hashApiToken } from "~/lib/api-auth.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { normalizeScope, OAuthError } from "~/lib/oauth-server.server";
 import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import {
@@ -413,19 +414,29 @@ export async function pollAgentConnection(
         expiresAt: tokenExpiresAt,
       },
     );
-    const claimed = await db.agentConnectionRequest.updateMany({
+    // After a transient D1 error the claim runs again. A try that had committed left the request
+    // claimed with this request's credential, which the retry recognises as its own claim, so the
+    // token it minted is answered rather than revoked as a loser's.
+    const claimed = await retryD1Write({
+      scope: "agent_connection.claim",
+      applied: async () => {
+        const row = await db.agentConnectionRequest.findUnique({ where: { id: current.id }, select: { credentialId: true } });
+        return row?.credentialId === created.credential.id ? { count: 1 } : null;
+      },
+    }, () => db.agentConnectionRequest.updateMany({
       where: { id: current.id, status: "approved", claimedAt: null },
       data: {
         status: "claimed",
         credentialId: created.credential.id,
         claimedAt: now,
       },
-    });
+    }));
     if (claimed.count !== 1) {
-      await db.apiCredential.update({
+      // Revoking sets a fixed value, so it runs again after a transient D1 error.
+      await retryD1Write({ scope: "agent_connection.revoke_unclaimed" }, () => db.apiCredential.update({
         where: { id: created.credential.id },
         data: { revokedAt: now },
-      });
+      }));
       // A concurrent poll claimed the request first; the credential we just
       // minted is now orphaned and revoked. Surface this otherwise-silent race
       // so a misbehaving client (or a real bug) hammering poll is observable.

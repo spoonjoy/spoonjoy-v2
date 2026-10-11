@@ -28,6 +28,16 @@ import { touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.s
 import { requestD1 } from "~/lib/d1-read.server";
 import { isD1GuardFailure } from "~/lib/d1-write.server";
 import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+  formWriteToken,
+  idForWriteToken,
+  isD1Unavailable,
+  retryD1Write,
+} from "~/lib/d1-write-retry.server";
+import { useWriteToken } from "~/hooks/use-write-token";
+import {
   createRecipeStepOnD1,
   ingredientAlreadyInRecipe,
   RECIPE_CHANGED_MESSAGE,
@@ -179,6 +189,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
   }
 
+  // The step's id comes from the form's token, made when the page opened, so a resubmit (after a
+  // 503, or a double tap) finds the step the first submit wrote and goes to it.
+  const stepToken = formWriteToken(formData.get("stepToken"));
+  const stepId = stepToken ? await idForWriteToken(`step:${id}`, userId, stepToken) : crypto.randomUUID();
+  const stepWritten = async () =>
+    (await database.recipeStep.findFirst({ where: { id: stepId, recipeId: id }, select: { id: true } })) !== null;
+  if (stepToken && (await stepWritten())) {
+    return redirect(`/recipes/${id}/steps/${stepId}/edit?created=1`);
+  }
+
   const stepTitle = formData.get("stepTitle")?.toString() || "";
   const description = formData.get("description")?.toString() || "";
   const ingredientsJson = formData.get("ingredientsJson")?.toString() || "[]";
@@ -282,25 +302,35 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       );
     }
 
-    const stepId = crypto.randomUUID();
     const stepTitleValue = stepTitle.trim() || null;
     const descriptionValue = description.trim();
     const d1 = requestD1(context);
     if (d1) {
       try {
-        await createRecipeStepOnD1(d1, {
-          recipeId: id,
-          stepId,
-          stepNum: nextStepNum,
-          stepTitle: stepTitleValue,
-          description: descriptionValue,
-          usesSteps,
-          rows,
-        });
+        // The step's id is chosen before the first try, so after a transient D1 error the write
+        // asks whether that step is in; if so it is done, and if not it runs again. A late apply
+        // of the earlier try stops the retry's guards, and the same check then finds the step.
+        await retryD1Write(
+          { scope: "recipe.create_step", applied: async () => ((await stepWritten()) ? true : null) },
+          async () => {
+            await createRecipeStepOnD1(d1, {
+              recipeId: id,
+              stepId,
+              stepNum: nextStepNum,
+              stepTitle: stepTitleValue,
+              description: descriptionValue,
+              usesSteps,
+              rows,
+            });
+            return true;
+          },
+        );
       } catch (error) {
         // Another request added a step or one of these ingredients in between; nothing was
-        // written.
+        // written. That request may be an earlier submit of this same form, landing late: then
+        // the step is the one this form writes.
         if (!isD1GuardFailure(error)) throw error;
+        if (await stepWritten()) return redirect(`/recipes/${id}/steps/${stepId}/edit?created=1`);
         const raced = await ingredientAlreadyInRecipe(database, id, ingredientNames);
         return raced
           ? data({ errors: { ingredientName: `${raced} is already in the recipe` } }, { status: 400 })
@@ -343,6 +373,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
     return redirect(`/recipes/${id}/steps/${stepId}/edit?created=1`);
   } catch (error) {
+    // The database was briefly unavailable: a retryable 503 the form shows, keeping what the cook
+    // entered, with the same token, so saving again writes the step once.
+    if (isD1Unavailable(error)) {
+      return data(
+        { errors: { general: D1_WRITE_UNAVAILABLE_MESSAGE }, errorCode: D1_WRITE_UNAVAILABLE_CODE, retryable: true as const },
+        { status: 503, headers: d1UnavailableHeaders() },
+      );
+    }
     // Validation + duplicate checks happened above and surface as 400s; reaching
     // here means the step/ingredient persistence itself failed (DB/infra fault).
     // The real error was previously discarded behind this generic 500 — capture
@@ -377,6 +415,8 @@ export default function NewStep() {
   const [ingredientInputMode, setIngredientInputMode] = useState<IngredientInputMode>("ai");
   const [ingredients, setIngredients] = useState<ParsedIngredient[]>([]);
   const [parsedIngredients, setParsedIngredients] = useState<ParsedIngredient[]>([]);
+  // One step per opening of the page: a save after a 503, or a double tap, writes it once.
+  const [stepToken] = useWriteToken();
   const navigate = useNavigate();
   const stepTitleErrorId = "new-step-title-error";
   const usesStepsErrorId = "new-step-uses-steps-error";
@@ -433,6 +473,7 @@ export default function NewStep() {
         )}
 
         <Form method="post" className="sj-form-section">
+          <input type="hidden" name="stepToken" value={stepToken} />
           <Fieldset className="space-y-6">
             <Field>
               <Label>Step Title (optional)</Label>
