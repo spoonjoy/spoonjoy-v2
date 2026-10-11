@@ -1914,6 +1914,39 @@ describe("Cookbooks $id Route", () => {
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
 
+      it("keeps the editor open with the new title when the database was briefly unavailable", async () => {
+        renderRenameStub(() =>
+          routerData(
+            { intent: "updateTitle", error: "Spoonjoy couldn't save that just now. Please try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },
+            { status: 503 },
+          ),
+        );
+
+        const input = await openTitleEditor();
+        fireEvent.change(input, { target: { value: "Renamed Title" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      });
+
+      it("says so when deleting could not be saved because the database was briefly unavailable", async () => {
+        renderRenameStub(() =>
+          routerData(
+            { intent: "delete", error: "Spoonjoy couldn't save that just now. Please try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },
+            { status: 503 },
+          ),
+        );
+
+        await openOwnerTools();
+        fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
+        fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
+
+        expect(await screen.findByRole("status")).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        expect(screen.getByRole("heading", { name: "Original Title", level: 1 })).toBeInTheDocument();
+      });
+
       it("ignores other intents' results", async () => {
         renderRenameStub(() => ({ success: true }));
 
