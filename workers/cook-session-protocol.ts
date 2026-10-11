@@ -29,10 +29,18 @@ const RECIPE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const ATTEMPT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MUTATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const PATCH_KEYS = ["attemptId", "changes", "expectedRevision", "mutationId"];
-const CHANGE_KEYS = new Set(["activeStepIndex", "scaleFactor", "checkedIngredientIds", "checkedStepOutputIds"]);
+const CHANGE_KEYS = new Set(["activeStepIndex", "activeStepId", "scaleFactor", "checkedIngredientIds", "checkedStepOutputIds"]);
 
 export interface CookProgress {
   activeStepIndex: number;
+  /**
+   * The current step's id. The step is kept by id so it survives the recipe's steps being
+   * reordered; the Worker works out `activeStepIndex` from it against the recipe as it is now.
+   * Null for a session last written before the id existed, and for a recipe without steps.
+   * Clients that send only `activeStepIndex` (the native app, older pages) still work: the
+   * Worker fills in the id of the step at that index.
+   */
+  activeStepId: string | null;
   scaleFactor: number;
   checkedIngredientIds: string[];
   checkedStepOutputIds: string[];
@@ -85,6 +93,11 @@ function parseChanges(value: unknown): CookProgressChanges | null {
     if (!Number.isSafeInteger(index) || (index as number) < 0 || (index as number) > MAX_COOK_STEP_INDEX) return null;
     changes.activeStepIndex = index as number;
   }
+  if ("activeStepId" in value) {
+    const id = value.activeStepId;
+    if (id !== null && (typeof id !== "string" || id.length === 0 || id.length > MAX_COOK_ID_LENGTH)) return null;
+    changes.activeStepId = id;
+  }
   if ("scaleFactor" in value) {
     const scale = value.scaleFactor;
     if (typeof scale !== "number" || !Number.isFinite(scale) || scale < MIN_COOK_SCALE || scale > MAX_COOK_SCALE) {
@@ -105,7 +118,7 @@ function parseChanges(value: unknown): CookProgressChanges | null {
 
 /**
  * Parses a PATCH body. It must contain exactly `attemptId`, `expectedRevision`, `mutationId`, and
- * a nonempty `changes` object drawn from the four progress fields; anything else is rejected.
+ * a nonempty `changes` object drawn from the five progress fields; anything else is rejected.
  */
 export function parseCookPatchBody(text: string): CookPatchBody | null {
   let parsed: unknown;

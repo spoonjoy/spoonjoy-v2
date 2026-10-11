@@ -4,8 +4,9 @@
 // authenticated the caller and applied the scope and Origin checks before calling in here.
 //
 // One CookSession Durable Object per (user, recipe) is the server of record. The Worker checks
-// the recipe in D1 (it exists, is not deleted, and every submitted id belongs to it) so the
-// object never has to trust client-supplied recipe content.
+// the recipe in D1 (it exists, is not deleted, the submitted step is one of its steps, and only
+// ids that belong to it are passed on) so the object never has to trust client-supplied recipe
+// content.
 import {
   COOK_EXPECTED_USER_HEADER,
   COOK_INTERNAL_ORIGIN,
@@ -32,7 +33,8 @@ interface CookD1Database {
 }
 
 interface CookRecipeBounds {
-  stepCount: number;
+  /** The recipe's step ids in step order. */
+  stepIds: readonly string[];
   ingredientIds: ReadonlySet<string>;
   stepOutputIds: ReadonlySet<string>;
 }
@@ -58,23 +60,53 @@ async function recipeExists(db: CookD1Database, recipeId: string): Promise<boole
 
 async function recipeBounds(db: CookD1Database, recipeId: string): Promise<CookRecipeBounds> {
   const [steps, ingredients, stepOutputs] = await Promise.all([
-    db.prepare('SELECT COUNT(*) AS stepCount FROM "RecipeStep" WHERE recipeId = ?').bind(recipeId).first<{ stepCount: number }>(),
+    db.prepare('SELECT id FROM "RecipeStep" WHERE recipeId = ? ORDER BY stepNum').bind(recipeId).all<{ id: string }>(),
     db.prepare('SELECT id FROM "Ingredient" WHERE recipeId = ?').bind(recipeId).all<{ id: string }>(),
     db.prepare('SELECT id FROM "StepOutputUse" WHERE recipeId = ?').bind(recipeId).all<{ id: string }>(),
   ]);
   return {
-    stepCount: steps!.stepCount,
+    stepIds: steps.results.map(({ id }) => id),
     ingredientIds: new Set(ingredients.results.map(({ id }) => id)),
     stepOutputIds: new Set(stepOutputs.results.map(({ id }) => id)),
   };
 }
 
-/** True when every submitted id and the step index exist in the recipe as it is now. */
+/**
+ * True when the submitted step exists in the recipe as it is now. A step named by id is checked by
+ * id; its index is worked out again (see `fitChangesToRecipe`).
+ */
 export function changesFitRecipe({ changes }: CookPatchBody, bounds: CookRecipeBounds): boolean {
-  const lastStepIndex = Math.max(bounds.stepCount - 1, 0);
-  return (changes.activeStepIndex === undefined || changes.activeStepIndex <= lastStepIndex) &&
-    (changes.checkedIngredientIds ?? []).every((id) => bounds.ingredientIds.has(id)) &&
-    (changes.checkedStepOutputIds ?? []).every((id) => bounds.stepOutputIds.has(id));
+  const lastStepIndex = Math.max(bounds.stepIds.length - 1, 0);
+  return typeof changes.activeStepId === "string"
+    ? bounds.stepIds.includes(changes.activeStepId)
+    : changes.activeStepIndex === undefined || changes.activeStepIndex <= lastStepIndex;
+}
+
+/**
+ * Fits the changes to the recipe as it is now. The caller has already checked the step fits.
+ *
+ * - Checked ids the recipe no longer has are dropped rather than refused. A client keeps checks
+ *   it cannot show (another device made them on another version of the recipe) and sends them
+ *   back with its own; refusing the whole list for one id an edit removed would make the client
+ *   fall back to trimming the list to its own recipe, and erase the other device's checks.
+ * - The step is stored as an id and an index that agree: a step named by id gets that step's
+ *   current index (it may have moved since the client loaded the recipe), and a step named only
+ *   by index (the native app, older pages) gets the id of the step there.
+ */
+export function fitChangesToRecipe(body: CookPatchBody, bounds: CookRecipeBounds): CookPatchBody {
+  const changes = { ...body.changes };
+  if (changes.checkedIngredientIds) {
+    changes.checkedIngredientIds = changes.checkedIngredientIds.filter((id) => bounds.ingredientIds.has(id));
+  }
+  if (changes.checkedStepOutputIds) {
+    changes.checkedStepOutputIds = changes.checkedStepOutputIds.filter((id) => bounds.stepOutputIds.has(id));
+  }
+  if (typeof changes.activeStepId === "string") {
+    changes.activeStepIndex = bounds.stepIds.indexOf(changes.activeStepId);
+  } else if (changes.activeStepIndex !== undefined) {
+    changes.activeStepId = bounds.stepIds[changes.activeStepIndex] ?? null;
+  }
+  return { ...body, changes };
 }
 
 // Reads the body with a running byte cap, so an oversized body is refused without buffering it.
@@ -156,6 +188,7 @@ export async function handleCookSessionProtocolRequest(
   const body = text === null ? null : parseCookPatchBody(text);
   if (!body) return invalidRequest();
   if (!await recipeExists(db, recipeId)) return recipeNotFound();
-  if (!changesFitRecipe(body, await recipeBounds(db, recipeId))) return invalidRequest();
-  return forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "PATCH", "", JSON.stringify(body));
+  const bounds = await recipeBounds(db, recipeId);
+  if (!changesFitRecipe(body, bounds)) return invalidRequest();
+  return forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "PATCH", "", JSON.stringify(fitChangesToRecipe(body, bounds)));
 }

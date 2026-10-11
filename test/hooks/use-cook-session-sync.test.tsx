@@ -10,13 +10,14 @@ import {
 } from "~/lib/cook-session-sync";
 
 const bounds = {
-  stepCount: 2,
+  stepIds: ["step-1", "step-2"],
   ingredientIds: new Set(["rice", "stock"]),
   stepOutputIds: new Set<string>(),
 };
 
+// Progress on step 1 of recipe-1 unless a test names another step.
 function progress(overrides: Partial<CookProgressValue> = {}): CookProgressValue {
-  return { ...DEFAULT_COOK_PROGRESS, ...overrides };
+  return { ...DEFAULT_COOK_PROGRESS, activeStepId: "step-1", ...overrides };
 }
 
 function serverState(revision: number, overrides: Partial<CookProgressValue> = {}) {
@@ -289,8 +290,8 @@ describe("useCookSessionSync", () => {
       if (url === "/api/cook-sessions/recipe-y/start") return jsonResponse({ state: serverState(0) }, 201);
       return jsonResponse({ state: null });
     });
-    const xBounds = { stepCount: 2, ingredientIds: new Set(["rice", "stock", "lemon"]), stepOutputIds: new Set<string>() };
-    const yBounds = { stepCount: 1, ingredientIds: new Set(["flour"]), stepOutputIds: new Set<string>() };
+    const xBounds = { stepIds: ["x-step-1", "x-step-2"], ingredientIds: new Set(["rice", "stock", "lemon"]), stepOutputIds: new Set<string>() };
+    const yBounds = { stepIds: ["y-step-1"], ingredientIds: new Set(["flour"]), stepOutputIds: new Set<string>() };
     const { rerender, initialProps, onRemoteProgress } = render({ recipeId: "recipe-x", bounds: xBounds });
     await settle();
 
@@ -301,7 +302,7 @@ describe("useCookSessionSync", () => {
 
     // The route moves on to recipe Y: first render before Y's progress loads, then ready with Y's.
     rerender({ ...initialProps, recipeId: "recipe-y", bounds: yBounds, ready: false, progress: progress({ checkedIngredientIds: ["stock", "rice"] }) });
-    rerender({ ...initialProps, recipeId: "recipe-y", bounds: yBounds, ready: true, progress: progress({ checkedIngredientIds: ["flour"] }) });
+    rerender({ ...initialProps, recipeId: "recipe-y", bounds: yBounds, ready: true, progress: progress({ activeStepId: "y-step-1", checkedIngredientIds: ["flour"] }) });
     await act(async () => {
       finishFirstSave();
       await vi.advanceTimersByTimeAsync(0);
@@ -316,7 +317,7 @@ describe("useCookSessionSync", () => {
       changes: { checkedIngredientIds: ["stock", "lemon", "rice"] },
     });
     expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-x")) ?? "{}").progress)
-      .toEqual(progress({ checkedIngredientIds: ["stock", "lemon", "rice"] }));
+      .toEqual(progress({ activeStepId: "x-step-1", checkedIngredientIds: ["stock", "lemon", "rice"] }));
     // Y's page never received X's progress, and Y saved only Y's own flour check.
     expect(onRemoteProgress).not.toHaveBeenCalled();
     const yPatches = requests.filter((r) => r.url === "/api/cook-sessions/recipe-y" && r.init.method === "PATCH");
