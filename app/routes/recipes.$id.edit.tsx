@@ -4,6 +4,7 @@ import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
   deleteRecipeStepOnD1,
+  recipeEditorUnavailable,
   saveRecipeEditOnD1,
   stepDeletionRaceAnswer,
   stepSwapRaceAnswer,
@@ -224,6 +225,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
           } catch (error) {
             // A step moved or went away, or the step gained an output dependency the move
             // would break, in between; nothing was swapped.
+            const unavailable = recipeEditorUnavailable(error, "reorder");
+            if (unavailable) return unavailable;
             if (!isD1GuardFailure(error)) throw error;
             const answer = await stepSwapRaceAnswer(database, id, stepId, direction);
             return data({ errors: { reorder: answer.error } }, { status: answer.status });
@@ -288,6 +291,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
       } catch (error) {
         // The step moved, went away or gained a dependent step in between; nothing was deleted.
+        const unavailable = recipeEditorUnavailable(error, "stepDeletion");
+        if (unavailable) return unavailable;
         if (!isD1GuardFailure(error)) throw error;
         const answer = await stepDeletionRaceAnswer(database, id, stepId);
         return data({ errors: { stepDeletion: answer.error } }, { status: answer.status });
@@ -483,6 +488,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       }
       return data({ errors: { title: ACTIVE_RECIPE_TITLE_CONFLICT_ERROR } }, { status: 400 });
     }
+    // The database was briefly unavailable and every try failed: a retryable 503 the form shows,
+    // keeping what the cook entered. The upload is kept: the last try may still commit, with a
+    // cover pointing at it.
+    const unavailable = recipeEditorUnavailable(error);
+    if (unavailable) return unavailable;
     // The recipe update threw after a replacement image landed in R2. Capture
     // the real failure (previously discarded), then decide what to do with the
     // upload; a failed delete is captured too.

@@ -40,8 +40,9 @@ import {
 } from "~/lib/llm-telemetry.server";
 import { tryConsumeImageGenQuota, type ImageGenBudgetEnv } from "~/lib/image-gen-ledger.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
-import { d1Binding } from "~/lib/d1-read.server";
+import { d1Binding, d1ReadBatch } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   activeRecipeTitleFreeGuard,
   nameUpsertStatements,
@@ -770,33 +771,44 @@ async function persistRecipe(
   const d1 = d1Binding(env?.DB);
   if (d1) {
     // One atomic batch: the recipe, its steps and its ingredients apply together, and the
-    // title is re-checked as they are written.
+    // title is re-checked as they are written. After a transient D1 error it runs again; a retry
+    // after the earlier try committed fails the title check against the recipe it wrote, so the
+    // recipe by its id (chosen before the first try) says the earlier try committed, with the
+    // title it was written under.
+    const writtenTitle = async (): Promise<string | null> => {
+      const [[row]] = await d1ReadBatch(d1, [[`SELECT "title" FROM "Recipe" WHERE "id" = ? AND "chefId" = ?`, id, chefId]]);
+      return row ? String(row.title) : null;
+    };
     for (let attempt = 1; ; attempt++) {
       const at = now();
+      const tryTitle = title;
       try {
-        await d1WriteBatch(d1, [
-          activeRecipeTitleFreeGuard(chefId, title),
-          recipeInsertStatement({
-            id,
-            title,
-            description: draft.description,
-            servings: draft.servings,
-            sourceUrl: draft.sourceUrl,
-            chefId,
-            now: at,
-          }),
-          ...draft.steps.map((step, index) => stepInsertStatement({
-            recipeId: id,
-            stepNum: index + 1,
-            stepTitle: null,
-            description: step,
-            duration: null,
-            now: at,
-          })),
-          // New units and ingredient names are created here, so a failed batch leaves none behind.
-          ...nameUpsertStatements(namedIngredients, at),
-          ...namedIngredients.map((ingredient) => namedIngredientInsertStatement({ ...ingredient, now: at })),
-        ]);
+        title = await retryD1Write({ scope: "recipe.import", applied: writtenTitle }, async () => {
+          await d1WriteBatch(d1, [
+            activeRecipeTitleFreeGuard(chefId, tryTitle),
+            recipeInsertStatement({
+              id,
+              title: tryTitle,
+              description: draft.description,
+              servings: draft.servings,
+              sourceUrl: draft.sourceUrl,
+              chefId,
+              now: at,
+            }),
+            ...draft.steps.map((step, index) => stepInsertStatement({
+              recipeId: id,
+              stepNum: index + 1,
+              stepTitle: null,
+              description: step,
+              duration: null,
+              now: at,
+            })),
+            // New units and ingredient names are created here, so a failed batch leaves none behind.
+            ...nameUpsertStatements(namedIngredients, at),
+            ...namedIngredients.map((ingredient) => namedIngredientInsertStatement({ ...ingredient, now: at })),
+          ]);
+          return tryTitle;
+        });
         break;
       } catch (error) {
         if (!isD1GuardFailure(error)) throw error;
@@ -978,7 +990,9 @@ async function activateImportedCoverIfStillAutomatic(
   recipeId: string,
   coverId: string,
 ): Promise<void> {
-  await db.recipe.updateMany({
+  // Sets fixed values on a recipe still without a cover; nothing reads its count, so running it
+  // again after it committed changes nothing.
+  await retryD1Write({ scope: "recipe.import_activate_cover" }, () => db.recipe.updateMany({
     where: {
       id: recipeId,
       coverMode: "auto",
@@ -989,7 +1003,7 @@ async function activateImportedCoverIfStillAutomatic(
       activeCoverVariant: "image",
       coverMode: "auto",
     },
-  });
+  }));
 }
 
 async function completeImportFromExtraction(input: {
