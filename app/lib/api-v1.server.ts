@@ -197,6 +197,7 @@ import {
   type UpdateSpoonPatch,
 } from "~/lib/recipe-spoon.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
 import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
@@ -2567,13 +2568,18 @@ async function releaseAbandonedRecipeImageUpload(
     // Spoon first, then cover, then photo, then key. A failed delete throws, the key stays held,
     // and the next retry repeats only what is left: the cover row still points at the photo
     // until it goes, so neither the spoon nor the photo is ever orphaned.
-    if (cover.sourceSpoonId) {
-      await input.db.recipeSpoon.deleteMany({ where: { id: cover.sourceSpoonId, recipeId: input.recipeId } });
+    // Each delete is by id, so it runs again after a transient D1 error.
+    const spoonId = cover.sourceSpoonId;
+    if (spoonId) {
+      await retryD1Write({ scope: "upload.release_spoon" }, () =>
+        input.db.recipeSpoon.deleteMany({ where: { id: spoonId, recipeId: input.recipeId } }));
     }
-    await input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } });
+    await retryD1Write({ scope: "upload.release_cover" }, () =>
+      input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } }));
     await cleanupUploadedRecipeImageObject(args, input.principal, cover.imageUrl);
   }
-  await input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } });
+  await retryD1Write({ scope: "upload.release_key" }, () =>
+    input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } }));
 }
 
 async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
@@ -2670,10 +2676,12 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
           throw mapSpoonDomainErrorForApiV1(error);
         }
         createdSpoonId = created.spoon.id;
-        createdCover = await db.recipeCover.update({
-          where: { id: createdCover.id },
+        const coverId = createdCover.id;
+        // Sets a fixed value by id, so it runs again after a transient D1 error.
+        createdCover = await retryD1Write({ scope: "cover.link_spoon" }, () => db.recipeCover.update({
+          where: { id: coverId },
           data: { sourceSpoonId: created.spoon.id },
-        });
+        }));
       }
 
       if (activateWhenReady) {
@@ -4775,20 +4783,25 @@ async function cleanupRecipeImageUploadRows(
     spoonId: string | null;
   },
 ) {
-  if (input.coverId) {
-    await db.recipeCover.deleteMany({ where: { id: input.coverId, recipeId: input.recipe.id } }).catch(() => undefined);
+  // Best effort, as before; each write deletes by id or sets the recipe's earlier cover choice, so
+  // it runs again after a transient D1 error.
+  const { coverId, spoonId } = input;
+  if (coverId) {
+    await retryD1Write({ scope: "upload.cleanup_cover" }, () =>
+      db.recipeCover.deleteMany({ where: { id: coverId, recipeId: input.recipe.id } })).catch(() => undefined);
   }
-  if (input.spoonId) {
-    await db.recipeSpoon.deleteMany({ where: { id: input.spoonId, recipeId: input.recipe.id } }).catch(() => undefined);
+  if (spoonId) {
+    await retryD1Write({ scope: "upload.cleanup_spoon" }, () =>
+      db.recipeSpoon.deleteMany({ where: { id: spoonId, recipeId: input.recipe.id } })).catch(() => undefined);
   }
-  await db.recipe.update({
+  await retryD1Write({ scope: "upload.cleanup_restore_cover" }, () => db.recipe.update({
     where: { id: input.recipe.id },
     data: {
       activeCoverId: input.recipe.activeCoverId,
       activeCoverVariant: input.recipe.activeCoverVariant,
       coverMode: input.recipe.coverMode,
     },
-  }).catch(() => undefined);
+  })).catch(() => undefined);
 }
 
 function booleanField(body: Record<string, unknown>, field: keyof NotificationPreferenceFlags): boolean {
@@ -5971,6 +5984,41 @@ function markerErrorLine(error: unknown) {
 }
 
 /**
+ * Writes a finished marker, again after a transient D1 error. The marker's id is chosen before the
+ * first try, so a try that runs again after its earlier try committed with the answer lost fails
+ * on that marker, and finding the marker by this id says the write is in. A marker another
+ * request wrote has a different id, so it still fails as taken.
+ */
+async function createMarker(
+  db: ApiV1WriteDb,
+  scope: string,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+): Promise<void> {
+  const id = crypto.randomUUID();
+  await retryD1Write(
+    {
+      scope,
+      applied: async () =>
+        (await db.apiMutationTombstone.findUnique({ where: { id }, select: { id: true } })) ? true : null,
+    },
+    async () => {
+      await db.apiMutationTombstone.create({
+        data: {
+          id,
+          idempotencyKeyId: reservation.id,
+          operation: marker.operation,
+          resourceType: marker.resourceType,
+          resourceId,
+        },
+      });
+      return true;
+    },
+  );
+}
+
+/**
  * Records that a multi-step write finished. A failed marker never fails the write: every step
  * has happened, so the answer is still true. Recovery, needed only if saving the response fails
  * as well, then treats the write as unfinished.
@@ -5982,14 +6030,7 @@ async function markWriteFinished(
   resourceId: string,
 ): Promise<boolean> {
   try {
-    await db.apiMutationTombstone.create({
-      data: {
-        idempotencyKeyId: reservation.id,
-        operation: marker.operation,
-        resourceType: marker.resourceType,
-        resourceId,
-      },
-    });
+    await createMarker(db, "api_marker.finish", reservation, marker, resourceId);
     return true;
   } catch (error) {
     console.error("[api-v1] write_finished_mark_failed", {
@@ -6010,9 +6051,10 @@ async function unmarkWriteFinished(
   marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
 ): Promise<boolean> {
   try {
-    await db.apiMutationTombstone.deleteMany({
+    // A delete by key, so it runs again after a transient D1 error.
+    await retryD1Write({ scope: "api_marker.unmark" }, () => db.apiMutationTombstone.deleteMany({
       where: { idempotencyKeyId: reservation.id, operation: marker.operation, resourceType: marker.resourceType },
-    });
+    }));
     return true;
   } catch (error) {
     console.error("[api-v1] write_finished_unmark_failed", {
@@ -6036,14 +6078,7 @@ async function claimWriteFinished(
   resourceId: string,
 ): Promise<"claimed" | "taken" | "unmarked"> {
   try {
-    await db.apiMutationTombstone.create({
-      data: {
-        idempotencyKeyId: reservation.id,
-        operation: marker.operation,
-        resourceType: marker.resourceType,
-        resourceId,
-      },
-    });
+    await createMarker(db, "api_marker.claim", reservation, marker, resourceId);
     return "claimed";
   } catch (error) {
     if (isPrismaErrorCode(error, "P2002")) return "taken";
