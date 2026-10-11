@@ -24,8 +24,7 @@ function format(component: string, problem: string, fix: string): string {
  * }
  */
 export function devWarn(component: string, problem: string, fix: string, key?: object): void {
-  // The else path only exists in production bundles; scripts/dev-strip.test.mjs covers it.
-  /* istanbul ignore else */
+  /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
   if (process.env.NODE_ENV !== "production") {
     const message = format(component, problem, fix);
     if (key) {
@@ -60,8 +59,7 @@ export function devWarn(component: string, problem: string, fix: string, key?: o
  * );
  */
 export function devThrow(component: string, problem: string, fix: string): never {
-  // The else path only exists in production bundles; scripts/dev-strip.test.mjs covers it.
-  /* istanbul ignore else */
+  /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
   if (process.env.NODE_ENV !== "production") {
     throw new Error(format(component, problem, fix));
   } else {

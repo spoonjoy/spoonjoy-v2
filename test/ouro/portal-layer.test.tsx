@@ -5,10 +5,11 @@ import { Dialog } from "~/components/ouro/dialog/dialog";
 import { Sheet } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 
-// Ouro UI's dialogs and sheets render into <body> inside an isolated portal, so without Spoonjoy's
-// portal rule (app/styles/tailwind.css) their layers stack at level 0 and the phone tab bar (z-50)
-// covers the bottom of a sheet. The rule lifts the portals to z-60, below Spoonjoy's toasts (z-80).
-// These render the real Ouro components, so a renamed portal fails here, not only in the journey.
+// Ouro UI's dialogs and sheets render into <body> inside a portal that stacks at --ouro-layer, 50 by
+// default, which only ties with the phone tab bar (z-50). Spoonjoy raises the token to 60 in its own
+// :root rule (app/styles/tailwind.css), below its toasts (z-80). These render the real Ouro components,
+// so a renamed portal or a dropped token fails here, not only in the journey. The tab bar is added
+// after the portal, so at a tie it would win by DOM order: only the raised layer keeps the sheet on top.
 // This runs in real browsers (vitest.ouro.config.ts loads app/styles/tailwind.css).
 
 const roots: Root[] = [];
@@ -58,9 +59,13 @@ const fixedStrip = (id: string, zIndex: number) => {
 
 const atBottom = () => document.elementFromPoint(window.innerWidth / 2, window.innerHeight - 10);
 
+it("raises --ouro-layer to 60 in Spoonjoy's stylesheet", () => {
+  expect(getComputedStyle(document.documentElement).getPropertyValue("--ouro-layer").trim()).toBe("60");
+});
+
 it.each(overlays)("lifts Ouro UI's $name portal to z-60, above the phone tab bar", async ({ portal, node }) => {
-  document.body.append(fixedStrip("tab-bar", 50));
   await render(node);
+  document.body.append(fixedStrip("tab-bar", 50));
 
   const rendered = document.querySelector<HTMLElement>(`[data-ouro="${portal}"]`);
   expect(rendered).not.toBeNull();

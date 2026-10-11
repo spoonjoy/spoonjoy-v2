@@ -2,6 +2,9 @@ import { createElement, type ComponentProps, type ReactElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Dialog, type DialogProps } from "~/components/ouro/dialog/dialog";
 
+// Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
+// fails the check if the line below it stops being an error.
+
 const trigger = createElement("button") as ReactElement;
 type SetOpen = (open: boolean) => void;
 

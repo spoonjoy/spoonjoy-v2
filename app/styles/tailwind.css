@@ -62,6 +62,7 @@
   --ouro-press-scale: 0.97;
   --ouro-backdrop-color: #18181b;
   --ouro-backdrop-max: 0.4;
+  --ouro-layer: 50;
 }
 
 .dark {
@@ -141,14 +142,13 @@
   --radius: var(--sj-radius-control);
 }
 
-/* Ouro UI's dialogs and sheets render into <body> inside an isolated portal that has no position,
-   so their own z-1000 layers stack at level 0 against the page, and the phone tab bar (z-50) would
-   sit on top of a bottom sheet. Lifting the portals to Catalyst's dialog layer (z-60) puts them above
-   the tab bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. */
-[data-ouro="dialog-portal"],
-[data-ouro="sheet-portal"] {
-  position: relative;
-  z-index: 60;
+/* Ouro UI's dialogs and sheets stack at --ouro-layer (50 by default, from ouro-base above), which ties
+   with the phone tab bar (z-50). Raising it to Catalyst's dialog layer (z-60) puts them above the tab
+   bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. This is
+   Spoonjoy's own unlayered :root rule after the Ouro tokens, as Ouro UI's README asks; the
+   --ouro-layer: 50 line above is ouro-base's and every shadcn add resets it. */
+:root {
+  --ouro-layer: 60;
 }
 
 /* Print: a recipe on paper is the title, the ingredients and the method in dark ink on white, whatever
@@ -801,14 +801,6 @@ body:has(#cook) .sj-mobile-surface {
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
-  --ouro-backdrop-max: var(--ouro-backdrop-max);
-  --color-ouro-backdrop-color: var(--ouro-backdrop-color);
-  --ouro-press-scale: var(--ouro-press-scale);
-  --ouro-duration-slow: var(--ouro-duration-slow);
-  --ouro-duration-base: var(--ouro-duration-base);
-  --ouro-duration-fast: var(--ouro-duration-fast);
-  --ouro-ease-spring: var(--ouro-ease-spring);
-  --ouro-spring-duration: var(--ouro-spring-duration);
   @keyframes ouro-spin {
   to {
     rotate: 1turn;

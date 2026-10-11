@@ -8,26 +8,10 @@ import { useBackdropAnchor } from "~/lib/ouro/use-backdrop-anchor";
 import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
 import { cn } from "~/lib/ouro/cn";
-import { footerClass, iosBackdrop, sheetHint } from "~/components/ouro/sheet/sheet-parts";
+import { footerClass, iosBackdrop, sheetHint } from "~/components/ouro/sheet/sheet-styles";
+import { dialogSizes, dialogSizeWarning, type DialogSize } from "~/components/ouro/dialog/dialog-styles";
 
-/** A centered dialog's maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. */
-export type DialogSize = "sm" | "md" | "lg";
-
-/**
- * The three sizes, for checking a `size` prop. Shared with `Dialog`.
- *
- * @internal
- */
-export const dialogSizes: readonly DialogSize[] = ["sm", "md", "lg"];
-
-/**
- * The dev message for a size that is not one of {@link dialogSizes}. Development only.
- *
- * @internal
- */
-export function dialogSizeWarning(size: string, fix: string): readonly [string, string] {
-  return [`size="${size}" is not a size; use ${dialogSizes.map((name) => `"${name}"`).join(", ")}`, fix];
-}
+export type { DialogSize } from "~/components/ouro/dialog/dialog-styles";
 
 const DialogContext = createContext(false);
 
@@ -73,7 +57,7 @@ function useDialogPart(part: string, inner: string): void {
     devThrow(
       part,
       "must be rendered inside <DialogRoot>",
-      process.env.NODE_ENV !== "production" ? shape(inner) : /* istanbul ignore next -- production only */ "",
+      process.env.NODE_ENV !== "production" ? shape(inner) : /* istanbul ignore next @preserve -- production only */ "",
     );
   }
 }
@@ -127,10 +111,15 @@ export function DialogTrigger(props: BaseDialog.Trigger.Props): JSX.Element {
   return <BaseDialog.Trigger {...props} />;
 }
 
-/** Part: moves the dialog to the end of `<body>`, in its own stacking context. */
+/**
+ * Part: moves the dialog to the end of `<body>`, in its own stacking context at the
+ * `--ouro-layer` z-index (50 by default, from ouro-base.css). If your app has fixed
+ * bars above z-50, raise it in a `:root` rule of your own after the Ouro tokens, outside
+ * any `@layer`: `:root { --ouro-layer: 60; }`. Don't edit the line shadcn wrote; `shadcn add` resets it.
+ */
 export function DialogPortal(props: Omit<BaseDialog.Portal.Props, "className">): JSX.Element {
   useDialogPart("DialogPortal", "…");
-  return <BaseDialog.Portal {...props} data-ouro="dialog-portal" className="isolate" />;
+  return <BaseDialog.Portal {...props} data-ouro="dialog-portal" className="relative isolate z-(--ouro-layer)" />;
 }
 
 /**
@@ -170,14 +159,14 @@ export function DialogPopup({ size: sizeProp = "md", ...props }: DialogPopupProp
     "DialogPopup",
     process.env.NODE_ENV !== "production"
       ? () => [size !== sizeProp && dialogSizeWarning(String(sizeProp), '<DialogPopup size="md">')]
-      : /* istanbul ignore next -- production only */ undefined,
+      : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   useAppearanceClassNameCheck(
     "DialogPopup",
     props.className,
     process.env.NODE_ENV !== "production"
       ? sheetHint("<DialogPopup>", "</DialogPopup>")
-      : /* istanbul ignore next -- production only */ "",
+      : /* istanbul ignore next @preserve -- production only */ "",
   );
   return <DialogPopupUnchecked {...props} size={size} />;
 }
@@ -253,7 +242,7 @@ export function DialogContent({ className, ref, ...props }: DialogContentProps):
     className,
     process.env.NODE_ENV !== "production"
       ? sheetHint("<DialogContent>", "</DialogContent>")
-      : /* istanbul ignore next -- production only */ "",
+      : /* istanbul ignore next @preserve -- production only */ "",
   );
   return (
     <div

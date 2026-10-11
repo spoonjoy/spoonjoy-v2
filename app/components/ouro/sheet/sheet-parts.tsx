@@ -7,25 +7,9 @@ import { useMergedRef } from "~/lib/ouro/refs";
 import { useBackdropAnchor } from "~/lib/ouro/use-backdrop-anchor";
 import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
+import { iosBackdrop, sheetHint, sheetSides, sideWarning, type SheetSide } from "~/components/ouro/sheet/sheet-styles";
 
-/** The edge a sheet slides in from, and is dragged back to, to dismiss. */
-export type SheetSide = "bottom" | "top" | "left" | "right";
-
-/**
- * The four sides, for checking a `side` prop. Shared with `Sheet`.
- *
- * @internal
- */
-export const sheetSides: readonly SheetSide[] = ["bottom", "top", "left", "right"];
-
-/**
- * The dev message for a side that is not one of {@link sheetSides}. Development only.
- *
- * @internal
- */
-export function sideWarning(side: string, fix: string): readonly [string, string] {
-  return [`side="${side}" is not a side; use ${sheetSides.map((name) => `"${name}"`).join(", ")}`, fix];
-}
+export type { SheetSide } from "~/components/ouro/sheet/sheet-styles";
 
 /**
  * A snap point for a bottom or top sheet: a fraction of the viewport height
@@ -59,23 +43,6 @@ const swipeDirections = { bottom: "down", top: "up", left: "left", right: "right
  *
  * Class strings are literal so the app's Tailwind finds them when it compiles.
  */
-
-/**
- * iOS 26+ Safari draws the page under its translucent toolbars, and a fixed element
- * stops at the toolbars, leaving the page under them undimmed. Base UI's guidance is
- * position: absolute (with body { position: relative } in the app). A library cannot
- * set that on body, and Base UI's iOS scroll lock keeps the page's scroll offset, so an
- * absolute backdrop would sit at the top of the document, off screen on a scrolled
- * page. The backdrops therefore keep --ouro-backdrop-top at the offset that puts them at
- * the top of the screen (useBackdropAnchor), and the large viewport height reaches under
- * the toolbars. Shared with the dialog backdrop.
- *
- * @internal
- */
-export const iosBackdrop =
-  "supports-[-webkit-touch-callout:none]:absolute supports-[-webkit-touch-callout:none]:inset-x-0 " +
-  "supports-[-webkit-touch-callout:none]:top-[var(--ouro-backdrop-top,0px)] supports-[-webkit-touch-callout:none]:bottom-auto " +
-  "supports-[-webkit-touch-callout:none]:h-lvh";
 
 const backdropClass =
   "fixed inset-0 z-1000 min-h-dvh bg-(--ouro-backdrop-color) " +
@@ -148,15 +115,6 @@ const popupSides = {
 } as const;
 
 /**
- * The actions row of a Dialog, in either presentation: a row at the end from 640px up.
- * Below it the actions stack full width in DOM order, so the primary action (last)
- * sits at the bottom, nearest the thumb. Shared with `DialogFooter`.
- *
- * @internal
- */
-export const footerClass = "box-border flex shrink-0 justify-end gap-3 px-5 pt-3 pb-5 max-sm:flex-col max-sm:*:w-full";
-
-/**
  * A bottom sheet's padding keeps its body above the home indicator and the software
  * keyboard. At a lower snap point part of the sheet sits below the screen, so it is
  * padded by that much more and the body ends on screen.
@@ -178,27 +136,10 @@ function useSheetPart(part: string, inner: string): SheetContextValue {
     devThrow(
       part,
       "must be rendered inside <SheetRoot>",
-      process.env.NODE_ENV !== "production" ? shape(inner) : /* istanbul ignore next -- production only */ "",
+      process.env.NODE_ENV !== "production" ? shape(inner) : /* istanbul ignore next @preserve -- production only */ "",
     );
   }
   return context;
-}
-
-/**
- * The Fix code for an appearance class on a sheet part: the theme's CSS variables
- * for colors and radius, or a wrapper inside `open`…`close` for text classes.
- * Development only.
- *
- * @internal
- */
-export function sheetHint(open: string, close: string) {
-  return (token: string): string => {
-    if (token.startsWith("rounded")) {
-      return `:root { --radius: ${token === "rounded-none" ? "0px" : "0.75rem"} }`;
-    }
-    if (/^(text|font)-/.test(token)) return `${open}<div className="${token}">…</div>${close}`;
-    return ":root { --popover: …; } .dark { --popover: …; }";
-  };
 }
 
 /** Props for {@link SheetRoot}: Base UI `Drawer.Root` props with `side` in place of `swipeDirection`. */
@@ -235,7 +176,7 @@ export function SheetRoot({ side: sideProp = "bottom", snapPoints, ...props }: S
     "SheetRoot",
     process.env.NODE_ENV !== "production"
       ? () => [side !== sideProp && sideWarning(String(sideProp), "<SheetRoot side=\"bottom\">")]
-      : /* istanbul ignore next -- production only */ undefined,
+      : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const snap = Boolean(snapPoints && snapPoints.length > 0);
   return (
@@ -254,12 +195,16 @@ export function SheetTrigger(props: Drawer.Trigger.Props): JSX.Element {
 /**
  * Part: moves the sheet to the end of `<body>` and makes it aware of the
  * software keyboard (`Drawer.VirtualKeyboardProvider`), so focused inputs stay visible.
+ * The portal is its own stacking context at the `--ouro-layer` z-index (50 by default,
+ * from ouro-base.css). If your app has fixed bars above z-50, raise it in a `:root`
+ * rule of your own after the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
+ * Don't edit the line shadcn wrote; `shadcn add` resets it.
  */
 export function SheetPortal(props: Omit<Drawer.Portal.Props, "className">): JSX.Element {
   useSheetPart("SheetPortal", "…");
   return (
     <Drawer.VirtualKeyboardProvider>
-      <Drawer.Portal {...props} data-ouro="sheet-portal" className="isolate" />
+      <Drawer.Portal {...props} data-ouro="sheet-portal" className="relative isolate z-(--ouro-layer)" />
     </Drawer.VirtualKeyboardProvider>
   );
 }
@@ -301,7 +246,7 @@ export function SheetPopup(props: SheetPopupProps): JSX.Element {
     props.className,
     process.env.NODE_ENV !== "production"
       ? sheetHint("<SheetPopup>", "</SheetPopup>")
-      : /* istanbul ignore next -- production only */ "",
+      : /* istanbul ignore next @preserve -- production only */ "",
   );
   return <SheetPopupUnchecked {...props} />;
 }
@@ -395,7 +340,7 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
     className,
     process.env.NODE_ENV !== "production"
       ? sheetHint("<SheetContent>", "</SheetContent>")
-      : /* istanbul ignore next -- production only */ "",
+      : /* istanbul ignore next @preserve -- production only */ "",
   );
   return (
     <Drawer.Content

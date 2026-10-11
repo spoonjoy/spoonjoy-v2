@@ -14,13 +14,9 @@ import {
   SheetTitle,
   SheetTrigger,
   SheetViewport,
-  footerClass,
-  sheetHint,
-  sheetSides,
-  sideWarning,
-  type SheetSide,
   type SheetSnapPoint,
 } from "~/components/ouro/sheet/sheet-parts";
+import { footerClass, sheetHint, sheetSides, sideWarning, type SheetSide } from "~/components/ouro/sheet/sheet-styles";
 
 export type { SheetSide, SheetSnapPoint } from "~/components/ouro/sheet/sheet-parts";
 
@@ -48,6 +44,8 @@ export interface SheetBaseProps {
   snapPoints?: SheetSnapPoint[] | undefined;
   /** The body. It scrolls when it is taller than the sheet. */
   children: ReactNode;
+  /** The actions row, stacked full width on phones; primary action last. */
+  footer?: ReactNode;
   /**
    * Layout only, applied to the sheet panel: width and margins (`max-w-lg`,
    * `mx-auto`). Your classes win over Ouro UI's. Appearance classes warn in development.
@@ -97,6 +95,22 @@ export type SheetProps = SheetWithTriggerProps | SheetControlledProps;
  * control it. Use `Dialog` instead when the content should be a centered
  * dialog on larger screens; it renders this sheet on phones.
  *
+ * To close the sheet from an action, control it (`open`/`onOpenChange`) and set
+ * `open` to `false` in the handler, or wrap each action in `SheetClose`
+ * (`import { SheetClose } from "@/components/ouro/sheet/sheet-parts"`, with your components alias):
+ * `<SheetClose render={<Button>Copy link</Button>} />`.
+ *
+ * It stacks above the page at `--ouro-layer`, a z-index of 50 by default (from
+ * ouro-base.css). If your app has fixed bars above z-50, raise it in a `:root` rule
+ * of your own after the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
+ * Don't edit the `--ouro-layer: 50` line shadcn wrote; `shadcn add` resets it.
+ *
+ * Testing accessibility: in WebKit, Base UI's focus guards take `role="button"`
+ * without a name so VoiceOver's cursor stays trapped. Exclude them:
+ * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
+ *
+ * @see https://ourostack.github.io/ouro-ui/docs/sheet
+ *
  * @example
  * <Sheet title="Save to cookbook" trigger={<Button>Save</Button>}>
  *   <CookbookList />
@@ -114,6 +128,7 @@ export function Sheet(props: SheetProps): JSX.Element {
     side: sideProp = "bottom",
     snapPoints,
     children,
+    footer,
     className,
     trigger,
     open,
@@ -139,19 +154,20 @@ export function Sheet(props: SheetProps): JSX.Element {
     className,
     process.env.NODE_ENV !== "production"
       ? sheetHint('<Sheet title="…">', "</Sheet>")
-      : /* istanbul ignore next -- production only */ "",
+      : /* istanbul ignore next @preserve -- production only */ "",
   );
   useDevWarnings(
     "Sheet",
     process.env.NODE_ENV !== "production"
       ? () => [
+          !title && ["title is required; it names the sheet for screen readers", '<Sheet title="Share">'],
           side !== sideProp && sideWarning(String(sideProp), '<Sheet side="bottom">'),
           isOpen !== undefined && ["isOpen is not a prop", "<Sheet open={open} onOpenChange={setOpen}>"],
           onClose !== undefined && ["onClose is not a prop", "<Sheet open={open} onOpenChange={setOpen}>"],
           position !== undefined && ["position is not a prop", '<Sheet side="bottom">'],
           size !== undefined && ["size is not a prop; a sheet fits its content", "<Sheet snapPoints={[0.5, 1]}>"],
         ]
-      : /* istanbul ignore next -- production only */ undefined,
+      : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
   return (
@@ -166,6 +182,7 @@ export function Sheet(props: SheetProps): JSX.Element {
       trigger={trigger}
       open={open}
       onOpenChange={onOpenChange}
+      footer={footer}
     >
       {children}
     </SheetFrame>

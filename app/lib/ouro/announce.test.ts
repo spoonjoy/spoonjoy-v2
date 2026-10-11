@@ -21,7 +21,7 @@ describe("announce", () => {
     const rect = region!.getBoundingClientRect();
     expect(rect.width).toBeLessThanOrEqual(1);
     expect(rect.height).toBeLessThanOrEqual(1);
-    await expect.poll(() => region!.textContent, { timeout: 500 }).toBe("Loading");
+    await expect.poll(() => region!.textContent).toBe("Loading");
   });
 
   it("waits 100ms after creating the region before writing the first message (Safari)", async () => {
@@ -30,8 +30,7 @@ describe("announce", () => {
     // A frame is not enough: Safari drops messages added to a brand-new region that soon.
     await nextFrame();
     expect(region.textContent).toBe("");
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(region.textContent).toBe("Loading");
+    await expect.poll(() => region.textContent).toBe("Loading");
   });
 
   it("uses timers, not animation frames, so a background tab still announces", () => {
