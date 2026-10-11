@@ -266,22 +266,9 @@ describe('RecipeHeader', () => {
       expect(screen.queryByText(/originally/)).toBeNull()
     })
 
-    it('renders clear progress button when onClearProgress is provided', () => {
-      const onClearProgress = vi.fn()
-      renderWithRouter(<RecipeHeader {...defaultProps} onClearProgress={onClearProgress} />)
-      expect(screen.getByRole('button', { name: 'Clear progress' })).toBeInTheDocument()
-    })
-
-    it('calls onClearProgress when button is clicked', async () => {
-      const onClearProgress = vi.fn()
-      renderWithRouter(<RecipeHeader {...defaultProps} onClearProgress={onClearProgress} />)
-      await userEvent.click(screen.getByRole('button', { name: 'Clear progress' }))
-      expect(onClearProgress).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not render clear progress button when onClearProgress is not provided', () => {
-      renderWithRouter(<RecipeHeader {...defaultProps} />)
-      expect(screen.queryByRole('button', { name: 'Clear progress' })).toBeNull()
+    it('leaves Clear progress to the Steps section, so a first check never grows the header', () => {
+      renderWithRouter(<RecipeHeader {...defaultProps} progressSyncStatus="synced" />)
+      expect(screen.queryByTestId('clear-progress-button')).toBeNull()
     })
 
     it('shows the cook progress sync status when progress syncs to the account', () => {
