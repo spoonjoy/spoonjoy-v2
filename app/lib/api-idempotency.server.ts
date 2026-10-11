@@ -6,7 +6,12 @@ export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 export const IDEMPOTENCY_RETRY_AFTER_SECONDS = 2;
 
 export type IdempotencyReservation =
-  | { status: "reserved"; record: ApiIdempotencyKey }
+  /**
+   * The request holds the key. `resumed` when it took over a key whose earlier write failed
+   * because D1 was briefly unavailable: that write may have committed after all, so the caller
+   * checks for it before writing again, under the same key id.
+   */
+  | { status: "reserved"; record: ApiIdempotencyKey; resumed?: boolean }
   | { status: "replay"; record: ApiIdempotencyKey }
   | { status: "in_flight"; record: ApiIdempotencyKey }
   | { status: "conflict"; record: ApiIdempotencyKey };
@@ -172,12 +177,60 @@ async function existingReservation(
   now: Date,
 ): Promise<IdempotencyReservation> {
   if (existing.operation === input.operation && existing.requestHash === input.requestHash) {
+    if (existing.responseBody === null && existing.responseStatus === RELEASED_FOR_RETRY_STATUS) {
+      return await resumeReleasedReservation(db, existing, now);
+    }
     if (existing.responseStatus === null || existing.responseBody === null) {
       return { status: "in_flight", record: existing };
     }
     return { status: "replay", record: existing };
   }
   return { status: "conflict", record: existing };
+}
+
+/**
+ * The mark on a key whose write failed because D1 was briefly unavailable: a response status with
+ * no response body, which no completed key has.
+ */
+const RELEASED_FOR_RETRY_STATUS = 503;
+
+/**
+ * Releases a key whose write failed because D1 was briefly unavailable, for the client's retry
+ * of the same request to take over. The key is kept, not deleted: the write may still commit,
+ * and the retry must run under the same key id, which writes that take their ids from it would
+ * then collide on rather than write twice. Setting a fixed value, it runs again after a
+ * transient D1 error.
+ */
+export async function releaseIdempotencyKeyForRetry(db: PrismaClientType, id: string): Promise<void> {
+  await retryD1Write({ scope: "idempotency.release" }, () => db.apiIdempotencyKey.updateMany({
+    where: { id, responseBody: null },
+    data: { responseStatus: RELEASED_FOR_RETRY_STATUS },
+  }));
+}
+
+/**
+ * Takes over a released key, unless another retry took it first. The claim stamps the key with
+ * this request's time, so after an ambiguous failure a read tells whether this request's claim
+ * is the one that committed.
+ */
+async function resumeReleasedReservation(
+  db: PrismaClientType,
+  existing: ApiIdempotencyKey,
+  now: Date,
+): Promise<IdempotencyReservation> {
+  const claimedAt = new Date(Math.max(now.getTime(), existing.updatedAt.getTime() + 1));
+  const ours = (record: ApiIdempotencyKey | null) =>
+    record !== null && record.responseStatus === null && record.updatedAt.getTime() === claimedAt.getTime();
+  const claimed = await retryD1Write({
+    scope: "idempotency.resume",
+    applied: async () => (ours(await db.apiIdempotencyKey.findUnique({ where: { id: existing.id } })) ? true : null),
+  }, async () => (await db.apiIdempotencyKey.updateMany({
+    where: { id: existing.id, responseStatus: RELEASED_FOR_RETRY_STATUS, responseBody: null },
+    data: { responseStatus: null, updatedAt: claimedAt },
+  })).count === 1);
+  return claimed
+    ? { status: "reserved", record: { ...existing, responseStatus: null, updatedAt: claimedAt }, resumed: true }
+    : { status: "in_flight", record: existing };
 }
 
 function isUniqueIdempotencyRace(error: unknown) {

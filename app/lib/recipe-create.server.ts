@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
 import { coverInsertStatement, createCover, setActiveRecipeCover, type CreateCoverInput } from "~/lib/recipe-cover.server";
 import type { D1Query } from "~/lib/d1-read.server";
@@ -284,24 +285,42 @@ async function createRecipeDraftOnD1(d1: D1ReadDatabase, input: CreateRecipeDraf
       now,
     })),
   );
+  const statements: D1Query[] = [
+    activeRecipeTitleFreeGuard(input.chefId, input.title),
+    recipeInsertStatement({ ...input, now }),
+    ...input.steps.map((step, stepIndex) => stepInsertStatement({
+      recipeId: input.id,
+      stepNum: stepIndex + 1,
+      stepTitle: step.stepTitle,
+      description: step.description,
+      duration: step.duration,
+      now,
+    })),
+    ...nameUpsertStatements(ingredients, now),
+    ...ingredients.map(namedIngredientInsertStatement),
+    ...stepOutputUses(input.steps).map((use) =>
+      stepOutputUseInsertStatement(input.id, use.inputStepNum, use.outputStepNum, now)),
+    ...coverStatements(input, now),
+  ];
   try {
-    await d1WriteBatch(d1, [
-      activeRecipeTitleFreeGuard(input.chefId, input.title),
-      recipeInsertStatement({ ...input, now }),
-      ...input.steps.map((step, stepIndex) => stepInsertStatement({
-        recipeId: input.id,
-        stepNum: stepIndex + 1,
-        stepTitle: step.stepTitle,
-        description: step.description,
-        duration: step.duration,
-        now,
-      })),
-      ...nameUpsertStatements(ingredients, now),
-      ...ingredients.map(namedIngredientInsertStatement),
-      ...stepOutputUses(input.steps).map((use) =>
-        stepOutputUseInsertStatement(input.id, use.inputStepNum, use.outputStepNum, now)),
-      ...coverStatements(input, now),
-    ]);
+    // The recipe's id is chosen before the first try, so after a transient D1 error the write
+    // asks whether that recipe is in. A retry after an earlier try committed (or a late commit
+    // of it) fails the title check against the recipe it wrote; the same check then finds it.
+    await retryD1Write(
+      {
+        scope: "recipe.create",
+        applied: async () => {
+          const [[row]] = await d1ReadBatch(d1, [
+            [`SELECT 1 AS "written" FROM "Recipe" WHERE "id" = ? AND "chefId" = ?`, input.id, input.chefId],
+          ]);
+          return row ? true : null;
+        },
+      },
+      async () => {
+        await d1WriteBatch(d1, statements);
+        return true;
+      },
+    );
   } catch (error) {
     // The batch's only guard is the title check.
     if (isD1GuardFailure(error)) throw new ActiveRecipeTitleConflictError();

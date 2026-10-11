@@ -522,6 +522,7 @@ describe("/api/v1 shell", () => {
       upstream_error: 502,
       upstream_timeout: 504,
       product_activation_pending: 503,
+      temporarily_unavailable: 503,
       internal_error: 500,
     });
   });

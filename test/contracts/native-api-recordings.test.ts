@@ -27,6 +27,7 @@ import { createUser } from "~/lib/auth.server";
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { getLocalDb } from "~/lib/db.server";
 import * as recipeImport from "~/lib/recipe-import.server";
+import * as recipeWrites from "~/lib/api-v1-recipe-writes.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1 } from "../helpers/sqlite-d1";
 import {
@@ -248,26 +249,36 @@ async function recordNativeSession() {
     await capture("oauth-register", "POST /oauth/register", await oauthRegisterAction(routeArgs(request, "", null)) as Response, 201);
   }
 
-  // Recipe editor.
+  // Recipe editor. The first create meets D1 briefly unavailable and answers a retryable 503;
+  // the client keeps the mutation queued and retries it with the same clientMutationId, which
+  // creates the recipe once.
+  const recipeCreateBody = {
+    clientMutationId: "cm_recipe_create",
+    title: "Lemon Pantry Pasta",
+    description: "Bright weeknight pasta from the pantry.",
+    servings: "4",
+    steps: [
+      {
+        stepTitle: "Boil",
+        description: "Cook the spaghetti in salted water.",
+        duration: 10,
+        ingredients: [
+          { quantity: 200, unit: "g", name: "spaghetti" },
+          { quantity: 1, unit: "tsp", name: "salt" },
+        ],
+      },
+    ],
+  };
+  vi.spyOn(recipeWrites, "createNativeRecipe").mockRejectedValueOnce(new Error("D1_ERROR: Network connection lost."));
+  await api("recipe-create-temporarily-unavailable", "POST", "recipes", {
+    token: chef,
+    body: recipeCreateBody,
+    endpoint: "POST /api/v1/recipes",
+    status: 503,
+  });
   const created = await api("recipe-create", "POST", "recipes", {
     token: chef,
-    body: {
-      clientMutationId: "cm_recipe_create",
-      title: "Lemon Pantry Pasta",
-      description: "Bright weeknight pasta from the pantry.",
-      servings: "4",
-      steps: [
-        {
-          stepTitle: "Boil",
-          description: "Cook the spaghetti in salted water.",
-          duration: 10,
-          ingredients: [
-            { quantity: 200, unit: "g", name: "spaghetti" },
-            { quantity: 1, unit: "tsp", name: "salt" },
-          ],
-        },
-      ],
-    },
+    body: recipeCreateBody,
     endpoint: "POST /api/v1/recipes",
     status: 201,
   });

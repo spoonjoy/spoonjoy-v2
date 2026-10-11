@@ -4,7 +4,7 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_011",
+    "requestId": "opaque_012",
     "data": {
       "created": true,
       "ingredient": {
@@ -128,7 +128,7 @@
         "cookbooks": []
       },
       "mutation": {
-        "clientMutationId": "opaque_012",
+        "clientMutationId": "opaque_013",
         "replayed": false
       }
     }

@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_071",
+    "requestId": "opaque_072",
     "data": {
       "item": {
         "id": "uuid_016",
@@ -20,7 +20,7 @@
         "updatedAt": "2026-01-01T00:00:00.000Z"
       },
       "mutation": {
-        "clientMutationId": "opaque_072",
+        "clientMutationId": "opaque_073",
         "replayed": false
       }
     }

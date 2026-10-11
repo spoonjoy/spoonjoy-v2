@@ -134,6 +134,10 @@ export const API_V1_SCOPE_REQUIREMENTS = [
   { path: "/api/v1/tokens/{credentialId}", method: "DELETE", auth: "bearer", scopes: ["tokens:write"] },
 ] as const;
 
+/** The message for a 503 `temporarily_unavailable`: D1 failed to answer after the write's retries. */
+export const API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE =
+  "The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.";
+
 export const API_V1_ERROR_STATUS = {
   invalid_json: 400,
   validation_error: 400,
@@ -151,6 +155,7 @@ export const API_V1_ERROR_STATUS = {
   rate_limited: 429,
   upstream_error: 502,
   product_activation_pending: 503,
+  temporarily_unavailable: 503,
   upstream_timeout: 504,
   internal_error: 500,
 } as const;

@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_095",
+    "requestId": "opaque_096",
     "data": {
       "id": "id_001",
       "email": "contract-chef@example.test",
@@ -14,7 +14,7 @@
       "oauthAccounts": [],
       "passkeys": [],
       "mutation": {
-        "clientMutationId": "opaque_096",
+        "clientMutationId": "opaque_097",
         "replayed": false
       }
     }
