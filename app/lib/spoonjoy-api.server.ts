@@ -105,6 +105,7 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { retryD1Write as retryApiTokenRevoke } from "~/lib/d1-write-retry.server";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -1510,12 +1511,14 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 
     if (!credential) throw new Error("API token not found");
 
+    // Sets a time chosen once, so running it again after a lost answer leaves the same row.
+    const revokedAt = new Date();
     const updated = credential.revokedAt
       ? credential
-      : await context.db.apiCredential.update({
+      : await retryApiTokenRevoke({ scope: "api_credential.revoke" }, () => context.db.apiCredential.update({
           where: { id: credential.id },
-          data: { revokedAt: new Date() },
-        });
+          data: { revokedAt },
+        }));
 
     return json({
       revoked: !credential.revokedAt,

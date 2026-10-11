@@ -131,6 +131,8 @@ export async function notifyForkOfMyRecipe(
         actorId: forker.id,
         recipientId: input.sourceChefId,
         kind: "fork_of_my_recipe",
+        // One fork, one notification, however often the fork's follow-up runs.
+        triggerKey: input.forkedRecipeId,
         payload: {
           forkedRecipeId: input.forkedRecipeId,
           sourceRecipeId: input.sourceRecipeId,

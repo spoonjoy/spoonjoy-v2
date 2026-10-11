@@ -32,6 +32,7 @@ import {
   captureException,
   type PostHogServerConfig,
 } from "~/lib/analytics-server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 export type NotificationKind =
   | "spoon_on_my_recipe"
@@ -44,6 +45,29 @@ export interface EnqueueNotificationInput {
   actorId: string;
   kind: NotificationKind;
   payload: Record<string, unknown>;
+  /**
+   * What made this notification, such as the fork's recipe id: the same trigger always names the
+   * same event row, so running the trigger again finds the row it wrote instead of logging and
+   * pushing a second one. Without it each call is its own event (still written once per call).
+   */
+  triggerKey?: string;
+}
+
+/**
+ * The event row's id: derived from the trigger when there is one, so a repeat of the same trigger
+ * writes the same row; otherwise chosen once per call, before the first try. Shaped as a UUID.
+ */
+export async function notificationEventId(input: EnqueueNotificationInput): Promise<string> {
+  if (input.triggerKey === undefined) return crypto.randomUUID();
+  const source = ["notification", input.kind, input.recipientId, input.actorId, input.triggerKey].join("\u0000");
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(source)));
+  const hex = Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+/** A Prisma unique-constraint failure. */
+function isUniqueConflict(error: unknown): boolean {
+  return prismaErrorCode(error) === "P2002";
 }
 
 export interface NotificationDispatchDeps {
@@ -174,15 +198,26 @@ export async function enqueueNotification(
     authSecret: string;
   }>;
   try {
-    // 2. Always log the event.
-    event = await db.notificationEvent.create({
-      data: {
-        recipientId: input.recipientId,
-        kind: input.kind,
-        payload: JSON.stringify(input.payload),
-      },
-      select: { id: true },
-    });
+    // 2. Always log the event, once. Its id is chosen before the first try, so a retry after a
+    // lost answer finds the row the earlier try wrote instead of adding a second.
+    const id = await notificationEventId(input);
+    const written = async () =>
+      db.notificationEvent.findFirst({ where: { id, recipientId: input.recipientId }, select: { id: true } });
+    try {
+      event = await retryD1Write({ scope: "notification.enqueue", applied: written }, () => db.notificationEvent.create({
+        data: {
+          id,
+          recipientId: input.recipientId,
+          kind: input.kind,
+          payload: JSON.stringify(input.payload),
+        },
+        select: { id: true },
+      }));
+    } catch (error) {
+      // The same trigger ran before and its event is logged (and pushed) already.
+      if (isUniqueConflict(error) && (await written())) return { eventId: id, queuedSends: 0 };
+      throw error;
+    }
 
     // 3. Preference lookup (default-on).
     pref = await db.notificationPreference.findUnique({
@@ -223,10 +258,11 @@ export async function enqueueNotification(
   let markedDelivered = false;
   const markDelivered = async () => {
     if (markedDelivered) return;
-    await db.notificationEvent.update({
+    const pushDeliveredAt = new Date();
+    await retryD1Write({ scope: "notification.mark_delivered" }, () => db.notificationEvent.update({
       where: { id: event.id },
-      data: { pushDeliveredAt: new Date() },
-    });
+      data: { pushDeliveredAt },
+    }));
     markedDelivered = true;
   };
 
@@ -241,8 +277,8 @@ export async function enqueueNotification(
         if (result.status === "delivered") {
           await markDelivered();
         } else if (result.status === "expired") {
-          await db.pushSubscription
-            .delete({ where: { id: sub.id } })
+          // A delete by id: running it again after a lost answer deletes nothing more.
+          await retryD1Write({ scope: "push_subscription.prune" }, () => db.pushSubscription.delete({ where: { id: sub.id } }))
             .catch((pruneError) => {
               // Already gone (P2025) — concurrent dispatch pruned it; expected.
               // Any other failure means dead endpoints accumulate: capture it.
