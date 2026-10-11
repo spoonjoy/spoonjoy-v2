@@ -676,6 +676,81 @@ describe("API v1 recipe write mutations", () => {
     });
   });
 
+  describe("when D1 is briefly unavailable", () => {
+    const NETWORK_LOST = "D1_ERROR: Network connection lost.";
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function createBody(clientMutationId: string) {
+      return {
+        clientMutationId,
+        title: `Unavailable Soup ${faker.string.alphanumeric(8)}`,
+        steps: [{ stepTitle: null, description: "Simmer", duration: null, ingredients: [] }],
+      };
+    }
+
+    async function expectTemporarilyUnavailable(response: Response, requestId: string) {
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("1");
+      expectPrivateEnvelopeHeaders(response, requestId);
+      const payload = await readJson(response);
+      expectErrorEnvelope(payload, requestId, "temporarily_unavailable", 503);
+      expect(payload.error.details).toEqual({ retryAfterSeconds: 1 });
+    }
+
+    it.each([
+      ["never reached the database", false],
+      ["committed but its answer was lost", true],
+    ])("answers 503 when the create %s, and the retry with the same clientMutationId creates one recipe", async (_case, commits) => {
+      const fixture = await createRecipeWriteFixture(db);
+      const placeholder = vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      const realCreate = recipeWritesModule.createNativeRecipe;
+      vi.spyOn(recipeWritesModule, "createNativeRecipe").mockImplementationOnce(async (...args) => {
+        if (commits) await realCreate(...args);
+        throw new Error(NETWORK_LOST);
+      });
+      const body = createBody(`recipe-create-unavailable-${commits}`);
+
+      const first = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_unavailable_first", body), "recipes"));
+      await expectTemporarilyUnavailable(first, "req_unavailable_first");
+      const key = await db.apiIdempotencyKey.findFirstOrThrow({ where: { key: body.clientMutationId } });
+      expect(key).toMatchObject({ responseStatus: 503, responseBody: null });
+
+      const retry = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_unavailable_retry", body), "recipes"));
+      expect(retry.status).toBe(201);
+      const payload = await readJson(retry);
+      expect(payload.data).toMatchObject({ created: true, recipe: { id: key.id, title: body.title } });
+      expect(await db.recipe.count({ where: { chefId: fixture.chef.id, title: body.title } })).toBe(1);
+      expect(placeholder).toHaveBeenCalledTimes(1);
+
+      const replay = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_unavailable_replay", body), "recipes"));
+      expect(replay.status).toBe(201);
+      expect((await readJson(replay)).data.mutation).toEqual({ clientMutationId: body.clientMutationId, replayed: true });
+    });
+
+    it("keeps the key in flight when D1 is still down to release it", async () => {
+      const fixture = await createRecipeWriteFixture(db);
+      vi.spyOn(placeholderCoverModule, "scheduleAiPlaceholderCover").mockResolvedValue(undefined);
+      vi.spyOn(recipeWritesModule, "createNativeRecipe").mockRejectedValueOnce(new Error(NETWORK_LOST));
+      const originalUpdateMany = db.apiIdempotencyKey.updateMany;
+      db.apiIdempotencyKey.updateMany = vi.fn().mockRejectedValue(new Error(NETWORK_LOST)) as unknown as typeof db.apiIdempotencyKey.updateMany;
+      const body = createBody("recipe-create-release-fails");
+
+      try {
+        const first = await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_release_fails", body), "recipes"));
+        await expectTemporarilyUnavailable(first, "req_release_fails");
+      } finally {
+        db.apiIdempotencyKey.updateMany = originalUpdateMany;
+      }
+      await expectInProgress(
+        await action(routeArgs(mutationRequest("POST", "recipes", fixture.writer.token, "req_release_fails_retry", body), "recipes")),
+        "req_release_fails_retry",
+      );
+    });
+  });
+
   it("creates steps that use earlier steps' outputs, as the native app sends them on every step", async () => {
     const fixture = await createRecipeWriteFixture(db);
     const body = {

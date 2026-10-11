@@ -3,6 +3,7 @@ import {
   API_V1_DISCOVERY_DATA,
   API_V1_RESOURCES,
   API_V1_SCOPE_REQUIREMENTS,
+  API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MCP_ACCESS_TOKEN_TTL_SECONDS } from "~/lib/oauth-server.server";
@@ -3117,6 +3118,7 @@ const errorMessages: Record<ApiV1ErrorCode, string> = {
   rate_limited: "Too many requests",
   upstream_error: "Upstream import provider failed",
   product_activation_pending: PRODUCT_ACTIVATION_PENDING_MESSAGE,
+  temporarily_unavailable: API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE,
   upstream_timeout: "Upstream import provider timed out",
   internal_error: "Internal error",
 };
@@ -3174,7 +3176,7 @@ function errorExampleFor(code: ApiV1ErrorCode, scopes: readonly string[]) {
       status: API_V1_ERROR_STATUS[code],
       ...(code === "idempotency_in_progress"
         ? { details: { retryAfterSeconds: 2 } }
-        : code === "product_activation_pending"
+        : code === "product_activation_pending" || code === "temporarily_unavailable"
           ? { details: { retryAfterSeconds: 1 } }
           : {}),
     },
@@ -3197,10 +3199,12 @@ function errorResponse(codes: ApiV1ErrorCode[], scopes: readonly string[]) {
         description: "Error envelopes name the credential headers they may depend on.",
         schema: { type: "string", example: "Authorization, Cookie" },
       },
-      ...(codes.includes("product_activation_pending")
+      ...(codes.includes("product_activation_pending") || codes.includes("temporarily_unavailable")
         ? {
             "Retry-After": {
-              description: "Seconds to wait before retrying product activation.",
+              description: codes.includes("product_activation_pending")
+                ? "Seconds to wait before retrying product activation, or the same request after the database was briefly unavailable."
+                : "Seconds to wait before retrying the same request after the database was briefly unavailable. Retry a write with the same clientMutationId.",
               schema: { type: "integer", example: 1 },
             },
           }
@@ -3218,6 +3222,16 @@ function errorResponse(codes: ApiV1ErrorCode[], scopes: readonly string[]) {
       Object.fromEntries(codes.map((code) => [code, errorExampleFor(code, scopes)])),
     ),
   };
+}
+
+/**
+ * Every operation that can fail with an internal error can also find the database briefly
+ * unavailable, which it answers as a retryable 503 `temporarily_unavailable`.
+ */
+function withTemporarilyUnavailable(codes: ApiV1ErrorCode[]): ApiV1ErrorCode[] {
+  if (!codes.includes("internal_error") || codes.includes("temporarily_unavailable")) return codes;
+  const index = codes.indexOf("internal_error");
+  return [...codes.slice(0, index), "temporarily_unavailable", ...codes.slice(index)];
 }
 
 function errorCodesByStatus(codes: ApiV1ErrorCode[]) {
@@ -3983,7 +3997,7 @@ export function buildApiV1OpenApiDocument(options: BuildOpenApiOptions = {}) {
         });
       }
       const errorScopes = isSearchOperation ? ["shopping_list:read"] : requirement.scopes;
-      for (const [status, codes] of errorCodesByStatus(meta.errors)) {
+      for (const [status, codes] of errorCodesByStatus(withTemporarilyUnavailable(meta.errors))) {
         responses[String(status)] = errorResponse(codes, errorScopes);
       }
 

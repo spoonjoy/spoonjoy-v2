@@ -394,7 +394,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -420,6 +421,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -458,6 +463,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -524,7 +535,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -550,6 +562,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -588,6 +604,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -653,7 +675,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -679,6 +702,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -717,6 +744,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -782,7 +815,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -808,6 +842,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -846,6 +884,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -911,7 +955,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -937,6 +982,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -975,6 +1024,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -1052,7 +1107,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -1078,6 +1134,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -1122,6 +1182,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -1199,7 +1265,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -1225,6 +1292,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -1269,6 +1340,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -1346,7 +1423,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "401",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -1372,6 +1450,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -1416,6 +1498,12 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "internal_error",
           "label": "Internal Error",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        },
+        {
+          "status": "503",
+          "name": "temporarily_unavailable",
+          "label": "Temporarily Unavailable",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"temporarily_unavailable\",\n    \"message\": \"The database was briefly unavailable. Retry the same request after the Retry-After header, with the same clientMutationId for a write.\",\n    \"status\": 503,\n    \"details\": {\n      \"retryAfterSeconds\": 1\n    }\n  }\n}"
         }
       ]
     },
@@ -1541,7 +1629,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -1571,6 +1660,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -1758,7 +1851,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -1788,6 +1882,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -1941,7 +2039,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -1975,6 +2074,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -2116,7 +2219,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -2150,6 +2254,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -2307,7 +2415,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -2345,6 +2454,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -2526,7 +2639,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -2564,6 +2678,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -2719,7 +2837,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -2757,6 +2876,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -2905,6 +3028,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "429",
         "500",
         "502",
+        "503",
         "504"
       ],
       "responseSummaries": [
@@ -2947,6 +3071,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "502",
           "description": "Errors: upstream_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         },
         {
           "status": "504",
@@ -3106,7 +3234,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -3144,6 +3273,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -3311,7 +3444,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -3349,6 +3483,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -3540,7 +3678,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -3578,6 +3717,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -3733,7 +3876,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -3771,6 +3915,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -3938,7 +4086,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -3976,6 +4125,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -4179,7 +4332,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -4217,6 +4371,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -4371,7 +4529,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -4409,6 +4568,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -4584,7 +4747,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -4618,6 +4782,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -4783,7 +4951,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -4821,6 +4990,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -4989,7 +5162,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -5027,6 +5201,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -5219,7 +5397,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -5257,6 +5436,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -5477,7 +5660,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -5515,6 +5699,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -5686,7 +5874,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -5720,6 +5909,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -5876,7 +6069,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -5914,6 +6108,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -6070,7 +6268,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -6108,6 +6307,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -6276,7 +6479,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -6314,6 +6518,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -6506,7 +6714,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -6544,6 +6753,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -6700,7 +6913,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -6738,6 +6952,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -6894,7 +7112,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -6932,6 +7151,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -7100,7 +7323,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -7138,6 +7362,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -7325,7 +7553,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -7355,6 +7584,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -7508,7 +7741,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -7542,6 +7776,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -7683,7 +7921,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -7717,6 +7956,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -7874,7 +8117,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -7912,6 +8156,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -8135,7 +8383,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "503",
-          "description": "Errors: product_activation_pending"
+          "description": "Errors: product_activation_pending, temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -8353,7 +8601,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "503",
-          "description": "Errors: product_activation_pending"
+          "description": "Errors: product_activation_pending, temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -8589,7 +8837,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         },
         {
           "status": "503",
-          "description": "Errors: product_activation_pending"
+          "description": "Errors: product_activation_pending, temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -8731,7 +8979,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8765,6 +9014,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -8921,7 +9174,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -8955,6 +9209,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -9111,7 +9369,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -9145,6 +9404,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -9265,7 +9528,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -9299,6 +9563,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -9443,7 +9711,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -9481,6 +9750,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -9613,7 +9886,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -9647,6 +9921,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -9768,7 +10046,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -9802,6 +10081,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -9958,7 +10241,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -9992,6 +10276,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -10112,7 +10400,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -10146,6 +10435,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -10305,7 +10598,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -10343,6 +10637,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -10511,7 +10809,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -10549,6 +10848,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -10668,7 +10971,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -10698,6 +11002,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -10841,7 +11149,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -10875,6 +11184,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -11019,7 +11332,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -11057,6 +11371,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -11236,7 +11554,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -11274,6 +11593,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -11392,7 +11715,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -11422,6 +11746,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -11553,7 +11881,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -11587,6 +11916,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -11715,7 +12048,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -11745,6 +12079,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -11904,7 +12242,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -11934,6 +12273,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -12085,7 +12428,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -12127,6 +12471,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -12288,7 +12636,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -12326,6 +12675,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -12511,7 +12864,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -12549,6 +12903,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -12698,7 +13056,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -12736,6 +13095,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -12884,7 +13247,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -12918,6 +13282,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -13066,7 +13434,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "405",
         "409",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -13100,6 +13469,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -13218,7 +13591,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -13248,6 +13622,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -13372,7 +13750,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "403",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -13402,6 +13781,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [
@@ -13533,7 +13916,8 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         "404",
         "405",
         "429",
-        "500"
+        "500",
+        "503"
       ],
       "responseSummaries": [
         {
@@ -13567,6 +13951,10 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         {
           "status": "500",
           "description": "Errors: internal_error"
+        },
+        {
+          "status": "503",
+          "description": "Errors: temporarily_unavailable"
         }
       ],
       "responseExamples": [

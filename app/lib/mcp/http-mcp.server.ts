@@ -15,6 +15,12 @@
  * Requests are rate-limited before any auth work.
  */
 
+import {
+  D1_WRITE_RETRY_AFTER_SECONDS,
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  isD1Unavailable,
+} from "~/lib/d1-write-retry.server";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import {
   handleJsonRpcMessage,
@@ -97,6 +103,8 @@ const MCP_TOOL_NAMES = new Set(MCP_TOOLS.map((tool) => tool.name));
 const MCP_TOOL_SCOPES = new Map(MCP_TOOLS.map((tool) => [tool.name, tool.requiredScopes ?? []]));
 const PRODUCT_ACTIVATION_PENDING_JSON_RPC_CODE = -32001;
 const PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS = 1;
+/** The JSON-RPC code for a tool call D1 could not answer after its retries; data.code is temporarily_unavailable. */
+const TEMPORARILY_UNAVAILABLE_JSON_RPC_CODE = -32002;
 
 export function isCookbookMembershipCutoverToolError(
   toolName: string,
@@ -423,7 +431,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
     });
   }
 
-  let productActivationPending = false;
+  let retryAfterSeconds: number | null = null;
   const router: JsonRpcToolRouter = {
     listTools() {
       return { tools: listSpoonjoyMcpTools() };
@@ -435,7 +443,7 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
         return { content: [{ type: "text", text }] };
       } catch (error) {
         if (isCookbookMembershipCutoverToolError(name, error)) {
-          productActivationPending = true;
+          retryAfterSeconds = PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS;
           throw new JsonRpcError(
             PRODUCT_ACTIVATION_PENDING_JSON_RPC_CODE,
             PRODUCT_ACTIVATION_PENDING_MESSAGE,
@@ -443,6 +451,21 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
               code: PRODUCT_ACTIVATION_PENDING_CODE,
               retryable: true,
               retryAfterSeconds: PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS,
+            },
+          );
+        }
+        if (isD1Unavailable(error)) {
+          // D1 failed to answer after the write's own retries. Tell the agent to call the tool
+          // again in a moment, as a retryable error rather than an internal one.
+          retryAfterSeconds = D1_WRITE_RETRY_AFTER_SECONDS;
+          throw new JsonRpcError(
+            TEMPORARILY_UNAVAILABLE_JSON_RPC_CODE,
+            D1_WRITE_UNAVAILABLE_MESSAGE,
+            {
+              code: D1_WRITE_UNAVAILABLE_CODE,
+              status: 503,
+              retryable: true,
+              retryAfterSeconds: D1_WRITE_RETRY_AFTER_SECONDS,
             },
           );
         }
@@ -516,8 +539,8 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
 
   const httpStatus = transport.era === "modern" && jsonRpcErrorCode(response) === -32601 ? 404 : 200;
   const httpResponse = jsonResponse(response, httpStatus);
-  if (productActivationPending) {
-    httpResponse.headers.set("Retry-After", String(PRODUCT_ACTIVATION_RETRY_AFTER_SECONDS));
+  if (retryAfterSeconds !== null) {
+    httpResponse.headers.set("Retry-After", String(retryAfterSeconds));
     httpResponse.headers.set("Cache-Control", "private, no-store");
   }
   if (!isJsonRpcSuccessResponse(response)) {

@@ -16,6 +16,7 @@ import {
 } from "~/lib/mcp/http-mcp.server";
 import { captureEvent, captureException } from "~/lib/analytics-server";
 import { createApiCredential } from "~/lib/api-auth.server";
+import * as spoonjoyTools from "~/lib/mcp/spoonjoy-tools.server";
 import { CLAUDE_MCP_REDIRECT_URI } from "~/lib/oauth-server.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../../helpers/cleanup";
@@ -410,6 +411,36 @@ describe("handleMcpHttpRequest", () => {
       where: { cookbookId: fixture.cookbook.id, recipeId: fixture.recipe.id },
     })).resolves.toBe(1);
     await expectProductActivationPendingMcpResponse(response, 71);
+  });
+
+  it("returns a retryable -32002 with Retry-After when D1 is briefly unavailable", async () => {
+    const principal = await mintCredential({ scopes: ["shopping_list:read", "shopping_list:write"] });
+    vi.spyOn(spoonjoyTools, "callSpoonjoyMcpTool").mockRejectedValueOnce(new Error("D1_ERROR: Network connection lost."));
+
+    try {
+      const response = await handleMcpHttpRequest({
+        request: rpcRequest(init(73, "tools/call", {
+          name: "add_shopping_list_item",
+          arguments: { name: "Eggs" },
+        }), bearer(principal.token)),
+        db,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Retry-After")).toBe("1");
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      await expect(response.json()).resolves.toEqual({
+        jsonrpc: "2.0",
+        id: 73,
+        error: {
+          code: -32002,
+          message: "Spoonjoy couldn't save that just now. Please try again in a moment.",
+          data: { code: "temporarily_unavailable", status: 503, retryable: true, retryAfterSeconds: 1 },
+        },
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("keeps ordinary MCP validation failures at -32602 without cutover retry headers", async () => {

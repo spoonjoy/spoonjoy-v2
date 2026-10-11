@@ -47,9 +47,11 @@ import {
   hashIdempotencyRequest,
   IDEMPOTENCY_RETRY_AFTER_SECONDS,
   idempotencyClientKey,
+  releaseIdempotencyKeyForRetry,
   replayIdempotencyResponse,
   reserveIdempotencyKey,
 } from "~/lib/api-idempotency.server";
+import { D1_WRITE_RETRY_AFTER_SECONDS, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import {
   buildApiV1ConnectorOpenApiDocument,
   buildApiV1OpenApiDocument,
@@ -138,6 +140,7 @@ import {
   API_V1_ERROR_STATUS,
   API_V1_RESOURCES,
   API_V1_SCOPE_REQUIREMENTS,
+  API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE,
   type ApiV1ErrorCode,
 } from "~/lib/api-v1-contract.server";
 import {
@@ -404,7 +407,8 @@ export function apiV1ErrorResponse(requestId: string, error: ApiV1Error): Respon
   const headers = apiV1PrivateHeaders(requestId);
   if (
     error.code === "idempotency_in_progress" ||
-    error.code === PRODUCT_ACTIVATION_PENDING_CODE
+    error.code === PRODUCT_ACTIVATION_PENDING_CODE ||
+    error.code === "temporarily_unavailable"
   ) {
     headers.set("Retry-After", String(retryAfterSecondsFromError(error)));
   }
@@ -441,7 +445,7 @@ function apiV1SamePartyErrorResponse(requestId: string, error: ApiV1Error): Resp
     body.error.details = error.details;
   }
   const headers = apiV1SamePartyPrivateHeaders(requestId);
-  if (error.code === "rate_limited") {
+  if (error.code === "rate_limited" || error.code === "temporarily_unavailable") {
     headers.set("Retry-After", String(retryAfterSecondsFromError(error)));
   }
   if (
@@ -4153,11 +4157,28 @@ export async function runIdempotentApiV1Mutation(
     throw new ApiV1Error("idempotency_conflict", "clientMutationId was already used for a different request");
   }
 
+  if (reservation.resumed) {
+    // This retry took over the key of a write that failed because D1 was briefly unavailable.
+    // That write may have committed after all; if the operation finds it, answer it.
+    const recovered = await options.recoverInFlight?.(db, reservation.record, { stopped: true });
+    if (recovered) {
+      await completeRecoveredIdempotencyKey(db, reservation.record, requestId, recovered);
+      return apiV1RecoveredReplayResponse(requestId, operation, recovered);
+    }
+  }
+
   let result: Awaited<ReturnType<typeof write>>;
   try {
     await options.beforeWrite?.(db, reservation.record);
     result = await write(db, reservation.record);
   } catch (error) {
+    if (isD1Unavailable(error)) {
+      // The write may still commit. Keep its key, released for the client's retry of the same
+      // clientMutationId, which takes it over with the same key id (see api-idempotency.server).
+      // If D1 is still down, the key stays in flight, as before.
+      await releaseIdempotencyKeyForRetry(db, reservation.record.id).catch(() => undefined);
+      throw error;
+    }
     const recovered = error instanceof ApiV1Error
       ? null
       : await options.recoverInFlight?.(db, reservation.record, { stopped: true });
@@ -7871,9 +7892,14 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
       });
     }
 
-    logApiV1InternalError(args, requestId, error);
-    captureApiV1InternalException(args, error);
     const internalError = normalizeApiV1InternalError(error);
+    // A transient D1 failure is expected now and then and is answered as retryable (the request
+    // event records its code, and retried writes log their own decisions); only unexpected
+    // failures are logged and go to exception telemetry.
+    if (internalError.code === "internal_error") {
+      logApiV1InternalError(args, requestId, error);
+      captureApiV1InternalException(args, error);
+    }
     const response = isNativeAuthPath(path)
       ? apiV1SamePartyErrorResponse(requestId, internalError)
       : apiV1ErrorResponse(requestId, internalError);
@@ -7889,6 +7915,11 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
 }
 
 export function normalizeApiV1InternalError(error: unknown): ApiV1Error {
+  if (isD1Unavailable(error)) {
+    return new ApiV1Error("temporarily_unavailable", API_V1_TEMPORARILY_UNAVAILABLE_MESSAGE, {
+      retryAfterSeconds: D1_WRITE_RETRY_AFTER_SECONDS,
+    });
+  }
   return new ApiV1Error("internal_error", "Internal error");
 }
 

@@ -11,6 +11,7 @@ import {
   IDEMPOTENCY_TTL_MS,
   replayIdempotencyResponse,
   newReservationId,
+  releaseIdempotencyKeyForRetry,
   reserveIdempotencyKey,
 } from "~/lib/api-idempotency.server";
 import { getLocalDb } from "~/lib/db.server";
@@ -563,7 +564,7 @@ describe("API idempotency keys when D1's connection drops", () => {
   });
 
   /** The client, with one method on idempotency keys failing once with a lost connection, after (`answer`) or before running. */
-  function losing(method: "create" | "update", lost: "answer" | "write") {
+  function losing(method: "create" | "update" | "updateMany", lost: "answer" | "write") {
     let failed = false;
     return new Proxy(db, {
       get: (target, prop) => prop === "apiIdempotencyKey"
@@ -609,6 +610,86 @@ describe("API idempotency keys when D1's connection drops", () => {
     await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({
       status: "replay",
       record: { responseStatus: 201, responseBody: JSON.stringify({ ok: true }) },
+    });
+  });
+
+  describe("a key released after D1 was briefly unavailable", () => {
+    async function released() {
+      const reservation = await reserveIdempotencyKey(db, input());
+      if (reservation.status !== "reserved") throw new Error("expected reservation");
+      await releaseIdempotencyKeyForRetry(db, reservation.record.id);
+      return reservation.record;
+    }
+
+    it("lets the client's retry of the same request take it over, under the same key id, once", async () => {
+      const record = await released();
+      expect(await db.apiIdempotencyKey.findUnique({ where: { id: record.id } }))
+        .toMatchObject({ responseStatus: 503, responseBody: null });
+
+      const retry = await reserveIdempotencyKey(db, input());
+      expect(retry).toMatchObject({ status: "reserved", resumed: true, record: { id: record.id, responseStatus: null } });
+      // A second retry while the first runs waits, as for any key in flight.
+      await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({ status: "in_flight", record: { id: record.id } });
+      expect(await db.apiIdempotencyKey.count()).toBe(1);
+    });
+
+    it("answers a conflict to a different request with the same key", async () => {
+      await released();
+      await expect(reserveIdempotencyKey(db, input("hash-b"))).resolves.toMatchObject({ status: "conflict" });
+    });
+
+    it("never releases a key whose response was saved", async () => {
+      const reservation = await reserveIdempotencyKey(db, input());
+      await completeIdempotencyKey(db, reservation.record.id, { status: 201, body: { ok: true } });
+      await releaseIdempotencyKeyForRetry(db, reservation.record.id);
+      await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({
+        status: "replay",
+        record: { responseStatus: 201 },
+      });
+    });
+
+    it.each(["answer", "write"] as const)(
+      "takes the key over once when the takeover's connection drops (lost %s)",
+      async (lost) => {
+        const record = await released();
+        const retry = await reserveIdempotencyKey(losing("updateMany", lost), input());
+        expect(retry).toMatchObject({ status: "reserved", resumed: true, record: { id: record.id } });
+        await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({ status: "in_flight" });
+      },
+    );
+
+    it("waits when another retry took the key over first", async () => {
+      const record = await released();
+      const racing = new Proxy(db, {
+        get: (target, prop) => prop === "apiIdempotencyKey"
+          ? new Proxy(target.apiIdempotencyKey, {
+            get: (keys, name) => name !== "updateMany" ? Reflect.get(keys, name) : async (args: never) => {
+              // The other retry's takeover lands between this request's read and its claim.
+              await db.apiIdempotencyKey.update({ where: { id: record.id }, data: { responseStatus: null } });
+              return keys.updateMany(args);
+            },
+          })
+          : Reflect.get(target, prop),
+      }) as typeof db;
+
+      await expect(reserveIdempotencyKey(racing, input())).resolves.toMatchObject({ status: "in_flight", record: { id: record.id } });
+    });
+
+    it("answers D1 unavailable when the release cannot reach D1", async () => {
+      const reservation = await reserveIdempotencyKey(db, input());
+      const down = new Proxy(db, {
+        get: (target, prop) => prop === "apiIdempotencyKey"
+          ? new Proxy(target.apiIdempotencyKey, {
+            get: (keys, name) => name !== "updateMany" ? Reflect.get(keys, name) : async () => {
+              throw new Error(NETWORK_LOST);
+            },
+          })
+          : Reflect.get(target, prop),
+      }) as typeof db;
+
+      await expect(releaseIdempotencyKeyForRetry(down, reservation.record.id)).rejects.toMatchObject({ name: "D1WriteUnavailableError" });
+      // The key stays in flight until it expires, as before a release existed.
+      await expect(reserveIdempotencyKey(db, input())).resolves.toMatchObject({ status: "in_flight" });
     });
   });
 
