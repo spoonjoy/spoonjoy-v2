@@ -26,7 +26,7 @@ import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 const WEBKIT_SHEET_TESTS = "app/components/ouro/sheet/sheet.test.tsx";
 const WEBKIT_SKIPPED_UNDER_VITEST_4 =
   /^(?!.*(?:sits at the bottom edge, fits its content and keeps clear of the top|covers the visible screen on a page scrolled 2000px))/;
-const largePage = playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } });
+const largePage = () => playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } });
 
 const projects = ouroTestProjects({
   css: "./app/styles/tailwind.css",
@@ -38,13 +38,30 @@ const projects = ouroTestProjects({
   ],
 }).flatMap((project) => {
   if (project.test?.name === "ouro-touch") return [project];
-  const test = { ...project.test, browser: { ...project.test?.browser, provider: largePage } };
-  if (project.test?.name !== "ouro-webkit") return [{ ...project, test }];
+  // Each project gets its own copy of the browser instances: Vitest names an instance in place
+  // ("ouro-webkit (webkit)"), so two projects sharing one instance object would collide.
+  const withLargePage = () => ({
+    ...project.test,
+    browser: {
+      ...project.test?.browser,
+      provider: largePage(),
+      instances: project.test?.browser?.instances?.map((instance) => ({ ...instance })),
+    },
+  });
+  if (project.test?.name !== "ouro-webkit") return [{ ...project, test: withLargePage() }];
   return [
-    { ...project, test: { ...test, exclude: [...(test.exclude ?? []), WEBKIT_SHEET_TESTS] } },
     {
       ...project,
-      test: { ...test, name: "ouro-webkit-sheet", include: [WEBKIT_SHEET_TESTS], testNamePattern: WEBKIT_SKIPPED_UNDER_VITEST_4 },
+      test: { ...withLargePage(), exclude: [...(project.test.exclude ?? []), WEBKIT_SHEET_TESTS] },
+    },
+    {
+      ...project,
+      test: {
+        ...withLargePage(),
+        name: "ouro-webkit-sheet",
+        include: [WEBKIT_SHEET_TESTS],
+        testNamePattern: WEBKIT_SKIPPED_UNDER_VITEST_4,
+      },
     },
   ];
 });
