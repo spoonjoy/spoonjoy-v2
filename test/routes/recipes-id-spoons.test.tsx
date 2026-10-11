@@ -445,6 +445,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Cook logged.");
   });
 
+  // The close wait below may take 5 seconds, the default budget for a whole test, so this test
+  // gets room for its typing and two submits around it.
   it("keeps the SpoonDialog open with the note and a retryable message when the cook could not be saved", async () => {
     const mockData = {
       recipe: {
@@ -508,7 +510,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     await userEvent.click(screen.getByRole("button", { name: /log cook/i }));
     await screen.findByRole("heading", { name: /log a cook/i });
     expect(screen.queryByRole("alert")).toBeNull();
-  });
+  }, 20_000);
 
   it("refuses an oversized spoon upload with 413 before buffering the whole body", async () => {
     const upload = oversizedMultipartUpload("http://localhost/recipes/x", cookSessionCookie);
