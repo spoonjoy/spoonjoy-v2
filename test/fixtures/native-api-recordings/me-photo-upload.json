@@ -1,0 +1,22 @@
+{
+  "name": "me-photo-upload",
+  "endpoint": "POST /api/v1/me/photo",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_091",
+    "data": {
+      "id": "id_001",
+      "email": "contract-chef@example.test",
+      "username": "contract_chef",
+      "photoUrl": "http://localhost/photos/profiles/id_001/1767225600000-uuid_020.png",
+      "hasPassword": true,
+      "oauthAccounts": [],
+      "passkeys": [],
+      "mutation": {
+        "clientMutationId": "opaque_092",
+        "replayed": false
+      }
+    }
+  }
+}

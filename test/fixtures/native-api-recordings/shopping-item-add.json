@@ -1,0 +1,30 @@
+{
+  "name": "shopping-item-add",
+  "endpoint": "POST /api/v1/shopping-list/items",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_066",
+    "data": {
+      "created": true,
+      "updated": false,
+      "item": {
+        "id": "uuid_015",
+        "name": "parmesan",
+        "quantity": 50,
+        "unit": "g",
+        "checked": false,
+        "checkedAt": null,
+        "deletedAt": null,
+        "categoryKey": null,
+        "iconKey": null,
+        "sortIndex": 0,
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "mutation": {
+        "clientMutationId": "opaque_067",
+        "replayed": false
+      }
+    }
+  }
+}

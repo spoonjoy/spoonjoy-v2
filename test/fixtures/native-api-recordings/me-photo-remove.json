@@ -1,0 +1,22 @@
+{
+  "name": "me-photo-remove",
+  "endpoint": "DELETE /api/v1/me/photo",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_093",
+    "data": {
+      "id": "id_001",
+      "email": "contract-chef@example.test",
+      "username": "contract_chef",
+      "photoUrl": null,
+      "hasPassword": true,
+      "oauthAccounts": [],
+      "passkeys": [],
+      "mutation": {
+        "clientMutationId": "opaque_094",
+        "replayed": false
+      }
+    }
+  }
+}

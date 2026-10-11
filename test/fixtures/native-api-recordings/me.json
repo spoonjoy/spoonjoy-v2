@@ -1,0 +1,18 @@
+{
+  "name": "me",
+  "endpoint": "GET /api/v1/me",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_088",
+    "data": {
+      "id": "id_001",
+      "email": "contract-chef@example.test",
+      "username": "contract_chef",
+      "photoUrl": null,
+      "hasPassword": true,
+      "oauthAccounts": [],
+      "passkeys": []
+    }
+  }
+}

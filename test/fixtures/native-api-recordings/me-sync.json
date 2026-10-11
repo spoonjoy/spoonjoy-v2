@@ -1,0 +1,302 @@
+{
+  "name": "me-sync",
+  "endpoint": "GET /api/v1/me/sync",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_083",
+    "data": {
+      "freshness": {
+        "accountId": "id_001",
+        "environment": "local",
+        "schemaVersion": 1,
+        "sourceEndpoint": "/api/v1/me/sync",
+        "generatedAt": "2026-01-01T00:00:00.000Z",
+        "lastValidatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "entries": [
+        {
+          "action": "upsert",
+          "kind": "profile",
+          "resourceId": "id_001",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "payload": {
+            "id": "id_001",
+            "email": "contract-chef@example.test",
+            "username": "contract_chef",
+            "photoUrl": null,
+            "joinedLabel": "Joined Spoonjoy",
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "upsert",
+          "kind": "recipe",
+          "resourceId": "id_004",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "payload": {
+            "id": "id_004",
+            "title": "Lemon Pantry Pasta",
+            "description": "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
+            "servings": "4",
+            "chef": {
+              "id": "id_001",
+              "username": "contract_chef"
+            },
+            "coverImageUrl": null,
+            "coverProvenanceLabel": null,
+            "coverSourceType": null,
+            "coverVariant": null,
+            "href": "/recipes/id_004",
+            "canonicalUrl": "http://localhost/recipes/id_004",
+            "attribution": {
+              "creditText": "Lemon Pantry Pasta by contract_chef on Spoonjoy",
+              "canonicalUrl": "http://localhost/recipes/id_004",
+              "sourceUrl": null,
+              "sourceHost": null,
+              "sourceRecipe": null
+            },
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "steps": [
+              {
+                "id": "uuid_001",
+                "stepNum": 2,
+                "stepTitle": "Boil",
+                "description": "Cook the spaghetti in salted water.",
+                "duration": 10,
+                "ingredients": [
+                  {
+                    "id": "uuid_002",
+                    "name": "salt",
+                    "quantity": 1,
+                    "unit": "tsp"
+                  },
+                  {
+                    "id": "uuid_003",
+                    "name": "spaghetti",
+                    "quantity": 200,
+                    "unit": "g"
+                  }
+                ],
+                "usingSteps": []
+              },
+              {
+                "id": "id_005",
+                "stepNum": 3,
+                "stepTitle": "Toss and serve",
+                "description": "Toss the pasta with lemon and olive oil, then serve.",
+                "duration": 3,
+                "ingredients": [
+                  {
+                    "id": "uuid_004",
+                    "name": "lemon",
+                    "quantity": 1,
+                    "unit": "whole"
+                  },
+                  {
+                    "id": "id_006",
+                    "name": "olive oil",
+                    "quantity": 2,
+                    "unit": "tbsp"
+                  }
+                ],
+                "usingSteps": [
+                  {
+                    "id": "uuid_007",
+                    "inputStepNum": 3,
+                    "outputStepNum": 2,
+                    "outputOfStep": {
+                      "stepNum": 2,
+                      "stepTitle": "Boil"
+                    }
+                  }
+                ]
+              }
+            ],
+            "cookbooks": [
+              {
+                "id": "id_016",
+                "title": "Weeknight Dinners",
+                "href": "/cookbooks/id_016",
+                "canonicalUrl": "http://localhost/cookbooks/id_016"
+              }
+            ]
+          }
+        },
+        {
+          "action": "upsert",
+          "kind": "recipe",
+          "resourceId": "id_015",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "payload": {
+            "id": "id_015",
+            "title": "Tomato Herb Soup, my way",
+            "description": "A simple soup.",
+            "servings": "2",
+            "chef": {
+              "id": "id_001",
+              "username": "contract_chef"
+            },
+            "coverImageUrl": null,
+            "coverProvenanceLabel": null,
+            "coverSourceType": null,
+            "coverVariant": null,
+            "href": "/recipes/id_015",
+            "canonicalUrl": "http://localhost/recipes/id_015",
+            "attribution": {
+              "creditText": "Tomato Herb Soup, my way by contract_chef on Spoonjoy",
+              "canonicalUrl": "http://localhost/recipes/id_015",
+              "sourceUrl": null,
+              "sourceHost": null,
+              "sourceRecipe": {
+                "id": "id_014",
+                "title": "Tomato Herb Soup",
+                "chef": {
+                  "id": "id_002",
+                  "username": "contract_friend"
+                },
+                "href": "/recipes/id_014",
+                "canonicalUrl": "http://localhost/recipes/id_014",
+                "deleted": false
+              }
+            },
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "steps": [
+              {
+                "id": "uuid_013",
+                "stepNum": 1,
+                "stepTitle": null,
+                "description": "Simmer everything.",
+                "duration": 20,
+                "ingredients": [
+                  {
+                    "id": "uuid_014",
+                    "name": "tomatoes",
+                    "quantity": 400,
+                    "unit": "g"
+                  }
+                ],
+                "usingSteps": []
+              }
+            ],
+            "cookbooks": []
+          }
+        },
+        {
+          "action": "upsert",
+          "kind": "cookbook",
+          "resourceId": "id_016",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "payload": {
+            "id": "id_016",
+            "title": "Weeknight Dinners",
+            "chef": {
+              "id": "id_001",
+              "username": "contract_chef"
+            },
+            "recipeCount": 1,
+            "coverImageUrls": [],
+            "href": "/cookbooks/id_016",
+            "canonicalUrl": "http://localhost/cookbooks/id_016",
+            "attribution": {
+              "creditText": "Weeknight Dinners by contract_chef on Spoonjoy",
+              "canonicalUrl": "http://localhost/cookbooks/id_016"
+            },
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "recipes": []
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "cookbook",
+          "resourceId": "id_017",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "cookbook",
+            "resourceId": "id_017",
+            "parentResourceId": null,
+            "title": "Someday",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "shoppingItem",
+          "resourceId": "uuid_015",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "shoppingItem",
+            "resourceId": "uuid_015",
+            "parentResourceId": "id_018",
+            "title": "parmesan",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "shoppingItem",
+          "resourceId": "uuid_016",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "shoppingItem",
+            "resourceId": "uuid_016",
+            "parentResourceId": "id_018",
+            "title": "spaghetti",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "shoppingItem",
+          "resourceId": "uuid_017",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "shoppingItem",
+            "resourceId": "uuid_017",
+            "parentResourceId": "id_018",
+            "title": "salt",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "shoppingItem",
+          "resourceId": "uuid_018",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "shoppingItem",
+            "resourceId": "uuid_018",
+            "parentResourceId": "id_018",
+            "title": "lemon",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "shoppingItem",
+          "resourceId": "uuid_019",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "shoppingItem",
+            "resourceId": "uuid_019",
+            "parentResourceId": "id_018",
+            "title": "olive oil",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        }
+      ],
+      "nextCursor": "cursor_001",
+      "hasMore": false
+    }
+  }
+}

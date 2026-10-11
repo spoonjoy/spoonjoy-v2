@@ -1,0 +1,15 @@
+{
+  "name": "notification-preferences",
+  "endpoint": "GET /api/v1/me/notification-preferences",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_095",
+    "data": {
+      "notifySpoonOnMyRecipe": true,
+      "notifyForkOfMyRecipe": true,
+      "notifyCookbookSaveOfMine": true,
+      "notifyFellowChefOriginCook": true
+    }
+  }
+}

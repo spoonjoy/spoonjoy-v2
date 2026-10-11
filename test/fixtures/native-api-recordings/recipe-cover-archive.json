@@ -1,0 +1,36 @@
+{
+  "name": "recipe-cover-archive",
+  "endpoint": "DELETE /api/v1/recipes/{id}/covers/{coverId}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_043",
+    "data": {
+      "activeCover": null,
+      "previousActiveCover": null,
+      "archivedCover": {
+        "id": "id_009",
+        "recipeId": "id_004",
+        "status": "archived",
+        "sourceType": "chef-upload",
+        "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "stylizedImageUrl": null,
+        "displayUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "activeVariant": null,
+        "provenanceLabel": "Original photo",
+        "sourceSpoonId": null,
+        "createdById": "id_001",
+        "archivedAt": "2026-01-01T00:00:00.000Z",
+        "generationStatus": "none",
+        "failureReason": null,
+        "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "warnings": [],
+      "mutation": {
+        "clientMutationId": "opaque_044",
+        "replayed": false
+      }
+    }
+  }
+}

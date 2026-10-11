@@ -1,0 +1,31 @@
+{
+  "name": "connections-list",
+  "endpoint": "GET /api/v1/me/connections",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_112",
+    "data": {
+      "connections": [
+        {
+          "id": "opaque_113",
+          "clientId": "opaque_002",
+          "clientName": "Spoonjoy Apple",
+          "issuer": "http://localhost",
+          "resource": null,
+          "scopes": [
+            "account:read",
+            "account:write",
+            "kitchen:read",
+            "kitchen:write",
+            "shopping_list:read",
+            "shopping_list:write"
+          ],
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "refreshTokenCount": 1,
+          "accessTokenCount": 2
+        }
+      ]
+    }
+  }
+}

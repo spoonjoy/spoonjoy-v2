@@ -1,0 +1,19 @@
+{
+  "name": "notification-preferences-update",
+  "endpoint": "PATCH /api/v1/me/notification-preferences",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_096",
+    "data": {
+      "notifySpoonOnMyRecipe": true,
+      "notifyForkOfMyRecipe": false,
+      "notifyCookbookSaveOfMine": true,
+      "notifyFellowChefOriginCook": false,
+      "mutation": {
+        "clientMutationId": "opaque_097",
+        "replayed": false
+      }
+    }
+  }
+}

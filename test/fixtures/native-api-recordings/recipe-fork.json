@@ -1,0 +1,78 @@
+{
+  "name": "recipe-fork",
+  "endpoint": "POST /api/v1/recipes/{id}/fork",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_047",
+    "data": {
+      "fork": {
+        "appliedTitle": "Tomato Herb Soup, my way",
+        "sourceChef": {
+          "id": "id_002",
+          "username": "contract_friend"
+        },
+        "sourceRecipeId": "id_014",
+        "titleWasSuffixed": false
+      },
+      "recipe": {
+        "id": "id_015",
+        "title": "Tomato Herb Soup, my way",
+        "description": "A simple soup.",
+        "servings": "2",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef"
+        },
+        "coverImageUrl": null,
+        "coverProvenanceLabel": null,
+        "coverSourceType": null,
+        "coverVariant": null,
+        "href": "/recipes/id_015",
+        "canonicalUrl": "http://localhost/recipes/id_015",
+        "attribution": {
+          "creditText": "Tomato Herb Soup, my way by contract_chef on Spoonjoy",
+          "canonicalUrl": "http://localhost/recipes/id_015",
+          "sourceUrl": null,
+          "sourceHost": null,
+          "sourceRecipe": {
+            "id": "id_014",
+            "title": "Tomato Herb Soup",
+            "chef": {
+              "id": "id_002",
+              "username": "contract_friend"
+            },
+            "href": "/recipes/id_014",
+            "canonicalUrl": "http://localhost/recipes/id_014",
+            "deleted": false
+          }
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "steps": [
+          {
+            "id": "uuid_013",
+            "stepNum": 1,
+            "stepTitle": null,
+            "description": "Simmer everything.",
+            "duration": 20,
+            "ingredients": [
+              {
+                "id": "uuid_014",
+                "name": "tomatoes",
+                "quantity": 400,
+                "unit": "g"
+              }
+            ],
+            "usingSteps": []
+          }
+        ],
+        "cookbooks": []
+      },
+      "mutation": {
+        "clientMutationId": "opaque_048",
+        "replayed": false
+      }
+    }
+  }
+}

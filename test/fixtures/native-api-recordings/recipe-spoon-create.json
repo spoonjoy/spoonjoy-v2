@@ -1,0 +1,54 @@
+{
+  "name": "recipe-spoon-create",
+  "endpoint": "POST /api/v1/recipes/{id}/spoons",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_032",
+    "data": {
+      "spoon": {
+        "id": "id_010",
+        "chefId": "id_001",
+        "recipeId": "id_004",
+        "cookedAt": "2026-01-01T00:00:00.000Z",
+        "photoUrl": null,
+        "note": "Added extra lemon zest.",
+        "nextTime": "Try bucatini.",
+        "deletedAt": null,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef",
+          "photoUrl": null
+        }
+      },
+      "isOriginCook": true,
+      "activeCover": {
+        "id": "id_009",
+        "recipeId": "id_004",
+        "status": "ready",
+        "sourceType": "chef-upload",
+        "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "stylizedImageUrl": null,
+        "displayUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "activeVariant": "image",
+        "provenanceLabel": "Original photo",
+        "sourceSpoonId": null,
+        "createdById": "id_001",
+        "archivedAt": null,
+        "generationStatus": "none",
+        "failureReason": null,
+        "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "previousActiveCover": null,
+      "createdCover": null,
+      "generationStatus": null,
+      "mutation": {
+        "clientMutationId": "opaque_033",
+        "replayed": false
+      }
+    }
+  }
+}

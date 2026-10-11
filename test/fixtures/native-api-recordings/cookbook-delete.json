@@ -1,0 +1,35 @@
+{
+  "name": "cookbook-delete",
+  "endpoint": "DELETE /api/v1/cookbooks/{id}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_061",
+    "data": {
+      "deleted": true,
+      "cookbook": {
+        "id": "id_017",
+        "title": "Someday",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef"
+        },
+        "recipeCount": 0,
+        "coverImageUrls": [],
+        "href": "/cookbooks/id_017",
+        "canonicalUrl": "http://localhost/cookbooks/id_017",
+        "attribution": {
+          "creditText": "Someday by contract_chef on Spoonjoy",
+          "canonicalUrl": "http://localhost/cookbooks/id_017"
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "recipes": []
+      },
+      "mutation": {
+        "clientMutationId": "opaque_062",
+        "replayed": false
+      }
+    }
+  }
+}

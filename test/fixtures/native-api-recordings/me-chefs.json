@@ -1,0 +1,60 @@
+{
+  "name": "me-chefs",
+  "endpoint": "GET /api/v1/me/chefs",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_082",
+    "data": {
+      "viewer": {
+        "id": "id_001",
+        "username": "contract_chef",
+        "photoUrl": null
+      },
+      "fellowChefs": {
+        "total": 1,
+        "rows": [
+          {
+            "chefId": "id_002",
+            "username": "contract_friend",
+            "photoUrl": null,
+            "interactionCounts": {
+              "spoons": 0,
+              "forks": 1,
+              "cookbookSaves": 0
+            },
+            "latestInteractionAt": "2026-01-01T00:00:00.000Z"
+          }
+        ]
+      },
+      "chefsUsingMyRecipes": {
+        "total": 0,
+        "rows": []
+      },
+      "activity": [
+        {
+          "id": "outbound:fork:id_015",
+          "kind": "forked",
+          "direction": "outbound",
+          "eventAt": "2026-01-01T00:00:00.000Z",
+          "actor": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          },
+          "otherChef": {
+            "id": "id_002",
+            "username": "contract_friend",
+            "photoUrl": null
+          },
+          "recipe": {
+            "id": "id_014",
+            "title": "Tomato Herb Soup"
+          },
+          "cookbook": null,
+          "label": "You forked Tomato Herb Soup from contract_friend."
+        }
+      ]
+    }
+  }
+}

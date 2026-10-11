@@ -1,0 +1,47 @@
+{
+  "name": "apns-device-revoke",
+  "endpoint": "DELETE /api/v1/me/apns-devices/{deviceId}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_101",
+    "data": {
+      "revoked": true,
+      "revokedCount": 1,
+      "device": {
+        "id": "id_020",
+        "deviceId": "opaque_099",
+        "platform": "ios",
+        "environment": "development",
+        "tokenPrefix": "aaaaaaaaaaaa",
+        "deviceName": "Contract iPhone",
+        "appVersion": "1.0 (1)",
+        "enabledAt": "2026-01-01T00:00:00.000Z",
+        "revokedAt": "2026-01-01T00:00:00.000Z",
+        "lastRegisteredAt": "2026-01-01T00:00:00.000Z",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "devices": [
+        {
+          "id": "id_020",
+          "deviceId": "opaque_099",
+          "platform": "ios",
+          "environment": "development",
+          "tokenPrefix": "aaaaaaaaaaaa",
+          "deviceName": "Contract iPhone",
+          "appVersion": "1.0 (1)",
+          "enabledAt": "2026-01-01T00:00:00.000Z",
+          "revokedAt": "2026-01-01T00:00:00.000Z",
+          "lastRegisteredAt": "2026-01-01T00:00:00.000Z",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "mutation": {
+        "clientMutationId": "opaque_102",
+        "replayed": false
+      }
+    }
+  }
+}

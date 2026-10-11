@@ -1,0 +1,25 @@
+{
+  "name": "token-revoke",
+  "endpoint": "DELETE /api/v1/tokens/{credentialId}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_105",
+    "data": {
+      "revoked": true,
+      "credential": {
+        "id": "uuid_021",
+        "name": "Shortcuts",
+        "tokenPrefix": "access_token_009",
+        "scopes": [
+          "recipes:read"
+        ],
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "lastUsedAt": null,
+        "revokedAt": "2026-01-01T00:00:00.000Z",
+        "expiresAt": "2026-01-01T00:00:00.000Z"
+      }
+    }
+  }
+}

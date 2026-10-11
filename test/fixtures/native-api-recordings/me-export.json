@@ -1,0 +1,200 @@
+{
+  "name": "me-export",
+  "endpoint": "GET /api/v1/me/export",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_107",
+    "data": {
+      "format": "spoonjoy.account-export.v1",
+      "exportedAt": "2026-01-01T00:00:00.000Z",
+      "account": {
+        "id": "id_001",
+        "username": "contract_chef",
+        "email": "contract-chef@example.test",
+        "photoUrl": null,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "signInMethods": [
+          "password"
+        ]
+      },
+      "recipes": [
+        {
+          "id": "id_019",
+          "title": "Garlic Bread",
+          "description": null,
+          "servings": "4",
+          "sourceUrl": "https://recipes.example/garlic-bread",
+          "forkedFromRecipeId": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "deletedAt": null,
+          "url": "http://localhost/recipes/id_019",
+          "steps": [],
+          "covers": []
+        },
+        {
+          "id": "id_004",
+          "title": "Lemon Pantry Pasta",
+          "description": "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
+          "servings": "4",
+          "sourceUrl": null,
+          "forkedFromRecipeId": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "deletedAt": null,
+          "url": "http://localhost/recipes/id_004",
+          "steps": [
+            {
+              "stepNum": 2,
+              "title": "Boil",
+              "description": "Cook the spaghetti in salted water.",
+              "durationMinutes": 10,
+              "usesOutputOfSteps": [],
+              "ingredients": [
+                {
+                  "quantity": 200,
+                  "unit": "g",
+                  "name": "spaghetti"
+                },
+                {
+                  "quantity": 1,
+                  "unit": "tsp",
+                  "name": "salt"
+                }
+              ]
+            },
+            {
+              "stepNum": 3,
+              "title": "Toss and serve",
+              "description": "Toss the pasta with lemon and olive oil, then serve.",
+              "durationMinutes": 3,
+              "usesOutputOfSteps": [
+                2
+              ],
+              "ingredients": [
+                {
+                  "quantity": 1,
+                  "unit": "whole",
+                  "name": "lemon"
+                },
+                {
+                  "quantity": 2,
+                  "unit": "tbsp",
+                  "name": "olive oil"
+                }
+              ]
+            }
+          ],
+          "covers": [
+            {
+              "id": "id_009",
+              "active": false,
+              "status": "archived",
+              "sourceType": "chef-upload",
+              "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+              "stylizedImageUrl": null,
+              "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+              "createdAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "id": "id_012",
+              "active": false,
+              "status": "ready",
+              "sourceType": "spoon",
+              "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+              "stylizedImageUrl": null,
+              "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+              "createdAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "id": "id_013",
+              "active": false,
+              "status": "ready",
+              "sourceType": "spoon",
+              "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+              "stylizedImageUrl": null,
+              "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+              "createdAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "id": "uuid_009",
+              "active": false,
+              "status": "failed",
+              "sourceType": "ai-placeholder",
+              "imageUrl": null,
+              "stylizedImageUrl": null,
+              "sourceImageUrl": null,
+              "createdAt": "2026-01-01T00:00:00.000Z"
+            }
+          ]
+        },
+        {
+          "id": "id_015",
+          "title": "Tomato Herb Soup, my way",
+          "description": "A simple soup.",
+          "servings": "2",
+          "sourceUrl": null,
+          "forkedFromRecipeId": "id_014",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "deletedAt": null,
+          "url": "http://localhost/recipes/id_015",
+          "steps": [
+            {
+              "stepNum": 1,
+              "title": null,
+              "description": "Simmer everything.",
+              "durationMinutes": 20,
+              "usesOutputOfSteps": [],
+              "ingredients": [
+                {
+                  "quantity": 400,
+                  "unit": "g",
+                  "name": "tomatoes"
+                }
+              ]
+            }
+          ],
+          "covers": []
+        }
+      ],
+      "cookbooks": [
+        {
+          "id": "id_016",
+          "title": "Weeknight Dinners",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "recipes": [
+            {
+              "id": "id_004",
+              "title": "Lemon Pantry Pasta",
+              "chef": "contract_chef",
+              "addedAt": "2026-01-01T00:00:00.000Z"
+            }
+          ]
+        }
+      ],
+      "shoppingList": [],
+      "cooks": [
+        {
+          "id": "id_010",
+          "recipeId": "id_004",
+          "recipeTitle": "Lemon Pantry Pasta",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "note": "Added extra lemon zest and pepper.",
+          "nextTime": "Try bucatini.",
+          "photoUrl": null
+        },
+        {
+          "id": "id_011",
+          "recipeId": "id_004",
+          "recipeTitle": "Lemon Pantry Pasta",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "note": "Lovely and quick.",
+          "nextTime": null,
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png"
+        }
+      ]
+    }
+  }
+}

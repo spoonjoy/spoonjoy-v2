@@ -1,0 +1,74 @@
+{
+  "name": "recipe-covers-list",
+  "endpoint": "GET /api/v1/recipes/{id}/covers",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_029",
+    "data": {
+      "covers": [
+        {
+          "id": "uuid_009",
+          "recipeId": "id_004",
+          "status": "failed",
+          "sourceType": "ai-placeholder",
+          "imageUrl": null,
+          "stylizedImageUrl": null,
+          "displayUrl": null,
+          "activeVariant": null,
+          "provenanceLabel": null,
+          "sourceSpoonId": null,
+          "createdById": "id_001",
+          "archivedAt": null,
+          "generationStatus": "failed",
+          "failureReason": "missing_image_provider_config",
+          "sourceImageUrl": null,
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "id_009",
+          "recipeId": "id_004",
+          "status": "ready",
+          "sourceType": "chef-upload",
+          "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+          "stylizedImageUrl": null,
+          "displayUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+          "activeVariant": "image",
+          "provenanceLabel": "Original photo",
+          "sourceSpoonId": null,
+          "createdById": "id_001",
+          "archivedAt": null,
+          "generationStatus": "none",
+          "failureReason": null,
+          "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "activeCover": {
+        "id": "id_009",
+        "recipeId": "id_004",
+        "status": "ready",
+        "sourceType": "chef-upload",
+        "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "stylizedImageUrl": null,
+        "displayUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "activeVariant": "image",
+        "provenanceLabel": "Original photo",
+        "sourceSpoonId": null,
+        "createdById": "id_001",
+        "archivedAt": null,
+        "generationStatus": "none",
+        "failureReason": null,
+        "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "spoonImages": [],
+      "pagination": {
+        "limit": 20,
+        "offset": 0,
+        "nextOffset": null,
+        "hasMore": false
+      }
+    }
+  }
+}

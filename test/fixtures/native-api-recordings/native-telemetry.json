@@ -1,0 +1,12 @@
+{
+  "name": "native-telemetry",
+  "endpoint": "POST /api/v1/native/telemetry",
+  "status": 202,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_106",
+    "data": {
+      "accepted": true
+    }
+  }
+}
