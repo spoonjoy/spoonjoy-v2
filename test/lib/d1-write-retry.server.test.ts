@@ -11,6 +11,7 @@ import {
   retryD1Write,
   runWithD1WriteRetryReporter,
 } from "~/lib/d1-write-retry.server";
+import { expectConsoleWarning } from "../warning-policy";
 
 const NETWORK_LOST = new Error("D1_ERROR: Network connection lost.");
 const INTERNAL = new Error("D1_ERROR: internal error; reference = abc");
@@ -171,20 +172,15 @@ describe("retryD1Write", () => {
 describe("runWithD1WriteRetryReporter", () => {
   it("logs each retry decision as one JSON line with no SQL or values on a per-run QA Worker", async () => {
     const lines: string[] = [];
-    const warn = vi.spyOn(console, "warn").mockImplementation((line: string) => {
-      lines.push(line);
-    });
-    try {
-      const applied = vi.fn<() => Promise<string | null>>()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce("in");
-      await runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
-        retryD1Write(options<string>({ applied }).options, queuedWrite([NETWORK_LOST, INTERNAL])));
-      await runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
-        retryD1Write(options<string>({ delaysMs: [] }).options, queuedWrite([NETWORK_LOST])).catch(() => null));
-    } finally {
-      warn.mockRestore();
-    }
+    const log = (line: string) => lines.push(line);
+    const applied = vi.fn<() => Promise<string | null>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("in");
+    await runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
+      retryD1Write(options<string>({ applied }).options, queuedWrite([NETWORK_LOST, INTERNAL])), log);
+    await runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
+      retryD1Write(options<string>({ delaysMs: [] }).options, queuedWrite([NETWORK_LOST])).catch(() => null), log);
+
     expect(lines.map((line) => JSON.parse(line))).toEqual([
       { event: "d1_write_retry", scope: "test.write", attempt: 1, kind: "network_connection_lost", outcome: "retry" },
       { event: "d1_write_retry", scope: "test.write", attempt: 2, kind: "internal_error", outcome: "applied" },
@@ -192,29 +188,26 @@ describe("runWithD1WriteRetryReporter", () => {
     ]);
   });
 
-  it("reports nothing anywhere else, and answers the run's own result", async () => {
-    const warn = vi.spyOn(console, "warn");
-    try {
-      await expect(runWithD1WriteRetryReporter({}, () =>
-        retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST])))).resolves.toBe("written on try 2");
-      expect(runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "0" }, () => 7)).toBe(7);
-      await expect(retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST]))).resolves.toBe("written on try 2");
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-    }
+  it("writes the lines to console.warn by default", async () => {
+    expectConsoleWarning(JSON.stringify({ event: "d1_write_retry", scope: "test.write", attempt: 1, kind: "network_connection_lost", outcome: "retry" }));
+    await expect(runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
+      retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST])))).resolves.toBe("written on try 2");
   });
 
-  it("never lets a throwing reporter change the write's outcome", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {
+  it("reports nothing anywhere else, and answers the run's own result", async () => {
+    const log = vi.fn();
+    await expect(runWithD1WriteRetryReporter({}, () =>
+      retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST])), log)).resolves.toBe("written on try 2");
+    expect(runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "0" }, () => 7, log)).toBe(7);
+    await expect(retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST]))).resolves.toBe("written on try 2");
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("never lets a throwing log change the write's outcome", async () => {
+    await expect(runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
+      retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST])), () => {
       throw new Error("log sink down");
-    });
-    try {
-      await expect(runWithD1WriteRetryReporter({ SPOONJOY_QA_ERROR_LOGS: "1" }, () =>
-        retryD1Write(options<string>().options, queuedWrite([NETWORK_LOST])))).resolves.toBe("written on try 2");
-    } finally {
-      warn.mockRestore();
-    }
+    })).resolves.toBe("written on try 2");
   });
 });
 

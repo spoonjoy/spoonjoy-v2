@@ -73,9 +73,13 @@ const reporters = new AsyncLocalStorage<D1WriteRetryReporter>();
  * (SPOONJOY_QA_ERROR_LOGS=1) logs each one as a JSON line, which the Journeys tail summary
  * counts; anywhere else nothing is reported.
  */
-export function runWithD1WriteRetryReporter<T>(env: { SPOONJOY_QA_ERROR_LOGS?: string }, run: () => T): T {
+export function runWithD1WriteRetryReporter<T>(
+  env: { SPOONJOY_QA_ERROR_LOGS?: string },
+  run: () => T,
+  log: (line: string) => void = (line) => console.warn(line),
+): T {
   if (!qaErrorLogsEnabled(env)) return run();
-  return reporters.run((report) => console.warn(JSON.stringify(report)), run);
+  return reporters.run((report) => log(JSON.stringify(report)), run);
 }
 
 function report(entry: D1WriteRetryReport) {
