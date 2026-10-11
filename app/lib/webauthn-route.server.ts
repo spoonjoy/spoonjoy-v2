@@ -28,8 +28,15 @@ import {
 } from "~/lib/webauthn.server";
 import type { AuthTelemetry } from "~/lib/auth-telemetry.server";
 import { requestCanonicalOrigin } from "~/lib/canonical-host.server";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+  isD1Unavailable,
+  retryD1Write,
+} from "~/lib/d1-write-retry.server";
 
 const WEBAUTHN_FAILURE_EVENT = "spoonjoy.webauthn.failure";
 
@@ -63,6 +70,31 @@ function captureWebAuthnUnexpected(
 ) {
   if (!telemetry || error instanceof WebAuthnError) return;
   telemetry.captureException(error, { surface: "webauthn", phase, distinct_id: distinctId });
+}
+
+/**
+ * The JSON answer of a WebAuthn route that failed. A WebAuthnError carries its own status; the
+ * database being briefly unavailable is a retryable 503, so the page can try again; anything else
+ * is a 400 with the error's message.
+ */
+export function webAuthnErrorResponse(error: unknown, fallbackMessage: string): Response {
+  if (isD1Unavailable(error)) {
+    return Response.json(
+      { error: D1_WRITE_UNAVAILABLE_MESSAGE, errorCode: D1_WRITE_UNAVAILABLE_CODE, retryable: true },
+      { status: 503, headers: d1UnavailableHeaders() },
+    );
+  }
+  const status = error instanceof WebAuthnError ? error.status : 400;
+  const message = error instanceof Error ? error.message : fallbackMessage;
+  return Response.json({ error: message }, { status });
+}
+
+/** Stores a new one-time challenge. It sets a fixed value, so after a transient D1 error it simply runs again. */
+async function storeChallenge(db: PrismaClient, userId: string, challenge: string, scope: string): Promise<void> {
+  await retryD1Write({ scope }, () => db.user.update({
+    where: { id: userId },
+    data: { webAuthnChallenge: challenge },
+  }));
 }
 
 function toStoredCredential(row: {
@@ -99,10 +131,7 @@ export async function startRegistration(
       existing.map(toStoredCredential),
     );
 
-    await db.user.update({
-      where: { id: userId },
-      data: { webAuthnChallenge: options.challenge },
-    });
+    await storeChallenge(db, userId, options.challenge, "webauthn.register_challenge");
 
     return options;
   } catch (error) {
@@ -173,10 +202,12 @@ export async function finishRegistration(
   const publicKey = new Uint8Array(credential.publicKey);
 
   // Persist (upsert so re-registering the same authenticator is idempotent),
-  // then clear the one-time challenge.
+  // then clear the one-time challenge. Both set fixed values, so after a transient D1 error each
+  // simply runs again.
   const trimmedName = typeof name === "string" ? name.trim() : "";
+  const createdAt = new Date();
   try {
-    await db.userCredential.upsert({
+    await retryD1Write({ scope: "webauthn.save_passkey" }, () => db.userCredential.upsert({
       where: { id: credential.id },
       create: {
         id: credential.id,
@@ -185,18 +216,18 @@ export async function finishRegistration(
         counter: credential.counter,
         transports: credential.transports,
         name: trimmedName || null,
-        createdAt: new Date(),
+        createdAt,
       },
       update: {
         publicKey,
         counter: credential.counter,
         transports: credential.transports,
       },
-    });
-    await db.user.update({
+    }));
+    await retryD1Write({ scope: "webauthn.clear_challenge" }, () => db.user.update({
       where: { id: userId },
       data: { webAuthnChallenge: null },
-    });
+    }));
   } catch (error) {
     // The passkey verified but persisting it (or clearing the challenge) failed
     // — a silent data-layer fault that strands the user mid-enrollment.
@@ -233,10 +264,7 @@ export async function startAuthentication(
     );
 
     if (user) {
-      await db.user.update({
-        where: { id: user.id },
-        data: { webAuthnChallenge: options.challenge },
-      });
+      await storeChallenge(db, user.id, options.challenge, "webauthn.sign_in_challenge");
     }
 
     return options;
@@ -267,31 +295,57 @@ const COUNTER_ADVANCES = `("counter" < ? OR (? = 0 AND "counter" = 0))`;
  * One D1 batch, so the counter rotation and the challenge clear apply together or not at
  * all. The guards stop the batch when the challenge was already consumed (or replaced) or
  * the stored counter has caught up with this assertion's; returns false then.
+ *
+ * After a transient D1 error the batch runs again. A try that had committed makes the retry stop
+ * on its guards; the user row then carries this sign-in's own update time with the challenge
+ * cleared and the counter at this assertion's, which the retry recognises as its own sign-in.
  */
 async function completeSignInOnD1(d1: D1ReadDatabase, write: SignInWrite): Promise<boolean> {
+  const at = d1Timestamp(new Date());
   try {
-    await d1WriteBatch(d1, [
-      d1Guard(`EXISTS (SELECT 1 FROM "User" WHERE "id" = ? AND "webAuthnChallenge" = ?)`, write.userId, write.challenge),
-      d1Guard(
-        `EXISTS (SELECT 1 FROM "UserCredential" WHERE "id" = ? AND "userId" = ? AND ${COUNTER_ADVANCES})`,
-        write.credentialId,
-        write.userId,
-        write.newCounter,
-        write.newCounter,
-      ),
-      [`UPDATE "UserCredential" SET "counter" = ? WHERE "id" = ?`, write.newCounter, write.credentialId],
-      [
-        `UPDATE "User" SET "webAuthnChallenge" = NULL, "updatedAt" = ? WHERE "id" = ? AND "webAuthnChallenge" = ?`,
-        d1Timestamp(new Date()),
-        write.userId,
-        write.challenge,
-      ],
-    ]);
-    return true;
+    return await retryD1Write({
+      scope: "webauthn.complete_sign_in",
+      applied: async () => (await signInCommitted(d1, write, at)) ? true : null,
+    }, async () => {
+      await signInBatch(d1, write, at);
+      return true;
+    });
   } catch (error) {
     if (isD1GuardFailure(error)) return false;
     throw error;
   }
+}
+
+async function signInCommitted(d1: D1ReadDatabase, write: SignInWrite, at: string): Promise<boolean> {
+  const [[row]] = await d1ReadBatch(d1, [[
+    `SELECT 1 AS "done" FROM "User" u JOIN "UserCredential" c ON c."userId" = u."id"
+     WHERE u."id" = ? AND u."webAuthnChallenge" IS NULL AND u."updatedAt" = ? AND c."id" = ? AND c."counter" = ?`,
+    write.userId,
+    at,
+    write.credentialId,
+    write.newCounter,
+  ]]);
+  return Boolean(row);
+}
+
+async function signInBatch(d1: D1ReadDatabase, write: SignInWrite, at: string): Promise<void> {
+  await d1WriteBatch(d1, [
+    d1Guard(`EXISTS (SELECT 1 FROM "User" WHERE "id" = ? AND "webAuthnChallenge" = ?)`, write.userId, write.challenge),
+    d1Guard(
+      `EXISTS (SELECT 1 FROM "UserCredential" WHERE "id" = ? AND "userId" = ? AND ${COUNTER_ADVANCES})`,
+      write.credentialId,
+      write.userId,
+      write.newCounter,
+      write.newCounter,
+    ),
+    [`UPDATE "UserCredential" SET "counter" = ? WHERE "id" = ?`, write.newCounter, write.credentialId],
+    [
+      `UPDATE "User" SET "webAuthnChallenge" = NULL, "updatedAt" = ? WHERE "id" = ? AND "webAuthnChallenge" = ?`,
+      at,
+      write.userId,
+      write.challenge,
+    ],
+  ]);
 }
 
 /**
@@ -451,8 +505,17 @@ export async function removeUserPasskey(
   userId: string,
   credentialId: string,
 ): Promise<{ removed: boolean }> {
-  const result = await db.userCredential.deleteMany({
-    where: { id: credentialId, userId },
+  // The answer is whether a passkey was removed, so after a transient D1 error the retry must
+  // recognise its own earlier delete: the passkey existed when the delete started, and is now gone.
+  const existing = await db.userCredential.findFirst({ where: { id: credentialId, userId }, select: { id: true } });
+  if (!existing) return { removed: false };
+  // A retry that deletes nothing, because an earlier try landed late, checks the same way.
+  const gone = async () => (await db.userCredential.findFirst({ where: { id: credentialId, userId }, select: { id: true } }))
+    ? null
+    : { count: 1 };
+  const result = await retryD1Write({ scope: "webauthn.remove_passkey", applied: gone }, async () => {
+    const deleted = await db.userCredential.deleteMany({ where: { id: credentialId, userId } });
+    return deleted.count > 0 ? deleted : (await gone()) ?? deleted;
   });
   return { removed: result.count > 0 };
 }
@@ -469,10 +532,12 @@ export async function renameUserPasskey(
   name: string,
 ): Promise<{ renamed: boolean }> {
   const trimmedName = name.trim();
-  const result = await db.userCredential.updateMany({
+  // It sets a fixed name, and matches the passkey however often it runs, so after a transient D1
+  // error it simply runs again.
+  const result = await retryD1Write({ scope: "webauthn.rename_passkey" }, () => db.userCredential.updateMany({
     where: { id: credentialId, userId },
     data: { name: trimmedName || null },
-  });
+  }));
   return { renamed: result.count > 0 };
 }
 

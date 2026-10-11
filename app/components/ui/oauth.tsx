@@ -100,6 +100,7 @@ export function OAuthError({ error, className }: OAuthErrorProps) {
     oauth_unconfigured: 'OAuth is not configured for this environment yet. Email/password login still works.',
     provider_account_taken: 'That OAuth account is already linked to another Spoonjoy account.',
     provider_already_linked: 'That OAuth provider is already linked to your account.',
+    temporarily_unavailable: "Spoonjoy couldn't save your sign-in just now. Please try again in a moment.",
   }
 
   const message = messages[error] ?? 'Something went wrong. Please try again.'
