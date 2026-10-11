@@ -161,6 +161,61 @@ describe("shopping list UX updates", () => {
     expect(input.value).toBe("2 lemons");
   });
 
+  it("sends the same write token for a resubmit after a 503, and a fresh one after each success", async () => {
+    const message = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+    const tokens: Array<{ intent: string; token: string }> = [];
+    const answers = [
+      { intent: "addItem", error: message, errorCode: "temporarily_unavailable", retryable: true },
+      { success: true, intent: "addItem" },
+      { success: true, intent: "addItem" },
+      { success: true, intent: "addFromRecipe" },
+      { success: true, intent: "addFromRecipe" },
+    ];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({ ...singleItemData, recipes: [{ id: "recipe-1", title: "Sunday Sauce" }] }),
+        action: async ({ request }) => {
+          const formData = await request.formData();
+          tokens.push({ intent: String(formData.get("intent")), token: String(formData.get("writeToken")) });
+          return answers[tokens.length - 1];
+        },
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+    await screen.findByTestId("shopping-list-checklist-board");
+    const input = document.querySelector("input[name='ingredientText']") as HTMLInputElement;
+    const addItem = async (count: number) => {
+      fireEvent.change(input, { target: { value: "2 lemons" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      await waitFor(() => expect(tokens).toHaveLength(count));
+    };
+    await addItem(1);
+    await screen.findByTestId("shopping-list-action-error");
+    await addItem(2);
+    await waitFor(() => expect(input.value).toBe(""));
+    await addItem(3);
+
+    fireEvent.change(screen.getByLabelText("Recipe"), { target: { value: "recipe-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add ingredients" }));
+    await waitFor(() => expect(tokens).toHaveLength(4));
+    await waitFor(() => expect((document.querySelectorAll("input[name='writeToken']")[1] as HTMLInputElement).value).not.toBe(tokens[3]!.token));
+    fireEvent.click(screen.getByRole("button", { name: "Add ingredients" }));
+    await waitFor(() => expect(tokens).toHaveLength(5));
+
+    const [failed, resubmitted, next, recipeFirst, recipeNext] = tokens.map(({ token }) => token);
+    expect(failed).toMatch(/^[\w-]{8,}$/);
+    // The resubmit after the 503 is the same add.
+    expect(resubmitted).toBe(failed);
+    // After a success, the next submit is a new add.
+    expect(next).not.toBe(resubmitted);
+    expect(recipeFirst).toMatch(/^[\w-]{8,}$/);
+    expect(recipeFirst).not.toBe(next);
+    expect(recipeNext).not.toBe(recipeFirst);
+  });
+
   it("keeps the market checklist narrower than the shopping-list header on desktop", async () => {
     const Stub = createTestRoutesStub([
       {

@@ -202,7 +202,7 @@ describe("shopping list actions on a D1 binding", () => {
       { intent: "addFromRecipe", recipeId: "no-such-recipe" },
     ]);
 
-    expect(responses).toEqual([{ success: true }, { status: 404 }, { status: 404 }]);
+    expect(responses).toEqual([{ success: true, intent: "addFromRecipe" }, { status: 404 }, { status: 404 }]);
     // 1 + 0.5 cups of flour, doubled, added to the 2 already on the list; a recipe keeps the
     // item's own category.
     expect(item(state, "flour (cups)")).toMatchObject({ quantity: 5, sortIndex: 0, categoryKey: "produce" });
@@ -215,10 +215,12 @@ describe("shopping list actions on a D1 binding", () => {
 
   it("checks, unchecks, removes and clears as the Prisma path does, closing the gaps", async () => {
     const { state } = await onBothPaths([
-      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.salt! }),
+      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.salt!, nextChecked: "true" }),
       (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.pepper!, nextChecked: "true" }),
-      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.flour! }),
-      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.flour! }),
+      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.flour!, nextChecked: "true" }),
+      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.flour!, nextChecked: "false" }),
+      // Saying no target state is refused, and leaves salt checked.
+      (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.salt! }),
       (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.eggs!, nextChecked: "false" }),
       (kitchen) => ({ intent: "removeItem", itemId: kitchen.items.flour! }),
       { intent: "toggleCheck" },
@@ -263,7 +265,7 @@ describe("shopping list actions on a D1 binding", () => {
     const deleting: D1ReadDatabase = {
       prepare: (sql) => d1.binding.prepare(sql),
       async batch(statements) {
-        const isAdd = (statements as unknown as Array<{ sql: string }>)[0]!.sql.includes('"IngredientRef"');
+        const isAdd = (statements as unknown as Array<{ sql: string }>).some((statement) => statement.sql.includes('"IngredientRef"'));
         if (isAdd && !deleted) {
           deleted = true;
           await db.shoppingList.delete({ where: { id: kitchen.listId } });
@@ -282,7 +284,7 @@ describe("shopping list actions on a D1 binding", () => {
     const env = { DB: d1.binding };
     const intents: Array<Record<string, string>> = [
       { intent: "addItem", ingredientName: "rice", unitName: "cups", quantity: "1" },
-      { intent: "toggleCheck", itemId: kitchen.items.salt! },
+      { intent: "toggleCheck", itemId: kitchen.items.salt!, nextChecked: "true" },
       { intent: "removeItem", itemId: kitchen.items.salt! },
       { intent: "clearCompleted" },
       { intent: "clearAll" },
@@ -370,6 +372,109 @@ describe("shopping list actions when D1's connection drops", () => {
     expect(answer.init.status).toBe(503);
     expect(answer.data).toEqual({ intent: "removeItem", error: D1_WRITE_UNAVAILABLE_MESSAGE, errorCode: "temporarily_unavailable", retryable: true });
     expect(await snapshot(kitchen)).toEqual(before);
+  });
+
+  // An add's batch claims its write-once key first; the adds run only under that claim.
+  const ADD = /"ApiIdempotencyKey"[\s\S]*"ShoppingListItem"/;
+  const addSteps: Step[] = [
+    { intent: "addItem", ingredientName: "Flour", unitName: "Cups", quantity: "1", writeToken: "add-flour-token" },
+    { intent: "addItem", ingredientName: "eggs", quantity: "2" },
+    { intent: "addItem", ingredientName: "Basil", unitName: "Bunch", quantity: "1", writeToken: "add-basil-token" },
+    (kitchen) => ({ intent: "addFromRecipe", recipeId: kitchen.recipeId, scaleFactor: "2", writeToken: "add-recipe-token" }),
+    (kitchen) => ({ intent: "addFromRecipe", recipeId: kitchen.recipeId }),
+  ];
+
+  /** Runs the add steps, each add's batch failing first as `outcome` when given, and returns the list. */
+  async function runAdds(outcome?: "lost" | "lost-answer" | "late") {
+    await cleanupDatabase();
+    const kitchen = await seedKitchen();
+    const flaky = flakyD1(d1.binding);
+    const responses: unknown[] = [];
+    for (const step of addSteps) {
+      if (outcome) flaky.failNext(ADD, outcome);
+      const result = await submit(kitchen, typeof step === "function" ? step(kitchen) : step, { DB: flaky.binding });
+      responses.push((result as { data?: unknown }).data);
+    }
+    const { items, ingredientRefs, units } = await snapshot(kitchen);
+    return {
+      responses,
+      items: items.map(({ touched: _touched, ...entry }) => entry),
+      ingredientRefs,
+      units,
+      failures: flaky.failures(),
+    };
+  }
+
+  it("adds each item and recipe once when an add's answer was lost, it never arrived, or it landed late", async () => {
+    const clean = await runAdds();
+    // 2 on the list, 1 typed, 1.5 cups doubled by the first recipe add and 1.5 by the second.
+    expect(clean.items.find((entry) => entry.name === "flour (cups)")).toMatchObject({ quantity: 7.5 });
+
+    for (const outcome of ["lost", "lost-answer", "late"] as const) {
+      // A late batch lands just before the next add's, so the last add's late batch is not in yet.
+      const run = await runAdds(outcome);
+      expect({ outcome, ...run }).toEqual({ outcome, ...clean, failures: addSteps.length });
+    }
+  });
+
+  it("adds once for a resubmit of the same form, and again for a changed form or a new token", async () => {
+    const kitchen = await seedKitchen();
+    const env = { DB: d1.binding };
+    const lemons = { intent: "addItem", ingredientName: "lemon", quantity: "2", writeToken: "lemon-form-1" };
+
+    // A double tap, and a resubmit after a 503 whose write in fact committed.
+    await submit(kitchen, lemons, env);
+    await expect(submit(kitchen, lemons, env)).resolves.toMatchObject({ data: { success: true, intent: "addItem" } });
+    expect(item(await snapshot(kitchen), "lemon")).toMatchObject({ quantity: 2 });
+
+    // The chef changed the amount before submitting again: a different add.
+    await submit(kitchen, { ...lemons, quantity: "3" }, env);
+    expect(item(await snapshot(kitchen), "lemon")).toMatchObject({ quantity: 5 });
+
+    // The form's next token, after a success: another add.
+    await submit(kitchen, { ...lemons, writeToken: "lemon-form-2" }, env);
+    expect(item(await snapshot(kitchen), "lemon")).toMatchObject({ quantity: 7 });
+
+    // The same recipe form twice adds its ingredients once.
+    const recipeForm = { intent: "addFromRecipe", recipeId: kitchen.recipeId, writeToken: "recipe-form-1" };
+    await submit(kitchen, recipeForm, env);
+    await submit(kitchen, recipeForm, env);
+    expect(item(await snapshot(kitchen), "butter (tbsp)")).toMatchObject({ quantity: 3 });
+  });
+
+  it("answers a retryable 503 for an add when every try fails, writing nothing, and the resubmit adds once", async () => {
+    const kitchen = await seedKitchen();
+    const before = await snapshot(kitchen);
+    const flaky = flakyD1(d1.binding);
+    const lemons = { intent: "addItem", ingredientName: "lemon", quantity: "2", writeToken: "lemon-503-token" };
+    flaky.failNext(ADD, "lost", "lost", "lost", "late");
+
+    const answer = await submit(kitchen, lemons, { DB: flaky.binding }) as unknown as { data: unknown; init: { status: number } };
+
+    expect(answer.init.status).toBe(503);
+    expect(answer.data).toMatchObject({ intent: "addItem", errorCode: "temporarily_unavailable", retryable: true });
+    expect(await snapshot(kitchen)).toEqual(before);
+
+    // The last try lands while the chef resubmits the same form: the lemons go on once.
+    await submit(kitchen, lemons, { DB: flaky.binding });
+    expect(item(await snapshot(kitchen), "lemon")).toMatchObject({ quantity: 2 });
+  });
+
+  it("drops the chef's expired keys for the same add, and keeps the rest", async () => {
+    const kitchen = await seedKitchen();
+    const key = (id: string, operation: string, expiresAt: Date) => db.apiIdempotencyKey.create({
+      data: { id, userId: kitchen.userId, clientKey: `chef:${kitchen.userId}`, key: id, operation, requestHash: "x", expiresAt },
+    });
+    const past = new Date(Date.now() - 1000);
+    await key("expired-add", "shopping_list.add_item", past);
+    await key("live-add", "shopping_list.add_item", new Date(Date.now() + 60_000));
+    await key("expired-fork", "web.fork_recipe", past);
+
+    await submit(kitchen, { intent: "addItem", ingredientName: "lemon", quantity: "2" }, { DB: d1.binding });
+
+    const ids = (await db.apiIdempotencyKey.findMany({ where: { userId: kitchen.userId }, select: { id: true, operation: true } }))
+      .map(({ id, operation }) => (id.startsWith("expired") || id.startsWith("live") ? id : operation)).sort();
+    expect(ids).toEqual(["expired-fork", "live-add", "shopping_list.add_item"]);
   });
 
   it("passes any other failure through", async () => {

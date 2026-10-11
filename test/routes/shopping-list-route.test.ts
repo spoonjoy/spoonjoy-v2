@@ -959,6 +959,7 @@ describe("Shopping List Route", () => {
         {
           intent: "toggleCheck",
           itemId: item.id,
+          nextChecked: "true",
         },
         testUserId
       );
@@ -1979,7 +1980,7 @@ describe("Shopping List Route", () => {
         ]);
 
         expect(result).toEqual({
-          data: { success: true },
+          data: { success: true, intent: "addFromRecipe" },
           init: null,
           type: "DataWithResponseInit",
         });
@@ -2237,7 +2238,7 @@ describe("Shopping List Route", () => {
       const byIngredient = new Map(items.map((item) => [item.ingredientRefId, item]));
 
       expect(result).toEqual({
-        data: { success: true },
+        data: { success: true, intent: "addFromRecipe" },
         init: null,
         type: "DataWithResponseInit",
       });
@@ -2532,7 +2533,7 @@ describe("Shopping List Route", () => {
         params: {},
       } as any);
 
-      expect(response).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(response).toEqual({ data: { success: true, intent: "addFromRecipe" }, init: null, type: "DataWithResponseInit" });
       expect(transactionOperationSets.map((operations) => operations.length)).toEqual([2, 2]);
       expect(transactionOperationSets[1]).not.toBe(transactionOperationSets[0]);
       expect(transactionOperationSets[1][0]).not.toBe(transactionOperationSets[0][0]);
@@ -2572,7 +2573,7 @@ describe("Shopping List Route", () => {
       } as any);
 
       // Returns success even when no action taken (no recipeId provided)
-      expect(result).toEqual({ data: { success: true }, init: null, type: "DataWithResponseInit" });
+      expect(result).toEqual({ data: { success: true, intent: "addFromRecipe" }, init: null, type: "DataWithResponseInit" });
     });
 
     it("should throw 404 when recipe does not exist", async () => {
@@ -2942,6 +2943,7 @@ describe("Shopping List Route", () => {
         {
           intent: "toggleCheck",
           itemId: "nonexistent-item-id",
+          nextChecked: "true",
         },
         testUserId
       );
@@ -3026,6 +3028,7 @@ describe("Shopping List Route", () => {
         {
           intent: "toggleCheck",
           itemId: item.id,
+          nextChecked: "false",
         },
         testUserId
       );
@@ -3042,6 +3045,25 @@ describe("Shopping List Route", () => {
 
       expect(updatedItem?.checked).toBe(false);
       expect(updatedItem?.checkedAt).toBeNull();
+    });
+
+    // A flip with no target state, run twice after a lost answer, would undo itself; the page
+    // always says which state it sets, so a request that does not is refused and writes nothing.
+    it.each([[undefined], ["yes"]])("refuses a toggle whose target state is %s, leaving the item as it was", async (nextChecked) => {
+      const shoppingList = await db.shoppingList.create({ data: { authorId: testUserId } });
+      const ingredientRef = await db.ingredientRef.create({ data: { name: "no_target_" + faker.string.numeric(10) } });
+      const item = await db.shoppingListItem.create({
+        data: { shoppingListId: shoppingList.id, ingredientRefId: ingredientRef.id, checked: false },
+      });
+
+      const request = await createFormRequest(
+        { intent: "toggleCheck", itemId: item.id, ...(nextChecked ? { nextChecked } : {}) },
+        testUserId
+      );
+      const result = await action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
+
+      expect(result).toMatchObject({ data: { errors: { toggle: "Say whether the item is checked." } }, init: { status: 400 } });
+      expect(await db.shoppingListItem.findUnique({ where: { id: item.id } })).toMatchObject({ checked: false, checkedAt: null });
     });
   });
 

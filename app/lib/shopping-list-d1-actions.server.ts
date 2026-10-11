@@ -4,6 +4,7 @@ import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { coalesceShoppingRecipeIngredients } from "~/lib/shopping-list-mutations.server";
+import { d1WriteOnceClaim, type D1WriteOnceClaim, type D1WriteOnceKey } from "~/lib/d1-write-once.server";
 
 // The shopping list page's writes (`/shopping-list` actions) on the request's D1 binding, with no
 // Prisma client. Each intent is one D1 batch, and a batch is one SQLite transaction, so the reads
@@ -14,9 +15,11 @@ import { coalesceShoppingRecipeIngredients } from "~/lib/shopping-list-mutations
 // Prisma sets `updatedAt` on every update; every statement here sets it explicitly, because the
 // sync API reads changes by it.
 //
-// After a transient D1 error (retryD1Write), the writes that leave the same rows however often
-// they run go again: making the list, setting an item's checked state, removing items and
-// renumbering the rest. Adding items does not, because a second add would add to the quantity.
+// After a transient D1 error (retryD1Write), every write here runs again. Making the list,
+// setting an item's checked state, removing items and renumbering the rest leave the same rows
+// however often they run. Adding items adds to the quantity, so each add claims a write-once key
+// in its batch and adds only under that claim (d1-write-once.server.ts): a retry, or a resubmit of
+// the same form, adds nothing more. A check always says which state it sets; nothing flips.
 
 /** The end of the list: the sort index after the last active item, as the Prisma path computes it. */
 const NEXT_SORT_INDEX = `(SELECT COALESCE(MAX("sortIndex"), -1) + 1 FROM "ShoppingListItem" WHERE "shoppingListId" = ? AND "deletedAt" IS NULL)`;
@@ -44,7 +47,7 @@ interface ItemWrite {
  * Two statements that put one item on the list: the first adds to the item already there (the
  * active one first, else the removed one), unchecks and restores it, and moves it to the end
  * when it was checked or removed; the second creates the item when the list has none with its
- * identity. Exactly one of them changes a row while the list exists.
+ * identity. Exactly one of them changes a row while the list exists and the try holds its claim.
  */
 function putItemStatements(
   shoppingListId: string,
@@ -52,6 +55,7 @@ function putItemStatements(
   write: ItemWrite,
   itemId: string,
   updatedAt: string,
+  claim: D1WriteOnceClaim,
 ): D1Query[] {
   const findExisting = `SELECT "id" FROM "ShoppingListItem"
       WHERE "shoppingListId" = ? AND "ingredientRefId" = ${identity.ingredientRef} AND "unitId" IS ${identity.unit}
@@ -74,7 +78,7 @@ function putItemStatements(
            END,
            "checked" = 0, "checkedAt" = NULL, "deletedAt" = NULL,
            "categoryKey" = ${categoryKey}, "iconKey" = ${iconKey}, "updatedAt" = ?
-       WHERE "id" = (${findExisting})`,
+       WHERE "id" = (${findExisting}) AND ${claim.guard}`,
       write.quantity,
       write.quantity,
       write.quantity,
@@ -83,6 +87,7 @@ function putItemStatements(
       write.iconKey,
       updatedAt,
       ...findValues,
+      ...claim.guardValues,
     ],
     [
       `INSERT INTO "ShoppingListItem" (
@@ -91,7 +96,8 @@ function putItemStatements(
        )
        SELECT ?, ?, ?, ${identity.unit}, ${identity.ingredientRef}, 0, ${NEXT_SORT_INDEX}, ?, ?, ?
        WHERE EXISTS (SELECT 1 FROM "ShoppingList" WHERE "id" = ?)
-         AND NOT EXISTS (${findExisting})`,
+         AND NOT EXISTS (${findExisting})
+         AND ${claim.guard}`,
       itemId,
       shoppingListId,
       write.quantity,
@@ -103,6 +109,7 @@ function putItemStatements(
       updatedAt,
       shoppingListId,
       ...findValues,
+      ...claim.guardValues,
     ],
   ];
 }
@@ -158,16 +165,24 @@ export interface D1ShoppingItemAdd {
   quantity: number | null;
   categoryKey: string | null;
   iconKey: string | null;
+  /** The add's write-once key: a retry or resubmit with it adds nothing more. */
+  writeKey: D1WriteOnceKey;
   now: Date;
 }
 
 /**
  * Adds one typed item: finds or creates its ingredient and unit, then adds to the item already
- * on the list or creates it, in one batch. Returns false when the list no longer exists.
+ * on the list or creates it, in one batch. Returns false when the list no longer exists. An add
+ * whose key an earlier try or submission already claimed adds nothing and answers true.
  */
 export async function addShoppingListItemOnD1(db: D1ReadDatabase, add: D1ShoppingItemAdd): Promise<boolean> {
+  return retryD1Write({ scope: "shopping_list.add_item" }, () => addShoppingListItemOnce(db, add));
+}
+
+async function addShoppingListItemOnce(db: D1ReadDatabase, add: D1ShoppingItemAdd): Promise<boolean> {
   const at = d1Timestamp(add.now);
-  const statements: D1Query[] = [[
+  const claim = d1WriteOnceClaim(add.writeKey, add.now);
+  const statements: D1Query[] = [...claim.statements, [
     `INSERT INTO "IngredientRef" ("id", "name", "updatedAt") VALUES (?, ?, ?) ON CONFLICT ("name") DO NOTHING`,
     crypto.randomUUID(),
     add.ingredientName,
@@ -193,9 +208,10 @@ export async function addShoppingListItemOnD1(db: D1ReadDatabase, add: D1Shoppin
     categoryKeyWins: "submitted",
     iconKey: add.iconKey,
     iconKeyWins: "submitted-if-set",
-  }, crypto.randomUUID(), at));
+  }, crypto.randomUUID(), at, claim));
 
   const results = await d1WriteBatch(db, statements);
+  if (results[1]!.changes === 0) return true;
   const [updated, inserted] = results.slice(-2);
   return updated!.changes + inserted!.changes > 0;
 }
@@ -210,11 +226,12 @@ const RECIPE_INGREDIENTS_SQL = `SELECT i."id", i."stepNum", i."ingredientRefId",
 
 /**
  * Adds a recipe's ingredients, scaled and combined by identity, in one batch. Returns false when
- * the recipe does not exist or was deleted.
+ * the recipe does not exist or was deleted. Under the add's write-once key, a retry or resubmit
+ * adds nothing more.
  */
 export async function addRecipeToShoppingListOnD1(
   db: D1ReadDatabase,
-  input: { shoppingListId: string; recipeId: string; scaleFactor: number; now: Date },
+  input: { shoppingListId: string; recipeId: string; scaleFactor: number; writeKey: D1WriteOnceKey; now: Date },
 ): Promise<boolean> {
   const [recipes, rows] = await d1ReadBatch(db, [
     [RECIPE_SQL, input.recipeId],
@@ -237,7 +254,9 @@ export async function addRecipeToShoppingListOnD1(
   if (ingredients.length === 0) return true;
 
   const at = d1Timestamp(input.now);
-  await d1WriteBatch(db, ingredients.flatMap((ingredient) => putItemStatements(input.shoppingListId, {
+  await retryD1Write({ scope: "shopping_list.add_recipe" }, () => {
+    const claim = d1WriteOnceClaim(input.writeKey, input.now);
+    return d1WriteBatch(db, [...claim.statements, ...ingredients.flatMap((ingredient) => putItemStatements(input.shoppingListId, {
     ingredientRef: "?",
     ingredientRefValues: [ingredient.ingredientRefId],
     // A recipe ingredient always has a unit; `IS ?` would also match a null one null-safely.
@@ -249,34 +268,27 @@ export async function addRecipeToShoppingListOnD1(
     categoryKeyWins: "existing",
     iconKey: ingredient.iconKey,
     iconKeyWins: "submitted",
-  }, crypto.randomUUID(), at)));
+  }, crypto.randomUUID(), at, claim))]);
+  });
   return true;
 }
 
-/** Checks or unchecks one item; with no `nextChecked`, flips it. */
-export async function toggleShoppingListItemOnD1(
+/** Checks or unchecks one item. It sets the state it is given, so it runs again after a transient D1 error. */
+export async function setShoppingListItemCheckedOnD1(
   db: D1ReadDatabase,
-  input: { shoppingListId: string; itemId: string; nextChecked: boolean | null; now: Date },
+  input: { shoppingListId: string; itemId: string; checked: boolean; now: Date },
 ): Promise<void> {
-  const next = input.nextChecked === null ? null : input.nextChecked ? 1 : 0;
   const at = d1Timestamp(input.now);
-  const toggle = () => d1WriteBatch(db, [[
+  await retryD1Write({ scope: "shopping_list.set_checked" }, () => d1WriteBatch(db, [[
     `UPDATE "ShoppingListItem"
-     SET "checked" = COALESCE(?, 1 - "checked"),
-         "checkedAt" = CASE WHEN COALESCE(?, 1 - "checked") = 1 THEN ? ELSE NULL END,
-         "updatedAt" = ?
+     SET "checked" = ?, "checkedAt" = ?, "updatedAt" = ?
      WHERE "id" = ? AND "shoppingListId" = ?`,
-    next,
-    next,
-    at,
+    input.checked ? 1 : 0,
+    input.checked ? at : null,
     at,
     input.itemId,
     input.shoppingListId,
-  ]]);
-  // Setting a given state can run again after a transient D1 error; a flip cannot, as a second
-  // flip would undo the first.
-  if (next === null) await toggle();
-  else await retryD1Write({ scope: "shopping_list.set_checked" }, toggle);
+  ]]));
 }
 
 /** Removes one active item and closes the gap it leaves. */
