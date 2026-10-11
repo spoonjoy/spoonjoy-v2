@@ -300,6 +300,11 @@ export default function ShoppingList() {
             <Plus data-slot="icon" className="size-4" />
             New item
           </Button>
+          {actionData?.error ? (
+            <p role="alert" className="mt-4 text-sm text-[var(--sj-tomato)]" data-testid="shopping-list-action-error">
+              {actionData.error}
+            </p>
+          ) : null}
         </header>
       </div>
 

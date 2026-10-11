@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient, ShoppingListItem } from "@prisma/client";
+import { d1UnavailableWebResponse } from "~/lib/d1-write-retry.server";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -91,6 +92,18 @@ export async function loadShoppingList({ request, context }: ShoppingListRouteAr
 export async function handleShoppingListAction({ request, context }: ShoppingListRouteArgs) {
   const userId = await requireUserId(request, "/login", getCloudflareEnv(context));
   const formData = await request.formData();
+  try {
+    return await handleShoppingListIntent(userId, formData, context);
+  } catch (error) {
+    // The database was briefly unavailable: a retryable 503 the page shows, keeping what the chef
+    // typed, instead of replacing the page with a 500. A row's check or remove reverts on its own.
+    const unavailable = d1UnavailableWebResponse(error, formData.get("intent"));
+    if (unavailable) return unavailable;
+    throw error;
+  }
+}
+
+async function handleShoppingListIntent(userId: string, formData: FormData, context: ShoppingListRouteArgs["context"]) {
   const intent = formData.get("intent")?.toString();
 
   // With a D1 binding every write is one D1 batch and no Prisma client is built.

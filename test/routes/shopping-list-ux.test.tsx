@@ -141,6 +141,26 @@ describe("shopping list UX updates", () => {
     expect(screen.getAllByTestId("shopping-list-category")).toHaveLength(1);
   });
 
+  it("shows a retryable message and keeps the typed item when the add could not be saved", async () => {
+    const message = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => singleItemData,
+        action: async () => ({ intent: "addItem", error: message, errorCode: "temporarily_unavailable", retryable: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+    const input = (await screen.findByTestId("shopping-list-checklist-board"), document.querySelector("input[name='ingredientText']") as HTMLInputElement);
+    fireEvent.change(input, { target: { value: "2 lemons" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByTestId("shopping-list-action-error")).toHaveTextContent(message);
+    expect(input.value).toBe("2 lemons");
+  });
+
   it("keeps the market checklist narrower than the shopping-list header on desktop", async () => {
     const Stub = createTestRoutesStub([
       {

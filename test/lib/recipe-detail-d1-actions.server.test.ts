@@ -2,7 +2,7 @@
 // The recipe page's cookbook and cook-log actions on D1 (recipe-detail-d1-actions.server.ts), run
 // against the real test database through the D1 test binding. Each action is one batch, answers as
 // the Prisma path does, and writes nothing when a check fails.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
@@ -18,6 +18,7 @@ import {
 } from "~/lib/recipe-detail-d1-actions.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 
 async function makeChef(prefix: string) {
   const handle = faker.string.alphanumeric(8).toLowerCase();
@@ -195,5 +196,59 @@ describe("recipe page actions on D1", () => {
       expect(again).toBeInstanceOf(SpoonNotFoundError);
       expect((again as Error).message).toBe(`Spoon ${spoonId} is deleted`);
     });
+
+    it("says a second request in the same millisecond finds the cook already deleted", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(new Date("2026-10-11T12:00:00.000Z"));
+        await deleteSpoonOnD1(d1.binding, { userId: chefId, spoonId });
+        const again = await rejection(deleteSpoonOnD1(d1.binding, { userId: chefId, spoonId }));
+        expect(again).toBeInstanceOf(SpoonNotFoundError);
+        expect((again as Error).message).toBe(`Spoon ${spoonId} is deleted`);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("when D1's connection drops", () => {
+    const membership = () => db.recipeInCookbook.count({ where: { cookbookId, recipeId } });
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("saves to and takes out of a cookbook as one run would (%s)", async (outcome) => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeInCookbook"/, outcome);
+      await addRecipeToCookbookOnD1(flaky.binding, { userId: chefId, cookbookId, recipeId });
+      expect(await membership()).toBe(1);
+
+      flaky.failNext(/DELETE FROM "RecipeInCookbook"/, outcome);
+      await removeRecipeFromCookbookOnD1(flaky.binding, { userId: chefId, cookbookId, recipeId });
+      expect(await membership()).toBe(0);
+      expect(flaky.failures()).toBe(2);
+    });
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("makes one new cookbook with the recipe in it (%s)", async (outcome) => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "Cookbook"/, outcome);
+
+      const created = await createCookbookWithRecipeOnD1(flaky.binding, { userId: chefId, recipeId, title: "Breads" });
+
+      expect(flaky.failures()).toBe(1);
+      expect(await db.cookbook.findMany({ where: { authorId: chefId, title: "Breads" }, select: { id: true } })).toEqual([{ id: created.id }]);
+      expect(await db.recipeInCookbook.count({ where: { cookbookId: created.id, recipeId } })).toBe(1);
+    });
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("deletes a cook once and answers as the first try would (%s)", async (outcome) => {
+      const spoonId = (await db.recipeSpoon.create({ data: { chefId, recipeId, note: "Good" } })).id;
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/UPDATE "RecipeSpoon"/, outcome);
+
+      await deleteSpoonOnD1(flaky.binding, { userId: chefId, spoonId });
+
+      expect(flaky.failures()).toBe(1);
+      expect((await db.recipeSpoon.findUniqueOrThrow({ where: { id: spoonId } })).deletedAt).not.toBeNull();
+      // A later request still finds it deleted.
+      await expect(deleteSpoonOnD1(d1.binding, { userId: chefId, spoonId })).rejects.toBeInstanceOf(SpoonNotFoundError);
+    });
   });
 });
+

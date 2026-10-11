@@ -1,5 +1,6 @@
 import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1ReadBatch } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { coalesceShoppingRecipeIngredients } from "~/lib/shopping-list-mutations.server";
@@ -12,6 +13,10 @@ import { coalesceShoppingRecipeIngredients } from "~/lib/shopping-list-mutations
 //
 // Prisma sets `updatedAt` on every update; every statement here sets it explicitly, because the
 // sync API reads changes by it.
+//
+// After a transient D1 error (retryD1Write), the writes that leave the same rows however often
+// they run go again: making the list, setting an item's checked state, removing items and
+// renumbering the rest. Adding items does not, because a second add would add to the quantity.
 
 /** The end of the list: the sort index after the last active item, as the Prisma path computes it. */
 const NEXT_SORT_INDEX = `(SELECT COALESCE(MAX("sortIndex"), -1) + 1 FROM "ShoppingListItem" WHERE "shoppingListId" = ? AND "deletedAt" IS NULL)`;
@@ -126,17 +131,19 @@ function normalizeOrderingStatement(shoppingListId: string, updatedAt: string): 
 /** The chef's shopping list id, creating the list on the first write as the Prisma path does. */
 export async function ensureShoppingListIdOnD1(db: D1ReadDatabase, userId: string, now: Date): Promise<string> {
   const at = d1Timestamp(now);
-  const [, lists] = await d1WriteBatch(db, [
+  const listId = crypto.randomUUID();
+  // Creates the list only if the chef has none, so it runs again after a transient D1 error.
+  const [, lists] = await retryD1Write({ scope: "shopping_list.ensure" }, () => d1WriteBatch(db, [
     [
       `INSERT INTO "ShoppingList" ("id", "authorId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?)
        ON CONFLICT ("authorId") DO NOTHING`,
-      crypto.randomUUID(),
+      listId,
       userId,
       at,
       at,
     ],
     [`SELECT "id" FROM "ShoppingList" WHERE "authorId" = ?`, userId],
-  ]);
+  ]));
   const id = lists.rows[0]?.id;
   /* istanbul ignore if -- @preserve the insert in the same batch leaves exactly one list */
   if (typeof id !== "string") throw new Error("D1 shopping list was not created");
@@ -253,7 +260,7 @@ export async function toggleShoppingListItemOnD1(
 ): Promise<void> {
   const next = input.nextChecked === null ? null : input.nextChecked ? 1 : 0;
   const at = d1Timestamp(input.now);
-  await d1WriteBatch(db, [[
+  const toggle = () => d1WriteBatch(db, [[
     `UPDATE "ShoppingListItem"
      SET "checked" = COALESCE(?, 1 - "checked"),
          "checkedAt" = CASE WHEN COALESCE(?, 1 - "checked") = 1 THEN ? ELSE NULL END,
@@ -266,6 +273,10 @@ export async function toggleShoppingListItemOnD1(
     input.itemId,
     input.shoppingListId,
   ]]);
+  // Setting a given state can run again after a transient D1 error; a flip cannot, as a second
+  // flip would undo the first.
+  if (next === null) await toggle();
+  else await retryD1Write({ scope: "shopping_list.set_checked" }, toggle);
 }
 
 /** Removes one active item and closes the gap it leaves. */
@@ -274,7 +285,7 @@ export async function removeShoppingListItemOnD1(
   input: { shoppingListId: string; itemId: string; now: Date },
 ): Promise<void> {
   const at = d1Timestamp(input.now);
-  await d1WriteBatch(db, [
+  await retryD1Write({ scope: "shopping_list.remove_item" }, () => d1WriteBatch(db, [
     [
       `UPDATE "ShoppingListItem" SET "deletedAt" = ?, "updatedAt" = ?
        WHERE "id" = ? AND "shoppingListId" = ? AND "deletedAt" IS NULL`,
@@ -284,7 +295,7 @@ export async function removeShoppingListItemOnD1(
       input.shoppingListId,
     ],
     normalizeOrderingStatement(input.shoppingListId, at),
-  ]);
+  ]));
 }
 
 /** Removes every checked item and renumbers the rest. */
@@ -293,7 +304,7 @@ export async function clearCompletedShoppingListItemsOnD1(
   input: { shoppingListId: string; now: Date },
 ): Promise<void> {
   const at = d1Timestamp(input.now);
-  await d1WriteBatch(db, [
+  await retryD1Write({ scope: "shopping_list.clear_completed" }, () => d1WriteBatch(db, [
     [
       `UPDATE "ShoppingListItem" SET "deletedAt" = ?, "updatedAt" = ?
        WHERE "shoppingListId" = ? AND "deletedAt" IS NULL AND ("checkedAt" IS NOT NULL OR "checked" = 1)`,
@@ -302,7 +313,7 @@ export async function clearCompletedShoppingListItemsOnD1(
       input.shoppingListId,
     ],
     normalizeOrderingStatement(input.shoppingListId, at),
-  ]);
+  ]));
 }
 
 /** Removes every item on the list. */
@@ -311,10 +322,10 @@ export async function clearShoppingListOnD1(
   input: { shoppingListId: string; now: Date },
 ): Promise<void> {
   const at = d1Timestamp(input.now);
-  await d1WriteBatch(db, [[
+  await retryD1Write({ scope: "shopping_list.clear" }, () => d1WriteBatch(db, [[
     `UPDATE "ShoppingListItem" SET "deletedAt" = ?, "updatedAt" = ? WHERE "shoppingListId" = ? AND "deletedAt" IS NULL`,
     at,
     at,
     input.shoppingListId,
-  ]]);
+  ]]));
 }

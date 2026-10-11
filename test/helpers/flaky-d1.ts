@@ -3,7 +3,12 @@
 // committed (applied, but the answer is lost). The write paths' retries must end with the rows a
 // single successful batch leaves, never a second copy.
 
-export type FlakyOutcome = "lost" | "lost-answer";
+/**
+ * "lost": the batch never reached the database. "lost-answer": it committed, but the answer was
+ * lost. "late": it is lost now, and commits just before the next batch that matches the same
+ * pattern (the retry), after any check in between, as a write still in flight on D1's side would.
+ */
+export type FlakyOutcome = "lost" | "lost-answer" | "late";
 
 export const NETWORK_LOST_MESSAGE = "D1_ERROR: Network connection lost.";
 
@@ -29,16 +34,23 @@ function sqlOf(statement: unknown): string {
 export function flakyD1<B extends BatchingBinding>(inner: B): FlakyD1<B> {
   const plans: Array<{ pattern: RegExp; outcome: FlakyOutcome }> = [];
   let failed = 0;
+  let late: { pattern: RegExp; statements: never[] } | null = null;
   const binding = {
     ...inner,
     prepare: (sql: string) => inner.prepare(sql),
     batch: async (statements: never[]) => {
       const sql = statements.map(sqlOf).join("\n");
+      if (late?.pattern.test(sql)) {
+        const landing = late.statements;
+        late = null;
+        await inner.batch(landing);
+      }
       const index = plans.findIndex((plan) => plan.pattern.test(sql));
       if (index === -1) return inner.batch(statements);
-      const [{ outcome }] = plans.splice(index, 1);
+      const [{ outcome, pattern }] = plans.splice(index, 1);
       failed += 1;
       if (outcome === "lost-answer") await inner.batch(statements);
+      if (outcome === "late") late = { pattern, statements };
       throw new Error(NETWORK_LOST_MESSAGE);
     },
   } as unknown as B;
