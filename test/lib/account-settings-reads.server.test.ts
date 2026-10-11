@@ -5,7 +5,8 @@ import type { PrismaClient } from "@prisma/client";
 import { Request as UndiciRequest } from "undici";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { promoteLegacyOAuthIssuerForUser, promoteLegacyOAuthIssuerForUserOnD1 } from "~/lib/oauth-server.server";
-import { flakyD1 } from "../helpers/flaky-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
+import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 import { getLocalDb } from "~/lib/db.server";
 import { readAccountSettingsFromD1, readAccountSettingsWithPrisma } from "~/lib/account-settings-reads.server";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -359,5 +360,63 @@ describe("legacy OAuth issuer promotion on D1", () => {
 
     expect(flaky.failures()).toBe(1);
     expect(await snapshot()).toEqual(once);
+  });
+});
+
+describe("account settings page when D1's connection drops", () => {
+  const PROMOTION = /UPDATE "OAuthClient" SET "issuer"/;
+
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    d1 = sqliteD1();
+  });
+
+  afterEach(async () => {
+    d1.close();
+    await cleanupDatabase();
+  });
+
+  it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("promotes and reads as one run would when the batch is %s", async (outcome) => {
+    const { user } = await seedAccount();
+    const legacy = await db.oAuthClient.create({ data: { clientName: "Legacy", redirectUris: "[]" } });
+    await refreshToken(user.id, legacy.id, { issuer: null });
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(PROMOTION, outcome);
+
+    const reads = await readAccountSettingsFromD1(flaky.binding, user.id, ISSUER);
+
+    expect(flaky.failures()).toBe(1);
+    expect(reads).toEqual(await readAccountSettingsFromD1(d1.binding, user.id, ISSUER));
+    await expect(db.oAuthClient.findUniqueOrThrow({ where: { id: legacy.id } })).resolves.toMatchObject({ issuer: ISSUER });
+  });
+
+  it("answers the page with a retryable 503 when D1 stays unavailable, and other failures as before", async () => {
+    const { user } = await seedAccount();
+    const { loadAccountSettings } = await import("~/lib/account-settings.server");
+    const cookie = (await createUserSessionCookie(user.id)).split(";")[0]!;
+    const request = () => new UndiciRequest("http://localhost:3000/account/settings", { headers: { Cookie: cookie } });
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(PROMOTION, "lost", "lost", "lost", "lost");
+
+    const thrown = await loadAccountSettings({ request: request(), context: { cloudflare: { env: { DB: flaky.binding } } } } as never)
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Response);
+    const response = thrown as Response;
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
+    await expect(response.text()).resolves.toBe(D1_WRITE_UNAVAILABLE_MESSAGE);
+
+    const failing = {
+      prepare: (sql: string) => d1.binding.prepare(sql),
+      async batch(statements: never[]) {
+        const sql = (statements as Array<{ sql?: string }>).map((statement) => statement.sql ?? "").join("\n");
+        if (PROMOTION.test(sql)) throw new Error("D1 is down for good");
+        return d1.binding.batch(statements);
+      },
+    };
+    await expect(loadAccountSettings({ request: request(), context: { cloudflare: { env: { DB: failing } } } } as never))
+      .rejects.toThrow("D1 is down for good");
   });
 });

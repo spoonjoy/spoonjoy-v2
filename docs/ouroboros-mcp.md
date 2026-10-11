@@ -40,7 +40,7 @@ When registered under the server name `spoonjoy`, the harness exposes these firs
 
 Search is backed by the same self-hosted SQLite/D1 FTS5 index as the UI and ranked with BM25. Shopping-list results are private: `search_spoonjoy` includes them only when an authenticated token, `SPOONJOY_MCP_USER_EMAIL`, or `ownerEmail` identifies the owner, and `search_shopping_list` always requires that owner identity.
 
-Cookbook tools are deliberately owner-scoped: agents can only list, fetch, create, and mutate cookbooks owned by `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`. Recipe membership adds require an active `recipeId`; deleted recipes are excluded from cookbook payloads and cannot be newly added.
+Cookbook tools are deliberately owner-scoped: agents can only list, fetch, create, and mutate cookbooks owned by `SPOONJOY_MCP_USER_EMAIL` or an explicit `ownerEmail`. Recipe membership adds require an active `recipeId`; deleted recipes are excluded from cookbook payloads and cannot be newly added. `create_cookbook` takes an optional `idempotencyKey` (8-100 letters, digits, `_` or `-`): a repeat with the same key, such as after a timeout, returns the cookbook the first call made with `created: true` and `mutation.replayed: true`, and the same key with a different title answers 409.
 
 Recipe cleanup is owner-scoped too. `delete_recipe` sets `deletedAt` on the target recipe, hides it from normal `get_recipe`/search/cookbook payloads, and returns `deleted: false` if the same owner repeats cleanup for an already-deleted recipe.
 
