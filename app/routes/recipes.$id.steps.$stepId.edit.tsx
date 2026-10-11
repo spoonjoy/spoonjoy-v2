@@ -8,6 +8,7 @@ import {
   deleteStepIngredientOnD1,
   ingredientAlreadyInRecipe,
   RECIPE_CHANGED_MESSAGE,
+  recipeEditorUnavailable,
   stepDeletionRaceAnswer,
   updateRecipeStepOnD1,
 } from "~/lib/recipe-d1-edits.server";
@@ -252,6 +253,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         await deleteRecipeStepOnD1(d1, { recipeId: id, stepId, stepNum: step.stepNum });
       } catch (error) {
         // The step moved, went away or gained a dependent step in between; nothing was deleted.
+        const unavailable = recipeEditorUnavailable(error, "stepDeletion");
+        if (unavailable) return unavailable;
         if (!isD1GuardFailure(error)) throw error;
         const answer = await stepDeletionRaceAnswer(database, id, stepId);
         return data({ errors: { stepDeletion: answer.error } }, { status: answer.status });
@@ -316,6 +319,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       } catch (error) {
         // Another request added one of these ingredients, or moved the step, in between;
         // none were added, and no unit or ingredient name was created.
+        const unavailable = recipeEditorUnavailable(error);
+        if (unavailable) return unavailable;
         if (!isD1GuardFailure(error)) throw error;
         const taken = await ingredientAlreadyInRecipe(database, id, drafts.map((draft) => draft.ingredientName));
         return taken
@@ -408,6 +413,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         });
       } catch (error) {
         // Another request added this ingredient, or moved the step, in between.
+        const unavailable = recipeEditorUnavailable(error, "ingredientName");
+        if (unavailable) return unavailable;
         if (!isD1GuardFailure(error)) throw error;
         return await ingredientAlreadyInRecipe(database, id, [ingredientKey])
           ? data({ errors: { ingredientName: "This ingredient is already in the recipe" } }, { status: 400 })
@@ -442,7 +449,13 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     const ingredientId = formData.get("ingredientId")?.toString();
     const d1 = requestD1(context);
     if (ingredientId && d1) {
-      await deleteStepIngredientOnD1(d1, { recipeId: id, stepNum: step.stepNum, ingredientId });
+      try {
+        await deleteStepIngredientOnD1(d1, { recipeId: id, stepNum: step.stepNum, ingredientId });
+      } catch (error) {
+        const unavailable = recipeEditorUnavailable(error, "ingredientName");
+        if (unavailable) return unavailable;
+        throw error;
+      }
       return data({ success: true });
     }
     if (ingredientId) {
@@ -524,6 +537,8 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         });
       } catch (error) {
         // The step moved, went away or lost its last ingredient in between; nothing was saved.
+        const unavailable = recipeEditorUnavailable(error);
+        if (unavailable) return unavailable;
         if (!isD1GuardFailure(error)) throw error;
         const current = await database.recipeStep.findUnique({ where: { id: stepId }, select: { stepNum: true } });
         if (!current) return data({ errors: { general: "Step not found" } }, { status: 404 });
