@@ -3,6 +3,7 @@ import { createUserSession, getSessionAuthenticatedAt, getUserId, isSessionIdent
 import { getAppleOAuthConfig, getGitHubOAuthConfig, getGoogleOAuthConfig } from "~/lib/env.server";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
+import { D1_WRITE_UNAVAILABLE_CODE, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
 import { verifyAppleCallback } from "~/lib/apple-oauth.server";
 import { handleGitHubOAuthCallback } from "~/lib/github-oauth-callback.server";
@@ -49,8 +50,31 @@ async function currentLinkingUserId(
 }
 
 interface OAuthFailureTelemetry {
-  failureKind: OAuthProviderFailureKind;
+  failureKind: OAuthProviderFailureKind | "database";
   retryable: boolean;
+}
+
+/** A callback that could not save its sign-in because the database was briefly unavailable. */
+interface D1UnavailableCallback {
+  success: false;
+  userId?: undefined;
+  action?: undefined;
+  error: typeof D1_WRITE_UNAVAILABLE_CODE;
+  redirectTo: string;
+}
+
+/**
+ * Runs a provider callback's account writes. Each runs again after a transient D1 error; if the
+ * database stays unavailable, the sign-in fails with a retryable error the sign-in page explains,
+ * instead of a 500. The provider's code is spent, so the chef starts the sign-in again.
+ */
+async function withD1Unavailable<T extends { success: boolean }>(run: () => Promise<T>): Promise<T | D1UnavailableCallback> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isD1Unavailable(error)) throw error;
+    return { success: false, error: D1_WRITE_UNAVAILABLE_CODE, redirectTo: "" };
+  }
 }
 
 function oauthFailureTelemetry(
@@ -75,6 +99,9 @@ function oauthFailureTelemetry(
   }
   if (errorCode === "email_required") {
     return { failureKind: "missing_email", retryable: false };
+  }
+  if (errorCode === D1_WRITE_UNAVAILABLE_CODE) {
+    return { failureKind: "database", retryable: true };
   }
   return undefined;
 }
@@ -234,13 +261,14 @@ export async function handleAppleCallback(request: Request, context: AppLoadCont
   }
 
   const database = await getRequestDb(context);
-  const callbackResult = await handleAppleOAuthCallback({
+  const appleUser = verifyResult.appleUser;
+  const callbackResult = await withD1Unavailable(() => handleAppleOAuthCallback({
     db: database,
     d1: requestD1(context),
-    appleUser: verifyResult.appleUser,
+    appleUser,
     currentUserId,
     redirectTo: stored.redirectTo,
-  });
+  }));
 
   if (!callbackResult.success || !callbackResult.userId) {
     return redirectWithCapturedOAuthError(telemetry, request, "apple", failureRedirect, callbackResult.error, "link_account", env);
@@ -325,13 +353,14 @@ export async function handleGitHubCallback(request: Request, context: AppLoadCon
   }
 
   const database = await getRequestDb(context);
-  const callbackResult = await handleGitHubOAuthCallback({
+  const githubUser = verifyResult.githubUser;
+  const callbackResult = await withD1Unavailable(() => handleGitHubOAuthCallback({
     db: database,
     d1: requestD1(context),
-    githubUser: verifyResult.githubUser,
+    githubUser,
     currentUserId,
     redirectTo: stored.redirectTo,
-  });
+  }));
 
   if (!callbackResult.success || !callbackResult.userId) {
     return redirectWithCapturedOAuthError(
@@ -430,13 +459,14 @@ export async function handleGoogleCallback(request: Request, context: AppLoadCon
   }
 
   const database = await getRequestDb(context);
-  const callbackResult = await handleGoogleOAuthCallback({
+  const googleUser = verifyResult.googleUser;
+  const callbackResult = await withD1Unavailable(() => handleGoogleOAuthCallback({
     db: database,
     d1: requestD1(context),
-    googleUser: verifyResult.googleUser,
+    googleUser,
     currentUserId,
     redirectTo: stored.redirectTo,
-  });
+  }));
 
   if (!callbackResult.success || !callbackResult.userId) {
     return redirectWithCapturedOAuthError(

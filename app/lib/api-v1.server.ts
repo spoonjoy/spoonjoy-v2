@@ -13,6 +13,8 @@ import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, Recipe
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
+import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
+import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
 import type { AppLoadContext } from "react-router";
 import {
   ApiAuthError,
@@ -200,6 +202,7 @@ import {
   type UpdateSpoonPatch,
 } from "~/lib/recipe-spoon.server";
 import { activateSpoonCoverForDecision } from "~/lib/spoon-cover-activation.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { decideSpoonCoverCreation } from "~/lib/spoon-cover-decision.server";
 import { validateSpoonPhotoAssignment } from "~/lib/recipe-image-assignment.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
@@ -2574,13 +2577,18 @@ async function releaseAbandonedRecipeImageUpload(
     // Spoon first, then cover, then photo, then key. A failed delete throws, the key stays held,
     // and the next retry repeats only what is left: the cover row still points at the photo
     // until it goes, so neither the spoon nor the photo is ever orphaned.
-    if (cover.sourceSpoonId) {
-      await input.db.recipeSpoon.deleteMany({ where: { id: cover.sourceSpoonId, recipeId: input.recipeId } });
+    // Each delete is by id, so it runs again after a transient D1 error.
+    const spoonId = cover.sourceSpoonId;
+    if (spoonId) {
+      await retryD1Write({ scope: "upload.release_spoon" }, () =>
+        input.db.recipeSpoon.deleteMany({ where: { id: spoonId, recipeId: input.recipeId } }));
     }
-    await input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } });
+    await retryD1Write({ scope: "upload.release_cover" }, () =>
+      input.db.recipeCover.deleteMany({ where: { id: input.record.id, recipeId: input.recipeId } }));
     await cleanupUploadedRecipeImageObject(args, input.principal, cover.imageUrl);
   }
-  await input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } });
+  await retryD1Write({ scope: "upload.release_key" }, () =>
+    input.db.apiIdempotencyKey.deleteMany({ where: { id: input.record.id, responseStatus: null } }));
 }
 
 async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, recipeId: string) {
@@ -2677,10 +2685,12 @@ async function handleRecipeImageUpload(args: ApiV1RouteArgs, requestId: string, 
           throw mapSpoonDomainErrorForApiV1(error);
         }
         createdSpoonId = created.spoon.id;
-        createdCover = await db.recipeCover.update({
-          where: { id: createdCover.id },
+        const coverId = createdCover.id;
+        // Sets a fixed value by id, so it runs again after a transient D1 error.
+        createdCover = await retryD1Write({ scope: "cover.link_spoon" }, () => db.recipeCover.update({
+          where: { id: coverId },
           data: { sourceSpoonId: created.spoon.id },
-        });
+        }));
       }
 
       if (activateWhenReady) {
@@ -4229,6 +4239,30 @@ export async function runIdempotentApiV1Mutation(
   }), { idempotencyOutcome: "committed", operation });
 }
 
+/**
+ * The write-once key for one API v1 shopping add on D1: this client's mutation and its body, so
+ * the client's resubmit of the same mutation after a 503 finds it claimed and adds nothing more.
+ */
+function apiV1ShoppingWriteKey(principal: ApiPrincipal, operation: string, clientMutationId: string, body: Record<string, unknown>) {
+  return d1WriteOnceKey({
+    userId: principal.id,
+    operation,
+    token: `${idempotencyClientKey(principal)}:${clientMutationId}`,
+    request: body,
+  });
+}
+
+async function addShoppingItemOnceOnD1(
+  d1: D1ReadDatabase,
+  principal: ApiPrincipal,
+  clientMutationId: string,
+  body: Record<string, unknown>,
+  put: Omit<D1ShoppingItemPut, "itemId" | "writeKey" | "now">,
+): Promise<{ created: boolean; id: string } | null> {
+  const writeKey = await apiV1ShoppingWriteKey(principal, "api_v1.shopping_item_create", clientMutationId, body);
+  return putShoppingListItemOnceOnD1(d1, { ...put, itemId: crypto.randomUUID(), writeKey, now: new Date() });
+}
+
 async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["clientMutationId", "name", "quantity", "unit", "categoryKey", "iconKey"]);
@@ -4248,13 +4282,27 @@ async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string,
       ingredientRefId: ingredientRef.id,
       unitId: unit?.id ?? null,
     };
-    const result = await addShoppingListItem(db, {
-      identity,
-      quantity,
-      categoryKey,
-      iconKey,
-      nextSortIndex: () => nextShoppingSortIndex(db, list.id),
-    });
+    // Quantities add up, so on D1 the add claims a write-once key in its own batch: a retry after
+    // a transient D1 error, or the client's resubmit of this mutation after a 503, adds nothing
+    // more. The key is this client's mutation and its body; the new item's id comes from it, so
+    // every try agrees on whether this mutation created the item.
+    const d1 = requestD1(args.context);
+    const result = d1
+      ? await addShoppingItemOnceOnD1(d1, principal, clientMutationId, body, {
+        shoppingListId: list.id,
+        ingredientRefId: ingredientRef.id,
+        unitId: unit?.id ?? null,
+        quantity,
+        categoryKey,
+        iconKey,
+      })
+      : await addShoppingListItem(db, {
+        identity,
+        quantity,
+        categoryKey,
+        iconKey,
+        nextSortIndex: () => nextShoppingSortIndex(db, list.id),
+      });
     if (!result) throw new ApiV1Error("not_found", "Shopping list not found", { resource: "shopping_list" });
     const item = await db.shoppingListItem.findUniqueOrThrow({
       where: { id: result.id },
@@ -4393,6 +4441,22 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
       throw new ApiV1Error("internal_error", "Internal error");
     }
     const nativeD1 = asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB);
+    // Quantities add up, so on D1 the batch writes once under this client's mutation: a retry
+    // after a transient D1 error, or the resubmit after a 503, adds nothing more and answers
+    // from the list as it is, counting as created the items the winning try noted it created.
+    const writeKey = nativeD1
+      ? await apiV1ShoppingWriteKey(principal, "api_v1.shopping_add_from_recipe", clientMutationId, body)
+      : null;
+    const replay = async (createdIds: string[]) => {
+      const items: ShoppingItemRow[] = [];
+      for (const requested of requestedRows) {
+        const identity = { shoppingListId: list.id, ingredientRefId: requested.ingredientRefId, unitId: requested.unitId };
+        const found = await findCompatibleShoppingListItem(db, identity);
+        items.push(await db.shoppingListItem.findUniqueOrThrow({ where: { id: found!.id }, include: { unit: true, ingredientRef: true } }));
+      }
+      const created = items.filter((item) => createdIds.includes(item.id)).length;
+      return { items, metadata: { created, updated: items.length - created } };
+    };
     const relationsByIdentity = new Map(
       recipe.steps.flatMap((step) => step.ingredients).map((ingredient) => [
         JSON.stringify([ingredient.ingredientRefId, ingredient.unitId]),
@@ -4513,6 +4577,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
         operations,
         metadata: { created, updated },
         native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItem),
+        writeOnce: writeKey ? { key: writeKey, replay } : undefined,
       };
     });
 
@@ -4812,20 +4877,25 @@ async function cleanupRecipeImageUploadRows(
     spoonId: string | null;
   },
 ) {
-  if (input.coverId) {
-    await db.recipeCover.deleteMany({ where: { id: input.coverId, recipeId: input.recipe.id } }).catch(() => undefined);
+  // Best effort, as before; each write deletes by id or sets the recipe's earlier cover choice, so
+  // it runs again after a transient D1 error.
+  const { coverId, spoonId } = input;
+  if (coverId) {
+    await retryD1Write({ scope: "upload.cleanup_cover" }, () =>
+      db.recipeCover.deleteMany({ where: { id: coverId, recipeId: input.recipe.id } })).catch(() => undefined);
   }
-  if (input.spoonId) {
-    await db.recipeSpoon.deleteMany({ where: { id: input.spoonId, recipeId: input.recipe.id } }).catch(() => undefined);
+  if (spoonId) {
+    await retryD1Write({ scope: "upload.cleanup_spoon" }, () =>
+      db.recipeSpoon.deleteMany({ where: { id: spoonId, recipeId: input.recipe.id } })).catch(() => undefined);
   }
-  await db.recipe.update({
+  await retryD1Write({ scope: "upload.cleanup_restore_cover" }, () => db.recipe.update({
     where: { id: input.recipe.id },
     data: {
       activeCoverId: input.recipe.activeCoverId,
       activeCoverVariant: input.recipe.activeCoverVariant,
       coverMode: input.recipe.coverMode,
     },
-  }).catch(() => undefined);
+  })).catch(() => undefined);
 }
 
 function booleanField(body: Record<string, unknown>, field: keyof NotificationPreferenceFlags): boolean {
@@ -6018,6 +6088,41 @@ function markerErrorLine(error: unknown) {
 }
 
 /**
+ * Writes a finished marker, again after a transient D1 error. The marker's id is chosen before the
+ * first try, so a try that runs again after its earlier try committed with the answer lost fails
+ * on that marker, and finding the marker by this id says the write is in. A marker another
+ * request wrote has a different id, so it still fails as taken.
+ */
+async function createMarker(
+  db: ApiV1WriteDb,
+  scope: string,
+  reservation: ApiIdempotencyKey,
+  marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
+  resourceId: string,
+): Promise<void> {
+  const id = crypto.randomUUID();
+  await retryD1Write(
+    {
+      scope,
+      applied: async () =>
+        (await db.apiMutationTombstone.findUnique({ where: { id }, select: { id: true } })) ? true : null,
+    },
+    async () => {
+      await db.apiMutationTombstone.create({
+        data: {
+          id,
+          idempotencyKeyId: reservation.id,
+          operation: marker.operation,
+          resourceType: marker.resourceType,
+          resourceId,
+        },
+      });
+      return true;
+    },
+  );
+}
+
+/**
  * Records that a multi-step write finished. A failed marker never fails the write: every step
  * has happened, so the answer is still true. Recovery, needed only if saving the response fails
  * as well, then treats the write as unfinished.
@@ -6029,14 +6134,7 @@ async function markWriteFinished(
   resourceId: string,
 ): Promise<boolean> {
   try {
-    await db.apiMutationTombstone.create({
-      data: {
-        idempotencyKeyId: reservation.id,
-        operation: marker.operation,
-        resourceType: marker.resourceType,
-        resourceId,
-      },
-    });
+    await createMarker(db, "api_marker.finish", reservation, marker, resourceId);
     return true;
   } catch (error) {
     console.error("[api-v1] write_finished_mark_failed", {
@@ -6057,9 +6155,10 @@ async function unmarkWriteFinished(
   marker: (typeof WRITE_FINISHED_RESOURCE)[keyof typeof WRITE_FINISHED_RESOURCE],
 ): Promise<boolean> {
   try {
-    await db.apiMutationTombstone.deleteMany({
+    // A delete by key, so it runs again after a transient D1 error.
+    await retryD1Write({ scope: "api_marker.unmark" }, () => db.apiMutationTombstone.deleteMany({
       where: { idempotencyKeyId: reservation.id, operation: marker.operation, resourceType: marker.resourceType },
-    });
+    }));
     return true;
   } catch (error) {
     console.error("[api-v1] write_finished_unmark_failed", {
@@ -6083,14 +6182,7 @@ async function claimWriteFinished(
   resourceId: string,
 ): Promise<"claimed" | "taken" | "unmarked"> {
   try {
-    await db.apiMutationTombstone.create({
-      data: {
-        idempotencyKeyId: reservation.id,
-        operation: marker.operation,
-        resourceType: marker.resourceType,
-        resourceId,
-      },
-    });
+    await createMarker(db, "api_marker.claim", reservation, marker, resourceId);
     return "claimed";
   } catch (error) {
     if (isPrismaErrorCode(error, "P2002")) return "taken";

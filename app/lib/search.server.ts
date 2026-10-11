@@ -25,6 +25,7 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   SEARCH_DIRTY_CLOCK_SCHEMA_SQL,
   SEARCH_DIRTY_SCHEMA_SQL,
@@ -444,10 +445,21 @@ const SEARCH_SOURCE_QUERIES: readonly D1Query[] = [
 
 // Statements run either as one D1 batch or one at a time through Prisma. Both return the
 // same row shapes, so one set of loaders and builders serves both paths.
-type SearchRunner = (queries: readonly D1Query[]) => Promise<D1Row[][]>;
+//
+// A call that writes names its fixed scope and runs again after a transient D1 error: every
+// write here is safe to repeat (tables and triggers made only if missing, the index's documents
+// deleted and rebuilt from the sources, the queue cleared up to a sequence number, and the
+// marker set to fixed values), so a repeat leaves the index a single run leaves.
+type SearchRunner = (queries: readonly D1Query[], writeScope?: string) => Promise<D1Row[][]>;
+
+function retriedWhenWriting(
+  run: (queries: readonly D1Query[]) => Promise<D1Row[][]>,
+): SearchRunner {
+  return (queries, writeScope) => (writeScope ? retryD1Write({ scope: writeScope }, () => run(queries)) : run(queries));
+}
 
 function d1SearchRunner(db: D1ReadDatabase): SearchRunner {
-  return (queries) => d1ReadBatch(db, queries);
+  return retriedWhenWriting((queries) => d1ReadBatch(db, queries));
 }
 
 // Prisma's raw rows carry BigInt counts and Date objects where D1 returns plain numbers;
@@ -459,7 +471,7 @@ function normalizePrismaValue(value: unknown): unknown {
 }
 
 function prismaSearchRunner(database: PrismaClient): SearchRunner {
-  return async (queries) => {
+  return retriedWhenWriting(async (queries) => {
     const results: D1Row[][] = [];
     for (const [sql, ...values] of queries) {
       if (/^\s*(SELECT|WITH)\b/i.test(sql)) {
@@ -473,7 +485,7 @@ function prismaSearchRunner(database: PrismaClient): SearchRunner {
       }
     }
     return results;
-  };
+  });
 }
 
 function mapSearchSources(rows: D1Row[][]): SearchSources {
@@ -815,9 +827,9 @@ function searchDocumentSqlValues(document: SearchDocumentInput): Array<string | 
 // Rebuilds every document. With `installTriggers`, the triggers go in first, so a write
 // that lands while the sources are read is queued and picked up by the next search.
 async function rebuildAllSearchDocuments(run: SearchRunner, { installTriggers }: { installTriggers: boolean }): Promise<number> {
-  await run(SEARCH_INDEX_SCHEMA_QUERIES);
+  await run(SEARCH_INDEX_SCHEMA_QUERIES, "search.install_tables");
   if (installTriggers) {
-    await run(searchTriggerInstallStatements().map((sql): D1Query => [sql]));
+    await run(searchTriggerInstallStatements().map((sql): D1Query => [sql]), "search.install_triggers");
   }
 
   const [maxSeqRows, ...sourceRows] = await run([[SEARCH_DIRTY_CLOCK_SQL], ...SEARCH_SOURCE_QUERIES]);
@@ -831,7 +843,7 @@ async function rebuildAllSearchDocuments(run: SearchRunner, { installTriggers }:
     ...searchInsertStatements(documents),
     [CLEAR_SEARCH_DIRTY_SQL, maxSeq],
     [WRITE_SEARCH_METADATA_SQL, SEARCH_METADATA_ID, SEARCH_MAINTENANCE_VERSION, documents.length],
-  ]);
+  ], "search.rebuild");
 
   return documents.length;
 }
@@ -862,7 +874,7 @@ async function reindexDirtySearchEntities(run: SearchRunner, dirtyRows: SearchDi
     [DELETE_SEARCH_DOCUMENTS_BY_KEY_SQL, JSON.stringify([...keys])],
     ...searchInsertStatements(documents),
     [CLEAR_SEARCH_DIRTY_KEYS_SQL, lastSeq, claimed],
-  ]);
+  ], "search.reindex");
 }
 
 function searchDirtyRows(rows: D1Row[]): SearchDirtyRow[] {
@@ -887,7 +899,7 @@ async function readSearchIndexState(
     [SEARCH_TRIGGER_COUNT_SQL],
     [SEARCH_DIRTY_SQL],
     ...(statement ? [statement] : []),
-  ]);
+  ], "search.check");
   const offset = SEARCH_INDEX_SCHEMA_QUERIES.length;
   const metadata = rows[offset]![0] as unknown as SearchIndexMetadataRow | undefined;
   const triggerCount = d1Count(rows[offset + 1]![0]?.triggerCount, "triggerCount");

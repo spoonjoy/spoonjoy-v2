@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists } from "~/lib/auth.server";
+import { D1_WRITE_UNAVAILABLE_MESSAGE, d1UnavailableHeaders, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { findUsernameConflict } from "~/lib/account-identity.server";
 import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
@@ -127,7 +128,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   // Create user
-  const user = await createUser(database, email, username, password);
+  let user: Awaited<ReturnType<typeof createUser>>;
+  try {
+    user = await createUser(database, email, username, password);
+  } catch (error) {
+    // The database was briefly unavailable: say so above the form, which keeps what was typed.
+    if (!isD1Unavailable(error)) throw error;
+    return data(
+      { errors: { general: D1_WRITE_UNAVAILABLE_MESSAGE }, values: { email, username } },
+      { status: 503, headers: d1UnavailableHeaders() },
+    );
+  }
 
   // A new account lands where it came from (the recipe someone tapped Save on, an app asking for
   // access), sanitised as log-in does, or else in its own Kitchen, which starts with what to do

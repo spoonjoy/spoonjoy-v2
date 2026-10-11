@@ -13,8 +13,9 @@ import {
   ActiveRecipeTitleConflictError,
   validateActiveRecipeTitleUnique,
 } from "~/lib/recipe-title-uniqueness.server";
-import { d1DateTime, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1DateTime, d1EpochMsSql, d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   activeRecipeTitleFreeGuard,
   cookbooksForRecipeTouchStatement,
@@ -485,13 +486,28 @@ async function updateNativeRecipeOnce(
     const updatedAt = new Date();
     // The guards re-check that the recipe is still active, the new title still free and, when
     // the client gave one, the recipe still unchanged since expectedUpdatedAt.
-    await d1WriteBatch(d1, [
-      recipeActiveGuard(recipeId),
-      ...(input.fields.title === undefined ? [] : [activeRecipeTitleFreeGuard(chefId, input.fields.title, recipeId)]),
-      ...(expectedUpdatedAt ? [recipeUpdatedAtGuard(recipeId, expectedUpdatedAt)] : []),
-      recipeUpdateStatement(recipeId, input.fields, updatedAt),
-      cookbooksForRecipeTouchStatement(recipeId, updatedAt),
-    ]);
+    // After a transient D1 error it runs again. A retry after the earlier try committed fails its
+    // expectedUpdatedAt guard: the recipe at this update's time says the earlier try committed.
+    await retryD1Write(
+      {
+        scope: "recipe.update",
+        applied: async () => {
+          const [rows] = await d1ReadBatch(d1, [[
+            `SELECT 1 FROM "Recipe" WHERE "id" = ? AND ${d1EpochMsSql('"updatedAt"')} = ?`,
+            recipeId,
+            updatedAt.getTime(),
+          ]]);
+          return rows.length > 0 ? true : null;
+        },
+      },
+      () => d1WriteBatch(d1, [
+        recipeActiveGuard(recipeId),
+        ...(input.fields.title === undefined ? [] : [activeRecipeTitleFreeGuard(chefId, input.fields.title, recipeId)]),
+        ...(expectedUpdatedAt ? [recipeUpdatedAtGuard(recipeId, expectedUpdatedAt)] : []),
+        recipeUpdateStatement(recipeId, input.fields, updatedAt),
+        cookbooksForRecipeTouchStatement(recipeId, updatedAt),
+      ]).then(() => true as const),
+    );
   } else if (updated) {
     const updatedAt = new Date();
     await db.$transaction([
@@ -537,27 +553,45 @@ async function deleteNativeRecipeOnce(
   const deletedAt = new Date();
   if (d1) {
     // The guard re-checks that the recipe is still active; a delete that lost the race to
-    // another delete runs again and answers not_found.
-    const results = await d1WriteBatch(d1, [
-      recipeActiveGuard(recipeId),
-      [
-        `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?
-         RETURNING "id", "title", "deletedAt", "updatedAt"`,
-        d1Timestamp(deletedAt),
-        d1Timestamp(deletedAt),
-        recipeId,
-      ],
-      cookbooksForRecipeTouchStatement(recipeId, deletedAt),
-      nativeSyncTombstoneUpsertStatement({
-        accountId: chefId,
-        resourceType: "recipe",
-        resourceId: existing.id,
-        title: existing.title,
-        deletedAt,
-        updatedAt: deletedAt,
-      }),
-    ]);
-    const row = results[1]!.rows[0]!;
+    // another delete runs again and answers not_found. After a transient D1 error it runs again;
+    // a retry after the earlier try committed fails that guard, and the recipe deleted at this
+    // delete's time says the earlier try committed.
+    const returned = `"id", "title", "deletedAt", "updatedAt"`;
+    const row: D1Row = await retryD1Write(
+      {
+        scope: "recipe.delete",
+        applied: async () => {
+          const [rows] = await d1ReadBatch(d1, [[
+            `SELECT ${returned} FROM "Recipe" WHERE "id" = ? AND ${d1EpochMsSql('"deletedAt"')} = ?`,
+            recipeId,
+            deletedAt.getTime(),
+          ]]);
+          return rows[0] ?? null;
+        },
+      },
+      async () => {
+        const results = await d1WriteBatch(d1, [
+          recipeActiveGuard(recipeId),
+          [
+            `UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?
+             RETURNING ${returned}`,
+            d1Timestamp(deletedAt),
+            d1Timestamp(deletedAt),
+            recipeId,
+          ],
+          cookbooksForRecipeTouchStatement(recipeId, deletedAt),
+          nativeSyncTombstoneUpsertStatement({
+            accountId: chefId,
+            resourceType: "recipe",
+            resourceId: existing.id,
+            title: existing.title,
+            deletedAt,
+            updatedAt: deletedAt,
+          }),
+        ]);
+        return results[1]!.rows[0]!;
+      },
+    );
     return success({
       recipe: {
         id: String(row.id),

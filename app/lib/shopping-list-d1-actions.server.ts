@@ -216,6 +216,65 @@ async function addShoppingListItemOnce(db: D1ReadDatabase, add: D1ShoppingItemAd
   return updated!.changes + inserted!.changes > 0;
 }
 
+export interface D1ShoppingItemPut {
+  shoppingListId: string;
+  ingredientRefId: string;
+  unitId: string | null;
+  quantity: number | null;
+  categoryKey: string | null;
+  iconKey: string | null;
+  /** The id a new item gets; the claim keeps it, so a later try knows which item this add created. */
+  itemId: string;
+  writeKey: D1WriteOnceKey;
+  now: Date;
+}
+
+/**
+ * Adds one item whose ingredient and unit already exist (the REST and tool adds), in one batch
+ * under its write-once key, so a retry after a transient D1 error or a resubmission with the same
+ * key adds nothing more. Answers the list's item with that identity afterwards, and whether this
+ * add created it (by whichever try holds the key), or null when the list no longer exists.
+ */
+export async function putShoppingListItemOnceOnD1(
+  db: D1ReadDatabase,
+  put: D1ShoppingItemPut,
+): Promise<{ id: string; created: boolean } | null> {
+  const identity: ItemIdentitySql = {
+    ingredientRef: "?",
+    ingredientRefValues: [put.ingredientRefId],
+    unit: "?",
+    unitValues: [put.unitId],
+  };
+  const at = d1Timestamp(put.now);
+  const results = await retryD1Write({ scope: "api_v1.shopping_item_create" }, () => {
+    // The claim notes the id this try gives a new item, so a later try can tell whether the
+    // item on the list is the one this add created.
+    const claim = d1WriteOnceClaim(put.writeKey, put.now, put.itemId);
+    return d1WriteBatch(db, [
+      ...claim.statements,
+      ...putItemStatements(put.shoppingListId, identity, {
+        quantity: put.quantity,
+        categoryKey: put.categoryKey,
+        categoryKeyWins: "submitted",
+        iconKey: put.iconKey,
+        iconKeyWins: "submitted-if-set",
+      }, put.itemId, at, claim),
+      [
+        `SELECT "id" FROM "ShoppingListItem"
+         WHERE "shoppingListId" = ? AND "ingredientRefId" = ? AND "unitId" IS ?
+         ORDER BY "deletedAt" IS NOT NULL, "sortIndex", "id" LIMIT 1`,
+        put.shoppingListId,
+        put.ingredientRefId,
+        put.unitId,
+      ],
+      claim.readNote,
+    ]);
+  });
+  const id = results.at(-2)!.rows[0]?.id;
+  if (typeof id !== "string") return null;
+  return { id, created: results.at(-1)!.rows[0]!.note === id };
+}
+
 const RECIPE_SQL = `SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`;
 
 const RECIPE_INGREDIENTS_SQL = `SELECT i."id", i."stepNum", i."ingredientRefId", i."unitId", i."quantity", r."name" AS "ingredientName"

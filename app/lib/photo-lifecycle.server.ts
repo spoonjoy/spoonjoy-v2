@@ -29,6 +29,7 @@
 
 
 import { captureException, resolvePostHogServerConfig, type PostHogServerEnv } from "~/lib/analytics-server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 /** Where stored photos are served from; rows keep this relative URL. */
 export const PHOTO_URL_PREFIX = "/photos/";
 /** Moved objects wait here, unserved, until they are purged or restored. */
@@ -300,6 +301,15 @@ async function moveToQuarantine(bucket: PhotoSweepBucket, key: string, variants:
   return true;
 }
 
+/**
+ * Runs one of the sweep's writes, again after a transient D1 error. Every sweep write is safe to
+ * run twice: a delete by key, an insert that skips a key already there, an update to fixed values,
+ * and the run's own log row, inserted by an id chosen before the first try and skipped if there.
+ */
+function sweepWrite(db: PhotoSweepDatabase, scope: string, sql: string, ...values: unknown[]): Promise<void> {
+  return retryD1Write({ scope }, () => db.run(sql, ...values));
+}
+
 /** One run of the photo sweep. See the module comment for what each mode does. */
 export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<PhotoSweepReport> {
   const now = options.now ?? (() => new Date());
@@ -368,14 +378,16 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
   for (const row of cleanup.values()) {
     if (row.quarantinedAt) continue;
     if (live.has(row.key) || !originals.has(row.key)) {
-      await db.run(`DELETE FROM "PhotoCleanup" WHERE "key" = ? AND "quarantinedAt" IS NULL`, row.key);
+      await sweepWrite(db, "photo_sweep.forget", `DELETE FROM "PhotoCleanup" WHERE "key" = ? AND "quarantinedAt" IS NULL`, row.key);
       cleanup.delete(row.key);
     }
   }
   for (const key of unreferenced) {
     if (cleanup.has(key)) continue;
     const eligibleAt = new Date(startedAt.getTime() + PHOTO_SWEEP_GRACE_MS);
-    await db.run(
+    await sweepWrite(
+      db,
+      "photo_sweep.record",
       `INSERT INTO "PhotoCleanup" ("key", "reason", "firstUnreferencedAt", "eligibleAt", "sizeBytes", "updatedAt")
        VALUES (?, 'unreferenced', ?, ?, ?, ?) ON CONFLICT("key") DO NOTHING`,
       key,
@@ -408,7 +420,9 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
       try {
         if (await isPhotoKeyLive(db, key)) continue;
         if (await moveToQuarantine(bucket, key, variantsByOriginal.get(key) ?? [], startedAt)) {
-          await db.run(
+          await sweepWrite(
+            db,
+            "photo_sweep.quarantine",
             `UPDATE "PhotoCleanup" SET "quarantinedAt" = ?, "updatedAt" = ? WHERE "key" = ?`,
             at,
             at,
@@ -429,7 +443,7 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
       changes += 1;
       try {
         await bucket.delete(`${PHOTO_QUARANTINE_PREFIX}${row.key}`);
-        await db.run(`UPDATE "PhotoCleanup" SET "purgedAt" = ?, "updatedAt" = ? WHERE "key" = ?`, at, at, row.key);
+        await sweepWrite(db, "photo_sweep.purge", `UPDATE "PhotoCleanup" SET "purgedAt" = ?, "updatedAt" = ? WHERE "key" = ?`, at, at, row.key);
         report.purged += 1;
       } catch (error) {
         report.failures += 1;
@@ -447,11 +461,14 @@ export async function runPhotoSweep(options: RunPhotoSweepOptions): Promise<Phot
   }
 
   report.finishedAt = now().toISOString();
-  await db.run(
+  await sweepWrite(
+    db,
+    "photo_sweep.log_run",
     `INSERT INTO "PhotoSweepRun" ("id", "mode", "startedAt", "finishedAt", "objectsScanned", "referencedObjects",
        "unreferencedObjects", "unreferencedBytes", "orphanVariants", "eligibleObjects", "quarantined", "purged",
        "failures", "truncated", "note")
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT("id") DO NOTHING`,
     report.id,
     report.mode,
     report.startedAt,
