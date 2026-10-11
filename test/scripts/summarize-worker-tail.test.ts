@@ -89,6 +89,7 @@ describe("summarize-worker-tail.jq", () => {
       "budget",
       "byPath",
       "complete",
+      "d1TransientErrors",
       "firstEventTimestamp",
       "firstExceptions",
       "hungInvocations",
@@ -99,8 +100,10 @@ describe("summarize-worker-tail.jq", () => {
       "slowest",
       "stalledInvocations",
       "tailAliveAtStop",
+      "tailReconnects",
       "totalInvocations",
     ]);
+    expect(Object.keys(summary.d1TransientErrors).sort()).toEqual(["notRetried", "notRetriedWrites", "retried", "total"]);
     for (const invocation of [...summary.nonOkInvocations, ...summary.firstExceptions, ...summary.slowest, ...summary.serverErrorInvocations]) {
       expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
@@ -179,6 +182,39 @@ describe("summarize-worker-tail.jq", () => {
       byPath: [],
       budget: { cpuTimeP95Ms: 10, overBudget: [] },
     });
+  });
+
+  it("marks a tail that reconnected after a drop incomplete, and records how often it reconnected", () => {
+    expect(summarize([hostileEvent()], true).summary).toMatchObject({ complete: true, tailReconnects: 0 });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailReconnects", "0"]).summary)
+      .toMatchObject({ complete: true, tailReconnects: 0 });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailReconnects", "2"]).summary)
+      .toMatchObject({ complete: false, tailAliveAtStop: true, tailReconnects: 2 });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailReconnects", '"x"']).summary)
+      .toMatchObject({ complete: true, tailReconnects: 0 });
+  });
+
+  it("counts the Worker's transient D1 error reports, retried or not, reading only their fixed fields", () => {
+    const report = (fields: Record<string, unknown>) =>
+      JSON.stringify({ event: "d1_transient_error", call: "all", attempt: 1, kind: "network_connection_lost", ...fields });
+    const { summary, raw } = summarize([
+      hostileEvent({
+        outcome: "ok",
+        logs: [
+          { level: "warn", message: [report({ operation: "read", willRetry: true })] },
+          { level: "warn", message: [report({ operation: "read", willRetry: false, extra: CANARIES.logLine })] },
+          { level: "error", message: report({ operation: "write", willRetry: false }) },
+          { level: "warn", message: [{ event: "d1_transient_error", operation: "bogus", willRetry: "yes" }] },
+          { level: "warn", message: ["{not json", JSON.stringify({ event: "other" }), 7] },
+          "not an object",
+        ],
+      }),
+      hostileEvent({ logs: "not an array" }),
+      hostileEvent({ logs: undefined }),
+    ]);
+    expect(summary.d1TransientErrors).toEqual({ total: 4, retried: 1, notRetried: 3, notRetriedWrites: 2 });
+    expect(raw).not.toContain(CANARIES.logLine);
+    expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0 });
   });
 
   it("records the time window the tail covered", () => {
@@ -548,8 +584,8 @@ describe("Journeys workflow tail wiring", () => {
     // finished lost the last ~6 s of events in runs 37934997247 and 37912555692, including the
     // failing request itself.
     const run = step("Stop QA Worker tail and summarise it").run ?? "";
-    const waitAt = run.indexOf("wc -c < .worker-tail/tail.json");
-    const killAt = run.indexOf('kill "$(cat .worker-tail/pid)"');
+    const waitAt = run.indexOf("cat .worker-tail/tail-*.json 2>/dev/null | wc -c");
+    const killAt = run.indexOf('kill -- "-$(cat .worker-tail/pid)"');
 
     expect(waitAt).toBeGreaterThan(-1);
     expect(waitAt).toBeLessThan(killAt);
@@ -557,6 +593,35 @@ describe("Journeys workflow tail wiring", () => {
     expect(run.indexOf("tail_alive=true")).toBeLessThan(waitAt);
     expect(run).toMatch(/for _ in \$\(seq 1 30\)/);
     expect(run).toMatch(/quiet" -ge 5/);
+  });
+
+  it("reconnects a dropped tail into a new file per connection, and summarises every connection's events", () => {
+    // Run 38151797798's tail exited at 15:40:06, seconds before its two 500s, so the summary had
+    // no record of them.
+    const start = step("Start QA Worker tail").run ?? "";
+    expect(start).toMatch(/^ *setsid nohup bash -c '/m);
+    expect(start).toMatch(/for connection in 1 2 3 4 5 6; do/);
+    expect(start).toContain('> ".worker-tail/tail-$connection.json"');
+    expect(start).toContain("echo $! > .worker-tail/pid");
+
+    const stop = step("Stop QA Worker tail and summarise it").run ?? "";
+    expect(stop).toContain('kill -9 -- "-$(cat .worker-tail/pid)"');
+    expect(stop).toMatch(/for tail_file in \.worker-tail\/tail-\*\.json; do/);
+    expect(stop).toContain(`sed -n '/^{/,$p' "$tail_file" | jq -c '.' >> .worker-tail/events.ndjson`);
+    expect(stop).toContain('--argjson tailReconnects "$tail_reconnects"');
+    expect(stop).toMatch(/jq '\{[^']*tailReconnects[^']*d1TransientErrors[^']*\}'/);
+  });
+
+  it("warns, without failing, when the Worker reported transient D1 errors", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(select\(\.d1TransientErrors[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(warn({ d1TransientErrors: { total: 3, retried: 2, notRetried: 1, notRetriedWrites: 1 } }).trimEnd()).toBe(
+      "::warning::D1 transient errors: 3 (2 retried; 1 not retried, of which 1 on writes). See d1TransientErrors in worker-tail-summary.json.",
+    );
+    expect(warn({ d1TransientErrors: { total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0 } })).toBe("");
+    expect(warn({})).toBe("");
   });
 
   it("keeps error-level log lines for the per-run QA Worker only, and prints how many it kept", () => {

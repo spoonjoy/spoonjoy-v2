@@ -1,4 +1,4 @@
-import { execFile as nodeExecFile } from "node:child_process";
+import { execFileSync, execFile as nodeExecFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -37,6 +37,35 @@ function workflowRunScript(workflow: string, stepName: string, nextStepName: str
   const runIndex = lines.indexOf("        run: |");
   if (runIndex < 0) throw new Error(`Missing run block for ${stepName}.`);
   return lines.slice(runIndex + 1).map((line) => line.slice(10)).join("\n");
+}
+
+/**
+ * Runs the "Ensure release artifact exists" step's own `jq -e` checks over many artifacts at once
+ * and says, for each, whether the step would keep it (every check passes, as `jq -e` judges a
+ * result: the last output is neither false nor null, and there is no error). The step runs its
+ * checks in order and stops at the first failure; they read nothing but the artifact, so all of
+ * them passing is the same verdict. Every `jq -e` in the step must be one of the checks found
+ * here, so a new check cannot go unevaluated.
+ */
+function releaseGuardVerdicts(script: string, env: NodeJS.ProcessEnv, artifacts: unknown[]): boolean[] {
+  const checks = [...script.matchAll(/jq -e((?: --arg [a-z_]+ "\$[A-Z0-9_]+")*) '([^']*)' "\$artifact_path"/g)]
+    .map(([, args, filter]) => ({
+      args: [...args.matchAll(/--arg ([a-z_]+) "\$([A-Z0-9_]+)"/g)].flatMap(([, name, variable]) => {
+        if (env[variable] === undefined) throw new Error(`The release guard reads unset ${variable}.`);
+        return ["--arg", name, env[variable]!];
+      }),
+      filter,
+    }));
+  expect(checks.length).toBeGreaterThan(0);
+  expect(checks).toHaveLength(script.match(/\bjq -e\b/g)?.length ?? 0);
+  const input = artifacts.map((artifact) => JSON.stringify(artifact)).join("\n");
+  const perCheck = checks.map(({ args, filter }) => execFileSync(
+    "jq",
+    [...args, "-c", `(try [${filter}] catch null) as $out | $out != null and ($out | length) > 0 and ($out | last) != false and ($out | last) != null`],
+    { input, env, encoding: "utf8" },
+  ).trim().split("\n").map((line) => JSON.parse(line) as boolean));
+  for (const verdicts of perCheck) expect(verdicts).toHaveLength(artifacts.length);
+  return artifacts.map((_, index) => perCheck.every((verdicts) => verdicts[index]));
 }
 
 function secureProductionDeployWorkflow(
@@ -862,7 +891,7 @@ describe("deployment preflight", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("rejects an ancestry-only normal release policy that permits a stale source SHA", () => {
     const inputs = validInputs();
@@ -1471,7 +1500,7 @@ describe("deployment preflight", () => {
     ]) {
       await expect(check(name)).rejects.toThrow();
     }
-  });
+  }, 30_000);
 
   it("preserves only executable-lifecycle-valid release artifacts", async () => {
     const workflow = await readFile(".github/workflows/production-deploy.yml", "utf8");
@@ -1551,7 +1580,7 @@ describe("deployment preflight", () => {
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
   it("executes jq and rejects unsanitized failure and rollbackFailure values", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-workflow-failure-sanitization-"));
@@ -1750,7 +1779,7 @@ describe("deployment preflight", () => {
     }
   }, 30_000);
 
-  it("executes every synthetic lifecycle tuple and representative poison mutation", async () => {
+  it("accepts every synthetic lifecycle tuple and rejects every representative poison mutation", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-synthetic-artifact-"));
     const artifactPath = path.join(root, "mcp-oauth-canary-artifacts/production-release.json");
     const sourceSha = "a".repeat(40);
@@ -2088,10 +2117,53 @@ describe("deployment preflight", () => {
       }),
     ];
 
+    const fallbackFor = (releaseMode: string, protocolBoundary: string) => ({
+      status: releaseMode === "protocol-v1-canary" ? "release_state_unknown" : "forward_repair_required",
+      sourceSha,
+      releaseMode,
+      deploymentStrategy: releaseMode === "protocol-v1-canary" ? "gradual" : "atomic",
+      phase: "unknown",
+      reviewedMigrations: null,
+      migrationApply: "unknown",
+      databaseRollbackSupported: false,
+      failure: "Release workflow failed without a trustworthy orchestrator artifact.",
+      ...(protocolBoundary ? { protocolV1BoundarySha: protocolBoundary } : {}),
+    });
+    const invalidMutationsOf = (artifact: Record<string, unknown>) => {
+      const releaseMode = String(artifact.releaseMode);
+      return [
+        { ...artifact, phase: "banana" },
+        { ...artifact, sourceSha: "main" },
+        { ...artifact, deploymentStrategy: releaseMode === "protocol-v1-canary" ? "atomic" : "gradual" },
+        { ...artifact, failure: "" },
+        { ...artifact, reviewedMigrations: ["0024_bad..name.sql"] },
+        { ...artifact, reviewedMigrations: [migration, migration] },
+        ...(["validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list"]
+            .includes(String(artifact.phase))
+          ? [{ ...artifact, reviewedMigrations: [migration] }]
+          : []),
+        ...(artifact.phase === "migration_review"
+          ? [{ ...artifact, reviewedMigrations: [] }]
+          : []),
+        ...(["version_lookup", "protocol_ancestry"].includes(String(artifact.phase))
+          ? [{ ...artifact, candidateVersionId }]
+          : []),
+        ...(artifact.phase === "rollback_already_active"
+          ? [{ ...artifact, previousVersionId, candidateVersionId }]
+          : [{ ...artifact, previousVersionId, candidateVersionId: previousVersionId }]),
+        {
+          ...artifact,
+          previousVersionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          candidateVersionId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+        },
+        ...(releaseMode === "protocol-v1-canary"
+          ? [{ ...artifact, protocolV1BoundarySha: undefined }]
+          : [{ ...artifact, protocolV1BoundarySha: boundary }]),
+      ];
+    };
+
     try {
-      await mkdir(path.dirname(artifactPath), { recursive: true });
-      for (const artifact of validArtifacts) {
-        const releaseMode = String(artifact.releaseMode);
+      for (const releaseMode of ["protocol-v1-canary", "atomic-bootstrap", "atomic-product-activation"]) {
         const protocolBoundary = releaseMode === "protocol-v1-canary" ? boundary : "";
         const script = workflowRunScript(
           secureProductionDeployWorkflow(releaseMode, protocolBoundary),
@@ -2104,62 +2176,32 @@ describe("deployment preflight", () => {
           SPOONJOY_RELEASE_MODE: releaseMode,
           SPOONJOY_PROTOCOL_V1_BOUNDARY_SHA: protocolBoundary,
         };
-        await writeFile(artifactPath, JSON.stringify(artifact));
-        await execFile("bash", ["-c", script], { cwd: root, env });
-        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(artifact);
+        const valid = validArtifacts.filter((artifact) => artifact.releaseMode === releaseMode);
+        expect(valid.length).toBeGreaterThan(0);
 
-        const invalidMutations = [
-          { ...artifact, phase: "banana" },
-          { ...artifact, sourceSha: "main" },
-          { ...artifact, deploymentStrategy: releaseMode === "protocol-v1-canary" ? "atomic" : "gradual" },
-          { ...artifact, failure: "" },
-          { ...artifact, reviewedMigrations: ["0024_bad..name.sql"] },
-          { ...artifact, reviewedMigrations: [migration, migration] },
-          ...(["validate", "provenance", "initial_preflight", "build", "post_build_provenance", "migration_list"]
-              .includes(String(artifact.phase))
-            ? [{ ...artifact, reviewedMigrations: [migration] }]
-            : []),
-          ...(artifact.phase === "migration_review"
-            ? [{ ...artifact, reviewedMigrations: [] }]
-            : []),
-          ...(["version_lookup", "protocol_ancestry"].includes(String(artifact.phase))
-            ? [{ ...artifact, candidateVersionId }]
-            : []),
-          ...(artifact.phase === "rollback_already_active"
-            ? [{ ...artifact, previousVersionId, candidateVersionId }]
-            : [{ ...artifact, previousVersionId, candidateVersionId: previousVersionId }]),
-          {
-            ...artifact,
-            previousVersionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            candidateVersionId: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
-          },
-          ...(releaseMode === "protocol-v1-canary"
-            ? [{ ...artifact, protocolV1BoundarySha: undefined }]
-            : [{ ...artifact, protocolV1BoundarySha: boundary }]),
-        ];
-        for (const invalid of invalidMutations) {
-          await writeFile(artifactPath, JSON.stringify(invalid));
-          await execFile("bash", ["-c", script], { cwd: root, env });
-          expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual({
-            status: releaseMode === "protocol-v1-canary"
-              ? "release_state_unknown"
-              : "forward_repair_required",
-            sourceSha,
-            releaseMode,
-            deploymentStrategy: releaseMode === "protocol-v1-canary" ? "gradual" : "atomic",
-            phase: "unknown",
-            reviewedMigrations: null,
-            migrationApply: "unknown",
-            databaseRollbackSupported: false,
-            failure: "Release workflow failed without a trustworthy orchestrator artifact.",
-            ...(protocolBoundary ? { protocolV1BoundarySha: protocolBoundary } : {}),
-          });
-        }
+        // The whole step, end to end, for one valid artifact and one poison mutation of it: it
+        // keeps the valid one as written and replaces the poisoned one with the fallback.
+        await mkdir(path.dirname(artifactPath), { recursive: true });
+        await writeFile(artifactPath, JSON.stringify(valid[0]));
+        await execFile("bash", ["-c", script], { cwd: root, env });
+        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(valid[0]);
+        await writeFile(artifactPath, JSON.stringify(invalidMutationsOf(valid[0])[0]));
+        await execFile("bash", ["-c", script], { cwd: root, env });
+        expect(JSON.parse(await readFile(artifactPath, "utf8"))).toEqual(fallbackFor(releaseMode, protocolBoundary));
+
+        // Every tuple and every mutation, through the step's own jq checks: one jq process per
+        // check for the whole matrix instead of a shell and up to four jq processes per case,
+        // which took over a minute and could time out under a loaded full run.
+        const invalid = valid.flatMap(invalidMutationsOf);
+        const verdicts = releaseGuardVerdicts(script, env, [...valid, ...invalid]);
+        expect(verdicts.slice(0, valid.length)).toEqual(valid.map(() => true));
+        const accepted = invalid.filter((_, index) => verdicts[valid.length + index]);
+        expect(accepted).toEqual([]);
       }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 30_000);
 
   it("keeps a valid pre-migration restore point and distrusts a malformed or impossible one", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "spoonjoy-restore-point-artifact-"));

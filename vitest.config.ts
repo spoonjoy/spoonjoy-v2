@@ -93,6 +93,7 @@ export default defineConfig({
       "**/.claude/**",
       "test/workers/cook-session-bootstrap.test.ts",
       "test/workers/cook-session-protocol.test.ts",
+      "test/workers/d1-transient-retry.test.ts",
       "test/workers/saved-recipe-cutover-d1.test.ts",
       "test/workers/native-cook-session-recordings.test.ts",
       "scripts/bench/**",

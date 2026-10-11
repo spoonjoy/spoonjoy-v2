@@ -239,8 +239,19 @@ jobs:
           SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
         run: |
           mkdir -p .worker-tail
-          nohup ./node_modules/.bin/wrangler tail "$SPOONJOY_QA_RUN_WORKER" --format json \
-            > .worker-tail/tail.json 2> .worker-tail/tail.err < /dev/null &
+          # A tail whose connection drops is reconnected, at most 5 times, so one dropped socket
+          # does not leave the rest of the run without evidence (run 38151797798 lost its tail
+          # seconds before its two 500s). Each connection writes its own file, so a value cut off
+          # by the drop cannot spoil the next; the summary counts the reconnects and calls a
+          # reconnected tail incomplete, because events between connections are lost. setsid
+          # puts the loop and its wrangler in one process group, which the summary step stops.
+          setsid nohup bash -c '
+            for connection in 1 2 3 4 5 6; do
+              ./node_modules/.bin/wrangler tail "$SPOONJOY_QA_RUN_WORKER" --format json \
+                > ".worker-tail/tail-$connection.json" 2>> .worker-tail/tail.err < /dev/null || true
+              sleep 2
+            done
+          ' > /dev/null 2>&1 < /dev/null &
           echo $! > .worker-tail/pid
           # The JSON format prints no "connected" line; give the socket a moment to open.
           sleep 10 || true
@@ -284,9 +295,11 @@ jobs:
       # scrubbed message and at most 5 scrubbed stack frames, attached to the 5xx and exception
       # entries, at most 3 per invocation and 40 in all; the log prints how many were kept. Any
       # other caller of the program, such as a production tail, keeps no log line.
-      # If the tail had already exited when the suite finished, or recorded nothing,
-      # the summary says `complete: false` and the log warns: that is no evidence, not a clean
-      # run. The raw stream is then deleted.
+      # It also counts the transient D1 errors the Worker logged (event d1_transient_error, which
+      # carries no SQL or values), split into retried and not retried, and warns when there were any.
+      # If the tail had already exited when the suite finished, had to reconnect, or recorded
+      # nothing, the summary says `complete: false` and the log warns: that is partial evidence,
+      # not a clean run. The raw stream is then deleted.
       - name: Stop QA Worker tail and summarise it
         if: always() && steps.qa-run.outcome == 'success'
         continue-on-error: true
@@ -300,34 +313,43 @@ jobs:
             # grown for 5 s, at most 30 s.
             quiet=0; last_size=""
             for _ in $(seq 1 30); do
-              size=$(wc -c < .worker-tail/tail.json 2>/dev/null || echo 0)
+              size=$(cat .worker-tail/tail-*.json 2>/dev/null | wc -c)
               if [ "$size" = "$last_size" ]; then quiet=$((quiet + 1)); else quiet=0; fi
               last_size=$size
               if [ "$quiet" -ge 5 ]; then break; fi
               sleep 1 || true
             done
-            kill "$(cat .worker-tail/pid)" 2>/dev/null || true
+            # The whole process group: the reconnect loop and the wrangler it is running.
+            kill -- "-$(cat .worker-tail/pid)" 2>/dev/null || true
             sleep 2 || true
-            kill -9 "$(cat .worker-tail/pid)" 2>/dev/null || true
+            kill -9 -- "-$(cat .worker-tail/pid)" 2>/dev/null || true
           fi
           : > .worker-tail/events.ndjson
-          if [ -f .worker-tail/tail.json ]; then
+          tail_connections=0
+          for tail_file in .worker-tail/tail-*.json; do
+            [ -f "$tail_file" ] || continue
+            tail_connections=$((tail_connections + 1))
             # Keep only the JSON events (from the first line that opens an object), and stop at
-            # a value cut off by the kill instead of failing on it.
-            sed -n '/^{/,$p' .worker-tail/tail.json | jq -c '.' > .worker-tail/events.ndjson 2>/dev/null || true
-          fi
-          jq -s --argjson tailAliveAtStop "$tail_alive" --argjson keepErrorLogs true -f scripts/summarize-worker-tail.jq \
+            # a value cut off by the kill or the drop instead of failing on it.
+            sed -n '/^{/,$p' "$tail_file" | jq -c '.' >> .worker-tail/events.ndjson 2>/dev/null || true
+          done
+          tail_reconnects=$(( tail_connections > 1 ? tail_connections - 1 : 0 ))
+          jq -s --argjson tailAliveAtStop "$tail_alive" --argjson tailReconnects "$tail_reconnects" --argjson keepErrorLogs true -f scripts/summarize-worker-tail.jq \
             .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
           if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           rm -rf .worker-tail
           if [ "$(jq -r '.complete' test-results/worker-tail-summary.json 2>/dev/null)" != "true" ]; then
-            echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, or recorded no events). Treat worker-tail-summary.json as no evidence, not as a run without Worker-side failures."
+            echo "::warning::The QA Worker tail is incomplete (the tail exited before the suite finished, reconnected after a drop, or recorded no events). Treat worker-tail-summary.json as partial evidence, not as a run without Worker-side failures."
           fi
-          jq '{ complete, tailAliveAtStop, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, slowestPaths: (.byPath | .[0:5]) }' \
+          jq '{ complete, tailAliveAtStop, tailReconnects, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, slowestPaths: (.byPath | .[0:5]) }' \
             test-results/worker-tail-summary.json || true
           # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
           # a server failure, so name it in the log. Non-fatal for now.
           jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \
+            test-results/worker-tail-summary.json || true
+          # A transient D1 error (app/lib/d1-transient-retry.server.ts) is a platform failure, not a
+          # bug in the change under test; name how many there were and how many a retry absorbed.
+          jq -r 'select(.d1TransientErrors.total > 0) | "::warning::D1 transient errors: \(.d1TransientErrors.total) (\(.d1TransientErrors.retried) retried; \(.d1TransientErrors.notRetried) not retried, of which \(.d1TransientErrors.notRetriedWrites) on writes). See d1TransientErrors in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
           jq -r '"QA Worker error log lines kept: \(.errorLogs.kept // 0) from \(.errorLogs.invocations // 0) invocations (\(.errorLogs.droppedOverCap // 0) over the cap)."' \
             test-results/worker-tail-summary.json || true

@@ -4,7 +4,7 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_049",
+    "requestId": "opaque_050",
     "data": {
       "fork": {
         "appliedTitle": "Tomato Herb Soup, my way",
@@ -70,7 +70,7 @@
         "cookbooks": []
       },
       "mutation": {
-        "clientMutationId": "opaque_050",
+        "clientMutationId": "opaque_051",
         "replayed": false
       }
     }
