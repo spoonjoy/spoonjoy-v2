@@ -7,6 +7,7 @@ import type { ImageGenRunner } from "~/lib/image-gen.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 
 // Cover stylization with a D1 binding: each lifecycle update of the cover and the
 // native-sync touches of its recipe and cookbooks go to D1 as one batch (through the
@@ -353,6 +354,62 @@ describe("cover stylization on a D1 binding", () => {
         recipeTouched: false,
         cookbookTouched: false,
       });
+    });
+  });
+
+  describe("when D1's connection drops", () => {
+    // The success mark is the only cover update that sets the stylized image; the processing mark
+    // the only one that sets the start time; the failure mark sets neither.
+    const SUCCESS = /"stylizedImageUrl" = \?/;
+    const PROCESSING = /"generationStartedAt" = \?/;
+    const FAILURE = /^(?![\s\S]*"generationStartedAt" = \?)(?![\s\S]*"stylizedImageUrl" = \?)[\s\S]*UPDATE "RecipeCover"/;
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("marks the cover processing and succeeded as one run would (%s)", async (outcome) => {
+      const seeded = await seed(outcome);
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(PROCESSING, outcome);
+      flaky.failNext(SUCCESS, outcome);
+
+      await stylize(seeded, flaky.binding);
+
+      expect(flaky.failures()).toBe(2);
+      expect(await state(seeded)).toMatchObject({
+        status: "ready",
+        generationStatus: "succeeded",
+        stylized: expect.any(String),
+        generationStarted: true,
+        recipeTouched: true,
+        cookbookTouched: true,
+      });
+    });
+
+    it("never marks a cover failed when its success committed and every later try was lost", async () => {
+      const seeded = await seed("committed");
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(SUCCESS, "lost-answer", "lost", "lost", "lost");
+      const logger = { error: vi.fn() };
+
+      await stylize(seeded, flaky.binding, { logger });
+
+      expect(await state(seeded)).toMatchObject({ status: "ready", generationStatus: "succeeded", failureReason: null });
+      expect(logger.error).toHaveBeenCalledWith("spoon cover stylization failed", expect.anything());
+    });
+
+    it("marks the cover failed when its success never landed, and logs a failure mark the database could not take", async () => {
+      const landed = await seed("never landed");
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(SUCCESS, "lost", "lost", "lost", "lost");
+      await stylize(landed, flaky.binding);
+      expect(await state(landed)).toMatchObject({ generationStatus: "failed" });
+
+      const unmarked = await seed("unmarked");
+      const down = flakyD1(d1.binding);
+      down.failNext(SUCCESS, "lost", "lost", "lost", "lost");
+      down.failNext(FAILURE, "lost", "lost", "lost", "lost");
+      const logger = { error: vi.fn() };
+      await expect(stylize(unmarked, down.binding, { logger })).resolves.toBeUndefined();
+      expect(await state(unmarked)).toMatchObject({ status: "processing", generationStatus: "processing" });
+      expect(logger.error).toHaveBeenCalledWith("spoon cover stylization failure state update failed", expect.anything());
     });
   });
 });

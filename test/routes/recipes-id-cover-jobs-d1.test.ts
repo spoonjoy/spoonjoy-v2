@@ -12,6 +12,7 @@ import { sessionStorage } from "~/lib/session.server";
 import { coverRegenerationStatement, readOwnedRecipeForCoverJobOnD1 } from "~/lib/recipe-cover-jobs-d1.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 
 const platform = vi.hoisted(() => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
@@ -62,7 +63,7 @@ describe("the recipe owner's cover jobs on a D1 binding", () => {
 
   async function post(
     fields: Record<string, string>,
-    options: { userId?: string; id?: string; waitUntil?: boolean } = {},
+    options: { userId?: string; id?: string; waitUntil?: boolean; binding?: unknown } = {},
   ): Promise<ActionResult> {
     const id = options.id ?? recipeId;
     const body = new UndiciFormData();
@@ -75,7 +76,7 @@ describe("the recipe owner's cover jobs on a D1 binding", () => {
         body,
       }) as unknown as Request,
       params: { id },
-      context: { cloudflare: { env: { DB: d1.binding }, ctx } } as never,
+      context: { cloudflare: { env: { DB: options.binding ?? d1.binding }, ctx } } as never,
     } as never) as Promise<ActionResult>;
   }
 
@@ -235,6 +236,104 @@ describe("the recipe owner's cover jobs on a D1 binding", () => {
       await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } })).resolves.toMatchObject({ generationStatus: "failed" });
     }
     expect(platform.getRequestDb).toHaveBeenCalledTimes(4);
+  });
+
+  describe("when D1's connection drops", () => {
+    type Unavailable = { data: Record<string, unknown>; init: { status: number } };
+
+    const jobs: Array<[string, () => Promise<Record<string, string>>]> = [
+      ["a cover from a cook's photo", async () => ({ intent: "createCoverFromSpoon", spoonId: (await spoonWithPhoto()).id })],
+      ["an AI placeholder cover", async () => ({ intent: "generateRecipeCoverPlaceholder" })],
+      ["a child of a stylized cover", async () => ({
+        intent: "regenerateRecipeCover",
+        coverId: (await db.recipeCover.create({
+          data: { recipeId, imageUrl: "/s.jpg", stylizedImageUrl: "/st.jpg", sourceType: "spoon", status: "ready" },
+        })).id,
+      })],
+    ];
+    const cases = jobs.flatMap(([label, fields]) =>
+      (["lost", "lost-answer", "late"] as FlakyOutcome[]).map((outcome) => [label, fields, outcome] as const));
+
+    it.each(cases)("starts %s once and answers its cover (%s)", async (_label, fields, outcome) => {
+      const form = await fields();
+      const before = await db.recipeCover.findMany({ where: { recipeId }, select: { id: true } });
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, outcome);
+
+      const answer = await post(form, { binding: flaky.binding });
+
+      expect(flaky.failures()).toBe(1);
+      const created = (await db.recipeCover.findMany({ where: { recipeId }, select: { id: true } }))
+        .filter((cover) => !before.some((old) => old.id === cover.id));
+      expect(created).toEqual([{ id: answer.coverId }]);
+      expect(background).toHaveLength(1);
+    });
+
+    it("regenerates a cover in place after a lost answer", async () => {
+      const plain = await db.recipeCover.create({
+        data: { recipeId, imageUrl: "/plain.jpg", sourceType: "chef-upload", status: "failed", failureReason: "timeout" },
+      });
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/UPDATE "RecipeCover"/, "lost-answer");
+
+      await expect(post({ intent: "regenerateRecipeCover", coverId: plain.id }, { binding: flaky.binding }))
+        .resolves.toEqual({ success: true, intent: "regenerateRecipeCover", coverId: plain.id });
+      expect(flaky.failures()).toBe(1);
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: plain.id } })).resolves.toMatchObject({
+        status: "processing",
+        failureReason: null,
+      });
+    });
+
+    it("answers a retryable 503 and starts no job when every try fails", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, "lost", "lost", "lost", "lost");
+
+      const answer = await post({ intent: "generateRecipeCoverPlaceholder" }, { binding: flaky.binding }) as unknown as Unavailable;
+
+      expect(answer.init.status).toBe(503);
+      expect(answer.data).toMatchObject({ errorCode: "temporarily_unavailable" });
+      expect(await db.recipeCover.count()).toBe(0);
+      expect(background).toHaveLength(0);
+    });
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("chooses a cover, no cover, and archives one as one run would (%s)", async (outcome) => {
+      const [first, second] = [
+        await db.recipeCover.create({ data: { recipeId, imageUrl: "/1.jpg", sourceType: "chef-upload" } }),
+        await db.recipeCover.create({ data: { recipeId, imageUrl: "/2.jpg", sourceType: "chef-upload" } }),
+      ];
+      const flaky = flakyD1(d1.binding);
+      const recipe = () => db.recipe.findUniqueOrThrow({ where: { id: recipeId }, select: { activeCoverId: true, coverMode: true } });
+
+      flaky.failNext(/UPDATE "Recipe"/, outcome);
+      await post({ intent: "setRecipeCover", coverId: first.id, variant: "image" }, { binding: flaky.binding });
+      await expect(recipe()).resolves.toEqual({ activeCoverId: first.id, coverMode: "manual" });
+
+      flaky.failNext(/UPDATE "Recipe"/, outcome);
+      await post({ intent: "setRecipeNoCover", confirmNoCover: "true" }, { binding: flaky.binding });
+      await expect(recipe()).resolves.toEqual({ activeCoverId: null, coverMode: "none" });
+
+      await db.recipe.update({ where: { id: recipeId }, data: { activeCoverId: first.id, coverMode: "manual" } });
+      flaky.failNext(/UPDATE "Recipe"/, outcome);
+      await post(
+        { intent: "archiveRecipeCover", coverId: first.id, replacementCoverId: second.id, replacementVariant: "image" },
+        { binding: flaky.binding },
+      );
+      await expect(recipe()).resolves.toEqual({ activeCoverId: second.id, coverMode: "manual" });
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: first.id } })).resolves.toMatchObject({ status: "archived" });
+      expect(flaky.failures()).toBe(3);
+    });
+
+    it("answers an archive the database could not take with a retryable 503, not a 400", async () => {
+      const cover = await db.recipeCover.create({ data: { recipeId, imageUrl: "/1.jpg", sourceType: "chef-upload" } });
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/UPDATE "RecipeCover"/, "lost", "lost", "lost", "lost");
+
+      const answer = await post({ intent: "archiveRecipeCover", coverId: cover.id }, { binding: flaky.binding }) as unknown as Unavailable;
+
+      expect(answer.init.status).toBe(503);
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: cover.id } })).resolves.toMatchObject({ archivedAt: null });
+    });
   });
 });
 

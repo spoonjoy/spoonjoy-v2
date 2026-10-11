@@ -1,6 +1,8 @@
 import type { Prisma, PrismaClient, RecipeSpoon } from "@prisma/client";
 import { RECIPE_IMAGE_TYPES, storeImage, validateImageFileForStorage } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+import { newReservationId as cuidShapedId } from "~/lib/api-idempotency.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 export class SpoonValidationError extends Error {
   status = 400;
@@ -116,8 +118,11 @@ export async function createSpoon(
 ): Promise<CreateSpoonResult> {
   const isOriginCook = await isOriginCookCandidate(db, input.chefId, input.recipeId);
   const { note, nextTime, photoUrl } = await prepareSpoonContent(input, deps);
+  // The id is chosen before the first try (shaped like the cuid Prisma would make), so after a
+  // transient D1 error the create either finds the spoon its earlier try wrote or writes it once.
+  const id = input.id ?? cuidShapedId(new Date());
   const data: Prisma.RecipeSpoonUncheckedCreateInput = {
-    id: input.id,
+    id,
     chefId: input.chefId,
     recipeId: input.recipeId,
     note,
@@ -128,7 +133,13 @@ export async function createSpoon(
     data.cookedAt = input.cookedAt;
   }
 
-  const spoon = await db.recipeSpoon.create({ data });
+  const spoon = await retryD1Write(
+    {
+      scope: "spoon.create.prisma",
+      applied: () => db.recipeSpoon.findFirst({ where: { id, chefId: input.chefId, recipeId: input.recipeId } }),
+    },
+    () => db.recipeSpoon.create({ data }),
+  );
   return { spoon, isOriginCook };
 }
 

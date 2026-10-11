@@ -94,6 +94,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Both catches guard the advisory lastUsedAt write after the token is already authenticated: the awaited branch swallows only P2025 (credential deleted between read and write) and rethrows everything else, and the waitUntil branch logs a failed best-effort background write. No user-facing failure is hidden.",
   },
+  {
+    file: "app/lib/recipe-cover-stuck.server.ts",
+    category: "swallow",
+    reason:
+      "Catch only answers the covers as they are when settling stuck generations finds the database briefly unavailable (a D1 write that ran out of retries, or a transient D1 error); settling is tidying a read does on the way, and the next read settles them. Every other error is re-thrown to the instrumented request boundary.",
+  },
 
   // --- pure rethrow / race recovery (surfaced to instrumented callers) ---
   {

@@ -10,6 +10,7 @@ import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 
 const platform = vi.hoisted(() => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
@@ -67,7 +68,7 @@ describe("the first photo as the recipe's cover on a D1 binding", () => {
 
   async function post(
     fields: Record<string, string | File>,
-    options: { userId?: string; id?: string } = {},
+    options: { userId?: string; id?: string; binding?: unknown } = {},
   ): Promise<ActionResult> {
     const id = options.id ?? recipeId;
     const body = new UndiciFormData();
@@ -82,7 +83,7 @@ describe("the first photo as the recipe's cover on a D1 binding", () => {
       params: { id },
       context: {
         cloudflare: {
-          env: { DB: d1.binding, PHOTOS: bucket },
+          env: { DB: options.binding ?? d1.binding, PHOTOS: bucket },
           ctx: { waitUntil: (task: Promise<unknown>) => background.push(task) },
         },
       } as never,
@@ -232,5 +233,39 @@ describe("the first photo as the recipe's cover on a D1 binding", () => {
     await expect(recipeCover()).resolves.toEqual({ activeCoverId: null, activeCoverVariant: null, coverMode: "auto" });
     expect(background).toHaveLength(0);
     expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
+  describe("when D1's connection drops", () => {
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("posts the cook and makes one cover from its photo (%s)", async (outcome) => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeSpoon"/, outcome);
+
+      const answer = await post({ photo: photo(), postAsSpoon: "true", activateWhenReady: "true" }, { binding: flaky.binding });
+
+      expect(flaky.failures()).toBe(1);
+      expect(answer).toMatchObject({ success: true, intent: "createFirstPhotoCover", coverId: expect.any(String) });
+      const covers = await db.recipeCover.findMany({ where: { recipeId }, select: { id: true } });
+      expect(covers).toEqual([{ id: answer.coverId }]);
+      await expect(db.recipeSpoon.count({ where: { recipeId } })).resolves.toBe(1);
+      await expect(recipeCover()).resolves.toMatchObject({ activeCoverId: answer.coverId, coverMode: "manual" });
+      expect(background).toHaveLength(1);
+      expect(bucket.delete).not.toHaveBeenCalled();
+    });
+
+    it("answers a retryable 503 when every try fails, and keeps the stored photo a late try may still use", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, "lost", "lost", "lost", "lost");
+
+      const answer = await post({ photo: photo(), postAsSpoon: "false" }, { binding: flaky.binding }) as unknown as {
+        data: Record<string, unknown>;
+        init: { status: number };
+      };
+
+      expect(answer.init.status).toBe(503);
+      expect(answer.data).toMatchObject({ errorCode: "temporarily_unavailable", retryable: true });
+      expect(bucket.delete).not.toHaveBeenCalled();
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
+      expect(background).toHaveLength(0);
+    });
   });
 });

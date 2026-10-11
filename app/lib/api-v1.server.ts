@@ -1,4 +1,5 @@
 import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
+import { isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import {
@@ -1620,6 +1621,8 @@ function normalizeRecipeCoverImageUrl(value: unknown, origin: string): string {
 }
 
 function coverMutationError(error: unknown, coverId: string): ApiV1Error {
+  // The database being briefly unavailable is not the client's mistake; it passes through.
+  if (isD1Unavailable(error)) throw error;
   const message = error instanceof Error ? error.message : "Cover mutation failed";
   if (/cover was not found/i.test(message)) {
     return new ApiV1Error("not_found", "Cover not found", { resource: "recipe_cover", coverId });

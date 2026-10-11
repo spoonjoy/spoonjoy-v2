@@ -1,5 +1,6 @@
 import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import type { PrismaClient } from "@prisma/client";
 import {
   createGeminiImageRunner,
@@ -201,6 +202,8 @@ function placeholderD1(input: SchedulePlaceholderInput): D1ReadDatabase | null {
   return d1Binding(input.env?.DB);
 }
 
+// A generation that succeeded is never marked failed: when the finishing write committed but its
+// answer was lost and every retry failed, the job's error path must not undo the finished cover.
 async function markPlaceholderFailed(
   input: SchedulePlaceholderInput,
   reason: string,
@@ -209,17 +212,18 @@ async function markPlaceholderFailed(
   try {
     const d1 = placeholderD1(input);
     if (d1) {
-      await d1WriteBatch(d1, [[
+      // Sets fixed values, so it runs again after a transient D1 error.
+      await retryD1Write({ scope: "cover.placeholder_fail" }, () => d1WriteBatch(d1, [[
         `UPDATE "RecipeCover" SET "status" = 'failed', "generationStatus" = 'failed', "failureReason" = ?
-         WHERE ${UNARCHIVED_COVER_SQL}`,
+         WHERE ${UNARCHIVED_COVER_SQL} AND "generationStatus" <> 'succeeded'`,
         reason,
         input.coverId,
         input.recipeId,
-      ]]);
+      ]]));
       return;
     }
     await input.db.recipeCover.updateMany({
-      where: unarchivedCover(input.coverId),
+      where: { ...unarchivedCover(input.coverId), generationStatus: { not: "succeeded" } },
       data: {
         status: "failed",
         generationStatus: "failed",
@@ -335,7 +339,10 @@ async function finishPlaceholderOnD1(
       input.recipeId,
     ]);
   }
-  await d1WriteBatch(d1, statements);
+  // Every statement sets fixed values (the touch time is taken once), and each activation only
+  // matches while the recipe is as it was before this cover became its cover, so after a
+  // transient D1 error the batch runs again and ends as one run would.
+  await retryD1Write({ scope: "cover.placeholder_finish" }, () => d1WriteBatch(d1, statements));
 }
 
 function failureReasonFor(error: unknown): string {

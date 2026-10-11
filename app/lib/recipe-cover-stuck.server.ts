@@ -1,6 +1,7 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import { mapModel, RECIPE_COVER_COLUMNS, selectColumns } from "~/lib/d1-models.server";
 import {
   touchNativeSyncCookbooksForRecipeOperation,
@@ -83,7 +84,8 @@ export function d1StuckCoverStore(d1: D1ReadDatabase): StuckCoverStore {
   return {
     async failStuck(recipeId, coverIds, cutoff, now) {
       const touchedAt = d1Timestamp(now);
-      await d1WriteBatch(d1, [
+      // Sets fixed values on covers still stuck, so it runs again after a transient D1 error.
+      await retryD1Write({ scope: "cover.fail_stuck" }, () => d1WriteBatch(d1, [
         [
           `UPDATE "RecipeCover"
            SET "status" = CASE WHEN "imageUrl" = '' THEN 'failed' ELSE 'ready' END,
@@ -105,7 +107,7 @@ export function d1StuckCoverStore(d1: D1ReadDatabase): StuckCoverStore {
           touchedAt,
           recipeId,
         ],
-      ]);
+      ]));
     },
     async read(recipeId, coverIds) {
       const [rows] = await d1ReadBatch(d1, [[
@@ -143,7 +145,14 @@ export async function settleStuckCoverGenerations<T extends StuckCheckCover | nu
   if (stuck.length === 0) return covers;
 
   const ids = [...new Set(stuck.map((cover) => cover.id))];
-  await store.failStuck(recipeId, ids, new Date(now.getTime() - STUCK_COVER_GENERATION_AFTER_MS), now);
+  try {
+    await store.failStuck(recipeId, ids, new Date(now.getTime() - STUCK_COVER_GENERATION_AFTER_MS), now);
+  } catch (error) {
+    // Settling is tidying a read does on the way: when the database is briefly unavailable, the
+    // covers are answered as they are, and the next read settles them.
+    if (isD1Unavailable(error)) return covers;
+    throw error;
+  }
   const settled = new Map((await store.read(recipeId, ids)).map((cover) => [cover.id, cover]));
   return covers.map((cover) => cover && { ...cover, ...settled.get(cover.id) }) as T[];
 }

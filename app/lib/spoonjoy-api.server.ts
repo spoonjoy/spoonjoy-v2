@@ -1,4 +1,5 @@
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
+import { isD1Unavailable } from "~/lib/d1-write-retry.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -710,7 +711,8 @@ function activeCoverMutationResponse(input: {
 }
 
 function coverLifecycleApiError(error: unknown): never {
-  if (error instanceof ApiAuthError) throw error;
+  // The database being briefly unavailable is not the client's mistake; it passes through.
+  if (error instanceof ApiAuthError || isD1Unavailable(error)) throw error;
   if (error instanceof Error) throw new ApiAuthError(error.message, 400);
   throw new ApiAuthError("Cover mutation failed", 400);
 }

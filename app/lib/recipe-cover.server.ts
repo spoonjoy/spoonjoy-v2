@@ -1,6 +1,8 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
 import { d1DateTime, d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { newReservationId as cuidShapedId } from "~/lib/api-idempotency.server";
 import { cookbooksForRecipeTouchStatement, recipeUpdateStatement } from "~/lib/recipe-d1-writes.server";
 import {
   touchNativeSyncCookbooksForRecipe,
@@ -130,11 +132,23 @@ function coverCreateData(input: CreateCoverInput) {
   };
 }
 
+/**
+ * Creates a cover row. Its id is chosen before the first try (shaped like the cuid Prisma would
+ * make), so after a transient D1 error the create either finds the cover its earlier try wrote
+ * or writes it once.
+ */
 export async function createCover(
   db: PrismaClient,
   input: CreateCoverInput,
 ): Promise<RecipeCover> {
-  return db.recipeCover.create({ data: coverCreateData(input) });
+  const data = coverCreateData({ ...input, id: input.id ?? cuidShapedId(new Date()) });
+  return retryD1Write(
+    {
+      scope: "cover.create.prisma",
+      applied: () => db.recipeCover.findFirst({ where: { id: data.id, recipeId: data.recipeId } }),
+    },
+    () => db.recipeCover.create({ data }),
+  );
 }
 
 /**
@@ -164,19 +178,21 @@ export async function startRecipeCoverRegeneration(
     });
     return { coverId: child.id, parentCoverId: cover.id };
   }
-  await db.recipeCover.update({
+  // Sets fixed values (the start time is taken once), so it runs again after a transient D1 error.
+  const generationStartedAt = new Date();
+  await retryD1Write({ scope: "cover.regenerate_in_place.prisma" }, () => db.recipeCover.update({
     where: { id: cover.id },
     data: {
       status: "processing",
       generationStatus: "processing",
       // The stuck-generation check (recipe-cover-stuck.server.ts) times a generation from here;
       // without it, it would fall back to the cover's own, older createdAt.
-      generationStartedAt: new Date(),
+      generationStartedAt,
       failureReason: null,
       sourceImageUrl: cover.sourceImageUrl ?? input.rawPhotoUrl,
       promptAddition: input.promptAddition,
     },
-  });
+  }));
   return { coverId: cover.id, parentCoverId: undefined };
 }
 
@@ -388,7 +404,9 @@ export function activateRecipeCoverOnD1(d1: D1ReadDatabase, input: ActiveCoverIn
   return withCoverRaceRetry(async () => {
     const cover = await loadActivatableCover(d1CoverLookup(d1), input);
     const updatedAt = new Date();
-    await d1WriteBatch(d1, [
+    // Sets fixed values and leaves the cover its guard checks as it was, so it runs again after
+    // a transient D1 error.
+    await retryD1Write({ scope: "cover.activate" }, () => d1WriteBatch(d1, [
       coverUnchangedGuard(cover),
       recipeUpdateStatement(input.recipeId, {
         activeCoverId: cover.id,
@@ -396,7 +414,7 @@ export function activateRecipeCoverOnD1(d1: D1ReadDatabase, input: ActiveCoverIn
         coverMode: "manual",
       }, updatedAt),
       cookbooksForRecipeTouchStatement(input.recipeId, updatedAt),
-    ]);
+    ]));
   });
 }
 
@@ -439,10 +457,11 @@ export async function clearActiveRecipeCover(
 ) {
   const updatedAt = new Date();
   if (d1) {
-    await d1WriteBatch(d1, [
+    // Sets fixed values, so it runs again after a transient D1 error.
+    await retryD1Write({ scope: "cover.clear" }, () => d1WriteBatch(d1, [
       recipeUpdateStatement(recipeId, { activeCoverId: null, activeCoverVariant: null, coverMode: "none" }, updatedAt),
       cookbooksForRecipeTouchStatement(recipeId, updatedAt),
-    ]);
+    ]));
     return db.recipe.findUniqueOrThrow({ where: { id: recipeId } });
   }
   const [recipe] = await db.$transaction([
@@ -575,19 +594,40 @@ async function archiveRecipeCoverOnD1Attempt(d1: D1ReadDatabase, input: ArchiveC
       recipeUpdateStatement(input.recipeId, { activeCoverId: null, activeCoverVariant: null, coverMode: "none" }, now),
     ];
   }
-  await d1WriteBatch(d1, [
-    // Whether the cover is the active one decided what to do; it must still be so.
-    d1Guard(
-      `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "activeCoverId" IS ?)
-       AND EXISTS (SELECT 1 FROM "RecipeCover" WHERE "id" = ?)`,
-      input.recipeId,
-      activeCoverId,
-      cover.id,
-    ),
-    ...activation,
-    [`UPDATE "RecipeCover" SET "status" = 'archived', "archivedAt" = ? WHERE "id" = ?`, d1Timestamp(now), cover.id],
-    ...(isActiveCover ? [cookbooksForRecipeTouchStatement(input.recipeId, now)] : []),
-  ]);
+  const archivedAt = d1Timestamp(now);
+  // After a transient D1 error the archive checks whether its earlier try committed: the batch is
+  // atomic, so a cover archived at this request's own time means all of it did. A try that runs
+  // again after the earlier one committed would fail its guard (the active cover moved), and is
+  // answered by the same check.
+  await retryD1Write(
+    {
+      scope: "cover.archive",
+      applied: async () => {
+        const [rows] = await d1ReadBatch(d1, [[
+          `SELECT 1 AS "archived" FROM "RecipeCover" WHERE "id" = ? AND "status" = 'archived' AND "archivedAt" = ?`,
+          cover.id,
+          archivedAt,
+        ]]);
+        return rows.length > 0 ? true : null;
+      },
+    },
+    async () => {
+      await d1WriteBatch(d1, [
+        // Whether the cover is the active one decided what to do; it must still be so.
+        d1Guard(
+          `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "activeCoverId" IS ?)
+           AND EXISTS (SELECT 1 FROM "RecipeCover" WHERE "id" = ?)`,
+          input.recipeId,
+          activeCoverId,
+          cover.id,
+        ),
+        ...activation,
+        [`UPDATE "RecipeCover" SET "status" = 'archived', "archivedAt" = ? WHERE "id" = ?`, archivedAt, cover.id],
+        ...(isActiveCover ? [cookbooksForRecipeTouchStatement(input.recipeId, now)] : []),
+      ]);
+      return true;
+    },
+  );
 }
 
 export async function backfillActiveCoverForRecipe(

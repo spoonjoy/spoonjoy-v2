@@ -7,6 +7,7 @@ import { getLocalDb } from "~/lib/db.server";
 import type { ImageGenRunner } from "~/lib/image-gen.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 
 // AI placeholder covers with a D1 binding: marking the placeholder ready and activating it
 // go to D1 as one batch, and marking it failed is one statement, never Prisma's multi-row
@@ -227,5 +228,63 @@ describe("AI placeholder covers on a D1 binding", () => {
     expect(await state(viaD1)).toEqual(await state(viaPrisma));
     expect(await state(viaD1)).toMatchObject({ status: "failed", generationStatus: "failed", failureReason: "Placeholder image generation failed: provider down" });
     expect(await state(archived)).toMatchObject({ status: "archived", generationStatus: "processing", failureReason: null });
+  });
+
+  describe("when D1's connection drops", () => {
+    const FINISH = /"status" = 'ready'/;
+    const FAIL = /"status" = 'failed'/;
+
+    it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("finishes and activates the placeholder as one run would (%s)", async (outcome) => {
+      const guard = { activeCoverId: null, activeCoverVariant: null, coverMode: "auto" };
+      const seeded = await seed(outcome);
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(FINISH, outcome);
+
+      await generate(seeded, flaky.binding, { activateWhenReady: true, activationGuard: guard });
+
+      expect(flaky.failures()).toBe(1);
+      expect(await state(seeded)).toMatchObject({
+        status: "ready",
+        generationStatus: "succeeded",
+        active: "placeholder",
+        coverMode: "manual",
+        recipeTouched: true,
+        cookbookTouched: true,
+      });
+    });
+
+    it("never marks a placeholder failed when its finish committed and every later try was lost", async () => {
+      const seeded = await seed("committed");
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(FINISH, "lost-answer", "lost", "lost", "lost");
+      const logger = { error: vi.fn() };
+
+      await generate(seeded, flaky.binding, { logger });
+
+      expect(await state(seeded)).toMatchObject({ status: "ready", generationStatus: "succeeded", failureReason: null, active: "placeholder" });
+      expect(logger.error).toHaveBeenCalledWith("ai-placeholder cover generation failed", expect.any(Error));
+    });
+
+    it("marks the placeholder failed when its finish never landed", async () => {
+      const seeded = await seed("never");
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(FINISH, "lost", "lost", "lost", "lost");
+
+      await generate(seeded, flaky.binding);
+
+      expect(await state(seeded)).toMatchObject({ status: "failed", generationStatus: "failed", active: null });
+      expect((await state(seeded)).failureReason).toContain("was not saved");
+    });
+
+    it("marks a failed placeholder failed once after a lost answer", async () => {
+      const seeded = await seed("fail mark");
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(FAIL, "lost-answer");
+
+      await generate(seeded, flaky.binding, { runner: runner({ fails: true }) });
+
+      expect(flaky.failures()).toBe(1);
+      expect(await state(seeded)).toMatchObject({ status: "failed", generationStatus: "failed" });
+    });
   });
 });
