@@ -14,6 +14,8 @@ export type ShoppingListActionData = {
     parse?: string;
   };
   parseDraft?: ParsedItemDraft;
+  /** Why the action failed, such as the database being briefly unavailable (a 503). */
+  error?: string;
 };
 
 function parseFractionToken(token: string): number | null {

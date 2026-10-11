@@ -3,8 +3,12 @@
 // deleting a cook's log entry, plus the owner check ahead of the cover choices. Each is one batch, which D1 runs as one transaction: the batch reads
 // what the checks need and its writes are guarded by the same conditions, so a request that fails
 // a check changes nothing, and the answer comes from the rows read in that same transaction.
+// Each runs again after a transient D1 error (retryD1Write): saving and taking out leave the same
+// rows however often they run, and a new cookbook or a deleted cook checks whether the earlier try
+// committed before running again.
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { SpoonAuthError, SpoonNotFoundError } from "~/lib/recipe-spoon.server";
 
 const ACTIVE_RECIPE = `EXISTS (SELECT 1 FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL)`;
@@ -35,21 +39,22 @@ export async function addRecipeToCookbookOnD1(
 ): Promise<void> {
   const now = d1Timestamp(new Date());
   const { userId, cookbookId, recipeId } = input;
-  const [cookbook, recipe] = await d1WriteBatch(d1, [
+  const membershipId = crypto.randomUUID();
+  const [cookbook, recipe] = await retryD1Write({ scope: "cookbook.add_recipe" }, () => d1WriteBatch(d1, [
     [`SELECT "authorId" FROM "Cookbook" WHERE "id" = ?`, cookbookId],
     [`SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`, recipeId],
     [
       `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
        SELECT ?, ?, ?, ?, ?, ? WHERE ${OWNED_COOKBOOK} AND ${ACTIVE_RECIPE}
        ON CONFLICT ("cookbookId", "recipeId") DO NOTHING`,
-      crypto.randomUUID(), cookbookId, recipeId, userId, now, now,
+      membershipId, cookbookId, recipeId, userId, now, now,
       cookbookId, userId, recipeId,
     ],
     [
       `UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ? AND "authorId" = ? AND ${ACTIVE_RECIPE}`,
       now, cookbookId, userId, recipeId,
     ],
-  ]);
+  ]));
   assertCookbookChecks(cookbook.rows, userId, recipe.rows);
 }
 
@@ -60,14 +65,14 @@ export async function removeRecipeFromCookbookOnD1(
 ): Promise<void> {
   const now = d1Timestamp(new Date());
   const { userId, cookbookId, recipeId } = input;
-  const [cookbook] = await d1WriteBatch(d1, [
+  const [cookbook] = await retryD1Write({ scope: "cookbook.remove_recipe" }, () => d1WriteBatch(d1, [
     [`SELECT "authorId" FROM "Cookbook" WHERE "id" = ?`, cookbookId],
     [
       `DELETE FROM "RecipeInCookbook" WHERE "cookbookId" = ? AND "recipeId" = ? AND ${OWNED_COOKBOOK}`,
       cookbookId, recipeId, cookbookId, userId,
     ],
     [`UPDATE "Cookbook" SET "updatedAt" = ? WHERE "id" = ? AND "authorId" = ?`, now, cookbookId, userId],
-  ]);
+  ]));
   assertCookbookChecks(cookbook.rows, userId);
 }
 
@@ -82,21 +87,36 @@ export async function createCookbookWithRecipeOnD1(
 ): Promise<{ id: string; title: string }> {
   const now = d1Timestamp(new Date());
   const cookbookId = crypto.randomUUID();
+  const membershipId = crypto.randomUUID();
   const { userId, recipeId, title } = input;
-  const [recipe] = await d1WriteBatch(d1, [
-    [`SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`, recipeId],
-    [
-      `INSERT INTO "Cookbook" ("id", "title", "authorId", "createdAt", "updatedAt")
-       SELECT ?, ?, ?, ?, ? WHERE ${ACTIVE_RECIPE}`,
-      cookbookId, title, userId, now, now, recipeId,
-    ],
-    [
-      `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
-       SELECT ?, ?, ?, ?, ?, ? WHERE ${ACTIVE_RECIPE}`,
-      crypto.randomUUID(), cookbookId, recipeId, userId, now, now, recipeId,
-    ],
-  ]);
-  if (recipe.rows.length === 0) throw recipeNotFound();
+  // The cookbook's id is fixed before the first try, so a try that runs again after an ambiguous
+  // failure finds the cookbook the earlier one made (the batch is atomic, so the recipe is in it).
+  const made = await retryD1Write(
+    {
+      scope: "cookbook.create_with_recipe",
+      applied: async () => {
+        const [[row]] = await d1ReadBatch(d1, [[`SELECT 1 AS "made" FROM "Cookbook" WHERE "id" = ? AND "authorId" = ?`, cookbookId, userId]]);
+        return row ? true : null;
+      },
+    },
+    async () => {
+      const [recipe] = await d1WriteBatch(d1, [
+        [`SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`, recipeId],
+        [
+          `INSERT INTO "Cookbook" ("id", "title", "authorId", "createdAt", "updatedAt")
+           SELECT ?, ?, ?, ?, ? WHERE ${ACTIVE_RECIPE}`,
+          cookbookId, title, userId, now, now, recipeId,
+        ],
+        [
+          `INSERT INTO "RecipeInCookbook" ("id", "cookbookId", "recipeId", "addedById", "createdAt", "updatedAt")
+           SELECT ?, ?, ?, ?, ?, ? WHERE ${ACTIVE_RECIPE}`,
+          membershipId, cookbookId, recipeId, userId, now, now, recipeId,
+        ],
+      ]);
+      return recipe.rows.length > 0;
+    },
+  );
+  if (!made) throw recipeNotFound();
   return { id: cookbookId, title };
 }
 
@@ -109,16 +129,33 @@ export async function assertActiveRecipeOnD1(d1: D1ReadDatabase, recipeId: strin
 /** Deletes one of the chef's own cook log entries, with deleteSpoon's errors. */
 export async function deleteSpoonOnD1(d1: D1ReadDatabase, input: { userId: string; spoonId: string }): Promise<void> {
   const now = d1Timestamp(new Date());
-  const [spoon] = await d1WriteBatch(d1, [
-    [`SELECT "chefId", "deletedAt" FROM "RecipeSpoon" WHERE "id" = ?`, input.spoonId],
-    [
-      `UPDATE "RecipeSpoon" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL`,
-      now, now, input.spoonId, input.userId,
-    ],
-  ]);
-  const row = spoon.rows[0];
+  // A try that runs again after an ambiguous failure would find the cook already deleted; the
+  // deletion time this request set says the earlier try committed, so it answers as that try would.
+  const row = await retryD1Write(
+    {
+      scope: "spoon.delete",
+      applied: async () => {
+        const [[deleted]] = await d1ReadBatch(d1, [[
+          `SELECT "chefId" FROM "RecipeSpoon" WHERE "id" = ? AND "chefId" = ? AND "deletedAt" = ?`,
+          input.spoonId, input.userId, now,
+        ]]);
+        return deleted ? { chefId: input.userId, deletedAt: null } : null;
+      },
+    },
+    async () => {
+      const [spoon] = await d1WriteBatch(d1, [
+        [`SELECT "chefId", "deletedAt" FROM "RecipeSpoon" WHERE "id" = ?`, input.spoonId],
+        [
+          `UPDATE "RecipeSpoon" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ? AND "chefId" = ? AND "deletedAt" IS NULL`,
+          now, now, input.spoonId, input.userId,
+        ],
+      ]);
+      return spoon.rows[0] as { chefId: unknown; deletedAt: unknown } | undefined;
+    },
+  );
   if (!row) throw new SpoonNotFoundError(`Spoon ${input.spoonId} not found`);
-  if (row.deletedAt != null) throw new SpoonNotFoundError(`Spoon ${input.spoonId} is deleted`);
+  // Deleted at this request's own time: an earlier try of this request did it.
+  if (row.deletedAt != null && row.deletedAt !== now) throw new SpoonNotFoundError(`Spoon ${input.spoonId} is deleted`);
   if (row.chefId !== input.userId) throw new SpoonAuthError("Spoon is not owned by requesting user");
 }
 

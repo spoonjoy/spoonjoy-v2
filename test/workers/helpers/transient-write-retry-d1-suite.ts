@@ -10,6 +10,7 @@ import { handleRecipeDetailAction } from "../../../app/lib/recipe-detail.server"
 import { forkRecipeOnD1 } from "../../../app/lib/recipe-fork.server";
 import { createSpoonOnD1 } from "../../../app/lib/recipe-spoon-d1.server";
 import { createUserSessionCookie } from "../../../app/lib/session.server";
+import { createCookbookWithRecipeOnD1, deleteSpoonOnD1 } from "../../../app/lib/recipe-detail-d1-actions.server";
 import { flakyD1 } from "../../helpers/flaky-d1";
 import { applyRepositoryMigrations } from "./repository-migrations";
 
@@ -125,6 +126,29 @@ describe("writes on Wrangler D1 when its connection drops", () => {
 
       expect(again).toMatchObject({ recipeId: "transient-fork-1", replayed: true });
       expect(await count(`SELECT COUNT(*) AS "count" FROM "Recipe" WHERE "chefId" = ? AND "sourceRecipeId" = ?`, COOK, RECIPE)).toBe(1);
+    });
+  });
+
+  describe("the recipe page's everyday writes", () => {
+    it("makes one new cookbook when a late commit lands before the retry", async () => {
+      const flaky = flakyD1(database());
+      flaky.failNext(/INSERT INTO "Cookbook"/, "late");
+
+      const created = await createCookbookWithRecipeOnD1(flaky.binding, { userId: COOK, recipeId: RECIPE, title: "Transient Breads" });
+
+      expect(flaky.failures()).toBe(1);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "Cookbook" WHERE "authorId" = ? AND "title" = 'Transient Breads'`, COOK)).toBe(1);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "RecipeInCookbook" WHERE "cookbookId" = ?`, created.id)).toBe(1);
+    });
+
+    it("deletes a cook once when the batch committed but its answer was lost", async () => {
+      const flaky = flakyD1(database());
+      flaky.failNext(/UPDATE "RecipeSpoon"/, "lost-answer");
+
+      await deleteSpoonOnD1(flaky.binding, { userId: COOK, spoonId: "transient-spoon-1" });
+
+      expect(flaky.failures()).toBe(1);
+      expect(await count(`SELECT COUNT(*) AS "count" FROM "RecipeSpoon" WHERE "id" = 'transient-spoon-1' AND "deletedAt" IS NOT NULL`)).toBe(1);
     });
   });
 

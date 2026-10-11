@@ -8,6 +8,8 @@ import { createUserSessionCookie } from "~/lib/session.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1 } from "../helpers/flaky-d1";
+import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 import { createTestRecipe, createTestUser } from "../utils";
 
 const spies = vi.hoisted(() => ({ getRequestDb: null as null | ReturnType<typeof vi.fn> }));
@@ -307,3 +309,76 @@ describe("shopping list actions on a D1 binding", () => {
     expect(d1.roundTrips() - before).toBe(3);
   });
 });
+
+describe("shopping list actions when D1's connection drops", () => {
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    d1 = sqliteD1();
+  });
+
+  afterEach(async () => {
+    d1.close();
+    await cleanupDatabase();
+  });
+
+  const WRITES = /UPDATE "ShoppingListItem"/;
+  const ENSURE_LIST = /INSERT INTO "ShoppingList" /;
+  const steps: Step[] = [
+    (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.pepper!, nextChecked: "true" }),
+    (kitchen) => ({ intent: "toggleCheck", itemId: kitchen.items.eggs!, nextChecked: "false" }),
+    (kitchen) => ({ intent: "removeItem", itemId: kitchen.items.flour! }),
+    { intent: "clearCompleted" },
+    { intent: "clearAll" },
+  ];
+
+  /** Runs the steps, each write's first batch failing as `outcome` when given, and returns the list. */
+  async function runSteps(outcome?: "lost" | "lost-answer") {
+    await cleanupDatabase();
+    const kitchen = await seedKitchen();
+    const flaky = flakyD1(d1.binding);
+    for (const step of steps) {
+      if (outcome) flaky.failNext(WRITES, outcome);
+      if (outcome) flaky.failNext(ENSURE_LIST, outcome);
+      await submit(kitchen, typeof step === "function" ? step(kitchen) : step, { DB: flaky.binding });
+    }
+    const { items } = await snapshot(kitchen);
+    return { items: items.map(({ touched: _touched, ...entry }) => entry), failures: flaky.failures() };
+  }
+
+  it("ends as one clean run would when each write's answer was lost after it committed, or it never arrived", async () => {
+    const clean = await runSteps();
+    const answersLost = await runSteps("lost-answer");
+    const writesLost = await runSteps("lost");
+
+    // Each step's list lookup and its write both failed once.
+    expect(answersLost).toEqual({ ...clean, failures: 2 * steps.length });
+    expect(writesLost).toEqual({ ...clean, failures: 2 * steps.length });
+  });
+
+  it("answers a retryable 503 the page shows when every try fails, writing nothing", async () => {
+    const kitchen = await seedKitchen();
+    const before = await snapshot(kitchen);
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(WRITES, "lost", "lost", "lost", "lost");
+
+    const answer = await submit(kitchen, { intent: "removeItem", itemId: kitchen.items.flour! }, { DB: flaky.binding }) as unknown as {
+      data: unknown;
+      init: { status: number };
+    };
+
+    expect(answer.init.status).toBe(503);
+    expect(answer.data).toEqual({ intent: "removeItem", error: D1_WRITE_UNAVAILABLE_MESSAGE, errorCode: "temporarily_unavailable", retryable: true });
+    expect(await snapshot(kitchen)).toEqual(before);
+  });
+
+  it("passes any other failure through", async () => {
+    const kitchen = await seedKitchen();
+    const broken: D1ReadDatabase = {
+      prepare: (sql) => d1.binding.prepare(sql),
+      batch: async () => { throw new Error("D1 is down hard"); },
+    };
+    await expect(submit(kitchen, { intent: "clearAll" }, { DB: broken })).rejects.toThrow("D1 is down hard");
+  });
+});
+
