@@ -227,23 +227,28 @@ describe("recipe image upload writes after a transient D1 error", () => {
 
   it("answers a cook link the database never takes as a failure, and undoes the upload", async () => {
     failNext(db, "recipeCover", "update", (args) => args?.data?.sourceSpoonId !== undefined, ...GIVE_UP);
-    // The error's stack is not known ahead, so its log line is checked here rather than through
-    // the warning policy.
-    const logged: unknown[][] = [];
-    const consoleError = console.error;
-    vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
-      if (args[0] === "[api-v1] internal_error") logged.push(args);
-      else consoleError(...args);
+    // The logged error carries its stack; a fixed stack lets the warning policy match the line.
+    const prepareStackTrace = Error.prepareStackTrace;
+    Error.prepareStackTrace = () => "stack";
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_link_give_up",
+      method: "POST",
+      path: `/api/v1/recipes/${recipeId}/image`,
+      error: {
+        name: "D1WriteUnavailableError",
+        message: "The database was briefly unavailable, so cover.link_spoon was not saved",
+        stack: "stack",
+      },
     });
     const photos = photoBucket();
 
-    const response = await upload("req_link_give_up", "link-give-up", photos.bucket);
+    try {
+      const response = await upload("req_link_give_up", "link-give-up", photos.bucket);
 
-    expect(response.status).toBeGreaterThanOrEqual(500);
-    expect(logged).toEqual([[
-      "[api-v1] internal_error",
-      expect.objectContaining({ error: expect.objectContaining({ name: "D1WriteUnavailableError" }) }),
-    ]]);
+      expect(response.status).toBeGreaterThanOrEqual(500);
+    } finally {
+      Error.prepareStackTrace = prepareStackTrace;
+    }
     await expect(rows()).resolves.toEqual({ covers: [], spoons: [], markers: 0 });
     expect(photos.keys.size).toBe(0);
   });
