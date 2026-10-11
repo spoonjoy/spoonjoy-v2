@@ -582,7 +582,7 @@ describe("browser push endpoints", () => {
   it.each(OUTCOMES)("removes a subscription after a %s delete", async (outcome) => {
     await db.pushSubscription.create({ data: { userId, endpoint: PUSH_ENDPOINT, p256dh: "p", authSecret: "a" } });
     const flaky = flakyRequests();
-    flaky.failNext("pushSubscription", "deleteMany", any, outcome);
+    flaky.failNext("pushSubscription", "delete", any, outcome);
 
     const response = await pushRequest("subscriptions", "DELETE", { endpoint: PUSH_ENDPOINT });
 
@@ -593,7 +593,7 @@ describe("browser push endpoints", () => {
   it("answers a retryable 503 when every delete is lost", async () => {
     await db.pushSubscription.create({ data: { userId, endpoint: PUSH_ENDPOINT, p256dh: "p", authSecret: "a" } });
     const flaky = flakyRequests();
-    flaky.failNext("pushSubscription", "deleteMany", any, ...GIVE_UP);
+    flaky.failNext("pushSubscription", "delete", any, ...GIVE_UP);
     await expectJson503(await pushRequest("subscriptions", "DELETE", { endpoint: PUSH_ENDPOINT }));
     expect(await db.pushSubscription.count()).toBe(1);
   });

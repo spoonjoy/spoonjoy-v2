@@ -5472,9 +5472,8 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "account.apns.register", async (db) => {
     const tokenHash = await hashApnsToken(token);
     // Every write sets fixed values chosen here, once, so each runs again safely after a lost
-    // answer; the create's id is chosen up front so a retry recognises the row it wrote.
+    // answer; a retried create recognises its row by the device key and this registration time.
     const now = new Date();
-    const newId = crypto.randomUUID();
     await retryAccountD1Write({ scope: "apns.revoke_token_elsewhere" }, () => db.nativePushDevice.updateMany({
       where: {
         tokenHash,
@@ -5508,10 +5507,11 @@ async function handleApnsDeviceRegister(args: ApiV1RouteArgs, requestId: string,
         }))
       : await retryAccountD1Write({
         scope: "apns.register_new",
-        applied: () => db.nativePushDevice.findFirst({ where: { id: newId, userId: principal.id } }),
+        applied: () => db.nativePushDevice.findFirst({
+          where: { userId: principal.id, deviceId, platform, environment, tokenHash, lastRegisteredAt: now },
+        }),
       }, () => db.nativePushDevice.create({
           data: {
-            id: newId,
             userId: principal.id,
             deviceId,
             platform,

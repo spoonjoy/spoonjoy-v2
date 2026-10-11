@@ -126,9 +126,11 @@ export async function action({ request, context }: Route.ActionArgs) {
         select: { id: true, userId: true },
       });
       if (!row || row.userId !== userId) return jsonError(404, "Subscription not found");
-      // A delete by id and owner: running it again after a lost answer deletes nothing more.
-      await retryD1Write({ scope: "push_subscription.delete" }, () =>
-        db.pushSubscription.deleteMany({ where: { id: row.id, userId } }));
+      // After a lost answer, a row that is gone was deleted by the earlier try.
+      await retryD1Write({
+        scope: "push_subscription.delete",
+        applied: async () => (await db.pushSubscription.findUnique({ where: { id: row.id }, select: { id: true } })) ? null : row,
+      }, () => db.pushSubscription.delete({ where: { id: row.id } }));
       return new Response(null, { status: 204 });
     } catch (error) {
       const unavailable = d1UnavailableJsonResponse(error);
