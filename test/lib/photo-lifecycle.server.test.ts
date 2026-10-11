@@ -18,6 +18,8 @@ import {
   type PhotoSweepDatabase,
 } from "~/lib/photo-lifecycle.server";
 import { migratedSqliteD1, type MigratedSqlite } from "../helpers/migrated-sqlite";
+import { NETWORK_LOST_MESSAGE, type FlakyOutcome } from "../helpers/flaky-d1";
+import { D1WriteUnavailableError } from "~/lib/d1-write-retry.server";
 
 const DAY = 24 * 60 * 60 * 1000;
 const T0 = new Date("2026-10-01T00:00:00.000Z");
@@ -453,6 +455,118 @@ describe("runPhotoSweep", () => {
     const report = await runPhotoSweep({ db, bucket: memoryBucket(), mode: "dry-run" });
     expect(report.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(Date.parse(report.startedAt)).not.toBeNaN();
+  });
+});
+
+/**
+ * The sweep's database, with its next matching writes failing as D1 does when its connection
+ * drops: before the write ran ("lost"), after it committed ("lost-answer"), or committing just
+ * before the next matching write ("late").
+ */
+function flakySweepDb(inner: PhotoSweepDatabase) {
+  const plans: Array<{ pattern: RegExp; outcome: FlakyOutcome }> = [];
+  let late: { pattern: RegExp; run: () => Promise<void> } | null = null;
+  const flaky: PhotoSweepDatabase = {
+    all: (sql, ...values) => inner.all(sql, ...values),
+    async run(sql, ...values) {
+      if (late?.pattern.test(sql)) {
+        const landing = late.run;
+        late = null;
+        await landing();
+      }
+      const index = plans.findIndex((plan) => plan.pattern.test(sql));
+      if (index === -1) return inner.run(sql, ...values);
+      const [{ pattern, outcome }] = plans.splice(index, 1);
+      if (outcome === "lost-answer") await inner.run(sql, ...values);
+      if (outcome === "late") late = { pattern, run: () => inner.run(sql, ...values) };
+      throw new Error(NETWORK_LOST_MESSAGE);
+    },
+  };
+  return {
+    db: flaky,
+    failNext(pattern: RegExp, ...outcomes: FlakyOutcome[]) {
+      for (const outcome of outcomes) plans.push({ pattern, outcome });
+    },
+  };
+}
+
+describe("runPhotoSweep after a transient D1 error", () => {
+  function arrangeKitchen() {
+    insertUser("chef", "/photos/profiles/chef/me.jpg");
+    insertRecipe("live", "chef");
+    insertSpoon("spoon-deleted", "chef", "live", "/photos/spoons/deleted.jpg", T0.toISOString());
+    insertCover("cover-archived", "live", { imageUrl: "/photos/covers/archived.jpg" }, { archivedAt: T0.toISOString() });
+    return memoryBucket({
+      "profiles/chef/me.jpg": "me",
+      "spoons/deleted.jpg": "deleted spoon",
+      "covers/archived.jpg": "archived",
+    });
+  }
+
+  function runLog() {
+    return database.sqlite.prepare(`SELECT "id" FROM "PhotoSweepRun" ORDER BY "id"`).all();
+  }
+
+  it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("records, quarantines, purges and logs each run once (%s)", async (outcome) => {
+    const bucket = arrangeKitchen();
+    const flaky = flakySweepDb(db);
+
+    flaky.failNext(/INSERT INTO "PhotoCleanup"/, outcome);
+    flaky.failNext(/INSERT INTO "PhotoSweepRun"/, outcome);
+    const first = await runPhotoSweep({ db: flaky.db, bucket, mode: "apply", now: at(0), newId: () => "run-1" });
+    expect(first).toMatchObject({ unreferencedObjects: 2, failures: 0 });
+    expect(cleanupRows().map((row) => row.key)).toEqual(["covers/archived.jpg", "spoons/deleted.jpg"]);
+
+    flaky.failNext(/SET "quarantinedAt"/, outcome);
+    const second = await runPhotoSweep({ db: flaky.db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS), newId: () => "run-2" });
+    expect(second).toMatchObject({ quarantined: 2, failures: 0 });
+    expect(cleanupRows().every((row) => row.quarantinedAt !== null)).toBe(true);
+
+    flaky.failNext(/SET "purgedAt"/, outcome);
+    const third = await runPhotoSweep({
+      db: flaky.db,
+      bucket,
+      mode: "apply",
+      now: at(PHOTO_SWEEP_GRACE_MS + PHOTO_QUARANTINE_RETENTION_MS),
+      newId: () => "run-3",
+    });
+    expect(third).toMatchObject({ purged: 2, failures: 0 });
+    expect(cleanupRows().every((row) => row.purgedAt !== null)).toBe(true);
+    expect(runLog()).toEqual([{ id: "run-1" }, { id: "run-2" }, { id: "run-3" }]);
+  });
+
+  it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("forgets a photo that is gone without a move (%s)", async (outcome) => {
+    const bucket = arrangeKitchen();
+    await runPhotoSweep({ db, bucket, mode: "dry-run", now: at(0) });
+    bucket.objects.delete("spoons/deleted.jpg");
+    const flaky = flakySweepDb(db);
+    flaky.failNext(/DELETE FROM "PhotoCleanup"/, outcome);
+
+    await runPhotoSweep({ db: flaky.db, bucket, mode: "dry-run", now: at(DAY) });
+
+    expect(cleanupRows().map((row) => row.key)).toEqual(["covers/archived.jpg"]);
+  });
+
+  it("gives up on its run log with a retryable error when the database stays unavailable", async () => {
+    const bucket = arrangeKitchen();
+    const flaky = flakySweepDb(db);
+    flaky.failNext(/INSERT INTO "PhotoSweepRun"/, "lost", "lost", "lost", "lost");
+
+    const failure = runPhotoSweep({ db: flaky.db, bucket, mode: "dry-run", now: at(0), newId: () => "run-lost" });
+    await expect(failure).rejects.toBeInstanceOf(D1WriteUnavailableError);
+    await expect(failure).rejects.toMatchObject({ scope: "photo_sweep.log_run" });
+    expect(runLog()).toEqual([]);
+  });
+
+  it("counts a quarantine mark the database never takes as a failure, and moves on", async () => {
+    const bucket = arrangeKitchen();
+    await runPhotoSweep({ db, bucket, mode: "apply", now: at(0) });
+    const flaky = flakySweepDb(db);
+    flaky.failNext(/SET "quarantinedAt"/, "lost", "lost", "lost", "lost");
+
+    const report = await runPhotoSweep({ db: flaky.db, bucket, mode: "apply", now: at(PHOTO_SWEEP_GRACE_MS) });
+
+    expect(report).toMatchObject({ quarantined: 1, failures: 1 });
   });
 });
 
