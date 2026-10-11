@@ -1404,6 +1404,75 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
   });
 
+  // Production Deploy run 38145373089: attempt 1 rolled back after Cloudflare failed the promotion,
+  // and `gh run rerun --failed` released in attempt 2. Both attempts uploaded release evidence
+  // under one name, and attempt 2's report-canary downloaded attempt 1's by that name, so it
+  // judged a rollback instead of the release that ran.
+  const ATTEMPT_ARTIFACT = "mcp-oauth-canary-artifacts-attempt-${{ github.run_attempt }}";
+  it.each([
+    [
+      "an upload under one name for every attempt",
+      `          name: ${ATTEMPT_ARTIFACT}\n          path: mcp-oauth-canary-artifacts/`,
+      "          name: mcp-oauth-canary-artifacts\n          path: mcp-oauth-canary-artifacts/",
+    ],
+    [
+      "a report that downloads one name for every attempt",
+      "          name: ${{ needs.deploy.outputs.release_artifact }}",
+      "          name: mcp-oauth-canary-artifacts",
+    ],
+    [
+      "a deploy output that names one artifact for every attempt",
+      `      release_artifact: ${ATTEMPT_ARTIFACT}`,
+      "      release_artifact: mcp-oauth-canary-artifacts",
+    ],
+    [
+      "a deploy job without the release artifact output",
+      `    outputs:\n      release_artifact: ${ATTEMPT_ARTIFACT}\n`,
+      "",
+    ],
+    [
+      "a report without the artifact name check",
+      "      - name: Check release artifact name\n        env:\n          RELEASE_ARTIFACT: ${{ needs.deploy.outputs.release_artifact }}\n        run: |\n          [[ \"$RELEASE_ARTIFACT\" =~ ^mcp-oauth-canary-artifacts-attempt-[1-9][0-9]*$ ]]\n\n",
+      "",
+    ],
+  ])("rejects %s, so a rerun's report could judge an earlier attempt", (_label, expected, replacement) => {
+    const inputs = validInputs();
+    const workflow = secureProductionDeployWorkflow();
+    inputs.productionDeployWorkflow = workflow.replace(expected, replacement);
+    expect(inputs.productionDeployWorkflow).not.toBe(workflow);
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("production deploy workflow");
+  });
+
+  it("lets the report download only an attempt-scoped release artifact name", async () => {
+    const workflow = await readFile(".github/workflows/production-deploy.yml", "utf8");
+    const script = workflowRunScript(workflow, "Check release artifact name", "Download MCP OAuth canary artifacts");
+    const check = (name: string) => execFile("bash", ["-c", script], { env: { ...process.env, RELEASE_ARTIFACT: name } });
+
+    for (const name of [
+      "mcp-oauth-canary-artifacts-attempt-1",
+      "mcp-oauth-canary-artifacts-attempt-2",
+      "mcp-oauth-canary-artifacts-attempt-10",
+    ]) {
+      await expect(check(name)).resolves.toBeDefined();
+    }
+    // An empty name would download every artifact in the run, an earlier attempt's included.
+    for (const name of [
+      "",
+      "mcp-oauth-canary-artifacts",
+      "mcp-oauth-canary-artifacts-attempt-",
+      "mcp-oauth-canary-artifacts-attempt-0",
+      "mcp-oauth-canary-artifacts-attempt-01",
+      "mcp-oauth-canary-artifacts-attempt-1x",
+      "x-mcp-oauth-canary-artifacts-attempt-1",
+      "mcp-oauth-canary-artifacts-attempt-2\nmcp-oauth-canary-artifacts",
+    ]) {
+      await expect(check(name)).rejects.toThrow();
+    }
+  });
+
   it("preserves only executable-lifecycle-valid release artifacts", async () => {
     const workflow = await readFile(".github/workflows/production-deploy.yml", "utf8");
     const script = workflowRunScript(

@@ -80,6 +80,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: production
+    # Each attempt uploads its release evidence under its own name. A rerun's report-canary must
+    # judge the attempt that ran, and a same-named artifact from an earlier attempt can win the
+    # download by name. When a rerun skips this job, report-canary reads the earlier attempt's name
+    # from this output, so it still judges the deploy that counts.
+    outputs:
+      release_artifact: mcp-oauth-canary-artifacts-attempt-${{ github.run_attempt }}
     env:
       SOURCE_SHA: ${{ needs.release-target.outputs.source_sha }}
 
@@ -314,7 +320,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: mcp-oauth-canary-artifacts
+          name: mcp-oauth-canary-artifacts-attempt-${{ github.run_attempt }}
           path: mcp-oauth-canary-artifacts/
           if-no-files-found: error
           retention-days: 14
@@ -346,10 +352,18 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.28.1 --activate
 
+      # An empty name would make download-artifact fetch every artifact in the run, including an
+      # earlier attempt's, so anything but this attempt-scoped name fails closed.
+      - name: Check release artifact name
+        env:
+          RELEASE_ARTIFACT: ${{ needs.deploy.outputs.release_artifact }}
+        run: |
+          [[ "$RELEASE_ARTIFACT" =~ ^mcp-oauth-canary-artifacts-attempt-[1-9][0-9]*$ ]]
+
       - name: Download MCP OAuth canary artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: mcp-oauth-canary-artifacts
+          name: ${{ needs.deploy.outputs.release_artifact }}
           path: mcp-oauth-canary-artifacts
 
       - name: Report MCP OAuth canary

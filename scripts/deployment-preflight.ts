@@ -886,6 +886,13 @@ export const PRODUCTION_RELEASE_TARGET_JOB = Object.freeze({
 export const PRODUCTION_DEPLOY_JOB_ENV = Object.freeze({
   SOURCE_SHA: "${{ needs.release-target.outputs.source_sha }}",
 });
+// Each deploy attempt uploads its release evidence under its own name, and report-canary downloads
+// the name the deploy job it needs used. A rerun after a failed promotion therefore cannot have its
+// report judge an earlier attempt's same-named artifact.
+const PRODUCTION_RELEASE_ARTIFACT_NAME = "mcp-oauth-canary-artifacts-attempt-${{ github.run_attempt }}";
+const PRODUCTION_DEPLOY_JOB_OUTPUTS = Object.freeze({
+  release_artifact: PRODUCTION_RELEASE_ARTIFACT_NAME,
+});
 const PRODUCTION_WORKFLOW_ENV = Object.freeze({
   GIT_CONFIG_COUNT: "1",
   GIT_CONFIG_KEY_0: "init.defaultBranch",
@@ -992,7 +999,7 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
     if: "always()",
     uses: PINNED_UPLOAD_ARTIFACT_ACTION,
     with: {
-      name: "mcp-oauth-canary-artifacts",
+      name: PRODUCTION_RELEASE_ARTIFACT_NAME,
       path: "mcp-oauth-canary-artifacts/",
       "if-no-files-found": "error",
       "retention-days": 14,
@@ -1019,10 +1026,15 @@ const PRODUCTION_REPORT_STEPS: readonly Record<string, unknown>[] = [
     run: `corepack enable\ncorepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate\n`,
   },
   {
+    name: "Check release artifact name",
+    env: { RELEASE_ARTIFACT: "${{ needs.deploy.outputs.release_artifact }}" },
+    run: "[[ \"$RELEASE_ARTIFACT\" =~ ^mcp-oauth-canary-artifacts-attempt-[1-9][0-9]*$ ]]\n",
+  },
+  {
     name: "Download MCP OAuth canary artifacts",
     uses: PINNED_DOWNLOAD_ARTIFACT_ACTION,
     with: {
-      name: "mcp-oauth-canary-artifacts",
+      name: "${{ needs.deploy.outputs.release_artifact }}",
       path: "mcp-oauth-canary-artifacts",
     },
   },
@@ -1140,7 +1152,8 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
   const deploy = objectRecord(jobs.deploy);
   const report = objectRecord(jobs["report-canary"]);
   if (
-    !exactObjectKeys(deploy, ["name", "needs", "if", "runs-on", "timeout-minutes", "environment", "env", "steps"]) ||
+    !exactObjectKeys(deploy, ["name", "needs", "if", "runs-on", "timeout-minutes", "environment", "outputs", "env", "steps"]) ||
+    !exactWorkflowRecord(deploy.outputs, PRODUCTION_DEPLOY_JOB_OUTPUTS) ||
     deploy.name !== "deploy" ||
     deploy.needs !== "release-target" ||
     !exactWorkflowRecord(deploy.env, PRODUCTION_DEPLOY_JOB_ENV) ||
@@ -1898,7 +1911,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     check(
       "production deploy workflow",
       parsedProductionWorkflowIsCanonical(inputs.productionDeployWorkflow),
-      ".github/workflows/production-deploy.yml must deploy only the newest main commit with green canonical CI, from a push run or the merge queue's run of the same commit (chosen by its release-target job), validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, and record the released SHA."
+      ".github/workflows/production-deploy.yml must deploy only the newest main commit with green canonical CI, from a push run or the merge queue's run of the same commit (chosen by its release-target job), validate exact-SHA manual dispatches, pin every action, run deploy:auto with Cloudflare credentials, record the released SHA, and keep each attempt's release evidence under its own artifact name."
     ),
     check(
       "QA image-cover smoke workflow",
