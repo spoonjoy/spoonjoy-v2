@@ -1,4 +1,5 @@
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
+import { D1WriteUnavailableError, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -4066,6 +4067,19 @@ const TOOL_ANNOTATIONS = {
   list_spoons_for_recipe: { title: "List cooks for recipe", readOnlyHint: true },
   list_spoons_by_chef: { title: "List cooks by chef", readOnlyHint: true },
 } satisfies Record<string, McpToolAnnotations>;
+
+/**
+ * Whether a call that failed because D1 was briefly unavailable can be sent again as it was: the
+ * error came from a write that `retryD1Write` gave up on (which either did not apply, or is safe
+ * to run again), or the operation reads only or repeats with no extra effect. Any other write
+ * may have committed, so a second call could apply it twice; it stays an internal error.
+ */
+export function isSpoonjoyOperationRetryableAfterD1Error(name: string, error: unknown): boolean {
+  if (!isD1Unavailable(error)) return false;
+  if (error instanceof D1WriteUnavailableError) return true;
+  const annotations: McpToolAnnotations | undefined = TOOL_ANNOTATIONS[name as keyof typeof TOOL_ANNOTATIONS];
+  return Boolean(annotations && (annotations.readOnlyHint || annotations.idempotentHint));
+}
 
 export function listSpoonjoyApiOperations(): SpoonjoyMcpToolDescriptor[] {
   return tools.map(({ name, description, inputSchema, requiredScopes }) => {

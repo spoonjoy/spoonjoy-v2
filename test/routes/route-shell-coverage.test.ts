@@ -366,6 +366,7 @@ describe("route shell coverage", () => {
     const captureEvent = vi.fn(async () => undefined);
     vi.doMock("~/lib/spoonjoy-api.server", () => ({
       listSpoonjoyApiOperations: () => [],
+      isSpoonjoyOperationRetryableAfterD1Error: () => false,
       callSpoonjoyApiOperation: vi.fn(async () => {
         throw new Error("Recipe not found");
       }),
@@ -412,6 +413,7 @@ describe("route shell coverage", () => {
     const captureEvent = vi.fn(async () => undefined);
     vi.doMock("~/lib/spoonjoy-api.server", () => ({
       listSpoonjoyApiOperations: () => [],
+      isSpoonjoyOperationRetryableAfterD1Error: () => false,
       callSpoonjoyApiOperation: vi.fn(async () => {
         throw new Error("unexpected route bug");
       }),
@@ -461,6 +463,7 @@ describe("route shell coverage", () => {
   it("does not capture unexpected legacy REST errors when analytics is unavailable", async () => {
     vi.doMock("~/lib/spoonjoy-api.server", () => ({
       listSpoonjoyApiOperations: () => [],
+      isSpoonjoyOperationRetryableAfterD1Error: () => false,
       callSpoonjoyApiOperation: vi.fn(async () => {
         throw new Error("unexpected route bug");
       }),

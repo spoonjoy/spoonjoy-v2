@@ -4,7 +4,7 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_033",
+    "requestId": "opaque_034",
     "data": {
       "spoon": {
         "id": "id_010",
@@ -46,7 +46,7 @@
       "createdCover": null,
       "generationStatus": null,
       "mutation": {
-        "clientMutationId": "opaque_034",
+        "clientMutationId": "opaque_035",
         "replayed": false
       }
     }
