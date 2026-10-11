@@ -2,7 +2,7 @@ import type { Route } from "./+types/auth.webauthn.authenticate.verify";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { createUserSessionCookie, sanitizeSessionRedirect } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { configFromRequest, finishAuthentication, WebAuthnError } from "~/lib/webauthn-route.server";
+import { configFromRequest, finishAuthentication, webAuthnErrorResponse } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { enforceAuthRateLimit, rateLimitedResponse } from "~/lib/rate-limit.server";
@@ -61,8 +61,6 @@ export async function action({ request, context }: Route.ActionArgs) {
       },
     });
   } catch (error) {
-    const status = error instanceof WebAuthnError ? error.status : 400;
-    const message = error instanceof Error ? error.message : "Could not verify authentication";
-    return Response.json({ error: message }, { status });
+    return webAuthnErrorResponse(error, "Could not verify authentication");
   }
 }

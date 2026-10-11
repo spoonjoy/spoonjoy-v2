@@ -1,6 +1,7 @@
 import type { AgentConnectionRequest, PrismaClient as PrismaClientType } from "@prisma/client";
 import { ApiAuthError, createApiCredential, hashApiToken } from "~/lib/api-auth.server";
-import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { D1WriteUnavailableError, retryD1Write } from "~/lib/d1-write-retry.server";
+import { newReservationId } from "~/lib/api-idempotency.server";
 import { normalizeScope, OAuthError } from "~/lib/oauth-server.server";
 import { sessionVersionUnchanged } from "~/lib/session-version-fence.server";
 import {
@@ -210,10 +211,18 @@ async function expirePendingRequest(
   now: Date,
 ): Promise<AgentConnectionRequest> {
   if (request.status !== "pending" || !isExpired(request, now)) return request;
-  return db.agentConnectionRequest.update({
-    where: { id: request.id },
-    data: { status: "expired" },
-  });
+  // It sets a fixed status, so after a transient D1 error it simply runs again. The request is
+  // past its expiry either way, so if the database stays unavailable it is answered as expired and
+  // a later read records it.
+  try {
+    return await retryD1Write({ scope: "agent_connection.expire" }, () => db.agentConnectionRequest.update({
+      where: { id: request.id },
+      data: { status: "expired" },
+    }));
+  } catch (error) {
+    if (!(error instanceof D1WriteUnavailableError)) throw error;
+    return { ...request, status: "expired" };
+  }
 }
 
 function publicStatus(request: AgentConnectionRequest, now: Date): AgentConnectionPublicStatus {
@@ -245,9 +254,17 @@ export async function startAgentConnection(
   const expiresAt = new Date(now.getTime() + ttlMinutes * 60 * 1000);
   const deviceCode = generateDeviceCode();
   const userCode = generateUserCode();
-  const request = await db.agentConnectionRequest.create({
+  const deviceCodeHash = await hashApiToken(deviceCode);
+  // The id and codes are chosen before the first try, so a retry after a transient D1 error fails
+  // on them when an earlier try committed, and that request is the one answered.
+  const id = newReservationId(now);
+  const request = await retryD1Write({
+    scope: "agent_connection.start",
+    applied: () => db.agentConnectionRequest.findFirst({ where: { id, deviceCodeHash } }),
+  }, () => db.agentConnectionRequest.create({
     data: {
-      deviceCodeHash: await hashApiToken(deviceCode),
+      id,
+      deviceCodeHash,
       userCode,
       agentName: normalizeAgentName(input.agentName),
       scopes: normalizeDelegatedScopes(input.scopes),
@@ -257,7 +274,7 @@ export async function startAgentConnection(
       expiresAt,
       createdAt: now,
     },
-  });
+  }));
 
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   const authorizationUrl = connectionUrl(baseUrl, request.id);
@@ -303,15 +320,17 @@ export async function approveAgentConnectionRequest(
     );
   }
 
-  // Approve only a request that is still pending, so a concurrent denial or approval wins.
-  await db.agentConnectionRequest.updateMany({
+  // Approve only a request that is still pending, so a concurrent denial or approval wins. The
+  // answer is the row read afterwards, not the rows this changed, so after a transient D1 error it
+  // simply runs again: a try that had committed leaves nothing pending to change.
+  await retryD1Write({ scope: "agent_connection.approve" }, () => db.agentConnectionRequest.updateMany({
     where: { id, status: "pending" },
     data: {
       status: "approved",
       approvedById: approver.userId,
       approvedAt: now,
     },
-  });
+  }));
   // The session-version fence. A revocation that landed before this check ran its sweep while
   // the request was still pending, so undo the approval here: deny it if no poll has collected
   // it yet, or revoke the token a poll collected in between. One that lands after this check
@@ -319,16 +338,19 @@ export async function approveAgentConnectionRequest(
   // revocation's write because D1 read replication is off; the fence would need a D1 session
   // if it were turned on.)
   if (!(await sessionVersionUnchanged(db, approver.userId, approver.sessionVersion))) {
-    await db.agentConnectionRequest.updateMany({
+    // Undoing sets fixed values and is answered by the row read afterwards, so each write simply
+    // runs again after a transient D1 error.
+    await retryD1Write({ scope: "agent_connection.undo_approval" }, () => db.agentConnectionRequest.updateMany({
       where: { id, status: "approved", approvedById: approver.userId },
       data: { status: "denied", deniedAt: now },
-    });
+    }));
     const settled = await db.agentConnectionRequest.findUniqueOrThrow({ where: { id } });
     if (settled.status === "claimed" && settled.approvedById === approver.userId && settled.credentialId) {
-      await db.apiCredential.updateMany({
-        where: { id: settled.credentialId, revokedAt: null },
+      const credentialId = settled.credentialId;
+      await retryD1Write({ scope: "agent_connection.undo_approval" }, () => db.apiCredential.updateMany({
+        where: { id: credentialId, revokedAt: null },
         data: { revokedAt: now },
-      });
+      }));
     }
     return settled;
   }
@@ -344,13 +366,14 @@ export async function denyAgentConnectionRequest(
   if (!request) throw new ApiAuthError("Connection request not found", 404);
   if (publicStatus(request, now) !== "pending") return request;
 
-  return db.agentConnectionRequest.update({
+  // It sets fixed values, so after a transient D1 error it simply runs again.
+  return retryD1Write({ scope: "agent_connection.deny" }, () => db.agentConnectionRequest.update({
     where: { id },
     data: {
       status: "denied",
       deniedAt: now,
     },
-  });
+  }));
 }
 
 export async function pollAgentConnection(
@@ -394,10 +417,12 @@ export async function pollAgentConnection(
     if (!current.approvedById) throw new ApiAuthError("Approved connection is missing a user", 400);
     // Approved before account scopes were refused: never mint a token with them.
     if (!isGrantableAgentConnectionScope(current.scopes)) {
-      await db.agentConnectionRequest.updateMany({
+      // It sets a fixed status and its answer does not depend on the rows it changed, so after a
+      // transient D1 error it simply runs again.
+      await retryD1Write({ scope: "agent_connection.expire_account_scope" }, () => db.agentConnectionRequest.updateMany({
         where: { id: current.id, status: "approved", claimedAt: null },
         data: { status: "expired" },
-      });
+      }));
       return {
         status: "expired",
         expiresAt,
