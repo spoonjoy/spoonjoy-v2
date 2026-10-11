@@ -500,7 +500,9 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(tokens[1]).toBe(tokens[0]);
     expect(tokens[0]).toMatch(/^[0-9a-f-]{36}$/);
 
-    // A fresh opening starts without the old message.
+    // A fresh opening starts without the old message. Cancel is disabled while the second submit
+    // is in flight, so wait for its answer first: a click on the disabled button closes nothing.
+    await waitFor(() => expect(screen.getByRole("button", { name: /cancel/i })).toBeEnabled());
     // The dialog closes with an animation, which can outlast the default second under the
     // coverage run.
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
