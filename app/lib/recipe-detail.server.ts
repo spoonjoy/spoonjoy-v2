@@ -717,6 +717,39 @@ async function cleanupFirstPhotoCoverAttempt(
   }
 }
 
+/** The editorial job for a first photo's cover; when the cover was made active, only while it still is. */
+function firstPhotoStylization(input: {
+  database: Awaited<ReturnType<typeof getRequestDb>>;
+  userId: string;
+  recipeId: string;
+  coverId: string;
+  photoUrl: string;
+  recipeTitle: string;
+  env: ScheduleSpoonStylizationInput["env"];
+  bucket: ScheduleSpoonStylizationInput["bucket"];
+  sourceType: "spoon" | "chef-upload";
+  promptAddition: string | null;
+  activateWhenReady: boolean;
+}): ScheduleSpoonStylizationInput {
+  return {
+    db: input.database,
+    userId: input.userId,
+    recipeId: input.recipeId,
+    coverId: input.coverId,
+    rawPhotoUrl: input.photoUrl,
+    recipeTitle: input.recipeTitle,
+    env: input.env,
+    bucket: input.bucket,
+    sourceType: input.sourceType,
+    promptAddition: input.promptAddition,
+    activateWhenReady: input.activateWhenReady,
+    suppressAutoActivation: !input.activateWhenReady,
+    activationGuard: input.activateWhenReady
+      ? { activeCoverId: input.coverId, activeCoverVariant: "image", coverMode: "manual" }
+      : undefined,
+  };
+}
+
 async function handleCreateFirstPhotoCover(
   database: Awaited<ReturnType<typeof getRequestDb>>,
   userId: string,
@@ -741,6 +774,27 @@ async function handleCreateFirstPhotoCover(
   const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
   const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
   const { bucket, env, waitUntil } = getCloudflareCtx(context);
+  const ids = await coverJobIds(formData, { userId, recipeId, intent: "createFirstPhotoCover" });
+  // A resubmit of a first photo that was saved answers as the first did, without storing the
+  // photo or writing again; it starts the editorial job only if the first request never did.
+  const replayed = ids.replayable ? await readReplayedCoverJob(database, recipeId, ids.coverId) : null;
+  if (replayed) {
+    if (generateEditorial && replayed.jobPending) {
+      await runOrQueueSpoonCoverStylization(
+        firstPhotoStylization({
+          database, userId, recipeId, coverId: ids.coverId, photoUrl: replayed.imageUrl, recipeTitle: recipe.title,
+          env, bucket, sourceType: replayed.sourceSpoonId ? "spoon" : "chef-upload", promptAddition, activateWhenReady,
+        }),
+        waitUntil,
+      );
+    }
+    return {
+      success: true,
+      intent: "createFirstPhotoCover",
+      spoon: replayed.sourceSpoonId ? { id: replayed.sourceSpoonId } : null,
+      coverId: ids.coverId,
+    };
+  }
   let photoUrl: string | null = null;
   let sourceSpoonId: string | null = null;
   let coverId: string | null = null;
@@ -750,6 +804,7 @@ async function handleCreateFirstPhotoCover(
       const spoonResult = await createSpoon(
         database,
         {
+          id: ids.spoonId,
           chefId: userId,
           recipeId,
           photoFile,
@@ -775,6 +830,7 @@ async function handleCreateFirstPhotoCover(
 
     const sourceType = sourceSpoonId ? "spoon" : "chef-upload";
     const cover = await createCover(database, {
+      id: ids.coverId,
       recipeId,
       imageUrl: photoUrl,
       sourceType,
@@ -797,27 +853,10 @@ async function handleCreateFirstPhotoCover(
 
     if (generateEditorial) {
       await runOrQueueSpoonCoverStylization(
-        {
-          db: database,
-          userId,
-          recipeId,
-          coverId: cover.id,
-          rawPhotoUrl: photoUrl,
-          recipeTitle: recipe.title,
-          env,
-          bucket,
-          sourceType,
-          promptAddition,
-          activateWhenReady,
-          suppressAutoActivation: !activateWhenReady,
-          activationGuard: activateWhenReady
-            ? {
-                activeCoverId: cover.id,
-                activeCoverVariant: "image",
-                coverMode: "manual",
-              }
-            : undefined,
-        },
+        firstPhotoStylization({
+          database, userId, recipeId, coverId: cover.id, photoUrl, recipeTitle: recipe.title,
+          env, bucket, sourceType, promptAddition, activateWhenReady,
+        }),
         waitUntil,
       );
     }
@@ -868,6 +907,103 @@ type RecipeDetailD1Answer =
 
 type CoverJobIntent = "createCoverFromSpoon" | "generateRecipeCoverPlaceholder" | "regenerateRecipeCover";
 /**
+ * The ids a cover job's form token stands for. The same submission always names the same cover
+ * (and, for a first photo posted as a cook, the same cook), so a resubmit after a 503 or a lost
+ * answer finds what the first one wrote instead of adding a second cover and starting a second
+ * job. The kind names the recipe, the job and its target, so one form's token never names a
+ * cover another job made. Without a token, each submission gets fresh ids, as before.
+ */
+async function coverJobIds(
+  formData: FormData,
+  input: { userId: string; recipeId: string; intent: string; target?: string },
+): Promise<{ coverId: string; spoonId: string; replayable: boolean }> {
+  const token = formWriteToken(formData.get("coverToken"));
+  if (!token) return { coverId: crypto.randomUUID(), spoonId: crypto.randomUUID(), replayable: false };
+  const kind = `cover:${input.recipeId}:${input.intent}:${input.target ?? ""}`;
+  return {
+    coverId: await idForWriteToken(kind, input.userId, token),
+    spoonId: await idForWriteToken(`${kind}:spoon`, input.userId, token),
+    replayable: true,
+  };
+}
+
+/** A cover an earlier submission of the same cover job wrote. */
+type ReplayedCoverJob = {
+  imageUrl: string;
+  sourceSpoonId: string | null;
+  /** The cover still waits for a job that never started (the earlier request answered a 503). */
+  jobPending: boolean;
+};
+
+function replayedCoverJob(cover: {
+  imageUrl: string;
+  sourceSpoonId: string | null;
+  generationStatus: string;
+  generationStartedAt: unknown;
+  archivedAt: unknown;
+}): ReplayedCoverJob {
+  return {
+    imageUrl: cover.imageUrl,
+    sourceSpoonId: cover.sourceSpoonId,
+    // A stylization job marks its start; a cover still processing without that mark (and every
+    // placeholder still processing) has no job that finished it, so the replay starts one.
+    jobPending: cover.generationStatus === "processing" && cover.generationStartedAt == null && cover.archivedAt == null,
+  };
+}
+
+async function readReplayedCoverJobOnD1(
+  d1: D1ReadDatabase,
+  recipeId: string,
+  coverId: string,
+): Promise<ReplayedCoverJob | null> {
+  const [[row]] = await d1ReadBatch(d1, [[
+    `SELECT "imageUrl", "sourceSpoonId", "generationStatus", "generationStartedAt", "archivedAt" FROM "RecipeCover"
+     WHERE "id" = ? AND "recipeId" = ?`,
+    coverId,
+    recipeId,
+  ]]);
+  return row
+    ? replayedCoverJob(row as Parameters<typeof replayedCoverJob>[0])
+    : null;
+}
+
+/**
+ * Writes a cover job's batch. When it fails because an earlier submission of the same job wrote
+ * the cover first (its late commit landing between this request's check and its write), answers
+ * that cover as a replay instead of failing.
+ */
+async function writeCoverJobOnD1(
+  d1: D1ReadDatabase,
+  input: { recipeId: string; coverId: string; replayable: boolean; statements: D1Query[]; scope: string; createsCover: boolean },
+): Promise<ReplayedCoverJob | null> {
+  try {
+    await writeExistingRecipeOnD1(d1, input.recipeId, input.statements, {
+      scope: input.scope,
+      createdCoverId: input.createsCover ? input.coverId : undefined,
+    });
+    return null;
+  } catch (error) {
+    const replayed = input.replayable && input.createsCover && !isD1Unavailable(error)
+      ? await readReplayedCoverJobOnD1(d1, input.recipeId, input.coverId)
+      : null;
+    if (replayed) return replayed;
+    throw error;
+  }
+}
+
+async function readReplayedCoverJob(
+  database: Awaited<ReturnType<typeof getRequestDb>>,
+  recipeId: string,
+  coverId: string,
+): Promise<ReplayedCoverJob | null> {
+  const cover = await database.recipeCover.findFirst({
+    where: { id: coverId, recipeId },
+    select: { imageUrl: true, sourceSpoonId: true, generationStatus: true, generationStartedAt: true, archivedAt: true },
+  });
+  return cover ? replayedCoverJob(cover) : null;
+}
+
+/**
  * The chef's first photo as the recipe's cover, on D1: the owner check, then the photo stored
  * (as a cook's photo when it is posted as a cook, else as a recipe photo), then one guarded batch
  * with the cook, the cover and (when asked) the cover made active with its cookbooks touched. The
@@ -896,56 +1032,74 @@ async function handleCreateFirstPhotoCoverOnD1(
   const cookedAt = parseOptionalCookedAt(formData.get("cookedAt"));
   const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
   const { bucket, env, waitUntil } = getCloudflareCtx(context);
-
-  const spoon = postAsSpoon
-    ? await prepareSpoonContent({ chefId: userId, recipeId, photoFile, note, nextTime, cookedAt }, { bucket })
-      .catch(spoonErrorToResponse)
-    : null;
-  // prepareSpoonContent stores the photo file it is given, so a posted cook always has a photo URL.
-  const photoUrl = spoon ? spoon.photoUrl! : await validateAndStoreDirectRecipePhoto(photoFile, { bucket, userId, recipeId });
-
-  const now = new Date();
-  const sourceSpoonId = spoon ? crypto.randomUUID() : null;
-  const coverId = crypto.randomUUID();
-  const sourceType = sourceSpoonId ? "spoon" : "chef-upload";
-  const writes: D1Query[] = [];
-  if (spoon && sourceSpoonId) {
-    writes.push(spoonInsertStatement(
-      { id: sourceSpoonId, chefId: userId, recipeId, cookedAt: cookedAt ?? null, photoUrl, note: spoon.note, nextTime: spoon.nextTime },
+  const ids = await coverJobIds(formData, { userId, recipeId, intent: "createFirstPhotoCover" });
+  // A resubmit of a first photo that was saved answers as the first did, without storing the
+  // photo or writing again; it starts the editorial job only if the first request never did.
+  let replayed = ids.replayable ? await readReplayedCoverJobOnD1(d1, recipeId, ids.coverId) : null;
+  const coverId = ids.coverId;
+  let photoUrl: string;
+  let sourceSpoonId: string | null;
+  if (replayed) {
+    photoUrl = replayed.imageUrl;
+    sourceSpoonId = replayed.sourceSpoonId;
+  } else {
+    const spoon = postAsSpoon
+      ? await prepareSpoonContent({ chefId: userId, recipeId, photoFile, note, nextTime, cookedAt }, { bucket })
+        .catch(spoonErrorToResponse)
+      : null;
+    // prepareSpoonContent stores the photo file it is given, so a posted cook always has a photo URL.
+    photoUrl = spoon ? spoon.photoUrl! : await validateAndStoreDirectRecipePhoto(photoFile, { bucket, userId, recipeId });
+    sourceSpoonId = spoon ? ids.spoonId : null;
+    const now = new Date();
+    const writes: D1Query[] = [];
+    if (spoon && sourceSpoonId) {
+      writes.push(spoonInsertStatement(
+        { id: sourceSpoonId, chefId: userId, recipeId, cookedAt: cookedAt ?? null, photoUrl, note: spoon.note, nextTime: spoon.nextTime },
+        now,
+      ));
+    }
+    writes.push(coverInsertStatement(
+      {
+        id: coverId,
+        recipeId,
+        imageUrl: photoUrl,
+        sourceType: sourceSpoonId ? "spoon" : "chef-upload",
+        sourceSpoonId,
+        status: generateEditorial ? "processing" : "ready",
+        createdById: userId,
+        sourceImageUrl: photoUrl,
+        generationStatus: generateEditorial ? "processing" : "none",
+        promptAddition,
+      },
       now,
     ));
+    if (activateWhenReady) {
+      writes.push(
+        recipeUpdateStatement(recipeId, { activeCoverId: coverId, activeCoverVariant: "image", coverMode: "manual" }, now),
+        cookbooksForRecipeTouchStatement(recipeId, now),
+      );
+    }
+    const storedPhotoUrl = photoUrl;
+    try {
+      replayed = await writeCoverJobOnD1(d1, {
+        recipeId, coverId, replayable: ids.replayable, statements: writes, scope: "cover.create_first_photo", createsCover: true,
+      });
+    } catch (error) {
+      // When the database was unavailable, a try may still have committed with the photo in it,
+      // so the photo is kept (at worst unused) rather than deleted from under a saved cover.
+      if (!isD1Unavailable(error)) await deleteStoredImage({ bucket, imageUrl: storedPhotoUrl }).catch(() => false);
+      throw error;
+    }
+    if (replayed) {
+      // An earlier submission's cover landed first: this request's copy of the photo is unused.
+      await deleteStoredImage({ bucket, imageUrl: storedPhotoUrl }).catch(() => false);
+      photoUrl = replayed.imageUrl;
+      sourceSpoonId = replayed.sourceSpoonId;
+    }
   }
-  writes.push(coverInsertStatement(
-    {
-      id: coverId,
-      recipeId,
-      imageUrl: photoUrl,
-      sourceType,
-      sourceSpoonId,
-      status: generateEditorial ? "processing" : "ready",
-      createdById: userId,
-      sourceImageUrl: photoUrl,
-      generationStatus: generateEditorial ? "processing" : "none",
-      promptAddition,
-    },
-    now,
-  ));
-  if (activateWhenReady) {
-    writes.push(
-      recipeUpdateStatement(recipeId, { activeCoverId: coverId, activeCoverVariant: "image", coverMode: "manual" }, now),
-      cookbooksForRecipeTouchStatement(recipeId, now),
-    );
-  }
-  try {
-    await writeExistingRecipeOnD1(d1, recipeId, writes, { scope: "cover.create_first_photo", createdCoverId: coverId });
-  } catch (error) {
-    // When the database was unavailable, a try may still have committed with the photo in it,
-    // so the photo is kept (at worst unused) rather than deleted from under a saved cover.
-    if (!isD1Unavailable(error)) await deleteStoredImage({ bucket, imageUrl: photoUrl }).catch(() => false);
-    throw error;
-  }
+  const sourceType = sourceSpoonId ? "spoon" : "chef-upload";
 
-  if (generateEditorial) {
+  if (generateEditorial && (!replayed || replayed.jobPending)) {
     const later = backgroundWithRequestDb(context, waitUntil);
     await later((database) =>
       scheduleSpoonCoverStylization({
@@ -1017,24 +1171,35 @@ async function handleCoverJobOnD1(
   if (intent === "createCoverFromSpoon") {
     if (!spoonId) throw new Response("spoonId is required", { status: 400 });
     if (!spoon) throw new Response("Spoon photo not found", { status: 404 });
-    const newCoverId = crypto.randomUUID();
-    await writeExistingRecipeOnD1(d1, recipeId, [
-      coverInsertStatement(
-        {
-          id: newCoverId,
-          recipeId,
-          imageUrl: spoon.photoUrl,
-          sourceType: "spoon",
-          sourceSpoonId: spoon.id,
-          status: "processing",
-          createdById: userId,
-          sourceImageUrl: spoon.photoUrl,
-          generationStatus: "processing",
-          promptAddition,
-        },
-        now,
-      ),
-    ], { scope: "cover.create_from_spoon", createdCoverId: newCoverId });
+    const ids = await coverJobIds(formData, { userId, recipeId, intent, target: spoon.id });
+    const newCoverId = ids.coverId;
+    const replayed = ids.replayable ? await readReplayedCoverJobOnD1(d1, recipeId, newCoverId) : null;
+    if (replayed && !replayed.jobPending) return { success: true, intent, coverId: newCoverId };
+    const raced = replayed ? null : await writeCoverJobOnD1(d1, {
+      recipeId,
+      coverId: newCoverId,
+      replayable: ids.replayable,
+      scope: "cover.create_from_spoon",
+      createsCover: true,
+      statements: [
+        coverInsertStatement(
+          {
+            id: newCoverId,
+            recipeId,
+            imageUrl: spoon.photoUrl,
+            sourceType: "spoon",
+            sourceSpoonId: spoon.id,
+            status: "processing",
+            createdById: userId,
+            sourceImageUrl: spoon.photoUrl,
+            generationStatus: "processing",
+            promptAddition,
+          },
+          now,
+        ),
+      ],
+    });
+    if (raced && !raced.jobPending) return { success: true, intent, coverId: newCoverId };
     await later((database) =>
       scheduleSpoonCoverStylization({
         db: database,
@@ -1055,24 +1220,35 @@ async function handleCoverJobOnD1(
   }
 
   if (intent === "generateRecipeCoverPlaceholder") {
-    const newCoverId = crypto.randomUUID();
-    await writeExistingRecipeOnD1(d1, recipeId, [
-      coverInsertStatement(
-        {
-          id: newCoverId,
-          recipeId,
-          imageUrl: "",
-          sourceType: "ai-placeholder",
-          sourceSpoonId: null,
-          status: "processing",
-          createdById: userId,
-          sourceImageUrl: null,
-          generationStatus: "processing",
-          promptAddition,
-        },
-        now,
-      ),
-    ], { scope: "cover.create_placeholder", createdCoverId: newCoverId });
+    const ids = await coverJobIds(formData, { userId, recipeId, intent });
+    const newCoverId = ids.coverId;
+    const replayed = ids.replayable ? await readReplayedCoverJobOnD1(d1, recipeId, newCoverId) : null;
+    if (replayed && !replayed.jobPending) return { success: true, intent, coverId: newCoverId };
+    const raced = replayed ? null : await writeCoverJobOnD1(d1, {
+      recipeId,
+      coverId: newCoverId,
+      replayable: ids.replayable,
+      scope: "cover.create_placeholder",
+      createsCover: true,
+      statements: [
+        coverInsertStatement(
+          {
+            id: newCoverId,
+            recipeId,
+            imageUrl: "",
+            sourceType: "ai-placeholder",
+            sourceSpoonId: null,
+            status: "processing",
+            createdById: userId,
+            sourceImageUrl: null,
+            generationStatus: "processing",
+            promptAddition,
+          },
+          now,
+        ),
+      ],
+    });
+    if (raced && !raced.jobPending) return { success: true, intent, coverId: newCoverId };
     await later((database) =>
       scheduleAiPlaceholderCover({
         db: database,
@@ -1098,12 +1274,23 @@ async function handleCoverJobOnD1(
   }
   const rawPhotoUrl = cover.sourceImageUrl || cover.imageUrl;
   if (!rawPhotoUrl.trim()) throw new Response("Cover has no source image", { status: 400 });
-  const regeneration = coverRegenerationStatement(cover, { createdById: userId, rawPhotoUrl, promptAddition }, now);
-  // A child cover is checked by its id; regenerating in place sets fixed values.
-  await writeExistingRecipeOnD1(d1, recipeId, [regeneration.statement], {
+  const ids = await coverJobIds(formData, { userId, recipeId, intent, target: cover.id });
+  const regeneration = coverRegenerationStatement(cover, { createdById: userId, rawPhotoUrl, promptAddition, childCoverId: ids.coverId }, now);
+  // A child cover a resubmit already made is answered as made; regenerating in place sets fixed values.
+  const replayed = ids.replayable && regeneration.parentCoverId
+    ? await readReplayedCoverJobOnD1(d1, recipeId, regeneration.coverId)
+    : null;
+  if (replayed && !replayed.jobPending) return { success: true, intent, coverId: regeneration.coverId };
+  // A child cover is checked by its id.
+  const raced = replayed ? null : await writeCoverJobOnD1(d1, {
+    recipeId,
+    coverId: regeneration.coverId,
+    replayable: ids.replayable,
+    statements: [regeneration.statement],
     scope: "cover.regenerate",
-    createdCoverId: regeneration.parentCoverId ? regeneration.coverId : undefined,
+    createsCover: regeneration.parentCoverId !== undefined,
   });
+  if (raced && !raced.jobPending) return { success: true, intent, coverId: regeneration.coverId };
   await later((database) =>
     scheduleSpoonCoverStylization({
       db: database,
@@ -1488,7 +1675,11 @@ async function handleRecipeDetailIntent(
       throw new Response("Spoon photo not found", { status: 404 });
     }
     const { bucket, env, waitUntil } = getCloudflareCtx(context);
-    const cover = await createCover(database, {
+    const ids = await coverJobIds(formData, { userId, recipeId: id, intent, target: spoon.id });
+    const replayed = ids.replayable ? await readReplayedCoverJob(database, id, ids.coverId) : null;
+    if (replayed && !replayed.jobPending) return { success: true, intent: "createCoverFromSpoon", coverId: ids.coverId };
+    const cover = replayed ? { id: ids.coverId } : await createCover(database, {
+      id: ids.coverId,
       recipeId: id,
       imageUrl: spoon.photoUrl,
       sourceType: "spoon",
@@ -1529,7 +1720,13 @@ async function handleRecipeDetailIntent(
     const activateWhenReady = formData.get("activateWhenReady") === "true";
     const promptAddition = sanitizeImagePromptAddition(optionalFormText(formData, "promptAddition"));
     const { bucket, env, waitUntil } = getCloudflareCtx(context);
-    const cover = await createCover(database, {
+    const ids = await coverJobIds(formData, { userId, recipeId: id, intent });
+    const replayed = ids.replayable ? await readReplayedCoverJob(database, id, ids.coverId) : null;
+    if (replayed && !replayed.jobPending) {
+      return { success: true, intent: "generateRecipeCoverPlaceholder", coverId: ids.coverId };
+    }
+    const cover = replayed ? { id: ids.coverId } : await createCover(database, {
+      id: ids.coverId,
       recipeId: id,
       imageUrl: "",
       sourceType: "ai-placeholder",
@@ -1586,7 +1783,13 @@ async function handleRecipeDetailIntent(
       throw new Response("Cover has no source image", { status: 400 });
     }
     const { bucket, env, waitUntil } = getCloudflareCtx(context);
-    const regeneration = await startRecipeCoverRegeneration(database, cover, { createdById: userId, rawPhotoUrl, promptAddition });
+    const ids = await coverJobIds(formData, { userId, recipeId: id, intent, target: cover.id });
+    // A child cover a resubmit already made is answered as made; regenerating in place sets fixed values.
+    const replayed = ids.replayable && cover.stylizedImageUrl ? await readReplayedCoverJob(database, id, ids.coverId) : null;
+    if (replayed && !replayed.jobPending) return { success: true, intent: "regenerateRecipeCover", coverId: ids.coverId };
+    const regeneration = replayed
+      ? { coverId: ids.coverId, parentCoverId: cover.id }
+      : await startRecipeCoverRegeneration(database, cover, { createdById: userId, rawPhotoUrl, promptAddition, childCoverId: ids.coverId });
     await runOrQueueSpoonCoverStylization(
       {
         db: database,

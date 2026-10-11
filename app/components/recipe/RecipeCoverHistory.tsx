@@ -2,6 +2,7 @@ import { Form } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Field, Label } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
+import { useActionWriteToken } from "~/hooks/use-write-token";
 import { normalizeRequiredCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
 
 export type RecipeCoverHistoryVariant = {
@@ -76,6 +77,9 @@ function createdDateLabel(value: string) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** The cover jobs this panel starts; each resubmit of one makes one cover and one job. */
+const COVER_JOB_INTENTS = ["generateRecipeCoverPlaceholder", "regenerateRecipeCover", "createCoverFromSpoon"] as const;
+
 export function RecipeCoverHistory({
   covers,
   spoonImages = [],
@@ -83,6 +87,7 @@ export function RecipeCoverHistory({
   covers: RecipeCoverHistoryItem[];
   spoonImages?: RecipeCoverSpoonImage[];
 }) {
+  const coverToken = useActionWriteToken(COVER_JOB_INTENTS);
   const hasCurrentCover = covers.some((cover) =>
     cover.isActive && cover.status !== "archived" && !cover.archivedAt
   );
@@ -127,6 +132,7 @@ export function RecipeCoverHistory({
 
       <Form method="post" className="grid gap-3 border-b border-[var(--sj-border)] pb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="intent" value="generateRecipeCoverPlaceholder" />
+        <input type="hidden" name="coverToken" value={coverToken} />
         <input type="hidden" name="activateWhenReady" value="true" />
         <Field>
           <Label htmlFor="recipe-cover-placeholder-direction">Placeholder direction</Label>
@@ -262,6 +268,7 @@ export function RecipeCoverHistory({
                     {canQueueGeneration ? (
                       <Form method="post" className="grid w-full gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                         <input type="hidden" name="intent" value="regenerateRecipeCover" />
+                        <input type="hidden" name="coverToken" value={coverToken} />
                         <input type="hidden" name="coverId" value={cover.id} />
                         <input type="hidden" name="activateWhenReady" value="true" />
                         <Field>
@@ -361,6 +368,7 @@ export function RecipeCoverHistory({
                   </div>
                   <Form method="post">
                     <input type="hidden" name="intent" value="createCoverFromSpoon" />
+                    <input type="hidden" name="coverToken" value={coverToken} />
                     <input type="hidden" name="spoonId" value={spoon.id} />
                     <input type="hidden" name="activateWhenReady" value="true" />
                     <Field>

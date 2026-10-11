@@ -111,11 +111,11 @@ export async function readOwnedRecipeForCoverJobOnD1(
  */
 export function coverRegenerationStatement(
   cover: CoverForRegeneration,
-  input: { createdById: string; rawPhotoUrl: string; promptAddition: string | null },
+  input: { createdById: string; rawPhotoUrl: string; promptAddition: string | null; childCoverId: string },
   now: Date,
 ): { coverId: string; parentCoverId: string | undefined; statement: D1Query } {
   if (cover.stylizedImageUrl) {
-    const coverId = crypto.randomUUID();
+    const coverId = input.childCoverId;
     return {
       coverId,
       parentCoverId: cover.id,
