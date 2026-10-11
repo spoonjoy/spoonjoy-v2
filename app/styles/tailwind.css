@@ -740,9 +740,11 @@ body:has(#cook) .sj-mobile-surface {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  /* Ouro UI subtrees ([data-ouro]) are left out: they honour reduced motion themselves, dropping
+     transform motion and keeping a short opacity fade. */
+  :where(:not([data-ouro], [data-ouro] *)),
+  :where(:not([data-ouro], [data-ouro] *))::before,
+  :where(:not([data-ouro], [data-ouro] *))::after {
     scroll-behavior: auto !important;
     transition-duration: 0.001ms !important;
     animation-duration: 0.001ms !important;

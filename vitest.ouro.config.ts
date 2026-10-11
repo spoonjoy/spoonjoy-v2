@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { playwright } from "@vitest/browser-playwright";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
@@ -11,6 +12,33 @@ import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 //
 // It stays on Spoonjoy's Vitest 4: the registry asks for Vitest 5, but
 // @cloudflare/vitest-pool-workers (the Workers test lane) supports only Vitest 4.
+
+// Vitest 4 scales the test iframe down when the page is smaller than the viewport a test asks for
+// (Ouro's tests use up to 1280x844), which shifts real-mouse drags off their targets and makes
+// sizes fractional. A page larger than any of those keeps the iframe at its true size. The touch
+// project already sets its own 390x844 page.
+const projects = ouroTestProjects({
+  css: "./app/styles/tailwind.css",
+  include: [
+    "app/components/ouro/**/*.test.{ts,tsx}",
+    "app/lib/ouro/**/*.test.{ts,tsx}",
+    // Spoonjoy's own browser checks of how its stylesheet treats Ouro UI.
+    "test/ouro/**/*.test.{ts,tsx}",
+  ],
+}).map((project) =>
+  project.test?.name === "ouro-touch"
+    ? project
+    : {
+        ...project,
+        test: {
+          ...project.test,
+          browser: {
+            ...project.test?.browser,
+            provider: playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } }),
+          },
+        },
+      },
+);
 
 export default defineConfig({
   plugins: [react()],
@@ -26,15 +54,7 @@ export default defineConfig({
     include: ["@base-ui/react/button", "@base-ui/react/dialog", "@base-ui/react/drawer"],
   },
   test: {
-    projects: ouroTestProjects({
-      css: "./app/styles/tailwind.css",
-      include: [
-        "app/components/ouro/**/*.test.{ts,tsx}",
-        "app/lib/ouro/**/*.test.{ts,tsx}",
-        // Spoonjoy's own browser checks of how its stylesheet treats Ouro UI.
-        "test/ouro/**/*.test.{ts,tsx}",
-      ],
-    }),
+    projects,
     coverage: {
       provider: "istanbul",
       include: ["app/components/ouro/**/*.{ts,tsx}", "app/lib/ouro/**/*.{ts,tsx}"],
