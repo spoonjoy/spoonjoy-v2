@@ -4720,14 +4720,14 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       },
       "idempotency": {
         "key": "clientMutationId",
-        "location": "jsonBody",
+        "location": "jsonBody or multipartFormData",
         "retentionHours": 24,
         "replayStatus": [
           201
         ],
         "conflictStatus": 409,
         "inProgressRetryAfterSeconds": 2,
-        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. A multipart spoon create with a photo is matched on the uploaded file digest, size, type, and field values. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
       },
       "personalTokenOnly": false,
       "oauthNote": "",
@@ -4921,7 +4921,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         ],
         "conflictStatus": 409,
         "inProgressRetryAfterSeconds": 2,
-        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. A multipart spoon create with a photo is matched on the uploaded file digest, size, type, and field values. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
       },
       "personalTokenOnly": false,
       "oauthNote": "",
@@ -5127,7 +5127,7 @@ export const API_V1_PLAYGROUND_MANIFEST = {
         ],
         "conflictStatus": 409,
         "inProgressRetryAfterSeconds": 2,
-        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
+        "retryBodyRule": "Persist and retry the same mutation body and path for this clientMutationId. A multipart spoon create with a photo is matched on the uploaded file digest, size, type, and field values. Spoon deletes may put the idempotency key in the JSON body, query string, or X-Client-Mutation-Id header."
       },
       "personalTokenOnly": false,
       "oauthNote": "",
