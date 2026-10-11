@@ -83,6 +83,8 @@
     "test:changed": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then node scripts/test-changed.mjs",
     "test:workers": "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate",
     "test:workers:coverage": "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate --coverage",
+    "test:ouro": "vitest run --config vitest.ouro.config.ts --coverage",
+    "test:e2e:ouro": "playwright test -c playwright.ouro.config.ts",
     "test:mcp-sdk-python": "node scripts/mcp-python-sdk-conformance.mjs",
     "verify:clean:typecheck": "node scripts/run-with-warning-policy.mjs -- pnpm run typecheck",
     "verify:clean:build": "node scripts/run-with-warning-policy.mjs -- pnpm run build",
@@ -92,6 +94,8 @@
     "verify:clean:test:coverage": "node scripts/run-with-warning-policy.mjs -- pnpm run test:coverage",
     "verify:clean:test:changed": "node scripts/run-with-warning-policy.mjs -- pnpm run test:changed",
     "verify:clean:test:workers:coverage": "node scripts/run-with-warning-policy.mjs -- pnpm run test:workers:coverage",
+    "verify:clean:test:ouro": "node scripts/run-with-warning-policy.mjs -- pnpm run test:ouro",
+    "verify:clean:test:e2e:ouro": "node scripts/run-with-warning-policy.mjs -- pnpm run test:e2e:ouro",
     "verify:clean:test:mcp-sdk-python": "node scripts/run-with-warning-policy.mjs -- pnpm run test:mcp-sdk-python",
     "verify:clean:test:e2e": "node scripts/run-with-warning-policy.mjs -- pnpm run test:e2e",
     "prisma:generate": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
@@ -128,6 +132,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@base-ui/react": "^1.8.0",
     "@block65/webcrypto-web-push": "^1.0.2",
     "@cloudflare/vite-plugin": "^1.22.1",
     "@headlessui/react": "^2.2.9",
@@ -152,6 +157,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router": "7.18.2",
+    "tailwind-merge": "^3.7.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -190,6 +196,7 @@
     "happy-dom": "20.8.9",
     "jsdom-testing-mocks": "^1.16.0",
     "pg": "^8.21.0",
+    "playwright": "^1.58.1",
     "postcss": "^8.5.23",
     "prisma": "6.19.2",
     "sharp": "^0.35.5",

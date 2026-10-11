@@ -13,12 +13,13 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "rootDirs": [".", "./.react-router/types"],
     "paths": {
       "~/*": ["./app/*"],
       "@/*": ["./app/components/*"]
     }
   },
-  "include": ["app/**/*", "workers/**/*", ".react-router/types/**/*", "react-router.config.ts", "vite.config.ts", "vitest.config.ts", "vitest.workspace.ts"],
+  "include": ["app/**/*", "workers/**/*", ".react-router/types/**/*", "react-router.config.ts", "vite.config.ts", "vitest.config.ts", "vitest.ouro.config.ts", "vitest.workspace.ts"],
   "exclude": ["node_modules", "app/**/__tests__/**", "**/*.test.ts", "**/*.test.tsx", "test/**", "stories/**"]
 }

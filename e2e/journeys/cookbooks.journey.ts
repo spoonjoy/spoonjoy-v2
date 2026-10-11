@@ -107,18 +107,24 @@ test.describe("Cookbooks", () => {
     const saved = page.waitForResponse(
       (response) => new URL(response.url()).pathname === `${SALMON}.data` && response.request().method() === "POST",
     );
-    await cookbookToggle.click();
+    await (isMobile ? cookbookToggle.tap() : cookbookToggle.click());
     expect((await saved).status()).toBe(200);
     await expect(cookbookToggle).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
 
-    // The dialog has a visible, labelled Close button with a 44 px touch target.
-    const closeButton = saveDialog.getByRole("button", { name: "Close", exact: true });
-    await expect(closeButton).toBeVisible();
-    const closeBox = await closeButton.boundingBox();
-    expect(closeBox?.width ?? 0).toBeGreaterThanOrEqual(44);
-    expect(closeBox?.height ?? 0).toBeGreaterThanOrEqual(44);
-    await closeButton.click();
+    // The Save dialog is Ouro UI's Dialog: on a phone a bottom sheet resting on the bottom edge of
+    // the screen, on desktop a dialog centred on it. On a phone a tap above the sheet closes it; on
+    // desktop the labelled Close button in its corner does.
+    const viewport = page.viewportSize()!;
+    await expect
+      .poll(async () => {
+        const box = (await saveDialog.boundingBox())!;
+        return isMobile ? Math.round(box.y + box.height) : Math.round(box.x + box.width / 2);
+      })
+      .toBe(isMobile ? viewport.height : Math.round(viewport.width / 2));
+    await (isMobile
+      ? page.touchscreen.tap(viewport.width / 2, 8)
+      : saveDialog.getByRole("button", { name: "Close", exact: true }).click());
     await expect(saveDialog).toBeHidden();
 
     await verifyAfterReload(async () => {

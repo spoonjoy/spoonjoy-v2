@@ -5,6 +5,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["e2e/**/*.ts", "playwright.config.ts", "playwright.journeys.config.ts"],
+  "include": ["e2e/**/*.ts", "playwright.config.ts", "playwright.journeys.config.ts", "playwright.ouro.config.ts"],
   "exclude": ["node_modules"]
 }

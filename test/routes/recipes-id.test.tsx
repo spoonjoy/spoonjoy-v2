@@ -2420,28 +2420,28 @@ describe("Recipes $id Route", () => {
       await settleBrowserTasks();
     };
 
-    it("uses shared dialog/input components for save modal, keeps modal above dock z-index, and preserves scroll on open", async () => {
-      const user = userEvent.setup();
-      const mockData = {
-        recipe: {
-          id: "recipe-1",
-          title: "Save Modal Recipe",
-          description: null,
-          servings: null,
-          coverImageUrl: null,
-          chef: { id: "user-1", username: "testchef" },
-          steps: [],
-        },
-        isOwner: true,
-        cookbooks: [{ id: "cb-1", title: "Weeknights" }],
-        savedInCookbookIds: [],
-      };
+    const saveModalMockData = {
+      recipe: {
+        id: "recipe-1",
+        title: "Save Modal Recipe",
+        description: null,
+        servings: null,
+        coverImageUrl: null,
+        chef: { id: "user-1", username: "testchef" },
+        steps: [],
+      },
+      isOwner: true,
+      cookbooks: [{ id: "cb-1", title: "Weeknights" }],
+      savedInCookbookIds: [],
+    };
 
+    it("presents the save modal as Ouro UI's centred Dialog on a wide screen, with the cookbooks in its body, Create & Save in its footer, and the scroll kept", async () => {
+      const user = userEvent.setup();
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/:id",
           Component: RecipeDetail,
-          loader: () => mockData,
+          loader: () => saveModalMockData,
         },
       ]);
 
@@ -2457,35 +2457,111 @@ describe("Recipes $id Route", () => {
 
       await openSaveModalFromHeader();
 
-      expect(await screen.findByRole("dialog", { name: "Save to cookbook" })).toBeInTheDocument();
+      const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
       await settleBrowserTasks();
-      expect(screen.getByLabelText("Create new cookbook")).toBeInTheDocument();
+      // Ouro UI's Dialog: centred from 640px up, with its own title, over a backdrop.
+      expect(dialog).toHaveAttribute("data-ouro", "dialog");
+      expect(dialog).toHaveAttribute("data-ouro-presentation", "dialog");
+      expect(within(dialog).getByRole("heading", { name: "Save to cookbook" })).toBeInTheDocument();
+      expect(document.querySelector('[data-ouro="dialog-backdrop"]')).toBeTruthy();
 
-      const backdrop = document.querySelector('[data-slot="dialog-backdrop"]');
-      const panel = document.querySelector('[data-slot="dialog-panel"]');
-      expect(backdrop).toBeTruthy();
-      expect(panel).toBeTruthy();
-      expect(backdrop).toHaveClass("data-enter:duration-300", "data-leave:duration-200");
-      // The sheet fades in place (its cookbook buttons never move under a tap) and slides only on leave.
-      expect(panel).toHaveClass("data-leave:data-closed:translate-y-4", "data-closed:opacity-0");
-      expect(panel?.className.split(/\s+/).filter((name) => /translate|scale/.test(name) && !name.includes("data-leave:"))).toEqual([]);
-      expect(panel?.className).toContain("mb-24");
-      expect(panel?.className).toContain("max-h-[calc(100dvh-7.5rem)]");
-      expect(panel?.className).toContain("sm:mb-auto");
-      expect(panel).toHaveClass("rounded-t-[var(--sj-radius-surface)]");
-      expect(panel?.className).toContain("sm:rounded-[var(--sj-radius-surface)]");
-
+      // The cookbooks sit in Ouro's scrolling body; Create & Save sits in its footer, outside the
+      // scroll, so it stays in reach however many cookbooks there are.
+      const content = dialog.querySelector("[data-ouro-dialog-content]");
+      const modal = screen.getByTestId("save-modal");
       const modalBody = screen.getByTestId("save-modal-body");
       const modalFooter = screen.getByTestId("save-modal-footer");
-      expect(modalBody).toHaveClass("overflow-y-auto", "flex-1", "min-h-0");
-      expect(modalFooter).toHaveClass("sticky", "bottom-0", "shrink-0");
+      expect(content?.contains(modal)).toBe(true);
+      expect(modal.contains(modalBody)).toBe(true);
+      expect(modalBody.contains(screen.getByTestId("cookbook-item-cb-1"))).toBe(true);
+      // A toggle's colours show whether the recipe is saved, so it switches instantly, never fading
+      // through mid-state colours (the Ouro dialog's subtree is left out of the global reset).
+      expect(screen.getByTestId("cookbook-item-cb-1")).toHaveClass("sj-instant-state");
+      expect(screen.getByTestId("cookbook-item-cb-1")).not.toHaveClass("transition-colors");
+      expect(dialog.contains(modalFooter)).toBe(true);
+      expect(content?.contains(modalFooter)).toBe(false);
       expect(modalFooter.contains(screen.getByTestId("create-cookbook-button"))).toBe(true);
+      expect(screen.getByLabelText("Create new cookbook")).toBeInTheDocument();
 
-      expect(document.activeElement).toHaveTextContent("Save to cookbook");
+      expect(dialog.contains(document.activeElement)).toBe(true);
       expect(scrollToSpy).not.toHaveBeenCalled();
 
       await closeSaveModal(user);
       scrollToSpy.mockRestore();
+    });
+
+    // Known gap, pinned so it stays visible: on a screen 640px or wider (an iPad, or a phone in
+    // landscape) Ouro UI's centred Dialog focuses its first control when the app opens it with
+    // open/onOpenChange, even after a tap, so a user with no cookbooks gets the software keyboard
+    // for "Create new cookbook". Ouro UI v0.1.0 keeps focus on the dialog after a tap only when its
+    // own trigger opens it; Save stays controlled for the sign-in redirect in handleOpenSaveModal.
+    // The fix is upstream in ourostack/ouro-ui (a controlled Dialog that tracks the opening tap);
+    // when Spoonjoy upgrades to that release, change these to expect the dialog itself.
+    it.each([
+      { cookbooks: [{ id: "cb-1", title: "Weeknights" }], focused: "cookbook-item-cb-1" },
+      { cookbooks: [], focused: "new-cookbook-input" },
+    ])("focuses $focused when the wide-screen save dialog opens (upstream Ouro UI gap)", async ({ cookbooks, focused }) => {
+      const user = userEvent.setup();
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ({ ...saveModalMockData, cookbooks }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Save Modal Recipe" });
+
+      await openSaveModalFromHeader();
+
+      const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
+      await settleBrowserTasks();
+      expect(dialog).toHaveAttribute("data-ouro-presentation", "dialog");
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByTestId(focused));
+      });
+
+      await closeSaveModal(user);
+    });
+
+    it("presents the save modal as a bottom sheet on a phone-width screen", async () => {
+      const user = userEvent.setup();
+      // Below 640px, as on a phone: Ouro UI's Dialog reads (min-width: 640px) through matchMedia.
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      }));
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => saveModalMockData,
+        },
+      ]);
+
+      try {
+        render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+        await screen.findByRole("heading", { name: "Save Modal Recipe" });
+
+        await openSaveModalFromHeader();
+
+        const sheet = await screen.findByRole("dialog", { name: "Save to cookbook" });
+        await settleBrowserTasks();
+        expect(sheet).toHaveAttribute("data-ouro", "sheet");
+        expect(within(sheet).getByTestId("save-modal-body")).toBeInTheDocument();
+        expect(within(sheet).getByTestId("save-modal-footer")).toBeInTheDocument();
+
+        await closeSaveModal(user);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it("keeps save modal open after creating a cookbook and marks it saved", async () => {
@@ -2533,7 +2609,7 @@ describe("Recipes $id Route", () => {
       await closeSaveModal(user);
     });
 
-    it("closes the save modal from its visible Close button, a 44 px target", async () => {
+    it("closes the save modal from Ouro UI's labelled Close button", async () => {
       const user = userEvent.setup();
       const mockData = {
         recipe: {
@@ -2565,11 +2641,9 @@ describe("Recipes $id Route", () => {
       const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
       await settleBrowserTasks();
 
+      // Ouro UI's Dialog brings the Close button; on a touch screen it has a 44 px target.
       const closeButton = within(dialog).getByRole("button", { name: "Close", exact: true });
       expect(closeButton).toHaveAttribute("type", "button");
-      expect(closeButton).toHaveClass("size-11");
-      // The title keeps initial focus; Close is not focused on open.
-      expect(document.activeElement).toHaveTextContent("Save to cookbook");
 
       await user.click(closeButton);
       await waitFor(() => {

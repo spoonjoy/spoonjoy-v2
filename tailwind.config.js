@@ -7,23 +7,12 @@ export default {
   ],
   theme: {
     extend: {
+      // primary, secondary and success come from app/styles/tailwind.css's @theme inline block,
+      // which maps them onto Spoonjoy's palette for Ouro UI.
       colors: {
-        primary: {
-          DEFAULT: '#0066cc',
-          600: '#0052a3',
-          700: '#003d7a',
-        },
-        success: {
-          DEFAULT: '#28a745',
-          600: '#218838',
-        },
         danger: {
           DEFAULT: '#dc3545',
           600: '#c82333',
-        },
-        secondary: {
-          DEFAULT: '#6c757d',
-          600: '#5a6268',
         },
       },
     },
