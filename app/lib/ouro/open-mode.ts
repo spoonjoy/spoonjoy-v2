@@ -24,7 +24,7 @@ export function checkOpenMode(
       problem,
       process.env.NODE_ENV !== "production"
         ? `Pass trigger={<Button>…</Button>} for an uncontrolled ${noun}, or open and onOpenChange to control it`
-        : /* istanbul ignore next -- production only */ "",
+        : /* istanbul ignore next @preserve -- production only */ "",
     );
   const controlled = open !== undefined;
   if (hasTrigger && controlled) fail("takes trigger or open, not both");

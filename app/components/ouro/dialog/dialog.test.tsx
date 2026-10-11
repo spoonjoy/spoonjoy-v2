@@ -175,7 +175,7 @@ describe("automatic presentation", () => {
   });
 });
 
-describe("server rendering", () => {
+describe("Dialog server rendering", () => {
   it("renders on the server without throwing or rendering the popup", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const html = renderToString(
@@ -281,6 +281,70 @@ describe("trigger", () => {
     // An open would be committed by now: the click is handled and React has flushed.
     await act(async () => {});
     expect(popup()).toBeNull();
+  });
+});
+
+describe("Dialog stacking above the app's fixed bars", () => {
+  /** The app's `--ouro-layer`: 50 from ouro-base, unless the app raised it. */
+  const layer = () => Number(getComputedStyle(document.documentElement).getPropertyValue("--ouro-layer"));
+  /** A fixed, full-screen app layer at the given z-index, like a tab bar or a header. */
+  function appBar(zIndex: number): HTMLElement {
+    const bar = document.createElement("div");
+    Object.assign(bar.style, { position: "fixed", inset: "0", zIndex: String(zIndex) });
+    document.body.append(bar);
+    mounted.push(bar);
+    return bar;
+  }
+  /** Whether the popup is what a press at its center lands on. */
+  const onTop = (element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    return element.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
+  };
+  const portal = () => document.querySelector<HTMLElement>('[data-ouro="dialog-portal"]')!;
+
+  it("puts the portal on the --ouro-layer level, as its own stacking context", async () => {
+    await render(
+      <Dialog title="Edit recipe" open onOpenChange={() => {}}>
+        Body
+      </Dialog>,
+    );
+    await settled();
+    const style = getComputedStyle(portal());
+    expect(style.position).toBe("relative");
+    expect(layer()).toBeGreaterThanOrEqual(50);
+    expect(style.zIndex).toBe(String(layer()));
+    expect(style.isolation).toBe("isolate");
+  });
+
+  it("stays above a fixed app bar at the same level: a tie, which the portal wins as the last child of body", async () => {
+    appBar(layer());
+    await render(
+      <Dialog title="Edit recipe" open onOpenChange={() => {}}>
+        Body
+      </Dialog>,
+    );
+    await settled();
+    expect(document.body.lastElementChild).toBe(portal());
+    expect(onTop(dialogPopup()!)).toBe(true);
+  });
+
+  it("stays above a fixed app bar added after it when the app raises --ouro-layer past the bar", async () => {
+    const bar = layer();
+    document.documentElement.style.setProperty("--ouro-layer", String(bar + 10));
+    try {
+      await render(
+      <Dialog title="Edit recipe" open onOpenChange={() => {}}>
+        Body
+      </Dialog>,
+    );
+      await settled();
+      // After the portal in the DOM, so at an equal level the bar would cover it.
+      appBar(bar);
+      expect(getComputedStyle(portal()).zIndex).toBe(String(bar + 10));
+      expect(onTop(dialogPopup()!)).toBe(true);
+    } finally {
+      document.documentElement.style.removeProperty("--ouro-layer");
+    }
   });
 });
 
@@ -478,7 +542,7 @@ describe("motion", () => {
   });
 });
 
-describe("iOS backdrop rule", () => {
+describe("Dialog iOS backdrop rule", () => {
   it("covers the visible screen on a page scrolled 2000px", async () => {
     const ios = document.createElement("style");
     ios.textContent = withIosRules(pageCss());
@@ -509,7 +573,7 @@ describe("iOS backdrop rule", () => {
   });
 });
 
-describe("dev messages", () => {
+describe("Dialog dev messages", () => {
   it("throws the exact fix when neither trigger nor open is passed", () => {
     // @ts-expect-error -- neither trigger nor open
     const dialog = <Dialog title="Edit">Body</Dialog>;
@@ -530,6 +594,13 @@ describe("dev messages", () => {
     // @ts-expect-error -- open without onOpenChange
     const dialog = <Dialog title="Edit" open>Body</Dialog>;
     expect(() => renderToString(dialog)).toThrow(`[ouro-ui] Dialog: open needs onOpenChange. Fix: ${FIX}`);
+  });
+
+  it.each([[""], [undefined]])("warns when the title is missing (%j): it names the dialog for screen readers", async (title) => {
+    await openUncontrolled({ title } as object);
+    expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      '[ouro-ui] Dialog: title is required; it names the dialog for screen readers. Fix: <Dialog title="Edit recipe">.',
+    ]);
   });
 
   it("warns once about guessed props and drops them from the DOM", async () => {
@@ -571,7 +642,7 @@ describe("dev messages", () => {
   });
 });
 
-describe("parts", () => {
+describe("Dialog parts", () => {
   it("renders an md DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix", async () => {
     await render(
       <DialogRoot open>

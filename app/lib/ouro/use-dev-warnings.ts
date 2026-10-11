@@ -23,11 +23,9 @@ export type DevWarning = readonly [problem: string, fix: string] | false | undef
 export function useDevWarnings(component: string, collect: (() => DevWarning[]) | undefined): void {
   const key = useRef({});
   useEffect(() => {
-    // The else path only exists in production bundles; scripts/dev-strip.test.mjs covers it.
-    /* istanbul ignore else */
+    /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
     if (process.env.NODE_ENV !== "production") {
-      // Components pass `collect` in every development render.
-      /* istanbul ignore if */
+      /* istanbul ignore if @preserve -- components pass `collect` in every development render */
       if (!collect) return;
       for (const warning of collect()) {
         if (warning) devWarn(component, warning[0], warning[1], key.current);

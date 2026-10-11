@@ -2,6 +2,9 @@ import { createElement, type ComponentProps, type ComponentType, type SVGProps }
 import { expectTypeOf } from "vitest";
 import { Button, type ButtonProps } from "~/components/ouro/button/button";
 
+// Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
+// fails the check if the line below it stops being an error.
+
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
 // Valid shapes.

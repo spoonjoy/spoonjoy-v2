@@ -72,8 +72,7 @@ export function useAppearanceClassNameCheck(
 ): void {
   const warned = useRef(false);
   useEffect(() => {
-    // The else path only exists in production bundles; scripts/dev-strip.test.mjs covers it.
-    /* istanbul ignore else */
+    /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
     if (process.env.NODE_ENV !== "production") {
       if (warned.current) return;
       const problem = findClassNameProblem(className);

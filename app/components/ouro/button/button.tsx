@@ -16,7 +16,7 @@ import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
-import { useOuro } from "~/lib/ouro/ouro-provider";
+import { useOuro } from "~/lib/ouro/use-ouro";
 import { toneWarning } from "~/lib/ouro/tones";
 
 /** An icon component, such as one from `lucide-react` or `@heroicons/react`. */
@@ -43,6 +43,8 @@ export interface ButtonBaseProps {
    * shadcn's `default` is `solid` (the default), `ghost` and `link` are `plain`, and
    * `destructive` and `secondary` are tones: `tone="destructive"`. Any other
    * string is a type error whose message names the fix.
+   * Variant is visual only. For a toggle, pass `aria-pressed`; for the current
+   * nav item, `aria-current="page"`.
    * @default "solid"
    */
   variant?:
@@ -277,6 +279,8 @@ function safeRel(rel: string | undefined): string {
  * Use `href` to navigate (it renders a link); use `type="submit"` in a form.
  * Use `Text` with an `<a>` instead when a link sits inside running text.
  *
+ * @see https://ourostack.github.io/ouro-ui/docs/button
+ *
  * @example
  * <Button onClick={save} loading={saving}>Save</Button>
  * <Button href="/recipes/new" startIcon={PlusIcon}>New recipe</Button>
@@ -310,7 +314,7 @@ export function Button(props: ButtonProps): JSX.Element {
   useAppearanceClassNameCheck(
     "Button",
     className,
-    process.env.NODE_ENV !== "production" ? buttonHint : /* istanbul ignore next -- production only */ "",
+    process.env.NODE_ENV !== "production" ? buttonHint : /* istanbul ignore next @preserve -- production only */ "",
   );
   useDevWarnings(
     "Button",
@@ -341,7 +345,7 @@ export function Button(props: ButtonProps): JSX.Element {
               link.disabled !== undefined && ["a link cannot be disabled", "<Button disabled> without href"],
           ];
         }
-      : /* istanbul ignore next -- production only */ undefined,
+      : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
   // Speak the busy state when loading turns on. The shared region sits outside the
@@ -354,13 +358,16 @@ export function Button(props: ButtonProps): JSX.Element {
 
   const classes = cn(base, sizes[size], looks[variant][tone], fullWidth && "w-full", className);
 
+  // The touch target comes first and the label is positioned, so the label paints above
+  // the target: the target still enlarges the hit area, and nothing covers the text
+  // (axe can check its contrast).
   const content = (
     <>
       <TouchTarget />
       <span
         data-ouro-label=""
         className={cn(
-          "inline-flex items-center gap-[inherit] transition-opacity duration-(--ouro-duration-fast) ease-out",
+          "relative inline-flex items-center gap-[inherit] transition-opacity duration-(--ouro-duration-fast) ease-out",
           loading && "opacity-0",
         )}
       >
@@ -374,7 +381,7 @@ export function Button(props: ButtonProps): JSX.Element {
 
   if (rest.href !== undefined) {
     // `type` and `disabled` are typed `never` on links; drop them if they arrive anyway.
-    const { href, target, rel, onClick, ref, type, disabled, ...anchorProps } = rest as Omit<
+    const { href, target, rel, onClick, ref, type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<
       ButtonLinkProps,
       keyof ButtonBaseProps
     >;

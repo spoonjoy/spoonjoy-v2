@@ -1,27 +1,7 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type AnchorHTMLAttributes,
-  type ComponentType,
-  type JSX,
-  type ReactNode,
-  type Ref,
-} from "react";
+import { useMemo, type JSX, type ReactNode } from "react";
+import { DefaultLink, OuroContext, type OuroContextValue, type OuroLinkComponent } from "~/lib/ouro/use-ouro";
 
-/** A component that renders an internal link, such as a router's `Link`. */
-export type OuroLinkComponent = ComponentType<
-  AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; ref?: Ref<HTMLAnchorElement> }
->;
-
-export interface OuroContextValue {
-  /** Renders internal links. Defaults to a plain `<a>`. */
-  linkComponent: OuroLinkComponent;
-}
-
-const DefaultLink: OuroLinkComponent = (props) => <a {...props} />;
-
-const OuroContext = createContext<OuroContextValue>({ linkComponent: DefaultLink });
+export type { OuroContextValue, OuroLinkComponent } from "~/lib/ouro/use-ouro";
 
 /** Props for {@link OuroProvider}. */
 export interface OuroProviderProps {
@@ -51,9 +31,4 @@ export function OuroProvider({ children, linkComponent }: OuroProviderProps): JS
     [linkComponent],
   );
   return <OuroContext.Provider value={value}>{children}</OuroContext.Provider>;
-}
-
-/** Reads the {@link OuroProvider} settings; returns defaults when there is no provider. */
-export function useOuro(): OuroContextValue {
-  return useContext(OuroContext);
 }

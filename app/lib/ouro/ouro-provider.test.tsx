@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
-import { OuroProvider, useOuro, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
+import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
+import { useOuro } from "~/lib/ouro/use-ouro";
 import { act } from "~/lib/ouro/testing/act";
 
 

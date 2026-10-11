@@ -450,12 +450,23 @@ describe("density", () => {
 });
 
 describe("press feedback", () => {
+  /**
+   * The button's scale once the press-in transition has finished: no transition is
+   * running and two reads in a row agree. A single read can land mid-transition.
+   */
   async function pressScale(button: HTMLElement) {
     await commands.pointerPress({ selector: `[data-press-probe]`, action: "down" });
     try {
-      // Wait for the press-in transition to settle.
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return getComputedStyle(button).scale;
+      let last = "";
+      await expect
+        .poll(() => {
+          const scale = getComputedStyle(button).scale;
+          const still = scale === last && button.getAnimations().length === 0;
+          last = scale;
+          return still;
+        }, { interval: 50 })
+        .toBe(true);
+      return last;
     } finally {
       await commands.pointerPress({ selector: `[data-press-probe]`, action: "up" });
     }
@@ -742,7 +753,7 @@ describe("touch target", () => {
   });
 });
 
-describe("server rendering", () => {
+describe("Button server rendering", () => {
   it("renders to a string without warnings", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const html = renderToString(
