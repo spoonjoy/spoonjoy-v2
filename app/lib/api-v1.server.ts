@@ -4179,6 +4179,13 @@ export async function runIdempotentApiV1Mutation(
     result = await write(db, reservation.record);
   } catch (error) {
     if (isD1Unavailable(error)) {
+      // The write may have committed before its answer was lost: if the operation finds it,
+      // answer it as committed. A recovery that D1 also refuses counts as not found.
+      const committed = await options.recoverInFlight?.(db, reservation.record, { stopped: true }).catch(() => null);
+      if (committed) {
+        await completeRecoveredIdempotencyKey(db, reservation.record, requestId, committed);
+        return apiV1IdempotentResponse(requestId, operation, committed, "committed");
+      }
       // The write may still commit. Keep its key, released for the client's retry of the same
       // clientMutationId, which takes it over with the same key id (see api-idempotency.server).
       // If D1 is still down, the key stays in flight, as before.
