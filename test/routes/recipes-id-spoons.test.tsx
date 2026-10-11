@@ -445,8 +445,6 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Cook logged.");
   });
 
-  // The close wait below may take 5 seconds, the default budget for a whole test, so this test
-  // gets room for its typing and two submits around it.
   it("keeps the SpoonDialog open with the note and a retryable message when the cook could not be saved", async () => {
     const mockData = {
       recipe: {
@@ -502,7 +500,9 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(tokens[1]).toBe(tokens[0]);
     expect(tokens[0]).toMatch(/^[0-9a-f-]{36}$/);
 
-    // A fresh opening starts without the old message.
+    // A fresh opening starts without the old message. Cancel is disabled while the second submit
+    // is in flight, so wait for its answer first: a click on the disabled button closes nothing.
+    await waitFor(() => expect(screen.getByRole("button", { name: /cancel/i })).toBeEnabled());
     // The dialog closes with an animation, which can outlast the default second under the
     // coverage run.
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
@@ -510,7 +510,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     await userEvent.click(screen.getByRole("button", { name: /log cook/i }));
     await screen.findByRole("heading", { name: /log a cook/i });
     expect(screen.queryByRole("alert")).toBeNull();
-  }, 20_000);
+  });
 
   it("refuses an oversized spoon upload with 413 before buffering the whole body", async () => {
     const upload = oversizedMultipartUpload("http://localhost/recipes/x", cookSessionCookie);
