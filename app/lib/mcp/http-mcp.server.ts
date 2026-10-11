@@ -19,8 +19,8 @@ import {
   D1_WRITE_RETRY_AFTER_SECONDS,
   D1_WRITE_UNAVAILABLE_CODE,
   D1_WRITE_UNAVAILABLE_MESSAGE,
-  isD1Unavailable,
 } from "~/lib/d1-write-retry.server";
+import { isSpoonjoyOperationRetryableAfterD1Error } from "~/lib/spoonjoy-api.server";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import {
   handleJsonRpcMessage,
@@ -454,9 +454,9 @@ export async function handleMcpHttpRequest(params: HandleMcpHttpRequestParams): 
             },
           );
         }
-        if (isD1Unavailable(error)) {
-          // D1 failed to answer after the write's own retries. Tell the agent to call the tool
-          // again in a moment, as a retryable error rather than an internal one.
+        if (isSpoonjoyOperationRetryableAfterD1Error(name, error)) {
+          // D1 was briefly unavailable, and calling the tool again cannot apply a write twice.
+          // Tell the agent to call it again in a moment, as a retryable error.
           retryAfterSeconds = D1_WRITE_RETRY_AFTER_SECONDS;
           throw new JsonRpcError(
             TEMPORARILY_UNAVAILABLE_JSON_RPC_CODE,

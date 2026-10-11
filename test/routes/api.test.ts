@@ -9,6 +9,7 @@ import { getLocalDb } from "~/lib/db.server";
 import { sessionStorage } from "~/lib/session.server";
 import * as recipeImport from "~/lib/recipe-import.server";
 import * as spoonjoyApi from "~/lib/spoonjoy-api.server";
+import { D1WriteUnavailableError } from "~/lib/d1-write-retry.server";
 import { ImportRecipeError } from "~/lib/recipe-import.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { getOrCreateIngredientRef } from "../utils";
@@ -336,10 +337,12 @@ describe("Spoonjoy REST API route", () => {
     }), "nope")))).resolves.toMatchObject({ ok: false, error: { status: 404 } });
   });
 
-  it("answers a retryable 503 with Retry-After when D1 is briefly unavailable", async () => {
+  it("answers a retryable 503 with Retry-After when a write gave up because D1 was briefly unavailable", async () => {
     const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
     const credential = await createApiCredential(db, user.id, "Unavailable client", { scopes: ["shopping_list:write"] });
-    vi.spyOn(spoonjoyApi, "callSpoonjoyApiOperation").mockRejectedValueOnce(new Error("D1_ERROR: Network connection lost."));
+    vi.spyOn(spoonjoyApi, "callSpoonjoyApiOperation").mockRejectedValueOnce(
+      new D1WriteUnavailableError("shopping_list.add_item", new Error("D1_ERROR: Network connection lost.")),
+    );
     const telemetryEnv = { POSTHOG_KEY: "ph_test" };
 
     try {
@@ -365,6 +368,25 @@ describe("Spoonjoy REST API route", () => {
         },
       });
       expect(vi.mocked(captureException)).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("keeps an unwrapped write's transient D1 error internal, since a second call could apply it twice", async () => {
+    const user = await db.user.create({ data: { email: uniqueEmail(), username: faker.internet.username() } });
+    const credential = await createApiCredential(db, user.id, "Ambiguous client", { scopes: ["shopping_list:write"] });
+    vi.spyOn(spoonjoyApi, "callSpoonjoyApiOperation").mockRejectedValueOnce(new Error("D1_ERROR: Network connection lost."));
+
+    try {
+      const response = await action(routeArgs(new UndiciRequest("http://localhost/api/shopping-list/items", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${credential.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Eggs" }),
+      }), "shopping-list/items"));
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get("Retry-After")).toBeNull();
     } finally {
       vi.restoreAllMocks();
     }
