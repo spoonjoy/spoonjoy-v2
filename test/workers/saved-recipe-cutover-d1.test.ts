@@ -25,6 +25,7 @@ import "./helpers/recipe-atomic-writes-d1-suite";
 import "./helpers/shopping-cookbook-atomic-writes-d1-suite";
 import "./helpers/webauthn-sign-in-atomic-d1-suite";
 import "./helpers/transient-write-retry-d1-suite";
+import "./helpers/token-write-retry-d1-suite";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 
 interface TestD1Statement {
