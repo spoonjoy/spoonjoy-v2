@@ -44,6 +44,8 @@ Cookbook tools are deliberately owner-scoped: agents can only list, fetch, creat
 
 Recipe cleanup is owner-scoped too. `delete_recipe` sets `deletedAt` on the target recipe, hides it from normal `get_recipe`/search/cookbook payloads, and returns `deleted: false` if the same owner repeats cleanup for an already-deleted recipe.
 
+Logging a cook is replay-safe with an `idempotencyKey`. Pass a key of 8 to 100 letters, digits, `_` or `-` to `create_spoon`, and send the same key again if an answer is lost or the server answers `temporarily_unavailable`: the repeat returns the cook the first call logged, with its cover, and `mutation.replayed: true`, instead of logging the cook twice. The same key on a different recipe is refused with `409`.
+
 ## Image Uploads
 
 Agents should upload image bytes first, then assign the returned URL:

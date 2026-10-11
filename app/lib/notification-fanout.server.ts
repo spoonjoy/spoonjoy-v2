@@ -65,6 +65,8 @@ export async function fanoutFellowChefOriginCook(
           actorId: input.spoonerId,
           recipientId: recipient.chefId,
           kind: "fellow_chef_origin_cook",
+          // A recipe has one origin cook, so it notifies each fellow chef once.
+          triggerKey: input.recipeId,
           payload: {
             recipeId: input.recipeId,
             recipeTitle: input.recipeTitle,

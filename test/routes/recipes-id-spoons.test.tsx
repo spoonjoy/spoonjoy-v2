@@ -501,8 +501,10 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(tokens[0]).toMatch(/^[0-9a-f-]{36}$/);
 
     // A fresh opening starts without the old message.
+    // The dialog closes with an animation, which can outlast the default second under the
+    // coverage run.
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull(), { timeout: 5000 });
     await userEvent.click(screen.getByRole("button", { name: /log cook/i }));
     await screen.findByRole("heading", { name: /log a cook/i });
     expect(screen.queryByRole("alert")).toBeNull();

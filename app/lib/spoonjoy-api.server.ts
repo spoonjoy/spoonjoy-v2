@@ -1,5 +1,5 @@
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
-import { D1WriteUnavailableError, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
+import { D1WriteUnavailableError, formWriteToken, idForWriteToken, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import type {
   Prisma,
   PrismaClient as PrismaClientType,
@@ -105,6 +105,7 @@ import {
 } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
+import { retryD1Write as retryApiTokenRevoke } from "~/lib/d1-write-retry.server";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -1511,12 +1512,14 @@ const revokeApiTokenTool: SpoonjoyApiOperation = {
 
     if (!credential) throw new Error("API token not found");
 
+    // Sets a time chosen once, so running it again after a lost answer leaves the same row.
+    const revokedAt = new Date();
     const updated = credential.revokedAt
       ? credential
-      : await context.db.apiCredential.update({
+      : await retryApiTokenRevoke({ scope: "api_credential.revoke" }, () => context.db.apiCredential.update({
           where: { id: credential.id },
-          data: { revokedAt: new Date() },
-        });
+          data: { revokedAt },
+        }));
 
     return json({
       revoked: !credential.revokedAt,
@@ -3432,6 +3435,19 @@ const getShoppingListTool: SpoonjoyApiOperation = {
   },
 };
 
+/** Whether a spoon was its chef's first cook of their own recipe, judged against earlier spoons. */
+async function wasOriginCook(
+  db: PrismaClientType,
+  spoon: { id: string; chefId: string; recipeId: string; createdAt: Date },
+): Promise<boolean> {
+  const recipe = await db.recipe.findUnique({ where: { id: spoon.recipeId }, select: { chefId: true } });
+  if (recipe?.chefId !== spoon.chefId) return false;
+  const earlier = await db.recipeSpoon.count({
+    where: { chefId: spoon.chefId, recipeId: spoon.recipeId, deletedAt: null, id: { not: spoon.id }, createdAt: { lt: spoon.createdAt } },
+  });
+  return earlier === 0;
+}
+
 const createSpoonTool: SpoonjoyApiOperation = {
   name: "create_spoon",
   description: "Create a RecipeSpoon (cook event) authored by the authenticated principal.",
@@ -3444,6 +3460,10 @@ const createSpoonTool: SpoonjoyApiOperation = {
       note: { type: "string" },
       nextTime: { type: "string" },
       cookedAt: { type: "string" },
+      idempotencyKey: {
+        type: "string",
+        description: "Stable key (8-100 letters, digits, '_' or '-') for replay-safe creation: a repeat with the same key returns the spoon the first call made instead of logging a second cook.",
+      },
     },
     required: ["recipeId"],
     additionalProperties: false,
@@ -3452,6 +3472,20 @@ const createSpoonTool: SpoonjoyApiOperation = {
     rejectOwnerEmail(args);
     const principal = requireApiPrincipal(context.principal);
     const recipeId = requiredString(args, "recipeId");
+    const idempotencyKeyArg = optionalString(args.idempotencyKey);
+    const idempotencyKey = idempotencyKeyArg === undefined ? null : formWriteToken(idempotencyKeyArg);
+    if (idempotencyKeyArg !== undefined && idempotencyKey === null) {
+      throw new Error("idempotencyKey must be 8-100 letters, digits, '_' or '-'");
+    }
+    // A key derives the spoon's id, so a repeat after a lost answer finds the spoon the first call
+    // wrote instead of logging the cook twice. The chef's id is part of the derivation.
+    const spoonId = idempotencyKey ? await idForWriteToken("mcp.create_spoon", principal.id, idempotencyKey) : undefined;
+    const replayedSpoon = spoonId
+      ? await context.db.recipeSpoon.findFirst({ where: { id: spoonId, chefId: principal.id } })
+      : null;
+    if (replayedSpoon && replayedSpoon.recipeId !== recipeId) {
+      throw new ApiAuthError("idempotencyKey was already used for a different request", 409);
+    }
     const photoUrl = optionalString(args.photoUrl) ?? null;
     const photoAssignment = photoUrl
       ? await validateSpoonPhotoAssignment({
@@ -3467,35 +3501,46 @@ const createSpoonTool: SpoonjoyApiOperation = {
       throw new Error("cookedAt must be a valid ISO date string");
     }
 
-    const result = await createRecipeSpoon(context.db, {
-      chefId: principal.id,
-      recipeId,
-      photoUrl,
-      note: optionalString(args.note) ?? null,
-      nextTime: optionalString(args.nextTime) ?? null,
-      cookedAt,
-    });
+    const result = replayedSpoon
+      ? { spoon: replayedSpoon, isOriginCook: await wasOriginCook(context.db, replayedSpoon) }
+      : await createRecipeSpoon(context.db, {
+          id: spoonId,
+          chefId: principal.id,
+          recipeId,
+          photoUrl,
+          note: optionalString(args.note) ?? null,
+          nextTime: optionalString(args.nextTime) ?? null,
+          cookedAt,
+        });
 
-    // Notify the recipe owner when someone else cooks their recipe.
-    try {
-      const env = context.env ?? {};
-      const vapid = getVapidConfig(env as VapidEnv);
-      const notifyTask = notifySpoonOnMyRecipe(
-        context.db,
-        { recipeId, spoonerId: principal.id },
-        {
-          vapid,
-          waitUntil: context.waitUntil,
-          postHogConfig: resolvePostHogServerConfig(env),
-        },
-      );
-      await runOrSchedule(context, notifyTask);
-    } catch {
-      // VAPID not configured — skip silently.
+    // Notify the recipe owner when someone else cooks their recipe. A replay already notified.
+    if (!replayedSpoon) {
+      try {
+        const env = context.env ?? {};
+        const vapid = getVapidConfig(env as VapidEnv);
+        const notifyTask = notifySpoonOnMyRecipe(
+          context.db,
+          { recipeId, spoonerId: principal.id },
+          {
+            vapid,
+            waitUntil: context.waitUntil,
+            postHogConfig: resolvePostHogServerConfig(env),
+          },
+        );
+        await runOrSchedule(context, notifyTask);
+      } catch {
+        // VAPID not configured — skip silently.
+      }
     }
 
     let coverPayload: ReturnType<typeof formatCover> | null = null;
-    if (result.isOriginCook && result.spoon.photoUrl) {
+    // A replay returns the cover its first call made; it makes one only if that call stopped first.
+    const existingCover = replayedSpoon
+      ? await context.db.recipeCover.findFirst({ where: { recipeId, sourceSpoonId: replayedSpoon.id } })
+      : null;
+    if (existingCover) {
+      coverPayload = formatCover(existingCover);
+    } else if (result.isOriginCook && result.spoon.photoUrl) {
       const recipe = await context.db.recipe.findUniqueOrThrow({
         where: { id: recipeId },
         select: { id: true, title: true },
@@ -3522,8 +3567,8 @@ const createSpoonTool: SpoonjoyApiOperation = {
     }
 
     // Fan-out fellow_chef_origin_cook to every chef the spooner has previously
-    // engaged with — runs only when the spoon was an origin cook.
-    if (result.isOriginCook) {
+    // engaged with — runs only when the spoon was an origin cook, and not again on a replay.
+    if (result.isOriginCook && !replayedSpoon) {
       try {
         const env = context.env ?? {};
         const vapid = getVapidConfig(env as VapidEnv);
@@ -3555,6 +3600,7 @@ const createSpoonTool: SpoonjoyApiOperation = {
       spoon: formatSpoon(result.spoon),
       isOriginCook: result.isOriginCook,
       cover: coverPayload,
+      ...(idempotencyKey ? { mutation: { idempotencyKey, replayed: replayedSpoon !== null } } : {}),
     });
   },
 };
