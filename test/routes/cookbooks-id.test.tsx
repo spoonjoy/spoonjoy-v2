@@ -1944,6 +1944,10 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
         expect(await screen.findByRole("status")).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        // The page stays, and the dialog finishes closing before the test ends.
+        await waitFor(() => {
+          expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
+        });
         expect(screen.getByRole("heading", { name: "Original Title", level: 1 })).toBeInTheDocument();
       });
 
