@@ -391,14 +391,24 @@ async function recordNativeSession() {
     body: { clientMutationId: "cm_step_delete" },
     endpoint: "DELETE /api/v1/recipes/{id}/steps/{stepId}",
   });
+  // The app sends the recipe's updatedAt as its edit read it. An edit based on an older version is
+  // turned down with the recipe as it is now; keeping the cook's edit sends it again, with the same
+  // clientMutationId, based on that current version.
+  const recipeEdit = {
+    clientMutationId: "cm_recipe_update",
+    title: "Lemon Pantry Pasta",
+    description: "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
+    servings: "4",
+  };
+  const editConflict = await api("recipe-update-edit-conflict", "PATCH", `recipes/${recipeId}`, {
+    token: chef,
+    body: { ...recipeEdit, expectedUpdatedAt: "2025-01-01T00:00:00.000Z" },
+    endpoint: "PATCH /api/v1/recipes/{id}",
+    status: 409,
+  });
   await api("recipe-update", "PATCH", `recipes/${recipeId}`, {
     token: chef,
-    body: {
-      clientMutationId: "cm_recipe_update",
-      title: "Lemon Pantry Pasta",
-      description: "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
-      servings: "4",
-    },
+    body: { ...recipeEdit, expectedUpdatedAt: editConflict.error.details.currentUpdatedAt },
     endpoint: "PATCH /api/v1/recipes/{id}",
   });
 
