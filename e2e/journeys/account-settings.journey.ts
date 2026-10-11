@@ -1,7 +1,8 @@
 // Account settings on both devices (spec journey 11), as per-run scratch user 5: rename the
 // account, and see the new username on the chef's recipe and profile while the old profile URL is
 // gone; add a profile photo through the crop dialog, and see it on the kitchen, the recipe and the
-// profile; change the password, sign out, and sign back in with the new one. Passkeys, OAuth
+// profile; see an email change refused without the current password; change the password, sign
+// out, and sign back in with the new one. Passkeys, OAuth
 // unlinking, API token revocation and notifications are left to their own journeys.
 //
 // Each device signs in as its own account (scratch 5's base account on iPhone, its desktop twin on
@@ -136,6 +137,23 @@ test.describe("Account settings", () => {
     await verifyAfterReload(async () => {
       await expect(userInfo(page)).toContainText(newName);
       await expect(userInfo(page)).not.toContainText(firstName);
+    });
+
+    // --- Changing the email needs the current password (audit 2026-10-09, finding 2): without
+    // it the change is refused and the stored email stays, so a stolen session can't move the
+    // account to another address.
+    await waitForHydration(page);
+    await userInfo(page).getByRole("button", { name: "Edit", exact: true }).click();
+    const movedEmail = `codex-e2e-moved-${runId}@example.com`;
+    await userInfo(page).getByLabel("Email", { exact: true }).fill(movedEmail);
+    await userInfo(page).getByRole("button", { name: "Save", exact: true }).click();
+    await expect(userInfo(page).getByText("Enter your current password to confirm it's you.", { exact: true })).toBeVisible();
+    await expect(userInfo(page).getByLabel("Current password", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    await testInfo.attach("email-change-needs-password", { body: await userInfo(page).screenshot(), contentType: "image/png" });
+
+    await verifyAfterReload(async () => {
+      await expect(userInfo(page)).toContainText(account.email);
+      await expect(userInfo(page)).not.toContainText(movedEmail);
     });
 
     // The recipe's chef link carries the new username, and leads to the profile under it.
