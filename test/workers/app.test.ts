@@ -457,7 +457,15 @@ describe("Cloudflare worker app", () => {
 
     await worker.fetch(request, env, context());
 
-    expect(apiMocks.authenticateApiRequest).toHaveBeenCalledWith(expect.any(Function), request, env, { d1: binding });
+    // The request sees the binding wrapped for transient-error retries (d1-transient-retry.server.ts):
+    // a copy of the environment whose DB forwards to the real binding.
+    const [, calledRequest, calledEnv, options] = apiMocks.authenticateApiRequest.mock.calls.at(-1)!;
+    expect(calledRequest).toBe(request);
+    expect(calledEnv).not.toBe(env);
+    expect(calledEnv).toEqual({ ...env, DB: expect.anything() });
+    expect(options).toEqual({ d1: calledEnv.DB });
+    calledEnv.DB.prepare("SELECT 1");
+    expect(binding.prepare).toHaveBeenCalledWith("SELECT 1");
     expect(apiMocks.getDb).not.toHaveBeenCalled();
   });
 

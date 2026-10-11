@@ -93,6 +93,7 @@ export default defineConfig({
       "**/.claude/**",
       "test/workers/cook-session-bootstrap.test.ts",
       "test/workers/cook-session-protocol.test.ts",
+      "test/workers/d1-transient-retry.test.ts",
       "test/workers/saved-recipe-cutover-d1.test.ts",
       "scripts/bench/**",
       // Ouro UI's shipped tests need a real browser; vitest.ouro.config.ts runs them.

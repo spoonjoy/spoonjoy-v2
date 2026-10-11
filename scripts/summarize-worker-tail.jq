@@ -19,8 +19,24 @@
 #   an `errorLogs` count. React Router turns a loader or action error into a 500 that ends "ok",
 #   and logs the error with console.error, so that line is the only record of the exception.
 #   Without the switch (a production tail, or any other caller) no log line is kept.
+#   tailReconnects: how many times the tail had to reconnect after its connection dropped
+#   (default 0). Events between connections are lost, so a reconnected tail is incomplete too.
+#
+# Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
+# d1_transient_error report (app/lib/d1-transient-retry.server.ts): only its fixed fields are read,
+# and only counts leave the program.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
+def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
+
+# The d1_transient_error reports in an event's log lines, at any level, with only their fixed
+# fields: operation ("read" or "write") and willRetry.
+def d1_transient_reports:
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == "d1_transient_error")
+    | { operation: (if .operation == "read" then "read" else "write" end), willRetry: (.willRetry == true) }];
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:
@@ -179,8 +195,9 @@ def by_path: group_by(path_pattern)
 | def with_error_logs($index):
     $events[$index] | invocation + (if $errorLogs == null then {} else { errorLogs: ($errorLogs.lines[$index | tostring] // []) } end);
 {
-  complete: ($tailAliveAtStop == true and length > 0),
+  complete: ($tailAliveAtStop == true and length > 0 and tail_reconnects == 0),
   tailAliveAtStop: ($tailAliveAtStop == true),
+  tailReconnects: tail_reconnects,
   firstEventTimestamp: (timestamps | if length == 0 then null else min end),
   lastEventTimestamp: (timestamps | if length == 0 then null else max end),
   totalInvocations: length,
@@ -196,6 +213,13 @@ def by_path: group_by(path_pattern)
   # Requests that waited over 2 s on under 5 ms of CPU: stuck on a promise or on I/O, not working.
   stalledInvocations: ([.[] | select((.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000)] | length),
   firstExceptions: [$exceptionIndexes[] | with_error_logs(.)],
+  # Transient D1 failures the Worker reported: retried ones a later attempt may have absorbed,
+  # and ones that reached the caller (a write whose outcome is unknown, or a read out of retries).
+  d1TransientErrors: ([.[] | d1_transient_reports[]] as $reports
+    | { total: ($reports | length),
+        retried: ([$reports[] | select(.willRetry)] | length),
+        notRetried: ([$reports[] | select(.willRetry | not)] | length),
+        notRetriedWrites: ([$reports[] | select((.willRetry | not) and .operation == "write")] | length) }),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints

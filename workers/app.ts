@@ -3,6 +3,7 @@ import * as serverBuild from "virtual:react-router/server-build";
 import { canonicalizeRequestUrlForHost } from "../app/lib/canonical-host.server";
 import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server";
 import { d1Binding } from "../app/lib/d1-read.server";
+import { withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
@@ -266,7 +267,8 @@ function finalizeResponse(
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, rawEnv, ctx) {
+    const env = withTransientD1Retry(rawEnv);
     const oauthPreflight = oauthCorsPreflightResponse(request);
     if (oauthPreflight) {
       return finalizeResponse(oauthPreflight, env);
@@ -350,6 +352,6 @@ export default {
   // The cron trigger in wrangler.json. The photo sweep runs in PHOTO_SWEEP_MODE, which is a dry
   // run unless that setting is exactly "apply" (see app/lib/photo-lifecycle.server.ts).
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(runScheduledPhotoSweep(env));
+    ctx.waitUntil(runScheduledPhotoSweep(withTransientD1Retry(env)));
   },
 } satisfies ExportedHandler<CloudflareEnvironment>;

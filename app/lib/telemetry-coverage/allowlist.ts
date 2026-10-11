@@ -103,6 +103,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch only recovers a unique-constraint idempotency race or re-throws; the API route layer (api-v1.server.ts) captures the surfaced exception.",
   },
   {
+    file: "app/lib/d1-transient-retry.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch retries a read that failed with a transient D1 error and re-throws every other error, and the last transient one, unchanged; the route layer's handleError (entry.server.tsx) captures the surfaced exception. A second catch only keeps a throwing reporter from changing the query's outcome.",
+  },
+  {
     file: "app/lib/recipe-write-dedupe.server.ts",
     category: "rethrow",
     reason:
