@@ -487,6 +487,24 @@ describe("API v1 public telemetry", () => {
     expect(serialized).not.toContain("Telemetry Cookbook");
     expect(serialized).not.toContain(fixture.cookbook.title);
   });
+
+  it("captures public chef profile and chef-graph reads without the chef's identifier", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const reads = [
+      { splat: `users/${user.username}`, template: "/api/v1/users/{identifier}", operation: "users.get" },
+      { splat: `users/${user.username}/fellow-chefs`, template: "/api/v1/users/{identifier}/fellow-chefs", operation: "users.fellow-chefs.list" },
+      { splat: `users/${user.username}/kitchen-visitors`, template: "/api/v1/users/{identifier}/kitchen-visitors", operation: "users.kitchen-visitors.list" },
+    ];
+
+    for (const [index, read] of reads.entries()) {
+      const requestId = `req_user_public_${index}`;
+      const response = await loader(routeArgs(publicRequest(`http://localhost/api/v1/${read.splat}?page=1`, requestId), read.splat).args);
+      expect(response.status).toBe(200);
+      expectSafeApiV1Event(read.template, requestId);
+      expect(apiV1Event(read.template, requestId)?.properties).toMatchObject({ operation: read.operation });
+    }
+    expect(JSON.stringify(captureInputs())).not.toContain(user.username);
+  });
 });
 
 describe("API v1 mutation and validation telemetry", () => {

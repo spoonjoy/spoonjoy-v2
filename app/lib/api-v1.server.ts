@@ -1,7 +1,14 @@
 import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
-import { listFellowChefs, listKitchenVisitors, type FellowChefRow } from "~/lib/fellow-chefs.server";
+import {
+  DEFAULT_LIMIT as CHEF_GRAPH_DEFAULT_LIMIT,
+  MAX_LIMIT as CHEF_GRAPH_MAX_LIMIT,
+  listFellowChefs,
+  listKitchenVisitors,
+  type FellowChefRow,
+} from "~/lib/fellow-chefs.server";
+import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
 import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, RecipeCover, RecipeSpoon } from "@prisma/client";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
@@ -633,6 +640,12 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "cookbooks.recipes.add";
     case "DELETE cookbook-recipes":
       return "cookbooks.recipes.remove";
+    case "GET user":
+      return "users.get";
+    case "GET user-fellow-chefs":
+      return "users.fellow-chefs.list";
+    case "GET user-kitchen-visitors":
+      return "users.kitchen-visitors.list";
     case "GET me":
       return "account.read";
     case "PATCH me":
@@ -5045,6 +5058,213 @@ async function handleAccountExport(args: ApiV1RouteArgs, requestId: string, prin
   );
 }
 
+// Public chef profiles: the same reads as the web profile (`/users/:identifier`) and its
+// chef-graph pages, shaped for the native profile surface. Every recipe, cookbook and
+// spoon that is not deleted is public, as on the web; the identifier is a username or a
+// user id, and an id answers directly instead of redirecting.
+const API_V1_PROFILE_RECIPE_LIMIT = 24;
+
+type ChefGraphDirection = "fellow-chefs" | "kitchen-visitors";
+
+const CHEF_GRAPH_EMPTY_STATES: Record<ChefGraphDirection, { title: string; message: string; systemImage: string }> = {
+  "fellow-chefs": {
+    title: "No fellow chefs yet",
+    message: "Fellow chefs appear after this chef cooks, forks, or saves recipes from other chefs.",
+    systemImage: "person.2",
+  },
+  "kitchen-visitors": {
+    title: "No kitchen visitors yet",
+    message: "Kitchen visitors appear after other chefs cook, fork, or save this chef's recipes.",
+    systemImage: "person.crop.circle.badge.clock",
+  },
+};
+
+function profileHref(username: string): string {
+  return `/users/${encodeURIComponent(username)}`;
+}
+
+function profileJoinedLabel(createdAt: Date): string {
+  const month = createdAt.toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+  return `Joined ${month}`;
+}
+
+function profileCoverFields(
+  recipe: Parameters<typeof getRecipeCoverDisplay>[0],
+  covers: RecipeCover[],
+  origin: string,
+) {
+  const display = getRecipeCoverDisplay(recipe, covers);
+  const coverImageUrl = display ? publicAssetUrl(origin, display.displayUrl) : null;
+  return {
+    coverImageUrl,
+    coverProvenanceLabel: coverImageUrl ? display!.provenanceLabel : null,
+  };
+}
+
+function parseProfileRecipeCursor(url: URL): string | null {
+  const raw = url.searchParams.get("after");
+  if (raw === null || raw === "") return null;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(raw)) {
+    throw new ApiV1Error("invalid_cursor", "after must be a recipe id from recipesNextCursor");
+  }
+  return raw;
+}
+
+function parseChefGraphPage(url: URL): number {
+  const raw = url.searchParams.get("page");
+  if (raw === null || raw.trim() === "") return 1;
+  const page = Number(raw);
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new ApiV1Error("validation_error", "page must be a positive integer");
+  }
+  return page;
+}
+
+function parseChefGraphLimit(url: URL): number {
+  const raw = url.searchParams.get("limit");
+  if (raw === null || raw.trim() === "") return CHEF_GRAPH_DEFAULT_LIMIT;
+  const limit = Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > CHEF_GRAPH_MAX_LIMIT) {
+    throw new ApiV1Error("validation_error", `limit must be an integer between 1 and ${CHEF_GRAPH_MAX_LIMIT}`);
+  }
+  return limit;
+}
+
+function publicProfileHeaders(principal: ApiPrincipal | null) {
+  return principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders();
+}
+
+async function handleUserProfile(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal | null, identifier: string) {
+  const origin = publicContentOrigin(args);
+  const after = parseProfileRecipeCursor(new URL(args.request.url));
+  const d1 = requestD1(args.context);
+  const readInput = { identifier, recipeLimit: API_V1_PROFILE_RECIPE_LIMIT + 1, recipeAfter: after };
+  const rows = d1
+    ? await readChefProfileFromD1(d1, readInput)
+    : await readChefProfileWithPrisma(await getRequestDb(args.context), readInput);
+  const profileUser = rows.profileUser;
+  if (!profileUser) {
+    throw new ApiV1Error("not_found", "Chef not found", { resource: "user", identifier });
+  }
+
+  const recipes = rows.recipes.slice(0, API_V1_PROFILE_RECIPE_LIMIT);
+  const recipesNextCursor = rows.recipes.length > API_V1_PROFILE_RECIPE_LIMIT ? recipes[recipes.length - 1]!.id : null;
+  const href = profileHref(profileUser.username);
+  const recipeLink = (id: string) => {
+    const recipeHref = `/recipes/${id}`;
+    return { href: recipeHref, canonicalUrl: canonicalUrl(origin, recipeHref) };
+  };
+
+  return apiV1Success(requestId, {
+    profile: {
+      id: profileUser.id,
+      username: profileUser.username,
+      photoUrl: publicAssetUrl(origin, profileUser.photoUrl),
+      joinedLabel: profileJoinedLabel(profileUser.createdAt),
+      joinedAt: profileUser.createdAt.toISOString(),
+      href,
+      canonicalUrl: canonicalUrl(origin, href),
+    },
+    isOwner: principal?.id === profileUser.id,
+    recipes: recipes.map(({ covers, ...recipe }) => ({
+      id: recipe.id,
+      title: recipe.title,
+      description: recipe.description,
+      servings: recipe.servings,
+      ...profileCoverFields(recipe, covers, origin),
+      ...recipeLink(recipe.id),
+    })),
+    recipeCount: rows.recipeCount,
+    recipesNextCursor,
+    cookbooks: rows.cookbooks.map((cookbook) => {
+      const cookbookHref = `/cookbooks/${cookbook.id}`;
+      return {
+        id: cookbook.id,
+        title: cookbook.title,
+        recipeCount: cookbook._count.recipes,
+        recipes: cookbook.recipes.map(({ recipe }) => ({
+          id: recipe.id,
+          title: recipe.title,
+          ...profileCoverFields(recipe, recipe.covers, origin),
+          ...recipeLink(recipe.id),
+        })),
+        href: cookbookHref,
+        canonicalUrl: canonicalUrl(origin, cookbookHref),
+      };
+    }),
+    recentSpoons: rows.recentSpoons.map((spoon) => ({
+      id: spoon.id,
+      cookedAt: spoon.cookedAt.toISOString(),
+      photoUrl: publicAssetUrl(origin, spoon.photoUrl),
+      note: spoon.note,
+      nextTime: spoon.nextTime,
+      chef: {
+        id: spoon.chef.id,
+        username: spoon.chef.username,
+        photoUrl: publicAssetUrl(origin, spoon.chef.photoUrl),
+      },
+      recipe: { id: spoon.recipe.id, title: spoon.recipe.title, chefId: spoon.recipe.chefId },
+      ...profileCoverFields(spoon.recipe, spoon.recipe.covers, origin),
+    })),
+    fellowChefsCount: rows.fellowChefsCount,
+    kitchenVisitorsCount: rows.kitchenVisitorsCount,
+  }, 200, publicProfileHeaders(principal));
+}
+
+async function handleUserChefGraph(
+  args: ApiV1RouteArgs,
+  requestId: string,
+  principal: ApiPrincipal | null,
+  identifier: string,
+  direction: ChefGraphDirection,
+) {
+  const origin = publicContentOrigin(args);
+  const url = new URL(args.request.url);
+  const page = parseChefGraphPage(url);
+  const pageSize = parseChefGraphLimit(url);
+  const db = await getRequestDb(args.context);
+  const userSelect = { id: true, username: true } as const;
+  const profileUser =
+    (await db.user.findUnique({ where: { username: identifier }, select: userSelect })) ??
+    (await db.user.findUnique({ where: { id: identifier }, select: userSelect }));
+  if (!profileUser) {
+    throw new ApiV1Error("not_found", "Chef not found", { resource: "user", identifier });
+  }
+
+  const list = direction === "fellow-chefs" ? listFellowChefs : listKitchenVisitors;
+  const result = await list(db, profileUser.id, { limit: pageSize, offset: (page - 1) * pageSize });
+  const href = profileHref(profileUser.username);
+  const hasMore = page * pageSize < result.total;
+
+  return apiV1Success(requestId, {
+    profile: {
+      id: profileUser.id,
+      username: profileUser.username,
+      href,
+      canonicalUrl: canonicalUrl(origin, href),
+    },
+    direction,
+    isOwner: principal?.id === profileUser.id,
+    page,
+    pageSize,
+    total: result.total,
+    nextCursor: hasMore ? String(page + 1) : null,
+    rows: result.rows.map((row) => {
+      const rowHref = profileHref(row.username);
+      return {
+        chefId: row.chefId,
+        username: row.username,
+        photoUrl: publicAssetUrl(origin, row.photoUrl),
+        href: rowHref,
+        canonicalUrl: canonicalUrl(origin, rowHref),
+        interactionCounts: row.interactionCounts,
+        latestInteractionAt: row.latestInteractionAt.toISOString(),
+      };
+    }),
+    emptyState: result.rows.length === 0 ? CHEF_GRAPH_EMPTY_STATES[direction] : null,
+  }, 200, publicProfileHeaders(principal));
+}
+
 async function handleNativeChefsRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
@@ -7266,6 +7486,23 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && segments[0] === "recipes" && segments.length === 2) {
       const principal = await authorize(path);
       const response = await handleRecipeDetail(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && segments[0] === "users" && segments.length === 2) {
+      const principal = await authorize(path);
+      const response = await handleUserProfile(args, requestId, principal, segments[1]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (
+      args.request.method === "GET" &&
+      segments[0] === "users" &&
+      segments.length === 3 &&
+      (segments[2] === "fellow-chefs" || segments[2] === "kitchen-visitors")
+    ) {
+      const principal = await authorize(path);
+      const response = await handleUserChefGraph(args, requestId, principal, segments[1], segments[2]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 
