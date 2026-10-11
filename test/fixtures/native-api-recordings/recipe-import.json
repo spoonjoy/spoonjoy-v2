@@ -4,10 +4,10 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_086",
+    "requestId": "opaque_091",
     "data": {
       "recipe": {
-        "id": "id_019",
+        "id": "id_020",
         "title": "Garlic Bread",
         "description": null,
         "servings": "4",
@@ -19,11 +19,11 @@
         "coverProvenanceLabel": null,
         "coverSourceType": null,
         "coverVariant": null,
-        "href": "/recipes/id_019",
-        "canonicalUrl": "http://localhost/recipes/id_019",
+        "href": "/recipes/id_020",
+        "canonicalUrl": "http://localhost/recipes/id_020",
         "attribution": {
           "creditText": "Garlic Bread by contract_chef on Spoonjoy",
-          "canonicalUrl": "http://localhost/recipes/id_019",
+          "canonicalUrl": "http://localhost/recipes/id_020",
           "sourceUrl": "https://recipes.example/garlic-bread",
           "sourceHost": "recipes.example",
           "sourceRecipe": null
@@ -40,7 +40,7 @@
       "existingRecipeId": null,
       "coverPending": false,
       "mutation": {
-        "clientMutationId": "opaque_087",
+        "clientMutationId": "opaque_092",
         "replayed": false
       }
     }

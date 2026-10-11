@@ -4,7 +4,7 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_038",
+    "requestId": "opaque_040",
     "data": {
       "activeCover": {
         "id": "id_009",
@@ -43,26 +43,26 @@
         "createdAt": "2026-01-01T00:00:00.000Z"
       },
       "createdCover": {
-        "id": "id_013",
+        "id": "id_014",
         "recipeId": "id_004",
         "status": "ready",
         "sourceType": "spoon",
-        "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+        "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
         "stylizedImageUrl": null,
-        "displayUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+        "displayUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
         "activeVariant": null,
         "provenanceLabel": "Original photo",
-        "sourceSpoonId": "id_011",
+        "sourceSpoonId": "id_012",
         "createdById": "id_001",
         "archivedAt": null,
         "generationStatus": "none",
         "failureReason": null,
-        "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+        "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
         "createdAt": "2026-01-01T00:00:00.000Z"
       },
       "generationStatus": "none",
       "mutation": {
-        "clientMutationId": "opaque_039",
+        "clientMutationId": "opaque_041",
         "replayed": false
       }
     }

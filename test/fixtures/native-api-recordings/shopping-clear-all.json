@@ -4,12 +4,12 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_077",
+    "requestId": "opaque_079",
     "data": {
       "removed": 4,
       "items": [
         {
-          "id": "uuid_016",
+          "id": "uuid_017",
           "name": "spaghetti",
           "quantity": 200,
           "unit": "g",
@@ -22,7 +22,7 @@
           "updatedAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "uuid_017",
+          "id": "uuid_018",
           "name": "salt",
           "quantity": 1,
           "unit": "tsp",
@@ -35,7 +35,7 @@
           "updatedAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "uuid_018",
+          "id": "uuid_019",
           "name": "lemon",
           "quantity": 1,
           "unit": "whole",
@@ -48,7 +48,7 @@
           "updatedAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "uuid_019",
+          "id": "uuid_020",
           "name": "olive oil",
           "quantity": 2,
           "unit": "tbsp",
@@ -62,7 +62,7 @@
         }
       ],
       "mutation": {
-        "clientMutationId": "opaque_078",
+        "clientMutationId": "opaque_080",
         "replayed": false
       }
     }

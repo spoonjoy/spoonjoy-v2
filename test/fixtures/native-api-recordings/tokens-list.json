@@ -4,11 +4,11 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_103",
+    "requestId": "opaque_109",
     "data": {
       "tokens": [
         {
-          "id": "id_021",
+          "id": "id_022",
           "name": "Spoonjoy Apple (OAuth)",
           "tokenPrefix": "access_token_005",
           "scopes": [
@@ -29,7 +29,7 @@
           "expiresAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "id_022",
+          "id": "id_023",
           "name": "Spoonjoy Apple (OAuth)",
           "tokenPrefix": "access_token_006",
           "scopes": [
@@ -50,7 +50,7 @@
           "expiresAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "id_023",
+          "id": "id_024",
           "name": "Contract token admin",
           "tokenPrefix": "access_token_007",
           "scopes": [

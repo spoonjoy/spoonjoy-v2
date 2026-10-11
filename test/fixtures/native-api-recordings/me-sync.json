@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_083",
+    "requestId": "opaque_088",
     "data": {
       "freshness": {
         "accountId": "id_001",
@@ -117,10 +117,10 @@
             ],
             "cookbooks": [
               {
-                "id": "id_016",
+                "id": "id_017",
                 "title": "Weeknight Dinners",
-                "href": "/cookbooks/id_016",
-                "canonicalUrl": "http://localhost/cookbooks/id_016"
+                "href": "/cookbooks/id_017",
+                "canonicalUrl": "http://localhost/cookbooks/id_017"
               }
             ]
           }
@@ -128,10 +128,10 @@
         {
           "action": "upsert",
           "kind": "recipe",
-          "resourceId": "id_015",
+          "resourceId": "id_016",
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "payload": {
-            "id": "id_015",
+            "id": "id_016",
             "title": "Tomato Herb Soup, my way",
             "description": "A simple soup.",
             "servings": "2",
@@ -143,22 +143,22 @@
             "coverProvenanceLabel": null,
             "coverSourceType": null,
             "coverVariant": null,
-            "href": "/recipes/id_015",
-            "canonicalUrl": "http://localhost/recipes/id_015",
+            "href": "/recipes/id_016",
+            "canonicalUrl": "http://localhost/recipes/id_016",
             "attribution": {
               "creditText": "Tomato Herb Soup, my way by contract_chef on Spoonjoy",
-              "canonicalUrl": "http://localhost/recipes/id_015",
+              "canonicalUrl": "http://localhost/recipes/id_016",
               "sourceUrl": null,
               "sourceHost": null,
               "sourceRecipe": {
-                "id": "id_014",
+                "id": "id_015",
                 "title": "Tomato Herb Soup",
                 "chef": {
                   "id": "id_002",
                   "username": "contract_friend"
                 },
-                "href": "/recipes/id_014",
-                "canonicalUrl": "http://localhost/recipes/id_014",
+                "href": "/recipes/id_015",
+                "canonicalUrl": "http://localhost/recipes/id_015",
                 "deleted": false
               }
             },
@@ -166,14 +166,14 @@
             "updatedAt": "2026-01-01T00:00:00.000Z",
             "steps": [
               {
-                "id": "uuid_013",
+                "id": "uuid_014",
                 "stepNum": 1,
                 "stepTitle": null,
                 "description": "Simmer everything.",
                 "duration": 20,
                 "ingredients": [
                   {
-                    "id": "uuid_014",
+                    "id": "uuid_015",
                     "name": "tomatoes",
                     "quantity": 400,
                     "unit": "g"
@@ -188,10 +188,10 @@
         {
           "action": "upsert",
           "kind": "cookbook",
-          "resourceId": "id_016",
+          "resourceId": "id_017",
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "payload": {
-            "id": "id_016",
+            "id": "id_017",
             "title": "Weeknight Dinners",
             "chef": {
               "id": "id_001",
@@ -199,11 +199,11 @@
             },
             "recipeCount": 1,
             "coverImageUrls": [],
-            "href": "/cookbooks/id_016",
-            "canonicalUrl": "http://localhost/cookbooks/id_016",
+            "href": "/cookbooks/id_017",
+            "canonicalUrl": "http://localhost/cookbooks/id_017",
             "attribution": {
               "creditText": "Weeknight Dinners by contract_chef on Spoonjoy",
-              "canonicalUrl": "http://localhost/cookbooks/id_016"
+              "canonicalUrl": "http://localhost/cookbooks/id_017"
             },
             "createdAt": "2026-01-01T00:00:00.000Z",
             "updatedAt": "2026-01-01T00:00:00.000Z",
@@ -213,27 +213,13 @@
         {
           "action": "delete",
           "kind": "cookbook",
-          "resourceId": "id_017",
+          "resourceId": "id_018",
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "tombstone": {
             "resourceType": "cookbook",
-            "resourceId": "id_017",
+            "resourceId": "id_018",
             "parentResourceId": null,
             "title": "Someday",
-            "deletedAt": "2026-01-01T00:00:00.000Z",
-            "updatedAt": "2026-01-01T00:00:00.000Z"
-          }
-        },
-        {
-          "action": "delete",
-          "kind": "shoppingItem",
-          "resourceId": "uuid_015",
-          "updatedAt": "2026-01-01T00:00:00.000Z",
-          "tombstone": {
-            "resourceType": "shoppingItem",
-            "resourceId": "uuid_015",
-            "parentResourceId": "id_018",
-            "title": "parmesan",
             "deletedAt": "2026-01-01T00:00:00.000Z",
             "updatedAt": "2026-01-01T00:00:00.000Z"
           }
@@ -246,8 +232,8 @@
           "tombstone": {
             "resourceType": "shoppingItem",
             "resourceId": "uuid_016",
-            "parentResourceId": "id_018",
-            "title": "spaghetti",
+            "parentResourceId": "id_019",
+            "title": "parmesan",
             "deletedAt": "2026-01-01T00:00:00.000Z",
             "updatedAt": "2026-01-01T00:00:00.000Z"
           }
@@ -260,8 +246,8 @@
           "tombstone": {
             "resourceType": "shoppingItem",
             "resourceId": "uuid_017",
-            "parentResourceId": "id_018",
-            "title": "salt",
+            "parentResourceId": "id_019",
+            "title": "spaghetti",
             "deletedAt": "2026-01-01T00:00:00.000Z",
             "updatedAt": "2026-01-01T00:00:00.000Z"
           }
@@ -274,8 +260,8 @@
           "tombstone": {
             "resourceType": "shoppingItem",
             "resourceId": "uuid_018",
-            "parentResourceId": "id_018",
-            "title": "lemon",
+            "parentResourceId": "id_019",
+            "title": "salt",
             "deletedAt": "2026-01-01T00:00:00.000Z",
             "updatedAt": "2026-01-01T00:00:00.000Z"
           }
@@ -288,7 +274,21 @@
           "tombstone": {
             "resourceType": "shoppingItem",
             "resourceId": "uuid_019",
-            "parentResourceId": "id_018",
+            "parentResourceId": "id_019",
+            "title": "lemon",
+            "deletedAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        },
+        {
+          "action": "delete",
+          "kind": "shoppingItem",
+          "resourceId": "uuid_020",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "tombstone": {
+            "resourceType": "shoppingItem",
+            "resourceId": "uuid_020",
+            "parentResourceId": "id_019",
             "title": "olive oil",
             "deletedAt": "2026-01-01T00:00:00.000Z",
             "updatedAt": "2026-01-01T00:00:00.000Z"

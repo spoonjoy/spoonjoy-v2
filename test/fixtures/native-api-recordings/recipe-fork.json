@@ -4,7 +4,7 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_047",
+    "requestId": "opaque_049",
     "data": {
       "fork": {
         "appliedTitle": "Tomato Herb Soup, my way",
@@ -12,11 +12,11 @@
           "id": "id_002",
           "username": "contract_friend"
         },
-        "sourceRecipeId": "id_014",
+        "sourceRecipeId": "id_015",
         "titleWasSuffixed": false
       },
       "recipe": {
-        "id": "id_015",
+        "id": "id_016",
         "title": "Tomato Herb Soup, my way",
         "description": "A simple soup.",
         "servings": "2",
@@ -28,22 +28,22 @@
         "coverProvenanceLabel": null,
         "coverSourceType": null,
         "coverVariant": null,
-        "href": "/recipes/id_015",
-        "canonicalUrl": "http://localhost/recipes/id_015",
+        "href": "/recipes/id_016",
+        "canonicalUrl": "http://localhost/recipes/id_016",
         "attribution": {
           "creditText": "Tomato Herb Soup, my way by contract_chef on Spoonjoy",
-          "canonicalUrl": "http://localhost/recipes/id_015",
+          "canonicalUrl": "http://localhost/recipes/id_016",
           "sourceUrl": null,
           "sourceHost": null,
           "sourceRecipe": {
-            "id": "id_014",
+            "id": "id_015",
             "title": "Tomato Herb Soup",
             "chef": {
               "id": "id_002",
               "username": "contract_friend"
             },
-            "href": "/recipes/id_014",
-            "canonicalUrl": "http://localhost/recipes/id_014",
+            "href": "/recipes/id_015",
+            "canonicalUrl": "http://localhost/recipes/id_015",
             "deleted": false
           }
         },
@@ -51,14 +51,14 @@
         "updatedAt": "2026-01-01T00:00:00.000Z",
         "steps": [
           {
-            "id": "uuid_013",
+            "id": "uuid_014",
             "stepNum": 1,
             "stepTitle": null,
             "description": "Simmer everything.",
             "duration": 20,
             "ingredients": [
               {
-                "id": "uuid_014",
+                "id": "uuid_015",
                 "name": "tomatoes",
                 "quantity": 400,
                 "unit": "g"
@@ -70,7 +70,7 @@
         "cookbooks": []
       },
       "mutation": {
-        "clientMutationId": "opaque_048",
+        "clientMutationId": "opaque_050",
         "replayed": false
       }
     }

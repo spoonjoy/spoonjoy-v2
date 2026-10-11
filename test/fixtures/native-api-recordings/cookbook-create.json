@@ -4,11 +4,11 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_049",
+    "requestId": "opaque_051",
     "data": {
       "created": true,
       "cookbook": {
-        "id": "id_016",
+        "id": "id_017",
         "title": "Weeknights",
         "chef": {
           "id": "id_001",
@@ -16,18 +16,18 @@
         },
         "recipeCount": 0,
         "coverImageUrls": [],
-        "href": "/cookbooks/id_016",
-        "canonicalUrl": "http://localhost/cookbooks/id_016",
+        "href": "/cookbooks/id_017",
+        "canonicalUrl": "http://localhost/cookbooks/id_017",
         "attribution": {
           "creditText": "Weeknights by contract_chef on Spoonjoy",
-          "canonicalUrl": "http://localhost/cookbooks/id_016"
+          "canonicalUrl": "http://localhost/cookbooks/id_017"
         },
         "createdAt": "2026-01-01T00:00:00.000Z",
         "updatedAt": "2026-01-01T00:00:00.000Z",
         "recipes": []
       },
       "mutation": {
-        "clientMutationId": "opaque_050",
+        "clientMutationId": "opaque_052",
         "replayed": false
       }
     }

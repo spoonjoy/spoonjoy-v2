@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_079",
+    "requestId": "opaque_081",
     "data": {
       "query": null,
       "limit": 20,
@@ -38,7 +38,7 @@
           "updatedAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "id_014",
+          "id": "id_015",
           "title": "Tomato Herb Soup",
           "description": "A simple soup.",
           "servings": "2",
@@ -50,11 +50,11 @@
           "coverProvenanceLabel": null,
           "coverSourceType": null,
           "coverVariant": null,
-          "href": "/recipes/id_014",
-          "canonicalUrl": "http://localhost/recipes/id_014",
+          "href": "/recipes/id_015",
+          "canonicalUrl": "http://localhost/recipes/id_015",
           "attribution": {
             "creditText": "Tomato Herb Soup by contract_friend on Spoonjoy",
-            "canonicalUrl": "http://localhost/recipes/id_014",
+            "canonicalUrl": "http://localhost/recipes/id_015",
             "sourceUrl": null,
             "sourceHost": null,
             "sourceRecipe": null
@@ -63,7 +63,7 @@
           "updatedAt": "2026-01-01T00:00:00.000Z"
         },
         {
-          "id": "id_015",
+          "id": "id_016",
           "title": "Tomato Herb Soup, my way",
           "description": "A simple soup.",
           "servings": "2",
@@ -75,22 +75,22 @@
           "coverProvenanceLabel": null,
           "coverSourceType": null,
           "coverVariant": null,
-          "href": "/recipes/id_015",
-          "canonicalUrl": "http://localhost/recipes/id_015",
+          "href": "/recipes/id_016",
+          "canonicalUrl": "http://localhost/recipes/id_016",
           "attribution": {
             "creditText": "Tomato Herb Soup, my way by contract_chef on Spoonjoy",
-            "canonicalUrl": "http://localhost/recipes/id_015",
+            "canonicalUrl": "http://localhost/recipes/id_016",
             "sourceUrl": null,
             "sourceHost": null,
             "sourceRecipe": {
-              "id": "id_014",
+              "id": "id_015",
               "title": "Tomato Herb Soup",
               "chef": {
                 "id": "id_002",
                 "username": "contract_friend"
               },
-              "href": "/recipes/id_014",
-              "canonicalUrl": "http://localhost/recipes/id_014",
+              "href": "/recipes/id_015",
+              "canonicalUrl": "http://localhost/recipes/id_015",
               "deleted": false
             }
           },

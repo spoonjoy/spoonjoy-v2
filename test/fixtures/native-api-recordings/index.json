@@ -90,6 +90,11 @@
     "status": 200
   },
   {
+    "name": "recipe-spoon-create-photo",
+    "endpoint": "POST /api/v1/recipes/{id}/spoons",
+    "status": 201
+  },
+  {
     "name": "recipe-image-upload-spoon",
     "endpoint": "POST /api/v1/recipes/{id}/image",
     "status": 201
@@ -207,6 +212,21 @@
   {
     "name": "search",
     "endpoint": "GET /api/v1/search",
+    "status": 200
+  },
+  {
+    "name": "user-profile",
+    "endpoint": "GET /api/v1/users/{identifier}",
+    "status": 200
+  },
+  {
+    "name": "user-kitchen-visitors",
+    "endpoint": "GET /api/v1/users/{identifier}/kitchen-visitors",
+    "status": 200
+  },
+  {
+    "name": "user-fellow-chefs",
+    "endpoint": "GET /api/v1/users/{identifier}/fellow-chefs",
     "status": 200
   },
   {

@@ -4,11 +4,11 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_105",
+    "requestId": "opaque_111",
     "data": {
       "revoked": true,
       "credential": {
-        "id": "uuid_021",
+        "id": "uuid_022",
         "name": "Shortcuts",
         "tokenPrefix": "access_token_009",
         "scopes": [

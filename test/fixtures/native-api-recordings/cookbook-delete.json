@@ -4,11 +4,11 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_061",
+    "requestId": "opaque_063",
     "data": {
       "deleted": true,
       "cookbook": {
-        "id": "id_017",
+        "id": "id_018",
         "title": "Someday",
         "chef": {
           "id": "id_001",
@@ -16,18 +16,18 @@
         },
         "recipeCount": 0,
         "coverImageUrls": [],
-        "href": "/cookbooks/id_017",
-        "canonicalUrl": "http://localhost/cookbooks/id_017",
+        "href": "/cookbooks/id_018",
+        "canonicalUrl": "http://localhost/cookbooks/id_018",
         "attribution": {
           "creditText": "Someday by contract_chef on Spoonjoy",
-          "canonicalUrl": "http://localhost/cookbooks/id_017"
+          "canonicalUrl": "http://localhost/cookbooks/id_018"
         },
         "createdAt": "2026-01-01T00:00:00.000Z",
         "updatedAt": "2026-01-01T00:00:00.000Z",
         "recipes": []
       },
       "mutation": {
-        "clientMutationId": "opaque_062",
+        "clientMutationId": "opaque_064",
         "replayed": false
       }
     }

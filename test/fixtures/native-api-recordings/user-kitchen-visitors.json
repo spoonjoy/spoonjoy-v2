@@ -1,0 +1,29 @@
+{
+  "name": "user-kitchen-visitors",
+  "endpoint": "GET /api/v1/users/{identifier}/kitchen-visitors",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_085",
+    "data": {
+      "profile": {
+        "id": "id_001",
+        "username": "contract_chef",
+        "href": "/users/contract_chef",
+        "canonicalUrl": "http://localhost/users/contract_chef"
+      },
+      "direction": "kitchen-visitors",
+      "isOwner": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 0,
+      "nextCursor": null,
+      "rows": [],
+      "emptyState": {
+        "title": "No kitchen visitors yet",
+        "message": "Kitchen visitors appear after other chefs cook, fork, or save this chef's recipes.",
+        "systemImage": "person.crop.circle.badge.clock"
+      }
+    }
+  }
+}

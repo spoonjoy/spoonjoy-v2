@@ -4,12 +4,12 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_066",
+    "requestId": "opaque_068",
     "data": {
       "created": true,
       "updated": false,
       "item": {
-        "id": "uuid_015",
+        "id": "uuid_016",
         "name": "parmesan",
         "quantity": 50,
         "unit": "g",
@@ -22,7 +22,7 @@
         "updatedAt": "2026-01-01T00:00:00.000Z"
       },
       "mutation": {
-        "clientMutationId": "opaque_067",
+        "clientMutationId": "opaque_069",
         "replayed": false
       }
     }

@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_043",
+    "requestId": "opaque_045",
     "data": {
       "activeCover": null,
       "previousActiveCover": null,
@@ -28,7 +28,7 @@
       },
       "warnings": [],
       "mutation": {
-        "clientMutationId": "opaque_044",
+        "clientMutationId": "opaque_046",
         "replayed": false
       }
     }

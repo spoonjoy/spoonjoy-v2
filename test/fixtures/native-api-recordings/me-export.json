@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_107",
+    "requestId": "opaque_113",
     "data": {
       "format": "spoonjoy.account-export.v1",
       "exportedAt": "2026-01-01T00:00:00.000Z",
@@ -20,7 +20,7 @@
       },
       "recipes": [
         {
-          "id": "id_019",
+          "id": "id_020",
           "title": "Garlic Bread",
           "description": null,
           "servings": "4",
@@ -29,7 +29,7 @@
           "createdAt": "2026-01-01T00:00:00.000Z",
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "deletedAt": null,
-          "url": "http://localhost/recipes/id_019",
+          "url": "http://localhost/recipes/id_020",
           "steps": [],
           "covers": []
         },
@@ -98,23 +98,23 @@
               "createdAt": "2026-01-01T00:00:00.000Z"
             },
             {
-              "id": "id_012",
-              "active": false,
-              "status": "ready",
-              "sourceType": "spoon",
-              "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
-              "stylizedImageUrl": null,
-              "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
-              "createdAt": "2026-01-01T00:00:00.000Z"
-            },
-            {
               "id": "id_013",
               "active": false,
               "status": "ready",
               "sourceType": "spoon",
-              "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+              "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
               "stylizedImageUrl": null,
-              "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+              "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+              "createdAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "id": "id_014",
+              "active": false,
+              "status": "ready",
+              "sourceType": "spoon",
+              "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+              "stylizedImageUrl": null,
+              "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
               "createdAt": "2026-01-01T00:00:00.000Z"
             },
             {
@@ -130,16 +130,16 @@
           ]
         },
         {
-          "id": "id_015",
+          "id": "id_016",
           "title": "Tomato Herb Soup, my way",
           "description": "A simple soup.",
           "servings": "2",
           "sourceUrl": null,
-          "forkedFromRecipeId": "id_014",
+          "forkedFromRecipeId": "id_015",
           "createdAt": "2026-01-01T00:00:00.000Z",
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "deletedAt": null,
-          "url": "http://localhost/recipes/id_015",
+          "url": "http://localhost/recipes/id_016",
           "steps": [
             {
               "stepNum": 1,
@@ -161,7 +161,7 @@
       ],
       "cookbooks": [
         {
-          "id": "id_016",
+          "id": "id_017",
           "title": "Weeknight Dinners",
           "createdAt": "2026-01-01T00:00:00.000Z",
           "recipes": [
@@ -190,9 +190,18 @@
           "recipeId": "id_004",
           "recipeTitle": "Lemon Pantry Pasta",
           "cookedAt": "2026-01-01T00:00:00.000Z",
+          "note": "Charred the lemons first.",
+          "nextTime": "More pepper.",
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png"
+        },
+        {
+          "id": "id_012",
+          "recipeId": "id_004",
+          "recipeTitle": "Lemon Pantry Pasta",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
           "note": "Lovely and quick.",
           "nextTime": null,
-          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png"
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png"
         }
       ]
     }

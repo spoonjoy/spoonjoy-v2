@@ -4,17 +4,17 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_072",
+    "requestId": "opaque_074",
     "data": {
       "shoppingList": {
-        "id": "id_018",
+        "id": "id_019",
         "chef": {
           "id": "id_001",
           "username": "contract_chef"
         },
         "items": [
           {
-            "id": "uuid_015",
+            "id": "uuid_016",
             "name": "parmesan",
             "quantity": 50,
             "unit": "g",
@@ -27,7 +27,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
           {
-            "id": "uuid_016",
+            "id": "uuid_017",
             "name": "spaghetti",
             "quantity": 200,
             "unit": "g",
@@ -40,7 +40,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
           {
-            "id": "uuid_017",
+            "id": "uuid_018",
             "name": "salt",
             "quantity": 1,
             "unit": "tsp",
@@ -53,7 +53,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
           {
-            "id": "uuid_018",
+            "id": "uuid_019",
             "name": "lemon",
             "quantity": 1,
             "unit": "whole",
@@ -66,7 +66,7 @@
             "updatedAt": "2026-01-01T00:00:00.000Z"
           },
           {
-            "id": "uuid_019",
+            "id": "uuid_020",
             "name": "olive oil",
             "quantity": 2,
             "unit": "tbsp",

@@ -4,10 +4,10 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_064",
+    "requestId": "opaque_066",
     "data": {
       "cookbook": {
-        "id": "id_016",
+        "id": "id_017",
         "title": "Weeknight Dinners",
         "chef": {
           "id": "id_001",
@@ -15,11 +15,11 @@
         },
         "recipeCount": 1,
         "coverImageUrls": [],
-        "href": "/cookbooks/id_016",
-        "canonicalUrl": "http://localhost/cookbooks/id_016",
+        "href": "/cookbooks/id_017",
+        "canonicalUrl": "http://localhost/cookbooks/id_017",
         "attribution": {
           "creditText": "Weeknight Dinners by contract_chef on Spoonjoy",
-          "canonicalUrl": "http://localhost/cookbooks/id_016"
+          "canonicalUrl": "http://localhost/cookbooks/id_017"
         },
         "createdAt": "2026-01-01T00:00:00.000Z",
         "updatedAt": "2026-01-01T00:00:00.000Z",

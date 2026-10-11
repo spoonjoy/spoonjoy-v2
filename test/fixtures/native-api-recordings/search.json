@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_081",
+    "requestId": "opaque_083",
     "data": {
       "query": "pasta",
       "scope": "all",
@@ -43,14 +43,14 @@
         },
         {
           "type": "cookbook",
-          "id": "id_016",
+          "id": "id_017",
           "ownerId": "id_001",
           "ownerUsername": "contract_chef",
           "title": "Weeknight Dinners",
           "subtitle": "Cookbook by contract_chef",
           "snippet": "Weeknight Dinners contract_chef Lemon Pantry Pasta",
-          "href": "/cookbooks/id_016",
-          "canonicalUrl": "http://localhost/cookbooks/id_016",
+          "href": "/cookbooks/id_017",
+          "canonicalUrl": "http://localhost/cookbooks/id_017",
           "imageUrl": null,
           "score": -0.6912432486854126,
           "metadata": {

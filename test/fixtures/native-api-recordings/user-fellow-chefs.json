@@ -1,0 +1,39 @@
+{
+  "name": "user-fellow-chefs",
+  "endpoint": "GET /api/v1/users/{identifier}/fellow-chefs",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_086",
+    "data": {
+      "profile": {
+        "id": "id_001",
+        "username": "contract_chef",
+        "href": "/users/contract_chef",
+        "canonicalUrl": "http://localhost/users/contract_chef"
+      },
+      "direction": "fellow-chefs",
+      "isOwner": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "nextCursor": null,
+      "rows": [
+        {
+          "chefId": "id_002",
+          "username": "contract_friend",
+          "photoUrl": null,
+          "href": "/users/contract_friend",
+          "canonicalUrl": "http://localhost/users/contract_friend",
+          "interactionCounts": {
+            "spoons": 0,
+            "forks": 1,
+            "cookbookSaves": 0
+          },
+          "latestInteractionAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "emptyState": null
+    }
+  }
+}

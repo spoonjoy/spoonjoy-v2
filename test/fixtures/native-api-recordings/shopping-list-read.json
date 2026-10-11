@@ -4,10 +4,10 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_065",
+    "requestId": "opaque_067",
     "data": {
       "shoppingList": {
-        "id": "id_018",
+        "id": "id_019",
         "chef": {
           "id": "id_001",
           "username": "contract_chef"

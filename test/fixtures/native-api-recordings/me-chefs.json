@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_082",
+    "requestId": "opaque_087",
     "data": {
       "viewer": {
         "id": "id_001",
@@ -33,7 +33,7 @@
       },
       "activity": [
         {
-          "id": "outbound:fork:id_015",
+          "id": "outbound:fork:id_016",
           "kind": "forked",
           "direction": "outbound",
           "eventAt": "2026-01-01T00:00:00.000Z",
@@ -48,7 +48,7 @@
             "photoUrl": null
           },
           "recipe": {
-            "id": "id_014",
+            "id": "id_015",
             "title": "Tomato Herb Soup"
           },
           "cookbook": null,
