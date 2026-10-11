@@ -28,9 +28,10 @@ import {
 } from "~/lib/agent-connection.server";
 import { validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { runAfterRecipeSave } from "~/lib/recipe-save-follow-up.server";
-import { d1Binding } from "~/lib/d1-read.server";
+import { d1Binding, d1ReadBatch } from "~/lib/d1-read.server";
 import { deleteNativeRecipe } from "~/lib/api-v1-recipe-writes.server";
-import { d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   applyRecipeStepsUpdateWithPrisma,
   loadCurrentRecipeSteps,
@@ -2666,15 +2667,21 @@ const updateRecipeTool: SpoonjoyApiOperation = {
       const description = optionalNullableStringArgument(args, "description");
       const servings = optionalNullableStringArgument(args, "servings");
       const sourceUrl = optionalNullableStringArgument(args, "sourceUrl");
-      const imageUrl = optionalNullableStringArgument(args, "imageUrl");
+      const requestedImageUrl = optionalNullableStringArgument(args, "imageUrl");
       const steps = hasArgument(args, "steps") ? parseStepUpdates(args.steps) : undefined;
 
       const owner = await getOrCreateOwner(context, email);
       const existing = await context.db.recipe.findFirst({
         where: { id, chefId: owner.id, deletedAt: null },
-        select: { id: true, title: true },
+        select: { id: true, title: true, activeCoverId: true },
       });
       if (!existing) throw new Error("Recipe not found");
+      // The same image as the active cover is that cover, not a new one, so an agent repeating
+      // the call (after a lost answer or a retryable error) never adds a second cover.
+      const repeatsActiveCover = Boolean(requestedImageUrl && existing.activeCoverId) && (await context.db.recipeCover.count({
+        where: { id: existing.activeCoverId!, recipeId: existing.id, imageUrl: requestedImageUrl!, archivedAt: null },
+      })) > 0;
+      const imageUrl = repeatsActiveCover ? null : requestedImageUrl;
       const stepsPlan = steps
         ? planRecipeStepsUpdate(existing.id, await loadCurrentRecipeSteps(context.db, existing.id), steps, new Date())
         : undefined;
@@ -2710,16 +2717,27 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         // and a new title still free, and that the steps are still the ones the update was planned from.
         const now = new Date();
         coverId = imageUrl ? crypto.randomUUID() : null;
-        await d1WriteBatch(d1, [
-          recipeActiveGuard(existing.id),
-          ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
-          ...(stepsPlan ? [stepsPlan.guard, ...stepsPlan.statements] : []),
-          ...(coverId
-            ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
-            : []),
-          recipeUpdateStatement(existing.id, { ...data, ...(coverId ? activeImageCover(coverId) : {}) }, now),
-          ...(coverId ? [cookbooksForRecipeTouchStatement(existing.id, now)] : []),
-        ]);
+        const appliedMarker = coverId
+          ? ([`SELECT 1 FROM "RecipeCover" WHERE "id" = ? AND "recipeId" = ?`, coverId, existing.id] as const)
+          : ([`SELECT 1 FROM "Recipe" WHERE "id" = ? AND "updatedAt" = ?`, existing.id, d1Timestamp(now)] as const);
+        // The batch's ids and timestamp are chosen once, so after a transient D1 error it either
+        // finds its earlier try's cover (or its stamp on the recipe) or writes once.
+        await retryD1Write({
+          scope: "recipe.update.mcp",
+          applied: async () => ((await d1ReadBatch(d1, [[...appliedMarker]]))[0]!.length > 0 ? true : null),
+        }, async () => {
+          await d1WriteBatch(d1, [
+            recipeActiveGuard(existing.id),
+            ...(title === undefined ? [] : [activeRecipeTitleFreeGuard(owner.id, title, existing.id)]),
+            ...(stepsPlan ? [stepsPlan.guard, ...stepsPlan.statements] : []),
+            ...(coverId
+              ? [coverInsertStatement({ id: coverId, recipeId: existing.id, imageUrl: imageUrl!, sourceType: "chef-upload" }, now)]
+              : []),
+            recipeUpdateStatement(existing.id, { ...data, ...(coverId ? activeImageCover(coverId) : {}) }, now),
+            ...(coverId ? [cookbooksForRecipeTouchStatement(existing.id, now)] : []),
+          ]);
+          return true;
+        });
       } else {
         if (Object.keys(data).length > 0) {
           await context.db.recipe.update({ where: { id: existing.id }, data });
