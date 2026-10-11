@@ -184,6 +184,32 @@ describe("native username/password sign-in API", () => {
     }
   });
 
+  it("answers a retryable 503 with Retry-After when D1 is briefly unavailable", async () => {
+    await createUser(db, "unavailable@example.com", "native_unavailable", "correctHorseBatteryStaple");
+    const localDb = await getLocalDb();
+    const originalUpsert = localDb.oAuthClient.upsert;
+    localDb.oAuthClient.upsert = vi.fn().mockRejectedValue(
+      new Error("D1_ERROR: Network connection lost."),
+    ) as typeof localDb.oAuthClient.upsert;
+    try {
+      const response = await action(routeArgs(jsonRequest({
+        emailOrUsername: "native_unavailable",
+        password: "correctHorseBatteryStaple",
+      }, "req_native_password_unavailable")));
+      const json = await response.json() as any;
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBe("1");
+      expect(json.error).toMatchObject({
+        code: "temporarily_unavailable",
+        status: 503,
+        details: { retryAfterSeconds: 1 },
+      });
+    } finally {
+      localDb.oAuthClient.upsert = originalUpsert;
+    }
+  });
+
   it("maps non-credential native password auth errors to validation errors", async () => {
     await createUser(db, "validation-failure@example.com", "native_validation_failure", "correctHorseBatteryStaple");
     const localDb = await getLocalDb();

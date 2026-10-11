@@ -42,9 +42,6 @@ describe("API v1 cover activation while D1 is unavailable", () => {
     const flaky = flakyD1(d1.binding);
     flaky.failNext(/UPDATE "Recipe" SET/, "lost", "lost", "lost", "lost");
 
-    // How an unavailable database is answered and logged belongs to the API's error mapping;
-    // this test only holds that the cover mapper passes it through.
-    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const path = `recipes/${recipe.id}/covers/${cover.id}`;
     const answer = await apiV1Action({
       request: new UndiciRequest(`http://localhost/api/v1/${path}`, {
@@ -57,9 +54,10 @@ describe("API v1 cover activation while D1 is unavailable", () => {
     } as never) as Response;
 
     expect(flaky.failures()).toBe(4);
-    expect(answer.status).not.toBe(400);
-    expect(((await answer.json()) as { error: { code: string } }).error.code).not.toBe("validation_error");
-    logged.mockRestore();
+    // The cover mapper passes an unavailable database through, so the API answers it as retryable.
+    expect(answer.status).toBe(503);
+    expect(answer.headers.get("Retry-After")).toBe("1");
+    expect(((await answer.json()) as { error: { code: string } }).error.code).toBe("temporarily_unavailable");
     await expect(db.recipe.findUniqueOrThrow({ where: { id: recipe.id } })).resolves.toMatchObject({ activeCoverId: null });
   });
 });

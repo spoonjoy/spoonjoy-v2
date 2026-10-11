@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_112",
+    "requestId": "opaque_113",
     "data": {
       "revoked": true,
       "credential": {

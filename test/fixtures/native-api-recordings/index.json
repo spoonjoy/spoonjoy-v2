@@ -20,6 +20,11 @@
     "status": 201
   },
   {
+    "name": "recipe-create-temporarily-unavailable",
+    "endpoint": "POST /api/v1/recipes",
+    "status": 503
+  },
+  {
     "name": "recipe-create",
     "endpoint": "POST /api/v1/recipes",
     "status": 201
