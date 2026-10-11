@@ -70,7 +70,7 @@ export default function AccountSettings() {
   // Restore form state when there are field errors (e.g., after form submission fails), and
   // close a form once its submission succeeds; the banner below confirms it.
   useEffect(() => {
-    if (actionData?.fieldErrors?.email || actionData?.fieldErrors?.username) {
+    if (actionData?.fieldErrors?.email || actionData?.fieldErrors?.username || actionData?.fieldErrors?.currentPassword) {
       setIsEditing(true);
     }
     if (actionData?.fieldErrors?.newPassword) {
@@ -140,7 +140,8 @@ export default function AccountSettings() {
         </div>
       )}
 
-      {/* User Info Section */}
+      {/* User Info Section (the anchor brings a chef back here after "Sign in again") */}
+      <div id="user-info">
       <SettingsPanel
         testId="user-info-section"
         title="User information"
@@ -178,6 +179,28 @@ export default function AccountSettings() {
                 <ErrorMessage>{actionData.fieldErrors.username}</ErrorMessage>
               )}
             </Field>
+            {/* Changing the email needs proof it's the owner: the password, or for an account
+                without one, a recent sign-in. A username-only save needs neither. */}
+            {user.hasPassword ? (
+              <Field>
+                <Label>Current password</Label>
+                <Description>Needed only to change your email.</Description>
+                <Input
+                  type="password"
+                  name="currentPassword"
+                  autoComplete="current-password"
+                  invalid={!!actionData?.fieldErrors?.currentPassword}
+                />
+                {actionData?.fieldErrors?.currentPassword && (
+                  <ErrorMessage>{actionData.fieldErrors.currentPassword}</ErrorMessage>
+                )}
+              </Field>
+            ) : (
+              <Text className="text-sm/6">
+                To change your email, you need to have signed in within the last 10 minutes. If it has been longer,
+                sign in again first.
+              </Text>
+            )}
             <div className="flex flex-wrap gap-3">
               <Button type="submit">
                 Save
@@ -187,7 +210,17 @@ export default function AccountSettings() {
               </Button>
             </div>
           </Form>
-        ) : (
+        ) : null}
+        {isEditing && !user.hasPassword ? (
+          <Form method="post" className="mt-3">
+            <input type="hidden" name="intent" value="reauthenticate" />
+            <input type="hidden" name="for" value="email" />
+            <Button type="submit" plain>
+              Sign in again
+            </Button>
+          </Form>
+        ) : null}
+        {!isEditing && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <Text className="border-y border-[var(--sj-border)] py-4">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
@@ -200,6 +233,7 @@ export default function AccountSettings() {
           </div>
         )}
       </SettingsPanel>
+      </div>
 
       {/* Profile Photo Section */}
       <SettingsPanel testId="profile-photo-section" title="Profile photo">

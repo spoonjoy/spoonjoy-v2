@@ -1012,6 +1012,8 @@ describe("Account Settings Route", () => {
       formData.append("email", newEmail);
       formData.append("username", testUsername);
       formData.append("intent", "updateUserInfo");
+      // Changing the email needs the current password.
+      formData.append("currentPassword", "testPassword123");
 
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
@@ -1083,6 +1085,8 @@ describe("Account Settings Route", () => {
       formData.append("email", newEmail);
       formData.append("username", newUsername);
       formData.append("intent", "updateUserInfo");
+      // Changing the email needs the current password.
+      formData.append("currentPassword", "testPassword123");
 
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
@@ -1123,6 +1127,8 @@ describe("Account Settings Route", () => {
       formData.append("email", existingEmail); // Try to use existing email
       formData.append("username", testUsername);
       formData.append("intent", "updateUserInfo");
+      // Changing the email needs the current password.
+      formData.append("currentPassword", "testPassword123");
 
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
@@ -1197,6 +1203,8 @@ describe("Account Settings Route", () => {
       formData.append("email", existingEmail.toLowerCase()); // Same email, different case
       formData.append("username", testUsername);
       formData.append("intent", "updateUserInfo");
+      // Changing the email needs the current password.
+      formData.append("currentPassword", "testPassword123");
 
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
@@ -1384,6 +1392,8 @@ describe("Account Settings Route", () => {
       formData.append("email", newEmail);
       formData.append("username", testUsername);
       formData.append("intent", "updateUserInfo");
+      // Changing the email needs the current password.
+      formData.append("currentPassword", "testPassword123");
 
       const headers = new Headers();
       headers.set("Cookie", cookieValue);
