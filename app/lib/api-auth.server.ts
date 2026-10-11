@@ -3,7 +3,7 @@ import { getSessionIdentity, isCurrentSession, type SessionEnv } from "~/lib/ses
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { d1Boolean, d1Count, d1NullableDateTime, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
-import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { D1WriteUnavailableError, retryD1Write } from "~/lib/d1-write-retry.server";
 import { newReservationId } from "~/lib/api-idempotency.server";
 
 export type ApiPrincipalSource = "session" | "bearer" | "environment";
@@ -362,6 +362,16 @@ function signedOutError(): ApiAuthError {
   return new ApiAuthError("Your session was signed out. Sign in again to create a token.", 401);
 }
 
+/**
+ * The `lastUsedAt` touch ran out of tries. It only records when a token was last used, so the
+ * request, already authenticated, goes on without it.
+ */
+function lastUsedAtUnavailable(error: unknown): boolean {
+  if (!(error instanceof D1WriteUnavailableError)) return false;
+  console.warn("[api-auth] lastUsedAt update skipped: the database was briefly unavailable");
+  return true;
+}
+
 function isRecordNotFound(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2025";
 }
@@ -449,10 +459,13 @@ export async function authenticateApiToken(
       select: { id: true, issuer: true },
     });
     if (client && client.issuer === null) {
-      await db.oAuthClient.updateMany({
-        where: { id: credential.oauthClientId, issuer: null, revokedAt: null },
+      // Fills an empty issuer and reads the result back, so after a transient D1 error it simply
+      // runs again.
+      const clientId = credential.oauthClientId;
+      await retryD1Write({ scope: "api_auth.bind_client_issuer" }, () => db.oAuthClient.updateMany({
+        where: { id: clientId, issuer: null, revokedAt: null },
         data: { issuer: expectedOAuthIssuer },
-      });
+      }));
       client = await db.oAuthClient.findFirst({
         where: { id: credential.oauthClientId, revokedAt: null },
         select: { id: true, issuer: true },
@@ -461,10 +474,10 @@ export async function authenticateApiToken(
     if (!client || client.issuer !== expectedOAuthIssuer) throw new ApiAuthError("Invalid API token", 401);
 
     if (oauthIssuer === null) {
-      await db.apiCredential.updateMany({
+      await retryD1Write({ scope: "api_auth.bind_credential_issuer" }, () => db.apiCredential.updateMany({
         where: { id: credential.id, oauthIssuer: null },
         data: { oauthIssuer: expectedOAuthIssuer },
-      });
+      }));
       oauthIssuer = (await db.apiCredential.findUniqueOrThrow({
         where: { id: credential.id },
         select: { oauthIssuer: true },
@@ -479,10 +492,11 @@ export async function authenticateApiToken(
   if (credential.lastUsedAt === null || now - credential.lastUsedAt.getTime() >= LAST_USED_AT_WRITE_INTERVAL_MS) {
     // `update`, not `updateMany`: Prisma's D1 adapter runs updateMany as an
     // implicit transaction and warns that D1 cannot do one.
-    const touch = db.apiCredential.update({
+    // It sets a fixed time, so after a transient D1 error it simply runs again.
+    const touch = retryD1Write({ scope: "api_credential.touch_last_used" }, () => db.apiCredential.update({
       where: { id: credential.id },
       data: { lastUsedAt: new Date(now) },
-    });
+    }));
     if (options.waitUntil) {
       options.waitUntil(touch.catch((error: unknown) => {
         console.warn("[api-auth] lastUsedAt update failed", error);
@@ -493,7 +507,7 @@ export async function authenticateApiToken(
       } catch (error) {
         // P2025: the credential was deleted after we read it. The request was
         // already authenticated, and there is nothing left to record.
-        if (!isRecordNotFound(error)) throw error;
+        if (!isRecordNotFound(error) && !lastUsedAtUnavailable(error)) throw error;
       }
     }
   }
@@ -579,16 +593,20 @@ async function authenticateApiTokenOnD1(
   if (lastUsedAt === null || now - lastUsedAt.getTime() >= LAST_USED_AT_WRITE_INTERVAL_MS) {
     // A credential deleted since the read updates no row, which is fine: there is nothing to record.
     const touchedAt = d1Timestamp(new Date(now));
-    const touch = d1WriteBatch(d1, [[
+    const touch = retryD1Write({ scope: "api_credential.touch_last_used" }, () => d1WriteBatch(d1, [[
       'UPDATE "ApiCredential" SET "lastUsedAt" = ?, "updatedAt" = ? WHERE "id" = ?',
       touchedAt, touchedAt, id,
-    ]]);
+    ]]));
     if (options.waitUntil) {
       options.waitUntil(touch.catch((error: unknown) => {
         console.warn("[api-auth] lastUsedAt update failed", error);
       }));
     } else {
-      await touch;
+      try {
+        await touch;
+      } catch (error) {
+        if (!lastUsedAtUnavailable(error)) throw error;
+      }
     }
   }
 

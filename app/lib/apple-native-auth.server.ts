@@ -1,4 +1,5 @@
 import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { normalizeCredentialScopes } from "~/lib/api-auth.server";
 import { handleAppleOAuthCallback } from "~/lib/apple-oauth-callback.server";
@@ -116,7 +117,8 @@ export async function ensureNativeAppleOAuthClient(
   issuer: string,
 ): Promise<string> {
   const clientId = await nativeAppleOAuthClientId(issuer);
-  await db.oAuthClient.upsert({
+  // An upsert by its fixed id, so after a transient D1 error it simply runs again.
+  await retryD1Write({ scope: "oauth.ensure_native_client" }, () => db.oAuthClient.upsert({
     where: { id: clientId },
     create: {
       id: clientId,
@@ -127,7 +129,7 @@ export async function ensureNativeAppleOAuthClient(
     update: {
       clientName: NATIVE_APPLE_CLIENT_NAME,
     },
-  });
+  }));
   return clientId;
 }
 

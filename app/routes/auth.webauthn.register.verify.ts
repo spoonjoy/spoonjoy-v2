@@ -2,7 +2,7 @@ import type { Route } from "./+types/auth.webauthn.register.verify";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { getUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { configFromRequest, finishRegistration, WebAuthnError } from "~/lib/webauthn-route.server";
+import { configFromRequest, finishRegistration, webAuthnErrorResponse } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -34,8 +34,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
     return Response.json(result);
   } catch (error) {
-    const status = error instanceof WebAuthnError ? error.status : 400;
-    const message = error instanceof Error ? error.message : "Could not verify registration";
-    return Response.json({ error: message }, { status });
+    return webAuthnErrorResponse(error, "Could not verify registration");
   }
 }

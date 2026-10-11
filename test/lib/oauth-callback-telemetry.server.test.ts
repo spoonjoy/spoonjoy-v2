@@ -49,6 +49,7 @@ vi.mock("~/lib/analytics-server", async (importOriginal) => ({
 }));
 
 import { captureEvent, captureException } from "~/lib/analytics-server";
+import { D1WriteUnavailableError } from "~/lib/d1-write-retry.server";
 import {
   handleAppleCallback,
   handleGitHubCallback,
@@ -331,6 +332,47 @@ describe("OAuth social-callback telemetry", () => {
           retryable: false,
         },
       });
+    });
+
+    it("sends the chef back to sign in again, with a retryable database failure, when the sign-in could not be saved", async () => {
+      const { context } = telemetryContext();
+      verifyMocks.verifyGitHubCallback.mockResolvedValueOnce({
+        success: true,
+        githubUser: { id: "github-user", email: "chef@example.com", emailVerified: true, login: "chef", name: null, avatarUrl: null },
+      });
+      callbackMocks.handleGitHubOAuthCallback.mockRejectedValueOnce(new D1WriteUnavailableError("oauth_user.create", new Error("D1_ERROR: Network connection lost.")));
+      const cookie = await storedCookie("github");
+      const request = new Request("https://spoonjoy.app/auth/github/callback?state=state&code=c", {
+        headers: { Cookie: cookie },
+      });
+
+      const response = await handleGitHubCallback(request, context);
+
+      expect(response.headers.get("Location")).toBe("/login?oauthError=temporarily_unavailable");
+      expect(socialCallbackEvents().at(-1)).toMatchObject({
+        properties: {
+          provider: "github",
+          error_code: "temporarily_unavailable",
+          phase: "link_account",
+          failure_kind: "database",
+          retryable: true,
+        },
+      });
+    });
+
+    it("passes on a sign-in failure that is not the database being unavailable", async () => {
+      const { context } = telemetryContext();
+      verifyMocks.verifyGitHubCallback.mockResolvedValueOnce({
+        success: true,
+        githubUser: { id: "github-user", email: "chef@example.com", emailVerified: true, login: "chef", name: null, avatarUrl: null },
+      });
+      callbackMocks.handleGitHubOAuthCallback.mockRejectedValueOnce(new Error("disk full"));
+      const cookie = await storedCookie("github");
+      const request = new Request("https://spoonjoy.app/auth/github/callback?state=state&code=c", {
+        headers: { Cookie: cookie },
+      });
+
+      await expect(handleGitHubCallback(request, context)).rejects.toThrow("disk full");
     });
 
     it("threads provider + phase through for GitHub (no httpStatus)", async () => {

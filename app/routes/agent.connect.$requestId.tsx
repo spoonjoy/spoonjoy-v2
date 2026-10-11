@@ -1,6 +1,7 @@
 import type { Route } from "./+types/agent.connect.$requestId";
 import { Form, data, redirect, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { D1_WRITE_UNAVAILABLE_MESSAGE, d1UnavailableHeaders, isD1Unavailable } from "~/lib/d1-write-retry.server";
 import { getCurrentSessionIdentity, getUserId } from "~/lib/session.server";
 import {
   approveAgentConnectionRequest,
@@ -127,7 +128,17 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
   } satisfies LoaderData;
 }
 
-export async function action({ request, context, params }: Route.ActionArgs) {
+export async function action(args: Route.ActionArgs) {
+  try {
+    return await decide(args);
+  } catch (error) {
+    // The database was briefly unavailable: say so on the page, where the chef can try again.
+    if (!isD1Unavailable(error)) throw error;
+    return data({ error: D1_WRITE_UNAVAILABLE_MESSAGE } satisfies ActionData, { status: 503, headers: d1UnavailableHeaders() });
+  }
+}
+
+async function decide({ request, context, params }: Route.ActionArgs) {
   const env = context.cloudflare?.env;
   const identity = await getCurrentSessionIdentity(request, env);
   if (!identity) throw redirect(loginRedirect(request));

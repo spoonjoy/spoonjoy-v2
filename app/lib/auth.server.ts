@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { newReservationId } from "~/lib/api-idempotency.server";
 
 const SALT_ROUNDS = 10;
 
@@ -29,7 +31,11 @@ export async function verifyPassword(password: string, hashedPassword: string): 
   return bcrypt.compareSync(password, hashedPassword);
 }
 
-// Create user
+/**
+ * Create a user with a password. The id is chosen before the first try, so after a transient D1
+ * error a retry that fails on the unique email or username, because an earlier try committed,
+ * finds this id and answers the account it made, rather than refusing the email as taken.
+ */
 export async function createUser(
   db: PrismaClient,
   email: string,
@@ -37,17 +43,22 @@ export async function createUser(
   password: string
 ) {
   const { hashedPassword, salt } = await hashPassword(password);
+  const id = newReservationId(new Date());
+  const select = { id: true, email: true, username: true } as const;
 
-  const user = await db.user.create({
+  return retryD1Write({
+    scope: "user.create",
+    applied: () => db.user.findFirst({ where: { id, hashedPassword }, select }),
+  }, () => db.user.create({
     data: {
+      id,
       email: email.toLowerCase(),
       username,
       hashedPassword,
       salt,
     },
-  });
-
-  return { id: user.id, email: user.email, username: user.username };
+    select,
+  }));
 }
 
 type AuthenticatedUser = {

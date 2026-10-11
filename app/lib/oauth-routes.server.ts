@@ -17,6 +17,7 @@ import {
   D1_WRITE_UNAVAILABLE_MESSAGE,
   d1UnavailableHeaders,
   isD1Unavailable,
+  retryD1Write,
 } from "~/lib/d1-write-retry.server";
 import { RequestBodyTooLargeError, readLimitedTextBody } from "~/lib/request-body-limit.server";
 import {
@@ -87,6 +88,17 @@ function oauthErrorResponse(error: unknown): Response {
   return Response.json(
     { error: error.code, error_description: error.message, ...(error.reason ? { reason: error.reason } : {}) },
     { status: error.status },
+  );
+}
+
+/**
+ * The database was briefly unavailable and a write could not be made safely: a retryable 503 in
+ * the OAuth error format, so the client can send the same request again.
+ */
+function d1UnavailableOAuthResponse(): Response {
+  return Response.json(
+    { error: D1_WRITE_UNAVAILABLE_CODE, error_description: D1_WRITE_UNAVAILABLE_MESSAGE },
+    { status: 503, headers: d1UnavailableHeaders() },
   );
 }
 
@@ -364,6 +376,9 @@ export async function handleOAuthRegister(
     if (error instanceof OAuthError) {
       return withOAuthRegisterTelemetry(oauthErrorResponse(error), { ...telemetry, errorCode: error.code });
     }
+    if (isD1Unavailable(error)) {
+      return withOAuthRegisterTelemetry(d1UnavailableOAuthResponse(), { ...telemetry, errorCode: D1_WRITE_UNAVAILABLE_CODE });
+    }
     return oauthErrorResponse(error);
   }
 }
@@ -508,10 +523,7 @@ export async function handleOAuthToken(
     // late, and presenting the same refresh token again answers the pair it rotated to.
     if (isD1Unavailable(error)) {
       return withOAuthTokenTelemetry(
-        Response.json(
-          { error: D1_WRITE_UNAVAILABLE_CODE, error_description: D1_WRITE_UNAVAILABLE_MESSAGE },
-          { status: 503, headers: d1UnavailableHeaders() },
-        ),
+        d1UnavailableOAuthResponse(),
         { outcome: "error", grantType: safeGrantType, clientId, errorCode: D1_WRITE_UNAVAILABLE_CODE },
       );
     }
@@ -585,6 +597,14 @@ export async function handleOAuthRevoke(
         tokenTypeHint,
       });
     }
+    // Every revoke write runs again after a transient D1 error, so the same request works again.
+    if (isD1Unavailable(error)) {
+      return withOAuthRevokeTelemetry(d1UnavailableOAuthResponse(), {
+        outcome: "error",
+        errorCode: D1_WRITE_UNAVAILABLE_CODE,
+        tokenTypeHint,
+      });
+    }
     return oauthErrorResponse(error);
   }
 }
@@ -602,7 +622,7 @@ export interface AuthorizeRequestParams {
 
 export type AuthorizeView =
   | { kind: "consent"; clientName: string | null; scope: string; params: AuthorizeRequestParams; consentToken: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; retryable?: true };
 
 const OAUTH_CONSENT_TTL_MS = 10 * 60 * 1000;
 
@@ -611,10 +631,23 @@ async function createConsentTransaction(
   input: { userId: string; issuer: string; params: AuthorizeRequestParams; expiresAt: Date },
 ): Promise<string> {
   const token = createOAuthOpaqueToken("oct_");
-  await db.oAuthConsentTransaction.deleteMany({ where: { expiresAt: { lte: new Date() } } });
-  await db.oAuthConsentTransaction.create({
-    data: {
-      tokenHash: await hashOAuthOpaqueToken(token),
+  const tokenHash = await hashOAuthOpaqueToken(token);
+  // Dropping expired screens deletes by a fixed rule, so after a transient D1 error it simply runs
+  // again. The new screen's key is its token's hash, chosen before the first try, so a retry fails
+  // on it when an earlier try committed, and that screen is the one used.
+  const pruneBefore = new Date();
+  await retryD1Write({ scope: "oauth.consent_prune" }, () => db.oAuthConsentTransaction.deleteMany({
+    where: { expiresAt: { lte: pruneBefore } },
+  }));
+  await retryD1Write({
+    scope: "oauth.consent_create",
+    applied: async () => (await db.oAuthConsentTransaction.findFirst({
+      where: { tokenHash, userId: input.userId },
+      select: { tokenHash: true },
+    })) ? token : null,
+  }, async () => {
+    await db.oAuthConsentTransaction.create({ data: {
+      tokenHash,
       userId: input.userId,
       issuer: input.issuer,
       clientId: input.params.clientId,
@@ -624,7 +657,8 @@ async function createConsentTransaction(
       codeChallenge: input.params.codeChallenge,
       resource: input.params.resource || null,
       expiresAt: input.expiresAt,
-    },
+    } });
+    return token;
   });
   return token;
 }
@@ -866,6 +900,23 @@ export async function loadOAuthAuthorize(
   db: Database,
   env: OAuthEnv | null | undefined,
 ): Promise<AuthorizeView | Response> {
+  try {
+    return await loadOAuthAuthorizeView(request, db, env);
+  } catch (error) {
+    // The database was briefly unavailable: say so, and reloading the page tries again.
+    if (!isD1Unavailable(error)) throw error;
+    return withOAuthAuthorizeTelemetry(
+      { kind: "error", message: D1_WRITE_UNAVAILABLE_MESSAGE, retryable: true },
+      { outcome: "error", errorCode: D1_WRITE_UNAVAILABLE_CODE, stateClass: authorizeStateClass(readAuthorizeParams(new URL(request.url).searchParams).state) },
+    );
+  }
+}
+
+async function loadOAuthAuthorizeView(
+  request: Request,
+  db: Database,
+  env: OAuthEnv | null | undefined,
+): Promise<AuthorizeView | Response> {
   const url = new URL(request.url);
   const issuer = resolveIssuerOrigin(request.url, env?.SPOONJOY_BASE_URL);
   const params = readAuthorizeParams(url.searchParams);
@@ -934,6 +985,25 @@ export async function loadOAuthAuthorize(
  * redirect back with it; on deny, redirect back with access_denied.
  */
 export async function handleOAuthAuthorizeAction(
+  request: Request,
+  db: Database,
+  env: OAuthEnv | null | undefined,
+): Promise<Response> {
+  try {
+    return await handleOAuthAuthorizeDecision(request, db, env);
+  } catch (error) {
+    // The database was briefly unavailable: a retryable 503. The consent screen is still valid
+    // unless an earlier try consumed it, so submitting it again works.
+    if (!isD1Unavailable(error)) throw error;
+    return withOAuthAuthorizeTelemetry(d1UnavailableOAuthResponse(), {
+      outcome: "error",
+      errorCode: D1_WRITE_UNAVAILABLE_CODE,
+      stateClass: "unknown",
+    });
+  }
+}
+
+async function handleOAuthAuthorizeDecision(
   request: Request,
   db: Database,
   env: OAuthEnv | null | undefined,
@@ -1032,9 +1102,30 @@ export async function handleOAuthAuthorizeAction(
     );
   }
 
-  const consumeConsent = () => db.oAuthConsentTransaction.deleteMany({
-    where: { tokenHash: transaction.tokenHash, userId, issuer, expiresAt: { gt: now } },
+  // Consuming the screen answers on whether it deleted the row. After a transient D1 error it runs
+  // again, and the row being gone means an earlier try deleted it. (A second submit of the same
+  // screen racing a lost try could also find it gone; the session-version fence below still holds,
+  // and each code is single-use.)
+  const consentGone = async () => (await db.oAuthConsentTransaction.findUnique({
+    where: { tokenHash: transaction.tokenHash },
+    select: { tokenHash: true },
+  })) ? null : { count: 1 };
+  let triedBefore = false;
+  const consumeConsent = () => retryD1Write({ scope: "oauth.consent_consume", applied: consentGone }, async () => {
+    // A retry that deletes nothing may follow an earlier try that landed late. A first try that
+    // deletes nothing means another request consumed the screen.
+    const retry = triedBefore;
+    triedBefore = true;
+    const result = await db.oAuthConsentTransaction.deleteMany({
+      where: { tokenHash: transaction.tokenHash, userId, issuer, expiresAt: { gt: now } },
+    });
+    return result.count === 1 || !retry ? result : (await consentGone()) ?? result;
   });
+  // Withdrawing the code deletes it by its hash, so after a transient D1 error it simply runs again.
+  const withdrawCode = async (code: string) => {
+    const codeHash = await hashOAuthOpaqueToken(code);
+    await retryD1Write({ scope: "oauth.code_withdraw" }, () => db.oAuthAuthCode.deleteMany({ where: { codeHash } }));
+  };
   const consumedError = () => withOAuthAuthorizeTelemetry(
     Response.json({ error: "invalid_request", error_description: "The consent transaction is invalid or expired." }, { status: 400 }),
     {
@@ -1071,7 +1162,7 @@ export async function handleOAuthAuthorizeAction(
   try {
     consumed = await consumeConsent();
   } catch (error) {
-    await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
+    await withdrawCode(code);
     throw error;
   }
   // The session-version fence: sign out everywhere or a password change that landed after this
@@ -1079,7 +1170,7 @@ export async function handleOAuthAuthorizeAction(
   // must not survive it. One that lands after this check finds the code and spends it. (This
   // read is consistent with the revocation's write because D1 read replication is off.)
   if (consumed.count !== 1 || !(await sessionVersionUnchanged(db, userId, identity.sessionVersion))) {
-    await db.oAuthAuthCode.deleteMany({ where: { codeHash: await hashOAuthOpaqueToken(code) } });
+    await withdrawCode(code);
     return consumedError();
   }
 
