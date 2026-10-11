@@ -211,6 +211,16 @@ const externalGuideSteps = [
     ].join("\n"),
   },
   {
+    title: "Public chef profiles",
+    scope: "Public read",
+    body: "GET /api/v1/users/{identifier} returns a chef's public profile by username or id: recipes, cookbooks, recent cooks, and chef-graph counts. The fellow-chefs and kitchen-visitors endpoints page through the chefs connected by cooks, forks, and cookbook saves, with page and limit query parameters.",
+    sample: [
+      "GET /api/v1/users/{identifier}",
+      "GET /api/v1/users/{identifier}/fellow-chefs?page=1&limit=50",
+      "GET /api/v1/users/{identifier}/kitchen-visitors?page=1&limit=50",
+    ].join("\n"),
+  },
+  {
     title: "Manage owner recipe covers",
     scope: "Requires kitchen:write",
     body: "Recipe cover management endpoints let native clients list cover candidates and spoon photo sources, activate a cover variant, set an explicit no-cover state, archive a candidate with replacement or confirmed no-cover, regenerate editorial imagery, and create a cover from a spoon photo. These operations are owner-scoped to the authenticated chef's recipes.",

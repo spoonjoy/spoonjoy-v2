@@ -509,6 +509,9 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `DELETE` | `/api/v1/cookbooks/{id}` | Authenticated chef | `kitchen:write` |
 | `POST` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
 | `DELETE` | `/api/v1/cookbooks/{id}/recipes/{recipeId}` | Authenticated chef | `kitchen:write` |
+| `GET` | `/api/v1/users/{identifier}` | Optional | None |
+| `GET` | `/api/v1/users/{identifier}/fellow-chefs` | Optional | None |
+| `GET` | `/api/v1/users/{identifier}/kitchen-visitors` | Optional | None |
 | `GET` | `/api/v1/me` | Authenticated chef | `account:read` |
 | `GET` | `/api/v1/me/sync` | Authenticated chef | `account:read kitchen:read` |
 | `PATCH` | `/api/v1/me` | Authenticated chef | `account:write` |
@@ -552,6 +555,8 @@ Mutation responses return the changed item or changed items plus mutation metada
 Retry network timeouts, `429`, and `5xx` responses with the same mutation id. Refresh or reconnect on `401`. Do not retry validation, scope, or idempotency-conflict errors unchanged.
 
 Recipe and cookbook list endpoints are public catalog search endpoints today. They accept `limit`, `cursor`, and `query`/`q`; when both query aliases are supplied, `query` wins. Responses include `cursor`, `nextCursor`, and `hasMore`, plus `coverImageUrl` on recipe summaries and `coverImageUrls` on cookbook summaries. They do not provide private owner export or public deletion tombstones. Use first-party `/api/v1/me/sync` for native owner data, including owned recipe/cookbook delete tombstones.
+
+Public chef profiles mirror the web profile pages. `GET /api/v1/users/{identifier}` takes a username or a user id and returns the chef's profile, up to 24 recipes (`recipesNextCursor` is passed back as `after` for the next 24), cookbooks with up to four recipe previews each, the 10 most recent cooks, and the fellow chef and kitchen visitor counts. `isOwner` is true when the request's credentials belong to that chef. `GET /api/v1/users/{identifier}/fellow-chefs` lists the chefs whose recipes this chef has cooked, forked, or saved, and `GET /api/v1/users/{identifier}/kitchen-visitors` lists the chefs who have done that to this chef's recipes. Both take `page` (from 1) and `limit` (1 to 100, default 50) and return `nextCursor` as the next page number, or null on the last page. An unknown chef returns `not_found`.
 
 Cookbook write endpoints are owner-scoped native and automation surfaces. `POST /api/v1/cookbooks` creates an owned cookbook from `title`. `PATCH /api/v1/cookbooks/{id}` renames an owned cookbook. `DELETE /api/v1/cookbooks/{id}` deletes only the cookbook and its recipe links, never the recipes themselves. `POST /api/v1/cookbooks/{id}/recipes/{recipeId}` adds an active recipe to an owned cookbook and returns `added: false` as a successful no-op when the recipe is already present. `DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}` removes the link and returns `removed: false` when the link is already absent. Delete endpoints accept `clientMutationId` in the JSON body, query string, or `X-Client-Mutation-Id` header.
 
