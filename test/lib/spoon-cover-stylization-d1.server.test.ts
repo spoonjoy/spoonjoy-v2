@@ -411,5 +411,19 @@ describe("cover stylization on a D1 binding", () => {
       expect(await state(unmarked)).toMatchObject({ status: "processing", generationStatus: "processing" });
       expect(logger.error).toHaveBeenCalledWith("spoon cover stylization failure state update failed", expect.anything());
     });
+
+    it("still rejects when the failure mark hits an error other than an unavailable database", async () => {
+      const seeded = await seed("broken mark");
+      const TRIGGER = "StylizationD1_mark_failure";
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(SUCCESS, "lost", "lost", "lost", "lost");
+      await db.$executeRawUnsafe(`CREATE TRIGGER "${TRIGGER}" BEFORE UPDATE ON "RecipeCover"
+        WHEN NEW."generationStatus" = 'failed' BEGIN SELECT RAISE(ABORT, 'stylization_mark_failure'); END`);
+      try {
+        await expect(stylize(seeded, flaky.binding)).rejects.toThrow("stylization_mark_failure");
+      } finally {
+        await db.$executeRawUnsafe(`DROP TRIGGER "${TRIGGER}"`);
+      }
+    });
   });
 });

@@ -17,7 +17,7 @@ import {
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
-import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   captureImageGenerationException,
   captureImageGenerationProviderFallback,
@@ -905,7 +905,9 @@ export async function scheduleSpoonCoverStylization(
     try {
       await markStylizationFailed(input, failureReasonFor(error), { force: true, keepSucceeded: true });
     } catch (markError) {
-      // The database may still be unavailable; the stuck-generation check fails the cover later.
+      // While the database is still unavailable the stuck-generation check fails the cover later;
+      // any other error surfaces as before.
+      if (!isD1Unavailable(markError)) throw markError;
       logger.error("spoon cover stylization failure state update failed", serializeError(markError));
     }
     await captureGenerationException(input, error, serializedError);
