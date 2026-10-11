@@ -1227,9 +1227,12 @@ async function handleRecipeDetailActionOnD1(
   if (intent === "delete") {
     const { title } = await assertOwnedActiveRecipeOnD1(d1, { recipeId, userId });
     const deletedAt = new Date();
-    // One atomic batch: the soft delete and its native sync tombstone.
+    const deletedAtValue = d1Timestamp(deletedAt);
+    // One atomic batch: the soft delete and its native sync tombstone. A try that runs again
+    // after the earlier one committed finds the recipe already deleted and fails its guard; the
+    // recipe deleted at this request's own time says the earlier try committed.
     await writeExistingRecipeOnD1(d1, recipeId, [
-      [`UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`, d1Timestamp(deletedAt), d1Timestamp(deletedAt), recipeId],
+      [`UPDATE "Recipe" SET "deletedAt" = ?, "updatedAt" = ? WHERE "id" = ?`, deletedAtValue, deletedAtValue, recipeId],
       nativeSyncTombstoneUpsertStatement({
         accountId: userId,
         resourceType: "recipe",
@@ -1238,7 +1241,10 @@ async function handleRecipeDetailActionOnD1(
         deletedAt,
         updatedAt: deletedAt,
       }),
-    ]);
+    ], {
+      scope: "recipe.delete",
+      committedWhen: [`SELECT 1 AS "deleted" FROM "Recipe" WHERE "id" = ? AND "deletedAt" = ?`, recipeId, deletedAtValue],
+    });
     return { kind: "redirect", response: redirect("/recipes") };
   }
 
@@ -1662,6 +1668,11 @@ async function handleRecipeDetailIntent(
 interface ExistingRecipeWriteRetry {
   scope: string;
   createdCoverId?: string;
+  /**
+   * For a write the recipe guard stops once it has committed (a delete): a read that returns a
+   * row only when the earlier try committed, such as the recipe deleted at this request's time.
+   */
+  committedWhen?: D1Query;
 }
 
 async function writeExistingRecipeOnD1(
@@ -1675,6 +1686,7 @@ async function writeExistingRecipeOnD1(
     return true as const;
   };
   const createdCoverId = retry?.createdCoverId;
+  const committedWhen = retry?.committedWhen;
   try {
     if (!retry) await write();
     else {
@@ -1687,6 +1699,11 @@ async function writeExistingRecipeOnD1(
               createdCoverId,
               recipeId,
             ]]);
+            return rows.length > 0 ? (true as const) : null;
+          }
+          : committedWhen
+          ? async () => {
+            const [rows] = await d1ReadBatch(d1, [committedWhen]);
             return rows.length > 0 ? (true as const) : null;
           }
           : undefined,

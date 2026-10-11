@@ -236,7 +236,8 @@ export async function updateSpoon(
     );
   }
 
-  return db.recipeSpoon.update({ where: { id: spoonId }, data });
+  // Sets the patch's values by id, so it runs again after a transient D1 error.
+  return retryD1Write({ scope: "spoon.update" }, () => db.recipeSpoon.update({ where: { id: spoonId }, data }));
 }
 
 export async function deleteSpoon(
@@ -245,10 +246,12 @@ export async function deleteSpoon(
   requestingUserId: string,
 ): Promise<RecipeSpoon> {
   await findOwnedActiveSpoon(db, spoonId, requestingUserId);
-  return db.recipeSpoon.update({
+  // The deletion time is chosen once, so every try sets the same values.
+  const deletedAt = new Date();
+  return retryD1Write({ scope: "spoon.delete.prisma" }, () => db.recipeSpoon.update({
     where: { id: spoonId },
-    data: { deletedAt: new Date() },
-  });
+    data: { deletedAt },
+  }));
 }
 
 const chefSelect = { id: true, username: true, photoUrl: true } as const;
