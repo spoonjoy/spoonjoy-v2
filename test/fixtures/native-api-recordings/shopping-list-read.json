@@ -1,0 +1,21 @@
+{
+  "name": "shopping-list-read",
+  "endpoint": "GET /api/v1/shopping-list",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_067",
+    "data": {
+      "shoppingList": {
+        "id": "id_019",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef"
+        },
+        "items": [],
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "nextCursor": "2026-01-01T00:00:00.000Z"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "name": "cookbook-add-recipe",
+  "endpoint": "POST /api/v1/cookbooks/{id}/recipes/{recipeId}",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_055",
+    "data": {
+      "added": true,
+      "recipeId": "id_004",
+      "cookbook": {
+        "id": "id_017",
+        "title": "Weeknight Dinners",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef"
+        },
+        "recipeCount": 1,
+        "coverImageUrls": [],
+        "href": "/cookbooks/id_017",
+        "canonicalUrl": "http://localhost/cookbooks/id_017",
+        "attribution": {
+          "creditText": "Weeknight Dinners by contract_chef on Spoonjoy",
+          "canonicalUrl": "http://localhost/cookbooks/id_017"
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "recipes": [
+          {
+            "id": "id_004",
+            "title": "Lemon Pantry Pasta",
+            "description": "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
+            "servings": "4",
+            "chef": {
+              "id": "id_001",
+              "username": "contract_chef"
+            },
+            "coverImageUrl": null,
+            "coverProvenanceLabel": null,
+            "coverSourceType": null,
+            "coverVariant": null,
+            "href": "/recipes/id_004",
+            "canonicalUrl": "http://localhost/recipes/id_004",
+            "attribution": {
+              "creditText": "Lemon Pantry Pasta by contract_chef on Spoonjoy",
+              "canonicalUrl": "http://localhost/recipes/id_004",
+              "sourceUrl": null,
+              "sourceHost": null,
+              "sourceRecipe": null
+            },
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          }
+        ]
+      },
+      "mutation": {
+        "clientMutationId": "opaque_056",
+        "replayed": false
+      }
+    }
+  }
+}

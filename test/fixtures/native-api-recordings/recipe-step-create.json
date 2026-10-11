@@ -1,0 +1,118 @@
+{
+  "name": "recipe-step-create",
+  "endpoint": "POST /api/v1/recipes/{id}/steps",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_007",
+    "data": {
+      "created": true,
+      "step": {
+        "id": "id_005",
+        "stepNum": 2,
+        "stepTitle": "Toss",
+        "description": "Toss the pasta with lemon and olive oil.",
+        "duration": 2,
+        "ingredients": [
+          {
+            "id": "uuid_004",
+            "name": "lemon",
+            "quantity": 1,
+            "unit": "whole"
+          }
+        ],
+        "usingSteps": [
+          {
+            "id": "uuid_005",
+            "inputStepNum": 2,
+            "outputStepNum": 1,
+            "outputOfStep": {
+              "stepNum": 1,
+              "stepTitle": "Boil"
+            }
+          }
+        ]
+      },
+      "recipe": {
+        "id": "id_004",
+        "title": "Lemon Pantry Pasta",
+        "description": "Bright weeknight pasta from the pantry.",
+        "servings": "4",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef"
+        },
+        "coverImageUrl": null,
+        "coverProvenanceLabel": null,
+        "coverSourceType": null,
+        "coverVariant": null,
+        "href": "/recipes/id_004",
+        "canonicalUrl": "http://localhost/recipes/id_004",
+        "attribution": {
+          "creditText": "Lemon Pantry Pasta by contract_chef on Spoonjoy",
+          "canonicalUrl": "http://localhost/recipes/id_004",
+          "sourceUrl": null,
+          "sourceHost": null,
+          "sourceRecipe": null
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "steps": [
+          {
+            "id": "uuid_001",
+            "stepNum": 1,
+            "stepTitle": "Boil",
+            "description": "Cook the spaghetti in salted water.",
+            "duration": 10,
+            "ingredients": [
+              {
+                "id": "uuid_002",
+                "name": "salt",
+                "quantity": 1,
+                "unit": "tsp"
+              },
+              {
+                "id": "uuid_003",
+                "name": "spaghetti",
+                "quantity": 200,
+                "unit": "g"
+              }
+            ],
+            "usingSteps": []
+          },
+          {
+            "id": "id_005",
+            "stepNum": 2,
+            "stepTitle": "Toss",
+            "description": "Toss the pasta with lemon and olive oil.",
+            "duration": 2,
+            "ingredients": [
+              {
+                "id": "uuid_004",
+                "name": "lemon",
+                "quantity": 1,
+                "unit": "whole"
+              }
+            ],
+            "usingSteps": [
+              {
+                "id": "uuid_005",
+                "inputStepNum": 2,
+                "outputStepNum": 1,
+                "outputOfStep": {
+                  "stepNum": 1,
+                  "stepTitle": "Boil"
+                }
+              }
+            ]
+          }
+        ],
+        "cookbooks": []
+      },
+      "mutation": {
+        "clientMutationId": "opaque_008",
+        "replayed": false
+      }
+    }
+  }
+}

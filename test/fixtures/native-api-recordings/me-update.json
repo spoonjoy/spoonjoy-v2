@@ -1,0 +1,22 @@
+{
+  "name": "me-update",
+  "endpoint": "PATCH /api/v1/me",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_094",
+    "data": {
+      "id": "id_001",
+      "email": "contract-chef@example.test",
+      "username": "contract_chef",
+      "photoUrl": null,
+      "hasPassword": true,
+      "oauthAccounts": [],
+      "passkeys": [],
+      "mutation": {
+        "clientMutationId": "opaque_095",
+        "replayed": false
+      }
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "name": "user-profile",
+  "endpoint": "GET /api/v1/users/{identifier}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_084",
+    "data": {
+      "profile": {
+        "id": "id_001",
+        "username": "contract_chef",
+        "photoUrl": null,
+        "joinedLabel": "Joined Jan 2026",
+        "joinedAt": "2026-01-01T00:00:00.000Z",
+        "href": "/users/contract_chef",
+        "canonicalUrl": "http://localhost/users/contract_chef"
+      },
+      "isOwner": false,
+      "recipes": [
+        {
+          "id": "id_016",
+          "title": "Tomato Herb Soup, my way",
+          "description": "A simple soup.",
+          "servings": "2",
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null,
+          "href": "/recipes/id_016",
+          "canonicalUrl": "http://localhost/recipes/id_016"
+        },
+        {
+          "id": "id_004",
+          "title": "Lemon Pantry Pasta",
+          "description": "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
+          "servings": "4",
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null,
+          "href": "/recipes/id_004",
+          "canonicalUrl": "http://localhost/recipes/id_004"
+        }
+      ],
+      "recipeCount": 2,
+      "recipesNextCursor": null,
+      "cookbooks": [
+        {
+          "id": "id_017",
+          "title": "Weeknight Dinners",
+          "recipeCount": 1,
+          "recipes": [
+            {
+              "id": "id_004",
+              "title": "Lemon Pantry Pasta",
+              "coverImageUrl": null,
+              "coverProvenanceLabel": null,
+              "href": "/recipes/id_004",
+              "canonicalUrl": "http://localhost/recipes/id_004"
+            }
+          ],
+          "href": "/cookbooks/id_017",
+          "canonicalUrl": "http://localhost/cookbooks/id_017"
+        }
+      ],
+      "recentSpoons": [
+        {
+          "id": "id_012",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+          "note": "Lovely and quick.",
+          "nextTime": null,
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          },
+          "recipe": {
+            "id": "id_004",
+            "title": "Lemon Pantry Pasta",
+            "chefId": "id_001"
+          },
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null
+        },
+        {
+          "id": "id_011",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+          "note": "Charred the lemons first.",
+          "nextTime": "More pepper.",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          },
+          "recipe": {
+            "id": "id_004",
+            "title": "Lemon Pantry Pasta",
+            "chefId": "id_001"
+          },
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null
+        },
+        {
+          "id": "id_010",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "photoUrl": null,
+          "note": "Added extra lemon zest and pepper.",
+          "nextTime": "Try bucatini.",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          },
+          "recipe": {
+            "id": "id_004",
+            "title": "Lemon Pantry Pasta",
+            "chefId": "id_001"
+          },
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null
+        }
+      ],
+      "fellowChefsCount": 1,
+      "kitchenVisitorsCount": 0
+    }
+  }
+}

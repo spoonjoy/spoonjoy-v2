@@ -1,0 +1,21 @@
+{
+  "name": "oauth-register",
+  "endpoint": "POST /oauth/register",
+  "status": 201,
+  "body": {
+    "client_id": "id_003",
+    "client_name": "Spoonjoy Apple",
+    "redirect_uris": [
+      "https://spoonjoy.app/oauth/callback"
+    ],
+    "token_endpoint_auth_method": "none",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "application_type": "web"
+  }
+}

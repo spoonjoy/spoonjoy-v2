@@ -1,0 +1,21 @@
+{
+  "name": "recipe-delete",
+  "endpoint": "DELETE /api/v1/recipes/{id}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_116",
+    "data": {
+      "deleted": true,
+      "recipe": {
+        "id": "id_016",
+        "deletedAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z"
+      },
+      "mutation": {
+        "clientMutationId": "opaque_117",
+        "replayed": false
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "shopping-clear-completed",
+  "endpoint": "POST /api/v1/shopping-list/clear-completed",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_077",
+    "data": {
+      "removed": 0,
+      "items": [],
+      "mutation": {
+        "clientMutationId": "opaque_078",
+        "replayed": false
+      }
+    }
+  }
+}

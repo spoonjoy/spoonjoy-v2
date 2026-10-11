@@ -1,0 +1,67 @@
+{
+  "name": "search",
+  "endpoint": "GET /api/v1/search",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_083",
+    "data": {
+      "query": "pasta",
+      "scope": "all",
+      "limit": 20,
+      "isAuthenticated": false,
+      "results": [
+        {
+          "type": "recipe",
+          "id": "id_004",
+          "ownerId": "id_001",
+          "ownerUsername": "contract_chef",
+          "title": "Lemon Pantry Pasta",
+          "subtitle": "Recipe by contract_chef",
+          "snippet": "Bright weeknight pasta from the pantry, ready in fifteen minutes. contract_chef Weeknight Dinners Boil Cook the spaghetti in salted water. 200 g spaghetti...",
+          "href": "/recipes/id_004",
+          "canonicalUrl": "http://localhost/recipes/id_004",
+          "imageUrl": null,
+          "score": -1.020565104411379,
+          "metadata": {
+            "servings": "4",
+            "chefUsername": "contract_chef",
+            "ingredientNames": [
+              "lemon",
+              "olive oil",
+              "salt",
+              "spaghetti"
+            ],
+            "stepCount": 2,
+            "cookbookTitles": [
+              "Weeknight Dinners"
+            ],
+            "coverProvenanceLabel": null,
+            "coverSourceType": null,
+            "coverVariant": null
+          }
+        },
+        {
+          "type": "cookbook",
+          "id": "id_017",
+          "ownerId": "id_001",
+          "ownerUsername": "contract_chef",
+          "title": "Weeknight Dinners",
+          "subtitle": "Cookbook by contract_chef",
+          "snippet": "Weeknight Dinners contract_chef Lemon Pantry Pasta",
+          "href": "/cookbooks/id_017",
+          "canonicalUrl": "http://localhost/cookbooks/id_017",
+          "imageUrl": null,
+          "score": -0.6912432486854126,
+          "metadata": {
+            "authorUsername": "contract_chef",
+            "recipeCount": 1,
+            "recipeTitles": [
+              "Lemon Pantry Pasta"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

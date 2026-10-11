@@ -1,0 +1,70 @@
+{
+  "name": "tokens-list",
+  "endpoint": "GET /api/v1/tokens",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_109",
+    "data": {
+      "tokens": [
+        {
+          "id": "id_022",
+          "name": "Spoonjoy Apple (OAuth)",
+          "tokenPrefix": "access_token_005",
+          "scopes": [
+            "account:read",
+            "account:write",
+            "cookbooks:read",
+            "kitchen:read",
+            "kitchen:write",
+            "public:read",
+            "recipes:read",
+            "shopping_list:read",
+            "shopping_list:write"
+          ],
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "lastUsedAt": null,
+          "revokedAt": null,
+          "expiresAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "id_023",
+          "name": "Spoonjoy Apple (OAuth)",
+          "tokenPrefix": "access_token_006",
+          "scopes": [
+            "account:read",
+            "account:write",
+            "cookbooks:read",
+            "kitchen:read",
+            "kitchen:write",
+            "public:read",
+            "recipes:read",
+            "shopping_list:read",
+            "shopping_list:write"
+          ],
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "lastUsedAt": "2026-01-01T00:00:00.000Z",
+          "revokedAt": null,
+          "expiresAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "id_024",
+          "name": "Contract token admin",
+          "tokenPrefix": "access_token_007",
+          "scopes": [
+            "recipes:read",
+            "tokens:read",
+            "tokens:write"
+          ],
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "lastUsedAt": "2026-01-01T00:00:00.000Z",
+          "revokedAt": null,
+          "expiresAt": null
+        }
+      ]
+    }
+  }
+}

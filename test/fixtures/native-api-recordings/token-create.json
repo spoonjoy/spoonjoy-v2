@@ -1,0 +1,25 @@
+{
+  "name": "token-create",
+  "endpoint": "POST /api/v1/tokens",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_110",
+    "data": {
+      "token": "access_token_008",
+      "credential": {
+        "id": "uuid_022",
+        "name": "Shortcuts",
+        "tokenPrefix": "access_token_009",
+        "scopes": [
+          "recipes:read"
+        ],
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "lastUsedAt": null,
+        "revokedAt": null,
+        "expiresAt": "2026-01-01T00:00:00.000Z"
+      }
+    }
+  }
+}

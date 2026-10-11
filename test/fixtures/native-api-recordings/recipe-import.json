@@ -1,0 +1,48 @@
+{
+  "name": "recipe-import",
+  "endpoint": "POST /api/v1/recipes/import",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_091",
+    "data": {
+      "recipe": {
+        "id": "id_020",
+        "title": "Garlic Bread",
+        "description": null,
+        "servings": "4",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef"
+        },
+        "coverImageUrl": null,
+        "coverProvenanceLabel": null,
+        "coverSourceType": null,
+        "coverVariant": null,
+        "href": "/recipes/id_020",
+        "canonicalUrl": "http://localhost/recipes/id_020",
+        "attribution": {
+          "creditText": "Garlic Bread by contract_chef on Spoonjoy",
+          "canonicalUrl": "http://localhost/recipes/id_020",
+          "sourceUrl": "https://recipes.example/garlic-bread",
+          "sourceHost": "recipes.example",
+          "sourceRecipe": null
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "steps": [],
+        "cookbooks": []
+      },
+      "importCode": null,
+      "blockers": [],
+      "confidence": "high",
+      "source": "json-ld",
+      "existingRecipeId": null,
+      "coverPending": false,
+      "mutation": {
+        "clientMutationId": "opaque_092",
+        "replayed": false
+      }
+    }
+  }
+}

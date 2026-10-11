@@ -1,0 +1,75 @@
+{
+  "name": "shopping-add-from-recipe",
+  "endpoint": "POST /api/v1/shopping-list/add-from-recipe",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_072",
+    "data": {
+      "recipe": {
+        "id": "id_004",
+        "title": "Lemon Pantry Pasta"
+      },
+      "created": 4,
+      "updated": 0,
+      "items": [
+        {
+          "id": "uuid_017",
+          "name": "spaghetti",
+          "quantity": 200,
+          "unit": "g",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": null,
+          "categoryKey": "pantry",
+          "iconKey": "wheat",
+          "sortIndex": 2,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "uuid_018",
+          "name": "salt",
+          "quantity": 1,
+          "unit": "tsp",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": null,
+          "categoryKey": "spices",
+          "iconKey": "pot",
+          "sortIndex": 3,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "uuid_019",
+          "name": "lemon",
+          "quantity": 1,
+          "unit": "whole",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": null,
+          "categoryKey": "produce",
+          "iconKey": "citrus",
+          "sortIndex": 4,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "uuid_020",
+          "name": "olive oil",
+          "quantity": 2,
+          "unit": "tbsp",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": null,
+          "categoryKey": "pantry",
+          "iconKey": "droplets",
+          "sortIndex": 5,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "mutation": {
+        "clientMutationId": "opaque_073",
+        "replayed": false
+      }
+    }
+  }
+}

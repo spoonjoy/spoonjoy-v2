@@ -1,0 +1,342 @@
+[
+  {
+    "name": "auth-password-native",
+    "endpoint": "POST /api/v1/auth/password/native",
+    "status": 201
+  },
+  {
+    "name": "auth-apple-native",
+    "endpoint": "POST /api/v1/auth/apple/native",
+    "status": 201
+  },
+  {
+    "name": "oauth-token-refresh",
+    "endpoint": "POST /oauth/token",
+    "status": 200
+  },
+  {
+    "name": "oauth-register",
+    "endpoint": "POST /oauth/register",
+    "status": 201
+  },
+  {
+    "name": "recipe-create",
+    "endpoint": "POST /api/v1/recipes",
+    "status": 201
+  },
+  {
+    "name": "recipe-step-create",
+    "endpoint": "POST /api/v1/recipes/{id}/steps",
+    "status": 201
+  },
+  {
+    "name": "recipe-step-update",
+    "endpoint": "PATCH /api/v1/recipes/{id}/steps/{stepId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-ingredient-create",
+    "endpoint": "POST /api/v1/recipes/{id}/steps/{stepId}/ingredients",
+    "status": 201
+  },
+  {
+    "name": "recipe-ingredient-delete",
+    "endpoint": "DELETE /api/v1/recipes/{id}/steps/{stepId}/ingredients/{ingredientId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-output-uses-replace",
+    "endpoint": "PUT /api/v1/recipes/{id}/step-output-uses",
+    "status": 200
+  },
+  {
+    "name": "recipe-step-reorder",
+    "endpoint": "POST /api/v1/recipes/{id}/steps/reorder",
+    "status": 200
+  },
+  {
+    "name": "recipe-step-delete",
+    "endpoint": "DELETE /api/v1/recipes/{id}/steps/{stepId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-update",
+    "endpoint": "PATCH /api/v1/recipes/{id}",
+    "status": 200
+  },
+  {
+    "name": "recipe-image-upload",
+    "endpoint": "POST /api/v1/recipes/{id}/image",
+    "status": 201
+  },
+  {
+    "name": "recipe-covers-list",
+    "endpoint": "GET /api/v1/recipes/{id}/covers",
+    "status": 200
+  },
+  {
+    "name": "recipe-cover-activate",
+    "endpoint": "PATCH /api/v1/recipes/{id}/covers/{coverId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-spoon-create",
+    "endpoint": "POST /api/v1/recipes/{id}/spoons",
+    "status": 201
+  },
+  {
+    "name": "recipe-spoon-update",
+    "endpoint": "PATCH /api/v1/recipes/{id}/spoons/{spoonId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-spoon-create-photo",
+    "endpoint": "POST /api/v1/recipes/{id}/spoons",
+    "status": 201
+  },
+  {
+    "name": "recipe-image-upload-spoon",
+    "endpoint": "POST /api/v1/recipes/{id}/image",
+    "status": 201
+  },
+  {
+    "name": "recipe-cover-from-spoon",
+    "endpoint": "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+    "status": 201
+  },
+  {
+    "name": "recipe-spoons-list",
+    "endpoint": "GET /api/v1/recipes/{id}/spoons",
+    "status": 200
+  },
+  {
+    "name": "recipe-cover-set-no-cover",
+    "endpoint": "PATCH /api/v1/recipes/{id}/covers",
+    "status": 200
+  },
+  {
+    "name": "recipe-cover-archive",
+    "endpoint": "DELETE /api/v1/recipes/{id}/covers/{coverId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-fork",
+    "endpoint": "POST /api/v1/recipes/{id}/fork",
+    "status": 201
+  },
+  {
+    "name": "cookbook-create",
+    "endpoint": "POST /api/v1/cookbooks",
+    "status": 201
+  },
+  {
+    "name": "cookbook-update",
+    "endpoint": "PATCH /api/v1/cookbooks/{id}",
+    "status": 200
+  },
+  {
+    "name": "cookbook-add-recipe",
+    "endpoint": "POST /api/v1/cookbooks/{id}/recipes/{recipeId}",
+    "status": 201
+  },
+  {
+    "name": "cookbook-remove-recipe",
+    "endpoint": "DELETE /api/v1/cookbooks/{id}/recipes/{recipeId}",
+    "status": 200
+  },
+  {
+    "name": "cookbook-delete",
+    "endpoint": "DELETE /api/v1/cookbooks/{id}",
+    "status": 200
+  },
+  {
+    "name": "cookbooks-list",
+    "endpoint": "GET /api/v1/cookbooks",
+    "status": 200
+  },
+  {
+    "name": "cookbook-detail",
+    "endpoint": "GET /api/v1/cookbooks/{id}",
+    "status": 200
+  },
+  {
+    "name": "shopping-list-read",
+    "endpoint": "GET /api/v1/shopping-list",
+    "status": 200
+  },
+  {
+    "name": "shopping-item-add",
+    "endpoint": "POST /api/v1/shopping-list/items",
+    "status": 201
+  },
+  {
+    "name": "shopping-item-check",
+    "endpoint": "PATCH /api/v1/shopping-list/items/{itemId}",
+    "status": 200
+  },
+  {
+    "name": "shopping-add-from-recipe",
+    "endpoint": "POST /api/v1/shopping-list/add-from-recipe",
+    "status": 200
+  },
+  {
+    "name": "shopping-list-read-full",
+    "endpoint": "GET /api/v1/shopping-list",
+    "status": 200
+  },
+  {
+    "name": "shopping-item-delete",
+    "endpoint": "DELETE /api/v1/shopping-list/items/{itemId}",
+    "status": 200
+  },
+  {
+    "name": "shopping-clear-completed",
+    "endpoint": "POST /api/v1/shopping-list/clear-completed",
+    "status": 200
+  },
+  {
+    "name": "shopping-clear-all",
+    "endpoint": "POST /api/v1/shopping-list/clear-all",
+    "status": 200
+  },
+  {
+    "name": "recipes-list",
+    "endpoint": "GET /api/v1/recipes",
+    "status": 200
+  },
+  {
+    "name": "recipe-detail",
+    "endpoint": "GET /api/v1/recipes/{id}",
+    "status": 200
+  },
+  {
+    "name": "search",
+    "endpoint": "GET /api/v1/search",
+    "status": 200
+  },
+  {
+    "name": "user-profile",
+    "endpoint": "GET /api/v1/users/{identifier}",
+    "status": 200
+  },
+  {
+    "name": "user-kitchen-visitors",
+    "endpoint": "GET /api/v1/users/{identifier}/kitchen-visitors",
+    "status": 200
+  },
+  {
+    "name": "user-fellow-chefs",
+    "endpoint": "GET /api/v1/users/{identifier}/fellow-chefs",
+    "status": 200
+  },
+  {
+    "name": "me-chefs",
+    "endpoint": "GET /api/v1/me/chefs",
+    "status": 200
+  },
+  {
+    "name": "me-sync",
+    "endpoint": "GET /api/v1/me/sync",
+    "status": 200
+  },
+  {
+    "name": "recipe-import-blocked",
+    "endpoint": "POST /api/v1/recipes/import",
+    "status": 200
+  },
+  {
+    "name": "recipe-import",
+    "endpoint": "POST /api/v1/recipes/import",
+    "status": 201
+  },
+  {
+    "name": "me",
+    "endpoint": "GET /api/v1/me",
+    "status": 200
+  },
+  {
+    "name": "me-update",
+    "endpoint": "PATCH /api/v1/me",
+    "status": 200
+  },
+  {
+    "name": "me-photo-upload",
+    "endpoint": "POST /api/v1/me/photo",
+    "status": 200
+  },
+  {
+    "name": "me-photo-remove",
+    "endpoint": "DELETE /api/v1/me/photo",
+    "status": 200
+  },
+  {
+    "name": "notification-preferences",
+    "endpoint": "GET /api/v1/me/notification-preferences",
+    "status": 200
+  },
+  {
+    "name": "notification-preferences-update",
+    "endpoint": "PATCH /api/v1/me/notification-preferences",
+    "status": 200
+  },
+  {
+    "name": "apns-device-register",
+    "endpoint": "POST /api/v1/me/apns-devices",
+    "status": 201
+  },
+  {
+    "name": "apns-device-revoke",
+    "endpoint": "DELETE /api/v1/me/apns-devices/{deviceId}",
+    "status": 200
+  },
+  {
+    "name": "tokens-list",
+    "endpoint": "GET /api/v1/tokens",
+    "status": 200
+  },
+  {
+    "name": "token-create",
+    "endpoint": "POST /api/v1/tokens",
+    "status": 201
+  },
+  {
+    "name": "token-revoke",
+    "endpoint": "DELETE /api/v1/tokens/{credentialId}",
+    "status": 200
+  },
+  {
+    "name": "native-telemetry",
+    "endpoint": "POST /api/v1/native/telemetry",
+    "status": 202
+  },
+  {
+    "name": "me-export",
+    "endpoint": "GET /api/v1/me/export",
+    "status": 200
+  },
+  {
+    "name": "recipe-spoon-delete",
+    "endpoint": "DELETE /api/v1/recipes/{id}/spoons/{spoonId}",
+    "status": 200
+  },
+  {
+    "name": "recipe-delete",
+    "endpoint": "DELETE /api/v1/recipes/{id}",
+    "status": 200
+  },
+  {
+    "name": "connections-list",
+    "endpoint": "GET /api/v1/me/connections",
+    "status": 200
+  },
+  {
+    "name": "connection-disconnect",
+    "endpoint": "DELETE /api/v1/me/connections/{connectionId}",
+    "status": 200
+  },
+  {
+    "name": "account-delete",
+    "endpoint": "DELETE /api/v1/me",
+    "status": 200
+  }
+]

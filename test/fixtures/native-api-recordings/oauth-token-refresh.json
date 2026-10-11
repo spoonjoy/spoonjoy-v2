@@ -1,0 +1,12 @@
+{
+  "name": "oauth-token-refresh",
+  "endpoint": "POST /oauth/token",
+  "status": 200,
+  "body": {
+    "access_token": "access_token_004",
+    "refresh_token": "refresh_token_004",
+    "token_type": "Bearer",
+    "expires_in": 900,
+    "scope": "kitchen:read kitchen:write shopping_list:read shopping_list:write account:read account:write"
+  }
+}

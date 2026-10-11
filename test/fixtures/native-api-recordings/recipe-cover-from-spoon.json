@@ -1,0 +1,70 @@
+{
+  "name": "recipe-cover-from-spoon",
+  "endpoint": "POST /api/v1/recipes/{id}/covers/from-spoon/{spoonId}",
+  "status": 201,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_040",
+    "data": {
+      "activeCover": {
+        "id": "id_009",
+        "recipeId": "id_004",
+        "status": "ready",
+        "sourceType": "chef-upload",
+        "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "stylizedImageUrl": null,
+        "displayUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "activeVariant": "image",
+        "provenanceLabel": "Original photo",
+        "sourceSpoonId": null,
+        "createdById": "id_001",
+        "archivedAt": null,
+        "generationStatus": "none",
+        "failureReason": null,
+        "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "previousActiveCover": {
+        "id": "id_009",
+        "recipeId": "id_004",
+        "status": "ready",
+        "sourceType": "chef-upload",
+        "imageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "stylizedImageUrl": null,
+        "displayUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "activeVariant": "image",
+        "provenanceLabel": "Original photo",
+        "sourceSpoonId": null,
+        "createdById": "id_001",
+        "archivedAt": null,
+        "generationStatus": "none",
+        "failureReason": null,
+        "sourceImageUrl": "http://localhost/photos/recipes/id_001/id_004/1767225600000-uuid_008.png",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "createdCover": {
+        "id": "id_014",
+        "recipeId": "id_004",
+        "status": "ready",
+        "sourceType": "spoon",
+        "imageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+        "stylizedImageUrl": null,
+        "displayUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+        "activeVariant": null,
+        "provenanceLabel": "Original photo",
+        "sourceSpoonId": "id_012",
+        "createdById": "id_001",
+        "archivedAt": null,
+        "generationStatus": "none",
+        "failureReason": null,
+        "sourceImageUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "generationStatus": "none",
+      "mutation": {
+        "clientMutationId": "opaque_041",
+        "replayed": false
+      }
+    }
+  }
+}

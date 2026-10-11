@@ -1,0 +1,70 @@
+{
+  "name": "shopping-clear-all",
+  "endpoint": "POST /api/v1/shopping-list/clear-all",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_079",
+    "data": {
+      "removed": 4,
+      "items": [
+        {
+          "id": "uuid_017",
+          "name": "spaghetti",
+          "quantity": 200,
+          "unit": "g",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": "2026-01-01T00:00:00.000Z",
+          "categoryKey": "pantry",
+          "iconKey": "wheat",
+          "sortIndex": 2,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "uuid_018",
+          "name": "salt",
+          "quantity": 1,
+          "unit": "tsp",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": "2026-01-01T00:00:00.000Z",
+          "categoryKey": "spices",
+          "iconKey": "pot",
+          "sortIndex": 3,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "uuid_019",
+          "name": "lemon",
+          "quantity": 1,
+          "unit": "whole",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": "2026-01-01T00:00:00.000Z",
+          "categoryKey": "produce",
+          "iconKey": "citrus",
+          "sortIndex": 4,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "uuid_020",
+          "name": "olive oil",
+          "quantity": 2,
+          "unit": "tbsp",
+          "checked": false,
+          "checkedAt": null,
+          "deletedAt": "2026-01-01T00:00:00.000Z",
+          "categoryKey": "pantry",
+          "iconKey": "droplets",
+          "sortIndex": 5,
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "mutation": {
+        "clientMutationId": "opaque_080",
+        "replayed": false
+      }
+    }
+  }
+}

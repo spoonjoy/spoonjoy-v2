@@ -1,0 +1,32 @@
+{
+  "name": "recipe-spoon-update",
+  "endpoint": "PATCH /api/v1/recipes/{id}/spoons/{spoonId}",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_034",
+    "data": {
+      "spoon": {
+        "id": "id_010",
+        "chefId": "id_001",
+        "recipeId": "id_004",
+        "cookedAt": "2026-01-01T00:00:00.000Z",
+        "photoUrl": null,
+        "note": "Added extra lemon zest and pepper.",
+        "nextTime": "Try bucatini.",
+        "deletedAt": null,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "chef": {
+          "id": "id_001",
+          "username": "contract_chef",
+          "photoUrl": null
+        }
+      },
+      "mutation": {
+        "clientMutationId": "opaque_035",
+        "replayed": false
+      }
+    }
+  }
+}

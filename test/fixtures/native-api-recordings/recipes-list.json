@@ -1,0 +1,103 @@
+{
+  "name": "recipes-list",
+  "endpoint": "GET /api/v1/recipes",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_081",
+    "data": {
+      "query": null,
+      "limit": 20,
+      "cursor": null,
+      "nextCursor": null,
+      "hasMore": false,
+      "recipes": [
+        {
+          "id": "id_004",
+          "title": "Lemon Pantry Pasta",
+          "description": "Bright weeknight pasta from the pantry, ready in fifteen minutes.",
+          "servings": "4",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef"
+          },
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null,
+          "coverSourceType": null,
+          "coverVariant": null,
+          "href": "/recipes/id_004",
+          "canonicalUrl": "http://localhost/recipes/id_004",
+          "attribution": {
+            "creditText": "Lemon Pantry Pasta by contract_chef on Spoonjoy",
+            "canonicalUrl": "http://localhost/recipes/id_004",
+            "sourceUrl": null,
+            "sourceHost": null,
+            "sourceRecipe": null
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "id_015",
+          "title": "Tomato Herb Soup",
+          "description": "A simple soup.",
+          "servings": "2",
+          "chef": {
+            "id": "id_002",
+            "username": "contract_friend"
+          },
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null,
+          "coverSourceType": null,
+          "coverVariant": null,
+          "href": "/recipes/id_015",
+          "canonicalUrl": "http://localhost/recipes/id_015",
+          "attribution": {
+            "creditText": "Tomato Herb Soup by contract_friend on Spoonjoy",
+            "canonicalUrl": "http://localhost/recipes/id_015",
+            "sourceUrl": null,
+            "sourceHost": null,
+            "sourceRecipe": null
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        },
+        {
+          "id": "id_016",
+          "title": "Tomato Herb Soup, my way",
+          "description": "A simple soup.",
+          "servings": "2",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef"
+          },
+          "coverImageUrl": null,
+          "coverProvenanceLabel": null,
+          "coverSourceType": null,
+          "coverVariant": null,
+          "href": "/recipes/id_016",
+          "canonicalUrl": "http://localhost/recipes/id_016",
+          "attribution": {
+            "creditText": "Tomato Herb Soup, my way by contract_chef on Spoonjoy",
+            "canonicalUrl": "http://localhost/recipes/id_016",
+            "sourceUrl": null,
+            "sourceHost": null,
+            "sourceRecipe": {
+              "id": "id_015",
+              "title": "Tomato Herb Soup",
+              "chef": {
+                "id": "id_002",
+                "username": "contract_friend"
+              },
+              "href": "/recipes/id_015",
+              "canonicalUrl": "http://localhost/recipes/id_015",
+              "deleted": false
+            }
+          },
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ]
+    }
+  }
+}

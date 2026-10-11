@@ -1,0 +1,68 @@
+{
+  "name": "recipe-spoons-list",
+  "endpoint": "GET /api/v1/recipes/{id}/spoons",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_042",
+    "data": {
+      "limit": 20,
+      "cursor": null,
+      "nextCursor": null,
+      "hasMore": false,
+      "spoons": [
+        {
+          "id": "id_012",
+          "chefId": "id_001",
+          "recipeId": "id_004",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_011.png",
+          "note": "Lovely and quick.",
+          "nextTime": null,
+          "deletedAt": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          }
+        },
+        {
+          "id": "id_011",
+          "chefId": "id_001",
+          "recipeId": "id_004",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "photoUrl": "http://localhost/photos/spoons/id_001/id_004/1767225600000-uuid_010.png",
+          "note": "Charred the lemons first.",
+          "nextTime": "More pepper.",
+          "deletedAt": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          }
+        },
+        {
+          "id": "id_010",
+          "chefId": "id_001",
+          "recipeId": "id_004",
+          "cookedAt": "2026-01-01T00:00:00.000Z",
+          "photoUrl": null,
+          "note": "Added extra lemon zest and pepper.",
+          "nextTime": "Try bucatini.",
+          "deletedAt": null,
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "chef": {
+            "id": "id_001",
+            "username": "contract_chef",
+            "photoUrl": null
+          }
+        }
+      ]
+    }
+  }
+}
