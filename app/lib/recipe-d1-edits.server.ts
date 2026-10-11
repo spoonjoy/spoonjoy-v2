@@ -1,8 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1EpochMsSql, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { validateStepReorderComplete } from "~/lib/step-reorder-validation.server";
 import { d1Guard, d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { D1_WRITE_UNAVAILABLE_CODE, D1_WRITE_UNAVAILABLE_MESSAGE, d1UnavailableHeaders, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
+import { data } from "react-router";
 import { coverInsertStatement } from "~/lib/recipe-cover.server";
 import {
   activeRecipeTitleFreeGuard,
@@ -27,6 +29,36 @@ import {
 // Each batch starts with guards that re-check, as it writes, what the action read and
 // validated first; if another request changed those rows in between, the batch fails and
 // nothing in it applies. The Prisma versions stay in the routes for when there is no binding.
+//
+// Each batch runs again after a transient D1 error (retryD1Write). A batch that sets fixed values
+// simply runs again. A batch whose guards its own commit would fail (a moved or deleted step, an
+// added ingredient, a changed updatedAt) chooses its marks before the first try (ids, its time)
+// and, after an ambiguous failure, reads them back: if the earlier try committed, that is the
+// answer, and a retry stopped by its own commit is not mistaken for a race.
+
+/** The time a batch wrote, as SQL comparable whatever format the column holds. */
+function writtenAt(column: string): string {
+  return `${d1EpochMsSql(column)} = ?`;
+}
+
+/** Whether `query` finds a row; for an `applied` check. */
+async function found(d1: D1ReadDatabase, query: D1Query): Promise<true | null> {
+  const [rows] = await d1ReadBatch(d1, [query]);
+  return rows.length > 0 ? true : null;
+}
+
+/**
+ * The editor pages' answer when the database was briefly unavailable and every try failed: a
+ * retryable 503 that shows the message in `field` and keeps what the cook entered. Null for any
+ * other error.
+ */
+export function recipeEditorUnavailable(error: unknown, field: string = "general") {
+  if (!isD1Unavailable(error)) return null;
+  return data(
+    { errors: { [field]: D1_WRITE_UNAVAILABLE_MESSAGE }, errorCode: D1_WRITE_UNAVAILABLE_CODE, retryable: true as const },
+    { status: 503, headers: d1UnavailableHeaders() },
+  );
+}
 
 /** The answer for an editor write that lost a race and whose checks still pass. */
 export const RECIPE_CHANGED_MESSAGE = "This recipe changed while you were editing it. Reload the page and try again.";
@@ -108,7 +140,7 @@ export async function saveRecipeEditOnD1(
   } else if (cover?.kind === "clear") {
     coverFields = { activeCoverId: null, activeCoverVariant: null, coverMode: "none" };
   }
-  await d1WriteBatch(d1, [
+  const statements: D1Query[] = [
     recipeActiveGuard(recipeId),
     activeRecipeTitleFreeGuard(input.chefId, input.fields.title, recipeId),
     ...(input.expectedUpdatedAt ? [recipeUpdatedAtGuard(recipeId, input.expectedUpdatedAt)] : []),
@@ -126,7 +158,23 @@ export async function saveRecipeEditOnD1(
       : []),
     recipeUpdateStatement(recipeId, { ...input.fields, ...coverFields }, now),
     cookbooksForRecipeTouchStatement(recipeId, now),
-  ]);
+  ];
+  // A retry after the earlier try committed fails its updatedAt guard (and an upload's cover id
+  // is taken): the recipe at this save's time and title, with its cover, says it committed.
+  await retryD1Write(
+    {
+      scope: "recipe.edit",
+      applied: () => found(d1, [
+        `SELECT 1 FROM "Recipe" WHERE "id" = ? AND "title" = ? AND ${writtenAt('"updatedAt"')}${
+          cover?.kind === "upload" ? ` AND "activeCoverId" = ?` : ""}`,
+        recipeId,
+        input.fields.title,
+        now.getTime(),
+        ...(cover?.kind === "upload" ? [cover.coverId] : []),
+      ]),
+    },
+    () => d1WriteBatch(d1, statements).then(() => true as const),
+  );
 }
 
 /** Swaps a step with its neighbour through a temporary step number, then touches the recipe. */
@@ -135,15 +183,36 @@ export async function swapRecipeStepsOnD1(
   input: { recipeId: string; stepId: string; stepNum: number; targetStepId: string; targetStepNum: number },
 ): Promise<void> {
   const now = new Date();
-  await d1WriteBatch(d1, [
-    stepAtGuard(input.stepId, input.recipeId, input.stepNum),
-    stepAtGuard(input.targetStepId, input.recipeId, input.targetStepNum),
-    stepReorderDependencyFreeGuard(input.recipeId, input.stepNum, input.targetStepNum),
-    stepNumUpdateStatement(input.stepId, -1, now),
-    stepNumUpdateStatement(input.targetStepId, input.stepNum, now),
-    stepNumUpdateStatement(input.stepId, input.targetStepNum, now),
-    recipeUpdateStatement(input.recipeId, {}, now),
-  ]);
+  // A swap is a flip: run again after it committed, its step guards stop it. Both steps at their
+  // swapped numbers, at this swap's time, say the earlier try committed.
+  await retryD1Write(
+    {
+      scope: "recipe.swap_steps",
+      applied: async () => {
+        const [rows] = await d1ReadBatch(d1, [[
+          `SELECT "id" FROM "RecipeStep"
+           WHERE "recipeId" = ? AND ${writtenAt('"updatedAt"')}
+             AND (("id" = ? AND "stepNum" = ?) OR ("id" = ? AND "stepNum" = ?))`,
+          input.recipeId,
+          now.getTime(),
+          input.stepId,
+          input.targetStepNum,
+          input.targetStepId,
+          input.stepNum,
+        ]]);
+        return rows.length === 2 ? true : null;
+      },
+    },
+    () => d1WriteBatch(d1, [
+      stepAtGuard(input.stepId, input.recipeId, input.stepNum),
+      stepAtGuard(input.targetStepId, input.recipeId, input.targetStepNum),
+      stepReorderDependencyFreeGuard(input.recipeId, input.stepNum, input.targetStepNum),
+      stepNumUpdateStatement(input.stepId, -1, now),
+      stepNumUpdateStatement(input.targetStepId, input.stepNum, now),
+      stepNumUpdateStatement(input.stepId, input.targetStepNum, now),
+      recipeUpdateStatement(input.recipeId, {}, now),
+    ]).then(() => true as const),
+  );
 }
 
 /**
@@ -155,16 +224,30 @@ export async function deleteRecipeStepOnD1(
   input: { recipeId: string; stepId: string; stepNum: number },
 ): Promise<void> {
   const now = new Date();
-  await d1WriteBatch(d1, [
-    stepAtGuard(input.stepId, input.recipeId, input.stepNum),
-    d1Guard(
-      `NOT EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "outputStepNum" = ?)`,
-      input.recipeId,
-      input.stepNum,
-    ),
-    stepDeleteStatement(input.stepId),
-    recipeUpdateStatement(input.recipeId, {}, now),
-  ]);
+  // Run again after it committed, its step guard stops it: the step gone and the recipe touched
+  // at this delete's time say the earlier try committed.
+  await retryD1Write(
+    {
+      scope: "recipe.delete_step",
+      applied: () => found(d1, [
+        `SELECT 1 FROM "Recipe" WHERE "id" = ? AND ${writtenAt('"updatedAt"')}
+           AND NOT EXISTS (SELECT 1 FROM "RecipeStep" WHERE "id" = ?)`,
+        input.recipeId,
+        now.getTime(),
+        input.stepId,
+      ]),
+    },
+    () => d1WriteBatch(d1, [
+      stepAtGuard(input.stepId, input.recipeId, input.stepNum),
+      d1Guard(
+        `NOT EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "outputStepNum" = ?)`,
+        input.recipeId,
+        input.stepNum,
+      ),
+      stepDeleteStatement(input.stepId),
+      recipeUpdateStatement(input.recipeId, {}, now),
+    ]).then(() => true as const),
+  );
 }
 
 /**
@@ -183,14 +266,36 @@ export async function addStepIngredientsOnD1(
   },
 ): Promise<void> {
   const now = new Date();
-  const named = input.rows.map((row) => ({ ...row, recipeId: input.recipeId, stepNum: input.stepNum, now }));
-  await d1WriteBatch(d1, [
-    stepAtGuard(input.stepId, input.recipeId, input.stepNum),
-    ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
-    ...nameUpsertStatements(named, now),
-    ...named.map(namedIngredientInsertStatement),
-    recipeUpdateStatement(input.recipeId, {}, now),
-  ]);
+  // The ingredients' ids are chosen before the first try. Run again after it committed, the
+  // names-free guard stops it: every one of those ids on the step says the earlier try committed.
+  const named = input.rows.map((row) => ({
+    ...row,
+    id: crypto.randomUUID(),
+    recipeId: input.recipeId,
+    stepNum: input.stepNum,
+    now,
+  }));
+  await retryD1Write(
+    {
+      scope: "recipe.add_step_ingredients",
+      applied: async () => {
+        const [rows] = await d1ReadBatch(d1, [[
+          `SELECT "id" FROM "Ingredient" WHERE "recipeId" = ? AND "stepNum" = ? AND "id" IN (SELECT "value" FROM json_each(?))`,
+          input.recipeId,
+          input.stepNum,
+          JSON.stringify(named.map((row) => row.id)),
+        ]]);
+        return rows.length === named.length ? true : null;
+      },
+    },
+    () => d1WriteBatch(d1, [
+      stepAtGuard(input.stepId, input.recipeId, input.stepNum),
+      ingredientNamesFreeGuard(input.recipeId, input.rows.map((row) => row.ingredientName)),
+      ...nameUpsertStatements(named, now),
+      ...named.map(namedIngredientInsertStatement),
+      recipeUpdateStatement(input.recipeId, {}, now),
+    ]).then(() => true as const),
+  );
 }
 
 /**
@@ -256,7 +361,9 @@ export async function updateRecipeStepOnD1(
   },
 ): Promise<void> {
   const now = new Date();
-  await d1WriteBatch(d1, [
+  // Sets fixed values and replaces the output uses: run again after it committed, its guards still
+  // pass and it leaves the same rows.
+  await retryD1Write({ scope: "recipe.update_step" }, () => d1WriteBatch(d1, [
     stepAtGuard(input.stepId, input.recipeId, input.stepNum),
     ...(input.usesSteps.length === 0
       ? [d1Guard(`EXISTS (SELECT 1 FROM "Ingredient" WHERE "recipeId" = ? AND "stepNum" = ?)`, input.recipeId, input.stepNum)]
@@ -272,7 +379,7 @@ export async function updateRecipeStepOnD1(
     ...[...new Set(input.usesSteps)].map((outputStepNum) =>
       stepOutputUseInsertStatement(input.recipeId, input.stepNum, outputStepNum, now)),
     recipeUpdateStatement(input.recipeId, {}, now),
-  ]);
+  ]));
 }
 
 /**
@@ -286,16 +393,24 @@ export async function deleteStepIngredientOnD1(
 ): Promise<boolean> {
   const now = new Date();
   const ingredient = `"id" = ? AND "recipeId" = ? AND "stepNum" = ?`;
-  const [, deletion] = await d1WriteBatch(d1, [
-    [
-      `UPDATE "Recipe" SET "updatedAt" = ? WHERE "id" = ? AND EXISTS (SELECT 1 FROM "Ingredient" WHERE ${ingredient})`,
-      d1Timestamp(now),
-      input.recipeId,
-      input.ingredientId,
-      input.recipeId,
-      input.stepNum,
-    ],
-    [`DELETE FROM "Ingredient" WHERE ${ingredient}`, input.ingredientId, input.recipeId, input.stepNum],
-  ]);
-  return deletion!.changes > 0;
+  // Run again after it committed, the delete finds nothing. The recipe touched at this delete's
+  // time (the touch runs only when the ingredient was there) says an earlier try deleted it. Only
+  // a later try may read it that way: the first try's own touch sets the same time.
+  let tries = 0;
+  return retryD1Write({ scope: "recipe.delete_step_ingredient" }, async () => {
+    tries += 1;
+    const [, deletion, touched] = await d1WriteBatch(d1, [
+      [
+        `UPDATE "Recipe" SET "updatedAt" = ? WHERE "id" = ? AND EXISTS (SELECT 1 FROM "Ingredient" WHERE ${ingredient})`,
+        d1Timestamp(now),
+        input.recipeId,
+        input.ingredientId,
+        input.recipeId,
+        input.stepNum,
+      ],
+      [`DELETE FROM "Ingredient" WHERE ${ingredient}`, input.ingredientId, input.recipeId, input.stepNum],
+      [`SELECT 1 FROM "Recipe" WHERE "id" = ? AND ${writtenAt('"updatedAt"')}`, input.recipeId, now.getTime()],
+    ]);
+    return deletion!.changes > 0 || (tries > 1 && touched!.rows.length > 0);
+  });
 }

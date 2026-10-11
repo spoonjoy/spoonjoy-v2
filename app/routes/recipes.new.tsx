@@ -15,6 +15,15 @@ import {
 import { createRecipeDraft, parseRecipeStepsJson } from "~/lib/recipe-create.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
+  D1_WRITE_UNAVAILABLE_CODE,
+  D1_WRITE_UNAVAILABLE_MESSAGE,
+  d1UnavailableHeaders,
+  formWriteToken,
+  idForWriteToken,
+  isD1Unavailable,
+} from "~/lib/d1-write-retry.server";
+import { useWriteToken } from "~/hooks/use-write-token";
+import {
   deleteStoredImageWithCapture,
   hasUploadedImageFile,
   imageUploadFormDataWithinLimit,
@@ -176,6 +185,16 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   const database = await getRequestDb(context);
+  // The recipe's id comes from the form's token, made when the page opened, so a resubmit (after
+  // a 503, or a double tap) finds the recipe the first submit wrote and goes to it, instead of
+  // answering that its own title is taken.
+  const recipeToken = formWriteToken(formData.get("recipeToken"));
+  const recipeId = recipeToken ? await idForWriteToken("recipe", userId, recipeToken) : crypto.randomUUID();
+  if (recipeToken) {
+    const written = await database.recipe.findFirst({ where: { id: recipeId, chefId: userId }, select: { id: true } });
+    if (written) return redirect(`/recipes/${recipeId}`);
+  }
+
   const titleUniquenessResult = await validateActiveRecipeTitleUnique(database, {
     chefId: userId,
     title,
@@ -186,7 +205,6 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const cloudflareEnv = getCloudflareEnv(context);
   const photosBucket = cloudflareEnv?.PHOTOS;
-  const recipeId = crypto.randomUUID();
   let uploadedImageUrl = "";
 
   if (imageFile) {
@@ -258,11 +276,29 @@ export async function action({ request, context }: Route.ActionArgs) {
         extras: { surface: "recipe_create" },
       });
     };
+    // The title was taken by an earlier submit of this same form, landing late: the recipe is
+    // this form's, so the save is done, and this submit's own upload is not needed.
+    if (error instanceof ActiveRecipeTitleConflictError && recipeToken) {
+      const earlier = await database.recipe.findFirst({ where: { id: recipeId, chefId: userId }, select: { id: true } });
+      if (earlier) {
+        await deleteUpload();
+        return redirect(`/recipes/${recipeId}`);
+      }
+    }
     // Another recipe took the title between the check above and the write, so nothing was
     // written: answer as the check does. That is an expected outcome, so nothing is captured.
     if (error instanceof ActiveRecipeTitleConflictError) {
       await deleteUpload();
       return data({ errors: { title: error.message } }, { status: 400 });
+    }
+    // The database was briefly unavailable and every try failed: a retryable 503 the form shows,
+    // keeping what the cook entered, with the same token, so saving again writes the recipe once.
+    // The upload is kept: the last try may still commit, with a cover pointing at it.
+    if (isD1Unavailable(error)) {
+      return data(
+        { errors: { general: D1_WRITE_UNAVAILABLE_MESSAGE }, errorCode: D1_WRITE_UNAVAILABLE_CODE, retryable: true as const },
+        { status: 503, headers: d1UnavailableHeaders() },
+      );
     }
     // The recipe create threw after the image landed in R2. Record the real
     // failure first (it was previously discarded behind a generic 500), then
@@ -354,6 +390,8 @@ export default function NewRecipe() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const submitInFlightRef = useRef(false);
   const [submitStarted, setSubmitStarted] = useState(false);
+  // One recipe per opening of the page: a save after a 503, or a double tap, writes it once.
+  const [recipeToken] = useWriteToken();
   const isLoading = navigation.state === 'submitting' || submitStarted;
 
   useEffect(() => {
@@ -416,6 +454,7 @@ export default function NewRecipe() {
 
       {/* Hidden form for submitting data to the action */}
       <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden">
+        <input type="hidden" name="recipeToken" value={recipeToken} />
         <input type="hidden" name="title" />
         <textarea name="description" className="hidden" />
         <input type="hidden" name="servings" />

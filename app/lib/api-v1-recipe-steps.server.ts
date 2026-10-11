@@ -1,7 +1,8 @@
 import type { Prisma, PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiV1ErrorCode } from "~/lib/api-v1-contract.server";
-import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1EpochMsSql, d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, retryOnD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   ingredientNamesFreeGuard,
   nameUpsertStatements,
@@ -143,6 +144,29 @@ function withRaceRetry<T>(
       reason: "concurrent_change",
     }))
     : attempt();
+}
+
+// Each step write's D1 batch runs again after a transient D1 error (retryD1Write). A batch that
+// sets fixed values simply runs again. A batch whose guards its own commit would fail chooses its
+// marks before the first try (ids, its time) and, after an ambiguous failure, reads them back:
+// if the earlier try committed, that is the answer, and a retry stopped by its own commit is not
+// mistaken for a race.
+
+/** Whether `query` finds `count` rows (one by default); for an `applied` check. */
+async function rowsFound(d1: D1ReadDatabase, query: D1Query, count = 1): Promise<true | null> {
+  const [rows] = await d1ReadBatch(d1, [query]);
+  return rows.length === count ? true : null;
+}
+
+/** The recipe was touched at `now` (by this batch) and the row `table.id` is gone. */
+function touchedAndGone(recipeId: string, now: Date, table: string, id: string): D1Query {
+  return [
+    `SELECT 1 FROM "Recipe" WHERE "id" = ? AND ${d1EpochMsSql('"updatedAt"')} = ?
+       AND NOT EXISTS (SELECT 1 FROM "${table}" WHERE "id" = ?)`,
+    recipeId,
+    now.getTime(),
+    id,
+  ];
 }
 
 function touchRecipeOp(db: Database, recipeId: string): Prisma.PrismaPromise<unknown> {
@@ -845,7 +869,10 @@ async function createNativeRecipeStepOnce(
   if (options.d1) {
     // One atomic batch: the step, its output uses and ingredients, and the recipe touch.
     const now = new Date();
-    await d1WriteBatch(options.d1, [
+    const d1 = options.d1;
+    // The step's id is chosen before the first try; a retry after the earlier try committed fails
+    // the step-number guard, and the step by that id says the earlier try committed.
+    const statements: D1Query[] = [
       noRecipeIngredientConflictsGuard(recipeId, input.ingredients),
       // Still the next step number: a step added in between sends the write back to its checks.
       d1Guard(`NOT EXISTS (SELECT 1 FROM "RecipeStep" WHERE "recipeId" = ? AND "stepNum" >= ?)`, recipeId, stepNum),
@@ -861,7 +888,14 @@ async function createNativeRecipeStepOnce(
       ...stepOutputUseStatements(recipeId, stepNum, input.outputStepNums, now),
       ...namedIngredientStatements(recipeId, stepNum, input.ingredients, now),
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ];
+    await retryD1Write(
+      {
+        scope: "recipe.create_step.api",
+        applied: () => rowsFound(d1, [`SELECT 1 FROM "RecipeStep" WHERE "id" = ? AND "recipeId" = ?`, stepId, recipeId]),
+      },
+      () => d1WriteBatch(d1, statements).then(() => true as const),
+    );
     return success({ recipeId, stepId, stepNum }, 201);
   }
   const ops: Prisma.PrismaPromise<unknown>[] = [
@@ -947,7 +981,10 @@ async function updateNativeRecipeStepOnce(
     const now = new Date();
     const { outputStepNums } = input.fields;
     const assignments = Object.keys(stepFields).map((column) => `"${column}" = ?`);
-    await d1WriteBatch(options.d1, [
+    // Sets fixed values and replaces the output uses: run again after it committed, its guards
+    // still pass and it leaves the same rows.
+    const d1 = options.d1;
+    await retryD1Write({ scope: "recipe.update_step.api" }, () => d1WriteBatch(d1, [
       stepAtGuard(stepId, recipeId, step.data.stepNum),
       ...stepWillHaveContentGuards(recipeId, step.data.stepNum, outputStepNums),
       ...(assignments.length > 0
@@ -965,7 +1002,7 @@ async function updateNativeRecipeStepOnce(
           ...stepOutputUseStatements(recipeId, step.data.stepNum, outputStepNums, now),
         ]),
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ]));
     return success({ recipeId, stepId, updated });
   }
 
@@ -1028,7 +1065,10 @@ async function deleteNativeRecipeStepOnce(
     // One atomic batch: the tombstone, the step (its ingredients and output uses cascade) and
     // the recipe touch. The guards re-check that the step is where it was and still unused.
     const now = new Date();
-    await d1WriteBatch(options.d1, [
+    const d1 = options.d1;
+    // A retry after the earlier try committed fails the step guard: the step gone and the recipe
+    // touched at this delete's time say the earlier try committed.
+    const statements: D1Query[] = [
       stepAtGuard(stepId, recipeId, step.data.stepNum),
       d1Guard(
         `NOT EXISTS (SELECT 1 FROM "StepOutputUse" WHERE "recipeId" = ? AND "outputStepNum" = ?)`,
@@ -1046,7 +1086,11 @@ async function deleteNativeRecipeStepOnce(
         : []),
       stepDeleteStatement(stepId),
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ];
+    await retryD1Write(
+      { scope: "recipe.delete_step.api", applied: () => rowsFound(d1, touchedAndGone(recipeId, now, "RecipeStep", stepId)) },
+      () => d1WriteBatch(d1, statements).then(() => true as const),
+    );
     return success({ recipeId, step: { id: stepId, stepNum: step.data.stepNum } });
   }
 
@@ -1103,12 +1147,22 @@ async function createNativeRecipeStepIngredientOnce(
   if (options.d1) {
     // One atomic batch: the ingredient (with its unit and ingredient ref) and the recipe touch.
     const now = new Date();
-    await d1WriteBatch(options.d1, [
+    const d1 = options.d1;
+    // The ingredient's id is chosen before the first try; a retry after the earlier try committed
+    // fails the names-free guard, and the ingredient by that id says the earlier try committed.
+    const statements: D1Query[] = [
       stepAtGuard(stepId, recipeId, step.data.stepNum),
       noRecipeIngredientConflictsGuard(recipeId, [input]),
       ...namedIngredientStatements(recipeId, step.data.stepNum, [{ ...input, id: ingredientId }], now),
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ];
+    await retryD1Write(
+      {
+        scope: "recipe.create_ingredient.api",
+        applied: () => rowsFound(d1, [`SELECT 1 FROM "Ingredient" WHERE "id" = ? AND "recipeId" = ?`, ingredientId, recipeId]),
+      },
+      () => d1WriteBatch(d1, statements).then(() => true as const),
+    );
     return success({ recipeId, stepId, ingredientId }, 201);
   }
   await db.$transaction([
@@ -1160,7 +1214,10 @@ async function deleteNativeRecipeStepIngredientOnce(
     // One atomic batch: the tombstone, the ingredient and the recipe touch. The guard
     // re-checks that the ingredient is still on the step.
     const now = new Date();
-    await d1WriteBatch(options.d1, [
+    const d1 = options.d1;
+    // A retry after the earlier try committed fails the guard: the ingredient gone and the recipe
+    // touched at this delete's time say the earlier try committed.
+    const statements: D1Query[] = [
       d1Guard(
         `EXISTS (SELECT 1 FROM "Ingredient" WHERE "id" = ? AND "recipeId" = ? AND "stepNum" = ?)`,
         ingredient.id,
@@ -1178,7 +1235,14 @@ async function deleteNativeRecipeStepIngredientOnce(
         : []),
       [`DELETE FROM "Ingredient" WHERE "id" = ?`, ingredient.id],
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ];
+    await retryD1Write(
+      {
+        scope: "recipe.delete_ingredient.api",
+        applied: () => rowsFound(d1, touchedAndGone(recipeId, now, "Ingredient", ingredient.id)),
+      },
+      () => d1WriteBatch(d1, statements).then(() => true as const),
+    );
     return success({ recipeId, stepId, ingredient: { id: ingredient.id } });
   }
 
@@ -1268,13 +1332,15 @@ async function reorderNativeRecipeStepOnce(
 
   if (currentIndex === targetIndex) {
     if (options.tombstone) {
-      await db.$transaction([createMutationTombstoneOp(db, {
-        ...options.tombstone,
+      const tombstone = options.tombstone;
+      // An upsert by its key: running it again leaves the same row.
+      await retryD1Write({ scope: "recipe.reorder_step_unchanged.api" }, () => createMutationTombstoneOp(db, {
+        ...tombstone,
         resourceType: "recipe_step_reorder",
         resourceId: input.stepId,
         parentResourceId: recipeId,
         payload: { recipeId, stepId: input.stepId, toStepNum: input.toStepNum, reordered: false },
-      })]);
+      }));
     }
     return success({ recipeId, stepId: input.stepId, reordered: false });
   }
@@ -1289,7 +1355,10 @@ async function reorderNativeRecipeStepOnce(
     // that the recipe still has exactly the steps read above, at the same numbers, and that
     // no step output use the move would break was added after the dependency check.
     const now = new Date();
-    await d1WriteBatch(options.d1, [
+    const d1 = options.d1;
+    // A reorder is a flip: run again after it committed, the step-number guard stops it. Every
+    // step at its new number, at this reorder's time, says the earlier try committed.
+    const statements: D1Query[] = [
       d1Guard(
         `(SELECT COUNT(*) FROM "RecipeStep" WHERE "recipeId" = ?) = ?
          AND (SELECT COUNT(*) FROM "RecipeStep"
@@ -1313,7 +1382,21 @@ async function reorderNativeRecipeStepOnce(
         }, now)]
         : []),
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ];
+    await retryD1Write(
+      {
+        scope: "recipe.reorder_step.api",
+        applied: () => rowsFound(d1, [
+          `SELECT "id" FROM "RecipeStep"
+           WHERE "recipeId" = ? AND ${d1EpochMsSql('"updatedAt"')} = ?
+             AND ("id" || ':' || "stepNum") IN (SELECT "value" FROM json_each(?))`,
+          recipeId,
+          now.getTime(),
+          JSON.stringify(reorderedSteps.map((candidate, index) => `${candidate.id}:${index + 1}`)),
+        ], reorderedSteps.length),
+      },
+      () => d1WriteBatch(d1, statements).then(() => true as const),
+    );
     return success({ recipeId, stepId: input.stepId, reordered: true });
   }
 
@@ -1393,13 +1476,16 @@ async function replaceNativeRecipeStepOutputUsesOnce(
     // One atomic batch: the output uses replaced and the recipe touch. The guards re-check
     // that the step is where it was and will still have content.
     const now = new Date();
-    await d1WriteBatch(options.d1, [
+    const d1 = options.d1;
+    // Replaces the output uses with fixed ones: run again after it committed, its guards still
+    // pass and it leaves the same rows.
+    await retryD1Write({ scope: "recipe.replace_output_uses.api" }, () => d1WriteBatch(d1, [
       stepAtGuard(input.inputStepId, recipeId, step.data.stepNum),
       ...stepWillHaveContentGuards(recipeId, step.data.stepNum, input.outputStepNums),
       stepOutputUsesDeleteStatement(recipeId, step.data.stepNum),
       ...stepOutputUseStatements(recipeId, step.data.stepNum, input.outputStepNums, now),
       recipeUpdateStatement(recipeId, {}, now),
-    ]);
+    ]));
     return success({ recipeId, stepId: input.inputStepId, replaced: true });
   }
 

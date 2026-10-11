@@ -848,7 +848,8 @@ describe("API v1 recipe step helper contracts", () => {
         payload: JSON.stringify({ recipeId: "recipe_1", stepId: "step_2", toStepNum: 2, reordered: false }),
       }),
     }));
-    expect(transaction).toHaveBeenCalledWith([tombstoneOp]);
+    // One upsert by its key, so it runs on its own rather than in a transaction.
+    expect(transaction).not.toHaveBeenCalled();
   });
 
 	  it("still supports reorder helpers without route tombstones", async () => {
