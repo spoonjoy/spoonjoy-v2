@@ -348,8 +348,9 @@ jobs:
           jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
           # A transient D1 error (app/lib/d1-transient-retry.server.ts) is a platform failure, not a
-          # bug in the change under test; name how many there were and how many a retry absorbed.
-          jq -r 'select(.d1TransientErrors.total > 0) | "::warning::D1 transient errors: \(.d1TransientErrors.total) (\(.d1TransientErrors.retried) retried; \(.d1TransientErrors.notRetried) not retried, of which \(.d1TransientErrors.notRetriedWrites) on writes). See d1TransientErrors in worker-tail-summary.json."' \
+          # bug in the change under test; name how many there were and how many a retry absorbed,
+          # including the writes their operation retried safely (app/lib/d1-write-retry.server.ts).
+          jq -r 'select(.d1TransientErrors.total > 0) | "::warning::D1 transient errors: \(.d1TransientErrors.total) (\(.d1TransientErrors.retried) retried; \(.d1TransientErrors.notRetried) not retried, of which \(.d1TransientErrors.notRetriedWrites) on writes nothing handled). Write operations: \(.d1TransientErrors.writeOperations.retried // 0) retried safely, \(.d1TransientErrors.writeOperations.applied // 0) found already applied, \(.d1TransientErrors.writeOperations.gaveUp // 0) gave up with a retryable 503. See d1TransientErrors in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
           jq -r '"QA Worker error log lines kept: \(.errorLogs.kept // 0) from \(.errorLogs.invocations // 0) invocations (\(.errorLogs.droppedOverCap // 0) over the cap)."' \
             test-results/worker-tail-summary.json || true

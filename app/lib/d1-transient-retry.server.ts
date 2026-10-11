@@ -20,8 +20,10 @@ import { qaErrorLogsEnabled } from "./qa-error-logs.server";
  * - any statement or batch, write or not, when D1 says its storage failed to start, because then
  *   the statement never ran.
  *
- * Every other write is not retried: whether it was applied is unknown, and only the operation
- * itself could make a second attempt safe. Its error still reaches the caller unchanged.
+ * No other write is retried here: whether it was applied is unknown, and only the operation
+ * itself can make a second attempt safe. Its error still reaches the caller unchanged, and the
+ * operations that know they are safe to run again do so through `retryD1Write`
+ * (d1-write-retry.server.ts).
  *
  * Each transient failure, retried or not, is reported to `onTransientError` with no SQL and no
  * bound values, so the per-run QA Worker can log it for the Journeys tail summary.

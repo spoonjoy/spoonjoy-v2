@@ -109,6 +109,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch retries a read that failed with a transient D1 error and re-throws every other error, and the last transient one, unchanged; the route layer's handleError (entry.server.tsx) captures the surfaced exception. A second catch only keeps a throwing reporter from changing the query's outcome.",
   },
   {
+    file: "app/lib/d1-write-retry.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch runs a write again only after a transient D1 error, when the operation says that is safe, and re-throws every other error unchanged; one that runs out of tries becomes D1WriteUnavailableError, which the routes answer as a retryable 503 and the route layer's handleError captures otherwise. A second catch only keeps a throwing reporter from changing the write's outcome.",
+  },
+  {
+    file: "app/lib/account-revocation.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch only starts the revocation again when another account change moved the session version between its read and its batch (a D1 guard failure), and re-throws every other error, and the last race, to the account settings action, whose route boundary captures it.",
+  },
+  {
     file: "app/lib/recipe-write-dedupe.server.ts",
     category: "rethrow",
     reason:
