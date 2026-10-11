@@ -1,4 +1,5 @@
-import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1ReadBatch, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
 import { photoCleanupRequestStatement } from "~/lib/photo-lifecycle.server";
 import { DELETED_CHEF_USERNAME } from "~/lib/username";
@@ -214,6 +215,10 @@ export const DELETE_RECIPES_STATEMENT = 10;
 /**
  * Deletes account `userId` as one atomic D1 batch. Throws `AccountDeletionError` when the
  * account does not exist or is the deleted-chef account.
+ *
+ * After a transient D1 error the batch runs again only once a read shows the account is still
+ * there: the batch applies whole or not at all, so an account that is gone was deleted by the
+ * failed try (or a concurrent deletion), whose counts are then not known and answered as zero.
  */
 export async function deleteAccount(
   d1: D1ReadDatabase,
@@ -223,12 +228,19 @@ export async function deleteAccount(
   if (userId === DELETED_CHEF_ID) {
     throw new AccountDeletionError("account_not_deletable", "This account can't be deleted.");
   }
+  const now = options.now ?? new Date();
+  const deletedEarlier = async (): Promise<AccountDeletionResult | null> => {
+    const [[user]] = await d1ReadBatch(d1, [[`SELECT "id" FROM "User" WHERE "id" = ?`, userId]]);
+    return user ? null : { reassignedRecipes: 0, deletedRecipes: 0 };
+  };
   try {
-    const results = await d1WriteBatch(d1, accountDeletionStatements(userId, options.now ?? new Date()));
-    return {
-      reassignedRecipes: results[REASSIGN_STATEMENT].changes,
-      deletedRecipes: results[DELETE_RECIPES_STATEMENT].changes,
-    };
+    return await retryD1Write({ scope: "account.delete", applied: deletedEarlier }, async () => {
+      const results = await d1WriteBatch(d1, accountDeletionStatements(userId, now));
+      return {
+        reassignedRecipes: results[REASSIGN_STATEMENT].changes,
+        deletedRecipes: results[DELETE_RECIPES_STATEMENT].changes,
+      };
+    });
   } catch (error) {
     // The account does not exist, or was deleted by another request first.
     if (isD1GuardFailure(error)) throw new AccountDeletionError("account_not_found", "Account not found.");

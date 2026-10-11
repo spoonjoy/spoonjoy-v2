@@ -2,6 +2,8 @@ import type { Route } from "./+types/api.push.preferences";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
+import { d1UnavailableJsonResponse } from "~/lib/push-route-errors.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 const PREFERENCE_KEYS = [
   "notifySpoonOnMyRecipe",
@@ -55,12 +57,15 @@ export async function action({ request, context }: Route.ActionArgs) {
   const db = await getRequestDb(context);
   let pref;
   try {
-    pref = await db.notificationPreference.upsert({
+    // An upsert of fixed values by the user's id: running it again leaves the same row.
+    pref = await retryD1Write({ scope: "notification_preference.save" }, () => db.notificationPreference.upsert({
       where: { userId },
       create: { userId, ...patch },
       update: patch,
-    });
+    }));
   } catch (error) {
+    const unavailable = d1UnavailableJsonResponse(error);
+    if (unavailable) return unavailable;
     // The body validated but the preference upsert failed (DB/infra fault). This
     // was previously uncaught — capture it (fire-and-forget, no-op without
     // PostHog) before flattening to a 500 the user sees as a generic failure.

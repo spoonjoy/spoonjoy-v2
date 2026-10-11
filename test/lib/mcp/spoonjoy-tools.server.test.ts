@@ -1757,10 +1757,12 @@ describe("spoonjoy MCP tools", () => {
       imageGenRunner: runner,
     }));
 
+    // The same image as the active cover is that cover: a repeated update adds no second cover
+    // and does not stylize it again (regenerate_recipe_cover is how an agent asks for a new look).
     expect(updated.recipe.imageUrl).toBe(upload.imageUrl);
-    await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(2);
+    await expect(context.db.recipeCover.count({ where: { recipeId: created.recipe.id } })).resolves.toBe(1);
     expect(captured).toHaveLength(0);
-    expect(runner.imageToImage).toHaveBeenCalledTimes(2);
+    expect(runner.imageToImage).toHaveBeenCalledTimes(1);
   });
 
   it("rejects unsafe recipe cover image assignments", async () => {
