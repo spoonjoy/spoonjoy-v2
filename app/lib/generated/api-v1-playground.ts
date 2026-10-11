@@ -8644,6 +8644,561 @@ export const API_V1_PLAYGROUND_MANIFEST = {
       ]
     },
     {
+      "id": "GET /api/v1/users/{identifier}",
+      "operationId": "getApiV1User",
+      "label": "Read a chef's public profile: recipes, cookbooks, recent cooks, and chef-graph counts",
+      "method": "GET",
+      "path": "/api/v1/users/{identifier}",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Chefs",
+      "auth": "optional",
+      "scopes": [],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "identifier",
+          "in": "path",
+          "label": "Identifier",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "identifier",
+          "description": "Chef username, or the chef's user id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "after",
+          "in": "query",
+          "label": "After",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "after",
+          "description": "recipesNextCursor from the previous profile page; returns the chef's next 24 recipes.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: invalid_cursor"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n      \"joinedLabel\": \"Joined Jun 2026\",\n      \"joinedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"isOwner\": false,\n    \"recipes\": [\n      {\n        \"id\": \"recipe_1\",\n        \"title\": \"Pasta\",\n        \"description\": \"Weeknight pasta\",\n        \"servings\": \"4\",\n        \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n        \"coverProvenanceLabel\": \"Original photo\",\n        \"href\": \"/recipes/recipe_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\"\n      }\n    ],\n    \"recipeCount\": 1,\n    \"recipesNextCursor\": null,\n    \"cookbooks\": [\n      {\n        \"id\": \"cookbook_1\",\n        \"title\": \"Weeknights\",\n        \"recipeCount\": 1,\n        \"recipes\": [\n          {\n            \"id\": \"recipe_1\",\n            \"title\": \"Pasta\",\n            \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n            \"coverProvenanceLabel\": \"Original photo\",\n            \"href\": \"/recipes/recipe_1\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\"\n          }\n        ],\n        \"href\": \"/cookbooks/cookbook_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      }\n    ],\n    \"recentSpoons\": [\n      {\n        \"id\": \"spoon_1\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"photoUrl\": null,\n        \"note\": \"Added extra lemon.\",\n        \"nextTime\": null,\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\",\n          \"photoUrl\": null\n        },\n        \"recipe\": {\n          \"id\": \"recipe_2\",\n          \"title\": \"Lemon Pasta\",\n          \"chefId\": \"chef_2\"\n        },\n        \"coverImageUrl\": null,\n        \"coverProvenanceLabel\": null\n      }\n    ],\n    \"fellowChefsCount\": 1,\n    \"kitchenVisitorsCount\": 0\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "invalid_cursor",
+          "label": "Invalid Cursor",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        },
+        {
+          "status": "500",
+          "name": "internal_error",
+          "label": "Internal Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/users/{identifier}/fellow-chefs",
+      "operationId": "getApiV1UserFellowChefs",
+      "label": "List the chefs whose recipes this chef has cooked, forked, or saved",
+      "method": "GET",
+      "path": "/api/v1/users/{identifier}/fellow-chefs",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Chefs",
+      "auth": "optional",
+      "scopes": [],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "identifier",
+          "in": "path",
+          "label": "Identifier",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "identifier",
+          "description": "Chef username, or the chef's user id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "page",
+          "in": "query",
+          "label": "Page",
+          "required": false,
+          "defaultValue": "1",
+          "placeholder": "page",
+          "description": "1-based page number. Defaults to 1.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "50",
+          "placeholder": "20",
+          "description": "Page size from 1 to 100. Defaults to 50.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"direction\": \"fellow-chefs\",\n    \"isOwner\": false,\n    \"page\": 1,\n    \"pageSize\": 50,\n    \"total\": 1,\n    \"nextCursor\": null,\n    \"rows\": [\n      {\n        \"chefId\": \"chef_2\",\n        \"username\": \"julia\",\n        \"photoUrl\": null,\n        \"href\": \"/users/julia\",\n        \"canonicalUrl\": \"https://spoonjoy.app/users/julia\",\n        \"interactionCounts\": {\n          \"spoons\": 1,\n          \"forks\": 0,\n          \"cookbookSaves\": 1\n        },\n        \"latestInteractionAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"emptyState\": null\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        },
+        {
+          "status": "500",
+          "name": "internal_error",
+          "label": "Internal Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "GET /api/v1/users/{identifier}/kitchen-visitors",
+      "operationId": "getApiV1UserKitchenVisitors",
+      "label": "List the chefs who have cooked, forked, or saved this chef's recipes",
+      "method": "GET",
+      "path": "/api/v1/users/{identifier}/kitchen-visitors",
+      "profiles": [
+        "full"
+      ],
+      "tag": "Chefs",
+      "auth": "optional",
+      "scopes": [],
+      "grantableScopes": [],
+      "acceptedOauthScopes": [],
+      "credentialModes": [
+        "anonymous",
+        "session",
+        "bearer"
+      ],
+      "retryPolicy": {
+        "retryOn": [
+          "network_timeout",
+          "429",
+          "5xx"
+        ],
+        "retryAfterHeader": "Retry-After",
+        "preserveClientMutationId": false,
+        "doNotRetryUnchanged": [
+          "validation_error",
+          "invalid_cursor",
+          "insufficient_scope"
+        ]
+      },
+      "cursorPolicy": null,
+      "idempotency": null,
+      "personalTokenOnly": false,
+      "oauthNote": "",
+      "selfRevokeException": "",
+      "kind": "read",
+      "risk": "safe",
+      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
+      "params": [
+        {
+          "name": "identifier",
+          "in": "path",
+          "label": "Identifier",
+          "required": true,
+          "defaultValue": "",
+          "placeholder": "identifier",
+          "description": "Chef username, or the chef's user id.",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "page",
+          "in": "query",
+          "label": "Page",
+          "required": false,
+          "defaultValue": "1",
+          "placeholder": "page",
+          "description": "1-based page number. Defaults to 1.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "label": "Limit",
+          "required": false,
+          "defaultValue": "50",
+          "placeholder": "20",
+          "description": "Page size from 1 to 100. Defaults to 50.",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "header",
+          "label": "X Request Id",
+          "required": false,
+          "defaultValue": "",
+          "placeholder": "X-Request-Id",
+          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseStatuses": [
+        "200",
+        "400",
+        "401",
+        "403",
+        "404",
+        "405",
+        "429",
+        "500"
+      ],
+      "responseSummaries": [
+        {
+          "status": "200",
+          "description": "Success"
+        },
+        {
+          "status": "400",
+          "description": "Errors: validation_error"
+        },
+        {
+          "status": "401",
+          "description": "Errors: invalid_token"
+        },
+        {
+          "status": "403",
+          "description": "Errors: insufficient_scope"
+        },
+        {
+          "status": "404",
+          "description": "Errors: not_found"
+        },
+        {
+          "status": "405",
+          "description": "Errors: method_not_allowed"
+        },
+        {
+          "status": "429",
+          "description": "Errors: rate_limited"
+        },
+        {
+          "status": "500",
+          "description": "Errors: internal_error"
+        }
+      ],
+      "responseExamples": [
+        {
+          "status": "200",
+          "name": "example",
+          "label": "Example",
+          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"direction\": \"fellow-chefs\",\n    \"isOwner\": false,\n    \"page\": 1,\n    \"pageSize\": 50,\n    \"total\": 1,\n    \"nextCursor\": null,\n    \"rows\": [\n      {\n        \"chefId\": \"chef_2\",\n        \"username\": \"julia\",\n        \"photoUrl\": null,\n        \"href\": \"/users/julia\",\n        \"canonicalUrl\": \"https://spoonjoy.app/users/julia\",\n        \"interactionCounts\": {\n          \"spoons\": 1,\n          \"forks\": 0,\n          \"cookbookSaves\": 1\n        },\n        \"latestInteractionAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"emptyState\": null\n  }\n}"
+        },
+        {
+          "status": "400",
+          "name": "validation_error",
+          "label": "Validation Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
+        },
+        {
+          "status": "401",
+          "name": "invalid_token",
+          "label": "Invalid Token",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
+        },
+        {
+          "status": "403",
+          "name": "insufficient_scope",
+          "label": "Insufficient Scope",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
+        },
+        {
+          "status": "404",
+          "name": "not_found",
+          "label": "Not Found",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
+        },
+        {
+          "status": "405",
+          "name": "method_not_allowed",
+          "label": "Method Not Allowed",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
+        },
+        {
+          "status": "429",
+          "name": "rate_limited",
+          "label": "Rate Limited",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
+        },
+        {
+          "status": "500",
+          "name": "internal_error",
+          "label": "Internal Error",
+          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
+        }
+      ]
+    },
+    {
       "id": "GET /api/v1/me",
       "operationId": "getApiV1Me",
       "label": "Read the authenticated account profile",
@@ -9487,561 +10042,6 @@ export const API_V1_PLAYGROUND_MANIFEST = {
           "name": "method_not_allowed",
           "label": "Method Not Allowed",
           "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        }
-      ]
-    },
-    {
-      "id": "GET /api/v1/users/{identifier}",
-      "operationId": "getApiV1User",
-      "label": "Read a chef's public profile: recipes, cookbooks, recent cooks, and chef-graph counts",
-      "method": "GET",
-      "path": "/api/v1/users/{identifier}",
-      "profiles": [
-        "full"
-      ],
-      "tag": "Chefs",
-      "auth": "optional",
-      "scopes": [],
-      "grantableScopes": [],
-      "acceptedOauthScopes": [],
-      "credentialModes": [
-        "anonymous",
-        "session",
-        "bearer"
-      ],
-      "retryPolicy": {
-        "retryOn": [
-          "network_timeout",
-          "429",
-          "5xx"
-        ],
-        "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
-        "doNotRetryUnchanged": [
-          "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
-        ]
-      },
-      "cursorPolicy": null,
-      "idempotency": null,
-      "personalTokenOnly": false,
-      "oauthNote": "",
-      "selfRevokeException": "",
-      "kind": "read",
-      "risk": "safe",
-      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
-      "params": [
-        {
-          "name": "identifier",
-          "in": "path",
-          "label": "Identifier",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "identifier",
-          "description": "Chef username, or the chef's user id.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "after",
-          "in": "query",
-          "label": "After",
-          "required": false,
-          "defaultValue": "",
-          "placeholder": "after",
-          "description": "recipesNextCursor from the previous profile page; returns the chef's next 24 recipes.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "X-Request-Id",
-          "in": "header",
-          "label": "X Request Id",
-          "required": false,
-          "defaultValue": "",
-          "placeholder": "X-Request-Id",
-          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "requestBody": null,
-      "responseStatuses": [
-        "200",
-        "400",
-        "401",
-        "403",
-        "404",
-        "405",
-        "429",
-        "500"
-      ],
-      "responseSummaries": [
-        {
-          "status": "200",
-          "description": "Success"
-        },
-        {
-          "status": "400",
-          "description": "Errors: invalid_cursor"
-        },
-        {
-          "status": "401",
-          "description": "Errors: invalid_token"
-        },
-        {
-          "status": "403",
-          "description": "Errors: insufficient_scope"
-        },
-        {
-          "status": "404",
-          "description": "Errors: not_found"
-        },
-        {
-          "status": "405",
-          "description": "Errors: method_not_allowed"
-        },
-        {
-          "status": "429",
-          "description": "Errors: rate_limited"
-        },
-        {
-          "status": "500",
-          "description": "Errors: internal_error"
-        }
-      ],
-      "responseExamples": [
-        {
-          "status": "200",
-          "name": "example",
-          "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"photoUrl\": \"https://spoonjoy.app/photos/profiles/chef_1/avatar.jpg\",\n      \"joinedLabel\": \"Joined Jun 2026\",\n      \"joinedAt\": \"2026-06-01T00:00:00.000Z\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"isOwner\": false,\n    \"recipes\": [\n      {\n        \"id\": \"recipe_1\",\n        \"title\": \"Pasta\",\n        \"description\": \"Weeknight pasta\",\n        \"servings\": \"4\",\n        \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n        \"coverProvenanceLabel\": \"Original photo\",\n        \"href\": \"/recipes/recipe_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\"\n      }\n    ],\n    \"recipeCount\": 1,\n    \"recipesNextCursor\": null,\n    \"cookbooks\": [\n      {\n        \"id\": \"cookbook_1\",\n        \"title\": \"Weeknights\",\n        \"recipeCount\": 1,\n        \"recipes\": [\n          {\n            \"id\": \"recipe_1\",\n            \"title\": \"Pasta\",\n            \"coverImageUrl\": \"https://spoonjoy.app/photos/recipes/recipe_1/cover.jpg\",\n            \"coverProvenanceLabel\": \"Original photo\",\n            \"href\": \"/recipes/recipe_1\",\n            \"canonicalUrl\": \"https://spoonjoy.app/recipes/recipe_1\"\n          }\n        ],\n        \"href\": \"/cookbooks/cookbook_1\",\n        \"canonicalUrl\": \"https://spoonjoy.app/cookbooks/cookbook_1\"\n      }\n    ],\n    \"recentSpoons\": [\n      {\n        \"id\": \"spoon_1\",\n        \"cookedAt\": \"2026-06-01T00:00:00.000Z\",\n        \"photoUrl\": null,\n        \"note\": \"Added extra lemon.\",\n        \"nextTime\": null,\n        \"chef\": {\n          \"id\": \"chef_1\",\n          \"username\": \"ari\",\n          \"photoUrl\": null\n        },\n        \"recipe\": {\n          \"id\": \"recipe_2\",\n          \"title\": \"Lemon Pasta\",\n          \"chefId\": \"chef_2\"\n        },\n        \"coverImageUrl\": null,\n        \"coverProvenanceLabel\": null\n      }\n    ],\n    \"fellowChefsCount\": 1,\n    \"kitchenVisitorsCount\": 0\n  }\n}"
-        },
-        {
-          "status": "400",
-          "name": "invalid_cursor",
-          "label": "Invalid Cursor",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_cursor\",\n    \"message\": \"cursor must be a valid Spoonjoy cursor\",\n    \"status\": 400\n  }\n}"
-        },
-        {
-          "status": "401",
-          "name": "invalid_token",
-          "label": "Invalid Token",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
-        },
-        {
-          "status": "403",
-          "name": "insufficient_scope",
-          "label": "Insufficient Scope",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
-        },
-        {
-          "status": "404",
-          "name": "not_found",
-          "label": "Not Found",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
-        },
-        {
-          "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
-        }
-      ]
-    },
-    {
-      "id": "GET /api/v1/users/{identifier}/fellow-chefs",
-      "operationId": "getApiV1UserFellowChefs",
-      "label": "List the chefs whose recipes this chef has cooked, forked, or saved",
-      "method": "GET",
-      "path": "/api/v1/users/{identifier}/fellow-chefs",
-      "profiles": [
-        "full"
-      ],
-      "tag": "Chefs",
-      "auth": "optional",
-      "scopes": [],
-      "grantableScopes": [],
-      "acceptedOauthScopes": [],
-      "credentialModes": [
-        "anonymous",
-        "session",
-        "bearer"
-      ],
-      "retryPolicy": {
-        "retryOn": [
-          "network_timeout",
-          "429",
-          "5xx"
-        ],
-        "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
-        "doNotRetryUnchanged": [
-          "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
-        ]
-      },
-      "cursorPolicy": null,
-      "idempotency": null,
-      "personalTokenOnly": false,
-      "oauthNote": "",
-      "selfRevokeException": "",
-      "kind": "read",
-      "risk": "safe",
-      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
-      "params": [
-        {
-          "name": "identifier",
-          "in": "path",
-          "label": "Identifier",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "identifier",
-          "description": "Chef username, or the chef's user id.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "page",
-          "in": "query",
-          "label": "Page",
-          "required": false,
-          "defaultValue": "1",
-          "placeholder": "page",
-          "description": "1-based page number. Defaults to 1.",
-          "schema": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        {
-          "name": "limit",
-          "in": "query",
-          "label": "Limit",
-          "required": false,
-          "defaultValue": "50",
-          "placeholder": "20",
-          "description": "Page size from 1 to 100. Defaults to 50.",
-          "schema": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          }
-        },
-        {
-          "name": "X-Request-Id",
-          "in": "header",
-          "label": "X Request Id",
-          "required": false,
-          "defaultValue": "",
-          "placeholder": "X-Request-Id",
-          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "requestBody": null,
-      "responseStatuses": [
-        "200",
-        "400",
-        "401",
-        "403",
-        "404",
-        "405",
-        "429",
-        "500"
-      ],
-      "responseSummaries": [
-        {
-          "status": "200",
-          "description": "Success"
-        },
-        {
-          "status": "400",
-          "description": "Errors: validation_error"
-        },
-        {
-          "status": "401",
-          "description": "Errors: invalid_token"
-        },
-        {
-          "status": "403",
-          "description": "Errors: insufficient_scope"
-        },
-        {
-          "status": "404",
-          "description": "Errors: not_found"
-        },
-        {
-          "status": "405",
-          "description": "Errors: method_not_allowed"
-        },
-        {
-          "status": "429",
-          "description": "Errors: rate_limited"
-        },
-        {
-          "status": "500",
-          "description": "Errors: internal_error"
-        }
-      ],
-      "responseExamples": [
-        {
-          "status": "200",
-          "name": "example",
-          "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"direction\": \"fellow-chefs\",\n    \"isOwner\": false,\n    \"page\": 1,\n    \"pageSize\": 50,\n    \"total\": 1,\n    \"nextCursor\": null,\n    \"rows\": [\n      {\n        \"chefId\": \"chef_2\",\n        \"username\": \"julia\",\n        \"photoUrl\": null,\n        \"href\": \"/users/julia\",\n        \"canonicalUrl\": \"https://spoonjoy.app/users/julia\",\n        \"interactionCounts\": {\n          \"spoons\": 1,\n          \"forks\": 0,\n          \"cookbookSaves\": 1\n        },\n        \"latestInteractionAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"emptyState\": null\n  }\n}"
-        },
-        {
-          "status": "400",
-          "name": "validation_error",
-          "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
-        },
-        {
-          "status": "401",
-          "name": "invalid_token",
-          "label": "Invalid Token",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
-        },
-        {
-          "status": "403",
-          "name": "insufficient_scope",
-          "label": "Insufficient Scope",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
-        },
-        {
-          "status": "404",
-          "name": "not_found",
-          "label": "Not Found",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
-        },
-        {
-          "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
-        }
-      ]
-    },
-    {
-      "id": "GET /api/v1/users/{identifier}/kitchen-visitors",
-      "operationId": "getApiV1UserKitchenVisitors",
-      "label": "List the chefs who have cooked, forked, or saved this chef's recipes",
-      "method": "GET",
-      "path": "/api/v1/users/{identifier}/kitchen-visitors",
-      "profiles": [
-        "full"
-      ],
-      "tag": "Chefs",
-      "auth": "optional",
-      "scopes": [],
-      "grantableScopes": [],
-      "acceptedOauthScopes": [],
-      "credentialModes": [
-        "anonymous",
-        "session",
-        "bearer"
-      ],
-      "retryPolicy": {
-        "retryOn": [
-          "network_timeout",
-          "429",
-          "5xx"
-        ],
-        "retryAfterHeader": "Retry-After",
-        "preserveClientMutationId": false,
-        "doNotRetryUnchanged": [
-          "validation_error",
-          "invalid_cursor",
-          "insufficient_scope"
-        ]
-      },
-      "cursorPolicy": null,
-      "idempotency": null,
-      "personalTokenOnly": false,
-      "oauthNote": "",
-      "selfRevokeException": "",
-      "kind": "read",
-      "risk": "safe",
-      "guide": "Anonymous is enough for public reads. If you send Session or Bearer credentials, Spoonjoy validates them and checks the listed scopes.",
-      "params": [
-        {
-          "name": "identifier",
-          "in": "path",
-          "label": "Identifier",
-          "required": true,
-          "defaultValue": "",
-          "placeholder": "identifier",
-          "description": "Chef username, or the chef's user id.",
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "page",
-          "in": "query",
-          "label": "Page",
-          "required": false,
-          "defaultValue": "1",
-          "placeholder": "page",
-          "description": "1-based page number. Defaults to 1.",
-          "schema": {
-            "type": "integer",
-            "minimum": 1
-          }
-        },
-        {
-          "name": "limit",
-          "in": "query",
-          "label": "Limit",
-          "required": false,
-          "defaultValue": "50",
-          "placeholder": "20",
-          "description": "Page size from 1 to 100. Defaults to 50.",
-          "schema": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          }
-        },
-        {
-          "name": "X-Request-Id",
-          "in": "header",
-          "label": "X Request Id",
-          "required": false,
-          "defaultValue": "",
-          "placeholder": "X-Request-Id",
-          "description": "Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.",
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "requestBody": null,
-      "responseStatuses": [
-        "200",
-        "400",
-        "401",
-        "403",
-        "404",
-        "405",
-        "429",
-        "500"
-      ],
-      "responseSummaries": [
-        {
-          "status": "200",
-          "description": "Success"
-        },
-        {
-          "status": "400",
-          "description": "Errors: validation_error"
-        },
-        {
-          "status": "401",
-          "description": "Errors: invalid_token"
-        },
-        {
-          "status": "403",
-          "description": "Errors: insufficient_scope"
-        },
-        {
-          "status": "404",
-          "description": "Errors: not_found"
-        },
-        {
-          "status": "405",
-          "description": "Errors: method_not_allowed"
-        },
-        {
-          "status": "429",
-          "description": "Errors: rate_limited"
-        },
-        {
-          "status": "500",
-          "description": "Errors: internal_error"
-        }
-      ],
-      "responseExamples": [
-        {
-          "status": "200",
-          "name": "example",
-          "label": "Example",
-          "example": "{\n  \"ok\": true,\n  \"requestId\": \"req_example\",\n  \"data\": {\n    \"profile\": {\n      \"id\": \"chef_1\",\n      \"username\": \"ari\",\n      \"href\": \"/users/ari\",\n      \"canonicalUrl\": \"https://spoonjoy.app/users/ari\"\n    },\n    \"direction\": \"fellow-chefs\",\n    \"isOwner\": false,\n    \"page\": 1,\n    \"pageSize\": 50,\n    \"total\": 1,\n    \"nextCursor\": null,\n    \"rows\": [\n      {\n        \"chefId\": \"chef_2\",\n        \"username\": \"julia\",\n        \"photoUrl\": null,\n        \"href\": \"/users/julia\",\n        \"canonicalUrl\": \"https://spoonjoy.app/users/julia\",\n        \"interactionCounts\": {\n          \"spoons\": 1,\n          \"forks\": 0,\n          \"cookbookSaves\": 1\n        },\n        \"latestInteractionAt\": \"2026-06-01T00:00:00.000Z\"\n      }\n    ],\n    \"emptyState\": null\n  }\n}"
-        },
-        {
-          "status": "400",
-          "name": "validation_error",
-          "label": "Validation Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"validation_error\",\n    \"message\": \"Request validation failed\",\n    \"status\": 400\n  }\n}"
-        },
-        {
-          "status": "401",
-          "name": "invalid_token",
-          "label": "Invalid Token",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"invalid_token\",\n    \"message\": \"Invalid API token\",\n    \"status\": 401\n  }\n}"
-        },
-        {
-          "status": "403",
-          "name": "insufficient_scope",
-          "label": "Insufficient Scope",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"insufficient_scope\",\n    \"message\": \"Missing required scope: undefined\",\n    \"status\": 403\n  }\n}"
-        },
-        {
-          "status": "404",
-          "name": "not_found",
-          "label": "Not Found",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Resource not found\",\n    \"status\": 404\n  }\n}"
-        },
-        {
-          "status": "405",
-          "name": "method_not_allowed",
-          "label": "Method Not Allowed",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"method_not_allowed\",\n    \"message\": \"Method not allowed\",\n    \"status\": 405\n  }\n}"
-        },
-        {
-          "status": "429",
-          "name": "rate_limited",
-          "label": "Rate Limited",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many requests\",\n    \"status\": 429\n  }\n}"
-        },
-        {
-          "status": "500",
-          "name": "internal_error",
-          "label": "Internal Error",
-          "example": "{\n  \"ok\": false,\n  \"requestId\": \"req_example\",\n  \"error\": {\n    \"code\": \"internal_error\",\n    \"message\": \"Internal error\",\n    \"status\": 500\n  }\n}"
         }
       ]
     },
