@@ -1,7 +1,7 @@
 import type { Route } from "./+types/auth.webauthn.register.options";
 import { getUserId } from "~/lib/session.server";
 import { getRequestDb } from "~/lib/route-platform.server";
-import { configFromRequest, startRegistration, WebAuthnError } from "~/lib/webauthn-route.server";
+import { configFromRequest, startRegistration, webAuthnErrorResponse } from "~/lib/webauthn-route.server";
 import { authTelemetryFromContext } from "~/lib/auth-telemetry.server";
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -21,8 +21,6 @@ export async function action({ request, context }: Route.ActionArgs) {
     );
     return Response.json(options);
   } catch (error) {
-    const status = error instanceof WebAuthnError ? error.status : 400;
-    const message = error instanceof Error ? error.message : "Could not start registration";
-    return Response.json({ error: message }, { status });
+    return webAuthnErrorResponse(error, "Could not start registration");
   }
 }

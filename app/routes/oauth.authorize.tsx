@@ -2,6 +2,7 @@ import type { Route } from "./+types/oauth.authorize";
 import type { ReactNode } from "react";
 import { data, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
+import { d1UnavailableHeaders } from "~/lib/d1-write-retry.server";
 import {
   handleOAuthAuthorizeAction,
   loadOAuthAuthorize,
@@ -202,6 +203,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     });
   }
   const view = observeOAuthAuthorizeView({ request, context }, { view: result, startedAt });
+  // The database was briefly unavailable: the page says so, and a reload tries again.
+  if (view.kind === "error" && view.retryable) return data(view, { status: 503, headers: d1UnavailableHeaders() });
   if (view.kind !== "consent") return view;
   return data(view, {
     headers: {

@@ -158,7 +158,9 @@ export async function revokeConnectorGrantsByConnectionKeys(
 ): Promise<number> {
   if (input.connectionKeys.length === 0) return 0;
   await validateConnectorGrantConnectionKeys(db, input);
-  const result = await db.oAuthGrant.updateMany({
+  // It revokes whatever is still active, so after a transient D1 error it simply runs again. A try
+  // that committed but whose answer was lost is counted as zero.
+  const result = await retryD1Write({ scope: "oauth.disconnect_grants" }, () => db.oAuthGrant.updateMany({
     where: {
       userId: input.userId,
       clientId: input.clientId,
@@ -172,7 +174,7 @@ export async function revokeConnectorGrantsByConnectionKeys(
       statusReason: "disconnect",
       statusChangedAt: input.now,
     },
-  });
+  }));
   return result.count;
 }
 
@@ -369,19 +371,29 @@ export function validateOAuthClientRegistration(input: {
 /**
  * Dynamic Client Registration. Validates that at least one well-formed
  * redirect URI is supplied, then persists the client and returns its id.
+ *
+ * The client id is chosen before the first try, so a retry after a transient D1 error fails on
+ * it when an earlier try committed, and that client is the one answered: one registration request
+ * makes one client. (A client that sends the whole registration again after a 503 registers again,
+ * as the protocol has no way to name an earlier registration.)
  */
 export async function registerOAuthClient(
   db: Database,
   input: { clientName?: string | null; redirectUris: string[]; issuer: string },
 ): Promise<RegisteredOAuthClient> {
   const { clientName, redirectUris } = validateOAuthClientRegistration(input);
-  const client = await db.oAuthClient.create({
+  const clientId = newReservationId(new Date());
+  const client = await retryD1Write({
+    scope: "oauth.register_client",
+    applied: () => db.oAuthClient.findUnique({ where: { id: clientId } }),
+  }, () => db.oAuthClient.create({
     data: {
+      id: clientId,
       clientName,
       redirectUris: redirectUris.join(" "),
       issuer: input.issuer,
     },
-  });
+  }));
 
   return { clientId: client.id, clientName: client.clientName, redirectUris, issuer: input.issuer };
 }
@@ -397,10 +409,12 @@ export async function getOAuthClient(
     where: { id: clientId, issuer, revokedAt: null },
   });
   if (!client) {
-    await db.oAuthClient.updateMany({
+    // Fills an empty issuer and reads the result back, so after a transient D1 error it simply
+    // runs again.
+    await retryD1Write({ scope: "oauth.bind_client_issuer" }, () => db.oAuthClient.updateMany({
       where: { id: clientId, issuer: null, revokedAt: null },
       data: { issuer },
-    });
+    }));
     client = await db.oAuthClient.findFirst({
       where: { id: clientId, issuer, revokedAt: null },
     });
@@ -433,10 +447,12 @@ export async function promoteLegacyOAuthIssuerForUser(
   ])];
   if (clientIds.length === 0) return;
 
-  await db.oAuthClient.updateMany({
+  // Every write here only fills issuers that are still empty, so after a transient D1 error each
+  // simply runs again.
+  await retryD1Write({ scope: "oauth.promote_legacy_issuer" }, () => db.oAuthClient.updateMany({
     where: { id: { in: clientIds }, issuer: null },
     data: { issuer },
-  });
+  }));
   const boundClientIds = (await db.oAuthClient.findMany({
     where: { id: { in: clientIds }, issuer },
     select: { id: true },
@@ -444,14 +460,14 @@ export async function promoteLegacyOAuthIssuerForUser(
   if (boundClientIds.length === 0) return;
 
   await Promise.all([
-    db.oAuthRefreshToken.updateMany({
+    retryD1Write({ scope: "oauth.promote_legacy_issuer" }, () => db.oAuthRefreshToken.updateMany({
       where: { userId, clientId: { in: boundClientIds }, issuer: null },
       data: { issuer },
-    }),
-    db.apiCredential.updateMany({
+    })),
+    retryD1Write({ scope: "oauth.promote_legacy_issuer" }, () => db.apiCredential.updateMany({
       where: { userId, oauthClientId: { in: boundClientIds }, oauthIssuer: null },
       data: { oauthIssuer: issuer },
-    }),
+    })),
   ]);
 }
 
@@ -527,6 +543,9 @@ export interface CreateAuthorizationCodeInput {
 /**
  * Mint a single-use authorization code after the user consents. Only the
  * SHA-256 of the code is stored, so a leaked database row can't be replayed.
+ *
+ * The row's id and the code are chosen before the first try, so a retry after a transient D1
+ * error fails on them when an earlier try committed, and that code is the one answered.
  */
 export async function createAuthorizationCode(
   db: Database,
@@ -535,9 +554,15 @@ export async function createAuthorizationCode(
   const now = input.now ?? new Date();
   const ttl = input.ttlSeconds ?? AUTH_CODE_TTL_SECONDS;
   const code = createOAuthOpaqueToken("oac_");
-  await db.oAuthAuthCode.create({
-    data: {
-      codeHash: await hashOAuthOpaqueToken(code),
+  const id = newReservationId(now);
+  const codeHash = await hashOAuthOpaqueToken(code);
+  await retryD1Write({
+    scope: "oauth.code_create",
+    applied: async () => (await db.oAuthAuthCode.findFirst({ where: { id, codeHash }, select: { id: true } })) ? code : null,
+  }, async () => {
+    await db.oAuthAuthCode.create({ data: {
+      id,
+      codeHash,
       clientId: input.clientId,
       issuer: input.issuer,
       userId: input.userId,
@@ -546,7 +571,8 @@ export async function createAuthorizationCode(
       scope: input.scope,
       resource: input.resource ?? null,
       expiresAt: new Date(now.getTime() + ttl * 1000),
-    },
+    } });
+    return code;
   });
   return code;
 }
@@ -599,7 +625,11 @@ export async function consumeAuthorizationCode(
     throw new OAuthError("invalid_client", "Unknown or revoked OAuth client");
   }
   if (record.issuer === null) {
-    await db.oAuthAuthCode.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
+    const codeId = record.id;
+    await retryD1Write({ scope: "oauth.bind_code_issuer" }, () => db.oAuthAuthCode.updateMany({
+      where: { id: codeId, issuer: null },
+      data: { issuer: input.issuer },
+    }));
     record = await db.oAuthAuthCode.findUniqueOrThrow({ where: { id: record.id } });
   }
   /* istanbul ignore if -- @preserve issuer promotion above must converge; retain a fail-closed guard for concurrent corruption. */
@@ -733,6 +763,8 @@ async function convergeLinkedLegacyMcpResource(
   if (!record.issuer || !record.connectionKey) {
     throw new OAuthError("invalid_grant", "Linked OAuth token identity is incomplete");
   }
+  const linkedIssuer = record.issuer;
+  const linkedConnectionKey = record.connectionKey;
   const canonicalScope = normalizeCredentialScopes(record.scope);
   const [grant, credentials] = await Promise.all([
     db.oAuthGrant.findUnique({ where: { id: grantId } }),
@@ -762,7 +794,14 @@ async function convergeLinkedLegacyMcpResource(
 
   if (record.resource === null) {
     await dependencies.onPersistenceMutation?.("legacy_resource_refresh", "before");
-    const promoted = await db.oAuthRefreshToken.updateMany({
+    // After a transient D1 error it runs again. A try that had committed (or landed late, so the
+    // retry changes nothing) left this live token on the resource, which is the converged state.
+    const refreshConverged = async () => {
+      const row = await db.oAuthRefreshToken.findUnique({ where: { id: record.id }, select: { resource: true, revokedAt: true } });
+      return row?.resource === resource && row.revokedAt === null ? { count: 1 } : null;
+    };
+    const promoted = await retryD1Write({ scope: "oauth.converge_refresh_resource", applied: refreshConverged }, async () => {
+      const result = await db.oAuthRefreshToken.updateMany({
       where: {
         id: record.id,
         userId: record.userId,
@@ -775,6 +814,8 @@ async function convergeLinkedLegacyMcpResource(
         revokedAt: null,
       },
       data: { resource },
+      });
+      return result.count === 1 ? result : (await refreshConverged()) ?? result;
     });
     if (promoted.count !== 1) {
       throw new OAuthError("invalid_grant", "OAuth refresh resource promotion did not converge");
@@ -784,7 +825,8 @@ async function convergeLinkedLegacyMcpResource(
 
   if (credentials.some((credential) => credential.oauthResource === null)) {
     await dependencies.onPersistenceMutation?.("legacy_resource_access", "before");
-    await db.apiCredential.updateMany({
+    // It fills resources that are still empty, so after a transient D1 error it simply runs again.
+    await retryD1Write({ scope: "oauth.converge_access_resource" }, () => db.apiCredential.updateMany({
       where: {
         userId: record.userId,
         oauthClientId: record.clientId,
@@ -794,24 +836,32 @@ async function convergeLinkedLegacyMcpResource(
         oauthResource: null,
       },
       data: { oauthResource: resource },
-    });
+    }));
     await dependencies.onPersistenceMutation?.("legacy_resource_access", "after");
   }
 
   if (grant.resource === null) {
     await dependencies.onPersistenceMutation?.("legacy_resource_grant", "before");
-    const promoted = await db.oAuthGrant.updateMany({
+    // As for the refresh token: a committed try left the active grant on the resource.
+    const grantConverged = async () => {
+      const row = await db.oAuthGrant.findUnique({ where: { id: grantId }, select: { resource: true, status: true } });
+      return row?.resource === resource && row.status === "active" ? { count: 1 } : null;
+    };
+    const promoted = await retryD1Write({ scope: "oauth.converge_grant_resource", applied: grantConverged }, async () => {
+      const result = await db.oAuthGrant.updateMany({
       where: {
         id: grantId,
         userId: record.userId,
         clientId: record.clientId,
-        issuer: record.issuer,
+        issuer: linkedIssuer,
         resource: null,
         scope: canonicalScope,
-        connectionKey: record.connectionKey,
+        connectionKey: linkedConnectionKey,
         status: "active",
       },
       data: { resource },
+      });
+      return result.count === 1 ? result : (await grantConverged()) ?? result;
     });
     if (promoted.count !== 1) {
       throw new OAuthError("invalid_grant", "OAuth grant resource promotion did not converge");
@@ -896,10 +946,11 @@ async function resolveConnectorGrant(
   // survive it. One that lands after this check finds the grant and revokes it. (This read is
   // consistent with the revocation's write because D1 read replication is off.)
   if (!(await sessionVersionUnchanged(db, input.userId, input.sessionVersion))) {
-    await db.oAuthGrant.updateMany({
+    // It sets fixed values, so after a transient D1 error it simply runs again.
+    await retryD1Write({ scope: "oauth.grant_fence_revoke" }, () => db.oAuthGrant.updateMany({
       where: { id: created.id, status: "active" },
       data: { status: "revoked", statusReason: "security_event", statusChangedAt: input.now },
-    });
+    }));
     throw sessionRevokedError();
   }
   return created.id;
@@ -1097,7 +1148,7 @@ export async function revokeConnectorRefreshToken(
   if (!client) return false;
   const linkedGrant = await requireLinkedConnectorGrant(db, record, true);
   if (record.issuer === null) {
-    await db.oAuthRefreshToken.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
+    await bindRefreshTokenIssuer(db, record.id, input.issuer);
     record = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
   }
   /* istanbul ignore if -- @preserve issuer promotion above must converge; retain a fail-closed guard for concurrent corruption. */
@@ -1105,32 +1156,36 @@ export async function revokeConnectorRefreshToken(
     return false;
   }
   const wasActive = record.revokedAt === null;
+  const revoking = record;
 
-  await db.apiCredential.updateMany({
-    where: { userId: record.userId, oauthClientId: record.clientId, oauthIssuer: null },
+  // Each write below fills an empty issuer or revokes what is still live, setting fixed values, so
+  // after a transient D1 error it simply runs again. Only the grant's revoke answers on the rows it
+  // changed, so it recognises its own earlier commit.
+  await retryD1Write({ scope: "oauth.disconnect_bind_issuer" }, () => db.apiCredential.updateMany({
+    where: { userId: revoking.userId, oauthClientId: revoking.clientId, oauthIssuer: null },
     data: { oauthIssuer: input.issuer },
-  });
+  }));
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("disconnect_refresh_revoke", "before");
   }
-  await db.oAuthRefreshToken.updateMany({
-    where: { id: record.id, revokedAt: null },
+  await retryD1Write({ scope: "oauth.disconnect_refresh" }, () => db.oAuthRefreshToken.updateMany({
+    where: { id: revoking.id, revokedAt: null },
     data: { revokedAt: now },
-  });
+  }));
   if (dependencies.onPersistenceMutation) {
     await dependencies.onPersistenceMutation("disconnect_refresh_revoke", "after");
     await dependencies.onPersistenceMutation("disconnect_access_revoke", "before");
   }
-  await db.apiCredential.updateMany({
+  await retryD1Write({ scope: "oauth.disconnect_access" }, () => db.apiCredential.updateMany({
     where: {
-      userId: record.userId,
-      oauthClientId: record.clientId,
-      oauthIssuer: record.issuer,
-      oauthResource: record.resource,
+      userId: revoking.userId,
+      oauthClientId: revoking.clientId,
+      oauthIssuer: revoking.issuer,
+      oauthResource: revoking.resource,
       revokedAt: null,
       OR: [
-        ...(record.connectionKey ? [{ oauthConnectionKey: record.connectionKey }] : []),
-        { oauthConnectionKey: null, createdAt: { lte: record.revokedAt ?? now } },
+        ...(revoking.connectionKey ? [{ oauthConnectionKey: revoking.connectionKey }] : []),
+        { oauthConnectionKey: null, createdAt: { lte: revoking.revokedAt ?? now } },
       ],
       AND: [{ OR: [
         { expiresAt: null },
@@ -1138,20 +1193,32 @@ export async function revokeConnectorRefreshToken(
       ] }],
     },
     data: { revokedAt: now },
-  });
+  }));
   if (record.grantId) {
-    const revokedGrant = await db.oAuthGrant.updateMany({
+    const grantId = record.grantId;
+    // A try that had committed (or landed late, so the retry changes nothing) left the grant
+    // revoked for a disconnect at this request's own time.
+    const ownRevoke = async () => {
+      const grant = await db.oAuthGrant.findUnique({ where: { id: grantId }, select: { status: true, statusReason: true, statusChangedAt: true } });
+      return grant?.status === "revoked" && grant.statusReason === "disconnect" && grant.statusChangedAt?.getTime() === now.getTime()
+        ? { count: 1 }
+        : null;
+    };
+    const revokedGrant = await retryD1Write({ scope: "oauth.disconnect_grant", applied: ownRevoke }, async () => {
+      const result = await db.oAuthGrant.updateMany({
       where: {
-        id: record.grantId,
-        userId: record.userId,
-        clientId: record.clientId,
-        issuer: record.issuer,
-        resource: record.resource,
-        scope: normalizeCredentialScopes(record.scope),
-        connectionKey: record.connectionKey!,
+        id: grantId,
+        userId: revoking.userId,
+        clientId: revoking.clientId,
+        issuer: input.issuer,
+        resource: revoking.resource,
+        scope: normalizeCredentialScopes(revoking.scope),
+        connectionKey: revoking.connectionKey!,
         status: "active",
       },
       data: { status: "revoked", statusReason: "disconnect", statusChangedAt: now },
+      });
+      return result.count === 1 ? result : (await ownRevoke()) ?? result;
     });
     if (linkedGrant?.status === "active" && revokedGrant.count !== 1) {
       throw new OAuthError("invalid_grant", "OAuth grant disconnect did not converge");
@@ -1161,6 +1228,14 @@ export async function revokeConnectorRefreshToken(
     await dependencies.onPersistenceMutation("disconnect_access_revoke", "after");
   }
   return wasActive;
+}
+
+/** Binds a legacy refresh token to the issuer that uses it. It fills an empty issuer, so it simply runs again after a transient D1 error. */
+async function bindRefreshTokenIssuer(db: Database, id: string, issuer: string): Promise<void> {
+  await retryD1Write({ scope: "oauth.bind_refresh_issuer" }, () => db.oAuthRefreshToken.updateMany({
+    where: { id, issuer: null },
+    data: { issuer },
+  }));
 }
 
 function connectionKeyOf(record: Pick<OAuthRefreshTokenRecord, "id" | "connectionKey">): string {
@@ -1181,7 +1256,9 @@ async function revokeConnection(
   grant: { status: "compromised"; statusReason: "refresh_reuse" } | { status: "revoked"; statusReason: "inactivity_expiry" },
 ): Promise<void> {
   const connectionKey = connectionKeyOf(record);
-  await db.oAuthRefreshToken.updateMany({
+  // Each write revokes whatever is still live on the connection, setting fixed values, so after a
+  // transient D1 error it simply runs again.
+  await retryD1Write({ scope: "oauth.revoke_connection" }, () => db.oAuthRefreshToken.updateMany({
     where: {
       userId: record.userId,
       clientId: record.clientId,
@@ -1189,8 +1266,8 @@ async function revokeConnection(
       OR: [{ connectionKey }, { connectionKey: null, id: connectionKey }],
     },
     data: { revokedAt: now },
-  });
-  await db.apiCredential.updateMany({
+  }));
+  await retryD1Write({ scope: "oauth.revoke_connection" }, () => db.apiCredential.updateMany({
     where: {
       userId: record.userId,
       oauthClientId: record.clientId,
@@ -1198,11 +1275,11 @@ async function revokeConnection(
       ...oauthAccessConnectionOwnership([connectionKey], now),
     },
     data: { revokedAt: now },
-  });
-  await db.oAuthGrant.updateMany({
+  }));
+  await retryD1Write({ scope: "oauth.revoke_connection" }, () => db.oAuthGrant.updateMany({
     where: { userId: record.userId, clientId: record.clientId, connectionKey, status: "active" },
     data: { ...grant, statusChangedAt: now },
-  });
+  }));
 }
 
 /**
@@ -1436,7 +1513,7 @@ async function rotate(
     await requireLinkedConnectorGrant(db, record);
   }
   if (record.issuer === null) {
-    await db.oAuthRefreshToken.updateMany({ where: { id: record.id, issuer: null }, data: { issuer: input.issuer } });
+    await bindRefreshTokenIssuer(db, record.id, input.issuer);
     record = await db.oAuthRefreshToken.findUniqueOrThrow({ where: { id: record.id } });
   }
   /* istanbul ignore if -- @preserve issuer promotion above must converge; retain a fail-closed guard for concurrent corruption. */

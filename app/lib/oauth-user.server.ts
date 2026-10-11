@@ -1,7 +1,8 @@
 import { findUsernameConflict } from "~/lib/account-identity.server";
 import type { PrismaClient } from "@prisma/client";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import type { D1Query, D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Guard, d1Timestamp, d1WriteBatch, isD1GuardFailure } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 export interface OAuthUserData {
   provider: string;
@@ -149,6 +150,11 @@ const USERNAME_RACE_ATTEMPTS = 3;
  * Writes the user and its OAuth link. With a D1 binding they are one atomic batch, so a
  * user can never exist without the link it was created for. Without one (unit tests,
  * scripts) Prisma writes them as one nested create.
+ *
+ * The user's id is chosen before the first try. After a transient D1 error the batch runs
+ * again; if an earlier try had committed, the retry stops on the email guard or the unique
+ * provider identity, and finding this id linked to this provider identity means the account
+ * is this request's own, so it is answered rather than refused as taken.
  */
 async function writeOAuthUser(
   db: PrismaClient,
@@ -161,7 +167,8 @@ async function writeOAuthUser(
     const id = crypto.randomUUID();
     const at = d1Timestamp(new Date());
     const verifiedAt = oauthData.emailVerified ? at : null;
-    await d1WriteBatch(d1, [
+    const user = { id, email: normalizedEmail, username };
+    const statements: D1Query[] = [
       // The unique index on email is case-sensitive; this stops a racing sign-up that stored
       // the same email in another case from leaving two accounts.
       d1Guard(`NOT EXISTS (SELECT 1 FROM "User" WHERE LOWER("email") = ?)`, normalizedEmail),
@@ -184,8 +191,20 @@ async function writeOAuthUser(
         id,
         at,
       ],
-    ]);
-    return { id, email: normalizedEmail, username };
+    ];
+    return retryD1Write({
+      scope: "oauth_user.create",
+      applied: async () => {
+        const link = await db.oAuth.findFirst({
+          where: { userId: id, provider: oauthData.provider, providerUserId: oauthData.providerUserId },
+          select: { userId: true },
+        });
+        return link ? user : null;
+      },
+    }, async () => {
+      await d1WriteBatch(d1, statements);
+      return user;
+    });
   }
 
   return db.user.create({
@@ -393,11 +412,21 @@ export async function markEmailVerifiedByProvider(
   // A typed write, so the timestamp is stored in the same format as every other Prisma DateTime.
   // The write re-checks the address it read: an email change landing between the read and this
   // write would otherwise mark the new, unproven address as verified.
-  const result = await db.user.updateMany({
-    where: { id: userId, emailVerifiedAt: null, email: user.email },
-    data: { emailVerifiedAt: new Date() },
+  // After a transient D1 error it runs again; a try that had committed left the account verified
+  // at this call's own time, which the retry recognises as its own write.
+  // A retry that finds nothing to update, because an earlier try landed late, checks the same way.
+  const verifiedAt = new Date();
+  const ownWrite = async () => {
+    const row = await db.user.findUnique({ where: { id: userId }, select: { emailVerifiedAt: true } });
+    return row?.emailVerifiedAt?.getTime() === verifiedAt.getTime() ? true : null;
+  };
+  return retryD1Write({ scope: "oauth_user.mark_email_verified", applied: ownWrite }, async () => {
+    const { count } = await db.user.updateMany({
+      where: { id: userId, emailVerifiedAt: null, email: user.email },
+      data: { emailVerifiedAt: verifiedAt },
+    });
+    return count === 1 || (await ownWrite()) === true;
   });
-  return result.count === 1;
 }
 
 /**
@@ -458,15 +487,22 @@ export async function linkOAuthAccount(
     };
   }
 
-  // Create the OAuth record
-  const oauthRecord = await db.oAuth.create({
+  // Create the OAuth record. After a transient D1 error it runs again; a try that had committed
+  // makes the retry fail on the unique provider identity, and finding this exact link means it is
+  // this request's own.
+  const oauthRecord = await retryD1Write({
+    scope: "oauth_user.link",
+    applied: () => db.oAuth.findFirst({
+      where: { userId, provider: oauthData.provider, providerUserId: oauthData.providerUserId },
+    }),
+  }, () => db.oAuth.create({
     data: {
       userId,
       provider: oauthData.provider,
       providerUserId: oauthData.providerUserId,
       providerUsername: oauthData.providerUsername,
     },
-  });
+  }));
 
   return {
     success: true,
@@ -538,14 +574,17 @@ export async function unlinkOAuthAccount(
     };
   }
 
-  // Delete the OAuth record
-  await db.oAuth.delete({
-    where: {
-      userId_provider: {
-        userId,
-        provider,
-      },
-    },
+  // Delete the OAuth record. After a transient D1 error it runs again; a try that had committed
+  // makes the retry find nothing to delete, and the link being gone means it is done.
+  await retryD1Write({
+    scope: "oauth_user.unlink",
+    applied: async () => (await db.oAuth.findUnique({
+      where: { userId_provider: { userId, provider } },
+      select: { userId: true },
+    })) ? null : true,
+  }, async () => {
+    await db.oAuth.delete({ where: { userId_provider: { userId, provider } } });
+    return true;
   });
 
   return {

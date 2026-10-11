@@ -115,6 +115,18 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch runs a write again only after a transient D1 error, when the operation says that is safe, and re-throws every other error unchanged; one that runs out of tries becomes D1WriteUnavailableError, which the routes answer as a retryable 503 and the route layer's handleError captures otherwise. A second catch only keeps a throwing reporter from changing the write's outcome.",
   },
   {
+    file: "app/routes/signup.tsx",
+    category: "rethrow",
+    reason:
+      "Catch answers only D1WriteUnavailableError (the account write ran out of retries, which retryD1Write reports) with a retryable 503 that keeps what was typed, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
+  },
+  {
+    file: "app/routes/agent.connect.$requestId.tsx",
+    category: "rethrow",
+    reason:
+      "Catch answers only D1WriteUnavailableError (the approve or deny write ran out of retries, which retryD1Write reports) with a retryable 503 the page shows, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
+  },
+  {
     file: "app/lib/account-revocation.server.ts",
     category: "rethrow",
     reason:
