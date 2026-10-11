@@ -91,7 +91,7 @@ import {
   removeRecipeFromCookbook,
 } from "~/lib/cookbook-membership-compat.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
-import { D1_WRITE_UNAVAILABLE_CODE, d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -338,6 +338,7 @@ interface CookbookActionData {
   success?: boolean;
   error?: unknown;
   errorCode?: string;
+  retryable?: boolean;
 }
 
 export default function CookbookDetail() {
@@ -365,7 +366,7 @@ export default function CookbookDetail() {
     // can try again.
     if (
       actionData?.intent !== "updateTitle" &&
-      actionData?.errorCode === D1_WRITE_UNAVAILABLE_CODE &&
+      actionData?.retryable === true &&
       typeof actionData.error === "string"
     ) {
       showToast({ message: actionData.error });
