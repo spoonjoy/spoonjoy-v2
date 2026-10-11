@@ -13,7 +13,7 @@ import type { ApiCredential, ApiIdempotencyKey, NativePushDevice, Prisma, Recipe
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { loadApiRecipeFromD1, loadApiRecipeWithPrisma } from "~/lib/api-recipe-reads.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
-import { d1WriteOnceKey, type D1WriteOnceKey } from "~/lib/d1-write-once.server";
+import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
 import { putShoppingListItemOnceOnD1, type D1ShoppingItemPut } from "~/lib/shopping-list-d1-actions.server";
 import type { AppLoadContext } from "react-router";
 import {
@@ -4194,11 +4194,17 @@ export async function runIdempotentApiV1Mutation(
   }), { idempotencyOutcome: "committed", operation });
 }
 
-/** A uuid-shaped id derived from a write-once key, the same on every try of the write. */
-async function writeOnceItemId(key: D1WriteOnceKey): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${key.userId}\n${key.key}`)));
-  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+/**
+ * The write-once key for one API v1 shopping add on D1: this client's mutation and its body, so
+ * the client's resubmit of the same mutation after a 503 finds it claimed and adds nothing more.
+ */
+function apiV1ShoppingWriteKey(principal: ApiPrincipal, operation: string, clientMutationId: string, body: Record<string, unknown>) {
+  return d1WriteOnceKey({
+    userId: principal.id,
+    operation,
+    token: `${idempotencyClientKey(principal)}:${clientMutationId}`,
+    request: body,
+  });
 }
 
 async function addShoppingItemOnceOnD1(
@@ -4208,15 +4214,8 @@ async function addShoppingItemOnceOnD1(
   body: Record<string, unknown>,
   put: Omit<D1ShoppingItemPut, "itemId" | "writeKey" | "now">,
 ): Promise<{ created: boolean; id: string } | null> {
-  const writeKey = await d1WriteOnceKey({
-    userId: principal.id,
-    operation: "api_v1.shopping_item_create",
-    token: `${idempotencyClientKey(principal)}:${clientMutationId}`,
-    request: body,
-  });
-  const itemId = await writeOnceItemId(writeKey);
-  const id = await putShoppingListItemOnceOnD1(d1, { ...put, itemId, writeKey, now: new Date() });
-  return id ? { created: id === itemId, id } : null;
+  const writeKey = await apiV1ShoppingWriteKey(principal, "api_v1.shopping_item_create", clientMutationId, body);
+  return putShoppingListItemOnceOnD1(d1, { ...put, itemId: crypto.randomUUID(), writeKey, now: new Date() });
 }
 
 async function handleShoppingItemCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -4397,6 +4396,22 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
       throw new ApiV1Error("internal_error", "Internal error");
     }
     const nativeD1 = asCompatibleD1Database(apiV1CloudflareFor(args)?.env?.DB);
+    // Quantities add up, so on D1 the batch writes once under this client's mutation: a retry
+    // after a transient D1 error, or the resubmit after a 503, adds nothing more and answers
+    // from the list as it is, counting as created the items the winning try noted it created.
+    const writeKey = nativeD1
+      ? await apiV1ShoppingWriteKey(principal, "api_v1.shopping_add_from_recipe", clientMutationId, body)
+      : null;
+    const replay = async (createdIds: string[]) => {
+      const items: ShoppingItemRow[] = [];
+      for (const requested of requestedRows) {
+        const identity = { shoppingListId: list.id, ingredientRefId: requested.ingredientRefId, unitId: requested.unitId };
+        const found = await findCompatibleShoppingListItem(db, identity);
+        items.push(await db.shoppingListItem.findUniqueOrThrow({ where: { id: found!.id }, include: { unit: true, ingredientRef: true } }));
+      }
+      const created = items.filter((item) => createdIds.includes(item.id)).length;
+      return { items, metadata: { created, updated: items.length - created } };
+    };
     const relationsByIdentity = new Map(
       recipe.steps.flatMap((step) => step.ingredients).map((ingredient) => [
         JSON.stringify([ingredient.ingredientRefId, ingredient.unitId]),
@@ -4517,6 +4532,7 @@ async function handleShoppingAddFromRecipe(args: ApiV1RouteArgs, requestId: stri
         operations,
         metadata: { created, updated },
         native: createCompatibleShoppingListD1Batch(nativeD1, writePlans, plannedItem),
+        writeOnce: writeKey ? { key: writeKey, replay } : undefined,
       };
     });
 

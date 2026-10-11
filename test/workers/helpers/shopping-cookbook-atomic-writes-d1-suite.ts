@@ -352,12 +352,13 @@ describe("atomic shopping-list and cookbook writes on Wrangler D1", () => {
           context: routeContext() as never,
         });
       };
-      const interleavedPrisma = await getDb({ DB: interleaved(webAdd, addition) });
+      const binding = interleaved(webAdd, addition);
+      const interleavedPrisma = await getDb({ DB: binding });
 
       await callSpoonjoyApiOperation(
         "add_shopping_list_item",
         { name: "sca apples", unit: "sca each", quantity: 2 },
-        { ...mcp(), db: interleavedPrisma },
+        { ...mcp(binding), db: interleavedPrisma },
       );
 
       expect(await shoppingItems()).toEqual([{ ingredientRefId: APPLES, quantity: 1 + 3 + 2, deleted: 0, checked: 0 }]);

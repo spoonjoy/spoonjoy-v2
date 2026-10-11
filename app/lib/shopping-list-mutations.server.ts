@@ -4,6 +4,8 @@ import type {
   ShoppingListItem,
 } from "@prisma/client";
 import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
+import { d1WriteOnceClaim, type D1WriteOnceClaim, type D1WriteOnceKey } from "~/lib/d1-write-once.server";
 import {
   d1Guard,
   d1Timestamp,
@@ -61,12 +63,22 @@ interface CompatibleBatch<T, Metadata> {
   operations: Array<Prisma.PrismaPromise<T>>;
   metadata: Metadata;
   native?: CompatibleShoppingListD1Batch<T>;
+  /**
+   * On D1, makes the batch write once under this key: each try claims it in the batch and writes
+   * only under its own claim, so a retry after a transient D1 error, or a resubmit with the same
+   * key, adds nothing more and answers `replay` (the answer rebuilt from the rows as they are).
+   */
+  writeOnce?: { key: D1WriteOnceKey; replay: (createdIds: string[]) => Promise<{ items: T[]; metadata: Metadata }> };
 }
 
 /** A shopping-list write as one atomic D1 batch, and how to read its items from the results. */
 export interface CompatibleShoppingListD1Batch<T> {
   database: D1ReadDatabase;
   queries: D1Query[];
+  /** The same writes, each applying only under `claim` (for a write-once batch). */
+  claimedQueries?: (claim: D1WriteOnceClaim) => D1Query[];
+  /** The ids of the items the batch creates, which a write-once claim notes. */
+  createdIds?: string[];
   items: (results: D1WriteResult[]) => T[];
 }
 
@@ -162,11 +174,18 @@ function d1Date(value: Date | null): string | null {
  * and a live row adds on top. SQLite evaluates every SET expression against the row before the
  * update, so the CASE sees the old "deletedAt".
  */
-export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan): D1Query[] {
+export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan, claim?: D1WriteOnceClaim): D1Query[] {
   const updatedAt = d1Timestamp(plan.updatedAt);
+  // Under a write-once claim, a try that does not hold the claim writes nothing, and its guards
+  // pass, so the batch commits only the (empty) claim attempt.
+  const guard = (condition: string, ...values: unknown[]): D1Query => claim
+    ? d1Guard(`(NOT ${claim.guard}) OR (${condition})`, ...claim.guardValues, ...values)
+    : d1Guard(condition, ...values);
+  const onlyUnderClaim = claim ? ` AND ${claim.guard}` : "";
+  const claimValues = claim ? claim.guardValues : [];
   if (plan.mode === "create") {
     return [
-      d1Guard(
+      guard(
         `NOT EXISTS (SELECT 1 FROM "ShoppingListItem"
           WHERE "shoppingListId" = ? AND "ingredientRefId" = ? AND "unitId" IS ?)`,
         plan.shoppingListId,
@@ -178,7 +197,7 @@ export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan)
           "id", "shoppingListId", "quantity", "unitId", "ingredientRefId",
           "checked", "checkedAt", "deletedAt", "sortIndex", "categoryKey",
           "iconKey", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE 1${onlyUnderClaim}
         RETURNING "quantity"`,
         plan.id,
         plan.shoppingListId,
@@ -192,12 +211,13 @@ export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan)
         plan.categoryKey,
         plan.iconKey,
         updatedAt,
+        ...claimValues,
       ],
     ];
   }
 
   return [
-    d1Guard(
+    guard(
       `EXISTS (SELECT 1 FROM "ShoppingListItem" WHERE "id" = ? AND "shoppingListId" = ?)`,
       plan.id,
       plan.shoppingListId,
@@ -211,7 +231,7 @@ export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan)
           END,
           "checked" = ?, "checkedAt" = ?, "deletedAt" = ?,
           "sortIndex" = ?, "categoryKey" = ?, "iconKey" = ?, "updatedAt" = ?
-      WHERE "id" = ? AND "shoppingListId" = ?
+      WHERE "id" = ? AND "shoppingListId" = ?${onlyUnderClaim}
       RETURNING "quantity"`,
       plan.quantityDelta,
       plan.quantityDelta,
@@ -225,6 +245,7 @@ export function shoppingListItemWriteStatements(plan: ShoppingListItemWritePlan)
       updatedAt,
       plan.id,
       plan.shoppingListId,
+      ...claimValues,
     ],
   ];
 }
@@ -277,6 +298,8 @@ export function createCompatibleShoppingListD1Batch<T = never>(
   return {
     database,
     queries,
+    claimedQueries: (claim) => writePlans.flatMap((plan) => shoppingListItemWriteStatements(plan, claim)),
+    createdIds: writePlans.filter((plan) => plan.mode === "create").map((plan) => plan.id),
     items: (results) => toItem
       ? writePlans.map((plan, index) => toItem(
         plan,
@@ -532,7 +555,24 @@ export async function runCompatibleShoppingListBatch<T, Metadata>(
   const execute = async () => {
     const batch = await build();
     let items: T[];
-    if (batch.native) {
+    if (batch.native && batch.writeOnce) {
+      const { key, replay } = batch.writeOnce;
+      const native = batch.native;
+      const claimedQueries = native.claimedQueries!;
+      const results = await retryD1Write({ scope: key.operation }, () => {
+        const claim = d1WriteOnceClaim(key, new Date(), JSON.stringify(native.createdIds!));
+        return d1WriteBatch(native.database, [
+          ...claim.statements,
+          [`SELECT ${claim.guard} AS "claimed"`, ...claim.guardValues],
+          ...claimedQueries(claim),
+          claim.readNote,
+        ]);
+      });
+      // Another try, or an earlier submission, holds the key: this one wrote nothing, and the
+      // winning try's note says which items it created.
+      if (!results[2]!.rows[0]!.claimed) return replay(JSON.parse(results.at(-1)!.rows[0]!.note as string) as string[]);
+      items = native.items(results.slice(3, -1));
+    } else if (batch.native) {
       const results = batch.native.queries.length > 0
         ? await d1WriteBatch(batch.native.database, batch.native.queries)
         : [];

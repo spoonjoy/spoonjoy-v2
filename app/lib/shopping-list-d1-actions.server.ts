@@ -223,19 +223,22 @@ export interface D1ShoppingItemPut {
   quantity: number | null;
   categoryKey: string | null;
   iconKey: string | null;
-  /** The id a new item gets. Choose it from the write key, so every try and resubmission agrees. */
+  /** The id a new item gets; the claim keeps it, so a later try knows which item this add created. */
   itemId: string;
   writeKey: D1WriteOnceKey;
   now: Date;
 }
 
 /**
- * Adds one item whose ingredient and unit already exist (the REST add), in one batch under its
- * write-once key, so a retry after a transient D1 error or a resubmission with the same key adds
- * nothing more. Answers the id of the list's item with that identity afterwards, or null when the
- * list has none (the list no longer exists).
+ * Adds one item whose ingredient and unit already exist (the REST and tool adds), in one batch
+ * under its write-once key, so a retry after a transient D1 error or a resubmission with the same
+ * key adds nothing more. Answers the list's item with that identity afterwards, and whether this
+ * add created it (by whichever try holds the key), or null when the list no longer exists.
  */
-export async function putShoppingListItemOnceOnD1(db: D1ReadDatabase, put: D1ShoppingItemPut): Promise<string | null> {
+export async function putShoppingListItemOnceOnD1(
+  db: D1ReadDatabase,
+  put: D1ShoppingItemPut,
+): Promise<{ id: string; created: boolean } | null> {
   const identity: ItemIdentitySql = {
     ingredientRef: "?",
     ingredientRefValues: [put.ingredientRefId],
@@ -244,7 +247,9 @@ export async function putShoppingListItemOnceOnD1(db: D1ReadDatabase, put: D1Sho
   };
   const at = d1Timestamp(put.now);
   const results = await retryD1Write({ scope: "api_v1.shopping_item_create" }, () => {
-    const claim = d1WriteOnceClaim(put.writeKey, put.now);
+    // The claim notes the id this try gives a new item, so a later try can tell whether the
+    // item on the list is the one this add created.
+    const claim = d1WriteOnceClaim(put.writeKey, put.now, put.itemId);
     return d1WriteBatch(db, [
       ...claim.statements,
       ...putItemStatements(put.shoppingListId, identity, {
@@ -262,10 +267,12 @@ export async function putShoppingListItemOnceOnD1(db: D1ReadDatabase, put: D1Sho
         put.ingredientRefId,
         put.unitId,
       ],
+      claim.readNote,
     ]);
   });
-  const id = results.at(-1)!.rows[0]?.id;
-  return typeof id === "string" ? id : null;
+  const id = results.at(-2)!.rows[0]?.id;
+  if (typeof id !== "string") return null;
+  return { id, created: results.at(-1)!.rows[0]!.note === id };
 }
 
 const RECIPE_SQL = `SELECT "id" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`;

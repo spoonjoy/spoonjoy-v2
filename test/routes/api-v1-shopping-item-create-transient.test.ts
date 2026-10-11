@@ -141,6 +141,70 @@ describe("API v1 shopping item create on D1 when its connection drops", () => {
     expect(await lemons()).toMatchObject([{ quantity: 2 }]);
   });
 
+  describe("adding a recipe", () => {
+    let recipeId: string;
+
+    beforeEach(async () => {
+      const recipe = await db.recipe.create({ data: { title: "Lemon Bars", chefId: userId } });
+      recipeId = recipe.id;
+      await db.recipeStep.create({ data: { recipeId, stepNum: 1, description: "Mix" } });
+      const cup = await db.unit.create({ data: { name: "transient cup" } });
+      const lemons = await getOrCreateIngredientRef(db, "lemons");
+      const sugar = await getOrCreateIngredientRef(db, "sugar");
+      await db.ingredient.createMany({
+        data: [
+          { recipeId, stepNum: 1, quantity: 2, unitId: cup.id, ingredientRefId: lemons.id },
+          { recipeId, stepNum: 1, quantity: 1, unitId: cup.id, ingredientRefId: sugar.id },
+        ],
+      });
+      await db.shoppingListItem.create({ data: { shoppingListId: listId, ingredientRefId: lemons.id, unitId: cup.id, quantity: 1, sortIndex: 0 } });
+    });
+
+    function addRecipe(binding: unknown, clientMutationId: string) {
+      return action({
+        request: new UndiciRequest("http://localhost/api/v1/shopping-list/add-from-recipe", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ clientMutationId, recipeId }),
+        }) as unknown as Request,
+        params: { "*": "shopping-list/add-from-recipe" },
+        context: { cloudflare: { env: { DB: binding } } },
+      } as any);
+    }
+
+    async function amounts() {
+      return Object.fromEntries((await lemons()).map((item) => [item.ingredientRef.name, item.quantity]));
+    }
+
+    it.each(OUTCOMES)("adds each ingredient once when the batch is %s and the request retries it", async (outcome) => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(ADD_BATCH, outcome);
+
+      const response = await addRecipe(flaky.binding, "recipe-once");
+
+      expect(flaky.failures()).toBe(1);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ data: { created: 1, updated: 1 } });
+      expect(await amounts()).toEqual({ lemons: 3, sugar: 1 });
+    });
+
+    it("adds once, answering what the late batch wrote, when the client resubmits after the request gave up", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(ADD_BATCH, "lost", "lost", "lost", "late");
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+      expect((await addRecipe(flaky.binding, "recipe-late")).status).toBeGreaterThanOrEqual(500);
+      const retried = await addRecipe(flaky.binding, "recipe-late");
+
+      expect(retried.status).toBe(200);
+      const data = (await retried.json()).data;
+      expect(data).toMatchObject({ created: 1, updated: 1 });
+      expect(Object.fromEntries(data.items.map((item: { name: string; quantity: number }) => [item.name, item.quantity])))
+        .toEqual({ lemons: 3, sugar: 1 });
+      expect(await amounts()).toEqual({ lemons: 3, sugar: 1 });
+    });
+  });
+
   it("answers not found, adding nothing, when the list is deleted just before the add's batch", async () => {
     const binding = {
       prepare: (sql: string) => d1.binding.prepare(sql),
