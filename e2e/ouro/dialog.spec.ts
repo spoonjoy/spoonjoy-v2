@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
+import { expect, test } from "../fixtures";
 import { openStory, settledBox, slowDrag } from "./story";
 
 test.describe("on a desktop", () => {

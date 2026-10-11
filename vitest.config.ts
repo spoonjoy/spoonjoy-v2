@@ -45,6 +45,12 @@ const coverageInclude = [
   "workers/app.ts",
 ] as const;
 
+// Ouro UI, installed from its shadcn registry: its components, helpers and the tests that ship with
+// them. Its tests run in Chromium and WebKit (vitest.ouro.config.ts), not in happy-dom, and so do
+// Spoonjoy's own browser checks of it in test/ouro.
+const OURO_UI_PATHS = ["app/components/ouro/**", "app/lib/ouro/**"];
+const OURO_BROWSER_TESTS = "test/ouro/**";
+
 const hasCoverageFlag = process.argv.some((arg) =>
   arg === "--coverage" || arg.startsWith("--coverage."),
 );
@@ -89,6 +95,9 @@ export default defineConfig({
       "test/workers/cook-session-protocol.test.ts",
       "test/workers/saved-recipe-cutover-d1.test.ts",
       "scripts/bench/**",
+      // Ouro UI's shipped tests need a real browser; vitest.ouro.config.ts runs them.
+      ...OURO_UI_PATHS,
+      OURO_BROWSER_TESTS,
     ],
     coverage: {
       provider: "istanbul",
@@ -101,6 +110,8 @@ export default defineConfig({
         "**/*.config.ts",
         "**/*.d.ts",
         "**/types/**",
+        // Covered to 100% by Ouro UI's own browser tests under vitest.ouro.config.ts instead.
+        ...OURO_UI_PATHS,
       ],
       thresholds: isFocusedCoverageRun ? undefined : {
         statements: 100,

@@ -12,7 +12,8 @@ const webServerEnv = Object.fromEntries(
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/journeys/**'],
+  // Journeys run against QA; Ouro UI's specs run against Storybook (playwright.ouro.config.ts).
+  testIgnore: ['**/journeys/**', '**/ouro/**'],
   globalTeardown: './e2e/support/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -38,7 +39,8 @@ export default defineConfig({
         storageState: authFile,
       },
       dependencies: ['setup'],
-      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/, /oauth-authorize\.spec\.ts/, /oauth-navigation\.spec\.ts/],
+      // A project's testIgnore replaces the top-level one, so Ouro UI's specs are left out here too.
+      testIgnore: [/.*\.setup\.ts/, /auth\.spec\.ts/, /example\.spec\.ts/, /passkey\.spec\.ts/, /oauth-authorize\.spec\.ts/, /oauth-navigation\.spec\.ts/, /[\\/]ouro[\\/]/],
     },
     // Tests that don't need authentication (auth flow tests + example)
     {
