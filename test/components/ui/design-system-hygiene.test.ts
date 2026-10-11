@@ -68,11 +68,20 @@ describe("Spoonjoy UI design-system hygiene", () => {
   it("does not use stale large-radius utility classes in app or story UI", () => {
     const staleRadiusPattern =
       /rounded-(?:lg|xl|2xl|3xl|md)|rounded-\[(?:1rem|1\.25rem|1\.6rem|2rem)\]|calc\(var\(--radius/;
-    const offenders = listTextFiles(APP_AND_STORY_FILES).filter((filePath) =>
-      staleRadiusPattern.test(readSourceFile(filePath)),
-    );
+    // Ouro UI (app/components/ouro) is installed from its registry and keeps Tailwind's radius
+    // names; tailwind.css derives those radii from Spoonjoy's control radius instead.
+    const offenders = listTextFiles(APP_AND_STORY_FILES)
+      .filter((filePath) => !filePath.startsWith("app/components/ouro/"))
+      .filter((filePath) => staleRadiusPattern.test(readSourceFile(filePath)));
 
     expect(offenders).toEqual([]);
+  });
+
+  it("derives Ouro UI's radii from Spoonjoy's control radius", () => {
+    const css = readSourceFile("app/styles/tailwind.css");
+
+    expect(css).toContain("--radius: var(--sj-radius-control);");
+    expect(css).toContain("--radius-xl: calc(var(--radius) * 1.4);");
   });
 
   it("keeps page mastheads from stacking a top rule under the desktop nav", () => {

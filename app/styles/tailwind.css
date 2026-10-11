@@ -52,6 +52,16 @@
   --sj-radius-surface: 0.5rem;
   --sj-radius-photo: 0.5rem;
   --sj-radius-hero: 0.5rem;
+  --warning: #b05109;
+  --warning-foreground: #ffffff;
+  --ouro-spring-duration: 750ms;
+  --ouro-ease-spring: linear(0, 0.0663, 0.2105, 0.3763, 0.5332, 0.6669, 0.7733, 0.8533, 0.9107, 0.9499, 0.9754, 0.9911, 1, 1.0044, 1.0061, 1.0062, 1.0055, 1.0045, 1.0035, 1.0026, 1.0018, 1.0012, 1.0008, 1, 1);
+  --ouro-duration-fast: 100ms;
+  --ouro-duration-base: 200ms;
+  --ouro-duration-slow: 400ms;
+  --ouro-press-scale: 0.97;
+  --ouro-backdrop-color: #18181b;
+  --ouro-backdrop-max: 0.4;
 }
 
 .dark {
@@ -95,6 +105,40 @@
   --sj-photo-line: color-mix(in srgb, var(--sj-on-photo) 22%, transparent);
   --sj-shadow: 0 28px 90px color-mix(in srgb, var(--sj-photo-charcoal) 56%, transparent);
   --sj-shadow-soft: 0 16px 44px color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
+  --warning: #fbbf24;
+  --warning-foreground: #000000;
+  --ouro-backdrop-color: #000000;
+}
+
+/*
+ * Ouro UI (app/components/ouro, installed from its shadcn registry) reads shadcn's theme variable
+ * names. They are mapped onto Spoonjoy's palette here, in this one block, instead of installing
+ * Ouro's own colour theme. Every value is a --sj-* variable, so Ouro components follow .dark and
+ * print exactly as the rest of the app does. Each -foreground pair passes WCAG AA 4.5:1 in both
+ * themes (test/styles/ouro-theme-mapping.test.ts). The ouro-base registry item adds the rest to
+ * :root, .dark and @theme inline: motion tokens, and a warning colour Spoonjoy has no equivalent for.
+ */
+:root,
+.dark {
+  --background: var(--sj-paper);
+  --foreground: var(--sj-ink);
+  --popover: var(--sj-panel-solid);
+  --popover-foreground: var(--sj-ink);
+  --primary: var(--sj-brass);
+  --primary-foreground: var(--sj-paper);
+  --secondary: var(--sj-flour);
+  --secondary-foreground: var(--sj-ink);
+  --muted: var(--sj-flour);
+  --muted-foreground: var(--sj-ink-soft);
+  --accent: var(--sj-flour);
+  --accent-foreground: var(--sj-ink);
+  --destructive: var(--sj-tomato);
+  --destructive-foreground: var(--sj-paper);
+  --success: var(--sj-herb);
+  --success-foreground: var(--sj-paper);
+  --border: var(--sj-border);
+  --ring: var(--sj-brass);
+  --radius: var(--sj-radius-control);
 }
 
 /* Print: a recipe on paper is the title, the ingredients and the method in dark ink on white, whatever
@@ -712,4 +756,56 @@ body:has(#cook) .sj-mobile-surface {
     background: var(--sj-brass);
     animation: none;
   }
+}
+
+@theme inline {
+  /* Ouro UI's colour utilities (bg-primary, text-muted-foreground…), read from the mapping above. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-destructive-foreground: var(--destructive-foreground);
+  /* Ouro UI's corner radii follow --radius (the control radius), as in a shadcn theme. Spoonjoy's own
+     UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes. */
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --ouro-backdrop-max: var(--ouro-backdrop-max);
+  --color-ouro-backdrop-color: var(--ouro-backdrop-color);
+  --ouro-press-scale: var(--ouro-press-scale);
+  --ouro-duration-slow: var(--ouro-duration-slow);
+  --ouro-duration-base: var(--ouro-duration-base);
+  --ouro-duration-fast: var(--ouro-duration-fast);
+  --ouro-ease-spring: var(--ouro-ease-spring);
+  --ouro-spring-duration: var(--ouro-spring-duration);
+  @keyframes ouro-spin {
+  to {
+    rotate: 1turn;
+    }
+  }
+  @keyframes ouro-pulse {
+  50% {
+    opacity: 0.4;
+    }
+  }
+}
+
+@utility press {
+    transition: scale var(--ouro-spring-duration) var(--ouro-ease-spring), background-color var(--ouro-duration-fast) ease-out, border-color var(--ouro-duration-fast) ease-out, color var(--ouro-duration-fast) ease-out, opacity var(--ouro-duration-fast) ease-out;
 }
