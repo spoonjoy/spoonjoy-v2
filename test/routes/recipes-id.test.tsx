@@ -2992,6 +2992,69 @@ describe("Recipes $id Route", () => {
       expect(submittedScaleFactor).toBe("1.25");
     });
 
+    it("says when the list could not be saved, and taps again with the same token until an add succeeds", async () => {
+      const message = "Spoonjoy couldn't save that just now. Please try again in a moment.";
+      const tokens: string[] = [];
+      const answers = [
+        { intent: "addFromRecipe", error: message, errorCode: "temporarily_unavailable", retryable: true },
+        { success: true, intent: "addFromRecipe" },
+        { success: true, intent: "addFromRecipe" },
+      ];
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Retry Add Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: null,
+              description: "prep",
+              ingredients: [{ id: "ing-1", quantity: 1, unit: { name: "cup" }, ingredientRef: { name: "flour" } }],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+      };
+      const Stub = createTestRoutesStub([
+        { path: "/recipes/:id", Component: RecipeDetail, loader: () => mockData },
+        {
+          path: "/shopping-list",
+          action: async ({ request }) => {
+            tokens.push((await request.formData()).get("writeToken")?.toString() ?? "");
+            return answers[tokens.length - 1];
+          },
+          Component: () => null,
+        },
+      ]);
+
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <Stub initialEntries={["/recipes/recipe-1"]} />
+        </ToastProvider>
+      );
+      await screen.findByRole("heading", { name: "Retry Add Recipe" });
+      await user.click(screen.getByTestId("recipe-header-list-action"));
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      await user.click(screen.getByTestId("recipe-header-list-action"));
+      expect(await screen.findByText("1 items added at 1x")).toBeInTheDocument();
+      await user.click(screen.getByTestId("recipe-header-list-action"));
+      await waitFor(() => expect(tokens).toHaveLength(3));
+
+      expect(tokens[0]).toMatch(/^[\w-]{8,}$/);
+      // The tap after the 503 is the same add; the tap after a success is a new one.
+      expect(tokens[1]).toBe(tokens[0]);
+      expect(tokens[2]).not.toBe(tokens[1]);
+    });
+
     it("redirects guest recipe mutations to login from the header actions", async () => {
       const assign = vi.fn();
       const originalAssign = window.location.assign;

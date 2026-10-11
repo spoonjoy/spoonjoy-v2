@@ -24,6 +24,7 @@ import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
+import { useWriteToken } from "~/hooks/use-write-token";
 
 export { __internal__, parseShoppingItemFallback };
 
@@ -160,6 +161,9 @@ export default function ShoppingList() {
   const location = useLocation();
   const addItemFormRef = useRef<HTMLFormElement>(null);
   const addItemInputRef = useRef<HTMLInputElement>(null);
+  // One add per submission of each form: a resubmit after a 503, or a double tap, adds once.
+  const [addItemToken, renewAddItemToken] = useWriteToken();
+  const [addRecipeToken, renewAddRecipeToken] = useWriteToken();
   const { checkedById: optimisticCheckedById, removedById: optimisticRemovedById } = useMemo(
     () => pendingShoppingItemChanges(fetchers),
     [fetchers]
@@ -175,8 +179,10 @@ export default function ShoppingList() {
   useEffect(() => {
     if (actionData?.success && actionData.intent === "addItem") {
       addItemFormRef.current?.reset();
+      renewAddItemToken();
     }
-  }, [actionData]);
+    if (actionData?.success && actionData.intent === "addFromRecipe") renewAddRecipeToken();
+  }, [actionData, renewAddItemToken, renewAddRecipeToken]);
 
   // "Add item" at the top is a link to #add-item: bring the Item field into view with focus, ready
   // to type. Keyed on the location, so following the link again focuses it again.
@@ -496,6 +502,7 @@ export default function ShoppingList() {
         <CookbookSectionTitle>Add item</CookbookSectionTitle>
         <Form method="post" className="mt-4" ref={addItemFormRef}>
           <input type="hidden" name="intent" value="addItem" />
+          <input type="hidden" name="writeToken" value={addItemToken} />
           <div className="space-y-4">
             <Field>
               <Label>Item</Label>
@@ -561,6 +568,7 @@ export default function ShoppingList() {
           <CookbookSectionTitle>Add from recipe</CookbookSectionTitle>
           <Form method="post" className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-end">
             <input type="hidden" name="intent" value="addFromRecipe" />
+            <input type="hidden" name="writeToken" value={addRecipeToken} />
             <Field>
               <Label htmlFor="shopping-recipe-id">Recipe</Label>
               <Select id="shopping-recipe-id" name="recipeId" required>
