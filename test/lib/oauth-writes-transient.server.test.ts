@@ -34,7 +34,7 @@ import {
 } from "~/lib/oauth-routes.server";
 import { D1WriteUnavailableError } from "~/lib/d1-write-retry.server";
 import { cleanupDatabase } from "../helpers/cleanup";
-import type { FlakyOutcome } from "../helpers/flaky-d1";
+import { NETWORK_LOST_MESSAGE, type FlakyOutcome } from "../helpers/flaky-d1";
 import { flakyPrisma } from "../helpers/flaky-prisma";
 import { createTestUser } from "../utils";
 
@@ -327,6 +327,30 @@ describe("the consent screen", () => {
     const response = await decide(flaky.db, "deny", token);
 
     expect(response.headers.get("Location")).toContain("error=access_denied");
+  });
+
+  it("still refuses the screen when a retry deletes nothing and the screen is still there", async () => {
+    const token = await consentToken();
+    let calls = 0;
+    const stuck = new Proxy(db, {
+      get: (target, prop) => prop === "oAuthConsentTransaction"
+        ? new Proxy(target.oAuthConsentTransaction, {
+          get: (rows, method) => method === "deleteMany"
+            ? async () => {
+              calls += 1;
+              if (calls === 1) throw new Error(NETWORK_LOST_MESSAGE);
+              return { count: 0 };
+            }
+            : Reflect.get(rows, method),
+        })
+        : Reflect.get(target, prop),
+    }) as PrismaClient;
+
+    const response = await decide(stuck, "deny", token);
+
+    expect(calls).toBe(2);
+    expect(response.status).toBe(400);
+    expect(await db.oAuthConsentTransaction.count({ where: { userId } })).toBe(1);
   });
 
   it("answers a 503, and withdraws the code, when every consume is lost", async () => {

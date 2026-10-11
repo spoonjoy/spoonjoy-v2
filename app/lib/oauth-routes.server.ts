@@ -907,7 +907,7 @@ export async function loadOAuthAuthorize(
     if (!isD1Unavailable(error)) throw error;
     return withOAuthAuthorizeTelemetry(
       { kind: "error", message: D1_WRITE_UNAVAILABLE_MESSAGE, retryable: true },
-      { outcome: "error", errorCode: D1_WRITE_UNAVAILABLE_CODE, stateClass: authorizeStateClass(new URL(request.url).searchParams.get("state") ?? "") },
+      { outcome: "error", errorCode: D1_WRITE_UNAVAILABLE_CODE, stateClass: authorizeStateClass(readAuthorizeParams(new URL(request.url).searchParams).state) },
     );
   }
 }
