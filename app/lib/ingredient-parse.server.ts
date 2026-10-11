@@ -15,11 +15,43 @@ import {
   geminiGenerateJson,
 } from '~/lib/gemini-text.server'
 import type { PostHogServerConfig, PostHogServerEnv } from '~/lib/analytics-server'
+import { enforceIngredientParseRateLimit, type RateLimiterBinding } from '~/lib/rate-limit.server'
 
 export const DEFAULT_INGREDIENT_PARSE_PROVIDER = 'openai'
 export const DEFAULT_INGREDIENT_PARSE_MODEL = 'gpt-4o-mini'
 export const DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS = 8_000
 export const DEFAULT_INGREDIENT_PARSE_MAX_RETRIES = 1
+
+/**
+ * The longest ingredient text sent to an AI model, in characters. About 100 typical ingredient
+ * lines, far more than one recipe step (or one imported recipe) needs; longer text is refused
+ * before any model call so one request cannot buy an arbitrarily large prompt.
+ */
+export const MAX_INGREDIENT_PARSE_TEXT_LENGTH = 4_000
+
+/**
+ * Output cap for the OpenAI call. One parsed ingredient is roughly 20-30 tokens of JSON, so this
+ * fits every ingredient {@link MAX_INGREDIENT_PARSE_TEXT_LENGTH} characters can hold.
+ */
+export const INGREDIENT_PARSE_MAX_OUTPUT_TOKENS = 4_096
+
+/**
+ * Output cap for the Gemini fallback. Gemini 2.5 counts its thinking tokens against
+ * `maxOutputTokens`, so this leaves room for them on top of the answer.
+ */
+export const INGREDIENT_PARSE_GEMINI_MAX_OUTPUT_TOKENS = 8_192
+
+export const INGREDIENT_PARSE_TEXT_TOO_LONG_MESSAGE =
+  'This ingredient text is too long to parse. Keep it under 4,000 characters, or add the ingredients in smaller batches.'
+
+export const INGREDIENT_PARSE_RATE_LIMITED_MESSAGE =
+  'Too many ingredient parses in a short time. Try again in a minute.'
+
+/** {@link IngredientParseError.code} when the text is over {@link MAX_INGREDIENT_PARSE_TEXT_LENGTH}. */
+export const INGREDIENT_PARSE_TEXT_TOO_LONG_CODE = 'ingredient_text_too_long'
+
+/** {@link IngredientParseError.code} when the user's per-minute parse limit is spent. */
+export const INGREDIENT_PARSE_RATE_LIMITED_CODE = 'ingredient_parse_rate_limited'
 
 export type IngredientParseProvider = typeof DEFAULT_INGREDIENT_PARSE_PROVIDER
 
@@ -32,6 +64,8 @@ export interface IngredientParserEnv extends PostHogServerEnv {
   GOOGLE_API_KEY?: string
   GEMINI_TEXT_MODEL?: string
   GEMINI_TEXT_TIMEOUT_MS?: string
+  /** Per-user throttle on AI parses (`wrangler.json` `ratelimits`). Absent: no throttle. */
+  INGREDIENT_PARSE_RATE_LIMITER?: RateLimiterBinding
 }
 
 /**
@@ -43,6 +77,7 @@ export interface IngredientParserEnv extends PostHogServerEnv {
 export interface IngredientParseTelemetry {
   postHogConfig?: PostHogServerConfig
   fetchImpl?: typeof fetch
+  /** The user making the request. It also keys the per-user rate limit; without it there is none. */
   distinctId?: string
 }
 
@@ -94,15 +129,33 @@ export class IngredientParseError extends Error {
 
   constructor(
     message: string,
-    public readonly cause?: unknown
+    public readonly cause?: unknown,
+    code?: string
   ) {
     super(message)
     this.name = 'IngredientParseError'
     const fields = extractOpenAIErrorFields(cause)
-    this.code = fields.code
+    this.code = code ?? fields.code
     this.type = fields.type
     this.status = fields.status
   }
+}
+
+/**
+ * True when parsing was refused by one of our own caps (text too long, or the user's rate limit)
+ * rather than by a provider. No model was called, so a non-AI fallback can stand in.
+ */
+export function isIngredientParseLimitError(error: unknown): error is IngredientParseError {
+  return (
+    error instanceof IngredientParseError &&
+    (error.code === INGREDIENT_PARSE_TEXT_TOO_LONG_CODE ||
+      error.code === INGREDIENT_PARSE_RATE_LIMITED_CODE)
+  )
+}
+
+/** True when the text is over {@link MAX_INGREDIENT_PARSE_TEXT_LENGTH}. */
+export function isIngredientParseTextTooLongError(error: unknown): error is IngredientParseError {
+  return error instanceof IngredientParseError && error.code === INGREDIENT_PARSE_TEXT_TOO_LONG_CODE
 }
 
 /**
@@ -334,7 +387,9 @@ export function isRetryableForFallback(error: IngredientParseError): boolean {
  * @param telemetry - Optional analytics context; when supplied, LLM-call
  *   failures are captured to PostHog with the preserved OpenAI error code.
  * @returns Array of parsed ingredients
- * @throws IngredientParseError if parsing fails
+ * @throws IngredientParseError if parsing fails, if the text is over
+ *   {@link MAX_INGREDIENT_PARSE_TEXT_LENGTH} characters, or if the user's rate limit is spent
+ *   (see {@link isIngredientParseLimitError})
  *
  * @example
  * ```typescript
@@ -350,6 +405,14 @@ export async function parseIngredients(
   configInput?: IngredientParserConfigInput,
   telemetry?: IngredientParseTelemetry
 ): Promise<ParsedIngredient[]> {
+  if (text.length > MAX_INGREDIENT_PARSE_TEXT_LENGTH) {
+    throw new IngredientParseError(
+      INGREDIENT_PARSE_TEXT_TOO_LONG_MESSAGE,
+      undefined,
+      INGREDIENT_PARSE_TEXT_TOO_LONG_CODE
+    )
+  }
+
   const config = resolveIngredientParserConfig(configInput)
 
   if (!config.apiKey) {
@@ -357,6 +420,21 @@ export async function parseIngredients(
   }
 
   const env = getConfigSource(configInput)
+
+  if (env.INGREDIENT_PARSE_RATE_LIMITER && telemetry?.distinctId) {
+    const rateLimit = await enforceIngredientParseRateLimit(
+      env.INGREDIENT_PARSE_RATE_LIMITER,
+      telemetry.distinctId,
+      telemetry.postHogConfig
+    )
+    if (!rateLimit.allowed) {
+      throw new IngredientParseError(
+        INGREDIENT_PARSE_RATE_LIMITED_MESSAGE,
+        undefined,
+        INGREDIENT_PARSE_RATE_LIMITED_CODE
+      )
+    }
+  }
 
   const startedAt = Date.now()
   try {
@@ -415,6 +493,7 @@ async function parseWithOpenAI(
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: text },
     ],
+    max_completion_tokens: INGREDIENT_PARSE_MAX_OUTPUT_TOKENS,
     response_format: {
       type: 'json_schema',
       json_schema: INGREDIENT_RESPONSE_JSON_SCHEMA,
@@ -429,6 +508,10 @@ async function parseWithOpenAI(
   const refusal = choice.message.refusal
   if (refusal) {
     throw new IngredientParseError('OpenAI refused to parse this ingredient text')
+  }
+
+  if (choice.finish_reason === 'length') {
+    throw new IngredientParseError('OpenAI response was cut off at the output token limit')
   }
 
   const content = choice.message.content
@@ -474,6 +557,7 @@ async function parseWithGemini(
     systemPrompt: SYSTEM_PROMPT,
     userText: text,
     responseSchema: GEMINI_INGREDIENT_RESPONSE_SCHEMA,
+    maxOutputTokens: INGREDIENT_PARSE_GEMINI_MAX_OUTPUT_TOKENS,
   })
 
   let parsed: unknown

@@ -38,6 +38,7 @@ export const REQUIRED_QA_RATE_LIMIT_BINDINGS = [
   "API_TOKEN_RATE_LIMITER",
   "API_IP_RATE_LIMITER",
   "AUTH_IP_RATE_LIMITER",
+  "INGREDIENT_PARSE_RATE_LIMITER",
 ] as const;
 
 const AUTH_ERROR_PATTERN = /auth|oauth|login|unauthenticated|api token|10000/i;
@@ -295,7 +296,7 @@ export function validateQaGeneratedBuildConfig(
     db.database_id === QA_D1_DATABASE_ID &&
     photos?.bucket_name === QA_R2_BUCKET &&
     hasExpectedRateLimitBindings &&
-    rateLimits.namespaceIds.every((id) => ["2001", "2002", "2003"].includes(id));
+    rateLimits.namespaceIds.every((id) => ["2001", "2002", "2003", "2004"].includes(id));
 
   return check(
     "QA generated build config",

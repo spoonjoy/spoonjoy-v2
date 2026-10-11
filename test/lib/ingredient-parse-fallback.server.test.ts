@@ -1,7 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as ingredientParse from '~/lib/ingredient-parse.server'
-import { IngredientParseError } from '~/lib/ingredient-parse.server'
-import { parseIngredientsWithRulesFallback } from '~/lib/ingredient-parse-fallback.server'
+import {
+  INGREDIENT_PARSE_RATE_LIMITED_CODE,
+  INGREDIENT_PARSE_RATE_LIMITED_MESSAGE,
+  INGREDIENT_PARSE_TEXT_TOO_LONG_MESSAGE,
+  IngredientParseError,
+  MAX_INGREDIENT_PARSE_TEXT_LENGTH,
+} from '~/lib/ingredient-parse.server'
+import {
+  parseIngredientsWithRulesFallback,
+  parseIngredientsWithRulesFallbackOnLimit,
+} from '~/lib/ingredient-parse-fallback.server'
+
+const POSTHOG = { enabled: true as const, key: 'ph_test', host: 'https://posthog.example' }
+const rateLimited = () =>
+  new IngredientParseError(INGREDIENT_PARSE_RATE_LIMITED_MESSAGE, undefined, INGREDIENT_PARSE_RATE_LIMITED_CODE)
+const overLongText = `${'1 cup flour\n'.repeat(Math.ceil(MAX_INGREDIENT_PARSE_TEXT_LENGTH / 12))}2 eggs`
 
 describe('parseIngredientsWithRulesFallback', () => {
   afterEach(() => {
@@ -65,5 +79,74 @@ describe('parseIngredientsWithRulesFallback', () => {
 
     const [[, init]] = vi.mocked(fetchImpl).mock.calls
     expect(JSON.parse((init as RequestInit).body as string).properties).toMatchObject({ error_name: 'string' })
+  })
+
+  it('parses by rules when the user is over the AI parse rate limit, and records why', async () => {
+    vi.spyOn(ingredientParse, 'parseIngredients').mockRejectedValue(rateLimited())
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+
+    await expect(
+      parseIngredientsWithRulesFallback('3 large eggs', {}, { postHogConfig: POSTHOG, fetchImpl, distinctId: 'chef-1' })
+    ).resolves.toEqual([{ quantity: 3, unit: 'large', ingredientName: 'eggs' }])
+
+    const [[, init]] = vi.mocked(fetchImpl).mock.calls
+    expect(JSON.parse((init as RequestInit).body as string).properties).toMatchObject({
+      error_code: INGREDIENT_PARSE_RATE_LIMITED_CODE,
+      rule_parsed_count: 1,
+    })
+  })
+
+  it('refuses text over the length cap with its message instead of a silent rules-only parse', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+
+    await expect(
+      parseIngredientsWithRulesFallback(overLongText, { OPENAI_API_KEY: 'key' }, { postHogConfig: POSTHOG, fetchImpl })
+    ).rejects.toThrow(INGREDIENT_PARSE_TEXT_TOO_LONG_MESSAGE)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+})
+
+describe('parseIngredientsWithRulesFallbackOnLimit', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('answers with the AI parse when it succeeds', async () => {
+    const ai = [{ quantity: 2, unit: 'cup', ingredientName: 'flour' }]
+    const spy = vi.spyOn(ingredientParse, 'parseIngredients').mockResolvedValue(ai)
+
+    await expect(parseIngredientsWithRulesFallbackOnLimit('2 cups flour', 'key', { distinctId: 'chef' })).resolves.toBe(ai)
+    expect(spy).toHaveBeenCalledWith('2 cups flour', 'key', { distinctId: 'chef' })
+  })
+
+  it('parses over-long text by rules so the import still saves', async () => {
+    const parsed = await parseIngredientsWithRulesFallbackOnLimit(overLongText, { OPENAI_API_KEY: 'key' })
+
+    expect(parsed.length).toBeGreaterThan(300)
+    expect(parsed.at(-1)).toEqual({ quantity: 2, unit: 'whole', ingredientName: 'eggs' })
+  })
+
+  it('parses by rules when the user is over the rate limit, and records why', async () => {
+    vi.spyOn(ingredientParse, 'parseIngredients').mockRejectedValue(rateLimited())
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch
+
+    await expect(
+      parseIngredientsWithRulesFallbackOnLimit('3 large eggs', {}, { postHogConfig: POSTHOG, fetchImpl, distinctId: 'chef-1' })
+    ).resolves.toEqual([{ quantity: 3, unit: 'large', ingredientName: 'eggs' }])
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('rethrows the limit error when the rules find no ingredient either', async () => {
+    const error = rateLimited()
+    vi.spyOn(ingredientParse, 'parseIngredients').mockRejectedValue(error)
+
+    await expect(parseIngredientsWithRulesFallbackOnLimit('2 cups')).rejects.toBe(error)
+  })
+
+  it('still fails on provider errors, as imports did before the caps', async () => {
+    const error = new IngredientParseError('OpenAI rate limit exceeded')
+    vi.spyOn(ingredientParse, 'parseIngredients').mockRejectedValue(error)
+
+    await expect(parseIngredientsWithRulesFallbackOnLimit('3 large eggs')).rejects.toBe(error)
   })
 })

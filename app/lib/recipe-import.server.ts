@@ -32,10 +32,8 @@ import {
   type RecipeLlmEnv,
   type RecipeLlmRunner,
 } from "~/lib/recipe-import-llm.server";
-import {
-  parseIngredients,
-  type ParsedIngredient,
-} from "~/lib/ingredient-parse.server";
+import type { ParsedIngredient } from "~/lib/ingredient-parse.server";
+import { parseIngredientsWithRulesFallbackOnLimit } from "~/lib/ingredient-parse-fallback.server";
 import {
   captureLlmCallFailure,
   captureLlmCallSucceeded,
@@ -1023,8 +1021,10 @@ async function completeImportFromExtraction(input: {
 
   const ingredientParser: NonNullable<ImportRecipeDeps["ingredientParser"]> =
     deps.ingredientParser ??
+    // Text over the parse length cap, or a spent per-user parse limit, falls back to the rule
+    // parser so the import still saves.
     ((text, env) =>
-      parseIngredients(text, env ?? undefined, {
+      parseIngredientsWithRulesFallbackOnLimit(text, env ?? undefined, {
         postHogConfig: deps.postHogConfig,
         fetchImpl: deps.analyticsFetchImpl,
         distinctId: deps.analyticsDistinctId ?? chefId,

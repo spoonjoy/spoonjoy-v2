@@ -30,6 +30,8 @@ export function getIngredientParserEnv(context: AppLoadContext): IngredientParse
       env?.INGREDIENT_PARSE_TIMEOUT_MS ?? process.env.INGREDIENT_PARSE_TIMEOUT_MS,
     INGREDIENT_PARSE_MAX_RETRIES:
       env?.INGREDIENT_PARSE_MAX_RETRIES ?? process.env.INGREDIENT_PARSE_MAX_RETRIES,
+    // Per-user throttle on AI parses; absent (local, tests) means no throttle.
+    INGREDIENT_PARSE_RATE_LIMITER: env?.INGREDIENT_PARSE_RATE_LIMITER,
     // PostHog keys ride along so parseIngredients can capture LLM-call failures.
     POSTHOG_KEY: env?.POSTHOG_KEY ?? process.env.POSTHOG_KEY,
     POSTHOG_HOST: env?.POSTHOG_HOST ?? process.env.POSTHOG_HOST,

@@ -114,6 +114,7 @@ function qaGeneratedBuildConfig() {
       { name: "API_TOKEN_RATE_LIMITER", namespace_id: "2001" },
       { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
       { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
+      { name: "INGREDIENT_PARSE_RATE_LIMITER", namespace_id: "2004" },
     ],
   };
 }
@@ -297,6 +298,7 @@ describe("validateQaGeneratedBuildConfig", () => {
         { name: "API_TOKEN_RATE_LIMITER", namespace_id: "2001" },
         { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
         { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
+        { name: "INGREDIENT_PARSE_RATE_LIMITER", namespace_id: "2004" },
       ],
     }, clientBuildMetadata(), clientBundle());
 
@@ -355,6 +357,7 @@ describe("validateQaGeneratedBuildConfig", () => {
         { name: "API_TOKEN_RATE_LIMITER", namespace_id: "1001" },
         { name: "API_IP_RATE_LIMITER", namespace_id: "1002" },
         { name: "AUTH_IP_RATE_LIMITER", namespace_id: "1003" },
+        { name: "INGREDIENT_PARSE_RATE_LIMITER", namespace_id: "1004" },
       ],
     });
 

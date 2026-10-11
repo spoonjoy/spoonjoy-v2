@@ -5,7 +5,11 @@ import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/ro
 import { requireUserId } from "~/lib/session.server";
 import { requestD1, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { readShoppingListFromD1, readShoppingListWithPrisma } from "~/lib/shopping-list-reads.server";
-import { IngredientParseError, parseIngredients } from "~/lib/ingredient-parse.server";
+import {
+  INGREDIENT_PARSE_RATE_LIMITED_CODE,
+  IngredientParseError,
+  parseIngredients,
+} from "~/lib/ingredient-parse.server";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import {
   parseShoppingItemFallback,
@@ -141,20 +145,26 @@ export async function handleShoppingListAction({ request, context }: ShoppingLis
           }
         } catch (error) {
           const fallbackDraft = parseShoppingItemFallback(ingredientText);
-          const parseMessage =
-            error instanceof IngredientParseError
-              ? error.message
-              : "Unable to parse item right now. Review and correct before adding.";
+          if (error instanceof IngredientParseError && error.code === INGREDIENT_PARSE_RATE_LIMITED_CODE) {
+            // Over the per-user AI parse limit: carry on with the rule parser, as when AI parsing
+            // is not configured, rather than refusing the item.
+            parsedDraft = fallbackDraft;
+          } else {
+            const parseMessage =
+              error instanceof IngredientParseError
+                ? error.message
+                : "Unable to parse item right now. Review and correct before adding.";
 
-          return data(
-            {
-              errors: {
-                parse: parseMessage,
+            return data(
+              {
+                errors: {
+                  parse: parseMessage,
+                },
+                parseDraft: fallbackDraft,
               },
-              parseDraft: fallbackDraft,
-            },
-            { status: 400 }
-          );
+              { status: 400 }
+            );
+          }
         }
       } else {
         parsedDraft = parseShoppingItemFallback(ingredientText);

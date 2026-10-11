@@ -87,6 +87,8 @@ declare global {
     API_IP_RATE_LIMITER?: RateLimitBinding;
     /** Tighter per-IP throttle for anonymous auth attempts (login/signup/passkey). */
     AUTH_IP_RATE_LIMITER?: RateLimitBinding;
+    /** Per-user throttle on AI ingredient parses (ingredient-parse.server.ts). */
+    INGREDIENT_PARSE_RATE_LIMITER?: RateLimitBinding;
     CF_VERSION_METADATA?: WorkerVersionMetadata;
     COOK_SESSIONS?: DurableObjectNamespace;
     COOK_SESSION_BOOTSTRAP_MODE?: string;

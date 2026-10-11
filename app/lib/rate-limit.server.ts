@@ -300,6 +300,29 @@ export async function enforceAgentCodeLookupRateLimit(
 }
 
 /**
+ * Throttle AI ingredient parses per user, so one account cannot run up model spend or spend
+ * the provider quota every other user depends on. Uses the dedicated
+ * `INGREDIENT_PARSE_RATE_LIMITER` binding, keyed on the user id.
+ *
+ * Fails OPEN like {@link enforceRateLimit}: with no binding, or when the binding errors, the
+ * parse is allowed and reported as scope `"skip"`.
+ */
+export async function enforceIngredientParseRateLimit(
+  limiter: RateLimiterBinding | undefined,
+  userId: string,
+  postHogConfig?: PostHogServerConfig,
+): Promise<Omit<RateLimitResult, "scope"> & { scope: "user" | "skip" }> {
+  if (!limiter) return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
+  const result = await safeLimit(limiter, `ingredient-parse:user:${userId}`, "user", { postHogConfig });
+  if (result === LIMITER_ERRORED) return { allowed: true, retryAfterSeconds: 0, scope: "skip" };
+  return {
+    allowed: result.success,
+    retryAfterSeconds: result.success ? 0 : retryAfterSecondsForLimitResult(result),
+    scope: "user",
+  };
+}
+
+/**
  * Build a 429 response with the standard `Retry-After` header.
  * Callers should also set their CORS / API headers on the response if
  * needed (this helper does not, so it stays generic).

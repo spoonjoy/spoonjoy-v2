@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   enforceAgentCodeLookupRateLimit,
   enforceAuthRateLimit,
+  enforceIngredientParseRateLimit,
   ipv6NetworkForRateLimit,
   enforceRateLimit,
   hashTokenForRateLimitKey,
@@ -531,6 +532,42 @@ describe("enforceAgentCodeLookupRateLimit", () => {
       "agent-code:ip:2001:db8:1:2::/64",
       "agent-code:ip:2001:db8:1:2::/64",
     ]);
+  });
+});
+
+describe("enforceIngredientParseRateLimit", () => {
+  it("skips without a limiter", async () => {
+    await expect(enforceIngredientParseRateLimit(undefined, "user-1"))
+      .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+  });
+
+  it("checks the user under the ingredient-parse prefix", async () => {
+    const limiter = mockLimiter(true);
+    await expect(enforceIngredientParseRateLimit(limiter, "user-1"))
+      .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "user" });
+    expect(limiter.limit).toHaveBeenCalledWith({ key: "ingredient-parse:user:user-1" });
+  });
+
+  it("refuses with a retry time when the user's budget is spent", async () => {
+    await expect(enforceIngredientParseRateLimit(mockLimiter(false), "user-1"))
+      .resolves.toEqual({ allowed: false, retryAfterSeconds: 60, scope: "user" });
+    const resetting = { limit: vi.fn().mockResolvedValue({ success: false, reset: 12.2 }) };
+    await expect(enforceIngredientParseRateLimit(resetting, "user-1"))
+      .resolves.toEqual({ allowed: false, retryAfterSeconds: 13, scope: "user" });
+  });
+
+  it("fails open and reports the backend error when the limiter throws", async () => {
+    const origFetch = globalThis.fetch;
+    const phFetch = postHogFetchSpy();
+    globalThis.fetch = phFetch;
+    try {
+      await expect(enforceIngredientParseRateLimit(throwingLimiter(), "user-1", POSTHOG_ENABLED))
+        .resolves.toEqual({ allowed: true, retryAfterSeconds: 0, scope: "skip" });
+      const backendError = postHogBodies(phFetch).find((b) => b.event === "spoonjoy.ratelimit.backend_error");
+      expect(backendError!.properties.scope).toBe("user");
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });
 

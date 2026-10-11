@@ -76,6 +76,28 @@ describe('geminiGenerateJson', () => {
     expect(body.generationConfig.responseMimeType).toBe('application/json')
   })
 
+  it('caps the output length only when asked', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse(geminiTextPayload('{"value":"ok"}')))
+    const config = buildConfig({ fetchImpl: fetchImpl as unknown as typeof fetch })
+
+    await geminiGenerateJson({ config, systemPrompt: 's', userText: 'u', responseSchema: RESPONSE_SCHEMA })
+    await geminiGenerateJson({
+      config,
+      systemPrompt: 's',
+      userText: 'u',
+      responseSchema: RESPONSE_SCHEMA,
+      maxOutputTokens: 512,
+    })
+
+    const [uncapped, capped] = fetchImpl.mock.calls.map(
+      ([, init]) => JSON.parse((init as RequestInit).body as string).generationConfig
+    )
+    expect(uncapped).not.toHaveProperty('maxOutputTokens')
+    expect(capped.maxOutputTokens).toBe(512)
+  })
+
   it('concatenates text parts of the first candidate, skipping parts with no text', async () => {
     // The middle part has no `text` key, exercising the `part.text ?? ""` branch.
     const payload = {
