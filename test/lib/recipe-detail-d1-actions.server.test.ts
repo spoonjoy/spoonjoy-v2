@@ -2,7 +2,7 @@
 // The recipe page's cookbook and cook-log actions on D1 (recipe-detail-d1-actions.server.ts), run
 // against the real test database through the D1 test binding. Each action is one batch, answers as
 // the Prisma path does, and writes nothing when a check fails.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
@@ -195,6 +195,19 @@ describe("recipe page actions on D1", () => {
       const again = await rejection(deleteSpoonOnD1(d1.binding, { userId: chefId, spoonId }));
       expect(again).toBeInstanceOf(SpoonNotFoundError);
       expect((again as Error).message).toBe(`Spoon ${spoonId} is deleted`);
+    });
+
+    it("says a second request in the same millisecond finds the cook already deleted", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.setSystemTime(new Date("2026-10-11T12:00:00.000Z"));
+        await deleteSpoonOnD1(d1.binding, { userId: chefId, spoonId });
+        const again = await rejection(deleteSpoonOnD1(d1.binding, { userId: chefId, spoonId }));
+        expect(again).toBeInstanceOf(SpoonNotFoundError);
+        expect((again as Error).message).toBe(`Spoon ${spoonId} is deleted`);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

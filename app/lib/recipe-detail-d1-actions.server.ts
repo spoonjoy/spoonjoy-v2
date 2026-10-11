@@ -131,6 +131,8 @@ export async function deleteSpoonOnD1(d1: D1ReadDatabase, input: { userId: strin
   const now = d1Timestamp(new Date());
   // A try that runs again after an ambiguous failure would find the cook already deleted; the
   // deletion time this request set says the earlier try committed, so it answers as that try would.
+  // Only a later try may read it that way: another request in the same millisecond also sets it.
+  let tries = 0;
   const row = await retryD1Write(
     {
       scope: "spoon.delete",
@@ -143,6 +145,7 @@ export async function deleteSpoonOnD1(d1: D1ReadDatabase, input: { userId: strin
       },
     },
     async () => {
+      tries += 1;
       const [spoon] = await d1WriteBatch(d1, [
         [`SELECT "chefId", "deletedAt" FROM "RecipeSpoon" WHERE "id" = ?`, input.spoonId],
         [
@@ -154,8 +157,9 @@ export async function deleteSpoonOnD1(d1: D1ReadDatabase, input: { userId: strin
     },
   );
   if (!row) throw new SpoonNotFoundError(`Spoon ${input.spoonId} not found`);
-  // Deleted at this request's own time: an earlier try of this request did it.
-  if (row.deletedAt != null && row.deletedAt !== now) throw new SpoonNotFoundError(`Spoon ${input.spoonId} is deleted`);
+  // Deleted at this request's own time on a later try: an earlier try of this request did it.
+  const deletedByEarlierTry = tries > 1 && row.deletedAt === now;
+  if (row.deletedAt != null && !deletedByEarlierTry) throw new SpoonNotFoundError(`Spoon ${input.spoonId} is deleted`);
   if (row.chefId !== input.userId) throw new SpoonAuthError("Spoon is not owned by requesting user");
 }
 
