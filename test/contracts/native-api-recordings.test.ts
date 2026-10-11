@@ -100,6 +100,8 @@ const OPAQUE_KEY_PATTERN = /(^id$|Id$|^cursor$|Cursor$|^token$|^client_id$|^acce
 const STABLE_VALUES = new Set(["spoonjoy-apple-native"]);
 
 function normalizeString(value: string, key: string | null): string {
+  // A profile's join label is the month the test chef was created, so it changes with the calendar.
+  if (key === "joinedLabel" && /^Joined [A-Z][a-z]{2} \d{4}$/.test(value)) return "Joined Jan 2026";
   let result = value.replace(TIMESTAMP_PATTERN, FIXED_TIMESTAMP).replace(EPOCH_MILLISECONDS_PATTERN, FIXED_EPOCH_MILLISECONDS);
   for (const { kind, pattern } of DYNAMIC_PATTERNS) {
     result = result.replace(pattern, (match) => placeholder(kind, match));
@@ -443,6 +445,18 @@ async function recordNativeSession() {
     },
     endpoint: "PATCH /api/v1/recipes/{id}/spoons/{spoonId}",
   });
+  await api("recipe-spoon-create-photo", "POST", `recipes/${recipeId}/spoons`, {
+    token: chef,
+    form: photoForm({
+      clientMutationId: "cm_spoon_create_photo",
+      useAsRecipeCover: "false",
+      note: "Charred the lemons first.",
+      nextTime: "More pepper.",
+      cookedAt: "2026-01-01T20:00:00.000Z",
+    }),
+    endpoint: "POST /api/v1/recipes/{id}/spoons",
+    status: 201,
+  });
   const photoSpoon = await api("recipe-image-upload-spoon", "POST", `recipes/${recipeId}/image`, {
     token: chef,
     form: photoForm({ clientMutationId: "cm_image_spoon", activateWhenReady: "false", generateEditorial: "false", postAsSpoon: "true", note: "Lovely and quick." }),
@@ -578,7 +592,6 @@ async function recordNativeSession() {
   await api("recipes-list", "GET", "recipes", { query: { limit: "20" }, endpoint: "GET /api/v1/recipes" });
   await api("recipe-detail", "GET", `recipes/${recipeId}`, { token: chef, endpoint: "GET /api/v1/recipes/{id}" });
   await api("search", "GET", "search", { query: { q: "pasta", scope: "all", limit: "20" }, endpoint: "GET /api/v1/search" });
-  if (process.env.TMP_SKIP_PROFILES !== "1") {
   await api("user-profile", "GET", "users/contract_chef", { endpoint: "GET /api/v1/users/{identifier}" });
   await api("user-kitchen-visitors", "GET", "users/contract_chef/kitchen-visitors", {
     query: { page: "1", limit: "20" },
@@ -588,7 +601,6 @@ async function recordNativeSession() {
     query: { page: "1", limit: "20" },
     endpoint: "GET /api/v1/users/{identifier}/fellow-chefs",
   });
-  }
   await api("me-chefs", "GET", "me/chefs", { token: chef, endpoint: "GET /api/v1/me/chefs" });
   await api("me-sync", "GET", "me/sync", { token: chef, query: { limit: "20" }, endpoint: "GET /api/v1/me/sync" });
 
@@ -688,6 +700,10 @@ async function recordNativeSession() {
     headers: { "X-Client-Mutation-Id": "cm_apns_revoke" },
     endpoint: "DELETE /api/v1/me/apns-devices/{deviceId}",
   });
+  // The first request with a token records its last use while the request runs, so a list made with a
+  // fresh token could show it either used or not. Use the token once first so the list is repeatable.
+  await api("tokens-list-warmup", "GET", "tokens", { token: tokenAdmin, endpoint: "GET /api/v1/tokens" });
+  recordings.pop();
   await api("tokens-list", "GET", "tokens", { token: tokenAdmin, endpoint: "GET /api/v1/tokens" });
   const createdToken = await api("token-create", "POST", "tokens", {
     token: tokenAdmin,
