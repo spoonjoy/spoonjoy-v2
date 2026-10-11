@@ -48,6 +48,7 @@ describe("route-platform.server", () => {
     process.env.OPENAI_API_KEY = "process-key";
     process.env.INGREDIENT_PARSE_MODEL = "process-model";
     process.env.POSTHOG_KEY = "process-ph";
+    const ingredientParseRateLimiter = { limit: async () => ({ success: true }) };
 
     expect(
       getIngredientParserEnv({
@@ -64,10 +65,13 @@ describe("route-platform.server", () => {
             POSTHOG_KEY: "cf-ph",
             POSTHOG_HOST: "https://cf.posthog.example",
             POSTHOG_DISABLED: "0",
+            INGREDIENT_PARSE_RATE_LIMITER: ingredientParseRateLimiter,
           },
         },
       })
     ).toEqual({
+      // The per-user AI parse throttle rides along so every parse surface is limited.
+      INGREDIENT_PARSE_RATE_LIMITER: ingredientParseRateLimiter,
       OPENAI_API_KEY: "cf-key",
       // Gemini fallback keys MUST flow through (else the fallback is dead on
       // the interactive parse surfaces).

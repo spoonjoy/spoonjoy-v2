@@ -254,6 +254,7 @@ function validInputs(): DeploymentPreflightInputs {
         { name: "API_TOKEN_RATE_LIMITER", namespace_id: "1001" },
         { name: "API_IP_RATE_LIMITER", namespace_id: "1002" },
         { name: "AUTH_IP_RATE_LIMITER", namespace_id: "1003" },
+        { name: "INGREDIENT_PARSE_RATE_LIMITER", namespace_id: "1004" },
       ],
       vars: {
         NODE_ENV: "production",
@@ -275,6 +276,7 @@ function validInputs(): DeploymentPreflightInputs {
             { name: "API_TOKEN_RATE_LIMITER", namespace_id: "2001" },
             { name: "API_IP_RATE_LIMITER", namespace_id: "2002" },
             { name: "AUTH_IP_RATE_LIMITER", namespace_id: "2003" },
+            { name: "INGREDIENT_PARSE_RATE_LIMITER", namespace_id: "2004" },
           ],
           vars: {
             NODE_ENV: "production",
@@ -5674,7 +5676,7 @@ describe("wrangler QA environment", () => {
     expect(qa?.vars?.SPOONJOY_BASE_URL).toBe("https://spoonjoy-v2-qa.mendelow-studio.workers.dev");
 
     const productionRateLimits = new Set(wrangler.ratelimits.map((limiter) => limiter.namespace_id));
-    expect(qa?.ratelimits?.map((limiter) => limiter.namespace_id)).toEqual(["2001", "2002", "2003"]);
+    expect(qa?.ratelimits?.map((limiter) => limiter.namespace_id)).toEqual(["2001", "2002", "2003", "2004"]);
     for (const limiter of qa?.ratelimits ?? []) {
       expect(productionRateLimits.has(limiter.namespace_id)).toBe(false);
     }

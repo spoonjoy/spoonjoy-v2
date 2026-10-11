@@ -25,11 +25,21 @@ vi.mock('~/lib/session.server', () => ({
 vi.mock('~/lib/ingredient-parse.server', () => ({
   parseIngredients: vi.fn(),
   IngredientParseError: class IngredientParseError extends Error {
-    constructor(message: string, public readonly cause?: unknown) {
+    constructor(
+      message: string,
+      public readonly cause?: unknown,
+      public readonly code: string | null = null
+    ) {
       super(message)
       this.name = 'IngredientParseError'
     }
   },
+  isIngredientParseTextTooLongError: (error: unknown) =>
+    (error as { code?: unknown } | null)?.code === 'ingredient_text_too_long',
+  isIngredientParseLimitError: (error: unknown) =>
+    ['ingredient_text_too_long', 'ingredient_parse_rate_limited'].includes(
+      String((error as { code?: unknown } | null)?.code)
+    ),
 }))
 
 import { requireUserId } from '~/lib/session.server'
@@ -308,6 +318,58 @@ describe('recipes.$id.steps.$stepId.edit - parseIngredients action', () => {
       const { data, status } = extractActionData(result)
       expect(status).toBe(200)
       expect(data.errors.parse).toBeDefined()
+    })
+
+    it('shows the length-cap message for over-long text instead of parsing it by rules', async () => {
+      vi.mocked(parseIngredients).mockRejectedValue(
+        new IngredientParseError('This ingredient text is too long to parse.', undefined, 'ingredient_text_too_long')
+      )
+
+      const formData = new UndiciFormData()
+      formData.set('intent', 'parseIngredients')
+      // The rules could parse this; the cap still wins so the person sees why.
+      formData.set('ingredientText', '2 cups flour')
+
+      const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await action({
+        request,
+        params: { id: testRecipe.id, stepId: testStep.id },
+        context: mockContext,
+      } as any)
+
+      const { data, status } = extractActionData(result)
+      expect(status).toBe(200)
+      expect(data.errors.parse).toBe('This ingredient text is too long to parse.')
+      expect(data.parsedIngredients).toBeUndefined()
+    })
+
+    it('parses by rules when the user is over the AI parse rate limit', async () => {
+      vi.mocked(parseIngredients).mockRejectedValue(
+        new IngredientParseError('Too many ingredient parses', undefined, 'ingredient_parse_rate_limited')
+      )
+
+      const formData = new UndiciFormData()
+      formData.set('intent', 'parseIngredients')
+      formData.set('ingredientText', '2 cups flour')
+
+      const request = new UndiciRequest('http://test.com/recipes/123/steps/456/edit', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await action({
+        request,
+        params: { id: testRecipe.id, stepId: testStep.id },
+        context: mockContext,
+      } as any)
+
+      const { data } = extractActionData(result)
+      expect(data.errors).toBeUndefined()
+      expect(data.parsedIngredients).toEqual([{ quantity: 2, unit: 'cup', ingredientName: 'flour' }])
     })
 
     it('handles non-IngredientParseError errors gracefully on text the rules cannot parse either', async () => {

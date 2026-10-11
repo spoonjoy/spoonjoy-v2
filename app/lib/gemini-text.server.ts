@@ -98,8 +98,10 @@ export async function geminiGenerateJson(input: {
   systemPrompt: string;
   userText: string;
   responseSchema: unknown;
+  /** Caps the answer's length (thinking tokens included on Gemini 2.5). Unset: the model default. */
+  maxOutputTokens?: number;
 }): Promise<string> {
-  const { config, systemPrompt, userText, responseSchema } = input;
+  const { config, systemPrompt, userText, responseSchema, maxOutputTokens } = input;
   const fetchImpl = config.fetchImpl ?? fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -120,6 +122,7 @@ export async function geminiGenerateJson(input: {
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema,
+            ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
           },
         }),
         signal: controller.signal,

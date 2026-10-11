@@ -4,7 +4,16 @@ import {
   DEFAULT_INGREDIENT_PARSE_MODEL,
   DEFAULT_INGREDIENT_PARSE_PROVIDER,
   DEFAULT_INGREDIENT_PARSE_TIMEOUT_MS,
+  INGREDIENT_PARSE_GEMINI_MAX_OUTPUT_TOKENS,
+  INGREDIENT_PARSE_MAX_OUTPUT_TOKENS,
+  INGREDIENT_PARSE_RATE_LIMITED_CODE,
+  INGREDIENT_PARSE_RATE_LIMITED_MESSAGE,
+  INGREDIENT_PARSE_TEXT_TOO_LONG_CODE,
+  INGREDIENT_PARSE_TEXT_TOO_LONG_MESSAGE,
+  isIngredientParseLimitError,
+  isIngredientParseTextTooLongError,
   isRetryableForFallback,
+  MAX_INGREDIENT_PARSE_TEXT_LENGTH,
   parseIngredients,
   ParsedIngredientSchema,
   ParsedIngredientsResponseSchema,
@@ -1747,6 +1756,178 @@ describe('Ingredient Parsing', () => {
       } finally {
         geminiFetch.mockRestore()
       }
+    })
+  })
+})
+
+describe('Ingredient parse caps', () => {
+  const OK_RESPONSE = {
+    choices: [
+      {
+        finish_reason: 'stop',
+        message: {
+          content: JSON.stringify({
+            ingredients: [{ quantity: 2, unit: 'cup', ingredientName: 'flour' }],
+          }),
+        },
+      },
+    ],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function limiter(success: boolean) {
+    return { limit: vi.fn().mockResolvedValue({ success }) }
+  }
+
+  describe('text length', () => {
+    it('refuses text over the cap before any provider or limiter call, with a clear message', async () => {
+      const rateLimiter = limiter(true)
+      const tooLong = 'a'.repeat(MAX_INGREDIENT_PARSE_TEXT_LENGTH + 1)
+
+      const error = await parseIngredients(
+        tooLong,
+        { OPENAI_API_KEY: 'key', INGREDIENT_PARSE_RATE_LIMITER: rateLimiter },
+        { distinctId: 'chef-1' }
+      ).catch((caught: unknown) => caught)
+
+      expect(error).toBeInstanceOf(IngredientParseError)
+      expect((error as IngredientParseError).message).toBe(INGREDIENT_PARSE_TEXT_TOO_LONG_MESSAGE)
+      expect((error as IngredientParseError).code).toBe(INGREDIENT_PARSE_TEXT_TOO_LONG_CODE)
+      expect(isIngredientParseTextTooLongError(error)).toBe(true)
+      expect(isIngredientParseLimitError(error)).toBe(true)
+      expect(mockCreate).not.toHaveBeenCalled()
+      expect(rateLimiter.limit).not.toHaveBeenCalled()
+    })
+
+    it('refuses over-long text even without an API key', async () => {
+      await expect(parseIngredients('a'.repeat(MAX_INGREDIENT_PARSE_TEXT_LENGTH + 1), {})).rejects.toMatchObject({
+        code: INGREDIENT_PARSE_TEXT_TOO_LONG_CODE,
+      })
+    })
+
+    it('accepts text exactly at the cap', async () => {
+      mockCreate.mockResolvedValueOnce(OK_RESPONSE)
+
+      await expect(
+        parseIngredients('a'.repeat(MAX_INGREDIENT_PARSE_TEXT_LENGTH), 'key')
+      ).resolves.toHaveLength(1)
+    })
+  })
+
+  describe('output tokens', () => {
+    it('caps the OpenAI answer length', async () => {
+      mockCreate.mockResolvedValueOnce(OK_RESPONSE)
+
+      await parseIngredients('2 cups flour', 'key')
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ max_completion_tokens: INGREDIENT_PARSE_MAX_OUTPUT_TOKENS })
+      )
+    })
+
+    it('treats an answer cut off at the token cap as a failed parse', async () => {
+      mockCreate.mockResolvedValueOnce({
+        choices: [{ finish_reason: 'length', message: { content: '{"ingredients":[' } }],
+      })
+
+      await expect(parseIngredients('2 cups flour', 'key')).rejects.toThrow(
+        'OpenAI response was cut off at the output token limit'
+      )
+    })
+
+    it('caps the Gemini fallback answer length', async () => {
+      mockCreate.mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 429 }))
+      const geminiFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        ingredients: [{ quantity: 3, unit: 'whole', ingredientName: 'eggs' }],
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      )
+
+      await parseIngredients('3 eggs', { OPENAI_API_KEY: 'key', GOOGLE_API_KEY: 'google' })
+
+      const body = JSON.parse((geminiFetch.mock.calls[0][1] as RequestInit).body as string)
+      expect(body.generationConfig.maxOutputTokens).toBe(INGREDIENT_PARSE_GEMINI_MAX_OUTPUT_TOKENS)
+    })
+  })
+
+  describe('per-user rate limit', () => {
+    it('checks the limiter under the user and parses when allowed', async () => {
+      mockCreate.mockResolvedValueOnce(OK_RESPONSE)
+      const rateLimiter = limiter(true)
+
+      await expect(
+        parseIngredients(
+          '2 cups flour',
+          { OPENAI_API_KEY: 'key', INGREDIENT_PARSE_RATE_LIMITER: rateLimiter },
+          { distinctId: 'chef-1' }
+        )
+      ).resolves.toHaveLength(1)
+
+      expect(rateLimiter.limit).toHaveBeenCalledWith({ key: 'ingredient-parse:user:chef-1' })
+    })
+
+    it('refuses without calling the model once the user is over the limit', async () => {
+      const error = await parseIngredients(
+        '2 cups flour',
+        { OPENAI_API_KEY: 'key', INGREDIENT_PARSE_RATE_LIMITER: limiter(false) },
+        { distinctId: 'chef-1' }
+      ).catch((caught: unknown) => caught)
+
+      expect(error).toBeInstanceOf(IngredientParseError)
+      expect((error as IngredientParseError).message).toBe(INGREDIENT_PARSE_RATE_LIMITED_MESSAGE)
+      expect((error as IngredientParseError).code).toBe(INGREDIENT_PARSE_RATE_LIMITED_CODE)
+      expect(isIngredientParseLimitError(error)).toBe(true)
+      expect(isIngredientParseTextTooLongError(error)).toBe(false)
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('skips the limiter when no user is named', async () => {
+      mockCreate.mockResolvedValueOnce(OK_RESPONSE)
+      const rateLimiter = limiter(false)
+
+      await expect(
+        parseIngredients('2 cups flour', { OPENAI_API_KEY: 'key', INGREDIENT_PARSE_RATE_LIMITER: rateLimiter })
+      ).resolves.toHaveLength(1)
+      expect(rateLimiter.limit).not.toHaveBeenCalled()
+    })
+
+    it('does not spend the limit when AI parsing is not configured', async () => {
+      const rateLimiter = limiter(true)
+
+      await expect(
+        parseIngredients('2 cups flour', { INGREDIENT_PARSE_RATE_LIMITER: rateLimiter }, { distinctId: 'chef-1' })
+      ).rejects.toThrow('OpenAI API key is required')
+      expect(rateLimiter.limit).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('limit error classification', () => {
+    it('does not count provider failures or other values as limit errors', () => {
+      expect(isIngredientParseLimitError(new IngredientParseError('OpenAI rate limit exceeded'))).toBe(false)
+      expect(isIngredientParseLimitError(new Error('boom'))).toBe(false)
+      expect(isIngredientParseTextTooLongError('too long')).toBe(false)
     })
   })
 })

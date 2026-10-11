@@ -12,13 +12,18 @@ const { parseIngredientsMock } = vi.hoisted(() => ({
 
 vi.mock("~/lib/ingredient-parse.server", () => {
   class IngredientParseError extends Error {
-    constructor(message: string, public readonly cause?: unknown) {
+    constructor(
+      message: string,
+      public readonly cause?: unknown,
+      public readonly code: string | null = null
+    ) {
       super(message);
       this.name = "IngredientParseError";
     }
   }
 
   return {
+    INGREDIENT_PARSE_RATE_LIMITED_CODE: "ingredient_parse_rate_limited",
     IngredientParseError,
     parseIngredients: parseIngredientsMock,
   };
@@ -154,6 +159,31 @@ describe("shopping list OpenAI and add-from-recipe coverage", () => {
       init: { status: 400 },
       data: { errors: { parse: "Parser says nope" } },
     });
+  });
+
+  it("adds the item by the rule parser when the user is over the AI parse rate limit", async () => {
+    parseIngredientsMock.mockRejectedValueOnce(
+      new IngredientParseError("Too many ingredient parses", undefined, "ingredient_parse_rate_limited")
+    );
+
+    const request = await createFormRequest(
+      { intent: "addItem", ingredientText: "3 lemons" },
+      testUserId
+    );
+
+    await action({
+      request,
+      context: { cloudflare: { env: { OPENAI_API_KEY: "test-key" } } },
+      params: {},
+    } as any);
+
+    const shoppingList = await db.shoppingList.findUnique({
+      where: { authorId: testUserId },
+      include: { items: { include: { ingredientRef: true } } },
+    });
+    expect(shoppingList?.items).toHaveLength(1);
+    expect(shoppingList?.items[0].quantity).toBe(3);
+    expect(shoppingList?.items[0].ingredientRef.name).toBe("lemons");
   });
 
   it("returns a generic parser error when OpenAI parsing throws an unknown error", async () => {

@@ -45,8 +45,9 @@ QA resources:
 - Worker URL: `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`
 - D1 database: `spoonjoy-qa`
 - R2 bucket: `spoonjoy-photos-qa`
-- Rate-limit namespaces: `2001`, `2002`, `2003`
+- Rate-limit namespaces: `2001`, `2002`, `2003`, `2004`
 - `AUTH_IP_RATE_LIMITER` (namespace `2003`) is 60/minute in QA, vs. production's 20/minute (namespace `1003`): CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs (personas + per-run scratch users signing in, plus the journeys' own sign-ins), so QA needs headroom a single real client would never need. Production is deliberately left tighter; do not raise it to match QA.
+- `INGREDIENT_PARSE_RATE_LIMITER` (namespace `2004` in QA, `1004` in production) allows 20 AI ingredient parses per user per minute. QA has no `OPENAI_API_KEY`, so it never spends this limit. Over the limit, the recipe editor, the shopping list and imports fall back to the rule-based parser instead of failing.
 - Disposable seed namespace: `codex-qa-seed-`
 - Disposable smoke users: `codex-smoke-...@example.com`
 
