@@ -435,18 +435,50 @@ async function hasCanonicalCi(run, repository, sha) {
 }
 
 const PRODUCTION_DEPLOY_WORKFLOW_FILE = "production-deploy.yml";
+// Each deploy attempt uploads its release evidence as `mcp-oauth-canary-artifacts-attempt-<n>`.
+// Runs from before that change used the bare name for every attempt, so the bare name is
+// unambiguous only in a run that had a single attempt.
 const RELEASE_ARTIFACT_NAME = "mcp-oauth-canary-artifacts";
+const RELEASE_ARTIFACT_ATTEMPT_PREFIX = `${RELEASE_ARTIFACT_NAME}-attempt-`;
 const RELEASE_ARTIFACT_FILE = "production-release.json";
 const RELEASED_RUN_LOOKBACK = 10;
 const RELEASE_RUN_EVENTS = new Set(["workflow_run", "workflow_dispatch"]);
 
+// The release artifact names to try for a run, newest deploy attempt first. A successful run's
+// deploy job is its most recent execution, which uploaded the highest-numbered attempt's artifact;
+// a rerun that skipped the deploy job leaves that artifact under the earlier attempt's number.
+function releaseArtifactNames(attempt) {
+  const names = [];
+  for (let n = attempt; n >= 1; n -= 1) names.push(`${RELEASE_ARTIFACT_ATTEMPT_PREFIX}${n}`);
+  if (attempt === 1) names.push(RELEASE_ARTIFACT_NAME);
+  return names;
+}
+
+async function downloadReleaseArtifact(run, repository, entry, directory) {
+  for (const name of releaseArtifactNames(entry.attempt)) {
+    try {
+      await run("gh", [
+        "run", "download", String(entry.databaseId),
+        "--repo", repository,
+        "--name", name,
+        "--dir", directory,
+      ]);
+      return true;
+    } catch {
+      // Not uploaded under this name; try the next.
+    }
+  }
+  return false;
+}
+
 // The commit production runs, as the newest successful Production Deploy run that recorded a
-// release says: its release artifact must show the release promoted and complete. A successful run
-// with no artifact (one that was superseded, so its deploy job skipped) is passed over. Only a run
-// GitHub started for main (a CI completion or a dispatch) whose own commit is on main counts, so
-// its artifact was written by main's own workflow; its released commit must be on main too.
-// Anything else, including a rollback or any lookup error, gives null, and the caller releases as
-// usual.
+// release says: its release artifact must show the release promoted and complete. The artifact is
+// the one the run's own final deploy attempt uploaded, never an earlier attempt's that a rerun
+// replaced. A successful run with no artifact (one that was superseded, so its deploy job skipped)
+// is passed over. Only a run GitHub started for main (a CI completion or a dispatch) whose own
+// commit is on main counts, so its artifact was written by main's own workflow; its released commit
+// must be on main too. Anything else, including a rollback or any lookup error, gives null, and the
+// caller releases as usual.
 export async function latestPromotedSha({
   run,
   repository,
@@ -461,26 +493,19 @@ export async function latestPromotedSha({
       "--branch", "main",
       "--status", "success",
       "--limit", String(RELEASED_RUN_LOOKBACK),
-      "--json", "databaseId,event,headSha",
+      "--json", "attempt,databaseId,event,headSha",
     ]), "gh run list");
     if (!Array.isArray(runs)) return null;
     for (const entry of runs) {
       if (
         !Number.isSafeInteger(entry?.databaseId) ||
+        !Number.isSafeInteger(entry.attempt) ||
+        entry.attempt < 1 ||
         !RELEASE_RUN_EVENTS.has(entry.event) ||
         !await isAncestor(run, entry.headSha, "origin/main")
       ) return null;
       const directory = makeTempDir();
-      try {
-        await run("gh", [
-          "run", "download", String(entry.databaseId),
-          "--repo", repository,
-          "--name", RELEASE_ARTIFACT_NAME,
-          "--dir", directory,
-        ]);
-      } catch {
-        continue;
-      }
+      if (!await downloadReleaseArtifact(run, repository, entry, directory)) continue;
       const artifact = parseJson(readFile(path.join(directory, RELEASE_ARTIFACT_FILE)), "The release artifact");
       return artifact?.status === "promoted" &&
         artifact.phase === "complete" &&

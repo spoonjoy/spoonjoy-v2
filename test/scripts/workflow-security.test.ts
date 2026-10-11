@@ -1044,13 +1044,17 @@ describe("latestPromotedSha", () => {
   const RELEASED = "4".repeat(40);
   const RUN_SHA = "5".repeat(40);
   const OFF_MAIN = "6".repeat(40);
-  const LIST = `gh run list --repo ${REPOSITORY} --workflow production-deploy.yml --branch main --status success --limit 10 --json databaseId,event,headSha`;
+  const LIST = `gh run list --repo ${REPOSITORY} --workflow production-deploy.yml --branch main --status success --limit 10 --json attempt,databaseId,event,headSha`;
+  const ATTEMPT_1 = "mcp-oauth-canary-artifacts-attempt-1";
   const released = (databaseId: number, overrides: Record<string, unknown> = {}) =>
-    ({ databaseId, event: "workflow_run", headSha: RUN_SHA, ...overrides });
+    ({ attempt: 1, databaseId, event: "workflow_run", headSha: RUN_SHA, ...overrides });
+  const PROMOTED = { status: "promoted", phase: "complete", sourceSha: RELEASED };
 
+  // `artifacts` maps a run id to its artifacts by name. A bare value is that run's attempt-1
+  // artifact, the name every single-attempt run now uploads.
   function releaseRunner({
     runs = [released(7)] as unknown,
-    artifacts = { 7: { status: "promoted", phase: "complete", sourceSha: RELEASED } } as Record<number, unknown>,
+    artifacts = { 7: PROMOTED } as Record<number, unknown>,
     list = undefined as string | undefined,
   } = {}) {
     const files = new Map<string, string>();
@@ -1062,11 +1066,13 @@ describe("latestPromotedSha", () => {
         if (onMain[1] === OFF_MAIN) throw new Error("not an ancestor");
         return "";
       }
-      const download = /^gh run download (\d+) --repo spoonjoy\/spoonjoy-v2 --name mcp-oauth-canary-artifacts --dir (\S+)$/.exec(command);
+      const download = /^gh run download (\d+) --repo spoonjoy\/spoonjoy-v2 --name (\S+) --dir (\S+)$/.exec(command);
       if (download) {
-        const artifact = artifacts[Number(download[1])];
+        const runArtifacts = artifacts[Number(download[1])];
+        const byName = runArtifacts instanceof Map ? runArtifacts : new Map([[ATTEMPT_1, runArtifacts]]);
+        const artifact = byName.get(download[2]);
         if (artifact === undefined) throw new Error("no valid artifacts found to download");
-        files.set(`${download[2]}/production-release.json`, typeof artifact === "string" ? artifact : JSON.stringify(artifact));
+        files.set(`${download[3]}/production-release.json`, typeof artifact === "string" ? artifact : JSON.stringify(artifact));
         return "";
       }
       throw new Error(`Unexpected command: ${command}`);
@@ -1086,7 +1092,51 @@ describe("latestPromotedSha", () => {
   it("passes over successful runs with no release artifact, as superseded runs have", async () => {
     const deps = releaseRunner({ runs: [released(9), released(7)] });
     expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBe(RELEASED);
-    expect(deps.run.mock.calls.filter(([, args]) => args[1] === "download")).toHaveLength(2);
+    // Run 9 tries its attempt-1 name and then the bare name; run 7 has the attempt-1 name.
+    expect(deps.run.mock.calls.filter(([, args]) => args[1] === "download")).toHaveLength(3);
+  });
+
+  // Production Deploy run 38145373089: attempt 1 rolled back after Cloudflare failed the
+  // promotion, and attempt 2 released. The run holds both attempts' evidence, and only the final
+  // attempt's says what production runs.
+  it("reads the final attempt's evidence, not an earlier attempt's that a rerun replaced", async () => {
+    const deps = releaseRunner({
+      runs: [released(7, { attempt: 2 })],
+      artifacts: {
+        7: new Map<string, unknown>([
+          [ATTEMPT_1, { status: "rolled_back", phase: "promote", sourceSha: RELEASED }],
+          ["mcp-oauth-canary-artifacts-attempt-2", PROMOTED],
+        ]),
+      },
+    });
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBe(RELEASED);
+    expect(deps.run.mock.calls.filter(([, args]) => args[1] === "download").map(([, args]) => args[6]))
+      .toEqual(["mcp-oauth-canary-artifacts-attempt-2"]);
+  });
+
+  it("reads an earlier attempt's evidence when the rerun reran only the report, not the deploy", async () => {
+    const deps = releaseRunner({ runs: [released(7, { attempt: 3 })] });
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBe(RELEASED);
+    expect(deps.run.mock.calls.filter(([, args]) => args[1] === "download").map(([, args]) => args[6])).toEqual([
+      "mcp-oauth-canary-artifacts-attempt-3",
+      "mcp-oauth-canary-artifacts-attempt-2",
+      ATTEMPT_1,
+    ]);
+  });
+
+  it("reads the bare artifact name a single-attempt run uploaded before attempts were named", async () => {
+    const deps = releaseRunner({ artifacts: { 7: new Map([["mcp-oauth-canary-artifacts", PROMOTED]]) } });
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBe(RELEASED);
+  });
+
+  it("never trusts the bare artifact name in a rerun run, where it could be any attempt's", async () => {
+    const deps = releaseRunner({
+      runs: [released(7, { attempt: 2 })],
+      artifacts: { 7: new Map([["mcp-oauth-canary-artifacts", PROMOTED]]) },
+    });
+    expect(await latestPromotedSha({ repository: REPOSITORY, ...deps })).toBeNull();
+    expect(deps.run.mock.calls.filter(([, args]) => args[1] === "download").map(([, args]) => args[6]))
+      .not.toContain("mcp-oauth-canary-artifacts");
   });
 
   it.each([
@@ -1104,6 +1154,8 @@ describe("latestPromotedSha", () => {
     ["a run list that is not a list", { list: "{}" }],
     ["a run list that is not JSON", { list: "rate limited" }],
     ["a run with a malformed id", { runs: [released(7, { databaseId: "7" })] }],
+    ["a run with a malformed attempt", { runs: [released(7, { attempt: "1" })] }],
+    ["a run with no attempt", { runs: [released(7, { attempt: 0 })] }],
     ["a null run", { runs: [null] }],
   ])("returns null, so the run releases as usual, for %s", async (_name, options) => {
     expect(await latestPromotedSha({ repository: REPOSITORY, ...releaseRunner(options as never) })).toBeNull();

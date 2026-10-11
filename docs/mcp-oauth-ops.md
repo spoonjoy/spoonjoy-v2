@@ -26,7 +26,7 @@ Start with the workflow run linked in the issue body. The summary tells which ch
 
 1. Open the latest failed workflow run linked from the issue.
 2. Read the job summary before downloading artifacts.
-3. Download `mcp-oauth-canary-artifacts` only if the summary is insufficient.
+3. Download the canary artifact only if the summary is insufficient. The scheduled canary uploads `mcp-oauth-canary-artifacts`; a Production Deploy attempt uploads `mcp-oauth-canary-artifacts-attempt-<n>`, so after a rerun take the highest `<n>`.
 4. Inspect `mcp-oauth-canary-results.json`.
 5. Check whether cleanup succeeded. If cleanup failed, look for `codex-mcp-canary-*` data before rerunning.
 6. Compare the failed check against the likely surface:

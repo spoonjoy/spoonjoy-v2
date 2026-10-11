@@ -3504,6 +3504,50 @@ describe("production canary release orchestration", () => {
     expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(result);
   });
 
+  // Production Deploy run 38145373089: attempt 1 canaried version 56a7caf5, Cloudflare then failed
+  // its promotion, and the release restored the prior version. `gh run rerun --failed` uploaded a
+  // fresh version of the same commit. Attempt 1's version is still in Cloudflare with the same
+  // source tag, so the rerun must canary and promote only the version it uploaded itself.
+  it("canaries and promotes only its own upload when a failed attempt left a version of the same commit", async () => {
+    const failedAttemptVersion = "56a7caf5-3be3-49d4-961b-d140246a3c62";
+    const before = JSON.stringify([
+      workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA, "2026-07-14T00:00:00Z"),
+      workerVersion(failedAttemptVersion, RELEASE_SHA, "2026-07-14T12:00:00Z", 2),
+    ]);
+    const runCommand = successfulRunner({
+      "pnpm exec wrangler versions list --json": [
+        before,
+        JSON.stringify([
+          workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA, "2026-07-14T00:00:00Z"),
+          workerVersion(failedAttemptVersion, RELEASE_SHA, "2026-07-14T12:00:00Z", 2),
+          workerVersion(CANDIDATE_VERSION, RELEASE_SHA, "2026-07-15T00:00:00Z", 3),
+        ]),
+      ],
+    });
+    const deps = releaseDeps(runCommand);
+
+    await expect(runProductionCanaryRelease(deps)).resolves.toMatchObject({
+      status: "promoted",
+      phase: "complete",
+      candidateVersionId: CANDIDATE_VERSION,
+    });
+    const commands = recordedCommands(runCommand);
+    const canary = commands.indexOf(
+      `pnpm run smoke:mcp:oauth -- --out mcp-oauth-canary-artifacts --worker-version-id ${CANDIDATE_VERSION}`,
+    );
+    const promote = commands.indexOf(
+      `pnpm exec wrangler versions deploy ${CANDIDATE_VERSION}@100% -y --message Promote ${RELEASE_SHA}`,
+    );
+    expect(commands.indexOf(CANARY_UPLOAD_COMMAND)).toBeLessThan(canary);
+    expect(canary).toBeGreaterThan(-1);
+    expect(promote).toBeGreaterThan(canary);
+    expect(commands.filter((command) => command.includes(failedAttemptVersion))).toEqual([]);
+    expect(deps.readCandidateCspHeaders).toHaveBeenCalledWith("https://spoonjoy.app", CANDIDATE_VERSION);
+    expect(deps.writeReleaseArtifact).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: "promoted", candidateVersionId: CANDIDATE_VERSION }),
+    );
+  });
+
   it("lists versions again while the uploaded candidate has not appeared yet", async () => {
     const before = JSON.stringify([
       workerVersion(PREVIOUS_VERSION, PREVIOUS_PRODUCT_SHA, "2026-07-14T00:00:00Z"),
