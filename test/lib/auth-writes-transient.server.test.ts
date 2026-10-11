@@ -29,6 +29,7 @@ import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 import { flakyPrisma } from "../helpers/flaky-prisma";
 import { createTestUser } from "../utils";
+import { expectConsoleWarning } from "../warning-policy";
 
 const ISSUER = "https://spoonjoy.app";
 const NOW = new Date("2026-10-11T12:00:00.000Z");
@@ -239,7 +240,7 @@ describe("authenticating a bearer token", () => {
   });
 
   it("still authenticates, without recording the use, when every touch is lost", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expectConsoleWarning("[api-auth] lastUsedAt update skipped: the database was briefly unavailable");
     const user = await newUser();
     const created = await createApiCredential(db, user.id, "Script");
     const flaky = flakyPrisma(db);
@@ -247,7 +248,6 @@ describe("authenticating a bearer token", () => {
 
     await expect(authenticateApiToken(flaky.db, created.token, ISSUER)).resolves.toMatchObject({ id: user.id });
     expect((await db.apiCredential.findUniqueOrThrow({ where: { id: created.credential.id } })).lastUsedAt).toBeNull();
-    expect(warn).toHaveBeenCalledWith("[api-auth] lastUsedAt update skipped: the database was briefly unavailable");
   });
 
   describe("on D1", () => {
@@ -266,7 +266,7 @@ describe("authenticating a bearer token", () => {
     });
 
     it("still authenticates, without recording the use, when every touch is lost", async () => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
+      expectConsoleWarning("[api-auth] lastUsedAt update skipped: the database was briefly unavailable");
       const user = await newUser();
       const created = await createApiCredential(db, user.id, "Script");
       const flaky = flakyD1(d1.binding);
