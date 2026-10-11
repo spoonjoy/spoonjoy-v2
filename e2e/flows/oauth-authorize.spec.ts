@@ -134,19 +134,38 @@ async function refreshTokens(
   return { accessToken: body.access_token, refreshToken: body.refresh_token };
 }
 
-async function expectRefreshReplayRejected(
-  request: APIRequestContext,
-  input: { clientId: string; refreshToken: string },
-): Promise<void> {
-  const res = await request.post('/oauth/token', {
+function replayRefresh(request: APIRequestContext, input: { clientId: string; refreshToken: string }) {
+  return request.post('/oauth/token', {
     form: {
       grant_type: 'refresh_token',
       client_id: input.clientId,
       refresh_token: input.refreshToken,
     },
   });
-  expect(res.status()).toBe(400);
-  await expect(res.json()).resolves.toMatchObject({ error: 'invalid_grant' });
+}
+
+// A client whose rotation answer was lost presents its old refresh token again. While the pair
+// that rotation made is unused, it gets that same pair, not a second one.
+async function expectRefreshReplayAnswersSamePair(
+  request: APIRequestContext,
+  input: { clientId: string; refreshToken: string },
+  pair: { accessToken: string; refreshToken: string },
+): Promise<void> {
+  const res = await replayRefresh(request, input);
+  expect(res.status()).toBe(200);
+  await expect(res.json()).resolves.toMatchObject({ access_token: pair.accessToken, refresh_token: pair.refreshToken });
+}
+
+// Once the pair is used, the old refresh token is refused. The use is recorded just after the
+// response, so this polls; an early replay only answers the same pair again.
+async function expectRefreshReplayRejected(
+  request: APIRequestContext,
+  input: { clientId: string; refreshToken: string },
+): Promise<void> {
+  await expect.poll(async () => {
+    const res = await replayRefresh(request, input);
+    return { status: res.status(), error: ((await res.json()) as { error?: string }).error };
+  }).toEqual({ status: 400, error: 'invalid_grant' });
 }
 
 async function expectMcpReady(request: APIRequestContext, accessToken: string): Promise<void> {
@@ -269,8 +288,9 @@ test.describe('OAuth authorize + consent flow', () => {
     const first = await exchangeCodeForTokens(page.request, { clientId, code: code!, verifier });
     await expectMcpReady(page.request, first.accessToken);
     const rotated = await refreshTokens(page.request, { clientId, refreshToken: first.refreshToken });
-    await expectRefreshReplayRejected(page.request, { clientId, refreshToken: first.refreshToken });
+    await expectRefreshReplayAnswersSamePair(page.request, { clientId, refreshToken: first.refreshToken }, rotated);
     await expectMcpReady(page.request, rotated.accessToken);
+    await expectRefreshReplayRejected(page.request, { clientId, refreshToken: first.refreshToken });
   });
 
   test('denying consent redirects back with access_denied', async ({ page }) => {
