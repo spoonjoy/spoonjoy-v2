@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createTestRoutesStub } from "../../utils";
 import { ForkRecipeButton } from "../../../app/components/recipe/ForkRecipeButton";
 
-function renderButton(props?: Partial<React.ComponentProps<typeof ForkRecipeButton>>) {
+function renderButton(
+  props?: Partial<React.ComponentProps<typeof ForkRecipeButton>>,
+  forkAction: () => Promise<unknown> = async () => null,
+) {
   const Stub = createTestRoutesStub([
     {
       path: "/",
@@ -20,7 +23,7 @@ function renderButton(props?: Partial<React.ComponentProps<typeof ForkRecipeButt
     },
     {
       path: "/recipes/:id/fork",
-      action: vi.fn(async () => null),
+      action: vi.fn(forkAction),
     },
   ]);
   return render(<Stub />);
@@ -132,5 +135,37 @@ describe("ForkRecipeButton", () => {
     await screen.findByRole("dialog");
     expect(token()).toMatch(/^[0-9a-f-]{36}$/);
     expect(token()).not.toBe(first);
+  });
+
+  it("keeps the dialog open with the server's message when the fork could not be saved, and clears it on the next opening", async () => {
+    const forkAction = vi.fn(async () => ({ error: "Spoonjoy couldn't save that just now. Please try again in a moment." }));
+    renderButton({ isOwner: false }, forkAction);
+    const token = () => (document.querySelector("form input[name='forkToken']") as HTMLInputElement).value;
+
+    await userEvent.click(await screen.findByRole("button", { name: /^fork$/i }));
+    const dialog = await screen.findByRole("dialog");
+    const sent = token();
+    await userEvent.click(dialog.querySelector("button[type='submit']")!);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now. Please try again in a moment.");
+    expect(forkAction).toHaveBeenCalledTimes(1);
+    // Trying again sends the same token, so it cannot make a second fork.
+    expect(token()).toBe(sent);
+    expect(dialog.querySelector("button[type='submit']")).not.toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: /^fork$/i }));
+    await screen.findByRole("dialog");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows nothing for an answer without a message", async () => {
+    renderButton({ isOwner: false }, async () => ({ error: { code: "other" } }));
+    await userEvent.click(await screen.findByRole("button", { name: /^fork$/i }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(dialog.querySelector("button[type='submit']")!);
+    await waitFor(() => expect(dialog.querySelector("button[type='submit']")).not.toBeDisabled());
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

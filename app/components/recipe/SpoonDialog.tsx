@@ -63,6 +63,14 @@ export function SpoonDialog({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [useAsRecipeCover, setUseAsRecipeCover] = useState(false);
   const [submitStarted, setSubmitStarted] = useState(false);
+  // One cook per opening of the dialog: a resubmit (after the server could not save it, or a
+  // double tap) carries the same token, and the server logs one cook for it. It is made when the
+  // dialog opens, in the browser, never during server rendering.
+  const [spoonToken, setSpoonToken] = useState("");
+
+  useEffect(() => {
+    if (isOpen) setSpoonToken(crypto.randomUUID());
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -143,6 +151,7 @@ export function SpoonDialog({
           onSubmit={handleSubmit}
         >
           <input type="hidden" name="intent" value="createSpoon" />
+          <input type="hidden" name="spoonToken" value={spoonToken} />
           {/* The field below is a wall-clock time with no timezone; this sends the instant it means
               in the cook's own timezone (see ~/lib/cooked-at). */}
           <input type="hidden" name="cookedAt" value={localDateTimeToIso(cookedAt)} />

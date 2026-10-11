@@ -1,5 +1,6 @@
 import type { ApiIdempotencyKey, PrismaClient as PrismaClientType } from "@prisma/client";
 import type { ApiPrincipal } from "~/lib/api-auth.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 export const IDEMPOTENCY_RETRY_AFTER_SECONDS = 2;
@@ -66,20 +67,50 @@ export function idempotencyClientKey(principal: Pick<ApiPrincipal, "id" | "sourc
   return `chef:${principal.id}`;
 }
 
+type ReservationInput = {
+  userId: string;
+  credentialId?: string | null;
+  clientKey: string;
+  key: string;
+  operation: string;
+  requestHash: string;
+  now?: Date;
+};
+
+/**
+ * Reserves the key for this request, or answers what an earlier request with it left: its saved
+ * response (replay), that it is still running (in flight), or that it was a different request
+ * (conflict). The new reservation's id is chosen before the first try, so after a transient D1
+ * error the whole reservation runs again and recognises its own row if the failed try wrote it.
+ */
 export async function reserveIdempotencyKey(
   db: PrismaClientType,
-  input: {
-    userId: string;
-    credentialId?: string | null;
-    clientKey: string;
-    key: string;
-    operation: string;
-    requestHash: string;
-    now?: Date;
-  },
+  input: ReservationInput,
 ): Promise<IdempotencyReservation> {
   const now = input.now ?? new Date();
+  const id = newReservationId(now);
+  return retryD1Write({ scope: "idempotency.reserve" }, () => reserveOnce(db, input, id, now));
+}
 
+let reservationCounter = 0;
+
+/**
+ * A new reservation id in the shape of the cuid Prisma would make ("c" and 24 lowercase letters
+ * or digits, time first), because a recipe created through the API takes its reservation's id.
+ * Chosen here, before the first try, rather than by Prisma on each try.
+ */
+export function newReservationId(now: Date): string {
+  reservationCounter = (reservationCounter + 1) % 36 ** 4;
+  const random = Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) => (byte % 36).toString(36)).join("");
+  return `c${now.getTime().toString(36).padStart(8, "0").slice(-8)}${reservationCounter.toString(36).padStart(4, "0")}${random}`;
+}
+
+async function reserveOnce(
+  db: PrismaClientType,
+  input: ReservationInput,
+  id: string,
+  now: Date,
+): Promise<IdempotencyReservation> {
   await db.apiIdempotencyKey.deleteMany({
     where: {
       userId: input.userId,
@@ -102,12 +133,13 @@ export async function reserveIdempotencyKey(
   });
 
   if (existing) {
-    return await existingReservation(db, existing, input, now);
+    return existing.id === id ? { status: "reserved", record: existing } : await existingReservation(db, existing, input, now);
   }
 
   try {
     const record = await db.apiIdempotencyKey.create({
       data: {
+        id,
         userId: input.userId,
         credentialId: input.credentialId ?? null,
         clientKey: input.clientKey,
@@ -158,18 +190,20 @@ function isUniqueIdempotencyRace(error: unknown) {
   return Boolean(target?.userId_clientKey_key);
 }
 
+/** Saves the response on the key. Saving the same response again changes nothing, so a transient D1 error retries it. */
 export async function completeIdempotencyKey(
   db: PrismaClientType,
   id: string,
   response: { status: number; body: unknown },
 ): Promise<ApiIdempotencyKey> {
-  return db.apiIdempotencyKey.update({
+  const responseBody = JSON.stringify(response.body);
+  return retryD1Write({ scope: "idempotency.complete" }, () => db.apiIdempotencyKey.update({
     where: { id },
     data: {
       responseStatus: response.status,
-      responseBody: JSON.stringify(response.body),
+      responseBody,
     },
-  });
+  }));
 }
 
 /**

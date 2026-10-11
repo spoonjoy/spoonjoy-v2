@@ -9,6 +9,7 @@ import {
 } from "~/lib/recipe-write-dedupe.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1 } from "../helpers/flaky-d1";
 import { createTestUser } from "../utils";
 
 let db: PrismaClient;
@@ -192,5 +193,62 @@ describe("recipe write keys shared between Prisma and D1", () => {
       await expect(run(write, { key })).resolves.toMatchObject({ replayed: false });
     }
     expect(write).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("recipe write keys on D1 when its connection drops", () => {
+  let flaky: ReturnType<typeof flakyD1<SqliteD1["binding"]>>;
+
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    chefId = (await db.user.create({ data: createTestUser() })).id;
+    d1 = sqliteD1();
+    flaky = flakyD1(d1.binding);
+  });
+
+  afterEach(async () => {
+    d1?.close();
+    d1 = null;
+    await cleanupDatabase();
+  });
+
+  function runFlaky(write: () => Promise<{ recipeId: string | null }>, key: string) {
+    return runDedupedRecipeWrite({ d1: flaky.binding, chefId, operation: "test.write", key, request: { source: "a" }, write, pollMs: 5 });
+  }
+
+  it("still holds its own key when the reservation committed but its answer was lost, and writes once", async () => {
+    flaky.failNext(/INSERT INTO "ApiIdempotencyKey"/, "lost-answer");
+    const write = vi.fn(async () => ({ recipeId: await newRecipe() }));
+
+    const first = await runFlaky(write, "lost-reserve");
+    const repeat = await runFlaky(write, "lost-reserve");
+
+    expect(flaky.failures()).toBe(1);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(first.replayed).toBe(false);
+    expect(repeat).toEqual({ value: first.value, replayed: true });
+    expect(await db.apiIdempotencyKey.count()).toBe(1);
+  });
+
+  it("saves the answer once more when saving it lost its connection", async () => {
+    flaky.failNext(/UPDATE "ApiIdempotencyKey" SET "responseStatus"/, "lost", "lost-answer");
+    const write = vi.fn(async () => ({ recipeId: await newRecipe() }));
+
+    const first = await runFlaky(write, "lost-complete");
+    const repeat = await runFlaky(write, "lost-complete");
+
+    expect(flaky.failures()).toBe(2);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(repeat).toEqual({ value: first.value, replayed: true });
+  });
+
+  it("releases the key of a failed write even when the release lost its connection", async () => {
+    flaky.failNext(/DELETE FROM "ApiIdempotencyKey" WHERE "id"/, "lost");
+
+    await expect(runFlaky(async () => { throw new Error("import provider down"); }, "lost-forget")).rejects.toThrow("import provider down");
+
+    expect(flaky.failures()).toBe(1);
+    expect(await db.apiIdempotencyKey.count()).toBe(0);
   });
 });

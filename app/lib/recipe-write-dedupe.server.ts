@@ -7,6 +7,7 @@ import {
 } from "~/lib/api-idempotency.server";
 import { d1EpochMsSql, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 // Imports and forks that a retry must not repeat. An agent whose import timed out, or a browser
 // whose fork form was submitted twice, sent the same request again and got a second recipe. These
@@ -150,7 +151,9 @@ const KEY_WHERE = `"userId" = ? AND "clientKey" = ? AND "key" = ?`;
  * The same reservations on D1. One batch drops an expired key, inserts a new one unless the key
  * exists, and reads the key back; the row that comes back is either ours (reserved) or the
  * earlier request's. The insert and the read are one transaction, so two racing requests cannot
- * both reserve.
+ * both reserve. The new key's id is chosen once, so after a transient D1 error the batch runs
+ * again and still recognises its own row. Releasing and completing a key set it to fixed values,
+ * so they run again too.
  */
 function d1KeyStore(d1: D1ReadDatabase): RecipeWriteKeyStore {
   return {
@@ -158,7 +161,7 @@ function d1KeyStore(d1: D1ReadDatabase): RecipeWriteKeyStore {
       const id = crypto.randomUUID();
       const now = new Date();
       const keyValues = [input.userId, input.clientKey, input.key];
-      const [, , { rows: [row] }] = await d1WriteBatch(d1, [
+      const [, , { rows: [row] }] = await retryD1Write({ scope: "recipe_write_key.reserve" }, () => d1WriteBatch(d1, [
         [`DELETE FROM "ApiIdempotencyKey" WHERE ${KEY_WHERE} AND ${d1EpochMsSql('"expiresAt"')} <= ?`, ...keyValues, now.getTime()],
         [
           `INSERT INTO "ApiIdempotencyKey"
@@ -174,7 +177,7 @@ function d1KeyStore(d1: D1ReadDatabase): RecipeWriteKeyStore {
           d1Timestamp(now),
         ],
         [`SELECT "id", "operation", "requestHash", "responseStatus", "responseBody" FROM "ApiIdempotencyKey" WHERE ${KEY_WHERE}`, ...keyValues],
-      ]);
+      ]));
       const responseBody = (row.responseBody as string | null) ?? null;
       if (row.id === id) return { status: "reserved", id, responseBody };
       const status = row.operation !== input.operation || row.requestHash !== input.requestHash
@@ -192,15 +195,17 @@ function d1KeyStore(d1: D1ReadDatabase): RecipeWriteKeyStore {
       return recipe !== undefined;
     },
     async forget(id) {
-      await d1WriteBatch(d1, [[`DELETE FROM "ApiIdempotencyKey" WHERE "id" = ?`, id]]);
+      await retryD1Write({ scope: "recipe_write_key.forget" }, () =>
+        d1WriteBatch(d1, [[`DELETE FROM "ApiIdempotencyKey" WHERE "id" = ?`, id]]));
     },
     async complete(id, body) {
-      await d1WriteBatch(d1, [[
+      const statement: [string, ...unknown[]] = [
         `UPDATE "ApiIdempotencyKey" SET "responseStatus" = 200, "responseBody" = ?, "updatedAt" = ? WHERE "id" = ?`,
         JSON.stringify(body),
         d1Timestamp(new Date()),
         id,
-      ]]);
+      ];
+      await retryD1Write({ scope: "recipe_write_key.complete" }, () => d1WriteBatch(d1, [statement]));
     },
   };
 }

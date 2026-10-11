@@ -361,8 +361,11 @@ describe("D1 recipe write batches", () => {
       const alwaysRacing: D1ReadDatabase = {
         prepare: (sql) => d1.binding.prepare(sql),
         async batch(statements) {
-          taken += 1;
-          await db.recipe.create({ data: { title: taken === 1 ? "Loaf" : `Loaf (variation ${taken})`, chefId } });
+          // Only the write batches race; a lone read is the check for whether the fork was written.
+          if (statements.length > 1) {
+            taken += 1;
+            await db.recipe.create({ data: { title: taken === 1 ? "Loaf" : `Loaf (variation ${taken})`, chefId } });
+          }
           return d1.binding.batch(statements as never);
         },
       };

@@ -4,6 +4,7 @@
 // becomes the recipe's cover, the cover and the recipe's new cover choice together.
 import { d1ReadBatch, d1NullableDateTime, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { coverInsertStatement } from "~/lib/recipe-cover.server";
 import { prepareSpoonContent, type CreateSpoonDeps, type CreateSpoonInput } from "~/lib/recipe-spoon.server";
 import {
@@ -24,6 +25,8 @@ export interface CreateSpoonOnD1Result {
   spoonerUsername: string | null;
   /** The cover made from the spoon's photo, when one was made. */
   cover: { id: string } | null;
+  /** This cook was already logged with this id, so nothing was written now. */
+  replayed?: true;
 }
 
 // `activateSpoonCoverForDecision`'s auto-seed condition, in SQL: the recipe is still on automatic
@@ -111,13 +114,15 @@ export function spoonInsertStatement(
 /**
  * Adds a cook's spoon to a recipe on D1. Answers 404 for a recipe that does not exist or is in the
  * trash; otherwise it decides and writes as `createSpoon` followed by the spoon-cover step on the Prisma path.
+ * Given an id that this chef already logged on this recipe, it answers that spoon and writes nothing.
  */
 export async function createSpoonOnD1(
   d1: D1ReadDatabase,
   input: CreateSpoonOnD1Input,
   deps: CreateSpoonDeps = {},
 ): Promise<CreateSpoonOnD1Result> {
-  const [recipeRows, coverRows, priorRows, spoonerRows] = await d1ReadBatch(d1, [
+  const spoonId = input.id ?? crypto.randomUUID();
+  const [recipeRows, coverRows, priorRows, spoonerRows, existingRows] = await d1ReadBatch(d1, [
     [
       `SELECT "id", "title", "chefId", "coverMode", "activeCoverId", "activeCoverVariant" FROM "Recipe" WHERE "id" = ? AND "deletedAt" IS NULL`,
       input.recipeId,
@@ -133,9 +138,11 @@ export async function createSpoonOnD1(
       input.recipeId,
     ],
     [`SELECT "username" FROM "User" WHERE "id" = ?`, input.chefId],
+    [`SELECT "chefId", "recipeId", "photoUrl" FROM "RecipeSpoon" WHERE "id" = ?`, spoonId],
   ]);
   const recipeRow = recipeRows[0];
   if (!recipeRow) throw new Response("Recipe not found", { status: 404 });
+  const spoonerUsername = spoonerRows[0] ? nullableText(spoonerRows[0], "username") : null;
   const recipe: RecipeForSpoonCoverDecision & { title: string } = {
     id: text(recipeRow, "id"),
     title: text(recipeRow, "title"),
@@ -146,6 +153,23 @@ export async function createSpoonOnD1(
     activeCover: activeCoverFromRow(coverRows[0]),
   };
   const isOriginCook = recipe.chefId === input.chefId && priorRows.length === 0;
+
+  // The same cook again (a resubmit, or a retry after an ambiguous failure, with the same id):
+  // answer the spoon the first one wrote, without a second upload, cover or notification.
+  const existing = existingRows[0];
+  if (existing) {
+    if (existing.chefId !== input.chefId || existing.recipeId !== input.recipeId) {
+      throw new Response("This cook was already logged elsewhere", { status: 409 });
+    }
+    return {
+      spoon: { id: spoonId, photoUrl: nullableText(existing, "photoUrl") },
+      isOriginCook: false,
+      recipe: { id: recipe.id, title: recipe.title },
+      spoonerUsername,
+      cover: null,
+      replayed: true,
+    };
+  }
 
   const { note, nextTime, photoUrl } = await prepareSpoonContent(input, deps);
   const decision = decideSpoonCoverCreation({
@@ -158,7 +182,6 @@ export async function createSpoonOnD1(
 
   const nowDate = new Date();
   const now = d1Timestamp(nowDate);
-  const spoonId = input.id ?? crypto.randomUUID();
   const writes: D1Query[] = [
     spoonInsertStatement(
       { id: spoonId, chefId: input.chefId, recipeId: input.recipeId, cookedAt: input.cookedAt ?? null, photoUrl, note, nextTime },
@@ -186,13 +209,30 @@ export async function createSpoonOnD1(
       recipeCoverUpdate(input.recipeId, decision, cover.id, recipe.activeCoverId, now),
     );
   }
-  await d1WriteBatch(d1, writes);
+  // The spoon's id is fixed before the first try, so a try that runs again after an ambiguous
+  // failure either finds the spoon the earlier one wrote (the batch is atomic, so its cover came
+  // with it) or writes it once.
+  await retryD1Write(
+    {
+      scope: "spoon.create",
+      applied: async () => {
+        const [[written]] = await d1ReadBatch(d1, [
+          [`SELECT 1 AS "written" FROM "RecipeSpoon" WHERE "id" = ? AND "chefId" = ?`, spoonId, input.chefId],
+        ]);
+        return written ? true : null;
+      },
+    },
+    async () => {
+      await d1WriteBatch(d1, writes);
+      return true;
+    },
+  );
 
   return {
     spoon: { id: spoonId, photoUrl },
     isOriginCook,
     recipe: { id: recipe.id, title: recipe.title },
-    spoonerUsername: spoonerRows[0] ? nullableText(spoonerRows[0], "username") : null,
+    spoonerUsername,
     cover,
   };
 }
