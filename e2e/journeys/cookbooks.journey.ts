@@ -107,7 +107,7 @@ test.describe("Cookbooks", () => {
     const saved = page.waitForResponse(
       (response) => new URL(response.url()).pathname === `${SALMON}.data` && response.request().method() === "POST",
     );
-    await cookbookToggle.click();
+    await (isMobile ? cookbookToggle.tap() : cookbookToggle.click());
     expect((await saved).status()).toBe(200);
     await expect(cookbookToggle).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
