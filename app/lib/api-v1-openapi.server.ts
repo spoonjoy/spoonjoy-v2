@@ -3229,9 +3229,7 @@ function errorResponse(codes: ApiV1ErrorCode[], scopes: readonly string[]) {
  * unavailable, which it answers as a retryable 503 `temporarily_unavailable`.
  */
 function withTemporarilyUnavailable(codes: ApiV1ErrorCode[]): ApiV1ErrorCode[] {
-  if (!codes.includes("internal_error") || codes.includes("temporarily_unavailable")) return codes;
-  const index = codes.indexOf("internal_error");
-  return [...codes.slice(0, index), "temporarily_unavailable", ...codes.slice(index)];
+  return codes.flatMap((code): ApiV1ErrorCode[] => (code === "internal_error" ? ["temporarily_unavailable", code] : [code]));
 }
 
 function errorCodesByStatus(codes: ApiV1ErrorCode[]) {
