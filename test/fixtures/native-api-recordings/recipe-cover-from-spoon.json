@@ -4,7 +4,7 @@
   "status": 201,
   "body": {
     "ok": true,
-    "requestId": "opaque_041",
+    "requestId": "opaque_042",
     "data": {
       "activeCover": {
         "id": "id_009",
@@ -62,7 +62,7 @@
       },
       "generationStatus": "none",
       "mutation": {
-        "clientMutationId": "opaque_042",
+        "clientMutationId": "opaque_043",
         "replayed": false
       }
     }

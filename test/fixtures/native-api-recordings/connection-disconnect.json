@@ -4,10 +4,10 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_121",
+    "requestId": "opaque_122",
     "data": {
       "disconnected": true,
-      "connectionId": "opaque_120",
+      "connectionId": "opaque_121",
       "clientId": "opaque_002",
       "issuer": "http://localhost",
       "resource": null,
