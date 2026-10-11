@@ -12,6 +12,11 @@ class PathOrderSequencer extends BaseSequencer {
   }
 }
 
+// `pnpm run test:native-recordings:refresh` sets this. The recordings test then hands its responses to
+// the reporter below instead of comparing them with the committed ones; see
+// test/workers/native-cook-session-recordings.test.ts.
+const writeNativeApiRecordings = process.env.SPOONJOY_WRITE_NATIVE_API_RECORDINGS === "1";
+
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
 const prismaWasmClient = new URL("./node_modules/.prisma/client/wasm.js", import.meta.url).pathname;
@@ -41,6 +46,10 @@ export default defineConfig({
     fileParallelism: false,
     maxWorkers: 1,
     sequence: { sequencer: PathOrderSequencer },
+    provide: { writeNativeApiRecordings },
+    ...(writeNativeApiRecordings
+      ? { reporters: ["default", "./test/workers/helpers/native-recordings-reporter.ts"] }
+      : {}),
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json", "html"],

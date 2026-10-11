@@ -216,9 +216,38 @@ describe("GET /api/v1/users/{identifier}", () => {
     const asOther = await get(`users/${fixture.owner.username}`, { token: otherToken.token });
 
     expect(asOwner.status).toBe(200);
-    expect(asOwner.headers.get("Cache-Control")).toBe("private, no-store");
     expect((await readJson(asOwner)).data.isOwner).toBe(true);
     expect((await readJson(asOther)).data.isOwner).toBe(false);
+    // Every answer to a request with credentials is private, whoever's profile it is.
+    for (const response of [asOwner, asOther]) {
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
+    }
+  });
+
+  it("caches only answers to requests without credentials, keyed by the credential headers", async () => {
+    const fixture = await profileFixture();
+
+    const anonymous = await get(`users/${fixture.owner.username}`);
+
+    expect(anonymous.headers.get("Cache-Control")).toBe("public, max-age=60, stale-while-revalidate=300");
+    expect(anonymous.headers.get("Vary")).toBe("Authorization, Cookie");
+    expect((await readJson(anonymous)).data.isOwner).toBe(false);
+  });
+
+  it("keeps errors for requests with credentials private", async () => {
+    const fixture = await profileFixture();
+    const ownerToken = await createApiCredential(db, fixture.owner.id, "Native app", { scopes: ["kitchen:read"] });
+
+    const expired = await get(`users/${fixture.owner.username}`, { token: "sj_not_a_real_token_value" });
+    const missing = await get("users/nobody_here", { token: ownerToken.token });
+
+    expect(expired.status).toBe(401);
+    expect(missing.status).toBe(404);
+    for (const response of [expired, missing]) {
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
+    }
   });
 
   it("returns the api-v1 not_found envelope for an unknown chef", async () => {
@@ -341,6 +370,7 @@ describe("GET /api/v1/users/{identifier}/fellow-chefs and kitchen-visitors", () 
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("public, max-age=60, stale-while-revalidate=300");
+    expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
     const { data } = await readJson(response);
     expect(data).toEqual({
       profile: {
@@ -388,6 +418,7 @@ describe("GET /api/v1/users/{identifier}/fellow-chefs and kitchen-visitors", () 
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
     const { data } = await readJson(response);
     expect(data).toMatchObject({ direction: "kitchen-visitors", isOwner: true, page: 1, pageSize: 50, total: 1, nextCursor: null, emptyState: null });
     expect(data.rows).toEqual([
@@ -397,6 +428,20 @@ describe("GET /api/v1/users/{identifier}/fellow-chefs and kitchen-visitors", () 
         latestInteractionAt: "2026-07-04T00:00:00.000Z",
       }),
     ]);
+  });
+
+  it("answers another signed-in chef with isOwner false and still keeps the page private", async () => {
+    const fixture = await graphFixture();
+    const token = await createApiCredential(db, fixture.julia.id, "Native app", { scopes: ["kitchen:read"] });
+
+    for (const direction of ["fellow-chefs", "kitchen-visitors"]) {
+      const response = await get(`users/${fixture.focal.username}/${direction}`, { token: token.token });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+      expect(response.headers.get("Vary")).toBe("Authorization, Cookie");
+      expect((await readJson(response)).data).toMatchObject({ direction, isOwner: false });
+    }
   });
 
   it("pages with page and limit and returns the next page number as nextCursor", async () => {

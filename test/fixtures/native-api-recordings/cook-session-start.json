@@ -1,0 +1,24 @@
+{
+  "name": "cook-session-start",
+  "endpoint": "POST /api/cook-sessions/{recipeId}/start",
+  "status": 201,
+  "body": {
+    "state": {
+      "version": 1,
+      "recipeId": "id_001",
+      "attemptId": "uuid_001",
+      "status": "active",
+      "revision": 0,
+      "progress": {
+        "activeStepIndex": 0,
+        "activeStepId": null,
+        "scaleFactor": 1,
+        "checkedIngredientIds": [],
+        "checkedStepOutputIds": []
+      },
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "terminalAt": null
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "cook-session-patch-stale-revision",
+  "endpoint": "PATCH /api/cook-sessions/{recipeId}",
+  "status": 409,
+  "body": {
+    "error": {
+      "code": "stale_revision",
+      "message": "Cook session has newer progress.",
+      "retryable": false,
+      "state": {
+        "version": 1,
+        "recipeId": "id_001",
+        "attemptId": "uuid_001",
+        "status": "active",
+        "revision": 1,
+        "progress": {
+          "activeStepIndex": 1,
+          "activeStepId": "id_002",
+          "scaleFactor": 2,
+          "checkedIngredientIds": [
+            "id_003"
+          ],
+          "checkedStepOutputIds": [
+            "id_004"
+          ]
+        },
+        "startedAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-01-01T00:00:00.000Z",
+        "terminalAt": null
+      }
+    }
+  }
+}

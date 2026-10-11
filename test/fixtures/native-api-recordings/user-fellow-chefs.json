@@ -13,7 +13,7 @@
         "canonicalUrl": "http://localhost/users/contract_chef"
       },
       "direction": "fellow-chefs",
-      "isOwner": false,
+      "isOwner": true,
       "page": 1,
       "pageSize": 20,
       "total": 1,

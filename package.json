@@ -81,7 +81,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then pnpm exec vitest run --coverage",
     "test:changed": "tsx scripts/warning-gate.ts -- pnpm run api:playground:generate --then node scripts/test-changed.mjs",
-    "test:native-recordings:refresh": "SPOONJOY_WRITE_NATIVE_API_RECORDINGS=1 vitest run test/contracts/native-api-recordings.test.ts",
+    "test:native-recordings:refresh": "SPOONJOY_WRITE_NATIVE_API_RECORDINGS=1 vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate test/workers/native-cook-session-recordings.test.ts && SPOONJOY_WRITE_NATIVE_API_RECORDINGS=1 vitest run test/contracts/native-api-recordings.test.ts",
     "test:workers": "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate",
     "test:workers:coverage": "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate --coverage",
     "test:ouro": "vitest run --config vitest.ouro.config.ts --coverage",
