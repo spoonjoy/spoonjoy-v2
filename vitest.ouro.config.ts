@@ -1,7 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
 import { fileURLToPath } from "node:url";
-import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 
@@ -18,14 +17,6 @@ import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 // (Ouro's tests use up to 1280x844), which shifts real-mouse drags off their targets and makes
 // sizes fractional. A page larger than any of those keeps the iframe at its true size. The touch
 // project already sets its own 390x844 page.
-// Vitest 4 also sizes the test iframe with a CSS transform, even at scale(1), and under it WebKit
-// measures 100dvh and 100lvh a fraction of a pixel short (811.999939px of 812). Two sheet tests
-// compare those exactly, so in WebKit sheet.test.tsx runs as its own project that skips exactly
-// those two; they still run in Chromium and the touch project. Every other file, including the
-// dialog's test of the same name, runs in WebKit in full. Undo this on Vitest 5.
-const WEBKIT_SHEET_TESTS = "app/components/ouro/sheet/sheet.test.tsx";
-const WEBKIT_SKIPPED_UNDER_VITEST_4 =
-  /^(?!.*(?:sits at the bottom edge, fits its content and keeps clear of the top|covers the visible screen on a page scrolled 2000px))/;
 const largePage = () => playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } });
 
 const projects = ouroTestProjects({
@@ -48,40 +39,11 @@ const projects = ouroTestProjects({
       instances: project.test?.browser?.instances?.map((instance) => ({ ...instance })),
     },
   });
-  if (project.test?.name !== "ouro-webkit") return [{ ...project, test: withLargePage() }];
-  return [
-    {
-      ...project,
-      test: { ...withLargePage(), exclude: [...(project.test.exclude ?? []), WEBKIT_SHEET_TESTS] },
-    },
-    {
-      ...project,
-      test: {
-        ...withLargePage(),
-        name: "ouro-webkit-sheet",
-        include: [WEBKIT_SHEET_TESTS],
-        testNamePattern: WEBKIT_SKIPPED_UNDER_VITEST_4,
-      },
-    },
-  ];
+  return [{ ...project, test: withLargePage() }];
 });
 
-// Ouro UI marks its production-only branches with `/* istanbul ignore … */` hints. Ouro's own
-// toolchain keeps those comments; Spoonjoy's Vite 7 transpiles TypeScript with esbuild, which drops
-// every comment that is not marked @preserve, so the hints never reach the coverage instrumenter.
-// This marks them @preserve, in the test build only, without editing the installed files.
-const preserveOuroCoverageHints: Plugin = {
-  name: "spoonjoy:preserve-ouro-coverage-hints",
-  enforce: "pre",
-  transform(code, id) {
-    if (!/\/app\/(components|lib)\/ouro\/.*\.tsx?$/.test(id)) return null;
-    const preserved = code.replace(/\/\* istanbul ignore (if|else|next)\b(?![^*]*@preserve)/g, "/* istanbul ignore $1 @preserve");
-    return preserved === code ? null : { code: preserved, map: null };
-  },
-};
-
 export default defineConfig({
-  plugins: [preserveOuroCoverageHints, react()],
+  plugins: [react()],
   resolve: {
     alias: {
       "~": fileURLToPath(new URL("./app", import.meta.url)),
