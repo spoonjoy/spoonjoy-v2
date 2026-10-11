@@ -57,6 +57,9 @@ const dialogPopup = () => document.querySelector<HTMLElement>('[data-ouro="dialo
 const backdrop = () => document.querySelector<HTMLElement>('[data-ouro="dialog-backdrop"]');
 const trigger = () => document.querySelector<HTMLElement>('[data-ouro="button"]')!;
 
+/** Resolves after the next frame's animation callbacks. */
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
 /** Waits until the open popup has finished its entrance (no starting style, no running transitions). */
 async function settled() {
   await expect
@@ -65,7 +68,7 @@ async function settled() {
         const element = popup();
         return Boolean(element && !element.hasAttribute("data-starting-style") && element.getAnimations().length === 0);
       },
-      { timeout: 3000, interval: 50 },
+      { interval: 50 },
     )
     .toBe(true);
 }
@@ -155,7 +158,7 @@ describe("automatic presentation", () => {
     await settled();
     expect(onOpenChange).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
     expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
   });
 
@@ -165,7 +168,7 @@ describe("automatic presentation", () => {
     await expect.poll(() => popup()?.getAttribute("data-ouro-presentation")).toBe("sheet");
     await settled();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
     await userEvent.click(trigger());
     await settled();
     expect(popup()!.getAttribute("data-ouro-presentation")).toBe("sheet");
@@ -200,8 +203,9 @@ describe("server rendering", () => {
     await act(async () => {
       roots.push(hydrateRoot(host, <StrictMode>{app()}</StrictMode>, { onRecoverableError: recoverable }));
     });
-    // Let the media query settle on the phone width after hydration.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    // Let the media query settle on the phone width after hydration: React commits
+    // inside act, and a frame passes, so any media change event has fired.
+    await act(nextFrame);
     expect(error).not.toHaveBeenCalled();
     expect(recoverable).not.toHaveBeenCalled();
     // The server-rendered trigger node survives the switch to the sheet form.
@@ -226,7 +230,8 @@ describe("trigger", () => {
     for (const [width, height, wide] of [[390, 844, false], [1280, 800, true], [390, 844, false]] as const) {
       await page.viewport(width, height);
       await expect.poll(() => matchMedia("(min-width: 640px)").matches).toBe(wide);
-      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      // The media change event fires before the next frame's callbacks; act commits the re-render.
+      await act(nextFrame);
       expect(trigger()).toBe(node);
       expect(document.activeElement).toBe(node);
     }
@@ -235,7 +240,7 @@ describe("trigger", () => {
     expect(popup()!.getAttribute("data-ouro-presentation")).toBe("sheet");
     expect(node.getAttribute("aria-expanded")).toBe("true");
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
     await expect.poll(() => document.activeElement).toBe(node);
     expect(node.getAttribute("aria-expanded")).toBe("false");
     expect(node.getAttribute("aria-haspopup")).toBe("dialog");
@@ -252,8 +257,7 @@ describe("trigger", () => {
     await act(() => node.dispatchEvent(new PointerEvent("pointerdown", { pointerType: "pen", bubbles: true })));
     await act(() => node.dispatchEvent(new MouseEvent("click", { detail: 1, bubbles: true })));
     await settled();
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(document.activeElement).toBe(popup());
+    await expect.poll(() => document.activeElement).toBe(popup());
   });
 
   it("keeps the trigger's own ref and onClick, and stays closed when onClick prevents default", async () => {
@@ -274,7 +278,8 @@ describe("trigger", () => {
     expect(ref.current).toBe(trigger());
     await userEvent.click(trigger());
     expect(onClick).toHaveBeenCalledOnce();
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // An open would be committed by now: the click is handled and React has flushed.
+    await act(async () => {});
     expect(popup()).toBeNull();
   });
 });
@@ -283,14 +288,14 @@ describe("centered dialog", () => {
   it("closes on Escape and returns focus to the trigger", async () => {
     await openUncontrolled();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
     await expect.poll(() => document.activeElement).toBe(trigger());
   });
 
   it("closes from an outside press", async () => {
     await openUncontrolled();
     await userEvent.click(document.body, { position: { x: 10, y: 10 } });
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
   });
 
   it("has a visible, compact close button in the top corner, labelled by closeLabel", async () => {
@@ -306,7 +311,7 @@ describe("centered dialog", () => {
     expect(rect.top - box.top).toBeLessThanOrEqual(20);
     expect(button.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
     await userEvent.click(close);
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
   });
 
   it("labels the close button Close by default", async () => {
@@ -444,7 +449,7 @@ describe("motion", () => {
     expect(transitionOf(element, "transform")!.duration).toBe("0.75s");
     expect(transitionOf(element, "opacity")).toBeDefined();
     await userEvent.keyboard("{Escape}");
-    await expect.poll(() => popup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => popup()).toBeNull();
     observer.disconnect();
     const scale = (transform: string) => new DOMMatrix(transform).a;
     const start = seen.find((entry) => entry.phase === "data-starting-style")!;
@@ -457,7 +462,7 @@ describe("motion", () => {
 
   it("fades the backdrop in to --ouro-backdrop-max", async () => {
     await openUncontrolled();
-    await expect.poll(() => Number(getComputedStyle(backdrop()!).opacity), { timeout: 3000 }).toBeCloseTo(0.4, 2);
+    await expect.poll(() => Number(getComputedStyle(backdrop()!).opacity)).toBeCloseTo(0.4, 2);
   });
 
   it("drops the scale under reduced motion and keeps the fade", async () => {
@@ -610,7 +615,7 @@ describe("parts", () => {
     expect(dialogPopup()!.getAttribute("data-size")).toBe("sm");
     expect(ref.current).toBe(backdrop());
     await userEvent.click(page.getByRole("button", { name: "Done" }));
-    await expect.poll(() => dialogPopup(), { timeout: 3000 }).toBeNull();
+    await expect.poll(() => dialogPopup()).toBeNull();
   });
 
   it.each([

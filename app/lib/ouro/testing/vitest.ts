@@ -43,12 +43,16 @@ export function ouroTestProjects({
   const setupFiles = [css, decodeURIComponent(new URL("./setup.ts", import.meta.url).pathname)];
   const touchInclude = include.map((glob) => glob.replace(/\.test\.(\{[^}]*\}|\w+)$/, ".touch.test.$1"));
   const exclude = [...configDefaults.exclude, "**/*.touch.test.{ts,tsx}", "**/*.visual.test.{ts,tsx}"];
+  // Tests wait on conditions (`expect.poll`), never on fixed timers. A loaded CI runner
+  // can take seconds to finish a 750ms spring, so a poll gives up only after 10s.
+  const expectOptions = { poll: { timeout: 10_000 } };
   return [
     ...browsers.map((browser) => ({
       extends: true as const,
       test: {
         name: `ouro-${browser}`,
         setupFiles,
+        expect: expectOptions,
         include,
         exclude,
         browser: { enabled: true, headless: true, provider: playwright(), instances: [{ browser }], commands },
@@ -59,6 +63,7 @@ export function ouroTestProjects({
       test: {
         name: "ouro-touch",
         setupFiles,
+        expect: expectOptions,
         include: touchInclude,
         browser: {
           enabled: true,
