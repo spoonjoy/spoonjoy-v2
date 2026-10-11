@@ -12,27 +12,34 @@ import {
   createCookSessionClient,
   mergeCookProgress,
   normalizeCookProgress,
+  normalizeCookProgressKeeping,
   normalizeScaleFactor,
   normalizeStepIndex,
   parseCookServerState,
   readSyncedCookCache,
+  restoreUnknownCookProgress,
   sameCookProgress,
   syncedCookProgressStorageKey,
   writeSyncedCookCache,
+  type CookProgressBounds,
   type CookProgressValue,
   type CookServerSnapshot,
   type CookSessionClient,
   type CookSyncResult,
 } from "~/lib/cook-session-sync";
 
-const bounds = {
-  stepCount: 3,
+const STEP_IDS = ["step-1", "step-2", "step-3"];
+
+const bounds: CookProgressBounds = {
+  stepIds: STEP_IDS,
   ingredientIds: new Set(["rice", "stock", "lemon"]),
   stepOutputIds: new Set(["use-1"]),
 };
 
+// Progress on this recipe: the step's id follows its index unless a test names it.
 function progress(overrides: Partial<CookProgressValue> = {}): CookProgressValue {
-  return { ...DEFAULT_COOK_PROGRESS, ...overrides };
+  const activeStepIndex = overrides.activeStepIndex ?? DEFAULT_COOK_PROGRESS.activeStepIndex;
+  return { ...DEFAULT_COOK_PROGRESS, activeStepId: STEP_IDS[activeStepIndex] ?? null, ...overrides };
 }
 
 function snapshot(revision: number, overrides: Partial<CookProgressValue> = {}, attemptId = "attempt-1"): CookServerSnapshot {
@@ -85,6 +92,7 @@ describe("cook progress values", () => {
     expect(mergeCookProgress(base, local, remote)).toEqual({
       // This device moved the step, the other device changed the scale.
       activeStepIndex: 2,
+      activeStepId: "step-3",
       scaleFactor: 2,
       // Unchecked stock here, checked lemon here, kept the other device's salt.
       checkedIngredientIds: ["rice", "salt", "lemon"],
@@ -105,6 +113,7 @@ describe("cook progress values", () => {
       checkedStepOutputIds: ["use-1"],
     }))).toEqual({
       activeStepIndex: 1,
+      activeStepId: "step-2",
       scaleFactor: 2,
       checkedIngredientIds: ["rice"],
       checkedStepOutputIds: ["use-1"],
@@ -365,7 +374,12 @@ function deferred() {
   return { promise, resolve };
 }
 
-function createSync(options: { progress?: CookProgressValue; server?: CookServerSnapshot | null; visible?: () => boolean } = {}) {
+function createSync(options: {
+  progress?: CookProgressValue;
+  server?: CookServerSnapshot | null;
+  visible?: () => boolean;
+  bounds?: CookProgressBounds;
+} = {}) {
   const client = new FakeClient();
   const onProgress = vi.fn();
   const onChange = vi.fn();
@@ -373,7 +387,7 @@ function createSync(options: { progress?: CookProgressValue; server?: CookServer
     client,
     progress: options.progress ?? progress(),
     server: options.server ?? null,
-    normalize: (value) => normalizeCookProgress(value, bounds),
+    bounds: () => options.bounds ?? bounds,
     onProgress,
     onChange,
     ...(options.visible ? { isVisible: options.visible } : {}),
@@ -536,7 +550,10 @@ describe("CookSessionSync", () => {
     expect(sync.server?.attemptId).toBe("attempt-2");
   });
 
-  it("shows the server's progress when the server refuses this page's change", async () => {
+  // This used to remember the server's state trimmed to this page's recipe, so the next exchange
+  // read the trimmed ids as unchecks and erased them. The server's state is now kept as it is;
+  // only the page's copy is fitted to the recipe.
+  it("shows the server's progress when the server refuses this page's change, and remembers the server's state as it is", async () => {
     const { client, sync, onProgress } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: snapshot(1) });
     client.reads.push({ kind: "state", state: snapshot(1) });
     client.patches.push({ kind: "rejected" });
@@ -545,7 +562,7 @@ describe("CookSessionSync", () => {
     await sync.sync(true);
 
     expect(onProgress).toHaveBeenLastCalledWith(progress({ checkedIngredientIds: ["stock"] }));
-    expect(sync.server).toEqual(snapshot(2, { checkedIngredientIds: ["stock"] }));
+    expect(sync.server).toEqual(snapshot(2, { checkedIngredientIds: ["stock", "gone"] }));
     expect(sync.status).toBe("synced");
   });
 
@@ -1017,5 +1034,309 @@ describe("CookSessionSync", () => {
       expect(sync.progress).toEqual(progress({ scaleFactor: 2 }));
       expect(client.requests).toBe(requests);
     }
+  });
+});
+
+// Audit finding data 14: a device that loaded an older version of a recipe erased progress
+// another device made on the newer version. These tests follow the native fix
+// (spoonjoy-apple #108): a device keeps ids and a step it cannot show instead of dropping them.
+describe("devices on different versions of the recipe", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The recipe as the old device loaded it: three steps, no salt.
+  const oldRecipe: CookProgressBounds = bounds;
+  // The recipe after an edit the newer device loaded: salt added to a new fourth step.
+  const newRecipe: CookProgressBounds = {
+    stepIds: [...STEP_IDS, "step-4"],
+    ingredientIds: new Set(["rice", "stock", "lemon", "salt"]),
+    stepOutputIds: new Set(["use-1", "use-2"]),
+  };
+
+  // The cook-session server in memory: revision-checked writes, checked ids the recipe as it is
+  // now does not have dropped, a step it does not have refused, and the step kept by id with its
+  // index derived from it, the way the Worker and the CookSession Durable Object do it.
+  class MemoryServer {
+    state: CookServerSnapshot | null = null;
+    patches: Array<Partial<CookProgressValue>> = [];
+
+    constructor(public recipe: CookProgressBounds) {}
+
+    client(): CookSessionClient {
+      return {
+        read: async () => ({ kind: "state", state: this.state }),
+        start: async () => {
+          this.state ??= { attemptId: "attempt-1", revision: 0, progress: { ...DEFAULT_COOK_PROGRESS } };
+          return { kind: "state", state: this.state };
+        },
+        patch: async (server, changes) => {
+          this.patches.push(changes);
+          if (!this.state) return { kind: "missing" };
+          if (server.revision !== this.state.revision) return { kind: "conflict", state: this.state };
+          if (changes.activeStepId != null && !this.recipe.stepIds.includes(changes.activeStepId)) {
+            return { kind: "rejected" };
+          }
+          const fitted = (ids: string[] | undefined, known: ReadonlySet<string>) => ids && ids.filter((id) => known.has(id));
+          const checks = {
+            ...(changes.checkedIngredientIds ? { checkedIngredientIds: fitted(changes.checkedIngredientIds, this.recipe.ingredientIds) } : {}),
+            ...(changes.checkedStepOutputIds ? { checkedStepOutputIds: fitted(changes.checkedStepOutputIds, this.recipe.stepOutputIds) } : {}),
+          };
+          const step = changes.activeStepId != null
+            ? { activeStepId: changes.activeStepId, activeStepIndex: this.recipe.stepIds.indexOf(changes.activeStepId) }
+            : changes.activeStepIndex !== undefined
+              ? { activeStepIndex: changes.activeStepIndex, activeStepId: this.recipe.stepIds[changes.activeStepIndex] ?? null }
+              : {};
+          this.state = {
+            attemptId: this.state.attemptId,
+            revision: this.state.revision + 1,
+            progress: { ...this.state.progress, ...changes, ...checks, ...step },
+          };
+          return { kind: "state", state: this.state };
+        },
+      };
+    }
+  }
+
+  function device(server: MemoryServer, recipe: CookProgressBounds, start: CookProgressValue = progress()) {
+    // Every pull is a fresh one: these tests are about the merge, not about skipping pulls.
+    let clock = 0;
+    const sync = new CookSessionSync({
+      now: () => (clock += MIN_COOK_PULL_INTERVAL_MS),
+      client: server.client(),
+      progress: start,
+      server: null,
+      bounds: () => recipe,
+      onProgress: vi.fn(),
+      onChange: vi.fn(),
+    });
+    return sync;
+  }
+
+  it("two devices on different recipe versions both keep their progress after merging", async () => {
+    const server = new MemoryServer(newRecipe);
+    const web = device(server, newRecipe);
+    const phone = device(server, oldRecipe);
+    await web.sync(true);
+    await phone.sync(true);
+
+    // The newer device checks salt, which the old device's recipe does not have, and moves to step 4.
+    web.setProgress({ ...web.progress, activeStepIndex: 3, activeStepId: "step-4", checkedIngredientIds: ["salt"] });
+    await web.sync(false);
+    expect(server.state?.progress.checkedIngredientIds).toEqual(["salt"]);
+
+    // The old device checks rice. Its merge must not trim salt or pull the step back.
+    await phone.sync(true);
+    phone.setProgress({ ...phone.progress, checkedIngredientIds: [...phone.progress.checkedIngredientIds, "rice"] });
+    await phone.sync(false);
+
+    expect([...server.state!.progress.checkedIngredientIds].sort()).toEqual(["rice", "salt"]);
+    expect(server.state?.progress.activeStepId).toBe("step-4");
+    expect(server.patches.at(-1)).toEqual({ checkedIngredientIds: ["salt", "rice"] });
+    expect(phone.status).toBe("synced");
+    // The old device shows what its recipe has, and still treats itself as in step with the server.
+    expect(phone.progress.checkedIngredientIds).toEqual(["rice"]);
+
+    // Another exchange from the old device changes nothing on the server.
+    const revision = server.state?.revision;
+    await phone.sync(true);
+    expect(server.state?.revision).toBe(revision);
+
+    // The newer device sees both checks.
+    await web.sync(true);
+    expect([...web.progress.checkedIngredientIds].sort()).toEqual(["rice", "salt"]);
+    expect(web.progress.activeStepId).toBe("step-4");
+    expect(web.status).toBe("synced");
+  });
+
+  it("a check an edit removed does not cost another device's checks or step", async () => {
+    // Version 2 added salt and step 4, version 3 removed lemon. Another device checked lemon and
+    // salt and moved to step 4 before version 3. This page still has version 1 (lemon, no salt).
+    const v3: CookProgressBounds = {
+      stepIds: [...STEP_IDS, "step-4"],
+      ingredientIds: new Set(["rice", "stock", "salt"]),
+      stepOutputIds: new Set(["use-1"]),
+    };
+    const server = new MemoryServer(v3);
+    server.state = {
+      attemptId: "attempt-1",
+      revision: 5,
+      progress: progress({ activeStepIndex: 3, activeStepId: "step-4", checkedIngredientIds: ["lemon", "salt"] }),
+    };
+    const page = device(server, oldRecipe);
+    await page.sync(true);
+    expect(page.progress).toEqual(progress({ activeStepIndex: 2, checkedIngredientIds: ["lemon"] }));
+
+    page.setProgress({ ...page.progress, checkedIngredientIds: ["lemon", "rice"] });
+    await page.sync(false);
+
+    // The server drops lemon (its recipe no longer has it) and keeps salt and step 4.
+    expect(server.state.progress).toMatchObject({ activeStepIndex: 3, activeStepId: "step-4", checkedIngredientIds: ["salt", "rice"] });
+    expect(page.status).toBe("synced");
+    // This page shows what the server kept that its recipe has.
+    expect(page.progress.checkedIngredientIds).toEqual(["rice"]);
+  });
+
+  it("ids and a step this page cannot show are not read as the cook undoing them", async () => {
+    // The server is on step 4 of the newer recipe with salt checked; this page has three steps,
+    // so it shows step 3 and no salt. The cook here checks stock.
+    const known = snapshot(4, { activeStepIndex: 3, activeStepId: "step-4", checkedIngredientIds: ["salt"] });
+    const shown = progress({ activeStepIndex: 2, checkedIngredientIds: ["stock"] });
+    const { client, sync } = createSync({ progress: shown, server: known });
+    client.reads.push({ kind: "state", state: known });
+    client.patches.push({ kind: "state", state: snapshot(5, { activeStepIndex: 3, activeStepId: "step-4", checkedIngredientIds: ["salt", "stock"] }) });
+
+    await sync.sync(true);
+    expect(client.patchCalls.map(({ changes }) => changes)).toEqual([{ checkedIngredientIds: ["salt", "stock"] }]);
+
+    // Moving to another step here is a real change and is sent, as this page's step.
+    const moved = createSync({ progress: progress({ activeStepIndex: 1 }), server: known });
+    moved.client.reads.push({ kind: "state", state: known });
+    moved.client.patches.push({ kind: "state", state: snapshot(5, { activeStepIndex: 1, checkedIngredientIds: ["salt"] }) });
+    await moved.sync.sync(true);
+    expect(moved.client.patchCalls.map(({ changes }) => changes)).toEqual([{ activeStepIndex: 1, activeStepId: "step-2" }]);
+  });
+
+  it("when the server refuses ids this page kept, sends the change again fitted to this page's recipe", async () => {
+    // Pepper was checked, then the recipe was edited to remove it. The server still holds the
+    // pepper check, and a server that refuses any list naming it (the current Worker drops such
+    // ids instead) must not leave this page stuck. This page has the edited recipe.
+    const known = snapshot(2, { checkedIngredientIds: ["pepper"] });
+    const { client, sync } = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: known });
+    client.reads.push({ kind: "state", state: known });
+    client.patches.push({ kind: "rejected" });
+    client.patches.push({ kind: "state", state: snapshot(3, { checkedIngredientIds: ["rice"] }) });
+
+    await sync.sync(true);
+    expect(client.patchCalls.map(({ changes }) => changes)).toEqual([
+      { checkedIngredientIds: ["pepper", "rice"] },
+      { checkedIngredientIds: ["rice"] },
+    ]);
+    expect(sync.server).toEqual(snapshot(3, { checkedIngredientIds: ["rice"] }));
+    expect(sync.status).toBe("synced");
+
+    // Refused again once fitted: the page shows the server's progress, as before.
+    const refused = createSync({ progress: progress({ checkedIngredientIds: ["rice"] }), server: known });
+    refused.client.reads.push({ kind: "state", state: known });
+    refused.client.patches.push({ kind: "rejected" }, { kind: "rejected" });
+    refused.client.reads.push({ kind: "state", state: known });
+    await refused.sync.sync(true);
+    expect(refused.client.patch).toHaveBeenCalledTimes(2);
+    expect(refused.client.read).toHaveBeenCalledTimes(2);
+    expect(refused.sync.server).toEqual(known);
+  });
+
+  it("a leave-time flush keeps what the server holds that this page cannot show", async () => {
+    const known = snapshot(1, { checkedIngredientIds: ["salt"] });
+    const { client, sync } = createSync({ server: known });
+    client.reads.push({ kind: "state", state: known });
+    await sync.sync(true);
+    expect(sync.status).toBe("synced");
+
+    client.patches.push({ kind: "state", state: snapshot(2, { checkedIngredientIds: ["salt", "rice"] }) });
+    sync.setProgress(progress({ checkedIngredientIds: ["rice"] }));
+    sync.flush();
+    expect(client.patchCalls).toEqual([{ server: known, changes: { checkedIngredientIds: ["salt", "rice"] }, options: { keepalive: true } }]);
+    sync.dispose();
+  });
+
+  it("keeps and restores only what this page cannot show", () => {
+    const server = progress({ activeStepIndex: 6, activeStepId: "step-7", scaleFactor: 2, checkedIngredientIds: ["salt"], checkedStepOutputIds: ["use-9"] });
+    expect(normalizeCookProgressKeeping(
+      progress({ activeStepIndex: 6, activeStepId: "step-7", scaleFactor: 2, checkedIngredientIds: ["salt", "rice", "zzz", "rice"], checkedStepOutputIds: ["use-9", "x"] }),
+      bounds,
+      server,
+    )).toEqual(progress({ activeStepIndex: 6, activeStepId: "step-7", scaleFactor: 2, checkedIngredientIds: ["salt", "rice"], checkedStepOutputIds: ["use-9"] }));
+    expect(normalizeCookProgressKeeping(progress({ activeStepIndex: 9, activeStepId: null, scaleFactor: 99 }), bounds, server))
+      .toEqual(progress({ activeStepIndex: 2, scaleFactor: 50 }));
+
+    expect(restoreUnknownCookProgress(progress({ activeStepIndex: 2, checkedIngredientIds: ["rice"] }), server, bounds))
+      .toEqual(progress({ activeStepIndex: 6, activeStepId: "step-7", checkedIngredientIds: ["rice", "salt"], checkedStepOutputIds: ["use-9"] }));
+    // A step the cook moved to here stays.
+    expect(restoreUnknownCookProgress(progress({ activeStepIndex: 1 }), server, bounds).activeStepId).toBe("step-2");
+    // A step from before steps were kept by id, beyond this recipe's steps, is put back too.
+    const legacy = progress({ activeStepIndex: 7, activeStepId: null });
+    expect(restoreUnknownCookProgress(progress({ activeStepIndex: 2 }), legacy, bounds)).toMatchObject({ activeStepIndex: 7, activeStepId: null });
+    // Ids this page knows are this page's to keep or drop.
+    expect(restoreUnknownCookProgress(progress({ checkedIngredientIds: ["rice"] }), progress({ checkedIngredientIds: ["stock"] }), bounds))
+      .toEqual(progress({ checkedIngredientIds: ["rice"] }));
+  });
+});
+
+describe("the current step is kept by id", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const reordered: CookProgressBounds = { ...bounds, stepIds: ["step-2", "step-1", "step-3"] };
+
+  it("finds the current step after the steps are reordered", () => {
+    // Saved on step 2 (index 1); step 2 is now first.
+    expect(normalizeCookProgress(progress({ activeStepIndex: 1 }), reordered)).toEqual(progress({ activeStepIndex: 0, activeStepId: "step-2" }));
+    // A step id this page does not have falls back to the index, kept in range.
+    expect(normalizeCookProgress(progress({ activeStepIndex: 9, activeStepId: "gone" }), reordered)).toEqual(progress({ activeStepIndex: 2, activeStepId: "step-3" }));
+    // Progress saved before steps were kept by id uses the index.
+    expect(normalizeCookProgress(progress({ activeStepIndex: 1, activeStepId: null }), reordered)).toEqual(progress({ activeStepIndex: 1, activeStepId: "step-1" }));
+    expect(normalizeCookProgress(progress({ activeStepIndex: 1 }), { ...bounds, stepIds: [] })).toEqual(progress({ activeStepIndex: 0, activeStepId: null }));
+  });
+
+  it("compares a step saved before ids by index, even after a reorder", () => {
+    // The server's session predates step ids: index 1. This page's recipe was reordered, and it
+    // shows step-1 at index 1. Without an id on both sides only the index can be compared.
+    const legacy = progress({ activeStepIndex: 1, activeStepId: null });
+    const shown = progress({ activeStepIndex: 1, activeStepId: "step-1" });
+    expect(sameCookProgress(legacy, shown)).toBe(true);
+    expect(cookProgressChanges(legacy, shown)).toEqual({});
+    expect(mergeCookProgress(legacy, shown, progress({ activeStepIndex: 2, activeStepId: null }))).toMatchObject({ activeStepIndex: 2, activeStepId: null });
+    expect(mergeCookProgress(legacy, progress({ activeStepIndex: 0, activeStepId: "step-2" }), legacy)).toMatchObject({ activeStepIndex: 0, activeStepId: "step-2" });
+  });
+
+  it("treats the same step at a new position as the same step", () => {
+    expect(sameCookProgress(progress({ activeStepIndex: 1 }), progress({ activeStepIndex: 0, activeStepId: "step-2" }))).toBe(true);
+    expect(sameCookProgress(progress({ activeStepIndex: 1, activeStepId: null }), progress({ activeStepIndex: 1 }))).toBe(true);
+    expect(sameCookProgress(progress({ activeStepIndex: 1, activeStepId: null }), progress({ activeStepIndex: 0 }))).toBe(false);
+    expect(cookProgressChanges(progress({ activeStepIndex: 1 }), progress({ activeStepIndex: 0, activeStepId: "step-2" }))).toEqual({});
+    expect(cookProgressChanges(progress(), progress({ activeStepIndex: 1, activeStepId: null }))).toEqual({ activeStepIndex: 1 });
+  });
+
+  it("keeps the current step when the recipe's steps are reordered between visits", async () => {
+    // The server saved step 2 at index 1. The recipe was then reordered so step 2 is first, and
+    // this page loaded the reordered recipe from its cache, showing step 2 at index 0.
+    const saved = snapshot(3, { activeStepIndex: 1, activeStepId: "step-2", checkedIngredientIds: ["rice"] });
+    const cached = normalizeCookProgress(saved.progress, reordered);
+    expect(cached).toEqual(progress({ activeStepIndex: 0, activeStepId: "step-2", checkedIngredientIds: ["rice"] }));
+    const { client, sync, onProgress } = createSync({ progress: cached, server: saved, bounds: reordered });
+    client.reads.push({ kind: "state", state: saved });
+
+    await sync.sync(true);
+
+    expect(client.patch).not.toHaveBeenCalled();
+    expect(onProgress).not.toHaveBeenCalled();
+    expect(sync.progress.activeStepId).toBe("step-2");
+    expect(sync.status).toBe("synced");
+  });
+
+  it("follows another device to its step by id, wherever that step sits in this page's recipe", async () => {
+    // This page shows the reordered recipe's first step, step 2.
+    const { client, sync, onProgress } = createSync({ progress: progress({ activeStepId: "step-2" }), bounds: reordered });
+    client.reads.push({ kind: "state", state: snapshot(2, { activeStepIndex: 0, activeStepId: "step-1" }) });
+
+    await sync.sync(true);
+
+    expect(onProgress).toHaveBeenLastCalledWith(progress({ activeStepIndex: 1, activeStepId: "step-1" }));
+  });
+
+  it("reads progress saved before steps were kept by id", () => {
+    const { activeStepId: _omitted, ...legacy } = progress({ activeStepIndex: 1 });
+    expect(parseCookServerState({ attemptId: "a", revision: 1, progress: legacy })?.progress).toEqual(progress({ activeStepIndex: 1, activeStepId: null }));
+    expect(parseCookServerState({ attemptId: "a", revision: 1, progress: { ...legacy, activeStepId: 4 } })).toBeNull();
   });
 });

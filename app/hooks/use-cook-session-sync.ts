@@ -3,7 +3,6 @@ import {
   CookSessionSync,
   clearOtherUsersCookProgressCache,
   createCookSessionClient,
-  normalizeCookProgress,
   readSyncedCookCache,
   removeSyncedCookCache,
   writeSyncedCookCache,
@@ -86,7 +85,7 @@ export function useCookSessionSync({
       client: createCookSessionClient(recipeId, userId),
       progress: latest.current.progress,
       server: readSyncedCookCache(userId, recipeId, bounds)?.server ?? null,
-      normalize: (value) => normalizeCookProgress(value, isCurrentRecipe() ? latest.current.bounds : bounds),
+      bounds: () => (isCurrentRecipe() ? latest.current.bounds : bounds),
       // Only called while this engine's recipe is the page's: once the page moves on, the engine
       // is leaving (or stopped), and a leaving engine never touches page state.
       onProgress: (value) => latest.current.onRemoteProgress(value),

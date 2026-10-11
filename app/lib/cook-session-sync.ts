@@ -8,16 +8,27 @@
 // When the server has moved on, the pending changes are replayed on top of the server's state:
 // a changed scale or step wins over the server's, and checks and unchecks are applied item by
 // item, so two devices checking different ingredients both keep their checks.
+//
+// Recipe versions: two devices can have loaded different versions of the same recipe. A device
+// keeps checked ids and a current step it cannot show (they came from a newer or older version)
+// instead of dropping them, and fits only its own changes to the recipe it loaded. Otherwise the
+// device on the older version would erase the other device's progress (audit finding data 14;
+// the native app made the same fix in spoonjoy-apple #108). The current step is kept by its step
+// id, so it survives the steps being reordered; the index is the fallback for sessions saved
+// before the id existed and for clients that send only the index.
 
 export interface CookProgressValue {
   activeStepIndex: number;
+  /** The current step's id; null in progress saved before steps were kept by id. */
+  activeStepId: string | null;
   scaleFactor: number;
   checkedIngredientIds: string[];
   checkedStepOutputIds: string[];
 }
 
 export interface CookProgressBounds {
-  stepCount: number;
+  /** The recipe's step ids in order, as this page loaded it. */
+  stepIds: readonly string[];
   ingredientIds: ReadonlySet<string>;
   stepOutputIds: ReadonlySet<string>;
 }
@@ -58,6 +69,7 @@ type HaltReason = "stopped" | "signed_out" | "account_changed" | "update_require
 
 export const DEFAULT_COOK_PROGRESS: CookProgressValue = Object.freeze({
   activeStepIndex: 0,
+  activeStepId: null,
   scaleFactor: 1,
   checkedIngredientIds: [],
   checkedStepOutputIds: [],
@@ -101,13 +113,82 @@ export function normalizeStepIndex(value: unknown, stepCount: number): number {
   return Math.min(stepCount - 1, Math.max(0, Math.trunc(value)));
 }
 
-/** Keeps only ids that exist in the recipe as loaded, and puts the step and scale in range. */
+/**
+ * Where `progress`'s current step is in the recipe as loaded: found by its id, or by its index
+ * when it has no id. Null when this recipe does not have that step (a step id from another
+ * version of the recipe, or an index past its last step).
+ */
+function knownStepIndex(progress: CookProgressValue, bounds: CookProgressBounds): number | null {
+  if (progress.activeStepId !== null) {
+    const index = bounds.stepIds.indexOf(progress.activeStepId);
+    return index === -1 ? null : index;
+  }
+  const index = progress.activeStepIndex;
+  return Number.isSafeInteger(index) && index >= 0 && index < bounds.stepIds.length ? index : null;
+}
+
+/** Keeps only ids that exist in the recipe as loaded, and puts the step (found by id) and scale in range. */
 export function normalizeCookProgress(progress: CookProgressValue, bounds: CookProgressBounds): CookProgressValue {
+  const activeStepIndex = knownStepIndex(progress, bounds) ?? normalizeStepIndex(progress.activeStepIndex, bounds.stepIds.length);
   return {
-    activeStepIndex: normalizeStepIndex(progress.activeStepIndex, bounds.stepCount),
+    activeStepIndex,
+    activeStepId: bounds.stepIds[activeStepIndex] ?? null,
     scaleFactor: normalizeScaleFactor(progress.scaleFactor),
     checkedIngredientIds: [...new Set(progress.checkedIngredientIds)].filter((id) => bounds.ingredientIds.has(id)),
     checkedStepOutputIds: [...new Set(progress.checkedStepOutputIds)].filter((id) => bounds.stepOutputIds.has(id)),
+  };
+}
+
+/**
+ * Like `normalizeCookProgress`, but leaves alone what `server` already holds: a checked id from
+ * another version of the recipe, and a step or scale this page did not change. The server checked
+ * those against its own recipe, and sending the trimmed value would erase another device's
+ * progress. Only this page's own changes are fitted to the recipe as it loaded it.
+ */
+export function normalizeCookProgressKeeping(
+  progress: CookProgressValue,
+  bounds: CookProgressBounds,
+  server: CookProgressValue,
+): CookProgressValue {
+  const fitted = normalizeCookProgress(progress, bounds);
+  const serverIngredients = new Set(server.checkedIngredientIds);
+  const serverOutputs = new Set(server.checkedStepOutputIds);
+  const step = sameStep(progress, server) ? server : fitted;
+  return {
+    activeStepIndex: step.activeStepIndex,
+    activeStepId: step.activeStepId,
+    scaleFactor: progress.scaleFactor === server.scaleFactor ? progress.scaleFactor : fitted.scaleFactor,
+    checkedIngredientIds: [...new Set(progress.checkedIngredientIds)]
+      .filter((id) => bounds.ingredientIds.has(id) || serverIngredients.has(id)),
+    checkedStepOutputIds: [...new Set(progress.checkedStepOutputIds)]
+      .filter((id) => bounds.stepOutputIds.has(id) || serverOutputs.has(id)),
+  };
+}
+
+/**
+ * Puts back into this page's progress what `base` held outside this page's recipe. The page
+ * cannot show or keep those ids or that step, so their absence here is not a change the cook made.
+ */
+export function restoreUnknownCookProgress(
+  local: CookProgressValue,
+  base: CookProgressValue,
+  bounds: CookProgressBounds,
+): CookProgressValue {
+  const ingredients = new Set(local.checkedIngredientIds);
+  const outputs = new Set(local.checkedStepOutputIds);
+  const keepBaseStep = knownStepIndex(base, bounds) === null && sameStep(local, normalizeCookProgress(base, bounds));
+  return {
+    activeStepIndex: keepBaseStep ? base.activeStepIndex : local.activeStepIndex,
+    activeStepId: keepBaseStep ? base.activeStepId : local.activeStepId,
+    scaleFactor: local.scaleFactor,
+    checkedIngredientIds: [
+      ...local.checkedIngredientIds,
+      ...base.checkedIngredientIds.filter((id) => !bounds.ingredientIds.has(id) && !ingredients.has(id)),
+    ],
+    checkedStepOutputIds: [
+      ...local.checkedStepOutputIds,
+      ...base.checkedStepOutputIds.filter((id) => !bounds.stepOutputIds.has(id) && !outputs.has(id)),
+    ],
   };
 }
 
@@ -116,8 +197,18 @@ function sameIds(left: string[], right: string[]): boolean {
   return new Set(left).size === rightSet.size && left.every((id) => rightSet.has(id));
 }
 
+/**
+ * The same current step: the same step id, wherever that step now sits in the recipe, or the
+ * same index when either side has no id (progress saved before steps were kept by id).
+ */
+function sameStep(left: CookProgressValue, right: CookProgressValue): boolean {
+  return left.activeStepId !== null && right.activeStepId !== null
+    ? left.activeStepId === right.activeStepId
+    : left.activeStepIndex === right.activeStepIndex;
+}
+
 export function sameCookProgress(left: CookProgressValue, right: CookProgressValue): boolean {
-  return left.activeStepIndex === right.activeStepIndex &&
+  return sameStep(left, right) &&
     left.scaleFactor === right.scaleFactor &&
     sameIds(left.checkedIngredientIds, right.checkedIngredientIds) &&
     sameIds(left.checkedStepOutputIds, right.checkedStepOutputIds);
@@ -140,8 +231,10 @@ export function mergeCookProgress(
   local: CookProgressValue,
   remote: CookProgressValue,
 ): CookProgressValue {
+  const step = sameStep(local, base) ? remote : local;
   return {
-    activeStepIndex: local.activeStepIndex !== base.activeStepIndex ? local.activeStepIndex : remote.activeStepIndex,
+    activeStepIndex: step.activeStepIndex,
+    activeStepId: step.activeStepId,
     scaleFactor: local.scaleFactor !== base.scaleFactor ? local.scaleFactor : remote.scaleFactor,
     checkedIngredientIds: mergeIds(base.checkedIngredientIds, local.checkedIngredientIds, remote.checkedIngredientIds),
     checkedStepOutputIds: mergeIds(base.checkedStepOutputIds, local.checkedStepOutputIds, remote.checkedStepOutputIds),
@@ -151,7 +244,11 @@ export function mergeCookProgress(
 /** The fields of `to` that differ from `from`, as a protocol PATCH `changes` object. */
 export function cookProgressChanges(from: CookProgressValue, to: CookProgressValue): Partial<CookProgressValue> {
   const changes: Partial<CookProgressValue> = {};
-  if (from.activeStepIndex !== to.activeStepIndex) changes.activeStepIndex = to.activeStepIndex;
+  if (!sameStep(from, to)) {
+    // The server keeps the step by id and works out its index in the recipe as it is now.
+    changes.activeStepIndex = to.activeStepIndex;
+    if (to.activeStepId !== null) changes.activeStepId = to.activeStepId;
+  }
   if (from.scaleFactor !== to.scaleFactor) changes.scaleFactor = to.scaleFactor;
   if (!sameIds(from.checkedIngredientIds, to.checkedIngredientIds)) changes.checkedIngredientIds = to.checkedIngredientIds;
   if (!sameIds(from.checkedStepOutputIds, to.checkedStepOutputIds)) changes.checkedStepOutputIds = to.checkedStepOutputIds;
@@ -162,6 +259,7 @@ function parseProgress(value: unknown): CookProgressValue | null {
   if (
     !isRecord(value) ||
     typeof value.activeStepIndex !== "number" ||
+    !(value.activeStepId === undefined || value.activeStepId === null || typeof value.activeStepId === "string") ||
     typeof value.scaleFactor !== "number" ||
     !isStringList(value.checkedIngredientIds) ||
     !isStringList(value.checkedStepOutputIds)
@@ -170,6 +268,7 @@ function parseProgress(value: unknown): CookProgressValue | null {
   }
   return {
     activeStepIndex: value.activeStepIndex,
+    activeStepId: value.activeStepId ?? null,
     scaleFactor: value.scaleFactor,
     checkedIngredientIds: value.checkedIngredientIds,
     checkedStepOutputIds: value.checkedStepOutputIds,
@@ -382,7 +481,8 @@ export interface CookSessionSyncOptions {
   client: CookSessionClient;
   progress: CookProgressValue;
   server: CookServerSnapshot | null;
-  normalize: (progress: CookProgressValue) => CookProgressValue;
+  /** The recipe as this page loaded it: progress is fitted to it for the page. */
+  bounds: () => CookProgressBounds;
   /** The server's progress (merged with anything still pending here) should replace the page's. */
   onProgress: (progress: CookProgressValue) => void;
   /** Progress, the known server state, or the status changed: persist and re-render. */
@@ -438,7 +538,23 @@ export class CookSessionSync {
   }
 
   private get pending(): boolean {
-    return !sameCookProgress(this.local, this.known?.progress ?? DEFAULT_COOK_PROGRESS);
+    if (!this.known) return !sameCookProgress(this.local, DEFAULT_COOK_PROGRESS);
+    return !sameCookProgress(this.outgoing(this.known.progress, this.local, this.known.progress), this.known.progress);
+  }
+
+  private normalize(progress: CookProgressValue): CookProgressValue {
+    return normalizeCookProgress(progress, this.options.bounds());
+  }
+
+  // What this page sends: its changes since `base` replayed on `remote`, keeping what the server
+  // holds that this page's recipe does not have.
+  private outgoing(base: CookProgressValue, local: CookProgressValue, remote: CookProgressValue): CookProgressValue {
+    const bounds = this.options.bounds();
+    return normalizeCookProgressKeeping(
+      mergeCookProgress(base, restoreUnknownCookProgress(local, base, bounds), remote),
+      bounds,
+      remote,
+    );
   }
 
   get status(): CookSyncStatus {
@@ -480,7 +596,7 @@ export class CookSessionSync {
    */
   flush(): void {
     if (this.disposed || this.leaving || this.halted || this.running || !this.known) return;
-    const changes = cookProgressChanges(this.known.progress, this.local);
+    const changes = cookProgressChanges(this.known.progress, this.outgoing(this.known.progress, this.local, this.known.progress));
     if (Object.keys(changes).length === 0) return;
     clearTimeout(this.pushTimer);
     void this.options.client.patch(this.known, changes, { keepalive: true });
@@ -544,7 +660,7 @@ export class CookSessionSync {
         if (outcome.reason === "account_changed") {
           // Another account owns the browser's session now: drop this tab's unsent changes, show
           // only what was saved, and never send or save anything more.
-          this.show(this.options.normalize(this.known?.progress ?? DEFAULT_COOK_PROGRESS));
+          this.show(this.normalize(this.known?.progress ?? DEFAULT_COOK_PROGRESS));
         }
       } else {
         this.retries = 0;
@@ -576,7 +692,7 @@ export class CookSessionSync {
   // from; anything the cook changed since then is replayed on top so it is not lost.
   private acknowledge(state: CookServerSnapshot, sent: CookProgressValue): void {
     this.known = state;
-    const next = this.options.normalize(mergeCookProgress(sent, this.local, state.progress));
+    const next = this.normalize(mergeCookProgress(sent, this.local, state.progress));
     if (!sameCookProgress(next, this.local)) this.show(next);
   }
 
@@ -600,6 +716,10 @@ export class CookSessionSync {
       remote = read.state;
     }
 
+    // First keep what the server holds that this page cannot show. The Worker drops checked ids
+    // its recipe no longer has, but if a server refuses the change anyway (an older Worker refused
+    // any list naming such an id), send again fitted to this page's recipe.
+    let fitsThisRecipeOnly = false;
     for (let round = 0; round < MAX_SYNC_ROUNDS; round += 1) {
       if (!remote) {
         // Nothing on the server yet: only start a session once there is progress to keep.
@@ -615,7 +735,10 @@ export class CookSessionSync {
 
       const base = this.known && this.known.attemptId === remote.attemptId ? this.known.progress : DEFAULT_COOK_PROGRESS;
       const sent = this.local;
-      const merged = this.options.normalize(mergeCookProgress(base, sent, remote.progress));
+      const fitted = this.normalize(mergeCookProgress(base, sent, remote.progress));
+      const merged = fitsThisRecipeOnly ? fitted : this.outgoing(base, sent, remote.progress);
+      // A refused change that kept nothing extra would be refused again as it is.
+      const canRetryFitted = !fitsThisRecipeOnly && !sameCookProgress(merged, fitted);
       if (sameCookProgress(merged, remote.progress)) {
         this.acknowledge(remote, sent);
         return { kind: "ok" };
@@ -631,6 +754,8 @@ export class CookSessionSync {
       } else if (result.kind === "missing") {
         this.known = null;
         remote = null;
+      } else if (result.kind === "rejected" && canRetryFitted) {
+        fitsThisRecipeOnly = true;
       } else if (result.kind === "rejected") {
         return this.adoptServerProgress();
       } else {
@@ -641,7 +766,9 @@ export class CookSessionSync {
   }
 
   // The server refused this page's progress (its recipe changed since the page loaded). Show the
-  // server's progress instead of retrying the same refused change.
+  // server's progress instead of retrying the same refused change. The server's state is
+  // remembered as the server holds it, so the next exchange does not read ids this page cannot
+  // show as unchecks.
   private async adoptServerProgress(): Promise<Outcome> {
     const startedAt = this.now();
     const read = await this.options.client.read();
@@ -649,9 +776,8 @@ export class CookSessionSync {
     if (read.kind !== "state") return this.failure(read);
     this.pulled = true;
     this.lastPullAt = startedAt;
-    const adopted = this.options.normalize(read.state?.progress ?? DEFAULT_COOK_PROGRESS);
-    this.known = read.state ? { ...read.state, progress: adopted } : null;
-    this.show(adopted);
+    this.known = read.state;
+    this.show(this.normalize(read.state?.progress ?? DEFAULT_COOK_PROGRESS));
     return { kind: "ok" };
   }
 }

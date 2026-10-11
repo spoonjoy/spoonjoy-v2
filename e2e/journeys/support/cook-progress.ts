@@ -31,6 +31,7 @@ export async function resetCookProgress(page: Page, recipeId: string, userId: st
 
 export interface SavedCookProgress {
   activeStepIndex: number;
+  activeStepId: string | null;
   scaleFactor: number;
   checkedIngredientIds: string[];
   checkedStepOutputIds: string[];

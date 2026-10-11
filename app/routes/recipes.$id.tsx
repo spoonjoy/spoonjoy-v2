@@ -51,6 +51,8 @@ import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
 import { useCookTimers, type CookTimersController } from "~/hooks/use-cook-timers";
 import { useScreenWakeLock } from "~/hooks/use-screen-wake-lock";
 import {
+  DEFAULT_COOK_PROGRESS,
+  normalizeCookProgress,
   normalizeScaleFactor,
   normalizeStepIndex,
   readSyncedCookCache,
@@ -148,6 +150,8 @@ const COVER_PROCESSING_POLL_INTERVAL_MS = 3000;
 interface CookProgressSnapshot {
   version: typeof COOK_PROGRESS_STORAGE_VERSION;
   activeStepIndex: number;
+  /** Added later in the same version: older snapshots have only the index. */
+  activeStepId: string | null;
   scaleFactor: number;
   checkedIngredientIds: string[];
   checkedStepOutputIds: string[];
@@ -156,6 +160,7 @@ interface CookProgressSnapshot {
 
 interface CookProgressState {
   activeStepIndex: number;
+  activeStepId: string | null;
   scaleFactor: number;
   checkedIngredientIds: Set<string>;
   checkedStepOutputIds: Set<string>;
@@ -196,8 +201,16 @@ export function parseCookProgressSnapshot(
       return null;
     }
 
+    // The step is found by its id, so it survives the steps being reordered; the index is the
+    // fallback for older snapshots and for a step the recipe no longer has.
+    const { activeStepIndex, activeStepId } = normalizeCookProgress({
+      ...DEFAULT_COOK_PROGRESS,
+      activeStepIndex: normalizeStepIndex(parsed.activeStepIndex, bounds.stepIds.length),
+      activeStepId: typeof parsed.activeStepId === "string" ? parsed.activeStepId : null,
+    }, bounds);
     return {
-      activeStepIndex: normalizeStepIndex(parsed.activeStepIndex, bounds.stepCount),
+      activeStepIndex,
+      activeStepId,
       scaleFactor: normalizeScaleFactor(parsed.scaleFactor),
       checkedIngredientIds: new Set(
         stringArray(parsed.checkedIngredientIds).filter((id) => bounds.ingredientIds.has(id))
@@ -239,6 +252,7 @@ export function readSyncedCookProgress(
 
   return {
     activeStepIndex: cached.progress.activeStepIndex,
+    activeStepId: cached.progress.activeStepId,
     scaleFactor: cached.progress.scaleFactor,
     checkedIngredientIds: new Set(cached.progress.checkedIngredientIds),
     checkedStepOutputIds: new Set(cached.progress.checkedStepOutputIds),
@@ -249,6 +263,7 @@ export function writeCookProgress(
   recipeId: string,
   {
     activeStepIndex,
+    activeStepId,
     scaleFactor,
     checkedIngredientIds,
     checkedStepOutputIds,
@@ -261,6 +276,7 @@ export function writeCookProgress(
   const snapshot: CookProgressSnapshot = {
     version: COOK_PROGRESS_STORAGE_VERSION,
     activeStepIndex,
+    activeStepId,
     scaleFactor,
     checkedIngredientIds: Array.from(checkedIngredientIds),
     checkedStepOutputIds: Array.from(checkedStepOutputIds),
@@ -392,17 +408,18 @@ export default function RecipeDetail() {
   const cookProgressTotal = ingredientCount + stepOutputUseCount;
   const cookProgressChecked = checkedIngredients.size + checkedStepOutputs.size;
   const cookProgressBounds = useMemo<CookProgressBounds>(() => ({
-    stepCount: recipe.steps.length,
+    stepIds: recipe.steps.map((step) => step.id),
     ingredientIds: new Set(recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.id))),
     stepOutputIds: new Set(recipe.steps.flatMap((step) => (step.usingSteps ?? []).map((use) => use.id))),
   }), [recipe.steps]);
 
   const cookProgress = useMemo<CookProgressValue>(() => ({
     activeStepIndex: activeCookStepIndex,
+    activeStepId: recipe.steps[activeCookStepIndex]?.id ?? null,
     scaleFactor,
     checkedIngredientIds: Array.from(checkedIngredients),
     checkedStepOutputIds: Array.from(checkedStepOutputs),
-  }), [activeCookStepIndex, scaleFactor, checkedIngredients, checkedStepOutputs]);
+  }), [activeCookStepIndex, recipe.steps, scaleFactor, checkedIngredients, checkedStepOutputs]);
   const applyRemoteCookProgress = useCallback((progress: CookProgressValue) => {
     setScaleFactor(progress.scaleFactor);
     setCheckedIngredients(new Set(progress.checkedIngredientIds));
@@ -552,6 +569,7 @@ export default function RecipeDetail() {
 
     writeCookProgress(recipe.id, {
       activeStepIndex: activeCookStepIndex,
+      activeStepId: recipe.steps[activeCookStepIndex]?.id ?? null,
       scaleFactor,
       checkedIngredientIds: checkedIngredients,
       checkedStepOutputIds: checkedStepOutputs,
@@ -561,6 +579,7 @@ export default function RecipeDetail() {
     loadedCookProgressRecipeId,
     cookSessionUserId,
     activeCookStepIndex,
+    recipe.steps,
     scaleFactor,
     checkedIngredients,
     checkedStepOutputs,

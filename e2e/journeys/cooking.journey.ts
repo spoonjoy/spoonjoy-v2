@@ -177,7 +177,8 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(page).toHaveURL(LEMON_RICE_URL);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
-      await saved;
+      // The account keeps the current step by its id, so it survives the steps being reordered.
+      expect((await saved).activeStepId).toBe(`${LEMON_RICE_ID}-step-3`);
 
       await verifyAfterReload(async () => {
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
@@ -215,7 +216,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(riceTimer).toContainText("Step 1 · Cook the rice");
       await expect(riceTimer).toContainText("14:");
       await expectAccessible();
-      await onStepTwo;
+      expect((await onStepTwo).activeStepId).toBe(`${LEMON_RICE_ID}-step-2`);
 
       // The timer is anchored to its end time, so a reload keeps it running.
       await verifyAfterReload(async () => {

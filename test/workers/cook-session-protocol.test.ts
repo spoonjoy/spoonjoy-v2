@@ -7,9 +7,9 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createUserSessionCookie } from "../../app/lib/session.server";
-import { changesFitRecipe, cookSessionObjectName } from "../../workers/cook-session-api";
+import { changesFitRecipe, cookSessionObjectName, fitChangesToRecipe } from "../../workers/cook-session-api";
 import { parseCookPatchBody } from "../../workers/cook-session-protocol";
-import { COOK_SESSION_RETENTION_MS } from "../../workers/cook-session-store";
+import { COOK_SESSION_RETENTION_MS, applyCookProgressChanges } from "../../workers/cook-session-store";
 import { applyRepositoryMigrations } from "./helpers/repository-migrations";
 import {
   cookProgressResetRequest,
@@ -42,6 +42,7 @@ interface CookStateBody {
   revision: number;
   progress: {
     activeStepIndex: number;
+    activeStepId: string | null;
     scaleFactor: number;
     checkedIngredientIds: string[];
     checkedStepOutputIds: string[];
@@ -63,6 +64,9 @@ const RICE = "cook-protocol-rice";
 const STOCK = "cook-protocol-stock";
 const OTHER_INGREDIENT = "cook-protocol-other-ingredient";
 const STEP_USE = "cook-protocol-use-1";
+const STEP_1 = `${RECIPE}-step-1`;
+const STEP_2 = `${RECIPE}-step-2`;
+const STEP_3 = `${RECIPE}-step-3`;
 const UNIT = "cook-protocol-unit";
 const INGREDIENT_REF = "cook-protocol-ingredient-ref";
 
@@ -247,7 +251,7 @@ describe("cook-session protocol v1", () => {
       recipeId: RECIPE,
       status: "active",
       revision: 0,
-      progress: { activeStepIndex: 0, scaleFactor: 1, checkedIngredientIds: [], checkedStepOutputIds: [] },
+      progress: { activeStepIndex: 0, activeStepId: null, scaleFactor: 1, checkedIngredientIds: [], checkedStepOutputIds: [] },
       terminalAt: null,
     });
     expect(first.startedAt).toBe(first.updatedAt);
@@ -273,6 +277,8 @@ describe("cook-session protocol v1", () => {
     expect(written.attemptId).toBe(started.attemptId);
     expect(written.progress).toEqual({
       activeStepIndex: 2,
+      // A client that sends only the index (the native app, an older page) gets the step's id too.
+      activeStepId: STEP_3,
       scaleFactor: 1.5,
       checkedIngredientIds: [RICE],
       checkedStepOutputIds: [STEP_USE],
@@ -341,17 +347,24 @@ describe("cook-session protocol v1", () => {
     await expect(userTables(objectFor(USER_A))).resolves.toEqual([]);
   });
 
-  it("rejects progress that does not fit the recipe as it is now", async () => {
+  it("rejects a step the recipe does not have as it is now", async () => {
     const started = await startSession();
 
-    for (const changes of [
-      { checkedIngredientIds: [OTHER_INGREDIENT] },
-      { checkedStepOutputIds: ["use-unknown"] },
-      { activeStepIndex: 3 },
-    ]) {
-      await expectError(await patch(started, changes), 400, "invalid_request");
-    }
+    await expectError(await patch(started, { activeStepIndex: 3 }), 400, "invalid_request");
     await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(started);
+  });
+
+  it("drops checked ids the recipe no longer has and keeps the rest", async () => {
+    // A device keeps checks it cannot show and sends them back with its own. One id a recipe edit
+    // removed must not cost the other device's checks: only that id is dropped.
+    const started = await startSession();
+    const written = await stateOf(await patch(started, {
+      checkedIngredientIds: [OTHER_INGREDIENT, RICE, STOCK],
+      checkedStepOutputIds: ["use-unknown", STEP_USE],
+    }));
+
+    expect(written.revision).toBe(1);
+    expect(written.progress).toMatchObject({ checkedIngredientIds: [RICE, STOCK], checkedStepOutputIds: [STEP_USE] });
   });
 
   it("allows step index 0 on a recipe without steps", async () => {
@@ -359,7 +372,90 @@ describe("cook-session protocol v1", () => {
     const response = await send("PATCH", EMPTY_RECIPE, { body: patchBody(started, { activeStepIndex: 0 }) });
 
     expect(response.status).toBe(200);
-    expect((await stateOf(response)).revision).toBe(1);
+    const written = await stateOf(response);
+    expect(written.revision).toBe(1);
+    expect(written.progress.activeStepId).toBeNull();
+  });
+
+  it("keeps the current step by id and works out its index in the recipe as it is now", async () => {
+    const started = await startSession();
+
+    // A page that loaded the recipe before step 3 moved first still names step 3 by id; the
+    // server stores where step 3 is now.
+    const moved = await stateOf(await patch(started, { activeStepIndex: 0, activeStepId: STEP_3 }));
+    expect(moved.progress).toMatchObject({ activeStepIndex: 2, activeStepId: STEP_3 });
+
+    // An id on its own is enough.
+    const byId = await stateOf(await patch(moved, { activeStepId: STEP_2 }));
+    expect(byId.progress).toMatchObject({ activeStepIndex: 1, activeStepId: STEP_2 });
+
+    // Changes that leave the step alone keep it.
+    const scaled = await stateOf(await patch(byId, { scaleFactor: 2 }));
+    expect(scaled.progress).toMatchObject({ activeStepIndex: 1, activeStepId: STEP_2, scaleFactor: 2 });
+
+    // A step this recipe does not have is refused, like any other id.
+    await expectError(await patch(scaled, { activeStepId: "cook-protocol-gone-step" }), 400, "invalid_request");
+    await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(scaled);
+  });
+
+  it("serves a session saved before steps were kept by id, and adds the step's id at the next write", async () => {
+    const started = await startSession();
+    const stub = objectFor(USER_A);
+    // The session table as protocol v1 first created it, without the step id column.
+    await runInDurableObject(stub, (_instance, state) => {
+      const sql = state.storage.sql;
+      sql.exec("DROP TABLE session");
+      sql.exec(`CREATE TABLE session (
+        singleton INTEGER PRIMARY KEY NOT NULL CHECK(singleton=1),
+        version INTEGER NOT NULL CHECK(version=1),
+        recipe_id TEXT NOT NULL,
+        attempt_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('active','completed','abandoned')),
+        revision INTEGER NOT NULL CHECK(revision>=0),
+        active_step_index INTEGER NOT NULL CHECK(active_step_index>=0),
+        scale_factor REAL NOT NULL CHECK(scale_factor>=0.25 AND scale_factor<=50),
+        checked_ingredient_ids_json TEXT NOT NULL,
+        checked_step_output_ids_json TEXT NOT NULL,
+        started_at INTEGER NOT NULL CHECK(started_at>=0),
+        updated_at INTEGER NOT NULL CHECK(updated_at>=started_at)
+      )`);
+      sql.exec(
+        "INSERT INTO session VALUES (1, 1, ?, ?, 'active', 4, 1, 1.5, '[]', '[]', ?, ?)",
+        RECIPE,
+        started.attemptId,
+        Date.parse(started.startedAt),
+        Date.parse(started.startedAt),
+      );
+    });
+    const columns = () => runInDurableObject(stub, (_instance, state) =>
+      Array.from(state.storage.sql.exec("PRAGMA table_info(session)")).map((row) => row.name));
+
+    // Reading never changes the table.
+    const legacy = await send("GET", RECIPE).then(stateOf);
+    expect(legacy.revision).toBe(4);
+    expect(legacy.progress).toMatchObject({ activeStepIndex: 1, activeStepId: null, scaleFactor: 1.5 });
+    expect(await columns()).not.toContain("active_step_id");
+    expect(await columns()).not.toContain("active_step_id_index");
+
+    // A write that leaves the step alone adds the column and keeps the step as it was.
+    const scaled = await stateOf(await patch(legacy, { scaleFactor: 2 }));
+    expect(await columns()).toEqual(expect.arrayContaining(["active_step_id", "active_step_id_index"]));
+    expect(scaled.progress).toMatchObject({ activeStepIndex: 1, activeStepId: null, scaleFactor: 2 });
+
+    const stepped = await stateOf(await patch(scaled, { activeStepIndex: 2 }));
+    expect(stepped.progress).toMatchObject({ activeStepIndex: 2, activeStepId: STEP_3 });
+    await expect(send("GET", RECIPE).then(stateOf)).resolves.toEqual(stepped);
+
+    // Rolled back: code from before the id moves only the index, as its UPDATE did. Rolled
+    // forward again, the stale id is not read as the current step.
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec("UPDATE session SET revision = revision + 1, active_step_index = 0 WHERE singleton = 1");
+    });
+    const afterRollback = await send("GET", RECIPE).then(stateOf);
+    expect(afterRollback.progress).toMatchObject({ activeStepIndex: 0, activeStepId: null });
+    // A write that leaves the step alone does not bring the stale id back.
+    const rescaled = await stateOf(await patch(afterRollback, { scaleFactor: 3 }));
+    expect(rescaled.progress).toMatchObject({ activeStepIndex: 0, activeStepId: null, scaleFactor: 3 });
   });
 
   it("refuses a request made for a different user without reading or writing their session", async () => {
@@ -412,6 +508,7 @@ describe("cook-session protocol v1", () => {
     expect(reset.status).toBe(200);
     expect((await stateOf(reset)).progress).toEqual({
       activeStepIndex: 0,
+      activeStepId: STEP_1,
       scaleFactor: 1,
       checkedIngredientIds: [],
       checkedStepOutputIds: [],
@@ -553,12 +650,15 @@ describe("cook-session protocol v1", () => {
     const attemptId = "00000000-0000-4000-8000-000000000000";
     const valid = { attemptId, expectedRevision: 0, mutationId: "m-1", changes: { scaleFactor: 2 } };
 
-    it("accepts exactly the four body fields and the four progress fields", () => {
+    it("accepts exactly the four body fields and the five progress fields", () => {
       expect(parseCookPatchBody(JSON.stringify(valid))).toEqual(valid);
       expect(parseCookPatchBody(JSON.stringify({
         ...valid,
-        changes: { activeStepIndex: 1, scaleFactor: 0.25, checkedIngredientIds: ["a"], checkedStepOutputIds: [] },
-      }))?.changes).toEqual({ activeStepIndex: 1, scaleFactor: 0.25, checkedIngredientIds: ["a"], checkedStepOutputIds: [] });
+        changes: { activeStepIndex: 1, activeStepId: "s2", scaleFactor: 0.25, checkedIngredientIds: ["a"], checkedStepOutputIds: [] },
+      }))?.changes).toEqual({ activeStepIndex: 1, activeStepId: "s2", scaleFactor: 0.25, checkedIngredientIds: ["a"], checkedStepOutputIds: [] });
+      // The Worker passes a null id to the Durable Object for a recipe without steps.
+      expect(parseCookPatchBody(JSON.stringify({ ...valid, changes: { activeStepIndex: 0, activeStepId: null } }))?.changes)
+        .toEqual({ activeStepIndex: 0, activeStepId: null });
     });
 
     it.each([
@@ -584,17 +684,40 @@ describe("cook-session protocol v1", () => {
       ["a numeric ingredient id", JSON.stringify({ ...valid, changes: { checkedIngredientIds: [1] } })],
       ["too many ingredients", JSON.stringify({ ...valid, changes: { checkedIngredientIds: Array.from({ length: 501 }, (_, i) => `i${i}`) } })],
       ["a bad step-output set", JSON.stringify({ ...valid, changes: { checkedStepOutputIds: [null] } })],
+      ["a numeric step id", JSON.stringify({ ...valid, changes: { activeStepId: 3 } })],
+      ["an empty step id", JSON.stringify({ ...valid, changes: { activeStepId: "" } })],
+      ["a long step id", JSON.stringify({ ...valid, changes: { activeStepId: "s".repeat(129) } })],
     ])("rejects %s", (_name, text) => {
       expect(parseCookPatchBody(text)).toBeNull();
     });
 
     it("checks the step index and ids against the recipe", () => {
-      const bounds = { stepCount: 2, ingredientIds: new Set(["a"]), stepOutputIds: new Set(["u"]) };
+      const bounds = { stepIds: ["s1", "s2"], ingredientIds: new Set(["a"]), stepOutputIds: new Set(["u"]) };
       const body = (changes: Record<string, unknown>) => ({ ...valid, changes });
 
-      expect(changesFitRecipe(body({ activeStepIndex: 1, checkedIngredientIds: ["a"], checkedStepOutputIds: ["u"] }), bounds)).toBe(true);
+      expect(changesFitRecipe(body({ activeStepIndex: 1, checkedIngredientIds: ["gone"], checkedStepOutputIds: ["u"] }), bounds)).toBe(true);
       expect(changesFitRecipe(body({ scaleFactor: 2 }), bounds)).toBe(true);
       expect(changesFitRecipe(body({ activeStepIndex: 2 }), bounds)).toBe(false);
+      expect(changesFitRecipe(body({ activeStepIndex: 0, activeStepId: "s2" }), bounds)).toBe(true);
+      expect(changesFitRecipe(body({ activeStepId: "s3" }), bounds)).toBe(false);
+    });
+
+    it("fits the checked ids and the step to the recipe", () => {
+      const bounds = { stepIds: ["s1", "s2"], ingredientIds: new Set(["a"]), stepOutputIds: new Set(["u"]) };
+      const body = (changes: Record<string, unknown>) => ({ ...valid, changes });
+
+      expect(fitChangesToRecipe(body({ checkedIngredientIds: ["gone", "a"], checkedStepOutputIds: ["u", "x"] }), bounds).changes)
+        .toEqual({ checkedIngredientIds: ["a"], checkedStepOutputIds: ["u"] });
+      expect(fitChangesToRecipe(body({ activeStepIndex: 0, activeStepId: "s2" }), bounds).changes).toEqual({ activeStepIndex: 1, activeStepId: "s2" });
+      expect(fitChangesToRecipe(body({ activeStepIndex: 1 }), bounds).changes).toEqual({ activeStepIndex: 1, activeStepId: "s2" });
+      expect(fitChangesToRecipe(body({ scaleFactor: 2 }), bounds).changes).toEqual({ scaleFactor: 2 });
+    });
+
+    it("drops a stored step id that a new index without an id no longer names", () => {
+      const stored = { activeStepIndex: 1, activeStepId: "s2", scaleFactor: 1, checkedIngredientIds: [], checkedStepOutputIds: [] };
+      expect(applyCookProgressChanges(stored, { scaleFactor: 2 })).toMatchObject({ activeStepIndex: 1, activeStepId: "s2" });
+      expect(applyCookProgressChanges(stored, { activeStepIndex: 0, activeStepId: "s1" })).toMatchObject({ activeStepIndex: 0, activeStepId: "s1" });
+      expect(applyCookProgressChanges(stored, { activeStepIndex: 0 })).toMatchObject({ activeStepIndex: 0, activeStepId: null });
     });
   });
 });

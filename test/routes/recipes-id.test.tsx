@@ -194,7 +194,7 @@ describe("Recipes $id Route", () => {
 
   describe("cook progress helpers", () => {
     const bounds = {
-      stepCount: 2,
+      stepIds: ["step-1", "step-2"],
       ingredientIds: new Set(["ing-1"]),
       stepOutputIds: new Set(["use-1"]),
     };
@@ -206,6 +206,7 @@ describe("Recipes $id Route", () => {
       writeSyncedCookCache("user-1", "recipe-1", {
         progress: {
           activeStepIndex: 1,
+          activeStepId: "step-2",
           scaleFactor: 1.5,
           checkedIngredientIds: ["ing-1", "gone"],
           checkedStepOutputIds: ["use-1"],
@@ -215,12 +216,34 @@ describe("Recipes $id Route", () => {
 
       expect(readSyncedCookProgress("user-1", "recipe-1", bounds)).toEqual({
         activeStepIndex: 1,
+        activeStepId: "step-2",
         scaleFactor: 1.5,
         checkedIngredientIds: new Set(["ing-1"]),
         checkedStepOutputIds: new Set(["use-1"]),
       });
       expect(readSyncedCookProgress("user-2", "recipe-1", bounds)).toBeNull();
+
+      // Step 2 was moved first since: the cook is still on step 2.
+      expect(readSyncedCookProgress("user-1", "recipe-1", { ...bounds, stepIds: ["step-2", "step-1"] })?.activeStepIndex).toBe(0);
       window.localStorage.clear();
+    });
+
+    it("keeps the stored step by id, so it survives the steps being reordered", () => {
+      const stored = JSON.stringify({
+        version: 1,
+        activeStepIndex: 0,
+        activeStepId: "step-1",
+        scaleFactor: 1,
+        checkedIngredientIds: [],
+        checkedStepOutputIds: [],
+      });
+
+      expect(parseCookProgressSnapshot(stored, bounds)?.activeStepIndex).toBe(0);
+      expect(parseCookProgressSnapshot(stored, { ...bounds, stepIds: ["step-2", "step-1"] })?.activeStepIndex).toBe(1);
+      // A step id the recipe no longer has falls back to the stored index.
+      expect(parseCookProgressSnapshot(stored, { ...bounds, stepIds: ["step-2", "step-3"] })?.activeStepIndex).toBe(0);
+      // A non-string id is ignored.
+      expect(parseCookProgressSnapshot(stored.replace('"step-1"', "7"), { ...bounds, stepIds: ["step-2", "step-1"] })?.activeStepIndex).toBe(0);
     });
 
     it("builds the recipe-specific cook progress storage key", () => {
@@ -281,6 +304,7 @@ describe("Recipes $id Route", () => {
         expect(readCookProgress("recipe-1", bounds)).toBeNull();
         expect(() => writeCookProgress("recipe-1", {
           activeStepIndex: 0,
+          activeStepId: null,
           scaleFactor: 1,
           checkedIngredientIds: new Set(),
           checkedStepOutputIds: new Set(),
@@ -298,6 +322,7 @@ describe("Recipes $id Route", () => {
         expect(readCookProgress("recipe-1", bounds)).toBeNull();
         expect(() => writeCookProgress("recipe-1", {
           activeStepIndex: 0,
+          activeStepId: null,
           scaleFactor: 1,
           checkedIngredientIds: new Set(),
           checkedStepOutputIds: new Set(),
@@ -3188,6 +3213,7 @@ describe("Recipes $id Route", () => {
       await waitFor(() => {
         const persisted = JSON.parse(window.localStorage.getItem(getCookProgressStorageKey("recipe-1")) ?? "{}");
         expect(persisted.activeStepIndex).toBe(1);
+        expect(persisted.activeStepId).toBe("step-2");
         expect(persisted.scaleFactor).toBe(1.25);
         expect(persisted.checkedIngredientIds).toContain("ing-1");
       });
@@ -3210,8 +3236,8 @@ describe("Recipes $id Route", () => {
     it("syncs a signed-in cook's progress with the server instead of the device-only key", async () => {
       window.localStorage.clear();
       writeSyncedCookCache("user-1", "recipe-1", {
-        progress: { activeStepIndex: 0, scaleFactor: 1.5, checkedIngredientIds: [], checkedStepOutputIds: [] },
-        server: { attemptId: "attempt-1", revision: 1, progress: { activeStepIndex: 0, scaleFactor: 1.5, checkedIngredientIds: [], checkedStepOutputIds: [] } },
+        progress: { activeStepIndex: 0, activeStepId: "step-1", scaleFactor: 1.5, checkedIngredientIds: [], checkedStepOutputIds: [] },
+        server: { attemptId: "attempt-1", revision: 1, progress: { activeStepIndex: 0, activeStepId: "step-1", scaleFactor: 1.5, checkedIngredientIds: [], checkedStepOutputIds: [] } },
       });
       const serverProgress = { activeStepIndex: 0, scaleFactor: 1.5, checkedIngredientIds: ["ing-1"], checkedStepOutputIds: [] };
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
