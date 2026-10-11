@@ -15,7 +15,7 @@
         "href": "/users/contract_chef",
         "canonicalUrl": "http://localhost/users/contract_chef"
       },
-      "isOwner": false,
+      "isOwner": true,
       "recipes": [
         {
           "id": "id_016",

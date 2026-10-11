@@ -326,10 +326,14 @@ export function apiV1Headers(requestId: string, json = true): Headers {
   return headers;
 }
 
+// Private answers depend on the caller's credentials, so they also name the headers that carry them:
+// a cache that ignores no-store still keys them by credential. Errors use these headers too, so an
+// error for a request with a token (an expired one, a chef that does not exist) is never shared.
 function apiV1PrivateHeaders(requestId: string): Headers {
   const headers = apiV1Headers(requestId);
   headers.set("Cache-Control", "private, no-store");
   headers.set("Pragma", "no-cache");
+  headers.set("Vary", "Authorization, Cookie");
   return headers;
 }
 
@@ -5130,6 +5134,8 @@ function parseChefGraphLimit(url: URL): number {
   return limit;
 }
 
+// A profile read with credentials says whether the caller owns it (isOwner), so it is private and
+// never stored; without credentials it is the same for everyone and may be cached publicly.
 function publicProfileHeaders(principal: ApiPrincipal | null) {
   return principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders();
 }

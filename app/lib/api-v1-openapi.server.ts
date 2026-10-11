@@ -3130,7 +3130,7 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
   };
   if (options.publicCache) {
     headers["Cache-Control"] = {
-      description: "Present on anonymous public recipe/cookbook responses: public, max-age=60, stale-while-revalidate=300. Authenticated public reads validate scopes and are not public-cacheable.",
+      description: "Present on anonymous public recipe, cookbook and chef profile responses: public, max-age=60, stale-while-revalidate=300. A public read that carries credentials validates scopes, may personalize the answer (a profile's isOwner), and is answered private, no-store.",
       schema: { type: "string" },
     };
     headers.Vary = {
@@ -3146,6 +3146,10 @@ function successResponse(schemaName: string, options: { publicCache?: boolean; n
     headers.Pragma = {
       description: "Legacy no-cache companion header for authenticated/private responses.",
       schema: { type: "string", example: "no-cache" },
+    };
+    headers.Vary = {
+      description: "Names the credential headers the private response depends on.",
+      schema: { type: "string", example: "Authorization, Cookie" },
     };
   }
   return {
@@ -3188,6 +3192,10 @@ function errorResponse(codes: ApiV1ErrorCode[], scopes: readonly string[]) {
       "Cache-Control": {
         description: "Error envelopes are not cacheable.",
         schema: { type: "string", example: "private, no-store" },
+      },
+      Vary: {
+        description: "Error envelopes name the credential headers they may depend on.",
+        schema: { type: "string", example: "Authorization, Cookie" },
       },
       ...(codes.includes("product_activation_pending")
         ? {

@@ -6,6 +6,10 @@
 // test/fixtures/native-api-recordings. spoonjoy-apple keeps a copy of that directory and decodes
 // every recording into its Swift models, so a change to a response shape fails here first.
 //
+// The cook-session endpoints (/api/cook-sessions/...) are served by a Durable Object that only runs in
+// the Workers runtime, so test/workers/native-cook-session-recordings.test.ts records and checks
+// those (the `cook-session-*` files). This test lists them in index.json after its own.
+//
 // After an intended response change, refresh the recordings here, then refresh spoonjoy-apple's copy once
 // this lands on main (spoonjoy-apple's "v2 API recordings" check fails while the copies differ):
 //
@@ -25,6 +29,13 @@ import { getLocalDb } from "~/lib/db.server";
 import * as recipeImport from "~/lib/recipe-import.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1 } from "../helpers/sqlite-d1";
+import {
+  COOK_SESSION_RECORDING_PREFIX,
+  createRecordingNormalizer,
+  serializeRecording as serialize,
+  type Recording,
+  type RecordingIndexEntry,
+} from "./native-api-recording-format";
 
 // Account deletion runs on the request's D1 binding; the rest of the API reads the same local
 // database through getRequestDb.
@@ -54,75 +65,14 @@ export const RECORDINGS_DIRECTORY = path.resolve(__dirname, "../fixtures/native-
 const WRITE_RECORDINGS = process.env.SPOONJOY_WRITE_NATIVE_API_RECORDINGS === "1";
 
 const ORIGIN = "http://localhost";
-const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 const CHEF_PASSWORD = "contract-chef-password-not-secret";
 const FRIEND_PASSWORD = "contract-friend-password-not-secret";
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-interface Recording {
-  name: string;
-  endpoint: string;
-  status: number;
-  body: unknown;
-}
-
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 const recordings: Recording[] = [];
-
-// One placeholder per distinct dynamic value, numbered by first appearance across the whole run, so a
-// recipe's ID is the same placeholder in its create response, its detail and the list it appears in.
-const placeholders = new Map<string, string>();
-const placeholderCounts = new Map<string, number>();
-
-function placeholder(kind: string, value: string) {
-  const key = `${kind}:${value}`;
-  const existing = placeholders.get(key);
-  if (existing) return existing;
-  const next = (placeholderCounts.get(kind) ?? 0) + 1;
-  placeholderCounts.set(kind, next);
-  const created = `${kind}_${String(next).padStart(3, "0")}`;
-  placeholders.set(key, created);
-  return created;
-}
-
-const DYNAMIC_PATTERNS: Array<{ kind: string; pattern: RegExp }> = [
-  { kind: "access_token", pattern: /\bsj_[A-Za-z0-9_-]{8,}/g },
-  { kind: "refresh_token", pattern: /\bort_[A-Za-z0-9_-]{8,}/g },
-  { kind: "uuid", pattern: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi },
-  { kind: "id", pattern: /\bc[a-z0-9]{24}\b/g },
-];
-const TIMESTAMP_PATTERN = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g;
-// Upload keys start with the upload time in milliseconds.
-const EPOCH_MILLISECONDS_PATTERN = /\b1\d{12}\b/g;
-const FIXED_EPOCH_MILLISECONDS = "1767225600000";
-const OPAQUE_KEY_PATTERN = /(^id$|Id$|^cursor$|Cursor$|^token$|^client_id$|^access_token$|^refresh_token$)/;
-const STABLE_VALUES = new Set(["spoonjoy-apple-native"]);
-
-function normalizeString(value: string, key: string | null): string {
-  // A profile's join label is the month the test chef was created, so it changes with the calendar.
-  if (key === "joinedLabel" && /^Joined [A-Z][a-z]{2} \d{4}$/.test(value)) return "Joined Jan 2026";
-  let result = value.replace(TIMESTAMP_PATTERN, FIXED_TIMESTAMP).replace(EPOCH_MILLISECONDS_PATTERN, FIXED_EPOCH_MILLISECONDS);
-  for (const { kind, pattern } of DYNAMIC_PATTERNS) {
-    result = result.replace(pattern, (match) => placeholder(kind, match));
-  }
-  if (key && OPAQUE_KEY_PATTERN.test(key) && result === value && !STABLE_VALUES.has(value) && !/_\d{3}$/.test(value)) {
-    const kind = /cursor/i.test(key) ? "cursor" : /token/i.test(key) ? "token" : "opaque";
-    result = placeholder(kind, value);
-  }
-  return result;
-}
-
-export function normalizeRecordedValue(value: unknown, key: string | null = null): unknown {
-  if (typeof value === "string") return normalizeString(value, key);
-  if (Array.isArray(value)) return value.map((entry) => normalizeRecordedValue(entry, key));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([entryKey, entry]) => [entryKey, normalizeRecordedValue(entry, entryKey)]),
-    );
-  }
-  return value;
-}
+const normalizeRecordedValue = createRecordingNormalizer();
 
 // Work a request hands to waitUntil (an AI placeholder cover, notifications) finishes before the
 // next request starts, so every run sees the same order of events.
@@ -242,13 +192,19 @@ async function oauthForm(name: string, endpoint: string, handler: typeof oauthTo
   return capture(name, endpoint, await handler(routeArgs(request, "", null)) as Response, status);
 }
 
+// Sorted by name, so the index does not depend on the order the directory lists files in.
+function committedCookSessionIndexEntries(): RecordingIndexEntry[] {
+  return fs.readdirSync(RECORDINGS_DIRECTORY)
+    .filter((file) => file.startsWith(COOK_SESSION_RECORDING_PREFIX) && file.endsWith(".json"))
+    .map((file) => file.slice(0, -".json".length))
+    .sort()
+    .map((name) => readCommittedRecording(name)!)
+    .map(({ name, endpoint, status }) => ({ name, endpoint, status }));
+}
+
 function readCommittedRecording(name: string): Recording | null {
   const file = path.join(RECORDINGS_DIRECTORY, `${name}.json`);
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) as Recording : null;
-}
-
-function serialize(value: unknown) {
-  return `${JSON.stringify(value, null, 2)}\n`;
 }
 
 async function recordNativeSession() {
@@ -602,12 +558,15 @@ async function recordNativeSession() {
   await api("recipes-list", "GET", "recipes", { query: { limit: "20" }, endpoint: "GET /api/v1/recipes" });
   await api("recipe-detail", "GET", `recipes/${recipeId}`, { token: chef, endpoint: "GET /api/v1/recipes/{id}" });
   await api("search", "GET", "search", { query: { q: "pasta", scope: "all", limit: "20" }, endpoint: "GET /api/v1/search" });
-  await api("user-profile", "GET", "users/contract_chef", { endpoint: "GET /api/v1/users/{identifier}" });
+  // The signed-in app sends its token on profile pages, so the chef's own profile answers isOwner.
+  await api("user-profile", "GET", "users/contract_chef", { token: chef, endpoint: "GET /api/v1/users/{identifier}" });
   await api("user-kitchen-visitors", "GET", "users/contract_chef/kitchen-visitors", {
+    token: chef,
     query: { page: "1", limit: "20" },
     endpoint: "GET /api/v1/users/{identifier}/kitchen-visitors",
   });
   await api("user-fellow-chefs", "GET", "users/contract_chef/fellow-chefs", {
+    token: chef,
     query: { page: "1", limit: "20" },
     endpoint: "GET /api/v1/users/{identifier}/fellow-chefs",
   });
@@ -790,7 +749,10 @@ describe("native API recordings", () => {
   });
 
   it("matches the committed recordings", () => {
-    const index = recordings.map(({ name, endpoint, status }) => ({ name, endpoint, status }));
+    // The cook-session recordings come from test/workers/native-cook-session-recordings.test.ts, which
+    // checks them itself; the index lists them after this test's own.
+    const cookSessionEntries = committedCookSessionIndexEntries();
+    const index = [...recordings.map(({ name, endpoint, status }) => ({ name, endpoint, status })), ...cookSessionEntries];
     if (WRITE_RECORDINGS) {
       fs.mkdirSync(RECORDINGS_DIRECTORY, { recursive: true });
       for (const file of fs.readdirSync(RECORDINGS_DIRECTORY)) {
@@ -802,6 +764,7 @@ describe("native API recordings", () => {
       fs.writeFileSync(path.join(RECORDINGS_DIRECTORY, "index.json"), serialize(index));
       return;
     }
+    expect(cookSessionEntries.length, "The cook-session recordings are missing. Run `pnpm run test:native-recordings:refresh`.").toBeGreaterThan(0);
     const committedIndex = JSON.parse(fs.readFileSync(path.join(RECORDINGS_DIRECTORY, "index.json"), "utf8"));
     expect(index, "The recorded endpoints changed. Run `pnpm run test:native-recordings:refresh`.").toEqual(committedIndex);
     for (const recording of recordings) {

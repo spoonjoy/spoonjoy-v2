@@ -1,0 +1,8 @@
+{
+  "name": "cook-session-read-empty",
+  "endpoint": "GET /api/cook-sessions/{recipeId}",
+  "status": 200,
+  "body": {
+    "state": null
+  }
+}
