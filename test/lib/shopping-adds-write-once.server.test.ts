@@ -96,6 +96,30 @@ describe("the add_shopping_list_item tool on D1", () => {
   });
 });
 
+describe("repeating a tool add with its idempotencyKey on D1", () => {
+  it("adds one item once, answering created both times, and a new key adds again", async () => {
+    const call = (key: string) => callSpoonjoyApiOperation("add_shopping_list_item", { name: "Limes", quantity: 2, idempotencyKey: key }, context(d1.binding));
+
+    await expect(call("limes-1")).resolves.toMatchObject({ created: 1, updated: 0 });
+    await expect(call("limes-1")).resolves.toMatchObject({ created: 1, updated: 0 });
+    expect(await quantities()).toEqual({ limes: 2 });
+
+    await expect(call("limes-2")).resolves.toMatchObject({ created: 0, updated: 1 });
+    expect(await quantities()).toEqual({ limes: 4 });
+  });
+
+  it("adds a recipe once when the call is repeated after its answer was lost", async () => {
+    const recipeId = await seedRecipe();
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(ADD_BATCH, "lost-answer", "lost", "lost", "lost");
+    const call = (binding: unknown) => callSpoonjoyApiOperation("add_recipe_to_shopping_list", { recipeId, idempotencyKey: "bars-1" }, context(binding));
+
+    await expect(call(flaky.binding)).rejects.toBeInstanceOf(D1WriteUnavailableError);
+    await expect(call(d1.binding)).resolves.toMatchObject({ created: 1, updated: 1 });
+    expect(await quantities()).toEqual({ "once flour": 3, "once egg": 3 });
+  });
+});
+
 describe("the add_recipe_to_shopping_list tool on D1", () => {
   it.each(OUTCOMES)("adds each ingredient once, answering the counts, when the batch is %s", async (outcome) => {
     const recipeId = await seedRecipe();

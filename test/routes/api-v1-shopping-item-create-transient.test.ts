@@ -113,13 +113,10 @@ describe("API v1 shopping item create on D1 when its connection drops", () => {
   it("adds once when the request gave up, the batch then committed late, and the client resubmitted", async () => {
     const flaky = flakyD1(d1.binding);
     flaky.failNext(ADD_BATCH, "lost", "lost", "lost", "late");
-    // How API v1 answers a write that stayed unavailable belongs to its error mapping; here it only fails.
-    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const failed = await add(flaky.binding, "lemons-late");
-    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(failed.status).toBe(503);
     expect(await lemons()).toEqual([]);
-    expect(logged).toHaveBeenCalled();
 
     // The resubmit's batch finds the late batch's claim (which lands just before it) and adds nothing.
     const retried = await add(flaky.binding, "lemons-late");
@@ -129,12 +126,24 @@ describe("API v1 shopping item create on D1 when its connection drops", () => {
     expect(await lemons()).toMatchObject([{ quantity: 2 }]);
   });
 
+  it("adds once when the first try committed, the rest were lost, and the client resubmitted after the 503", async () => {
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(ADD_BATCH, "lost-answer", "lost", "lost", "lost");
+
+    expect((await add(flaky.binding, "lemons-committed")).status).toBe(503);
+    expect(await lemons()).toMatchObject([{ quantity: 2 }]);
+    const retried = await add(flaky.binding, "lemons-committed");
+
+    expect(retried.status).toBe(201);
+    await expect(retried.json()).resolves.toMatchObject({ data: { created: true, item: { quantity: 2 } } });
+    expect(await lemons()).toMatchObject([{ quantity: 2 }]);
+  });
+
   it("adds once when the request gave up and nothing committed, then the client resubmitted", async () => {
     const flaky = flakyD1(d1.binding);
     flaky.failNext(ADD_BATCH, "lost", "lost", "lost", "lost");
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    expect((await add(flaky.binding, "lemons-retry")).status).toBeGreaterThanOrEqual(500);
+    expect((await add(flaky.binding, "lemons-retry")).status).toBe(503);
     const retried = await add(flaky.binding, "lemons-retry");
 
     expect(retried.status).toBe(201);
@@ -188,12 +197,23 @@ describe("API v1 shopping item create on D1 when its connection drops", () => {
       expect(await amounts()).toEqual({ lemons: 3, sugar: 1 });
     });
 
+    it("adds once when the first try committed, the rest were lost, and the client resubmitted after the 503", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(ADD_BATCH, "lost-answer", "lost", "lost", "lost");
+
+      expect((await addRecipe(flaky.binding, "recipe-committed")).status).toBe(503);
+      const retried = await addRecipe(flaky.binding, "recipe-committed");
+
+      expect(retried.status).toBe(200);
+      await expect(retried.json()).resolves.toMatchObject({ data: { created: 1, updated: 1 } });
+      expect(await amounts()).toEqual({ lemons: 3, sugar: 1 });
+    });
+
     it("adds once, answering what the late batch wrote, when the client resubmits after the request gave up", async () => {
       const flaky = flakyD1(d1.binding);
       flaky.failNext(ADD_BATCH, "lost", "lost", "lost", "late");
-      vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-      expect((await addRecipe(flaky.binding, "recipe-late")).status).toBeGreaterThanOrEqual(500);
+      expect((await addRecipe(flaky.binding, "recipe-late")).status).toBe(503);
       const retried = await addRecipe(flaky.binding, "recipe-late");
 
       expect(retried.status).toBe(200);

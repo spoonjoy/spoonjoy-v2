@@ -2882,6 +2882,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
     properties: {
       ownerEmail: { type: "string" },
       recipeId: { type: "string" },
+      idempotencyKey: { type: "string", description: "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the items are added once." },
     },
     required: ["recipeId"],
     additionalProperties: false,
@@ -2889,6 +2890,7 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const recipeId = requiredString(args, "recipeId");
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
 
     const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
@@ -2915,10 +2917,11 @@ const addRecipeToShoppingListTool: SpoonjoyApiOperation = {
       1,
     );
     const nativeD1 = asCompatibleD1Database(context.env?.DB);
-    // Quantities add up, so on D1 the batch writes once under a key of this request's own (a
-    // tool call has no client key): a retry after a transient D1 error adds nothing more.
+    // Quantities add up, so on D1 the batch writes once under a key: the caller's idempotencyKey,
+    // so a repeat of the call adds nothing more, or else this request's own, so a retry after a
+    // transient D1 error within it adds nothing more.
     const writeKey = nativeD1
-      ? await d1WriteOnceKey({ userId: owner.id, operation: "mcp.add_recipe_to_shopping_list", token: null, request: { recipeId } })
+      ? await d1WriteOnceKey({ userId: owner.id, operation: "mcp.add_recipe_to_shopping_list", token: mcpWriteToken(idempotencyKey), request: { recipeId } })
       : null;
     // The winning try noted the items it created; the tool answers counts, not items.
     const replay = async (createdIds: string[]) => ({
@@ -3269,16 +3272,23 @@ const removeRecipeFromCookbookTool: SpoonjoyApiOperation = {
   },
 };
 
+/** The write-once token for a tool's add: the caller's idempotencyKey, or none (the request's own key). */
+function mcpWriteToken(idempotencyKey: string | null): string | null {
+  return idempotencyKey ? `mcp:${idempotencyKey}` : null;
+}
+
 /**
- * The tool's single add on D1: one batch under a write-once key of this request's own (a tool
- * call has no client key), so a retry after a transient D1 error adds the quantity once.
+ * The tool's single add on D1: one batch under a write-once key, the caller's idempotencyKey or
+ * else this request's own, so a repeat of the call or a retry after a transient D1 error adds the
+ * quantity once.
  */
 async function addShoppingListItemOnceOnD1(
   d1: D1ReadDatabase,
   userId: string,
+  idempotencyKey: string | null,
   put: Omit<D1ShoppingItemPut, "itemId" | "writeKey" | "now">,
 ): Promise<{ created: boolean; id: string } | null> {
-  const writeKey = await d1WriteOnceKey({ userId, operation: "mcp.add_shopping_list_item", token: null, request: put });
+  const writeKey = await d1WriteOnceKey({ userId, operation: "mcp.add_shopping_list_item", token: mcpWriteToken(idempotencyKey), request: put });
   return putShoppingListItemOnceOnD1(d1, { ...put, itemId: crypto.randomUUID(), writeKey, now: new Date() });
 }
 
@@ -3295,6 +3305,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
       unit: { type: "string" },
       categoryKey: { type: "string" },
       iconKey: { type: "string" },
+      idempotencyKey: { type: "string", description: "Optional. Send the same key again when retrying this exact call, such as after a timeout, and the item is added once." },
     },
     required: ["name"],
     additionalProperties: false,
@@ -3306,6 +3317,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     const unitName = optionalString(args.unit);
     const categoryKey = optionalString(args.categoryKey) ?? null;
     const iconKey = optionalString(args.iconKey) ?? null;
+    const idempotencyKey = optionalString(args.idempotencyKey) ?? null;
 
     const owner = await getOrCreateOwner(context, email);
     const shoppingList = await getOrCreateShoppingList(context.db, owner.id);
@@ -3318,7 +3330,7 @@ const addShoppingListItemTool: SpoonjoyApiOperation = {
     };
     const d1 = asCompatibleD1Database(context.env?.DB);
     const mutation = d1
-      ? await addShoppingListItemOnceOnD1(d1, owner.id, { ...identity, quantity, categoryKey, iconKey })
+      ? await addShoppingListItemOnceOnD1(d1, owner.id, idempotencyKey, { ...identity, quantity, categoryKey, iconKey })
       : await addShoppingListItem(context.db, {
         identity,
         quantity,
