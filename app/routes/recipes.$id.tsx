@@ -1177,7 +1177,7 @@ export default function RecipeDetail() {
                       key={cookbook.id}
                       onClick={() => handleToggleCookbookSave(cookbook.id)}
                       aria-pressed={isSaved}
-                      className={`w-full border-y px-4 py-3 text-left transition-colors ${
+                      className={`sj-instant-state w-full border-y px-4 py-3 text-left ${
                         isSaved
                           ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))] hover:bg-[color-mix(in_srgb,var(--sj-brass)_20%,var(--sj-panel-solid))]"
                           : "border-[var(--sj-border)] bg-transparent hover:bg-[var(--sj-flour)]"

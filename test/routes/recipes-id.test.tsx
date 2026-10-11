@@ -2474,6 +2474,10 @@ describe("Recipes $id Route", () => {
       expect(content?.contains(modal)).toBe(true);
       expect(modal.contains(modalBody)).toBe(true);
       expect(modalBody.contains(screen.getByTestId("cookbook-item-cb-1"))).toBe(true);
+      // A toggle's colours show whether the recipe is saved, so it switches instantly, never fading
+      // through mid-state colours (the Ouro dialog's subtree is left out of the global reset).
+      expect(screen.getByTestId("cookbook-item-cb-1")).toHaveClass("sj-instant-state");
+      expect(screen.getByTestId("cookbook-item-cb-1")).not.toHaveClass("transition-colors");
       expect(dialog.contains(modalFooter)).toBe(true);
       expect(content?.contains(modalFooter)).toBe(false);
       expect(modalFooter.contains(screen.getByTestId("create-cookbook-button"))).toBe(true);
@@ -2484,6 +2488,41 @@ describe("Recipes $id Route", () => {
 
       await closeSaveModal(user);
       scrollToSpy.mockRestore();
+    });
+
+    // Known gap, pinned so it stays visible: on a screen 640px or wider (an iPad, or a phone in
+    // landscape) Ouro UI's centred Dialog focuses its first control when the app opens it with
+    // open/onOpenChange, even after a tap, so a user with no cookbooks gets the software keyboard
+    // for "Create new cookbook". Ouro UI v0.1.0 keeps focus on the dialog after a tap only when its
+    // own trigger opens it; Save stays controlled for the sign-in redirect in handleOpenSaveModal.
+    // The fix is upstream in ourostack/ouro-ui (a controlled Dialog that tracks the opening tap);
+    // when Spoonjoy upgrades to that release, change these to expect the dialog itself.
+    it.each([
+      { cookbooks: [{ id: "cb-1", title: "Weeknights" }], focused: "cookbook-item-cb-1" },
+      { cookbooks: [], focused: "new-cookbook-input" },
+    ])("focuses $focused when the wide-screen save dialog opens (upstream Ouro UI gap)", async ({ cookbooks, focused }) => {
+      const user = userEvent.setup();
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ({ ...saveModalMockData, cookbooks }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Save Modal Recipe" });
+
+      await openSaveModalFromHeader();
+
+      const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
+      await settleBrowserTasks();
+      expect(dialog).toHaveAttribute("data-ouro-presentation", "dialog");
+      await waitFor(() => {
+        expect(document.activeElement).toBe(screen.getByTestId(focused));
+      });
+
+      await closeSaveModal(user);
     });
 
     it("presents the save modal as a bottom sheet on a phone-width screen", async () => {
