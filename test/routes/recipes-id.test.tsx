@@ -2998,7 +2998,8 @@ describe("Recipes $id Route", () => {
       const answers = [
         { intent: "addFromRecipe", error: message, errorCode: "temporarily_unavailable", retryable: true },
         { success: true, intent: "addFromRecipe" },
-        { success: true, intent: "addFromRecipe" },
+        // A third, distinct answer: its toast replaces the success toast, so the test can wait for it to render.
+        { intent: "addFromRecipe", error: message, errorCode: "temporarily_unavailable", retryable: true },
       ];
       const mockData = {
         recipe: {
@@ -3048,6 +3049,8 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByText("1 items added at 1x")).toBeInTheDocument();
       await user.click(screen.getByTestId("recipe-header-list-action"));
       await waitFor(() => expect(tokens).toHaveLength(3));
+      // Let the third answer render before the test ends, so its toast update lands inside act().
+      expect(await screen.findByText(message)).toBeInTheDocument();
 
       expect(tokens[0]).toMatch(/^[\w-]{8,}$/);
       // The tap after the 503 is the same add; the tap after a success is a new one.
