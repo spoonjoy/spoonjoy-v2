@@ -2490,17 +2490,31 @@ describe("Recipes $id Route", () => {
       scrollToSpy.mockRestore();
     });
 
-    // Known gap, pinned so it stays visible: on a screen 640px or wider (an iPad, or a phone in
-    // landscape) Ouro UI's centred Dialog focuses its first control when the app opens it with
-    // open/onOpenChange, even after a tap, so a user with no cookbooks gets the software keyboard
-    // for "Create new cookbook". Ouro UI v0.1.0 keeps focus on the dialog after a tap only when its
-    // own trigger opens it; Save stays controlled for the sign-in redirect in handleOpenSaveModal.
-    // The fix is upstream in ourostack/ouro-ui (a controlled Dialog that tracks the opening tap);
-    // when Spoonjoy upgrades to that release, change these to expect the dialog itself.
+    // On a screen 640px or wider (an iPad, or a phone in landscape) the Save dialog is centred, and
+    // Save opens it controlled (open/onOpenChange) for the sign-in redirect in handleOpenSaveModal.
+    // Ouro UI v0.3.0 reads the press that opened a controlled Dialog from the document: after a touch
+    // or pen tap it focuses the popup, so no software keyboard rises for "Create new cookbook"; after
+    // a keyboard press it focuses the first control. (Ouro UI v0.1.0 focused the first control after
+    // a tap too; this test pinned that gap until the upgrade.)
+    const tapSaveInHeader = async () => {
+      const save = screen.getByTestId("recipe-header-save-action");
+      await act(async () => {
+        fireEvent.pointerDown(save, { pointerType: "touch" });
+        fireEvent.click(save, { detail: 1 });
+      });
+    };
+    const pressSaveInHeaderWithKeyboard = async () => {
+      const save = screen.getByTestId("recipe-header-save-action");
+      await act(async () => {
+        fireEvent.keyDown(save, { key: "Enter" });
+        fireEvent.click(save, { detail: 0 });
+      });
+    };
+
     it.each([
-      { cookbooks: [{ id: "cb-1", title: "Weeknights" }], focused: "cookbook-item-cb-1" },
-      { cookbooks: [], focused: "new-cookbook-input" },
-    ])("focuses $focused when the wide-screen save dialog opens (upstream Ouro UI gap)", async ({ cookbooks, focused }) => {
+      { cookbooks: [{ id: "cb-1", title: "Weeknights" }], label: "with cookbooks" },
+      { cookbooks: [], label: "with no cookbooks" },
+    ])("focuses the wide-screen save dialog itself when a tap opens it, $label", async ({ cookbooks }) => {
       const user = userEvent.setup();
       const Stub = createTestRoutesStub([
         {
@@ -2513,7 +2527,35 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
 
-      await openSaveModalFromHeader();
+      await tapSaveInHeader();
+
+      const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
+      await settleBrowserTasks();
+      expect(dialog).toHaveAttribute("data-ouro-presentation", "dialog");
+      await waitFor(() => {
+        expect(document.activeElement).toBe(dialog);
+      });
+
+      await closeSaveModal(user);
+    });
+
+    it.each([
+      { cookbooks: [{ id: "cb-1", title: "Weeknights" }], focused: "cookbook-item-cb-1" },
+      { cookbooks: [], focused: "new-cookbook-input" },
+    ])("focuses $focused when a keyboard press opens the wide-screen save dialog", async ({ cookbooks, focused }) => {
+      const user = userEvent.setup();
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => ({ ...saveModalMockData, cookbooks }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Save Modal Recipe" });
+
+      await pressSaveInHeaderWithKeyboard();
 
       const dialog = await screen.findByRole("dialog", { name: "Save to cookbook" });
       await settleBrowserTasks();
