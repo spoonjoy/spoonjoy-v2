@@ -108,6 +108,13 @@ export type AccountSettingsFormIntent = "updateUserInfo" | "changePassword" | "s
 /** Where "Sign in again" sends a passwordless chef, so they come back to finish deleting. */
 export const DELETE_ACCOUNT_REAUTH_REDIRECT = "/login?redirectTo=%2Faccount%2Fsettings%23delete-account";
 
+/** Where "Sign in again" sends a passwordless chef, so they come back to finish changing their email. */
+export const EMAIL_CHANGE_REAUTH_REDIRECT = "/login?redirectTo=%2Faccount%2Fsettings%23user-info";
+
+/** What a passwordless chef sees when their sign-in is too old to change their email. */
+export const EMAIL_CHANGE_RECENT_SIGN_IN_MESSAGE =
+  "For your safety, sign in again, then change your email within 10 minutes.";
+
 export interface AccountSettingsActionResult {
   success: boolean;
   intent?: AccountSettingsFormIntent;
@@ -144,6 +151,8 @@ export interface AccountSettingsActionResult {
     email?: string;
     username?: string;
     newPassword?: string;
+    /** Why the current password did not prove an email change (updateUserInfo). */
+    currentPassword?: string;
   };
   photoUrl?: string;
 }
@@ -422,13 +431,49 @@ export async function handleAccountSettingsAction({
       }
     }
 
+    // Changing the email needs proof the owner is here right now (the password, or for an account
+    // without one, a recent sign-in), the same proof account deletion asks for. Otherwise a stolen
+    // session could move the account to the thief's address and then sign in with Google or GitHub
+    // there (audit 2026-10-09, finding 2). A username-only save needs no proof.
+    const emailChanged = email !== currentUser.email.toLowerCase();
+    if (emailChanged) {
+      const env = getCloudflareEnv(context);
+      // A stolen session must not become a password-guessing oracle.
+      const rateLimit = await enforceAuthRateLimit(request, env?.AUTH_IP_RATE_LIMITER);
+      if (!rateLimit.allowed) {
+        return {
+          success: false,
+          intent: "updateUserInfo",
+          error: "rate_limited",
+          fieldErrors: { currentPassword: "Too many attempts. Try again in a few minutes." },
+        };
+      }
+      const proof = await verifyAccountOwnerProof(database, userId, {
+        password: formData.get("currentPassword")?.toString() || null,
+        sessionAuthenticatedAt: await getSessionAuthenticatedAt(request, env),
+      });
+      if (!proof.ok) {
+        /* istanbul ignore if -- @preserve the account was read just above; this is a race guard. */
+        if (proof.reason === "account_not_found") throw await destroyUserSession(request, "/login", env);
+        return {
+          success: false,
+          intent: "updateUserInfo",
+          error: proof.reason,
+          // A passwordless account has no password field, so its error shows under the email.
+          fieldErrors: proof.reason === "recent_sign_in_required"
+            ? { email: EMAIL_CHANGE_RECENT_SIGN_IN_MESSAGE }
+            : { currentPassword: proof.message },
+        };
+      }
+    }
+
     // Checks that neither value belongs to another account (usernames regardless of case, and
     // not another account's ID) and saves both in one guarded write.
     const saved = await saveAccountIdentity(database, {
       userId,
       email,
       username,
-      emailChanged: email !== currentUser.email.toLowerCase(),
+      emailChanged,
       usernameChanged,
     });
 
@@ -829,8 +874,10 @@ export async function handleAccountSettingsAction({
   }
 
   if (intent === "reauthenticate") {
-    // Sign out, then back in: the new session's sign-in time lets a passwordless chef delete.
-    throw await destroyUserSession(request, DELETE_ACCOUNT_REAUTH_REDIRECT, getCloudflareEnv(context));
+    // Sign out, then back in: the new session's sign-in time lets a passwordless chef delete the
+    // account or change its email, and the sign-in returns them to the form they came from.
+    const redirectTo = formData.get("for") === "email" ? EMAIL_CHANGE_REAUTH_REDIRECT : DELETE_ACCOUNT_REAUTH_REDIRECT;
+    throw await destroyUserSession(request, redirectTo, getCloudflareEnv(context));
   }
 
   if (intent === "setPassword") {

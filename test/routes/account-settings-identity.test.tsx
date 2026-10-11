@@ -50,11 +50,14 @@ describe("Account settings - identity", () => {
     return action({ request, context: { cloudflare: { env: null } }, params: {} } as any);
   }
 
-  async function saveUserInfo(fields: { email?: string; username: string }) {
+  // Sends the current password by default, as an email change needs it (a username-only save
+  // ignores it).
+  async function saveUserInfo(fields: { email?: string; username: string; currentPassword?: string }) {
     return (await postForm({
       intent: "updateUserInfo",
       email: fields.email ?? email,
       username: fields.username,
+      currentPassword: fields.currentPassword ?? PASSWORD,
     })) as AccountSettingsActionResult;
   }
 
