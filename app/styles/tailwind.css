@@ -141,6 +141,16 @@
   --radius: var(--sj-radius-control);
 }
 
+/* Ouro UI's dialogs and sheets render into <body> inside an isolated portal that has no position,
+   so their own z-1000 layers stack at level 0 against the page, and the phone tab bar (z-50) would
+   sit on top of a bottom sheet. Lifting the portals to Catalyst's dialog layer (z-60) puts them above
+   the tab bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. */
+[data-ouro="dialog-portal"],
+[data-ouro="sheet-portal"] {
+  position: relative;
+  z-index: 60;
+}
+
 /* Print: a recipe on paper is the title, the ingredients and the method in dark ink on white, whatever
  * theme the screen uses. Dark mode's tokens are put back to the light palette, on white paper, so a
  * phone in dark mode never prints pale text on a charcoal page (product audit 2026-10-09, finding 14). */
