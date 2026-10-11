@@ -19,11 +19,14 @@ import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 // sizes fractional. A page larger than any of those keeps the iframe at its true size. The touch
 // project already sets its own 390x844 page.
 // Vitest 4 also sizes the test iframe with a CSS transform, even at scale(1), and under it WebKit
-// measures 100dvh and 100lvh a fraction of a pixel short (843.999939px of 844). Two sheet tests
-// compare those exactly, so they run in Chromium and the touch project only, not in WebKit, until
-// Spoonjoy can move to Vitest 5.
+// measures 100dvh and 100lvh a fraction of a pixel short (811.999939px of 812). Two sheet tests
+// compare those exactly, so in WebKit sheet.test.tsx runs as its own project that skips exactly
+// those two; they still run in Chromium and the touch project. Every other file, including the
+// dialog's test of the same name, runs in WebKit in full. Undo this on Vitest 5.
+const WEBKIT_SHEET_TESTS = "app/components/ouro/sheet/sheet.test.tsx";
 const WEBKIT_SKIPPED_UNDER_VITEST_4 =
   /^(?!.*(?:sits at the bottom edge, fits its content and keeps clear of the top|covers the visible screen on a page scrolled 2000px))/;
+const largePage = playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } });
 
 const projects = ouroTestProjects({
   css: "./app/styles/tailwind.css",
@@ -33,21 +36,18 @@ const projects = ouroTestProjects({
     // Spoonjoy's own browser checks of how its stylesheet treats Ouro UI.
     "test/ouro/**/*.test.{ts,tsx}",
   ],
-}).map((project) =>
-  project.test?.name === "ouro-touch"
-    ? project
-    : {
-        ...project,
-        test: {
-          ...project.test,
-          ...(project.test?.name === "ouro-webkit" ? { testNamePattern: WEBKIT_SKIPPED_UNDER_VITEST_4 } : {}),
-          browser: {
-            ...project.test?.browser,
-            provider: playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } }),
-          },
-        },
-      },
-);
+}).flatMap((project) => {
+  if (project.test?.name === "ouro-touch") return [project];
+  const test = { ...project.test, browser: { ...project.test?.browser, provider: largePage } };
+  if (project.test?.name !== "ouro-webkit") return [{ ...project, test }];
+  return [
+    { ...project, test: { ...test, exclude: [...(test.exclude ?? []), WEBKIT_SHEET_TESTS] } },
+    {
+      ...project,
+      test: { ...test, name: "ouro-webkit-sheet", include: [WEBKIT_SHEET_TESTS], testNamePattern: WEBKIT_SKIPPED_UNDER_VITEST_4 },
+    },
+  ];
+});
 
 // Ouro UI marks its production-only branches with `/* istanbul ignore … */` hints. Ouro's own
 // toolchain keeps those comments; Spoonjoy's Vite 7 transpiles TypeScript with esbuild, which drops
