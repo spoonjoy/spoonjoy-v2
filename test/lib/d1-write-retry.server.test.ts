@@ -235,6 +235,7 @@ describe("d1UnavailableWebResponse", () => {
       errorCode: D1_WRITE_UNAVAILABLE_CODE,
       retryable: true,
     });
+    expect(d1UnavailableWebResponse(INTERNAL, null)!.data).toEqual(d1UnavailableWebResponse(INTERNAL, new File([], "x"))!.data);
     expect(d1UnavailableWebResponse(INTERNAL)!.data).toEqual({
       error: D1_WRITE_UNAVAILABLE_MESSAGE,
       errorCode: D1_WRITE_UNAVAILABLE_CODE,

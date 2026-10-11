@@ -194,10 +194,10 @@ export function d1UnavailableHeaders(): HeadersInit {
  * action data, so the page stays as it was, with the user's input, and shows the message. Null
  * for any other error.
  */
-export function d1UnavailableWebResponse(error: unknown, intent?: string) {
+export function d1UnavailableWebResponse(error: unknown, intent?: FormDataEntryValue | null) {
   if (!isD1Unavailable(error)) return null;
   const body: D1UnavailableWebBody = {
-    ...(intent === undefined ? {} : { intent }),
+    ...(typeof intent === "string" ? { intent } : {}),
     error: D1_WRITE_UNAVAILABLE_MESSAGE,
     errorCode: D1_WRITE_UNAVAILABLE_CODE,
     retryable: true,

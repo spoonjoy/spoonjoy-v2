@@ -1282,8 +1282,7 @@ export async function handleRecipeDetailAction({ request, params, context }: Rec
   } catch (error) {
     // The database was briefly unavailable: answer a retryable 503 the page shows where the user
     // acted, with their input still there, instead of replacing the page with a 500.
-    const intent = formData.get("intent");
-    const unavailable = d1UnavailableWebResponse(error, typeof intent === "string" ? intent : undefined);
+    const unavailable = d1UnavailableWebResponse(error, formData.get("intent"));
     if (unavailable) return unavailable;
     throw error;
   }
