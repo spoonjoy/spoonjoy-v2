@@ -38,6 +38,12 @@ export interface UseCookSessionSyncOptions {
   bounds: CookProgressBounds;
   progress: CookProgressValue;
   onRemoteProgress: (progress: CookProgressValue) => void;
+  /**
+   * The page is deleting this recipe. Sync stops at once and sends nothing more, not even what is
+   * still pending: the server answers 404 for a deleted recipe's session, and there is nothing left
+   * to save. Sync resumes if the delete fails and this turns false again.
+   */
+  deleting?: boolean;
 }
 
 /**
@@ -60,14 +66,15 @@ export function useCookSessionSync({
   bounds,
   progress,
   onRemoteProgress,
+  deleting = false,
 }: UseCookSessionSyncOptions): CookSyncStatus | null {
   const [status, setStatus] = useState<CookSyncStatus>("syncing");
   const engineRef = useRef<CookSessionSync | null>(null);
-  const latest = useRef({ recipeId, bounds, progress, onRemoteProgress });
-  latest.current = { recipeId, bounds, progress, onRemoteProgress };
+  const latest = useRef({ recipeId, bounds, progress, onRemoteProgress, deleting });
+  latest.current = { recipeId, bounds, progress, onRemoteProgress, deleting };
 
   useEffect(() => {
-    if (!userId || !ready) return;
+    if (!userId || !ready || deleting) return;
 
     // This engine belongs to this recipe for its whole life: it captures the recipe's ids now and
     // never reads the page's later data, because the same mounted route can move on to another
@@ -121,18 +128,25 @@ export function useCookSessionSync({
     pull();
 
     return () => {
-      // Leaving the recipe inside the app: the engine finishes a save in flight and sends what is
-      // still pending (at most 10 s, only while visible), then stops. pagehide covers tab close.
       engineRef.current = null;
       window.removeEventListener("focus", pull);
       window.removeEventListener("online", pull);
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      void engine.leave().then(() => {
+      const forget = () => {
         if (activeCookSessionEngines.get(key) === engine) activeCookSessionEngines.delete(key);
-      });
+      };
+      if (latest.current.deleting) {
+        // The recipe is being deleted: a save in flight may finish, but nothing more is sent.
+        engine.dispose();
+        forget();
+        return;
+      }
+      // Leaving the recipe inside the app: the engine finishes a save in flight and sends what is
+      // still pending (at most 10 s, only while visible), then stops. pagehide covers tab close.
+      void engine.leave().then(forget);
     };
-  }, [recipeId, userId, ready]);
+  }, [recipeId, userId, ready, deleting]);
 
   useEffect(() => {
     engineRef.current?.setProgress(progress);

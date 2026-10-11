@@ -7,6 +7,7 @@ import {
   useLoaderData,
   useLocation,
   useNavigate,
+  useNavigation,
   useRevalidator,
   useRouteError,
   useSubmit,
@@ -370,6 +371,9 @@ export default function RecipeDetail() {
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
   const coverPromptMode = loaderData.coverPromptMode ?? "none";
   const submit = useSubmit();
+  const navigation = useNavigation();
+  // From the delete's submit until the page leaves (or the delete fails and the page stays).
+  const isDeletingRecipe = navigation.state !== "idle" && navigation.formData?.get("intent") === "delete";
   const revalidator = useRevalidator();
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
@@ -439,6 +443,7 @@ export default function RecipeDetail() {
     bounds: cookProgressBounds,
     progress: cookProgress,
     onRemoteProgress: applyRemoteCookProgress,
+    deleting: isDeletingRecipe,
   });
 
   // PostHog: Track recipe view on mount
