@@ -11,6 +11,9 @@ import { describe, expect, it } from "vitest";
 const CSS = readFileSync(resolve(process.cwd(), "app/styles/tailwind.css"), "utf-8");
 const root = postcss.parse(CSS);
 
+// The global transition reset, minus Ouro UI subtrees (app/components/ouro).
+const OURO_EXCLUDING_RESET = ":where(html, html *):where(:not([data-ouro], [data-ouro] *))";
+
 const COLOUR_PROPERTIES = /\b(color|background-color|background|border-color|all)\b/;
 
 function enclosingAtRules(rule: Rule): AtRule[] {
@@ -79,7 +82,19 @@ describe("theme-switching colour transitions", () => {
       if (enclosingAtRules(rule).length > 0) return;
       if (transitionValue(rule) === "none") resets.push(...rule.selectors);
     });
-    expect(resets).toEqual(expect.arrayContaining([":where(html, html *)"]));
+    expect(resets).toEqual(expect.arrayContaining([OURO_EXCLUDING_RESET]));
+  });
+
+  it("leaves Ouro UI subtrees out of the reset, so its own layered transitions still run", () => {
+    // Ouro UI animates its dialogs, sheets and buttons with Tailwind's layered transitions, which
+    // this unlayered reset would beat; every Ouro UI root carries data-ouro. happy-dom cannot match
+    // this selector, so test/ouro/transition-reset.test.ts checks it in Chromium and WebKit.
+    expect(OURO_EXCLUDING_RESET).toContain(":not([data-ouro], [data-ouro] *)");
+  });
+
+  it("keeps the reset at zero specificity, so class rules such as .sj-instant-state still win", () => {
+    // Every argument sits inside :where(), which contributes no specificity.
+    expect(OURO_EXCLUDING_RESET.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, "")).toBe("");
   });
 
   it("keeps the switching rules unlayered and with zero specificity, so component rules still win", () => {

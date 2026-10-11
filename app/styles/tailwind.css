@@ -289,7 +289,10 @@ select {
  * did; they have zero specificity, so unlayered component rules with a class selector
  * (such as .sj-hover-lift) still set their own transitions.
  */
-:where(html, html *) {
+/* Ouro UI subtrees ([data-ouro], on each dialog, sheet and button root) are left out: they animate
+   their own opening, closing and gestures with Tailwind's layered transitions, which this unlayered
+   reset would otherwise switch off. The second :where() keeps the rule at zero specificity. */
+:where(html, html *):where(:not([data-ouro], [data-ouro] *)) {
   transition: none;
 }
 
