@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
 import { fileURLToPath } from "node:url";
+import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 
@@ -48,8 +49,22 @@ const projects = ouroTestProjects({
       },
 );
 
+// Ouro UI marks its production-only branches with `/* istanbul ignore … */` hints. Ouro's own
+// toolchain keeps those comments; Spoonjoy's Vite 7 transpiles TypeScript with esbuild, which drops
+// every comment that is not marked @preserve, so the hints never reach the coverage instrumenter.
+// This marks them @preserve, in the test build only, without editing the installed files.
+const preserveOuroCoverageHints: Plugin = {
+  name: "spoonjoy:preserve-ouro-coverage-hints",
+  enforce: "pre",
+  transform(code, id) {
+    if (!/\/app\/(components|lib)\/ouro\/.*\.tsx?$/.test(id)) return null;
+    const preserved = code.replace(/\/\* istanbul ignore (if|else|next)\b(?![^*]*@preserve)/g, "/* istanbul ignore $1 @preserve");
+    return preserved === code ? null : { code: preserved, map: null };
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [preserveOuroCoverageHints, react()],
   resolve: {
     alias: {
       "~": fileURLToPath(new URL("./app", import.meta.url)),
@@ -74,8 +89,10 @@ export default defineConfig({
         "**/*.d.ts",
         "app/lib/ouro/testing/**",
       ],
-      // Only files below 100% are listed, so a passing run prints no file table.
-      reporter: [["text", { skipFull: true }], "text-summary"],
+      // Totals only: the per-file table would print use-dev-warnings.ts, a name the warning policy
+      // rejects. Run `pnpm exec vitest run -c vitest.ouro.config.ts --coverage --coverage.reporter=text`
+      // for the table.
+      reporter: ["text-summary"],
       thresholds: { lines: 100, branches: 100, functions: 100, statements: 100 },
     },
   },
