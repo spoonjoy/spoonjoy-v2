@@ -573,6 +573,9 @@ export async function runCompatibleShoppingListBatch<T, Metadata>(
       if (!results[2]!.rows[0]!.claimed) return replay(JSON.parse(results.at(-1)!.rows[0]!.note as string) as string[]);
       items = native.items(results.slice(3, -1));
     } else if (batch.native) {
+      // Not retried: a transient failure here could add quantities twice. Every production caller
+      // on D1 passes `writeOnce` (both are set together from the binding), so only tests reach this;
+      // a new D1 caller must pass a write key too (docs/d1-write-retry.md).
       const results = batch.native.queries.length > 0
         ? await d1WriteBatch(batch.native.database, batch.native.queries)
         : [];

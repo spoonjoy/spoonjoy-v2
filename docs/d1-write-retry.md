@@ -73,7 +73,7 @@ The `scope` names below are the labels `retryD1Write` reports to the Worker tail
 
 ## Adding a new write
 
-1. Pick a shape from the table above. A create gets an id before the first try. A toggle sends the target state. Anything that adds up gets a write-once claim.
+1. Pick a shape from the table above. A create gets an id before the first try. A toggle sends the target state. Anything that adds up gets a write-once claim: a shopping-list batch built for D1 (`runCompatibleShoppingListBatch` with `native`) must also pass `writeOnce`, because the branch without it is not retried.
 2. Wrap it: `retryD1Write({ scope: "<area>.<action>", applied }, write)`. Give `applied` a read that is true only if this try committed.
 3. Let `D1WriteUnavailableError` reach the caller's 503 path. Never map it to a 400 or a 500.
 4. Test it under `lost`, `lost-answer` and `late`, plus the give-up. Each case should end with the rows of one clean run.
