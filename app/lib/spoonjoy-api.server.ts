@@ -791,7 +791,11 @@ async function runIdempotentMcpCoverMutation<T>(
   try {
     result = await input.write(publicIdempotencyKey);
   } catch (error) {
-    await context.db.apiIdempotencyKey.deleteMany({ where: { id: reservation.record.id } });
+    // Releasing the key is a delete by id, so it is safe to run again after a transient D1 error.
+    await retryD1Write(
+      { scope: "idempotency.release.mcp" },
+      () => context.db.apiIdempotencyKey.deleteMany({ where: { id: reservation.record.id } }),
+    );
     throw error;
   }
 
@@ -879,18 +883,35 @@ async function getOrCreateOwner(context: SpoonjoyApiContext, email: string) {
   });
 }
 
+/** An optional MCP `idempotencyKey`: null when absent, refused when malformed. */
+function optionalWriteKey(value: unknown): string | null {
+  const raw = optionalString(value);
+  if (raw === undefined) return null;
+  const key = formWriteToken(raw);
+  if (key === null) throw new Error("idempotencyKey must be 8-100 letters, digits, '_' or '-'");
+  return key;
+}
+
 async function getOrCreateUnit(db: Database, name: string) {
   const normalized = normalizeName(name);
   const existing = await db.unit.findUnique({ where: { name: normalized } });
   if (existing) return existing;
-  return db.unit.create({ data: { name: normalized } });
+  // Unique by name: after a transient D1 error, a try that committed is found by that name.
+  return retryD1Write(
+    { scope: "unit.create.mcp", applied: () => db.unit.findUnique({ where: { name: normalized } }) },
+    () => db.unit.create({ data: { name: normalized } }),
+  );
 }
 
 async function getOrCreateIngredientRef(db: Database, name: string) {
   const normalized = normalizeName(name);
   const existing = await db.ingredientRef.findUnique({ where: { name: normalized } });
   if (existing) return existing;
-  return db.ingredientRef.create({ data: { name: normalized } });
+  // Unique by name: after a transient D1 error, a try that committed is found by that name.
+  return retryD1Write(
+    { scope: "ingredient_ref.create.mcp", applied: () => db.ingredientRef.findUnique({ where: { name: normalized } }) },
+    () => db.ingredientRef.create({ data: { name: normalized } }),
+  );
 }
 
 function formatRecipe(recipe: RecipeWithDetails) {
@@ -1140,7 +1161,11 @@ async function nextSortIndex(db: Database, shoppingListId: string): Promise<numb
 async function getOrCreateShoppingList(db: Database, ownerId: string) {
   const existing = await db.shoppingList.findUnique({ where: { authorId: ownerId } });
   if (existing) return existing;
-  return db.shoppingList.create({ data: { authorId: ownerId } });
+  // One list per chef: after a transient D1 error, a try that committed is found by its chef.
+  return retryD1Write(
+    { scope: "shopping_list.create.mcp", applied: () => db.shoppingList.findUnique({ where: { authorId: ownerId } }) },
+    () => db.shoppingList.create({ data: { authorId: ownerId } }),
+  );
 }
 
 async function reloadShoppingList(db: Database, shoppingListId: string): Promise<ShoppingListWithItems> {
@@ -2525,28 +2550,42 @@ const createRecipeTool: SpoonjoyApiOperation = {
         // One atomic batch: the recipe, its steps and its cover (created and made active) apply
         // together, and the title is re-checked as they are written.
         const now = new Date();
-        created = { id: crypto.randomUUID() };
-        coverId = crypto.randomUUID();
-        await d1WriteBatch(d1, [
-          activeRecipeTitleFreeGuard(owner.id, title),
-          recipeInsertStatement({
-            id: created.id,
-            title,
-            description: optionalString(args.description) ?? null,
-            servings: optionalString(args.servings) ?? null,
-            sourceUrl: optionalString(args.sourceUrl) ?? null,
-            chefId: owner.id,
-            now,
-          }),
-          ...recipeStepsReplaceStatements(created.id, normalizedReplacementSteps(steps), now),
-          ...(imageUrl
-            ? [
-              coverInsertStatement({ id: coverId, recipeId: created.id, imageUrl, sourceType: "chef-upload" }, now),
-              recipeUpdateStatement(created.id, activeImageCover(coverId), now),
-            ]
-            // No image: the processing placeholder the website writes; generation fills it in.
-            : [coverInsertStatement({ id: coverId, recipeId: created.id, ...placeholderCoverFields(owner.id) }, now)]),
-        ]);
+        const recipeId = crypto.randomUUID();
+        created = { id: recipeId };
+        const newCoverId = crypto.randomUUID();
+        coverId = newCoverId;
+        // The ids are chosen before the first try, so after a transient D1 error the batch either
+        // finds the recipe its earlier try wrote or writes once. A late earlier try makes a retry
+        // fail its own title guard; the check finds that recipe and takes it as the answer.
+        await retryD1Write({
+          scope: "recipe.create.mcp",
+          applied: async () =>
+            (await d1ReadBatch(d1, [[`SELECT 1 FROM "Recipe" WHERE "id" = ? AND "chefId" = ?`, recipeId, owner.id]]))[0]!.length > 0
+              ? true
+              : null,
+        }, async () => {
+          await d1WriteBatch(d1, [
+            activeRecipeTitleFreeGuard(owner.id, title),
+            recipeInsertStatement({
+              id: recipeId,
+              title,
+              description: optionalString(args.description) ?? null,
+              servings: optionalString(args.servings) ?? null,
+              sourceUrl: optionalString(args.sourceUrl) ?? null,
+              chefId: owner.id,
+              now,
+            }),
+            ...recipeStepsReplaceStatements(recipeId, normalizedReplacementSteps(steps), now),
+            ...(imageUrl
+              ? [
+                coverInsertStatement({ id: newCoverId, recipeId: recipeId, imageUrl, sourceType: "chef-upload" }, now),
+                recipeUpdateStatement(recipeId, activeImageCover(newCoverId), now),
+              ]
+              // No image: the processing placeholder the website writes; generation fills it in.
+              : [coverInsertStatement({ id: newCoverId, recipeId: recipeId, ...placeholderCoverFields(owner.id) }, now)]),
+          ]);
+          return true;
+        });
       } else {
         created = await context.db.recipe.create({
           data: {
@@ -3153,6 +3192,10 @@ const createCookbookTool: SpoonjoyApiOperation = {
     properties: {
       ownerEmail: { type: "string" },
       title: { type: "string" },
+      idempotencyKey: {
+        type: "string",
+        description: "Stable key (8-100 letters, digits, '_' or '-') for replay-safe creation: a repeat with the same key returns the cookbook the first call made, with created: true and mutation.replayed: true.",
+      },
     },
     required: ["title"],
     additionalProperties: false,
@@ -3160,24 +3203,48 @@ const createCookbookTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
+    const idempotencyKey = optionalWriteKey(args.idempotencyKey);
 
     const owner = await getOrCreateOwner(context, email);
-    const existing = await context.db.cookbook.findFirst({
+    // A key derives the cookbook's id, so a repeat after a lost answer finds the cookbook the
+    // first call made and answers it as created, as the first call would have.
+    const cookbookId = idempotencyKey
+      ? await idForWriteToken("mcp.create_cookbook", owner.id, idempotencyKey)
+      : crypto.randomUUID();
+    const replayed = idempotencyKey
+      ? await context.db.cookbook.findFirst({ where: { id: cookbookId, authorId: owner.id }, include: cookbookRecipeInclude })
+      : null;
+    if (replayed && replayed.title !== title) {
+      throw new ApiAuthError("idempotencyKey was already used for a different request", 409);
+    }
+    const existing = replayed ?? await context.db.cookbook.findFirst({
       where: { authorId: owner.id, title },
       include: cookbookRecipeInclude,
     });
     const result = existing
-      ? { created: false, cookbook: existing }
+      ? { created: replayed !== null, cookbook: existing }
       : {
           created: true,
           cookbook: await reloadOwnerCookbook(
             context.db,
             owner.id,
-            (await context.db.cookbook.create({ data: { authorId: owner.id, title } })).id,
+            // The id is chosen before the first try, so after a transient D1 error the create
+            // either finds the cookbook its earlier try wrote or writes it once.
+            (await retryD1Write(
+              {
+                scope: "cookbook.create.mcp",
+                applied: () => context.db.cookbook.findFirst({ where: { id: cookbookId, authorId: owner.id } }),
+              },
+              () => context.db.cookbook.create({ data: { id: cookbookId, authorId: owner.id, title } }),
+            )).id,
           ),
         };
 
-    return json({ created: result.created, cookbook: formatCookbook(result.cookbook) });
+    return json({
+      created: result.created,
+      cookbook: formatCookbook(result.cookbook),
+      ...(idempotencyKey ? { mutation: { idempotencyKey, replayed: replayed !== null } } : {}),
+    });
   },
 };
 
@@ -3401,16 +3468,18 @@ const setShoppingListItemCheckedTool: SpoonjoyApiOperation = {
     });
     if (!item) throw new Error("Shopping list item not found");
 
-    await context.db.shoppingListItem.update({
-      where: { id: item.id },
-      // Unchecking leaves the position alone rather than writing back the one read above, which a
-      // concurrent renumbering may already have changed.
-      data: {
-        checked,
-        checkedAt: checked ? new Date() : null,
-        ...(checked ? { sortIndex: await nextSortIndex(context.db, shoppingList.id) } : {}),
-      },
-    });
+    // Unchecking leaves the position alone rather than writing back the one read above, which a
+    // concurrent renumbering may already have changed. The values are fixed before the first try,
+    // so after a transient D1 error running the update again sets the same state.
+    const data = {
+      checked,
+      checkedAt: checked ? new Date() : null,
+      ...(checked ? { sortIndex: await nextSortIndex(context.db, shoppingList.id) } : {}),
+    };
+    await retryD1Write(
+      { scope: "shopping_list.set_checked.mcp" },
+      () => context.db.shoppingListItem.update({ where: { id: item.id }, data }),
+    );
 
     const result = await reloadShoppingList(context.db, shoppingList.id);
 
@@ -3443,10 +3512,12 @@ const removeShoppingListItemTool: SpoonjoyApiOperation = {
     if (!item) throw new Error("Shopping list item not found");
 
     if (!item.deletedAt) {
-      await context.db.shoppingListItem.update({
-        where: { id: item.id },
-        data: { deletedAt: new Date() },
-      });
+      // One removal time for every try, so running it again after a transient D1 error sets the same value.
+      const deletedAt = new Date();
+      await retryD1Write(
+        { scope: "shopping_list.remove_item.mcp" },
+        () => context.db.shoppingListItem.update({ where: { id: item.id }, data: { deletedAt } }),
+      );
     }
 
     const result = await reloadShoppingList(context.db, shoppingList.id);

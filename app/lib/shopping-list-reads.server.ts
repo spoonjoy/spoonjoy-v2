@@ -8,6 +8,7 @@ import {
   type ColumnSpec,
 } from "~/lib/d1-models.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 
 // Reads behind the shopping list page (`/shopping-list`). The Prisma reader is the original
 // sequence of queries; the D1 reader returns the same data in one batch, plus one write the
@@ -116,14 +117,16 @@ export async function readShoppingListFromD1(
 
   if (lists.length === 0) {
     const at = d1Timestamp(now());
-    await d1WriteBatch(db, [[
+    const id = crypto.randomUUID();
+    // The insert ignores an existing list, so it is safe to run again after a transient D1 error.
+    await retryD1Write({ scope: "shopping_list.create_on_read" }, () => d1WriteBatch(db, [[
       `INSERT INTO "ShoppingList" ("id", "authorId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?)
        ON CONFLICT ("authorId") DO NOTHING`,
-      crypto.randomUUID(),
+      id,
       userId,
       at,
       at,
-    ]]);
+    ]]));
     [lists, items] = await d1ReadBatch(db, [
       [LIST_SQL, userId],
       [ITEMS_SQL, userId],

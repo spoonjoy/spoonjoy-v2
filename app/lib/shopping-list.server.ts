@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient, ShoppingListItem } from "@prisma/client";
-import { d1UnavailableWebResponse, formWriteToken } from "~/lib/d1-write-retry.server";
+import { d1UnavailablePageError, d1UnavailableWebResponse, formWriteToken } from "~/lib/d1-write-retry.server";
 import { d1WriteOnceKey } from "~/lib/d1-write-once.server";
 import type { AppLoadContext } from "react-router";
 import { data } from "react-router";
@@ -85,8 +85,11 @@ export async function loadShoppingList({ request, context }: ShoppingListRouteAr
 
   // With a D1 binding the page reads in one batch and never builds a Prisma client.
   const d1 = requestD1(context);
+  // The database briefly unavailable answers a retryable 503, not a 500.
   return d1
-    ? readShoppingListFromD1(d1, userId)
+    ? readShoppingListFromD1(d1, userId).catch((error: unknown) => {
+      throw d1UnavailablePageError(error) ?? error;
+    })
     : readShoppingListWithPrisma(await getRequestDb(context), userId);
 }
 

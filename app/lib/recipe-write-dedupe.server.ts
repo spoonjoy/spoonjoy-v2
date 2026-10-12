@@ -137,7 +137,8 @@ function prismaKeyStore(db: PrismaClient): RecipeWriteKeyStore {
       return recipe !== null;
     },
     async forget(id) {
-      await db.apiIdempotencyKey.deleteMany({ where: { id } });
+      // A delete by id, so it is safe to run again after a transient D1 error.
+      await retryD1Write({ scope: "recipe_write_key.forget" }, () => db.apiIdempotencyKey.deleteMany({ where: { id } }));
     },
     async complete(id, body) {
       await completeIdempotencyKey(db, id, { status: 200, body });

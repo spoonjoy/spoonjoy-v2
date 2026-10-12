@@ -12,6 +12,10 @@ export function routeErrorCopy(error: unknown): { status: number; title: string;
   }
   if (status === 403) return { status, title: "Not allowed.", message: "You don't have access to this page." };
   if (status === 401) return { status, title: "Please sign in.", message: "You need to be signed in to view this page." };
+  if (isResponse && status === 503 && typeof error.data === "string" && error.data.trim()) {
+    // The database was briefly unavailable: the page says so and that trying again will work.
+    return { status, title: "Not just now.", message: error.data };
+  }
   if (isResponse && status >= 400 && status < 500) {
     const message = typeof error.data === "string" && error.data.trim() ? error.data : "Try again, or head back home.";
     return { status, title: "We can't open that.", message };
