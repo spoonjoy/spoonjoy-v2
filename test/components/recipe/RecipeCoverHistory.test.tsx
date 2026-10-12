@@ -36,6 +36,51 @@ function renderHistory(
 }
 
 describe("RecipeCoverHistory", () => {
+  it("sends one cover token with each cover job, keeping it after a failed job and renewing it after a started one", async () => {
+    const user = userEvent.setup();
+    const sent: Array<{ intent: FormDataEntryValue | null; token: FormDataEntryValue | null }> = [];
+    const answers = [
+      { intent: "generateRecipeCoverPlaceholder", error: "We could not save that just now.", retryable: true },
+      { success: true, intent: "generateRecipeCoverPlaceholder", coverId: "p1" },
+      { success: true, intent: "setRecipeNoCover" },
+      { success: true, intent: "createCoverFromSpoon", coverId: "s1" },
+    ];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/",
+        Component: () => (
+          <RecipeCoverHistory
+            covers={[]}
+            spoonImages={[{ id: "spoon-1", photoUrl: "/photos/spoons/1.jpg", cookedAt: "2026-01-02T00:00:00.000Z", chef: { username: "cook" } }]}
+          />
+        ),
+        action: async ({ request }) => {
+          const formData = await request.formData();
+          sent.push({ intent: formData.get("intent"), token: formData.get("coverToken") });
+          return answers[sent.length - 1];
+        },
+      },
+    ]);
+    render(<Stub />);
+
+    const placeholder = async () => user.click(await screen.findByRole("button", { name: /placeholder/i }));
+    await placeholder();
+    await waitFor(() => expect(sent).toHaveLength(1));
+    await placeholder();
+    await waitFor(() => expect(sent).toHaveLength(2));
+    await user.click(screen.getByRole("button", { name: "Set no cover" }));
+    await waitFor(() => expect(sent).toHaveLength(3));
+    await user.click(screen.getByRole("button", { name: "Make a styled cover from the cook photo by cook" }));
+    await waitFor(() => expect(sent).toHaveLength(4));
+
+    expect(sent[0].token).toEqual(expect.stringMatching(/^[\w-]{8,}$/));
+    expect(sent[1].token).toBe(sent[0].token);
+    // Choosing no cover sends no token and leaves it as it is; the started placeholder renewed it.
+    expect(sent[2].token).toBeNull();
+    expect(sent[3].token).not.toBe(sent[1].token);
+    expect(sent[3].token).toEqual(expect.stringMatching(/^[\w-]{8,}$/));
+  });
+
   it("renders an explicit empty history state", async () => {
     renderHistory([]);
 

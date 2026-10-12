@@ -112,6 +112,40 @@ describe("RecipePhotoStudio", () => {
     expect((captured!.get("photo") as File).name).toBe("finished-pasta.png");
   }
 
+  it("sends the same cover token again after a failed save, and a new one after a saved photo", async () => {
+    const user = userEvent.setup();
+    const tokens: Array<FormDataEntryValue | null> = [];
+    const answers = [
+      { intent: "createFirstPhotoCover", error: "We could not save that just now.", retryable: true },
+      { success: true, intent: "createFirstPhotoCover", spoon: null, coverId: "c1" },
+      { success: true, intent: "createFirstPhotoCover", spoon: null, coverId: "c2" },
+    ];
+    const Stub = createTestRoutesStub([
+      {
+        path: "/recipes/r1",
+        Component: () => <RecipePhotoStudio recipeTitle="Weeknight pasta" hasActiveCover={false} />,
+        action: async ({ request }) => {
+          tokens.push((await request.formData()).get("coverToken"));
+          // Answer after the form shows its posting state, as a real save does.
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return answers[tokens.length - 1];
+        },
+      },
+    ]);
+    render(<Stub initialEntries={["/recipes/r1"]} />);
+
+    await user.upload(await screen.findByLabelText("Recipe photo"), makeFile("pasta.png", "image/png"));
+    for (let submitted = 1; submitted <= 3; submitted += 1) {
+      await user.click(await screen.findByRole("button", { name: "Save Spoon + cover" }));
+      await waitFor(() => expect(tokens).toHaveLength(submitted));
+    }
+
+    expect(tokens[0]).toEqual(expect.stringMatching(/^[\w-]{8,}$/));
+    // The failed save keeps its token, so the resubmit is the same write; the saved one renews it.
+    expect(tokens[1]).toBe(tokens[0]);
+    expect(tokens[2]).not.toBe(tokens[1]);
+  });
+
   it("hides Spoon fields when the photo should only become a cover", async () => {
     const user = userEvent.setup();
     let captured: FormData | null = null;

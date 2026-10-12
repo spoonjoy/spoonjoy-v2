@@ -13,6 +13,7 @@ import { coverRegenerationStatement, readOwnedRecipeForCoverJobOnD1 } from "~/li
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
+import { idForWriteToken } from "~/lib/d1-write-retry.server";
 
 const platform = vi.hoisted(() => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
@@ -238,6 +239,181 @@ describe("the recipe owner's cover jobs on a D1 binding", () => {
     expect(platform.getRequestDb).toHaveBeenCalledTimes(4);
   });
 
+  describe("with the form's cover token", () => {
+    type Unavailable = { data: Record<string, unknown>; init: { status: number } };
+    const TOKEN = "cover-token-0001";
+
+    /** Each job's form, and the target its token's cover id is derived with. */
+    const tokenJobs: Array<[string, () => Promise<{ form: Record<string, string>; target: string }>]> = [
+      ["a cover from a cook's photo", async () => {
+        const spoon = await spoonWithPhoto();
+        return { form: { intent: "createCoverFromSpoon", spoonId: spoon.id }, target: spoon.id };
+      }],
+      ["an AI placeholder cover", async () => ({ form: { intent: "generateRecipeCoverPlaceholder" }, target: "" })],
+      ["a child of a stylized cover", async () => {
+        const parent = await db.recipeCover.create({
+          data: { recipeId, imageUrl: "/s.jpg", stylizedImageUrl: "/st.jpg", sourceType: "spoon", status: "ready" },
+        });
+        return { form: { intent: "regenerateRecipeCover", coverId: parent.id }, target: parent.id };
+      }],
+    ];
+
+    async function tokenCoverId(intent: string, target: string, token = TOKEN) {
+      return idForWriteToken(`cover:${recipeId}:${intent}:${target}`, ownerId, token);
+    }
+
+    async function newCovers(before: Array<{ id: string }>) {
+      return (await db.recipeCover.findMany({ where: { recipeId }, select: { id: true } }))
+        .filter((cover) => !before.some((old) => old.id === cover.id));
+    }
+
+    it.each(tokenJobs)("makes %s once when a resubmit follows a 503 whose last try committed late", async (_label, job) => {
+      const { form, target } = await job();
+      const before = await db.recipeCover.findMany({ where: { recipeId }, select: { id: true } });
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, "lost", "lost", "lost", "late");
+
+      const unavailable = await post({ ...form, coverToken: TOKEN }, { binding: flaky.binding }) as unknown as Unavailable;
+      expect(unavailable.init.status).toBe(503);
+      expect(background).toHaveLength(0);
+
+      // The late try lands just before the resubmit's write, so the resubmit finds the cover taken.
+      const answer = await post({ ...form, coverToken: TOKEN }, { binding: flaky.binding });
+
+      const coverId = await tokenCoverId(form.intent, target);
+      expect(answer).toEqual({ success: true, intent: form.intent, coverId });
+      await expect(newCovers(before)).resolves.toEqual([{ id: coverId }]);
+      // The first request answered a 503 before starting its job, so the resubmit starts it.
+      expect(background).toHaveLength(1);
+    });
+
+    it.each(tokenJobs)("answers a double submit of %s with the first cover and starts one job", async (_label, job) => {
+      const { form, target } = await job();
+      const before = await db.recipeCover.findMany({ where: { recipeId }, select: { id: true } });
+
+      const first = await post({ ...form, coverToken: TOKEN });
+      // The first job marks its start before the resubmit arrives.
+      await db.recipeCover.update({ where: { id: first.coverId as string }, data: { generationStartedAt: new Date() } });
+      const second = await post({ ...form, coverToken: TOKEN });
+
+      const coverId = await tokenCoverId(form.intent, target);
+      expect(first).toEqual({ success: true, intent: form.intent, coverId });
+      expect(second).toEqual(first);
+      await expect(newCovers(before)).resolves.toEqual([{ id: coverId }]);
+      expect(background).toHaveLength(1);
+    });
+
+    it("starts a job on a resubmit only for a cover whose job never started", async () => {
+      const states = [
+        { label: "succeeded", data: { status: "ready", generationStatus: "succeeded" }, starts: false },
+        { label: "started", data: { status: "processing", generationStatus: "processing", generationStartedAt: new Date() }, starts: false },
+        { label: "archived", data: { status: "archived", generationStatus: "processing", archivedAt: new Date() }, starts: false },
+        { label: "waiting", data: { status: "processing", generationStatus: "processing" }, starts: true },
+      ];
+      for (const state of states) {
+        const token = `cover-token-${state.label}`;
+        const id = await tokenCoverId("generateRecipeCoverPlaceholder", "", token);
+        await db.recipeCover.create({ data: { id, recipeId, imageUrl: "", sourceType: "ai-placeholder", ...state.data } });
+        const jobsBefore = background.length;
+
+        const answer = await post({ intent: "generateRecipeCoverPlaceholder", coverToken: token });
+
+        expect(answer).toEqual({ success: true, intent: "generateRecipeCoverPlaceholder", coverId: id });
+        expect(background.length - jobsBefore).toBe(state.starts ? 1 : 0);
+      }
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(states.length);
+    });
+
+    it.each(tokenJobs)("answers %s that an earlier submission's late write made between this request's check and its write", async (_label, job) => {
+      const { form, target } = await job();
+      const coverId = await tokenCoverId(form.intent, target);
+      const landing = {
+        ...d1.binding,
+        prepare: (sql: string) => d1.binding.prepare(sql),
+        batch: async (statements: never[]) => {
+          const sql = statements.map((statement) => String((statement as { sql?: unknown }).sql)).join("\n");
+          if (/INSERT INTO "RecipeCover"/.test(sql) && !(await db.recipeCover.findUnique({ where: { id: coverId } }))) {
+            // Its job has already finished the cover.
+            await db.recipeCover.create({
+              data: { id: coverId, recipeId, imageUrl: "/landed.jpg", sourceType: "spoon", status: "ready", generationStatus: "succeeded" },
+            });
+          }
+          return d1.binding.batch(statements);
+        },
+      };
+
+      const answer = await post({ ...form, coverToken: TOKEN }, { binding: landing });
+
+      expect(answer).toEqual({ success: true, intent: form.intent, coverId });
+      await expect(db.recipeCover.findUniqueOrThrow({ where: { id: coverId } })).resolves.toMatchObject({ imageUrl: "/landed.jpg" });
+      // Its job already finished the cover, so no second job starts.
+      expect(background).toHaveLength(0);
+    });
+
+    it.each(tokenJobs)("starts the job on a resubmit of %s whose first request never started it", async (_label, job) => {
+      const { form, target } = await job();
+      const coverId = await tokenCoverId(form.intent, target);
+      await db.recipeCover.create({
+        data: { id: coverId, recipeId, imageUrl: "/waiting.jpg", sourceType: "spoon", status: "processing", generationStatus: "processing" },
+      });
+      const count = await db.recipeCover.count({ where: { recipeId } });
+
+      await expect(post({ ...form, coverToken: TOKEN })).resolves.toEqual({ success: true, intent: form.intent, coverId });
+
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(count);
+      expect(background).toHaveLength(1);
+    });
+
+    it("still fails a write that breaks for another reason, with or without a token", async () => {
+      const failing = {
+        ...d1.binding,
+        prepare: (sql: string) => d1.binding.prepare(sql),
+        batch: async (statements: never[]) => {
+          const sql = statements.map((statement) => String((statement as { sql?: unknown }).sql)).join("\n");
+          if (/INSERT INTO "RecipeCover"|UPDATE "RecipeCover"/.test(sql)) throw new Error("D1_ERROR: CHECK constraint failed");
+          return d1.binding.batch(statements);
+        },
+      };
+      const plain = await db.recipeCover.create({ data: { recipeId, imageUrl: "/plain.jpg", sourceType: "chef-upload", status: "failed" } });
+
+      await expect(post({ intent: "generateRecipeCoverPlaceholder", coverToken: TOKEN }, { binding: failing })).rejects.toThrow("CHECK constraint failed");
+      await expect(post({ intent: "generateRecipeCoverPlaceholder" }, { binding: failing })).rejects.toThrow("CHECK constraint failed");
+      await expect(post({ intent: "regenerateRecipeCover", coverId: plain.id, coverToken: TOKEN }, { binding: failing }))
+        .rejects.toThrow("CHECK constraint failed");
+      expect(background).toHaveLength(0);
+    });
+
+    it("answers a retryable 503 with a token when every try fails, and writes no cover", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, "lost", "lost", "lost", "lost");
+
+      const answer = await post({ intent: "generateRecipeCoverPlaceholder", coverToken: TOKEN }, { binding: flaky.binding }) as unknown as Unavailable;
+
+      expect(answer.init.status).toBe(503);
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(0);
+    });
+
+    it("regenerates a plain cover in place with a token, as without one", async () => {
+      const plain = await db.recipeCover.create({ data: { recipeId, imageUrl: "/plain.jpg", sourceType: "chef-upload", status: "failed" } });
+
+      await expect(post({ intent: "regenerateRecipeCover", coverId: plain.id, coverToken: TOKEN }))
+        .resolves.toEqual({ success: true, intent: "regenerateRecipeCover", coverId: plain.id });
+      await expect(post({ intent: "regenerateRecipeCover", coverId: plain.id, coverToken: TOKEN }))
+        .resolves.toEqual({ success: true, intent: "regenerateRecipeCover", coverId: plain.id });
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
+      expect(background).toHaveLength(2);
+    });
+
+    it("makes a new cover for each submission without a token, as before", async () => {
+      const first = await post({ intent: "generateRecipeCoverPlaceholder" });
+      const second = await post({ intent: "generateRecipeCoverPlaceholder" });
+
+      expect(first.coverId).not.toBe(second.coverId);
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(2);
+      expect(background).toHaveLength(2);
+    });
+  });
+
   describe("when D1's connection drops", () => {
     type Unavailable = { data: Record<string, unknown>; init: { status: number } };
 
@@ -370,7 +546,7 @@ describe("cover job D1 helpers", () => {
     };
     const { coverId, parentCoverId, statement } = coverRegenerationStatement(
       cover,
-      { createdById: "chef", rawPhotoUrl: "/display.jpg", promptAddition: null },
+      { createdById: "chef", rawPhotoUrl: "/display.jpg", promptAddition: null, childCoverId: "unused" },
       now,
     );
     expect({ coverId, parentCoverId }).toEqual({ coverId: "c", parentCoverId: undefined });

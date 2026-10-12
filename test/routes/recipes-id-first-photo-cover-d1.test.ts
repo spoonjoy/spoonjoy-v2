@@ -11,6 +11,7 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
+import { idForWriteToken } from "~/lib/d1-write-retry.server";
 
 const platform = vi.hoisted(() => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
@@ -233,6 +234,90 @@ describe("the first photo as the recipe's cover on a D1 binding", () => {
     await expect(recipeCover()).resolves.toEqual({ activeCoverId: null, activeCoverVariant: null, coverMode: "auto" });
     expect(background).toHaveLength(0);
     expect(platform.getRequestDb).not.toHaveBeenCalled();
+  });
+
+  describe("with the form's cover token", () => {
+    const TOKEN = "first-photo-token-1";
+    type Unavailable = { data: Record<string, unknown>; init: { status: number } };
+
+    async function tokenIds(token = TOKEN) {
+      const kind = `cover:${recipeId}:createFirstPhotoCover:`;
+      return { coverId: await idForWriteToken(kind, ownerId, token), spoonId: await idForWriteToken(`${kind}:spoon`, ownerId, token) };
+    }
+
+    it("posts one cook and one cover when a resubmit follows a 503 whose last try committed late, and drops the resubmit's photo", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, "lost", "lost", "lost", "late");
+      const fields = () => ({ photo: photo(), postAsSpoon: "true", activateWhenReady: "true", coverToken: TOKEN });
+      // Removing the unused copy is best effort: its own failure does not replace the answer.
+      bucket.delete.mockRejectedValue(new Error("delete failed"));
+
+      const unavailable = await post(fields(), { binding: flaky.binding }) as unknown as Unavailable;
+      expect(unavailable.init.status).toBe(503);
+      expect(background).toHaveLength(0);
+
+      const answer = await post(fields(), { binding: flaky.binding });
+
+      const { coverId, spoonId } = await tokenIds();
+      expect(answer).toEqual({ success: true, intent: "createFirstPhotoCover", spoon: { id: spoonId }, coverId });
+      await expect(db.recipeCover.findMany({ where: { recipeId }, select: { id: true } })).resolves.toEqual([{ id: coverId }]);
+      const spoons = await db.recipeSpoon.findMany({ where: { recipeId }, select: { id: true, photoUrl: true } });
+      expect(spoons.map((spoon) => spoon.id)).toEqual([spoonId]);
+      await expect(recipeCover()).resolves.toMatchObject({ activeCoverId: coverId, coverMode: "manual" });
+      // Two copies were stored; the resubmit's, which no row uses, is removed.
+      expect(bucket.put).toHaveBeenCalledTimes(2);
+      const [[storedFirst], [storedSecond]] = bucket.put.mock.calls as unknown as Array<[string]>;
+      expect(spoons[0].photoUrl).toContain(storedFirst);
+      // The photo's key, then its size variants.
+      expect(bucket.delete.mock.calls[0]).toEqual([storedSecond]);
+      expect(bucket.delete).not.toHaveBeenCalledWith(storedFirst);
+      // The first request answered a 503 before starting the editorial job, so the resubmit starts it.
+      expect(background).toHaveLength(1);
+    });
+
+    it("answers a resubmit of a saved first photo without storing it again or starting a second job", async () => {
+      const fields = () => ({ photo: photo(), postAsSpoon: "false", generateEditorial: "true", coverToken: TOKEN });
+
+      const first = await post(fields());
+      const { coverId } = await tokenIds();
+      // The first job marks its start before the resubmit arrives.
+      await db.recipeCover.update({ where: { id: coverId }, data: { generationStartedAt: new Date() } });
+      const second = await post(fields());
+
+      expect(first).toEqual({ success: true, intent: "createFirstPhotoCover", spoon: null, coverId });
+      expect(second).toEqual(first);
+      expect(bucket.put).toHaveBeenCalledTimes(1);
+      expect(bucket.delete).not.toHaveBeenCalled();
+      await expect(db.recipeCover.count({ where: { recipeId } })).resolves.toBe(1);
+      expect(background).toHaveLength(1);
+    });
+
+    it("starts the editorial job on a resubmit whose first request never started it", async () => {
+      const { coverId, spoonId } = await tokenIds();
+      await db.recipeSpoon.create({ data: { id: spoonId, chefId: ownerId, recipeId, photoUrl: "/photos/spoons/first.png" } });
+      await db.recipeCover.create({
+        data: { id: coverId, recipeId, imageUrl: "/photos/spoons/first.png", sourceType: "spoon", sourceSpoonId: spoonId, status: "processing", generationStatus: "processing" },
+      });
+
+      const answer = await post({ photo: photo(), postAsSpoon: "true", coverToken: TOKEN });
+
+      expect(answer).toEqual({ success: true, intent: "createFirstPhotoCover", spoon: { id: spoonId }, coverId });
+      expect(bucket.put).not.toHaveBeenCalled();
+      expect(background).toHaveLength(1);
+      // A resubmit that turns editorial art off starts no job.
+      await post({ photo: photo(), postAsSpoon: "true", generateEditorial: "false", coverToken: TOKEN });
+      expect(background).toHaveLength(1);
+    });
+
+    it("keeps the photo and answers a 503 when every try fails with a token", async () => {
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/INSERT INTO "RecipeCover"/, "lost", "lost", "lost", "lost");
+
+      const answer = await post({ photo: photo(), postAsSpoon: "false", coverToken: TOKEN }, { binding: flaky.binding }) as unknown as Unavailable;
+
+      expect(answer.init.status).toBe(503);
+      expect(bucket.delete).not.toHaveBeenCalled();
+    });
   });
 
   describe("when D1's connection drops", () => {
