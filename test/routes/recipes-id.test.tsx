@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { data as routerData, Outlet, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
+import { data as routerData, Outlet, redirect, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
@@ -3350,6 +3350,71 @@ describe("Recipes $id Route", () => {
         expect(fetchMock).toHaveBeenCalledWith("/api/cook-sessions/recipe-1", expect.objectContaining({ method: "GET" }));
         expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").server.revision).toBe(2);
         expect(window.localStorage.getItem(getCookProgressStorageKey("recipe-1"))).toBeNull();
+      } finally {
+        fetchMock.mockRestore();
+        window.localStorage.clear();
+      }
+    });
+
+    it("sends no cook-session request once the cook confirms deleting the recipe, even with a change still unsent", async () => {
+      window.localStorage.clear();
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ state: null })));
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Deleted While Cooking",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [
+            {
+              id: "step-1",
+              stepNum: 1,
+              stepTitle: "Prep",
+              description: "Chop.",
+              ingredients: [{ id: "ing-1", quantity: 1, unit: { name: "cup" }, ingredientRef: { name: "tomatoes" } }],
+              usingSteps: [],
+            },
+          ],
+        },
+        isOwner: true,
+        cookbooks: [],
+        savedInCookbookIds: [],
+        cookSessionUserId: "user-1",
+      };
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader: () => mockData,
+          action: () => redirect("/recipes"),
+        },
+        { path: "/recipes", Component: () => <h1>My recipes</h1> },
+      ]);
+
+      try {
+        const user = userEvent.setup();
+        render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+        await screen.findByRole("heading", { name: "Deleted While Cooking" });
+        await waitFor(() => expect(screen.getByTestId("cook-sync-status")).toHaveTextContent("Progress synced"));
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        // The delete dialog is open; then the page gets a change it has not sent yet (its save waits
+        // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
+        // session, so nothing may be sent from the confirm on: no save, no session start.
+        await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+        await user.click(screen.getByRole("button", { name: "Delete" }));
+        const confirm = await screen.findByRole("button", { name: "Delete" });
+        fireEvent.click(screen.getByRole("button", { name: "Increase scale", hidden: true }));
+        const requestsBeforeConfirm = fetchMock.mock.calls.length;
+        fireEvent.click(confirm);
+        await screen.findByRole("heading", { name: "My recipes" });
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await settleBrowserTasks();
+
+        expect(requestsBeforeConfirm).toBe(1);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
       } finally {
         fetchMock.mockRestore();
         window.localStorage.clear();

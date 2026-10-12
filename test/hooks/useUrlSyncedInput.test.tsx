@@ -88,6 +88,13 @@ describe("useUrlSyncedInput", () => {
   it("leaves typed text alone on an ordinary (not cached) page show", async () => {
     renderSearchBox("/search?q=lemon");
     const box = (await screen.findByLabelText("Search box")) as HTMLInputElement;
+    // The box can be on the page before its pageshow listener is; an event fired before then
+    // proves nothing. A cached-page restore resets the box once the listener is there.
+    await waitFor(() => {
+      fireEvent.change(box, { target: { value: "stale" } });
+      firePageShow(true);
+      expect(box.value).toBe("lemon");
+    });
 
     fireEvent.change(box, { target: { value: "half typed" } });
     firePageShow(false);
