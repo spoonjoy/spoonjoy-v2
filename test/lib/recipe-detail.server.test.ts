@@ -6,6 +6,7 @@ import { sessionStorage } from "~/lib/session.server";
 import { loadRecipeDetail, handleRecipeDetailAction } from "~/lib/recipe-detail.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1 } from "../helpers/sqlite-d1";
+import { idForWriteToken } from "~/lib/d1-write-retry.server";
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const GIF_BYTES = new Uint8Array([0x47, 0x49, 0x46, 0x38, 1, 2, 3]);
@@ -585,6 +586,123 @@ describe("handleRecipeDetailAction cover generation actions", () => {
       select: { updatedAt: true },
     });
     expect(touchedCookbook.updatedAt.getTime()).toBeGreaterThan(oldUpdatedAt.getTime());
+  });
+});
+
+describe("handleRecipeDetailAction cover jobs with a form's cover token, without a D1 binding", () => {
+  beforeEach(async () => { await cleanupDatabase(); });
+  afterEach(async () => { await cleanupDatabase(); });
+
+  const TOKEN = "prisma-cover-token";
+
+  async function postJob(chefId: string, recipeId: string, fields: Record<string, string | File>) {
+    const formData = new UndiciFormData();
+    for (const [key, value] of Object.entries(fields)) formData.append(key, value);
+    const captured: Promise<unknown>[] = [];
+    const result = await handleRecipeDetailAction({
+      request: await makeAuthedPostRequest(chefId, recipeId, formData) as unknown as Request,
+      params: { id: recipeId },
+      context: {
+        cloudflare: { env: null, ctx: { waitUntil: (promise: Promise<unknown>) => captured.push(promise) } },
+      } as any,
+    });
+    // Each started job finishes (with no image provider, as failed) before the test sets the cover's state.
+    await Promise.all(captured);
+    return { result, jobs: captured.length };
+  }
+
+  async function chefAndRecipe() {
+    const chef = await makeUser();
+    const recipe = await db.recipe.create({ data: { title: `Token ${faker.string.alphanumeric(6)}`, chefId: chef.id } });
+    return { chef, recipe };
+  }
+
+  function tokenCoverId(recipeId: string, chefId: string, intent: string, target = "") {
+    return idForWriteToken(`cover:${recipeId}:${intent}:${target}`, chefId, TOKEN);
+  }
+
+  it("makes one cover from a cook's photo per token, and restarts its job only while it never started", async () => {
+    const { chef, recipe } = await chefAndRecipe();
+    const spoon = await db.recipeSpoon.create({ data: { recipeId: recipe.id, chefId: chef.id, photoUrl: "/photos/spoons/t.jpg" } });
+    const fields = { intent: "createCoverFromSpoon", spoonId: spoon.id, coverToken: TOKEN };
+    const coverId = await tokenCoverId(recipe.id, chef.id, "createCoverFromSpoon", spoon.id);
+
+    const first = await postJob(chef.id, recipe.id, fields);
+    expect(first).toEqual({ result: { success: true, intent: "createCoverFromSpoon", coverId }, jobs: 1 });
+    // Its job has not marked its start, so a resubmit starts it (as after a 503).
+    await db.recipeCover.update({ where: { id: coverId }, data: { generationStatus: "processing", generationStartedAt: null } });
+    await expect(postJob(chef.id, recipe.id, fields)).resolves.toEqual({ result: first.result, jobs: 1 });
+    await db.recipeCover.update({ where: { id: coverId }, data: { generationStartedAt: new Date() } });
+    await expect(postJob(chef.id, recipe.id, fields)).resolves.toEqual({ result: first.result, jobs: 0 });
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+  });
+
+  it("makes one AI placeholder cover per token, and restarts its job only while it is still processing", async () => {
+    const { chef, recipe } = await chefAndRecipe();
+    const fields = { intent: "generateRecipeCoverPlaceholder", coverToken: TOKEN };
+    const coverId = await tokenCoverId(recipe.id, chef.id, "generateRecipeCoverPlaceholder");
+
+    const first = await postJob(chef.id, recipe.id, fields);
+    expect(first).toEqual({ result: { success: true, intent: "generateRecipeCoverPlaceholder", coverId }, jobs: 1 });
+    await db.recipeCover.update({ where: { id: coverId }, data: { status: "processing", generationStatus: "processing" } });
+    await expect(postJob(chef.id, recipe.id, fields)).resolves.toEqual({ result: first.result, jobs: 1 });
+    await db.recipeCover.update({ where: { id: coverId }, data: { status: "ready", generationStatus: "succeeded" } });
+    await expect(postJob(chef.id, recipe.id, fields)).resolves.toEqual({ result: first.result, jobs: 0 });
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+  });
+
+  it("makes one child of a stylized cover per token, and regenerates a plain cover in place", async () => {
+    const { chef, recipe } = await chefAndRecipe();
+    const stylized = await db.recipeCover.create({
+      data: { recipeId: recipe.id, imageUrl: "/s.jpg", stylizedImageUrl: "/st.jpg", sourceType: "spoon", status: "ready" },
+    });
+    const fields = { intent: "regenerateRecipeCover", coverId: stylized.id, coverToken: TOKEN };
+    const childId = await tokenCoverId(recipe.id, chef.id, "regenerateRecipeCover", stylized.id);
+
+    const first = await postJob(chef.id, recipe.id, fields);
+    expect(first).toEqual({ result: { success: true, intent: "regenerateRecipeCover", coverId: childId }, jobs: 1 });
+    await expect(db.recipeCover.findUniqueOrThrow({ where: { id: childId } })).resolves.toMatchObject({ parentCoverId: stylized.id });
+    await db.recipeCover.update({ where: { id: childId }, data: { status: "processing", generationStatus: "processing", generationStartedAt: null } });
+    await expect(postJob(chef.id, recipe.id, fields)).resolves.toEqual({ result: first.result, jobs: 1 });
+    await db.recipeCover.update({ where: { id: childId }, data: { generationStartedAt: new Date() } });
+    await expect(postJob(chef.id, recipe.id, fields)).resolves.toEqual({ result: first.result, jobs: 0 });
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(2);
+
+    const plain = await db.recipeCover.create({ data: { recipeId: recipe.id, imageUrl: "/p.jpg", sourceType: "chef-upload", status: "failed" } });
+    await expect(postJob(chef.id, recipe.id, { intent: "regenerateRecipeCover", coverId: plain.id, coverToken: TOKEN }))
+      .resolves.toEqual({ result: { success: true, intent: "regenerateRecipeCover", coverId: plain.id }, jobs: 1 });
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(3);
+  });
+
+  it("posts one first-photo cook and cover per token, starting the editorial job only while it never started", async () => {
+    const { chef, recipe } = await chefAndRecipe();
+    const kind = `cover:${recipe.id}:createFirstPhotoCover:`;
+    const coverId = await idForWriteToken(kind, chef.id, TOKEN);
+    const spoonId = await idForWriteToken(`${kind}:spoon`, chef.id, TOKEN);
+    const fields = () => ({ intent: "createFirstPhotoCover", photo: photoFile("token.png"), postAsSpoon: "true", coverToken: TOKEN });
+
+    const first = await postJob(chef.id, recipe.id, fields());
+    expect(first).toEqual({ result: { success: true, intent: "createFirstPhotoCover", spoon: { id: spoonId }, coverId }, jobs: 1 });
+    await db.recipeCover.update({ where: { id: coverId }, data: { status: "processing", generationStatus: "processing", generationStartedAt: null } });
+    await expect(postJob(chef.id, recipe.id, fields())).resolves.toEqual({ result: first.result, jobs: 1 });
+    await expect(postJob(chef.id, recipe.id, { ...fields(), generateEditorial: "false" })).resolves.toEqual({ result: first.result, jobs: 0 });
+    await db.recipeCover.update({ where: { id: coverId }, data: { generationStartedAt: new Date() } });
+    await expect(postJob(chef.id, recipe.id, fields())).resolves.toEqual({ result: first.result, jobs: 0 });
+    await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+    await expect(db.recipeSpoon.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+
+    // A direct photo replays with no cook.
+    const direct = { intent: "createFirstPhotoCover", photo: photoFile("direct.png"), postAsSpoon: "false", generateEditorial: "false", coverToken: "prisma-direct-token" };
+    const directFirst = await postJob(chef.id, recipe.id, direct);
+    await expect(postJob(chef.id, recipe.id, { ...direct, photo: photoFile("direct.png") })).resolves.toEqual(directFirst);
+    expect(directFirst.result).toMatchObject({ spoon: null });
+    // A direct photo's editorial job that never started is started by its resubmit.
+    await db.recipeCover.update({
+      where: { id: (directFirst.result as { coverId: string }).coverId },
+      data: { status: "processing", generationStatus: "processing", generationStartedAt: null },
+    });
+    await expect(postJob(chef.id, recipe.id, { ...direct, photo: photoFile("direct.png"), generateEditorial: "true" }))
+      .resolves.toEqual({ result: directFirst.result, jobs: 1 });
   });
 });
 

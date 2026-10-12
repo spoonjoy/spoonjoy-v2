@@ -6,6 +6,7 @@ import { Checkbox, CheckboxField } from "~/components/ui/checkbox";
 import { Description, Field, Label } from "~/components/ui/fieldset";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import { useActionWriteToken } from "~/hooks/use-write-token";
 import { localDateTimeToIso } from "~/lib/cooked-at";
 import {
   FOOD_IMAGE_ACCEPT,
@@ -24,6 +25,8 @@ function validateClientFile(file: File): string | null {
   }
   return null;
 }
+
+const PHOTO_STUDIO_INTENTS = ["createFirstPhotoCover"] as const;
 
 export interface RecipePhotoStudioProps {
   recipeTitle: string;
@@ -53,6 +56,8 @@ export function RecipePhotoStudio({
   const submitInFlightRef = useRef(false);
   const navigation = useNavigation();
   const submit = useSubmit();
+  // The same photo submitted again (after a 503 or a lost answer) makes one cover, not two.
+  const coverToken = useActionWriteToken(PHOTO_STUDIO_INTENTS);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [postAsSpoon, setPostAsSpoon] = useState(true);
@@ -202,6 +207,7 @@ export function RecipePhotoStudio({
         onSubmit={handleSubmit}
       >
         <input type="hidden" name="intent" value="createFirstPhotoCover" />
+        <input type="hidden" name="coverToken" value={coverToken} />
         <input type="hidden" name="activateWhenReady" value="true" />
         <Field>
           <Label htmlFor={photoId}>Recipe photo</Label>

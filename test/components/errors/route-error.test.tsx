@@ -16,7 +16,10 @@ describe("routeErrorCopy", () => {
     [errorResponse(409, "That cookbook already exists."), "We can't open that.", "That cookbook already exists."],
     [errorResponse(400, "   "), "We can't open that.", "Try again, or head back home."],
     [errorResponse(400, { message: "object" }), "We can't open that.", "Try again, or head back home."],
-    [errorResponse(503, "down"), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
+    [errorResponse(503, "Spoonjoy couldn't save that just now."), "Not just now.", "Spoonjoy couldn't save that just now."],
+    [errorResponse(503, "  "), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
+    [errorResponse(503, { message: "object" }), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
+    [errorResponse(502, "down"), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
     [new Error("boom"), "Something went wrong.", "We hit an unexpected snag. Try again in a moment."],
   ])("words %o as %s", (error, title, message) => {
     expect(routeErrorCopy(error)).toMatchObject({ title, message });

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { d1Boolean, d1Count, d1NullableDateTime, d1ReadBatch, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { mapModel, type ColumnSpec } from "~/lib/d1-models.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import { LEGACY_OAUTH_REFRESH_EXPIRES_AT, legacyOAuthIssuerPromotionStatements } from "~/lib/oauth-server.server";
 import { listUserPasskeys, type PasskeySummary } from "~/lib/webauthn-route.server";
 
@@ -216,7 +217,8 @@ function refreshTokenIsLive(expiresAt: Date | null, now: Date): boolean {
  * The batch first binds the user's pre-issuer OAuth rows to `issuer` (the same change as
  * `promoteLegacyOAuthIssuerForUser`, which the page has always made on load), then reads,
  * so the reads see the promoted rows. A D1 batch is atomic: the promotion and the reads
- * succeed or fail together.
+ * succeed or fail together. The promotion sets fixed values, so after a transient D1 error the
+ * whole batch runs again.
  */
 export async function readAccountSettingsFromD1(
   db: D1ReadDatabase,
@@ -235,7 +237,7 @@ export async function readAccountSettingsFromD1(
     refreshTokenRows,
     clientRows,
     accessCountRows,
-  ] = (await d1ReadBatch(db, [
+  ] = (await retryD1Write({ scope: "oauth.promote_legacy_issuer.settings" }, () => d1ReadBatch(db, [
     ...promotion,
     [
       `SELECT "id", "email", "username", "photoUrl", "hashedPassword" IS NOT NULL AS "hasPassword"
@@ -275,7 +277,7 @@ export async function readAccountSettingsFromD1(
       userId,
       userId,
     ],
-  ])).slice(promotion.length);
+  ]))).slice(promotion.length);
 
   const userRow = userRows[0];
   const preferenceRow = preferenceRows[0];

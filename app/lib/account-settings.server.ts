@@ -29,6 +29,7 @@ import {
   D1_WRITE_UNAVAILABLE_CODE,
   D1_WRITE_UNAVAILABLE_MESSAGE,
   d1UnavailableHeaders,
+  d1UnavailablePageError,
   isD1Unavailable,
   retryD1Write,
 } from "~/lib/d1-write-retry.server";
@@ -205,8 +206,11 @@ export async function loadAccountSettings({
   // batch; Prisma is only the fallback where there is no binding.
   const d1 = requestD1(context);
   const issuer = resolveIssuerOrigin(request.url, getCloudflareEnv(context)?.SPOONJOY_BASE_URL);
+  // The database briefly unavailable answers a retryable 503, not a 500.
   const reads = d1
-    ? await readAccountSettingsFromD1(d1, userId, issuer)
+    ? await readAccountSettingsFromD1(d1, userId, issuer).catch((error: unknown) => {
+      throw d1UnavailablePageError(error) ?? error;
+    })
     : await promoteThenReadWithPrisma(await getRequestDb(context), userId, issuer);
   const { user, passkeys, apiCredentials, activeRefreshTokens, oauthClients } = reads;
 

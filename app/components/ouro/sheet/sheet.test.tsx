@@ -190,6 +190,18 @@ describe("opening and closing", () => {
     expect(getComputedStyle(sheet).maxHeight).toBe(`${innerHeight - 32}px`);
   });
 
+  it("stays on the bottom edge after something scrolls a control into view while the sheet is off it", async () => {
+    // Scrolling a control into view while the sheet sits lower than its resting place (as it does
+    // while it enters) used to scroll the full-screen viewport, which kept that offset once the sheet
+    // came to rest, so the sheet floated mid-screen with blank space below it.
+    const sheet = await openUncontrolled();
+    sheet.style.translate = "0 400px";
+    page.getByRole("textbox", { name: "Note" }).element().scrollIntoView({ block: "center" });
+    sheet.style.translate = "";
+    expect(viewport()!.scrollTop).toBe(0);
+    expect(Math.round(sheet.getBoundingClientRect().bottom)).toBe(innerHeight);
+  });
+
   it("is controlled with open and onOpenChange", async () => {
     const onOpenChange = vi.fn();
     function Controlled() {

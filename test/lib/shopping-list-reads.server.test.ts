@@ -8,6 +8,8 @@ import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { readShoppingListFromD1, readShoppingListWithPrisma } from "~/lib/shopping-list-reads.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
+import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 import { createTestRecipe, createTestUser } from "../utils";
 
 let db: PrismaClient;
@@ -166,5 +168,75 @@ describe("shopping list loader on a D1 binding", () => {
     // The session version check, then one batch for the page.
     expect(d1.roundTrips()).toBe(2);
     expect(result).toEqual(await readShoppingListWithPrisma(db, user.id));
+  });
+});
+
+describe("shopping list first visit when D1's connection drops", () => {
+  const CREATE_LIST = /INSERT INTO "ShoppingList"/;
+
+  beforeEach(async () => {
+    db = await getLocalDb();
+    await cleanupDatabase();
+    d1 = sqliteD1();
+  });
+
+  afterEach(async () => {
+    d1.close();
+    vi.doUnmock("~/lib/route-platform.server");
+    vi.resetModules();
+    await cleanupDatabase();
+  });
+
+  it.each<FlakyOutcome>(["lost", "lost-answer", "late"])("creates the chef's one list when the insert is %s", async (outcome) => {
+    const user = await db.user.create({ data: createTestUser() });
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(CREATE_LIST, outcome);
+
+    const reads = await readShoppingListFromD1(flaky.binding, user.id);
+
+    expect(flaky.failures()).toBe(1);
+    await expect(db.shoppingList.findMany({ where: { authorId: user.id } })).resolves.toHaveLength(1);
+    expect(reads.shoppingList).toMatchObject({ authorId: user.id, items: [] });
+  });
+
+  it("answers the page with a retryable 503 when D1 stays unavailable", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const flaky = flakyD1(d1.binding);
+    flaky.failNext(CREATE_LIST, "lost", "lost", "lost", "lost");
+    const { loader } = await import("~/routes/shopping-list");
+    const cookie = (await createUserSessionCookie(user.id)).split(";")[0]!;
+
+    const thrown = await loader({
+      request: new UndiciRequest("http://localhost:3000/shopping-list", { headers: { Cookie: cookie } }),
+      context: { cloudflare: { env: { DB: flaky.binding } } },
+      params: {},
+    } as never).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Response);
+    const response = thrown as Response;
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("1");
+    await expect(response.text()).resolves.toBe(D1_WRITE_UNAVAILABLE_MESSAGE);
+    await expect(db.shoppingList.count({ where: { authorId: user.id } })).resolves.toBe(0);
+  });
+
+  it("still fails a page whose read fails for another reason", async () => {
+    const user = await db.user.create({ data: createTestUser() });
+    const { loader } = await import("~/routes/shopping-list");
+    const cookie = (await createUserSessionCookie(user.id)).split(";")[0]!;
+    const failing: D1ReadDatabase = {
+      prepare: (sql) => d1.binding.prepare(sql),
+      async batch(statements) {
+        const sql = (statements as Array<{ sql?: string }>).map((statement) => statement.sql ?? "").join("\n");
+        if (/"ShoppingListItem"/.test(sql)) throw new Error("D1 is down for good");
+        return d1.binding.batch(statements as never);
+      },
+    };
+
+    await expect(loader({
+      request: new UndiciRequest("http://localhost:3000/shopping-list", { headers: { Cookie: cookie } }),
+      context: { cloudflare: { env: { DB: failing } } },
+      params: {},
+    } as never)).rejects.toThrow("D1 is down for good");
   });
 });

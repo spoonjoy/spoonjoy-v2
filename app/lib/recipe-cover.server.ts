@@ -161,10 +161,11 @@ export async function createCover(
 export async function startRecipeCoverRegeneration(
   db: PrismaClient,
   cover: Pick<RecipeCover, "id" | "recipeId" | "imageUrl" | "stylizedImageUrl" | "sourceImageUrl" | "sourceType" | "sourceSpoonId">,
-  input: { createdById: string; rawPhotoUrl: string; promptAddition: string | null },
+  input: { createdById: string; rawPhotoUrl: string; promptAddition: string | null; childCoverId?: string },
 ): Promise<{ coverId: string; parentCoverId: string | undefined }> {
   if (cover.stylizedImageUrl) {
     const child = await createCover(db, {
+      id: input.childCoverId,
       recipeId: cover.recipeId,
       imageUrl: cover.imageUrl,
       sourceType: cover.sourceType as RecipeCoverSourceType,

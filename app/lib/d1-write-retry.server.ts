@@ -172,6 +172,15 @@ export async function idForWriteToken(kind: string, userId: string, token: strin
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+/**
+ * What a page's loader throws when the database was briefly unavailable: a retryable 503 whose
+ * text the error page shows, instead of a 500. Null for any other error.
+ */
+export function d1UnavailablePageError(error: unknown): Response | null {
+  if (!isD1Unavailable(error)) return null;
+  return new Response(D1_WRITE_UNAVAILABLE_MESSAGE, { status: 503, headers: d1UnavailableHeaders() });
+}
+
 /** The body of `d1UnavailableWebResponse`. */
 export type D1UnavailableWebBody = {
   /** The form's intent, so the page shows the message where the user acted. */
