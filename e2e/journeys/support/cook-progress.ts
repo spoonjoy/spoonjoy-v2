@@ -18,15 +18,32 @@ function send(page: Page, request: CookProgressResetRequest) {
   return page.request.fetch(request.path, { method: request.method, headers: request.headers, data: request.body });
 }
 
-/** Resets `userId`'s progress on the recipe; `page` must be signed in as that user. */
-export async function resetCookProgress(page: Page, recipeId: string, userId: string): Promise<void> {
-  const origin = appOrigin();
+// A connection to the QA Worker that drops before the answer arrives (ECONNRESET and the like) says
+// nothing about whether the request ran. The session keeps no receipt of a reset, so resending it
+// with the revision read before could answer a revision conflict. Instead the whole reset runs
+// again: it resumes the session, reads its current revision and writes the same reset state.
+const RESET_TRIES = 3;
+const DROPPED_CONNECTION = /ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|socket hang up/;
+
+async function resetOnce(page: Page, recipeId: string, userId: string, origin: string): Promise<void> {
   const started = await send(page, cookProgressStartRequest(recipeId, userId, origin));
   expect(started.status(), "starting the cook session for the reset").toBeLessThan(300);
   const { state } = (await started.json()) as { state: { attemptId: string; revision: number } };
 
   const reset = await send(page, cookProgressResetRequest(recipeId, userId, origin, state, `journey-reset-${Date.now()}`));
   expect(reset.status(), "resetting the cook session's progress").toBe(200);
+}
+
+/** Resets `userId`'s progress on the recipe; `page` must be signed in as that user. */
+export async function resetCookProgress(page: Page, recipeId: string, userId: string): Promise<void> {
+  const origin = appOrigin();
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await resetOnce(page, recipeId, userId, origin);
+    } catch (error) {
+      if (attempt >= RESET_TRIES || !DROPPED_CONNECTION.test(String(error))) throw error;
+    }
+  }
 }
 
 export interface SavedCookProgress {
