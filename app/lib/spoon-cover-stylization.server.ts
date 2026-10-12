@@ -17,6 +17,7 @@ import {
 import { tryConsumeImageGenQuota } from "~/lib/image-gen-ledger.server";
 import { d1Binding, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   captureImageGenerationException,
   captureImageGenerationProviderFallback,
@@ -262,6 +263,12 @@ function stylizationD1(input: ScheduleSpoonStylizationInput): D1ReadDatabase | n
  * cookbooks, as one D1 batch: all apply or none do. The update only matches a cover that is
  * not archived, and the touches only apply when it did, as the Prisma path touches only
  * after a matching update. Returns the number of covers updated.
+ *
+ * Every statement sets fixed values (the times are taken once, by the caller), and an activation
+ * only matches while the recipe is as it was before this cover became its cover, so after a
+ * transient D1 error the batch runs again and ends as one run would; the cover update still
+ * matches its cover, so the count it answers is the same. With `keepSucceeded`, a cover whose
+ * generation succeeded is left alone.
  */
 async function updateStylizationCoverOnD1(
   input: ScheduleSpoonStylizationInput,
@@ -269,6 +276,7 @@ async function updateStylizationCoverOnD1(
   fields: StylizationCoverFields,
   updatedAt: Date,
   activation: D1Query[] = [],
+  options: { keepSucceeded?: boolean } = {},
 ): Promise<number> {
   const columns: Record<string, unknown> = {
     ...(fields.stylizedImageUrl !== undefined ? { stylizedImageUrl: fields.stylizedImageUrl } : {}),
@@ -282,11 +290,14 @@ async function updateStylizationCoverOnD1(
     ...(input.parentCoverId !== undefined ? { parentCoverId: input.parentCoverId } : {}),
   };
   const touchedAt = d1Timestamp(updatedAt);
-  const coverStillUnarchived = `EXISTS (SELECT 1 FROM "RecipeCover" WHERE ${UNARCHIVED_COVER})`;
-  const [coverUpdate] = await d1WriteBatch(d1, [
+  // The touches below run after the cover update, so with `keepSucceeded` a cover it left alone
+  // (still succeeded) touches nothing either, and one it marked failed still matches.
+  const coverMatches = `${UNARCHIVED_COVER}${options.keepSucceeded ? ` AND "generationStatus" <> 'succeeded'` : ""}`;
+  const coverStillUnarchived = `EXISTS (SELECT 1 FROM "RecipeCover" WHERE ${coverMatches})`;
+  const [coverUpdate] = await retryD1Write({ scope: "cover.stylization_update" }, () => d1WriteBatch(d1, [
     [
       `UPDATE "RecipeCover" SET ${Object.keys(columns).map((column) => `"${column}" = ?`).join(", ")}
-       WHERE ${UNARCHIVED_COVER}`,
+       WHERE ${coverMatches}`,
       ...Object.values(columns),
       input.coverId,
       input.recipeId,
@@ -307,7 +318,7 @@ async function updateStylizationCoverOnD1(
       input.recipeId,
     ],
     ...activation,
-  ]);
+  ]));
   return coverUpdate.changes;
 }
 
@@ -369,18 +380,23 @@ async function markStylizationSucceeded(
 async function markStylizationFailed(
   input: ScheduleSpoonStylizationInput,
   failureReason: string,
-  options: { force?: boolean } = {},
+  options: { force?: boolean; keepSucceeded?: boolean } = {},
 ): Promise<void> {
   const cover = await currentCoverForLifecycle(input);
   if (!cover || cover.status === "archived" || cover.archivedAt) return;
   const wasRequested = cover.status === "processing" || cover.generationStatus === "processing";
   if (!options.force && !wasRequested) return;
+  // The job's error path never undoes a generation that succeeded: its success write may have
+  // committed with the answer lost, or something after it may have failed.
+  const keepSucceeded = options.keepSucceeded === true;
+  if (keepSucceeded && cover.generationStatus === "succeeded") return;
 
   const fields = { status: failureStatusFor(cover), generationStatus: "failed", failureReason };
   const d1 = stylizationD1(input);
   if (d1) {
-    // A cover archived since the read is left alone, as the check above would leave it.
-    await updateStylizationCoverOnD1(input, d1, fields, new Date());
+    // A cover archived since the read is left alone, as the check above would leave it, and with
+    // `keepSucceeded` so is one whose success landed since the read.
+    await updateStylizationCoverOnD1(input, d1, fields, new Date(), [], { keepSucceeded });
     return;
   }
 
@@ -388,7 +404,13 @@ async function markStylizationFailed(
   const promptAddition = sanitizeImagePromptAddition(input.promptAddition);
   // Only while the cover is still unarchived: one archived since the read is left alone.
   const result = await input.db.recipeCover.updateMany({
-    where: { id: cover.id, recipeId: input.recipeId, status: { not: "archived" }, archivedAt: null },
+    where: {
+      id: cover.id,
+      recipeId: input.recipeId,
+      status: { not: "archived" },
+      archivedAt: null,
+      ...(keepSucceeded ? { generationStatus: { not: "succeeded" } } : {}),
+    },
     data: {
       ...fields,
       promptVersion: STYLIZATION_PROMPT_VERSION,
@@ -880,7 +902,14 @@ export async function scheduleSpoonCoverStylization(
     await captureRecoveredProviderFallback(input, result);
   } catch (error) {
     const serializedError = serializeError(error);
-    await markStylizationFailed(input, failureReasonFor(error), { force: true });
+    try {
+      await markStylizationFailed(input, failureReasonFor(error), { force: true, keepSucceeded: true });
+    } catch (markError) {
+      // While the database is still unavailable the stuck-generation check fails the cover later;
+      // any other error surfaces as before.
+      if (!isD1Unavailable(markError)) throw markError;
+      logger.error("spoon cover stylization failure state update failed", serializeError(markError));
+    }
     await captureGenerationException(input, error, serializedError);
     logger.error("spoon cover stylization failed", serializedError);
   }

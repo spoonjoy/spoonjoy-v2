@@ -12,6 +12,7 @@ import {
   idempotencyClientKey,
 } from "~/lib/api-idempotency.server";
 import { ApiAuthError, type ApiPrincipal } from "~/lib/api-auth.server";
+import { idForWriteToken } from "~/lib/d1-write-retry.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 
 type Database = Awaited<ReturnType<typeof getLocalDb>>;
@@ -2220,6 +2221,96 @@ describe("spoonjoy-api spoon operations", () => {
         stylizedImageUrl: null,
       });
       expect(result.cover?.id).toBe(covers[0].id);
+    });
+
+    describe("with an idempotencyKey", () => {
+      type Created = {
+        spoon: { id: string; recipeId: string };
+        isOriginCook: boolean;
+        cover: { id: string } | null;
+        mutation?: { idempotencyKey: string; replayed: boolean };
+      };
+
+      it("replays the spoon and cover a repeat with the same key asks for, without logging the cook twice", async () => {
+        const { principal: chef } = await makeUser(db);
+        const recipe = await makeRecipe(db, chef.id);
+        const context: SpoonjoyApiContext = { db, principal: chef };
+        const args = { recipeId: recipe.id, photoUrl: "https://stub.test/raw.png", idempotencyKey: "cook-key-0001" };
+
+        const first = await callSpoonjoyApiOperation("create_spoon", args, context) as Created;
+        const repeat = await callSpoonjoyApiOperation("create_spoon", args, context) as Created;
+
+        expect(first.spoon.id).toBe(await idForWriteToken("mcp.create_spoon", chef.id, "cook-key-0001"));
+        expect(first.mutation).toEqual({ idempotencyKey: "cook-key-0001", replayed: false });
+        expect(repeat).toEqual({ ...first, mutation: { idempotencyKey: "cook-key-0001", replayed: true } });
+        expect(repeat.isOriginCook).toBe(true);
+        await expect(db.recipeSpoon.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+        await expect(db.recipeCover.count({ where: { recipeId: recipe.id } })).resolves.toBe(1);
+      });
+
+      it("makes the origin cook's cover on a repeat when the first call wrote the spoon and lost its answer before the cover", async () => {
+        const { principal: chef } = await makeUser(db);
+        const recipe = await makeRecipe(db, chef.id);
+        const id = await idForWriteToken("mcp.create_spoon", chef.id, "cook-key-lost");
+        await db.recipeSpoon.create({ data: { id, chefId: chef.id, recipeId: recipe.id, photoUrl: "https://stub.test/raw.png" } });
+
+        const repeat = await callSpoonjoyApiOperation("create_spoon", {
+          recipeId: recipe.id,
+          photoUrl: "https://stub.test/raw.png",
+          idempotencyKey: "cook-key-lost",
+        }, { db, principal: chef }) as Created;
+
+        expect(repeat.spoon.id).toBe(id);
+        expect(repeat.isOriginCook).toBe(true);
+        expect(repeat.mutation).toEqual({ idempotencyKey: "cook-key-lost", replayed: true });
+        const covers = await db.recipeCover.findMany({ where: { recipeId: recipe.id } });
+        expect(covers).toHaveLength(1);
+        expect(covers[0]).toMatchObject({ sourceSpoonId: id, sourceType: "spoon" });
+        expect(repeat.cover?.id).toBe(covers[0].id);
+      });
+
+      it("replays a later cook as not the origin cook, and another chef's cook of the recipe likewise", async () => {
+        const { principal: chef } = await makeUser(db);
+        const { principal: cook } = await makeUser(db);
+        const recipe = await makeRecipe(db, chef.id);
+        const chefContext: SpoonjoyApiContext = { db, principal: chef };
+        const cookContext: SpoonjoyApiContext = { db, principal: cook };
+
+        await callSpoonjoyApiOperation("create_spoon", { recipeId: recipe.id, note: "first", idempotencyKey: "cook-key-first" }, chefContext);
+        // A later spoon, written a moment after the first, so the replay judges it against an earlier one.
+        const laterId = await idForWriteToken("mcp.create_spoon", chef.id, "cook-key-later");
+        await db.recipeSpoon.create({ data: { id: laterId, chefId: chef.id, recipeId: recipe.id, note: "again", createdAt: new Date(Date.now() + 60_000) } });
+        await callSpoonjoyApiOperation("create_spoon", { recipeId: recipe.id, note: "theirs", idempotencyKey: "cook-key-other" }, cookContext);
+
+        const later = await callSpoonjoyApiOperation("create_spoon", { recipeId: recipe.id, note: "again", idempotencyKey: "cook-key-later" }, chefContext) as Created;
+        const other = await callSpoonjoyApiOperation("create_spoon", { recipeId: recipe.id, note: "theirs", idempotencyKey: "cook-key-other" }, cookContext) as Created;
+
+        expect(later).toMatchObject({ spoon: { id: laterId }, isOriginCook: false, cover: null, mutation: { replayed: true } });
+        expect(other).toMatchObject({ isOriginCook: false, cover: null, mutation: { replayed: true } });
+        await expect(db.recipeSpoon.count({ where: { recipeId: recipe.id } })).resolves.toBe(3);
+      });
+
+      it("refuses the same key for a different recipe", async () => {
+        const { principal: chef } = await makeUser(db);
+        const recipe = await makeRecipe(db, chef.id);
+        const otherRecipe = await makeRecipe(db, chef.id);
+        const context: SpoonjoyApiContext = { db, principal: chef };
+        await callSpoonjoyApiOperation("create_spoon", { recipeId: recipe.id, note: "x", idempotencyKey: "cook-key-dupe" }, context);
+
+        await expect(
+          callSpoonjoyApiOperation("create_spoon", { recipeId: otherRecipe.id, note: "x", idempotencyKey: "cook-key-dupe" }, context),
+        ).rejects.toMatchObject({ message: "idempotencyKey was already used for a different request", status: 409 });
+        await expect(db.recipeSpoon.count({ where: { recipeId: otherRecipe.id } })).resolves.toBe(0);
+      });
+
+      it("refuses a malformed key", async () => {
+        const { principal: chef } = await makeUser(db);
+        const recipe = await makeRecipe(db, chef.id);
+
+        await expect(
+          callSpoonjoyApiOperation("create_spoon", { recipeId: recipe.id, note: "x", idempotencyKey: "short" }, { db, principal: chef }),
+        ).rejects.toThrow("idempotencyKey must be 8-100 letters, digits, '_' or '-'");
+      });
     });
 
     it("does NOT insert a RecipeCover when chef is not the origin cook", async () => {

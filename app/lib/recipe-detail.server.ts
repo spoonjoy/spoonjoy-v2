@@ -86,7 +86,7 @@ import {
 import { FOOD_IMAGE_SIZE_MESSAGE, FOOD_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { sanitizeImagePromptAddition } from "~/lib/image-gen.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
-import { d1UnavailableWebResponse, formWriteToken, idForWriteToken } from "~/lib/d1-write-retry.server";
+import { d1UnavailableWebResponse, formWriteToken, idForWriteToken, isD1Unavailable, retryD1Write } from "~/lib/d1-write-retry.server";
 
 interface CloudflareContextLike {
   cloudflare?: {
@@ -937,9 +937,11 @@ async function handleCreateFirstPhotoCoverOnD1(
     );
   }
   try {
-    await writeExistingRecipeOnD1(d1, recipeId, writes);
+    await writeExistingRecipeOnD1(d1, recipeId, writes, { scope: "cover.create_first_photo", createdCoverId: coverId });
   } catch (error) {
-    await deleteStoredImage({ bucket, imageUrl: photoUrl }).catch(() => false);
+    // When the database was unavailable, a try may still have committed with the photo in it,
+    // so the photo is kept (at worst unused) rather than deleted from under a saved cover.
+    if (!isD1Unavailable(error)) await deleteStoredImage({ bucket, imageUrl: photoUrl }).catch(() => false);
     throw error;
   }
 
@@ -1032,7 +1034,7 @@ async function handleCoverJobOnD1(
         },
         now,
       ),
-    ]);
+    ], { scope: "cover.create_from_spoon", createdCoverId: newCoverId });
     await later((database) =>
       scheduleSpoonCoverStylization({
         db: database,
@@ -1070,7 +1072,7 @@ async function handleCoverJobOnD1(
         },
         now,
       ),
-    ]);
+    ], { scope: "cover.create_placeholder", createdCoverId: newCoverId });
     await later((database) =>
       scheduleAiPlaceholderCover({
         db: database,
@@ -1097,7 +1099,11 @@ async function handleCoverJobOnD1(
   const rawPhotoUrl = cover.sourceImageUrl || cover.imageUrl;
   if (!rawPhotoUrl.trim()) throw new Response("Cover has no source image", { status: 400 });
   const regeneration = coverRegenerationStatement(cover, { createdById: userId, rawPhotoUrl, promptAddition }, now);
-  await writeExistingRecipeOnD1(d1, recipeId, [regeneration.statement]);
+  // A child cover is checked by its id; regenerating in place sets fixed values.
+  await writeExistingRecipeOnD1(d1, recipeId, [regeneration.statement], {
+    scope: "cover.regenerate",
+    createdCoverId: regeneration.parentCoverId ? regeneration.coverId : undefined,
+  });
   await later((database) =>
     scheduleSpoonCoverStylization({
       db: database,
@@ -1179,12 +1185,15 @@ async function handleCoverChoiceOnD1(
     await writeExistingRecipeOnD1(d1, recipeId, [
       recipeUpdateStatement(recipeId, { activeCoverId: null, activeCoverVariant: null, coverMode: "none" }, updatedAt),
       cookbooksForRecipeTouchStatement(recipeId, updatedAt),
-    ]);
+    ], { scope: "cover.clear" });
   } else {
     const input = archiveCoverChoice(formData, recipeId);
     try {
       await archiveRecipeCoverOnD1(d1, input);
     } catch (error) {
+      // The database being briefly unavailable is not a bad request: the action answers it with
+      // a retryable 503.
+      if (isD1Unavailable(error)) throw error;
       throw new Response((error as Error).message, { status: 400 });
     }
   }
@@ -1644,9 +1653,45 @@ async function handleRecipeDetailIntent(
  * Runs a recipe page write as one atomic D1 batch that first re-checks the recipe still
  * exists; if it was removed after the page's checks, nothing applies and the answer is 404.
  */
-async function writeExistingRecipeOnD1(d1: D1ReadDatabase, recipeId: string, statements: D1Query[]) {
-  try {
+/**
+ * How a write on an existing recipe runs again after a transient D1 error. An idempotent write
+ * (one that sets fixed values) names only its scope; one that creates a cover also names the
+ * cover's id, chosen before the first try, and after an ambiguous failure the cover's presence
+ * says whether the earlier try (an atomic batch) committed.
+ */
+interface ExistingRecipeWriteRetry {
+  scope: string;
+  createdCoverId?: string;
+}
+
+async function writeExistingRecipeOnD1(
+  d1: D1ReadDatabase,
+  recipeId: string,
+  statements: D1Query[],
+  retry?: ExistingRecipeWriteRetry,
+) {
+  const write = async () => {
     await d1WriteBatch(d1, [recipeActiveGuard(recipeId), ...statements]);
+    return true as const;
+  };
+  const createdCoverId = retry?.createdCoverId;
+  try {
+    if (!retry) await write();
+    else {
+      await retryD1Write({
+        scope: retry.scope,
+        applied: createdCoverId
+          ? async () => {
+            const [rows] = await d1ReadBatch(d1, [[
+              `SELECT 1 AS "created" FROM "RecipeCover" WHERE "id" = ? AND "recipeId" = ?`,
+              createdCoverId,
+              recipeId,
+            ]]);
+            return rows.length > 0 ? (true as const) : null;
+          }
+          : undefined,
+      }, write);
+    }
   } catch (error) {
     if (isD1GuardFailure(error)) throw new Response("Recipe not found", { status: 404 });
     throw error;
