@@ -3400,10 +3400,15 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
   // lost is found again by that id rather than made twice (or refused as a duplicate title).
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.create", async (db, reservation) => {
     try {
-      await db.cookbook.create({
+      // A try whose answer was lost is found by the reservation's id, so a later try's clash with
+      // the row it wrote is not taken for a duplicate title.
+      await retryD1Write({
+        scope: "api_v1.cookbook_create",
+        applied: () => db.cookbook.findFirst({ where: { id: reservation.id, authorId: principal.id, title }, select: { id: true } }),
+      }, () => db.cookbook.create({
         data: { id: reservation.id, title, authorId: principal.id },
         select: { id: true },
-      });
+      }));
     } catch (error) {
       if (isPrismaErrorCode(error, "P2002")) {
         throw duplicateCookbookTitleError();
@@ -3430,10 +3435,11 @@ async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, pri
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
     await loadOwnedCookbookById(db, principal, id);
     try {
-      await db.cookbook.update({
+      // Sets a fixed title, so running it again ends the same.
+      await retryD1Write({ scope: "api_v1.cookbook_update" }, () => db.cookbook.update({
         where: { id },
         data: { title },
-      });
+      }));
     } catch (error) {
       if (isPrismaErrorCode(error, "P2002")) {
         throw duplicateCookbookTitleError();
@@ -3599,10 +3605,14 @@ async function loadShoppingListForUser(
     include,
   });
   if (existing) return existing;
-  return await db.shoppingList.create({
+  // One list per chef: a try whose answer was lost is found by its chef.
+  return await retryD1Write({
+    scope: "api_v1.shopping_list_create",
+    applied: () => db.shoppingList.findUnique({ where: { authorId: userId }, include }),
+  }, () => db.shoppingList.create({
     data: { authorId: userId },
     include,
-  });
+  }));
 }
 
 type ShoppingListRow = NonNullable<Awaited<ReturnType<typeof loadShoppingListForUser>>>;
@@ -3651,14 +3661,22 @@ async function getOrCreateApiV1Unit(db: ApiV1WriteDb, name: string) {
   const normalized = normalizeName(name);
   const existing = await db.unit.findUnique({ where: { name: normalized } });
   if (existing) return existing;
-  return await db.unit.create({ data: { name: normalized } });
+  // Units are unique by name: a try whose answer was lost is found by it.
+  return await retryD1Write({
+    scope: "api_v1.unit_create",
+    applied: () => db.unit.findUnique({ where: { name: normalized } }),
+  }, () => db.unit.create({ data: { name: normalized } }));
 }
 
 async function getOrCreateApiV1IngredientRef(db: ApiV1WriteDb, name: string) {
   const normalized = normalizeName(name);
   const existing = await db.ingredientRef.findUnique({ where: { name: normalized } });
   if (existing) return existing;
-  return await db.ingredientRef.create({ data: { name: normalized } });
+  // Ingredients are unique by name: a try whose answer was lost is found by it.
+  return await retryD1Write({
+    scope: "api_v1.ingredient_ref_create",
+    applied: () => db.ingredientRef.findUnique({ where: { name: normalized } }),
+  }, () => db.ingredientRef.create({ data: { name: normalized } }));
 }
 
 async function nextShoppingSortIndex(db: ApiV1WriteDb, shoppingListId: string) {
@@ -4220,7 +4238,11 @@ export async function runIdempotentApiV1Mutation(
     });
     await deleteIdempotencyReservationAfterWriteError({
       keepReservationForRecovery,
-      deleteReservation: () => db.apiIdempotencyKey.delete({ where: { id: reservation.record.id } }),
+      // Deleting by id is idempotent: a try whose answer was lost leaves nothing to delete.
+      deleteReservation: () => retryD1Write(
+        { scope: "api_v1.idempotency_release_after_error" },
+        () => db.apiIdempotencyKey.deleteMany({ where: { id: reservation.record.id } }),
+      ),
     });
     throw error;
   }
@@ -4338,16 +4360,18 @@ async function handleShoppingItemCheck(args: ApiV1RouteArgs, requestId: string, 
       throw new ApiV1Error("not_found", "Shopping list item has been removed; create or restore it with POST /api/v1/shopping-list/items", { resource: "shopping_list_item", itemId });
     }
 
-    const item = await db.shoppingListItem.update({
+    // The target state is worked out once, so every try sets the same values.
+    const data = {
+      checked,
+      checkedAt: checked ? new Date() : null,
+      deletedAt: null,
+      sortIndex: checked ? await nextShoppingSortIndex(db, list.id) : existing.sortIndex,
+    };
+    const item = await retryD1Write({ scope: "api_v1.shopping_item_check" }, () => db.shoppingListItem.update({
       where: { id: existing.id },
-      data: {
-        checked,
-        checkedAt: checked ? new Date() : null,
-        deletedAt: null,
-        sortIndex: checked ? await nextShoppingSortIndex(db, list.id) : existing.sortIndex,
-      },
+      data,
       include: { unit: true, ingredientRef: true },
-    });
+    }));
     return {
       status: 200,
       data: {
@@ -4377,11 +4401,13 @@ async function handleShoppingItemDelete(args: ApiV1RouteArgs, requestId: string,
       throw new ApiV1Error("not_found", "Shopping list item not found", { resource: "shopping_list_item", itemId });
     }
 
-    const item = await db.shoppingListItem.update({
+    // The removal time is chosen once, so every try sets the same value.
+    const deletedAt = new Date();
+    const item = await retryD1Write({ scope: "api_v1.shopping_item_delete" }, () => db.shoppingListItem.update({
       where: { id: existing.id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt },
       include: { unit: true, ingredientRef: true },
-    });
+    }));
     return {
       status: 200,
       data: {
@@ -4622,7 +4648,11 @@ async function handleShoppingClear(
     let removedItems: ShoppingItemRow[] = [];
     if (items.length > 0 && nativeD1) {
       // One batch, so the list is cleared all at once or not at all.
-      await d1WriteBatch(nativeD1, shoppingListItemsRemoveStatements(list.id, items.map((item) => item.id), deletedAt));
+      // It sets one removal time on fixed items, so running it again ends the same.
+      await retryD1Write(
+        { scope: mode === "completed" ? "api_v1.shopping_clear_completed" : "api_v1.shopping_clear" },
+        () => d1WriteBatch(nativeD1, shoppingListItemsRemoveStatements(list.id, items.map((item) => item.id), deletedAt)),
+      );
       removedItems = items.map((item) => ({ ...item, deletedAt, updatedAt: deletedAt }));
     } else if (items.length > 0) {
       removedItems = await db.$transaction(items.map((item) => db.shoppingListItem.update({
@@ -6318,14 +6348,16 @@ async function recoverNativeRecipeDelete(
   ) {
     return null;
   }
-  await recordNativeSyncTombstone(db, {
+  // An upsert by account and recipe with fixed values, so running it again ends the same.
+  const deletedAt = recipe.deletedAt;
+  await retryD1Write({ scope: "api_v1.recipe_delete_tombstone" }, () => recordNativeSyncTombstone(db, {
     accountId: input.principalId,
     resourceType: "recipe",
     resourceId: recipe.id,
     title: recipe.title,
-    deletedAt: recipe.deletedAt,
+    deletedAt,
     updatedAt: recipe.updatedAt,
-  });
+  }));
   return {
     status: 200,
     data: {
