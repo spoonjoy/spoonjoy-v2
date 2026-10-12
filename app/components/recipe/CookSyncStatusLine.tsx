@@ -20,6 +20,16 @@ const PROBLEM_STATUSES: ReadonlySet<CookSyncStatus> = new Set([
 ])
 const RELOAD_STATUSES: ReadonlySet<CookSyncStatus> = new Set(['account_changed', 'update_required'])
 
+// The line flows as text, so Reload follows the message on its last line instead of starting a
+// row of its own.
+const LINE_CLASS_NAME =
+  '[grid-area:1/1] m-0 font-sj-ui text-xs/4 font-semibold text-[var(--sj-ink-soft)]'
+// Reload is a 44px tap target drawn around a line-high label, so it never makes its line taller.
+const RELOAD_CLASS_NAME =
+  "relative ml-3 inline-block font-sj-ui text-xs/4 font-semibold uppercase tracking-[0.14em] text-[var(--sj-action)] after:absolute after:-inset-x-2 after:-inset-y-3.5 after:content-[''] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
+
+const ALL_STATUSES = Object.keys(COOK_SYNC_STATUS_TEXT) as CookSyncStatus[]
+
 export interface CookSyncStatusLineProps {
   status: CookSyncStatus
   /** Reloads the page; defaults to a full browser reload. */
@@ -45,24 +55,28 @@ export function CookSyncStatusLine({ status, onReload = () => window.location.re
     }
   }, [status])
 
+  // Every status shares one grid cell with an invisible copy of each other status's line, so the
+  // line is always as tall as its tallest status at the current width: a status that wraps to two
+  // lines, or that adds Reload, never moves the page below it. The copies are hidden from
+  // assistive technology and hold no controls.
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-      <p
-        className="font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]"
-        data-testid="cook-sync-status"
-        data-status={status}
-      >
-        {COOK_SYNC_STATUS_TEXT[status]}
+    <div className="mt-3 grid" data-testid="cook-sync-status-line">
+      {ALL_STATUSES.map((reserved) => (
+        <p key={reserved} aria-hidden="true" className={`invisible ${LINE_CLASS_NAME}`} data-testid="cook-sync-status-reserve">
+          <span>{COOK_SYNC_STATUS_TEXT[reserved]}</span>
+          {RELOAD_STATUSES.has(reserved) ? <span className={RELOAD_CLASS_NAME}>Reload</span> : null}
+        </p>
+      ))}
+      <p className={LINE_CLASS_NAME}>
+        <span data-testid="cook-sync-status" data-status={status}>
+          {COOK_SYNC_STATUS_TEXT[status]}
+        </span>
+        {RELOAD_STATUSES.has(status) ? (
+          <button type="button" onClick={onReload} className={RELOAD_CLASS_NAME}>
+            Reload
+          </button>
+        ) : null}
       </p>
-      {RELOAD_STATUSES.has(status) ? (
-        <button
-          type="button"
-          onClick={onReload}
-          className="font-sj-ui inline-flex min-h-11 items-center text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-action)] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-        >
-          Reload
-        </button>
-      ) : null}
       <span role="status" className="sr-only" data-testid="cook-sync-announcement">
         {announcement}
       </span>

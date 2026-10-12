@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
-import { d1WriteBatch } from "~/lib/d1-write.server";
+import { d1EpochMsSql, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
+import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
   captureException,
   type PostHogServerConfig,
@@ -112,10 +113,23 @@ function prismaD1Timestamp(date: Date): string {
 }
 
 /**
+ * Where a consume records that it spent its unit: a row in the idempotency key table under this
+ * client key, keyed by the consume's id, written in the same batch as the spend and only when the
+ * spend happened. Rows older than a day are dropped by the next consume of the same chef.
+ */
+const CONSUME_MARKER_CLIENT_KEY = "image-gen-consume";
+const CONSUME_MARKER_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
  * The consume as one D1 batch: create the day's row at zero if it is missing (and the user
  * still exists), then add one only while the count is under the cap. D1 runs a batch as one
  * transaction and runs batches one at a time, so concurrent consumes cannot pass the cap and
  * exactly the calls that fit under it succeed.
+ *
+ * A consume spends at most one unit however often it runs: its id is chosen before the first
+ * try, the batch writes a marker row with that id when it spends, and both increments are skipped
+ * once the marker exists. So after a transient D1 error the batch runs again, and its answer (is
+ * there a marker) is the same whether the spend landed on the first try, late, or on this one.
  */
 async function tryConsumeImageGenQuotaOnD1(
   d1: D1ReadDatabase,
@@ -132,9 +146,17 @@ async function tryConsumeImageGenQuotaOnD1(
   const budgetDay = `"bucketStart" IN (?, ?, ?)`;
   const updatedAt = prismaD1Timestamp(at);
   // Marks this consume's global-budget increment so the per-user increment can see whether
-  // it happened, inside the same transaction.
+  // it happened, inside the same transaction, and names the marker that says it spent.
   const consumeId = crypto.randomUUID();
-  const [, , , increment] = await d1WriteBatch(d1, [
+  const marker = `"userId" = ? AND "clientKey" = '${CONSUME_MARKER_CLIENT_KEY}' AND "key" = ?`;
+  const notSpentYet = `NOT EXISTS (SELECT 1 FROM "ApiIdempotencyKey" WHERE ${marker})`;
+  const results = await retryD1Write({ scope: "image_gen.consume" }, () => d1WriteBatch(d1, [
+    [
+      `DELETE FROM "ApiIdempotencyKey"
+       WHERE "userId" = ? AND "clientKey" = '${CONSUME_MARKER_CLIENT_KEY}' AND ${d1EpochMsSql('"expiresAt"')} <= ?`,
+      userId,
+      at.getTime(),
+    ],
     [
       `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt")
        SELECT ?, ?, ?, ?, 0, ?
@@ -165,7 +187,8 @@ async function tryConsumeImageGenQuotaOnD1(
       // has room under their own cap.
       `UPDATE "ImageGenDailyBudget" SET "count" = "count" + 1, "lastConsumeId" = ?, "updatedAt" = ?
        WHERE "bucketStart" = (SELECT "bucketStart" FROM "ImageGenDailyBudget" WHERE ${budgetDay} AND "count" < ? LIMIT 1)
-         AND EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ?)`,
+         AND EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ?)
+         AND ${notSpentYet}`,
       consumeId,
       updatedAt,
       ...dayForms,
@@ -174,13 +197,16 @@ async function tryConsumeImageGenQuotaOnD1(
       kind,
       ...dayForms,
       cap,
+      userId,
+      consumeId,
     ],
     [
       // One row only: a day stored in two forms by older writers must spend one unit, not two.
       // It runs only when the global increment above was this consume's.
       `UPDATE "ImageGenLedger" SET "count" = "count" + 1, "updatedAt" = ?
        WHERE "id" = (SELECT "id" FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ? LIMIT 1)
-         AND EXISTS (SELECT 1 FROM "ImageGenDailyBudget" WHERE ${budgetDay} AND "lastConsumeId" = ?)`,
+         AND EXISTS (SELECT 1 FROM "ImageGenDailyBudget" WHERE ${budgetDay} AND "lastConsumeId" = ?)
+         AND ${notSpentYet}`,
       updatedAt,
       userId,
       kind,
@@ -188,9 +214,31 @@ async function tryConsumeImageGenQuotaOnD1(
       cap,
       ...dayForms,
       consumeId,
+      userId,
+      consumeId,
     ],
-  ]);
-  return increment!.changes >= 1;
+    [
+      // The marker, only when this run spent (the global increment carries its id) and no
+      // earlier run of this consume already left one.
+      `INSERT INTO "ApiIdempotencyKey"
+         ("id", "userId", "credentialId", "clientKey", "key", "operation", "requestHash", "responseStatus", "expiresAt", "createdAt", "updatedAt")
+       SELECT ?, ?, NULL, '${CONSUME_MARKER_CLIENT_KEY}', ?, ?, ?, 200, ?, ?, ?
+       WHERE EXISTS (SELECT 1 FROM "ImageGenDailyBudget" WHERE ${budgetDay} AND "lastConsumeId" = ?)
+       ON CONFLICT DO NOTHING`,
+      consumeId,
+      userId,
+      consumeId,
+      `image_gen.consume.${kind}`,
+      kind,
+      d1Timestamp(new Date(at.getTime() + CONSUME_MARKER_TTL_MS)),
+      d1Timestamp(at),
+      d1Timestamp(at),
+      ...dayForms,
+      consumeId,
+    ],
+    [`SELECT 1 AS "spent" FROM "ApiIdempotencyKey" WHERE ${marker}`, userId, consumeId],
+  ]));
+  return results[results.length - 1]!.rows.length > 0;
 }
 
 /**

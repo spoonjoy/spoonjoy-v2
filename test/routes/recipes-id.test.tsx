@@ -5381,8 +5381,10 @@ describe("Recipes $id Route", () => {
 
       const checkboxes = screen.getAllByRole("checkbox");
       expect(checkboxes.length).toBeGreaterThanOrEqual(2);
-      // Nothing is ticked yet, so there is nothing to clear (finding 15).
+      // Nothing is ticked yet, so there is nothing to clear (finding 15): the button keeps its room
+      // on the Steps line but is invisible, disabled and hidden from assistive technology.
       expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
+      expect(screen.getByTestId("clear-progress-button")).toHaveAttribute("data-state", "reserved");
 
       await user.click(checkboxes[0]);
       await user.click(checkboxes[1]);
@@ -5393,6 +5395,7 @@ describe("Recipes $id Route", () => {
       expect(checkboxes[0]).not.toBeChecked();
       expect(checkboxes[1]).not.toBeChecked();
       expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
+      expect(screen.getByTestId("clear-progress-button")).toHaveAttribute("data-state", "reserved");
     });
 
     it("should keep cookbook-save controls out of the recipe page", async () => {

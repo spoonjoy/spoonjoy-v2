@@ -5,6 +5,7 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { flakyD1, type FlakyOutcome } from "../helpers/flaky-d1";
 import { sqliteD1 } from "../helpers/sqlite-d1";
 import { createTestRecipe, createTestUser, getOrCreateIngredientRef, getOrCreateUnit } from "../utils";
 
@@ -457,6 +458,40 @@ describe("API v1 shopping-list mutations on D1", () => {
         ["d1 clear flour", 2, true],
         ["d1 clear salt", 3, true],
       ]);
+    } finally {
+      d1.close();
+    }
+  });
+
+  it.each(["lost", "lost-answer", "late"] as FlakyOutcome[])("clears the list once when D1's connection drops (%s)", async (outcome) => {
+    const d1 = sqliteD1();
+    try {
+      const user = await db.user.create({ data: createTestUser() });
+      const credential = await createApiCredential(db, user.id, "D1 clear retry", { scopes: ["shopping_list:write"] });
+      const list = await db.shoppingList.create({ data: { authorId: user.id } });
+      for (const [index, name] of ["oats", "honey"].entries()) {
+        const ref = await getOrCreateIngredientRef(db, `d1 retry clear ${name}`);
+        await db.shoppingListItem.create({ data: { shoppingListId: list.id, ingredientRefId: ref.id, quantity: 1, sortIndex: index } });
+      }
+      const flaky = flakyD1(d1.binding);
+      flaky.failNext(/UPDATE "ShoppingListItem" SET "deletedAt"/, outcome);
+
+      const response = await action(routeArgs(
+        new UndiciRequest("http://localhost/api/v1/shopping-list/clear-all", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${credential.token}`, "Content-Type": "application/json", "X-Request-Id": `req_clear_${outcome}` },
+          body: JSON.stringify({ clientMutationId: `d1-clear-retry-${outcome}` }),
+        }) as unknown as Request,
+        "shopping-list/clear-all",
+        { DB: flaky.binding },
+      ));
+
+      expect(response.status).toBe(200);
+      expect(flaky.failures()).toBe(1);
+      const body = await response.json() as { data: { removed: number; items: Array<{ deletedAt: string }> } };
+      expect(body.data.removed).toBe(2);
+      const rows = await db.shoppingListItem.findMany({ where: { shoppingListId: list.id }, select: { deletedAt: true } });
+      expect(rows.map((row) => row.deletedAt?.toISOString())).toEqual(body.data.items.map((item) => item.deletedAt));
     } finally {
       d1.close();
     }

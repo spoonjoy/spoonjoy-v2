@@ -47,8 +47,6 @@ export interface RecipeHeaderProps {
   scaleFactor: number
   /** Callback when scale factor changes */
   onScaleChange: (value: number) => void
-  /** Reset checked ingredients/steps progress */
-  onClearProgress?: () => void
   /** Whether cook progress is saved to the cook's account; omitted when progress stays on this device */
   progressSyncStatus?: CookSyncStatus | null
   /** Contextual recipe navigation and primary actions */
@@ -89,7 +87,6 @@ export function RecipeHeader({
   servings,
   scaleFactor,
   onScaleChange,
-  onClearProgress,
   progressSyncStatus,
   masthead,
   provenance,
@@ -209,22 +206,12 @@ export function RecipeHeader({
           ) : null}
 
           <div className="mt-8 max-w-[43rem] print:hidden" data-testid="recipe-header-controls">
-            <div className="grid gap-4 sm:grid-cols-[minmax(16rem,26rem)_auto] sm:items-center sm:justify-between">
+            <div className="sm:max-w-[26rem]">
               <ScaleSelector
                 value={scaleFactor}
                 onChange={onScaleChange}
                 displayValue={scaledServings}
               />
-              {onClearProgress && (
-                <button
-                  type="button"
-                  onClick={onClearProgress}
-                  className="font-sj-ui inline-flex min-h-11 items-center justify-start text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:justify-end sm:text-right"
-                  data-testid="clear-progress-button"
-                >
-                  Clear progress
-                </button>
-              )}
             </div>
             {progressSyncStatus ? <CookSyncStatusLine status={progressSyncStatus} /> : null}
           </div>
