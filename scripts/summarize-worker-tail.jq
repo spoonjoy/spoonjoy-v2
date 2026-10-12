@@ -230,6 +230,7 @@ def by_path: group_by(path_pattern)
   # `writeOperations` counts those decisions. `notRetriedWrites` is the writes nothing handled:
   # the binding's unretried writes less the failures an operation handled (each such failure is
   # one of them, unless it was a read out of retries inside the operation), never below zero.
+  # docs/d1-write-retry.md lists how each write is made safe and the cases left on purpose.
   d1TransientErrors: ([.[] | d1_transient_reports[]] as $reports
     | ([.[] | d1_write_retry_reports[]] as $operations
     | ([$reports[] | select((.willRetry | not) and .operation == "write")] | length) as $unretriedWrites
