@@ -110,6 +110,20 @@ describe("API v1 cookbook writes after a transient D1 error", () => {
     expect(cookbooks).toEqual([{ id: body.data.cookbook.id, title }]);
   });
 
+  it("answers a create as committed when its retry could not tell, but the runner's recovery can", async () => {
+    // The create commits with its answer lost, and the retry's check of that is lost too, so the
+    // write gives up; the runner then finds the cookbook by its reservation's id.
+    failNext(db, "cookbook", "create", any, "lost-answer");
+    failNext(db, "cookbook", "findFirst", (args) => args?.where?.id !== undefined, "lost");
+
+    const response = await send("POST", "cookbooks", "req_book_recovered", { clientMutationId: "book-recovered", title: "Recovered book" });
+
+    expect(response.status).toBe(201);
+    const body = await response.json() as { data: { cookbook: { id: string } } };
+    await expect(db.cookbook.findMany({ where: { authorId: userId }, select: { id: true } }))
+      .resolves.toEqual([{ id: body.data.cookbook.id }]);
+  });
+
   it("still refuses a title another cookbook took while a try was lost", async () => {
     const title = "Taken while lost";
     const original = (db as unknown as Record<string, Delegate>).cookbook!.create!;
