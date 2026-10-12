@@ -13,7 +13,7 @@
 // open the recipe from the chef's kitchen home (a scratch cook's home lists no recipes) and change
 // no progress, so the chef's progress on Lemon Herb Rice stays untouched.
 import { test, expect } from "./support/journey";
-import type { Page } from "@playwright/test";
+import type { Locator, Page, TestInfo } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { pathUrl, recipeLink, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath, scratchForProject, scratchStorageStateForProject } from "./support/personas";
@@ -70,6 +70,22 @@ async function openLemonRiceFromSearch(page: Page) {
   await expect(syncStatus(page)).toHaveText("Progress synced");
 }
 
+// A point on the page, not in the viewport: the click that checks an ingredient may scroll it into
+// view, and only a shift of the page's own layout counts.
+function pageTop(locator: Locator) {
+  return locator.evaluate(async (element) => {
+    await document.fonts.ready;
+    return Math.round(element.getBoundingClientRect().top + window.scrollY);
+  });
+}
+
+// The whole page as the cook sees it, saved under test-results/ (the journeys-report artifact).
+async function savePageScreenshot(page: Page, testInfo: TestInfo, name: string) {
+  const path = testInfo.outputPath(`${name}-${testInfo.project.name}.png`);
+  await page.screenshot({ path, fullPage: true });
+  await testInfo.attach(name, { path, contentType: "image/png" });
+}
+
 // Two presses of "Increase scale": 1× -> 1.25× -> 1.5×.
 async function scaleToOneAndAHalf(page: Page) {
   const increase = page.getByRole("button", { name: "Increase scale" });
@@ -118,6 +134,43 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(scaleDisplay).toHaveText("1.5×");
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
+      await expectAccessible();
+    });
+
+    test("checking the first ingredient moves nothing on the page @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+      const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
+      const stepsHeading = page.getByRole("heading", { level: 2, name: "Steps", exact: true });
+      const stepOneTitle = page.getByRole("heading", { level: 3, name: "Cook the rice", exact: true });
+      const clearProgress = page.getByTestId("clear-progress-button");
+
+      await openLemonRiceDirectly(page);
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
+      await expect(clearProgress).toBeHidden();
+      const stepsHeadingBefore = await pageTop(stepsHeading);
+      const stepOneTitleBefore = await pageTop(stepOneTitle);
+      await savePageScreenshot(page, testInfo, "recipe-before-first-check");
+
+      const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
+      await jasmineRice.click();
+      await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+      await saved;
+      await expect(syncStatus(page)).toHaveText("Progress synced");
+      await expect(clearProgress).toBeVisible();
+      await savePageScreenshot(page, testInfo, "recipe-after-first-check");
+
+      // Clear progress and the sync line already had their room, so the first check (Ari's report:
+      // the page jumped down) shifts neither the Steps heading nor step 1.
+      expect(await pageTop(stepsHeading)).toBe(stepsHeadingBefore);
+      expect(await pageTop(stepOneTitle)).toBe(stepOneTitleBefore);
+
+      // A reload that opens with the check already made lays the page out the same way.
+      await verifyAfterReload(async () => {
+        await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
+        await expect(syncStatus(page)).toHaveText("Progress synced");
+        await expect(clearProgress).toBeVisible();
+        expect(await pageTop(stepsHeading)).toBe(stepsHeadingBefore);
+        expect(await pageTop(stepOneTitle)).toBe(stepOneTitleBefore);
+      });
       await expectAccessible();
     });
 
