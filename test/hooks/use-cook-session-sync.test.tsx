@@ -269,6 +269,55 @@ describe("useCookSessionSync", () => {
     expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").server.revision).toBe(3);
   });
 
+  it("deleting the recipe stops at once: a request in flight lands, and nothing follows it, not even a pending change", async () => {
+    // As on the recipe page after its steps were reordered: the cached position follows its step,
+    // so the page holds progress worth starting a session for, and the start is still in flight
+    // when the cook confirms the delete.
+    let finishStart!: () => void;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ state: null }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishStart = () => resolve(jsonResponse({ state: serverState(1) }));
+      }))
+      .mockResolvedValue(jsonResponse({ error: { code: "not_found" } }, 404));
+    const { result, rerender, initialProps, unmount } = render({ progress: progress({ activeStepIndex: 1, activeStepId: "step-2" }) });
+    await settle();
+    expect(fetchMock.mock.calls.map(([url, init]) => [url, (init as RequestInit).method])).toEqual([
+      ["/api/cook-sessions/recipe-1", "GET"],
+      ["/api/cook-sessions/recipe-1/start", "POST"],
+    ]);
+
+    rerender({ ...initialProps, progress: progress({ activeStepIndex: 1, activeStepId: "step-2", scaleFactor: 2 }), deleting: true });
+    await act(async () => {
+      finishStart();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    unmount();
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("pagehide"));
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Before, the start's answer was followed by a PATCH (and, once the leaving page's PATCH met the
+    // deleted recipe's 404, another start), each logging a 404 after the delete.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current).toBe("syncing");
+  });
+
+  it("syncs again when a delete fails and the page stays", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ state: null }));
+    const { rerender, initialProps } = render();
+    await settle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    rerender({ ...initialProps, deleting: true });
+    await settle();
+    rerender({ ...initialProps, deleting: false });
+    await settle();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/cook-sessions/recipe-1", expect.objectContaining({ method: "GET" }));
+  });
+
   it("moving to another recipe with a save in flight keeps the first recipe's checks and leaves the new page alone", async () => {
     // Recipe X (rice, stock) is on the page; the route then shows recipe Y (flour) in the same mount.
     writeSyncedCookCache("user-1", "recipe-x", { progress: progress(), server: serverState(1) });
