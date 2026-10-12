@@ -3400,16 +3400,20 @@ describe("Recipes $id Route", () => {
         await waitFor(() => expect(screen.getByTestId("cook-sync-status")).toHaveTextContent("Progress synced"));
         expect(fetchMock).toHaveBeenCalledTimes(1);
 
-        // A change the page has not sent yet, then the delete: the server answers 404 for a deleted
-        // recipe's session, so neither the change nor a session start may follow.
-        await user.click(screen.getByRole("button", { name: "Increase scale" }));
+        // The delete dialog is open; then the page gets a change it has not sent yet (its save waits
+        // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
+        // session, so nothing may be sent from the confirm on: no save, no session start.
         await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
         await user.click(screen.getByRole("button", { name: "Delete" }));
-        await user.click(await screen.findByRole("button", { name: "Delete" }));
+        const confirm = await screen.findByRole("button", { name: "Delete" });
+        fireEvent.click(screen.getByRole("button", { name: "Increase scale", hidden: true }));
+        const requestsBeforeConfirm = fetchMock.mock.calls.length;
+        fireEvent.click(confirm);
         await screen.findByRole("heading", { name: "My recipes" });
         await new Promise((resolve) => setTimeout(resolve, 400));
         await settleBrowserTasks();
 
+        expect(requestsBeforeConfirm).toBe(1);
         expect(fetchMock).toHaveBeenCalledTimes(1);
       } finally {
         fetchMock.mockRestore();
