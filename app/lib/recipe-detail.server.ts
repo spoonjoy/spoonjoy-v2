@@ -1882,36 +1882,33 @@ async function writeExistingRecipeOnD1(
   d1: D1ReadDatabase,
   recipeId: string,
   statements: D1Query[],
-  retry?: ExistingRecipeWriteRetry,
+  retry: ExistingRecipeWriteRetry,
 ) {
   const write = async () => {
     await d1WriteBatch(d1, [recipeActiveGuard(recipeId), ...statements]);
     return true as const;
   };
-  const createdCoverId = retry?.createdCoverId;
-  const committedWhen = retry?.committedWhen;
+  const createdCoverId = retry.createdCoverId;
+  const committedWhen = retry.committedWhen;
   try {
-    if (!retry) await write();
-    else {
-      await retryD1Write({
-        scope: retry.scope,
-        applied: createdCoverId
-          ? async () => {
-            const [rows] = await d1ReadBatch(d1, [[
-              `SELECT 1 AS "created" FROM "RecipeCover" WHERE "id" = ? AND "recipeId" = ?`,
-              createdCoverId,
-              recipeId,
-            ]]);
-            return rows.length > 0 ? (true as const) : null;
-          }
-          : committedWhen
-          ? async () => {
-            const [rows] = await d1ReadBatch(d1, [committedWhen]);
-            return rows.length > 0 ? (true as const) : null;
-          }
-          : undefined,
-      }, write);
-    }
+    await retryD1Write({
+      scope: retry.scope,
+      applied: createdCoverId
+        ? async () => {
+          const [rows] = await d1ReadBatch(d1, [[
+            `SELECT 1 AS "created" FROM "RecipeCover" WHERE "id" = ? AND "recipeId" = ?`,
+            createdCoverId,
+            recipeId,
+          ]]);
+          return rows.length > 0 ? (true as const) : null;
+        }
+        : committedWhen
+        ? async () => {
+          const [rows] = await d1ReadBatch(d1, [committedWhen]);
+          return rows.length > 0 ? (true as const) : null;
+        }
+        : undefined,
+    }, write);
   } catch (error) {
     if (isD1GuardFailure(error)) throw new Response("Recipe not found", { status: 404 });
     throw error;
