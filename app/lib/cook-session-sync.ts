@@ -383,13 +383,18 @@ export type CookSyncResult =
   /** May succeed later: network failure, 429, and 5xx other than 503 protocol unavailable. */
   | { kind: "transient"; retryAfterMs?: number };
 
+/** Aborting `signal` cancels the request; the call then answers `transient` and nothing is logged. */
+export interface CookSessionRequestOptions {
+  signal?: AbortSignal;
+}
+
 export interface CookSessionClient {
-  read(): Promise<CookSyncResult>;
-  start(): Promise<CookSyncResult>;
+  read(options?: CookSessionRequestOptions): Promise<CookSyncResult>;
+  start(options?: CookSessionRequestOptions): Promise<CookSyncResult>;
   patch(
     server: CookServerSnapshot,
     changes: Partial<CookProgressValue>,
-    options?: { keepalive?: boolean },
+    options?: CookSessionRequestOptions & { keepalive?: boolean },
   ): Promise<CookSyncResult>;
 }
 
@@ -459,8 +464,8 @@ export function createCookSessionClient(
   }
 
   return {
-    read: () => call(path, { method: "GET" }),
-    start: () => call(`${path}/start`, { method: "POST" }),
+    read: (readOptions = {}) => call(path, { method: "GET", ...readOptions }),
+    start: (startOptions = {}) => call(`${path}/start`, { method: "POST", ...startOptions }),
     patch: (server, changes, patchOptions = {}) => {
       const body = JSON.stringify({
         attemptId: server.attemptId,
@@ -472,7 +477,12 @@ export function createCookSessionClient(
         // Too big to outlive the page; the change stays queued in this browser's cache instead.
         return Promise.resolve({ kind: "transient" });
       }
-      return call(path, { method: "PATCH", body, ...(patchOptions.keepalive ? { keepalive: true } : {}) });
+      return call(path, {
+        method: "PATCH",
+        body,
+        ...(patchOptions.keepalive ? { keepalive: true } : {}),
+        ...(patchOptions.signal ? { signal: patchOptions.signal } : {}),
+      });
     },
   };
 }
@@ -509,6 +519,8 @@ export class CookSessionSync {
   private pulled = false;
   private failed = false;
   private disposed = false;
+  // Aborted by dispose(), so a request still in flight when the engine stops is cancelled.
+  private readonly abort = new AbortController();
   private leaving = false;
   private halted: HaltReason | null = null;
   private running: Promise<void> | null = null;
@@ -626,9 +638,13 @@ export class CookSessionSync {
     this.dispose();
   }
 
-  /** Stops at once: no more requests, retries, or callbacks. */
+  /**
+   * Stops at once: no more requests, retries, or callbacks, and a request in flight is cancelled,
+   * so a recipe deleted meanwhile is never answered with a 404 nobody wants.
+   */
   dispose(): void {
     this.disposed = true;
+    this.abort.abort();
     clearTimeout(this.pushTimer);
     clearTimeout(this.retryTimer);
   }
@@ -708,7 +724,7 @@ export class CookSessionSync {
     let remote: CookServerSnapshot | null = this.known;
     if (pull || !this.pulled) {
       const startedAt = this.now();
-      const read = await this.options.client.read();
+      const read = await this.options.client.read({ signal: this.abort.signal });
       if (this.disposed) return { kind: "ok" };
       if (read.kind !== "state") return this.failure(read);
       this.pulled = true;
@@ -727,7 +743,7 @@ export class CookSessionSync {
           this.known = null;
           return { kind: "ok" };
         }
-        const started = await this.options.client.start();
+        const started = await this.options.client.start({ signal: this.abort.signal });
         if (this.disposed) return { kind: "ok" };
         if (started.kind !== "state" || !started.state) return this.failure(started);
         remote = started.state;
@@ -744,7 +760,9 @@ export class CookSessionSync {
         return { kind: "ok" };
       }
 
-      const result = await this.options.client.patch(remote, cookProgressChanges(remote.progress, merged));
+      const result = await this.options.client.patch(remote, cookProgressChanges(remote.progress, merged), {
+        signal: this.abort.signal,
+      });
       if (this.disposed) return { kind: "ok" };
       if (result.kind === "state" && result.state) {
         this.acknowledge(result.state, sent);
@@ -771,7 +789,7 @@ export class CookSessionSync {
   // show as unchecks.
   private async adoptServerProgress(): Promise<Outcome> {
     const startedAt = this.now();
-    const read = await this.options.client.read();
+    const read = await this.options.client.read({ signal: this.abort.signal });
     if (this.disposed) return { kind: "ok" };
     if (read.kind !== "state") return this.failure(read);
     this.pulled = true;

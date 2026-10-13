@@ -137,7 +137,8 @@ export function useCookSessionSync({
         if (activeCookSessionEngines.get(key) === engine) activeCookSessionEngines.delete(key);
       };
       if (latest.current.deleting) {
-        // The recipe is being deleted: a save in flight may finish, but nothing more is sent.
+        // The recipe is being deleted: dispose() cancels a request in flight, so no 404 from the
+        // deleted recipe comes back, and nothing more is sent.
         engine.dispose();
         forget();
         return;

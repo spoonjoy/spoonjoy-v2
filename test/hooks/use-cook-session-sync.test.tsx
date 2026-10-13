@@ -269,7 +269,7 @@ describe("useCookSessionSync", () => {
     expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}").server.revision).toBe(3);
   });
 
-  it("deleting the recipe stops at once: a request in flight lands, and nothing follows it, not even a pending change", async () => {
+  it("deleting the recipe stops at once: nothing follows a request in flight, not even a pending change", async () => {
     // As on the recipe page after its steps were reordered: the cached position follows its step,
     // so the page holds progress worth starting a session for, and the start is still in flight
     // when the cook confirms the delete.
@@ -301,6 +301,69 @@ describe("useCookSessionSync", () => {
     // deleted recipe's 404, another start), each logging a 404 after the delete.
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.current).toBe("syncing");
+  });
+
+  // A fetch that waits for the server, answers with `answer` when told to, and rejects when aborted.
+  function hangingFetch(answer: () => Response) {
+    const requests: { signal: AbortSignal | undefined; respond: () => void }[] = [];
+    fetchMock.mockImplementation((_url: unknown, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("The operation was aborted.", "AbortError")));
+      requests.push({ signal: init?.signal ?? undefined, respond: () => resolve(answer()) });
+    }));
+    return requests;
+  }
+
+  it("deleting the recipe aborts the sync request in flight, so its 404 is never received or reported", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const requests = hangingFetch(() => jsonResponse({ error: { code: "not_found" } }, 404));
+    const { result, rerender, initialProps, unmount } = render();
+    await settle();
+    expect(requests).toHaveLength(1);
+    expect(requests[0].signal?.aborted).toBe(false);
+
+    rerender({ ...initialProps, deleting: true });
+    await settle();
+    expect(requests[0].signal?.aborted).toBe(true);
+    // The server's answer comes after the delete; nobody is listening for it.
+    requests[0].respond();
+    unmount();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current).toBe("syncing");
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("a page that unmounts on the delete's redirect aborts the request still in flight", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const requests = hangingFetch(() => jsonResponse({ error: { code: "not_found" } }, 404));
+    const { rerender, initialProps, unmount } = render();
+    await settle();
+
+    rerender({ ...initialProps, deleting: true });
+    unmount();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(requests[0].signal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("still reports a real failure on a live recipe: a 404 stops the sync and a 500 shows it offline", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: "not_found" } }, 404));
+    const missing = render();
+    await settle();
+    expect(missing.result.current).toBe("stopped");
+    missing.unmount();
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: "server_error" } }, 500));
+    const failing = render();
+    await settle();
+    expect(failing.result.current).toBe("offline");
+    failing.unmount();
   });
 
   it("syncs again when a delete fails and the page stays", async () => {
