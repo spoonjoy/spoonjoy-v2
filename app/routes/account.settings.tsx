@@ -636,8 +636,6 @@ export default function AccountSettings() {
       />
 
       <AccountDataSection
-        // A new failed attempt re-opens the form with its error.
-        key={actionData?.intent === "deleteAccount" ? `delete-${actionData.error}-${actionData.message}` : "account-data"}
         username={user.username}
         hasPassword={user.hasPassword}
         deleteError={actionData?.intent === "deleteAccount" ? actionData : null}

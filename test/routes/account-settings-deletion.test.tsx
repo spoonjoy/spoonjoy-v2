@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
@@ -209,6 +209,13 @@ describe("Account settings - Your data section", () => {
     await user.click(submit);
 
     expect(await screen.findByText("That password isn't right.")).toBeInTheDocument();
+    // Focus moves to the rejected field, which the message describes, so it is announced.
+    const rejected = screen.getByLabelText("Current password");
+    await waitFor(() => expect(rejected).toHaveFocus());
+    expect(rejected).toHaveAttribute("aria-invalid", "true");
+    expect(rejected).toHaveAccessibleDescription("That password isn't right.");
+    // What was typed stays, so the chef fixes only the password.
+    expect(screen.getByLabelText("Type your username, ada, to confirm")).toHaveValue("ada");
     expect(posted).toEqual([{ intent: "deleteAccount", confirmUsername: "ada", password: "nope" }]);
     // The error shows in the form, not in the page banner.
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
