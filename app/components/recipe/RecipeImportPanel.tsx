@@ -54,11 +54,9 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
     navigation.state !== "idle" && navigation.formData?.get("intent") === "import";
   const showResult = result && result.kind === kind;
 
-  // The import's message belongs on the field the cook filled in.
-  const formErrors = useMemo(
-    () => (result && result.kind === kind ? { [FIELD_NAME[kind]]: result.message } : undefined),
-    [result, kind],
-  );
+  // The import's message belongs on the field the cook filled in. One object per answer: the
+  // form takes a new object as a new answer and moves focus to the field.
+  const resultErrors = useMemo(() => (result ? { [FIELD_NAME[result.kind]]: result.message } : undefined), [result]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const form = event.currentTarget;
@@ -106,9 +104,11 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
       </div>
 
       <Form
+        // Each way in is its own form, so coming back to one shows its answer without taking focus.
+        key={kind}
         method="post"
         encType="multipart/form-data"
-        errors={formErrors}
+        errors={showResult ? resultErrors : undefined}
         render={<RouterForm />}
         onSubmit={handleSubmit}
         className="mt-6 max-w-xl gap-4"

@@ -222,6 +222,23 @@ describe("RecipeImportPanel", () => {
     expect(screen.queryByRole("link", { name: "Open it" })).not.toBeInTheDocument();
   });
 
+  it("leaves focus on the tab when the cook comes back to a kind whose answer is already shown", async () => {
+    const user = userEvent.setup();
+    renderPanel(() => ({ importResult: { kind: "link", message: "That site took too long to answer." } }));
+    await user.type(await screen.findByLabelText(requiredLabel("Recipe link")), "https://example.com/soup");
+    await user.click(screen.getByRole("button", { name: "Import recipe" }));
+    expect(await screen.findByText("That site took too long to answer.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Paste text" }));
+    const linkTab = screen.getByRole("button", { name: "From a link" });
+    await user.click(linkTab);
+
+    // The answer is back under the link field, and it is not treated as a new one.
+    expect(screen.getByText("That site took too long to answer.")).toBeInTheDocument();
+    expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("aria-invalid", "true");
+    expect(linkTab).toHaveFocus();
+  });
+
   it("shows that it is reading while the import runs", async () => {
     const user = userEvent.setup();
     let finish: (value: unknown) => void = () => undefined;
