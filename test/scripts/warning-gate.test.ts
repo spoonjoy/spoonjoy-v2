@@ -475,9 +475,10 @@ describe("repository test titles", () => {
     const roots = ["test", "app"].map((dir) => path.resolve(__dirname, "../..", dir));
     const titlePattern = /\b(?:it|test)(?:\.each\([^)]*\))?\(\s*(["'`])((?:(?!\1)[^\\\n]|\\.)*)\1/g;
     const flagged: string[] = [];
-    // Ouro UI's own tests come from its registry with their titles as they are (one is "warn for
-    // appearance classes on parts"). Their run never prints a slow title: vitest.ouro.config.ts
-    // sets slowTestThreshold out of reach.
+    // Stopgap for the Ouro UI defect "a copied-in test's title reads as a warning to an app's
+    // warning gate" (one is "warn for appearance classes on parts"): Ouro UI's tests are skipped
+    // here. Their run never prints a slow title, because vitest.ouro.config.ts sets
+    // slowTestThreshold out of reach under the same defect. Remove both with the fix (v0.8.0).
     const ouroDirs = ["app/components/ouro", "app/lib/ouro"].map((dir) => path.resolve(__dirname, "../..", dir));
     const visit = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {

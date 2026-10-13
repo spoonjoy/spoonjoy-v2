@@ -140,10 +140,11 @@ describe("build output hygiene", () => {
   });
 
   it("keeps inert client directives out of local app source", async () => {
-    // Ouro UI's files come from its registry as they are, and since v0.3.1 each starts with
-    // "use client" for Next.js apps. The build leaves the directive out of the bundle, and its
-    // notices about it are filtered for those files (scripts/build-output-hygiene.ts), so only
-    // Spoonjoy's own source is held to this.
+    // Stopgap for the Ouro UI defect "shadcn's installer does not strip Ouro UI's `"use client";`
+    // line for an app that is not on React Server Components": every copied-in Ouro UI file
+    // keeps the line, so only Spoonjoy's own source is held to this. The build's notices about
+    // those files are filtered by scripts/build-output-hygiene.ts, under the same defect. Remove
+    // both with the fix (v0.8.0).
     const ouroDirs = ["app/components/ouro", "app/lib/ouro"].map((dir) => path.join(process.cwd(), dir) + path.sep);
     const sourceFiles = (await findSourceFiles(path.join(process.cwd(), "app"))).filter(
       (filePath) => !ouroDirs.some((dir) => filePath.startsWith(dir)),
