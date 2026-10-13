@@ -1917,6 +1917,30 @@ describe("Cookbooks $id Route", () => {
         expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
       });
 
+      it("shows the error again when a second rename is refused for the same reason", async () => {
+        let attempts = 0;
+        renderRenameStub(() => {
+          attempts += 1;
+          return routerData({ error: "You already have a cookbook with this title", intent: "updateTitle" }, { status: 400 });
+        });
+
+        const input = await openTitleEditor();
+        fireEvent.change(input, { target: { value: "Taken Title" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        expect(await screen.findByText("You already have a cookbook with this title")).toBeInTheDocument();
+
+        // Changing the field drops its message; the next refusal must bring it back.
+        fireEvent.change(input, { target: { value: "Another Taken Title" } });
+        await waitFor(() => {
+          expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await waitFor(() => expect(attempts).toBe(2));
+        expect(await screen.findByText("You already have a cookbook with this title")).toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAttribute("aria-invalid", "true");
+      });
+
       it("keeps the editor open with the new title when the database was briefly unavailable", async () => {
         renderRenameStub(() =>
           routerData(

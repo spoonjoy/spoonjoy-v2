@@ -2771,6 +2771,12 @@ describe("Recipes $id Route", () => {
 
       await user.click(screen.getByRole("button", { name: "Create & Save" }));
       expect(await within(dialog).findByText("You already have a cookbook with this title")).toBeInTheDocument();
+      await waitFor(() => expect(titleInput).toHaveFocus());
+
+      // The same refusal again, with the title untouched, is a new answer: focus returns to the field.
+      await user.click(screen.getByRole("button", { name: "Create & Save" }));
+      await waitFor(() => expect(titleInput).toHaveFocus());
+      expect(titleInput).toHaveAccessibleDescription("You already have a cookbook with this title");
       await closeSaveModal(user);
 
       // Reopening starts clean.

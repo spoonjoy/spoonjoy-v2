@@ -6,10 +6,9 @@ import { Button } from "../ui/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
-import { Form } from "~/components/ouro/form/form";
+import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { useFormMessage } from "~/hooks/use-form-errors";
 import {
   FOOD_IMAGE_ACCEPT,
   FOOD_IMAGE_SIZE_MESSAGE,
@@ -38,7 +37,8 @@ export interface SpoonDialogProps {
   actionUrl: string;
   isOriginCookCandidate: boolean;
   coverPromptMode?: "none" | "first-photo" | "optional-update";
-  errorMessage?: string | null;
+  /** What the server refused, for the form: a new object for each refusal. */
+  errors?: FormErrors;
 }
 
 export function SpoonDialog({
@@ -47,9 +47,8 @@ export function SpoonDialog({
   actionUrl,
   isOriginCookCandidate,
   coverPromptMode = "none",
-  errorMessage,
+  errors: formErrors,
 }: SpoonDialogProps) {
-  const formErrors = useFormMessage(errorMessage);
   const photoId = useId();
   const photoHintId = useId();
   const photoStatusId = useId();

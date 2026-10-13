@@ -50,7 +50,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function Logout() {
   const actionData = useActionData<{ error?: string }>();
-  const formErrors = useFormMessage(actionData?.error);
+  const formErrors = useFormMessage(actionData?.error, actionData);
   return (
     <AuthLayout
       eyebrow="Signing out"

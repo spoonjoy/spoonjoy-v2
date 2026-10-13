@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
-import { createTestRoutesStub, findShownAlert, queryShownAlert } from "../utils";
+import { createTestRoutesStub, findShownAlert, getShownAlert, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
 import { data } from "react-router";
@@ -498,6 +498,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
     await waitFor(() => expect(tokens).toHaveLength(2));
     expect(tokens[1]).toBe(tokens[0]);
+    // The same refusal a second time is a new answer: focus goes back to the message.
+    await waitFor(() => expect(getShownAlert()).toHaveFocus());
     expect(tokens[0]).toMatch(/^[0-9a-f-]{36}$/);
 
     // A fresh opening starts without the old message. Cancel is disabled while the second submit

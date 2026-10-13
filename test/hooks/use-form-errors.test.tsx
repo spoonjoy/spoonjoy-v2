@@ -53,10 +53,19 @@ describe("useFormMessage", () => {
     expect(renderHook(() => useFormMessage("")).result.current).toBeUndefined();
   });
 
-  it("keeps the same object while the message is the same", () => {
-    const { result, rerender } = renderHook(({ message }) => useFormMessage(message), { initialProps: { message: "Nope" } });
+  it("keeps the same object for the same answer, and makes a new one when the same message arrives again", () => {
+    const first = { error: "Nope" };
+    const { result, rerender } = renderHook(({ answer }) => useFormMessage(answer.error, answer), {
+      initialProps: { answer: first },
+    });
     const shown = result.current;
-    rerender({ message: "Nope" });
+
+    rerender({ answer: first });
     expect(result.current).toBe(shown);
+
+    // The same refusal a second time is a new answer: the form shows it and moves focus again.
+    rerender({ answer: { error: "Nope" } });
+    expect(result.current).not.toBe(shown);
+    expect(result.current).toEqual({ form: "Nope" });
   });
 });

@@ -35,7 +35,10 @@ export function useFormErrors(
 /**
  * One message about the whole form (an action that answers `{ error }`, with no field to put it
  * on) in the shape Ouro UI's `Form` takes: it shows at the top of the form.
+ *
+ * `answer` is the action result the message came from. The result is a new object for each
+ * answer, not for each message text: the same refusal twice must show and take focus twice.
  */
-export function useFormMessage(message: string | null | undefined): FormErrors | undefined {
-  return useMemo(() => (message ? { form: message } : undefined), [message]);
+export function useFormMessage(message: string | null | undefined, answer: unknown): FormErrors | undefined {
+  return useMemo(() => (message ? { form: message } : undefined), [message, answer]);
 }

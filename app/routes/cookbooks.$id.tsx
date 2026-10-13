@@ -15,7 +15,7 @@ import {
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
 import { formatServingsLabel } from "~/lib/quantity";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { listImageProps } from "~/lib/image-loading";
@@ -75,7 +75,7 @@ import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/ui/button";
 import { Text, Strong } from "~/components/ui/text";
 import { Link as CatalystLink } from "~/components/ui/link";
-import { Form } from "~/components/ouro/form/form";
+import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -354,9 +354,9 @@ export default function CookbookDetail() {
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
-  const [titleError, setTitleError] = useState<string | null>(null);
-  // The rename's error belongs on the title field.
-  const titleErrors = useMemo(() => (titleError ? { title: titleError } : undefined), [titleError]);
+  // The rename's error belongs on the title field. Each refusal sets a new object, even with the
+  // same message: the form shows a message again only for a new object.
+  const [titleErrors, setTitleErrors] = useState<FormErrors>();
   const submit = useSubmit();
   // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
   useDockSuppressed(isEditingTitle);
@@ -376,21 +376,21 @@ export default function CookbookDetail() {
     }
     if (actionData?.intent !== "updateTitle") return;
     if (typeof actionData.error === "string") {
-      setTitleError(actionData.error);
+      setTitleErrors({ title: actionData.error });
       return;
     }
-    setTitleError(null);
+    setTitleErrors(undefined);
     setIsEditingTitle(false);
     showToast({ message: "Cookbook renamed." });
   }, [actionData, showToast]);
 
   const openTitleEditor = () => {
-    setTitleError(null);
+    setTitleErrors(undefined);
     setIsEditingTitle(true);
   };
 
   const closeTitleEditor = () => {
-    setTitleError(null);
+    setTitleErrors(undefined);
     setIsEditingTitle(false);
   };
 

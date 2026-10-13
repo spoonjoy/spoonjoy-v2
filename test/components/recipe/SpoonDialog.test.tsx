@@ -332,7 +332,7 @@ describe("SpoonDialog", () => {
   });
 
   it("shows the server-error message when actionData.error is provided", async () => {
-    renderDialog({ errorMessage: "Server said no" });
+    renderDialog({ errors: { form: "Server said no" } });
     expect(await screen.findByText("Server said no")).toBeInTheDocument();
   });
 

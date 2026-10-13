@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, getShownAlert } from "../utils";
 import { loader, action, meta } from "~/routes/logout";
 import Logout from "~/routes/logout";
 import { sessionStorage } from "~/lib/session.server";
@@ -176,6 +176,11 @@ describe("Logout Route", () => {
       await userEvent.setup().click(screen.getByRole("button", { name: "Log out" }));
       expect(await screen.findByText("Sign-out must come from Spoonjoy.")).toBeInTheDocument();
       expect(posted).toEqual(["POST"]);
+      // The same refusal a second time is a new answer: focus goes back to the message.
+      await waitFor(() => expect(getShownAlert()).toHaveFocus());
+      await userEvent.setup().click(screen.getByRole("button", { name: "Log out" }));
+      await waitFor(() => expect(posted).toEqual(["POST", "POST"]));
+      await waitFor(() => expect(getShownAlert()).toHaveFocus());
       // Like every other Log out form, this one clears cook progress cached in the browser.
       expect(window.localStorage.getItem("spoonjoy-cook-progress:user:test-user:recipe-1")).toBeNull();
       expect(window.localStorage.getItem("spoonjoy-cook-progress:recipe-1")).toBeNull();

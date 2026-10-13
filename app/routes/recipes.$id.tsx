@@ -27,7 +27,7 @@ import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
-import { Form } from "~/components/ouro/form/form";
+import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
@@ -659,19 +659,17 @@ export default function RecipeDetail() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
   // A cook the server could not save shows its message in the open dialog, which keeps the input.
-  const [spoonError, setSpoonError] = useState<string | null>(null);
+  // Each refusal sets a new object, even with the same message: the form shows a message again
+  // and moves focus to it only for a new object.
+  const [spoonErrors, setSpoonErrors] = useState<FormErrors>();
   const openSpoonDialog = useCallback(() => {
-    setSpoonError(null);
+    setSpoonErrors(undefined);
     setIsSpoonDialogOpen(true);
   }, []);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
-  const [createCookbookError, setCreateCookbookError] = useState<string | null>(null);
   // The create's error belongs on the cookbook name field.
-  const createCookbookErrors = useMemo(
-    () => (createCookbookError ? { title: createCookbookError } : undefined),
-    [createCookbookError],
-  );
+  const [createCookbookErrors, setCreateCookbookErrors] = useState<FormErrors>();
 
   useEffect(() => {
     const loggedSpoonId = actionData?.success && actionData.intent === "createSpoon"
@@ -689,7 +687,7 @@ export default function RecipeDetail() {
 
   useEffect(() => {
     if (actionData?.intent === "createSpoon" && typeof actionData.error === "string") {
-      setSpoonError(actionData.error);
+      setSpoonErrors({ form: actionData.error });
     }
   }, [actionData]);
 
@@ -699,7 +697,7 @@ export default function RecipeDetail() {
       return;
     }
 
-    setCreateCookbookError(null);
+    setCreateCookbookErrors(undefined);
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
 
@@ -948,7 +946,7 @@ export default function RecipeDetail() {
   useEffect(() => {
     const result = createCookbookFetcher.data as { intent?: unknown; error?: unknown } | undefined;
     if (result?.intent === "createCookbookAndSave" && typeof result.error === "string") {
-      setCreateCookbookError(result.error);
+      setCreateCookbookErrors({ title: result.error });
     }
   }, [createCookbookFetcher.data]);
 
@@ -1162,7 +1160,7 @@ export default function RecipeDetail() {
         actionUrl={`/recipes/${recipe.id}`}
         isOriginCookCandidate={isOriginCookCandidate}
         coverPromptMode={coverPromptMode}
-        errorMessage={spoonError}
+        errors={spoonErrors}
       />
 
       {/* Save to Cookbook: Ouro UI's Dialog, a bottom sheet on phones and centred from 640px up. It
@@ -1197,7 +1195,7 @@ export default function RecipeDetail() {
                 value={newCookbookTitle}
                 onChange={(event) => {
                   setNewCookbookTitle(event.target.value);
-                  setCreateCookbookError(null);
+                  setCreateCookbookErrors(undefined);
                 }}
                 data-testid="new-cookbook-input"
               />
