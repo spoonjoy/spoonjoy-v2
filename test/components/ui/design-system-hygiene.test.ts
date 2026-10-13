@@ -32,6 +32,16 @@ function listTextFiles(dirs: string[]): string[] {
 }
 
 describe("Spoonjoy UI design-system hygiene", () => {
+  it("uses one text link, Ouro UI's, outside Catalyst's own files", () => {
+    // Catalyst's TextLink (app/components/ui/text.tsx) looks different: tomato and semibold where
+    // Ouro UI's Link is the primary colour at normal weight.
+    const offenders = listTextFiles(APP_AND_STORY_FILES)
+      .filter((file) => !file.startsWith("app/components/ui/") && !file.startsWith("app/components/ouro/"))
+      .filter((file) => /\bTextLink\b/.test(readSourceFile(file)));
+
+    expect(offenders).toEqual([]);
+  });
+
   it("spaces an Ouro UI field from its siblings with a gap, not a margin", () => {
     // Stopgap for the Ouro UI defect "a field's root sets m-0, which beats the margin space-y and
     // space-x put on children": the field touches what follows it. Remove with the fix (v0.8.0).

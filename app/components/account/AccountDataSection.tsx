@@ -4,7 +4,8 @@ import { Download } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 import { SettingsPanel } from "~/components/cookbook/page";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
@@ -59,7 +60,9 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
             app and agent you connected. Recipes other cooks forked, saved or cooked stay up,
             credited to a “Deleted chef” placeholder; their forks stay theirs. This can't be undone, so download your data first if you want a copy.
           </Text>
-          <TextLink href="/privacy#deletion" className="text-sm">What gets deleted</TextLink>
+          <p className="m-0 text-sm/6">
+            <Link href="/privacy#deletion">What gets deleted</Link>
+          </p>
           {isDeleting ? (
             <Form
               method="post"

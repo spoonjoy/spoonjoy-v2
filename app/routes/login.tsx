@@ -15,7 +15,8 @@ import { Heading } from "~/components/ui/heading";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/ui/button";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 
 interface ActionData {
@@ -178,7 +179,7 @@ export default function Login() {
 
         <Text className="mt-6 text-center">
           Don't have an account?{" "}
-          <TextLink href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}>Sign up</TextLink>
+          <Link href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}>Sign up</Link>
         </Text>
       </div>
     </AuthLayout>

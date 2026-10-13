@@ -1,6 +1,7 @@
 import type { Route } from "./+types/account.deleted";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -21,8 +22,8 @@ export default function AccountDeleted() {
         </CookbookHeader>
         <Text className="mt-6 text-base/7">Thanks for cooking with us. You're welcome back any time.</Text>
         <div className="mt-2 flex flex-wrap gap-x-6">
-          <TextLink href="/signup">Create a new account</TextLink>
-          <TextLink href="/privacy#deletion">How we handle deleted accounts</TextLink>
+          <Link href="/signup">Create a new account</Link>
+          <Link href="/privacy#deletion">How we handle deleted accounts</Link>
         </div>
       </div>
     </CookbookPage>

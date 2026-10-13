@@ -13,7 +13,8 @@ import {
   parseShoppingItemFallback,
   type ShoppingListActionData,
 } from "~/lib/shopping-list-parser";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link as OuroLink } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Plus } from "lucide-react";
 import { Field } from "~/components/ouro/field/field";
@@ -391,7 +392,7 @@ export default function ShoppingList() {
           // the sentence, not in a button row, so the Add button still clears the dock on a phone.
           <RuledEmptyState title="Your shopping list is empty">
             <Text className="mt-2">
-              <TextLink href="/recipes">Explore recipes</TextLink> to add a recipe&apos;s ingredients, or add items one at a time below.
+              <OuroLink href="/recipes">Explore recipes</OuroLink> to add a recipe&apos;s ingredients, or add items one at a time below.
             </Text>
           </RuledEmptyState>
         ) : filteredItems.length === 0 ? (

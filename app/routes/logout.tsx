@@ -5,7 +5,8 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 import { Form } from "~/components/ouro/form/form";
 import { useFormMessage } from "~/hooks/use-form-errors";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
@@ -66,7 +67,7 @@ export default function Logout() {
           </Button>
         </Form>
         <Text className="mt-6 text-center">
-          <TextLink href="/">Stay signed in</TextLink>
+          <Link href="/">Stay signed in</Link>
         </Text>
       </div>
     </AuthLayout>

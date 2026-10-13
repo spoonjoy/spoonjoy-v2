@@ -7,7 +7,8 @@ import { Fieldset } from '../app/components/ouro/field/fieldset'
 import { TextArea } from '../app/components/ouro/text-field/text-area'
 import { TextField } from '../app/components/ouro/text-field/text-field'
 import { Heading, Subheading } from '../app/components/ui/heading'
-import { Text, TextLink } from '../app/components/ui/text'
+import { Link } from '../app/components/ouro/link/link'
+import { Text } from '../app/components/ui/text'
 
 const meta: Meta = {
   title: 'App/Foundation',
@@ -102,7 +103,7 @@ export const PantryCardLanguage: Story = {
           <Badge color="blue">Serves 2</Badge>
         </div>
         <Text>
-          See the full flow in <TextLink href="/recipes/lemon-pasta">recipe view</TextLink>.
+          See the full flow in <Link href="/recipes/lemon-pasta">recipe view</Link>.
         </Text>
       </div>
     </article>

@@ -2,7 +2,8 @@ import type { Route } from "./+types/terms";
 import type { ReactNode } from "react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Subheading } from "~/components/ui/heading";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 
 const LAST_UPDATED = "May 29, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
@@ -107,8 +108,8 @@ export default function Terms() {
         <Section title="Contact">
           <Text>
             Questions about these terms? Email{" "}
-            <TextLink href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</TextLink>. See also our{" "}
-            <TextLink href="/privacy">Privacy Policy</TextLink>.
+            <Link href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</Link>. See also our{" "}
+            <Link href="/privacy">Privacy Policy</Link>.
           </Text>
         </Section>
       </div>
