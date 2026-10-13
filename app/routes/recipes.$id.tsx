@@ -49,7 +49,7 @@ import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
-import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
+import { confirmCookSessionRecipeDeletion, useCookSessionSync } from "~/hooks/use-cook-session-sync";
 import { useCookTimers, type CookTimersController } from "~/hooks/use-cook-timers";
 import { useScreenWakeLock } from "~/hooks/use-screen-wake-lock";
 import { useWriteToken } from "~/hooks/use-write-token";
@@ -116,6 +116,31 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 
 export async function action({ request, params, context }: Route.ActionArgs) {
   return handleRecipeDetailAction({ request, params, context });
+}
+
+export async function clientAction({ request, params, serverAction }: Route.ClientActionArgs) {
+  const formData = await request.clone().formData();
+  const confirmDeletion = (result: unknown) => {
+    // Both delete implementations redirect here only after the delete/tombstone commit. A
+    // single-fetch redirect is thrown, not returned; neither a 404 nor a login redirect proves it.
+    if (formData.get("intent") !== "delete" || !params.id || !(result instanceof Response)
+      || result.status !== 302 || result.headers.get("Location") !== "/recipes") return;
+    const userId = formData.get("cookSessionUserId");
+    if (typeof userId === "string" && userId) confirmCookSessionRecipeDeletion(userId, params.id);
+    try {
+      window.localStorage.removeItem(getCookProgressStorageKey(params.id));
+    } catch {
+      // Storage can be unavailable; that must not replace the successful server redirect.
+    }
+  };
+  try {
+    const result = await serverAction();
+    confirmDeletion(result);
+    return result;
+  } catch (error) {
+    confirmDeletion(error);
+    throw error;
+  }
 }
 
 type CookbookListItem = { id: string; title: string };
@@ -993,7 +1018,7 @@ export default function RecipeDetail() {
 
   const handleConfirmDelete = () => {
     setIsDeleteDialogOpen(false);
-    submit({ intent: "delete" }, { method: "post" });
+    submit({ intent: "delete", cookSessionUserId: cookSessionUserId ?? "" }, { method: "post" });
   };
 
   /* istanbul ignore next -- @preserve browser scroll navigation */

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useCookProgressCacheOwner, useCookSessionSync, type UseCookSessionSyncOptions } from "~/hooks/use-cook-session-sync";
+import { confirmCookSessionRecipeDeletion, useCookProgressCacheOwner, useCookSessionSync, type UseCookSessionSyncOptions } from "~/hooks/use-cook-session-sync";
 import {
   DEFAULT_COOK_PROGRESS,
   MIN_COOK_PULL_INTERVAL_MS,
@@ -313,6 +313,53 @@ describe("useCookSessionSync", () => {
     return requests;
   }
 
+  it("deleting aborts a keepalive save without callbacks or follow-up work", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ state: serverState(4) }));
+    const { result, rerender, initialProps, onRemoteProgress, unmount } = render();
+    await settle();
+    const requests = hangingFetch(() => jsonResponse({ error: { code: "not_found" } }, 404));
+    onRemoteProgress.mockClear();
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
+    setVisibility("hidden");
+    window.dispatchEvent(new Event("pagehide"));
+    expect((fetchMock.mock.calls[1][1] as RequestInit).keepalive).toBe(true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].signal?.aborted).toBe(false);
+
+    rerender({ ...initialProps, deleting: true });
+    expect(requests[0].signal?.aborted).toBe(true);
+    requests[0].respond();
+    unmount();
+    await settle(60_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onRemoteProgress).not.toHaveBeenCalled();
+    expect(result.current).toBe("syncing");
+  });
+
+  it("a non-delete page close lets its keepalive save finish before aborting the engine", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ state: serverState(4) }));
+    const { rerender, initialProps, unmount } = render();
+    await settle();
+    const requests = hangingFetch(() => jsonResponse({ state: serverState(5, { scaleFactor: 2 }) }));
+
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
+    setVisibility("hidden");
+    window.dispatchEvent(new Event("pagehide"));
+    unmount();
+    await settle(100);
+    expect(requests[0].signal?.aborted).toBe(false);
+
+    requests[0].respond();
+    await settle();
+    expect(requests[0].signal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // A flush does not acknowledge a revision: retain recovery data for the next visit.
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}"))
+      .toMatchObject({ progress: progress({ scaleFactor: 2 }), server: serverState(4) });
+  });
+
   it("deleting the recipe aborts the sync request in flight, so its 404 is never received or reported", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const requests = hangingFetch(() => jsonResponse({ error: { code: "not_found" } }, 404));
@@ -367,18 +414,54 @@ describe("useCookSessionSync", () => {
   });
 
   it("syncs again when a delete fails and the page stays", async () => {
-    fetchMock.mockImplementation(async () => jsonResponse({ state: null }));
+    fetchMock.mockResolvedValue(jsonResponse({ state: serverState(4) }));
     const { rerender, initialProps } = render();
     await settle();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    rerender({ ...initialProps, deleting: true });
+    const edited = progress({ scaleFactor: 2 });
+    rerender({ ...initialProps, progress: edited });
+    const pending = window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"));
+    rerender({ ...initialProps, progress: edited, deleting: true });
     await settle();
-    rerender({ ...initialProps, deleting: false });
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBe(pending);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(4) }))
+      .mockResolvedValueOnce(jsonResponse({ state: serverState(5, { scaleFactor: 2 }) }));
+    rerender({ ...initialProps, progress: edited, deleting: false });
     await settle();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/cook-sessions/recipe-1", expect.objectContaining({ method: "GET" }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "GET" });
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({ method: "PATCH" });
+    expect(JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body))).toMatchObject({ changes: { scaleFactor: 2 } });
+    expect(JSON.parse(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1")) ?? "{}"))
+      .toMatchObject({ progress: edited, server: serverState(5, { scaleFactor: 2 }) });
+  });
+
+  it("confirmed deletion cannot be undone by a late result from an engine still finishing", async () => {
+    const otherKey = syncedCookProgressStorageKey("user-1", "recipe-2");
+    writeSyncedCookCache("user-1", "recipe-2", { progress: progress({ scaleFactor: 3 }), server: serverState(2) });
+    const unrelated = window.localStorage.getItem(otherKey);
+    let respond!: () => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      // Some transports can finish despite abort: the engine must not re-cache this answer.
+      respond = () => resolve(jsonResponse({ state: serverState(5) }));
+    }));
+    const { rerender, initialProps, unmount, onRemoteProgress } = render();
+    rerender({ ...initialProps, progress: progress({ scaleFactor: 2 }) });
+    unmount();
+
+    confirmCookSessionRecipeDeletion("user-1", "recipe-1");
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(true);
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBeNull();
+    respond();
+    await settle(60_000);
+
+    expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBeNull();
+    expect(window.localStorage.getItem(otherKey)).toBe(unrelated);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onRemoteProgress).not.toHaveBeenCalled();
   });
 
   it("moving to another recipe with a save in flight keeps the first recipe's checks and leaves the new page alone", async () => {

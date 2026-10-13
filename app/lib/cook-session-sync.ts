@@ -524,6 +524,7 @@ export class CookSessionSync {
   private leaving = false;
   private halted: HaltReason | null = null;
   private running: Promise<void> | null = null;
+  private readonly keepaliveRequests = new Set<Promise<CookSyncResult>>();
   private rerun = false;
   private rerunPull = false;
   private pushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -611,7 +612,10 @@ export class CookSessionSync {
     const changes = cookProgressChanges(this.known.progress, this.outgoing(this.known.progress, this.local, this.known.progress));
     if (Object.keys(changes).length === 0) return;
     clearTimeout(this.pushTimer);
-    void this.options.client.patch(this.known, changes, { keepalive: true });
+    const request = this.options.client.patch(this.known, changes, { keepalive: true, signal: this.abort.signal });
+    this.keepaliveRequests.add(request);
+    const forget = () => this.keepaliveRequests.delete(request);
+    void request.then(forget, forget);
   }
 
   /**
@@ -630,6 +634,9 @@ export class CookSessionSync {
       timer = setTimeout(resolve, timeoutMs);
     });
     const finish = async () => {
+      // A pagehide flush is still owned by this engine: ordinary leave lets it land, whereas
+      // deletion's dispose() aborts it at once. The same leave timeout bounds both kinds of save.
+      while (this.keepaliveRequests.size) await Promise.allSettled(this.keepaliveRequests);
       while (this.running) await this.running;
       if (this.pending) await this.run(false);
     };
@@ -639,8 +646,8 @@ export class CookSessionSync {
   }
 
   /**
-   * Stops at once: no more requests, retries, or callbacks, and a request in flight is cancelled,
-   * so a recipe deleted meanwhile is never answered with a 404 nobody wants.
+   * Stops at once: aborts owned fetches (including keepalive), ignores obsolete completions, and
+   * sends no more requests, retries, or callbacks. Abort cannot undo work already on the server.
    */
   dispose(): void {
     this.disposed = true;
