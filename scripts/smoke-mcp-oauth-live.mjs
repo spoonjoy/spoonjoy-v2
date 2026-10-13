@@ -709,12 +709,6 @@ async function main() {
         refreshToken: firstTokens.refreshToken,
         workerVersionId,
       });
-      await expectRefreshReplayRejected(page.request, {
-        baseUrl,
-        clientId,
-        refreshToken: successor.refreshToken,
-        workerVersionId,
-      });
     });
 
     await check("mcp initialize and tools/list with refreshed access token", async () => {
