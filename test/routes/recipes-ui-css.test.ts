@@ -88,41 +88,31 @@ function usesRawButtonElements(content: string): boolean {
 }
 
 /**
- * Checks if file uses raw input elements without using Input component
- * Note: Hidden inputs (<input type="hidden">) are excluded as they are not user-facing
+ * How many raw <input> elements a chef can see. Hidden inputs carry form data and do not count.
  */
-function usesRawInputElements(content: string): boolean {
-  // Has <input but doesn't import Input from UI
-  // Exclude hidden inputs which are acceptable for form data
-  const hasVisibleInputElements = /<input\s(?!type="hidden")(?!type='hidden')/g.test(content);
-  const importsInputComponent =
-    content.includes('import { Input') ||
-    content.includes('import {Input') ||
-    content.includes("Input }") ||
-    content.includes("Input}") ||
-    content.includes("Input,") ||
-    content.includes("RecipeBuilder"); // RecipeBuilder contains Input components
-
-  return hasVisibleInputElements && !importsInputComponent;
+function countVisibleInputs(content: string): number {
+  return (content.match(/<input\b(?!\s+type=["']hidden["'])/g) ?? []).length;
 }
 
 /**
- * Checks if file uses raw textarea elements without using Textarea component
- * Note: Hidden textareas (className="hidden") are excluded as they are not user-facing
+ * The raw inputs each recipe route may keep. Every other field is one of Ouro UI's
+ * (app/components/ouro/text-field/text-field.tsx).
  */
-function usesRawTextareaElements(content: string): boolean {
-  // Has <textarea but doesn't import Textarea from UI
-  // Exclude hidden textareas which are acceptable for form submission
-  const hasVisibleTextareaElements = /<textarea\s(?!name="[^"]*"\s+className="hidden")(?!className="hidden")/g.test(content);
-  const importsTextareaComponent =
-    content.includes('import { Textarea') ||
-    content.includes('import {Textarea') ||
-    content.includes("Textarea }") ||
-    content.includes("Textarea}") ||
-    content.includes("Textarea,") ||
-    content.includes("RecipeBuilder"); // RecipeBuilder contains Textarea components
+const ALLOWED_RAW_INPUTS: Record<string, number> = {
+  // Stopgap for the Ouro UI gap "TextField cannot render a frameless, display-size input inside
+  // the app's own frame": the hero search. Remove with the fix (v0.8.0).
+  "app/routes/recipes._index.tsx": 1,
+  // The image file input of the hidden form that carries RecipeBuilder's data to the action.
+  "app/routes/recipes.new.tsx": 1,
+  "app/routes/recipes.$id.edit.tsx": 1,
+};
 
-  return hasVisibleTextareaElements && !importsTextareaComponent;
+/**
+ * How many raw <textarea> elements a chef can see. One with className="hidden" carries form data
+ * and does not count.
+ */
+function countVisibleTextareas(content: string): number {
+  return (content.match(/<textarea\b(?![^>]*className="hidden")/g) ?? []).length;
 }
 
 describe("Recipe Routes UI/CSS Compliance", () => {
@@ -171,53 +161,29 @@ describe("Recipe Routes UI/CSS Compliance", () => {
     );
   });
 
-  describe("Input Component Usage", () => {
-    // Filter to only files that use input elements
-    const filesWithInputs = RECIPE_ROUTE_FILES.filter((filePath) => {
-      const content = readSourceFile(filePath);
-      return /<input\s/g.test(content);
+  describe("Field Component Usage", () => {
+    it("counts a raw input whatever else the file imports", () => {
+      // The old check passed any file whose source had "Input }" in it, such as an import of
+      // useUrlSyncedInput.
+      expect(countVisibleInputs('import { useUrlSyncedInput } from "x";\n<input name="q" />')).toBe(1);
+      expect(countVisibleInputs('<input type="hidden" name="a" />\n<input\n  type="hidden"\n  name="b"\n/>')).toBe(0);
+      expect(countVisibleTextareas('<textarea name="d" className="hidden" />\n<textarea name="e" />')).toBe(1);
     });
 
-    it.each(filesWithInputs)(
-      "%s should use Input component instead of raw <input>",
-      (filePath) => {
-        const content = readSourceFile(filePath);
-
-        expect(
-          usesRawInputElements(content),
-          `${filePath} uses raw <input> elements. ` +
-          `Should use Input component from app/components/ui/input.tsx`
-        ).toBe(false);
-      }
-    );
-  });
-
-  describe("Textarea Component Usage", () => {
-    // Filter to only files that use textarea elements
-    const filesWithTextareas = RECIPE_ROUTE_FILES.filter((filePath) => {
-      const content = readSourceFile(filePath);
-      return /<textarea\s/g.test(content);
+    it.each(RECIPE_ROUTE_FILES)("%s uses Ouro UI's fields instead of raw <input>", (filePath) => {
+      expect(
+        countVisibleInputs(readSourceFile(filePath)),
+        `${filePath} has a raw <input> that is not listed in ALLOWED_RAW_INPUTS. ` +
+        `Use TextField from app/components/ouro/text-field/text-field.tsx`
+      ).toBe(ALLOWED_RAW_INPUTS[filePath] ?? 0);
     });
 
-    if (filesWithTextareas.length === 0) {
-      it("should have no raw textarea elements (none found)", () => {
-        // No files use raw textarea elements - this is the expected state
-        expect(filesWithTextareas.length).toBe(0);
-      });
-    } else {
-      it.each(filesWithTextareas)(
-        "%s should use Textarea component instead of raw <textarea>",
-        (filePath) => {
-          const content = readSourceFile(filePath);
-
-          expect(
-            usesRawTextareaElements(content),
-            `${filePath} uses raw <textarea> elements. ` +
-            `Should use Textarea component from app/components/ui/textarea.tsx`
-          ).toBe(false);
-        }
-      );
-    }
+    it.each(RECIPE_ROUTE_FILES)("%s uses Ouro UI's TextArea instead of raw <textarea>", (filePath) => {
+      expect(
+        countVisibleTextareas(readSourceFile(filePath)),
+        `${filePath} has a raw <textarea>. Use TextArea from app/components/ouro/text-field/text-area.tsx`
+      ).toBe(0);
+    });
   });
 
   describe("Summary Report", () => {
@@ -242,11 +208,11 @@ describe("Recipe Routes UI/CSS Compliance", () => {
           fileIssues.push("uses raw <button>");
         }
 
-        if (usesRawInputElements(content)) {
+        if (countVisibleInputs(content) !== (ALLOWED_RAW_INPUTS[filePath] ?? 0)) {
           fileIssues.push("uses raw <input>");
         }
 
-        if (usesRawTextareaElements(content)) {
+        if (countVisibleTextareas(content) > 0) {
           fileIssues.push("uses raw <textarea>");
         }
 
