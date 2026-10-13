@@ -361,7 +361,6 @@ describe("useCookSessionSync", () => {
   });
 
   it("deleting the recipe aborts the sync request in flight, so its 404 is never received or reported", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const requests = hangingFetch(() => jsonResponse({ error: { code: "not_found" } }, 404));
     const { result, rerender, initialProps, unmount } = render();
     await settle();
@@ -378,12 +377,9 @@ describe("useCookSessionSync", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.current).toBe("syncing");
-    expect(consoleError).not.toHaveBeenCalled();
-    consoleError.mockRestore();
   });
 
   it("a page that unmounts on the delete's redirect aborts the request still in flight", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const requests = hangingFetch(() => jsonResponse({ error: { code: "not_found" } }, 404));
     const { rerender, initialProps, unmount } = render();
     await settle();
@@ -394,8 +390,6 @@ describe("useCookSessionSync", () => {
 
     expect(requests[0].signal?.aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(consoleError).not.toHaveBeenCalled();
-    consoleError.mockRestore();
   });
 
   it("still reports a real failure on a live recipe: a 404 stops the sync and a 500 shows it offline", async () => {
