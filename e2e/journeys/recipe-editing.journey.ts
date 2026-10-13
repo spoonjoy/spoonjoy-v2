@@ -35,6 +35,13 @@ function ingredient(page: Page, name: string) {
   return page.getByRole("checkbox", { name, exact: true });
 }
 
+// The recipe page syncs the cook's progress when it loads. Deleting the recipe stops the sync, but
+// a request already on its way still lands, and the server answers 404 for a deleted recipe: a
+// console error the journey would fail on. A cook deletes after the page has settled, so wait.
+async function expectCookProgressSynced(page: Page) {
+  await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+}
+
 async function openMaintenance(page: Page) {
   await page.getByRole("button", { name: /^Manage recipe/ }).click();
   return page.locator("#recipe-owner-maintenance");
@@ -205,6 +212,7 @@ test.describe("Recipe create and edit", () => {
 
     // --- Delete the recipe.
     await waitForHydration(page);
+    await expectCookProgressSynced(page);
     await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
@@ -255,6 +263,7 @@ test.describe("Recipe create and edit", () => {
 
     // --- Delete the recipe.
     await waitForHydration(page);
+    await expectCookProgressSynced(page);
     await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
