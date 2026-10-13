@@ -17,16 +17,40 @@ import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
 // (Ouro's tests use up to 1280x844), which shifts real-mouse drags off their targets and makes
 // sizes fractional. A page larger than any of those keeps the iframe at its true size. The touch
 // project already sets its own 390x844 page.
-// Vitest 4 also sizes the test iframe with a CSS transform, even at scale(1), and under it the
-// WebKit of Playwright 1.58 measures 100dvh and 100lvh a fraction of a pixel short (811.999939px of
-// 812). Two sheet tests compare those exactly, so in WebKit sheet.test.tsx runs as its own project
-// that skips exactly those two; they still run in Chromium and the touch project. Every other file,
-// including the dialog's test of the same name, runs in WebKit in full. With Ouro UI v0.3.0 both
-// still fail on Playwright 1.58 and both pass on Playwright 1.64 (PR #515's Storybook runs), so
-// undo this when Spoonjoy moves to Playwright 1.64 or later.
-const WEBKIT_SHEET_TESTS = "app/components/ouro/sheet/sheet.test.tsx";
-const WEBKIT_SKIPPED_ON_PLAYWRIGHT_1_58 =
-  /^(?!.*(?:sits at the bottom edge, fits its content and keeps clear of the top|covers the visible screen on a page scrolled 2000px))/;
+
+// Ouro UI's tests are written for the stack its registry asks for (Vitest 5, Playwright 1.63).
+// On Spoonjoy's (Vitest 4, Playwright 1.58) a few cannot pass, for reasons that are the test's and
+// not the component's. Each is skipped by name, in its own file and only in the browsers where it
+// fails: the file runs as its own project there, so a test of the same name in another file still
+// runs. Undo each entry when Spoonjoy reaches the stack it names.
+const STACK_SKIPS: { project: string; as: string; file: string; titles: string[] }[] = [
+  // Vitest 4 sizes the test iframe with a CSS transform, even at scale(1), and under it the WebKit
+  // of Playwright 1.58 measures 100dvh and 100lvh a fraction of a pixel short (811.999939px of
+  // 812). Two sheet tests compare those exactly; they still run in Chromium and the touch project.
+  // With Ouro UI v0.3.0 both fail on Playwright 1.58 and pass on Playwright 1.64 (PR #515's
+  // Storybook runs).
+  {
+    project: "ouro-webkit",
+    as: "ouro-webkit-sheet",
+    file: "app/components/ouro/sheet/sheet.test.tsx",
+    titles: [
+      "sits at the bottom edge, fits its content and keeps clear of the top",
+      "covers the visible screen on a page scrolled 2000px",
+    ],
+  },
+  // The test fills getByRole("textbox", { name: "Name" }) beside a field labelled "Unnamed". A
+  // role name matches as a substring, and Vitest 4 refuses a locator that finds two elements
+  // ("strict mode violation"). test/ouro/form-unrelated-change.test.tsx makes the same check with
+  // exact names, so the behaviour stays covered in both browsers.
+  ...["ouro-chromium", "ouro-webkit"].map((project) => ({
+    project,
+    as: `${project}-form`,
+    file: "app/components/ouro/form/form.test.tsx",
+    titles: ["ignores a change in a field without a form error"],
+  })),
+];
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const skipping = (titles: string[]) => new RegExp(`^(?!.*(?:${titles.map(escapeRegExp).join("|")}))`);
 const largePage = () => playwright({ contextOptions: { viewport: { width: 1600, height: 1200 } } });
 
 const projects = ouroTestProjects({
@@ -49,30 +73,31 @@ const projects = ouroTestProjects({
       instances: project.test?.browser?.instances?.map((instance) => ({ ...instance })),
     },
   });
-  if (project.test?.name !== "ouro-webkit") return [{ ...project, test: withLargePage() }];
+  const skips = STACK_SKIPS.filter((skip) => skip.project === project.test?.name);
   return [
     {
       ...project,
-      test: { ...withLargePage(), exclude: [...(project.test.exclude ?? []), WEBKIT_SHEET_TESTS] },
+      test: { ...withLargePage(), exclude: [...(project.test?.exclude ?? []), ...skips.map((skip) => skip.file)] },
     },
-    {
+    ...skips.map((skip) => ({
       ...project,
-      test: {
-        ...withLargePage(),
-        name: "ouro-webkit-sheet",
-        include: [WEBKIT_SHEET_TESTS],
-        testNamePattern: WEBKIT_SKIPPED_ON_PLAYWRIGHT_1_58,
-      },
-    },
+      test: { ...withLargePage(), name: skip.as, include: [skip.file], testNamePattern: skipping(skip.titles) },
+    })),
   ];
 });
 
-// Stopgap for an Ouro UI defect: its Select test "is disabled and read-only on request" rerenders
-// an uncontrolled Select with a new defaultValue, and Base UI answers with this development
-// message on the console. The test passes; the message alone fails Spoonjoy's zero-warning run.
-// Only this exact message is dropped, so any other console output from Ouro UI's tests still fails.
-const BASE_UI_SELECT_DEFAULT_VALUE_MESSAGE =
-  "Base UI: A component is changing the default value state of an uncontrolled Select after being initialized.";
+// Stopgaps for two Ouro UI defects: tests of its own that pass but write to the console, which
+// alone fails Spoonjoy's zero-warning run. Only these exact messages are dropped, so any other
+// console output from Ouro UI's tests still fails.
+const OURO_TEST_CONSOLE_NOISE = [
+  // The Select test "is disabled and read-only on request" rerenders an uncontrolled Select with a
+  // new defaultValue, and Base UI answers with this development message.
+  "Base UI: A component is changing the default value state of an uncontrolled Select after being initialized.",
+  // <TextArea autoGrow> changes its own height inside its ResizeObserver callback, so the browser
+  // reports this when its width changes ("refits when its width changes and the text rewraps").
+  // Spoonjoy renders no auto-growing TextArea.
+  "ResizeObserver loop completed with undelivered notifications.",
+];
 
 export default defineConfig({
   plugins: [react()],
@@ -106,7 +131,7 @@ export default defineConfig({
   },
   test: {
     projects,
-    onConsoleLog: (log) => (log.includes(BASE_UI_SELECT_DEFAULT_VALUE_MESSAGE) ? false : undefined),
+    onConsoleLog: (log) => (OURO_TEST_CONSOLE_NOISE.some((noise) => log.includes(noise)) ? false : undefined),
     // Vitest prints a test that ran longer than this as "✓ <title> <n>ms", and the warning policy
     // rejects a line that reads as a warning. Ouro UI's titles come from its registry as they are
     // (one is "warn for appearance classes on parts"), so no title is ever printed as slow here.
