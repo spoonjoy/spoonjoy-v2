@@ -250,6 +250,16 @@ describe("rotating a refresh token", () => {
     await expectOneLivePair(tokens);
   });
 
+  it("rejects the original after two rotations while the intermediate can recover its unused successor", async () => {
+    const successor = await rotateWith();
+    const latest = await rotateWith({ refreshToken: successor.refreshToken });
+    await expect(rotateWith()).rejects.toMatchObject({ code: "invalid_grant", refusal: "grace_replay" });
+    await expect(rotateWith({ refreshToken: successor.refreshToken })).resolves.toEqual(latest);
+    await expect(authenticateApiToken(db, latest.accessToken, ISSUER)).resolves.toMatchObject({ id: userId });
+    await expect(rotateWith({ refreshToken: successor.refreshToken })).rejects.toMatchObject({ code: "invalid_grant", refusal: "grace_replay" });
+    expect(await db.oAuthRefreshToken.count({ where: { userId, revokedAt: null } })).toBe(1);
+  });
+
   it.each(OUTCOMES)("answers the one live pair after a %s batch", async (outcome) => {
     const flaky = flakyD1(d1.binding);
     flaky.failNext(ROTATION_BATCH, outcome);
