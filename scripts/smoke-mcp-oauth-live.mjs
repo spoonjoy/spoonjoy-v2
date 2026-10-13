@@ -689,7 +689,21 @@ async function main() {
 
     let rotatedTokens;
     await check("refresh rotation and replay rejection", async () => {
+      const successor = await refreshTokens(page.request, {
+        baseUrl,
+        clientId,
+        refreshToken: firstTokens.refreshToken,
+        workerVersionId,
+      });
+      // An unused successor is recoverable after a lost response. Rotate it so rejection cannot race the deferred access-use write.
+      await expectMcpReady(page.request, { baseUrl, accessToken: successor.accessToken, workerVersionId });
       rotatedTokens = await refreshTokens(page.request, {
+        baseUrl,
+        clientId,
+        refreshToken: successor.refreshToken,
+        workerVersionId,
+      });
+      await expectRefreshReplayRejected(page.request, {
         baseUrl,
         clientId,
         refreshToken: firstTokens.refreshToken,
@@ -698,7 +712,7 @@ async function main() {
       await expectRefreshReplayRejected(page.request, {
         baseUrl,
         clientId,
-        refreshToken: firstTokens.refreshToken,
+        refreshToken: successor.refreshToken,
         workerVersionId,
       });
     });
