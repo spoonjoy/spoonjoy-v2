@@ -146,6 +146,13 @@ export default defineConfig({
         "**/*.test-d.ts",
         "**/*.d.ts",
         "app/lib/ouro/testing/**",
+        // Stopgap for an Ouro UI defect: its shared helpers arrive with three files that none of
+        // the installed components imports (they serve Toast, Card and the popovers), and the
+        // tests that cover them belong to those components. Take each out of this list when a
+        // component that uses it is installed with its tests.
+        "app/lib/ouro/toast.ts",
+        "app/lib/ouro/stretched-link.ts",
+        "app/lib/ouro/floating.ts",
       ],
       // Totals only: the per-file table would print use-dev-warnings.ts, a name the warning policy
       // rejects. Run `pnpm exec vitest run -c vitest.ouro.config.ts --coverage --coverage.reporter=text`
