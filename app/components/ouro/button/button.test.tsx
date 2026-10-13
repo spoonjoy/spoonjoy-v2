@@ -55,6 +55,25 @@ describe("button branch", () => {
     expect(button.textContent).toBe("Go");
   });
 
+  it("names its variant in data-variant, on buttons and links, so groups can style by look", async () => {
+    const { host } = await render(
+      <>
+        <Button>Solid</Button>
+        <Button variant="outline">Outline</Button>
+        <Button variant="plain" href="/recipes">
+          Plain link
+        </Button>
+        <Button variant={"default" as "solid"}>Unknown</Button>
+      </>,
+    );
+    expect([...host.querySelectorAll('[data-ouro="button"]')].map((button) => button.getAttribute("data-variant"))).toEqual([
+      "solid",
+      "outline",
+      "plain",
+      "solid",
+    ]);
+  });
+
   it("passes type, onClick and other button attributes through", async () => {
     const onClick = vi.fn();
     const { button } = await render(
@@ -493,7 +512,7 @@ describe("press feedback", () => {
     expect(await pressScale(button)).toBe("none");
   });
 
-  it("springs back with the theme's spring tokens", async () => {
+  it("scales in and out in the press duration on the ease-out token", async () => {
     const { button } = await render(<Button>Spring</Button>);
     const style = getComputedStyle(button);
     const properties = style.transitionProperty.split(", ");
@@ -501,8 +520,8 @@ describe("press feedback", () => {
     const easings = style.transitionTimingFunction.split(/,\s(?![^(]*\))/);
     const scaleIndex = properties.indexOf("scale");
     expect(scaleIndex).toBeGreaterThanOrEqual(0);
-    expect(durations[scaleIndex]).toBe("0.75s");
-    expect(easings[scaleIndex]).toMatch(/^linear\(/);
+    expect(durations[scaleIndex]).toBe("0.16s");
+    expect(easings[scaleIndex]).toBe("cubic-bezier(0.23, 1, 0.32, 1)");
   });
 });
 

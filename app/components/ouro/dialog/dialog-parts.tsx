@@ -1,3 +1,5 @@
+"use client";
+
 import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { createContext, useContext, type JSX, type Ref } from "react";

@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, type RefCallback } from "react";
 
 /**
@@ -9,7 +11,7 @@ import { useCallback, type RefCallback } from "react";
  *
  * Pass `false` when the app set its own `tabIndex`, so the app's choice stands.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  *
  * @example
  * const scrollRef = useKeyboardScrollable<HTMLDivElement>(props.tabIndex === undefined);

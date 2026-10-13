@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, type Ref, type RefCallback } from "react";
 import { attachRef } from "~/lib/ouro/refs";
 
@@ -6,13 +8,13 @@ import { attachRef } from "~/lib/ouro/refs";
  * the offset that puts its top at the top of the screen, whatever the page's
  * scroll position, and forwards the element to the app's own `ref`.
  *
- * On iOS the backdrops are absolutely positioned (see sheet.css), because a fixed
+ * On iOS the backdrops are absolutely positioned (`iosBackdrop` in sheet-styles.ts), because a fixed
  * element stops at Safari's translucent toolbars. Base UI's iOS scroll lock keeps
  * the page's scroll offset, so an absolute backdrop would otherwise sit at the
  * top of the document, off screen on a scrolled page. Elsewhere the backdrop is
  * fixed and the offset stays 0.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  *
  * @example
  * function SheetBackdrop({ ref, ...props }) {

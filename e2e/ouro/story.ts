@@ -2,7 +2,11 @@ import type { Locator, Page } from "@playwright/test";
 
 /**
  * Opens one Storybook story on its own, by story id (for example
- * `"overlays-sheet--playground"`), and waits for it to render. The Storybook comes from
+ * `"overlays-sheet--playground"`), and waits for it to render and for the app's web fonts
+ * to load, so text no longer changes width under a spec that measures. A font first used by
+ * content that appears later (an opened menu, a heavier weight) loads later: before measuring
+ * such content, wait again with `await page.evaluate(() => document.fonts.ready.then(() => {}))`.
+ * The Storybook comes from
  * the `OURO_E2E_URL` environment variable, default `http://localhost:6006`: the
  * Storybook that shows the Ouro UI stories installed in this app, compiled with the
  * app's own Tailwind and theme.
@@ -12,6 +16,11 @@ export async function openStory(page: Page, id: string): Promise<void> {
   const url = new URL(`iframe.html?id=${id}&viewMode=story`, base.endsWith("/") ? base : `${base}/`);
   await page.goto(url.href);
   await page.locator("#storybook-root > *").first().waitFor();
+  // A font starts loading when a layout first uses it, so lay the story out before asking.
+  await page.evaluate(() => {
+    document.body.getBoundingClientRect();
+    return document.fonts.ready.then(() => undefined);
+  });
 }
 
 /** Waits for an element's transitions (opening, springing back) to finish, then returns its box. */

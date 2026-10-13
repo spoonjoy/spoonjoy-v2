@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef } from "react";
 import { devWarn } from "~/lib/ouro/dev";
 

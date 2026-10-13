@@ -1,10 +1,12 @@
+"use client";
+
 import { useCallback, type Ref, type RefCallback } from "react";
 
 /**
  * Points `ref` at `element` and returns what undoes it. Handles object refs,
  * callback refs, and React 19 callback refs that return their own cleanup.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  */
 export function attachRef<T>(ref: Ref<T> | undefined, element: T): () => void {
   if (typeof ref === "function") {
@@ -24,7 +26,7 @@ export function attachRef<T>(ref: Ref<T> | undefined, element: T): () => void {
  * One callback ref that sets both an app's `ref` and a component's own ref, so a
  * component can hold an element the app also wants.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  *
  * @example
  * const own = useRef<HTMLElement>(null);

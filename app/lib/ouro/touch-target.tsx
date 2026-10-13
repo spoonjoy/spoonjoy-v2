@@ -7,7 +7,7 @@ import type { JSX } from "react";
  * without growing visually. With a fine pointer it is not rendered as a box at
  * all, so dense desktop layouts keep their exact hit areas.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  *
  * @example
  * <button className="relative">

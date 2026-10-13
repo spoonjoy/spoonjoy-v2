@@ -1,4 +1,5 @@
 import { playwright } from "@vitest/browser-playwright";
+import { fileURLToPath } from "node:url";
 import { configDefaults, type TestProjectInlineConfiguration } from "vitest/config";
 // Relative and with its extension, not `@/…`: Vitest loads this file with its config, which
 // Node runs directly (Vite's native config loader), before any alias applies.
@@ -20,10 +21,13 @@ export interface OuroTestOptions {
 /**
  * Vitest browser projects that run Ouro UI's tests in your app: one project per
  * browser, plus `ouro-touch` (Chromium as a 390x844 touch phone) for files named
- * `*.touch.test.tsx`. They register Ouro UI's browser commands (`drag`, `flick`,
- * `tap`, `emulateMedia`, `pointerPress`) and the setup that fails a test on any
- * React act() warning. Each project extends your root config, so your Vite plugins
- * and aliases apply. Needs Playwright's browsers: `npx playwright install chromium webkit`.
+ * `*.touch.test.tsx`. They register Ouro UI's browser commands (`drag`, `flick`, `tap`,
+ * `touchDrag`, `touchStep`, `emulateMedia`, `pointerPress`, `pageZoom`, `resetPageZoom`, `setPageZoom`,
+ * `restoreTouch`) and the setup that fails a test on any React act() warning. In `ouro-touch`, a test
+ * that leaves the page zoomed fails too (rotate the viewport with `rotate` from testing/rotate.ts),
+ * and every test starts with touch emulation on, even after a failure's screenshot dropped it.
+ * Each project extends your root config, so your Vite plugins and aliases apply. Needs
+ * Playwright's browsers: `npx playwright install chromium webkit`.
  *
  * @example
  * // vitest.config.ts
@@ -40,7 +44,7 @@ export function ouroTestProjects({
   include = ["**/ouro/**/*.test.{ts,tsx}"],
   browsers = ["chromium", "webkit"],
 }: OuroTestOptions): TestProjectInlineConfiguration[] {
-  const setupFiles = [css, decodeURIComponent(new URL("./setup.ts", import.meta.url).pathname)];
+  const setupFiles = [css, fileURLToPath(new URL("./setup.ts", import.meta.url))];
   const touchInclude = include.map((glob) => glob.replace(/\.test\.(\{[^}]*\}|\w+)$/, ".touch.test.$1"));
   const exclude = [...configDefaults.exclude, "**/*.touch.test.{ts,tsx}", "**/*.visual.test.{ts,tsx}"];
   // Tests wait on conditions (`expect.poll`), never on fixed timers. A loaded CI runner
@@ -62,7 +66,7 @@ export function ouroTestProjects({
       extends: true as const,
       test: {
         name: "ouro-touch",
-        setupFiles,
+        setupFiles: [...setupFiles, fileURLToPath(new URL("./touch-setup.ts", import.meta.url))],
         expect: expectOptions,
         include: touchInclude,
         browser: {

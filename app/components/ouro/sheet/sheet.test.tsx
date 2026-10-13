@@ -190,6 +190,8 @@ describe("opening and closing", () => {
     expect(getComputedStyle(sheet).maxHeight).toBe(`${innerHeight - 32}px`);
   });
 
+  // Spoonjoy's test for its stopgap in sheet-parts.tsx (the Ouro HX defect "the sheet viewport is a
+  // scroll container"), reapplied after the v0.7.0 upgrade overwrote it.
   it("stays on the bottom edge after something scrolls a control into view while the sheet is off it", async () => {
     // Scrolling a control into view while the sheet sits lower than its resting place (as it does
     // while it enters) used to scroll the full-screen viewport, which kept that offset once the sheet
@@ -496,7 +498,7 @@ describe("dragging (Chromium)", () => {
     await expect.poll(() => popup()).toBeNull();
     observer.disconnect();
     expect(durations.length).toBeGreaterThan(0);
-    expect(durations.at(-1)).toBe("0.1s");
+    expect(durations.at(-1)).toBe("0.15s");
   });
 
   chromiumOnly("keeps Tab inside the sheet, wrapping from the last control to the first", async () => {

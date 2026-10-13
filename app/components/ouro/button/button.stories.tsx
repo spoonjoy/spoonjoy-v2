@@ -85,6 +85,7 @@ export const Playground: Story = {
 
 /** Every tone in every variant, in light and dark. */
 export const TonesAndVariants: Story = {
+  parameters: { screenshot: { name: "button-variants" } },
   render: () => (
     <Surface>
       {variants.map((variant) => (
@@ -208,7 +209,7 @@ export const Disabled: Story = {
 
 /** A real layout: a phone-width form footer with a full-width primary action. */
 export const InContext: Story = {
-  parameters: { layout: "centered" },
+  parameters: { screenshot: { name: "button-in-context" }, layout: "centered" },
   render: () => (
     <div style={{ width: 360, display: "grid", gap: 20 }}>
       <Surface>

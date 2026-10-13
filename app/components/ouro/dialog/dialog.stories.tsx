@@ -76,6 +76,7 @@ export const Playground: Story = {};
 
 /** `footer` holds the actions: a row at the end on wider screens, stacked on phones with the primary action at the bottom. */
 export const WithFooter: Story = {
+  parameters: { screenshot: { name: "dialog-open", open: true } },
   args: {
     description: "Changes are saved to every cookbook with this recipe.",
     footer: (
@@ -136,6 +137,7 @@ export const HiddenTitle: Story = {
 
 /** `open` and `onOpenChange` put the dialog under your state. It stays open when a resize changes its form. */
 export const Controlled: Story = {
+  parameters: { plainOpeners: ["Open"] },
   render: function Render() {
     const [open, setOpen] = useState(false);
     return (

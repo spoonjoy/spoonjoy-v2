@@ -72,6 +72,7 @@ type Story = StoryObj<typeof meta>;
 export const Playground: Story = {};
 
 export const WithDescription: Story = {
+  parameters: { screenshot: { name: "sheet-open", open: true } },
   args: { description: "Tap a cookbook to save or remove this recipe." },
 };
 
@@ -135,6 +136,7 @@ export const WithForm: Story = {
 
 /** `open` and `onOpenChange` put the sheet under your state. */
 export const Controlled: Story = {
+  parameters: { plainOpeners: ["Open"] },
   render: function Render() {
     const [open, setOpen] = useState(false);
     return (

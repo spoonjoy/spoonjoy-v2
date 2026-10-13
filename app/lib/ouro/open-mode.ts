@@ -5,7 +5,7 @@ import { devThrow } from "~/lib/ouro/dev";
  * way to open: a `trigger`, or `open` with an `onOpenChange` function. The types
  * already forbid the other shapes; this catches untyped and `as any` callers.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  *
  * @param noun How the fix names the overlay: "sheet", "dialog", "confirmation".
  * @example

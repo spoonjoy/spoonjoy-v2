@@ -1,11 +1,12 @@
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { useState, type ReactNode } from "react";
-import { commands, page, userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { act } from "~/lib/ouro/testing/act";
 import { Button } from "~/components/ouro/button/button";
 import { Sheet } from "~/components/ouro/sheet/sheet";
 import { Dialog } from "~/components/ouro/dialog/dialog";
+import { rotate } from "~/lib/ouro/testing/rotate";
 
 // Runs in the `touch` project: Chromium as a 390x844 phone with a coarse pointer.
 
@@ -14,7 +15,7 @@ const nodes: Element[] = [];
 afterEach(async () => {
   await act(() => root?.unmount());
   for (const node of nodes.splice(0)) node.remove();
-  await page.viewport(390, 844);
+  await rotate(390, 844);
 });
 
 const popup = () => document.querySelector<HTMLElement>('[data-ouro="dialog"]');
@@ -57,7 +58,7 @@ function focusOf(popupElement: HTMLElement): string {
 
 describe("initial focus in the centered dialog (landscape phone, 844x390)", () => {
   it("focuses the popup, not the input, after a tap, so no keyboard pops up", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     await mount(<Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>{form}</Dialog>);
     await commands.tap(TRIGGER);
     const element = await opened();
@@ -66,7 +67,7 @@ describe("initial focus in the centered dialog (landscape phone, 844x390)", () =
   });
 
   it("focuses the first tabbable element after a keyboard open (Enter on the trigger)", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     await mount(<Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>{form}</Dialog>);
     document.querySelector<HTMLElement>(TRIGGER)!.focus();
     await userEvent.keyboard("{Enter}");
@@ -76,14 +77,14 @@ describe("initial focus in the centered dialog (landscape phone, 844x390)", () =
   });
 
   it("focuses the first tabbable element after a mouse click", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     await mount(<Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>{form}</Dialog>);
     await userEvent.click(document.querySelector<HTMLElement>(TRIGGER)!);
     expect(focusOf(await opened())).toBe("input");
   });
 
   it("still runs the trigger's own onPointerDown", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     const types: string[] = [];
     await mount(
       <Dialog
@@ -150,7 +151,7 @@ async function openWith(open: "tap" | "keyboard") {
 
 describe("initial focus in a controlled dialog opened from the app's own button", () => {
   it("focuses the centered popup, not its first input, after a tap", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     await mount(<ControlledDialog presentation="dialog" />);
     const element = await openWith("tap");
     expect(element.getAttribute("data-ouro-presentation")).toBe("dialog");
@@ -158,7 +159,7 @@ describe("initial focus in a controlled dialog opened from the app's own button"
   });
 
   it("focuses the centered popup's first input after a keyboard open", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     await mount(<ControlledDialog presentation="dialog" />);
     const element = await openWith("keyboard");
     expect(element.getAttribute("data-ouro-presentation")).toBe("dialog");
@@ -166,7 +167,7 @@ describe("initial focus in a controlled dialog opened from the app's own button"
   });
 
   it("focuses the centered popup's first input when a keyboard open follows a tap", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     await mount(<ControlledDialog presentation="dialog" />);
     await openWith("tap");
     await userEvent.keyboard("{Escape}");

@@ -1,3 +1,5 @@
+"use client";
+
 import type { JSX, ReactElement, ReactNode, RefObject } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { checkOpenMode } from "~/lib/ouro/open-mode";
@@ -109,6 +111,7 @@ export type SheetProps = SheetWithTriggerProps | SheetControlledProps;
  * without a name so VoiceOver's cursor stays trapped. Exclude them:
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
+ * @group Overlays
  * @see https://ourostack.github.io/ouro-ui/docs/sheet
  *
  * @example
@@ -197,7 +200,8 @@ const closeClass =
   "sr-only focus-visible:top-3 focus-visible:end-3 focus-visible:z-1 focus-visible:m-0 focus-visible:size-auto " +
   "focus-visible:overflow-visible focus-visible:[clip-path:none] focus-visible:px-3 focus-visible:py-1.5 " +
   "focus-visible:rounded-lg focus-visible:bg-muted focus-visible:text-foreground focus-visible:text-sm focus-visible:leading-5 focus-visible:font-medium " +
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Props for {@link SheetFrame}: a Sheet's props after its checks, plus what `Dialog` adds. */
 export interface SheetFrameProps {
@@ -219,6 +223,8 @@ export interface SheetFrameProps {
   presentation?: "sheet" | undefined;
   /** Where focus goes on close: `Dialog` passes its own trigger, which it renders outside the sheet. */
   finalFocus?: RefObject<HTMLElement | null> | undefined;
+  /** Disables the close button, as `EditSheet` does while a save is pending. */
+  closeDisabled?: boolean | undefined;
 }
 
 /**
@@ -243,6 +249,7 @@ export function SheetFrame({
   footer,
   presentation,
   finalFocus,
+  closeDisabled,
 }: SheetFrameProps): JSX.Element {
   const showHeader = !hideTitle || description !== undefined;
   const titleNode = <SheetTitle visuallyHidden={hideTitle}>{title}</SheetTitle>;
@@ -278,7 +285,7 @@ export function SheetFrame({
               </div>
             )}
             {side === "top" && <SheetHandle />}
-            <SheetClose data-ouro-sheet-close="" className={closeClass}>
+            <SheetClose data-ouro-sheet-close="" disabled={closeDisabled} className={closeClass}>
               {closeLabel}
             </SheetClose>
           </SheetPopupUnchecked>

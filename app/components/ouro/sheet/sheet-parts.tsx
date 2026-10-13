@@ -1,3 +1,5 @@
+"use client";
+
 import { Drawer } from "@base-ui/react/drawer";
 import { createContext, useContext, type JSX, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
@@ -231,6 +233,9 @@ export function SheetViewport(props: Omit<Drawer.Viewport.Props, "className">): 
       {...props}
       data-ouro="sheet-viewport"
       data-side={side}
+      // Spoonjoy stopgap for the Ouro HX defect "the sheet viewport is a scroll container": Ouro
+      // v0.7.0 ships overflow-hidden here, so scrolling a control into view while the sheet enters
+      // leaves the sheet floating mid-screen. Spoonjoy's fix (#546) is reapplied until Ouro has it.
       className={cn("fixed inset-0 z-1000 flex overflow-clip touch-none", viewportClasses[side])}
     />
   );
