@@ -46,10 +46,25 @@ function emptyBundleChunkNames(log: { message?: string; names?: readonly string[
   return match ? [match[1]] : [];
 }
 
+// Stopgap for an Ouro UI defect: its files start with `"use client";`, with a semicolon, which
+// shadcn's installer does not strip for an app that is not on React Server Components
+// (components.json "rsc": false), so every copied-in Ouro UI file keeps the line. Rollup leaves it
+// out of the bundle and says so twice per file: the directive notice, and a sourcemap notice
+// about that first line. Both are noise for those files only; Spoonjoy's own source stays held
+// to "no client directives" by test/build-output-hygiene.test.ts.
+const OURO_UI_SOURCE = /\/app\/(?:components|lib)\/ouro\//;
+
+function isOuroUiClientDirectiveNotice(log: { code?: string; message?: string; id?: string; loc?: { line?: number } }) {
+  if (!log.id || !OURO_UI_SOURCE.test(log.id.replaceAll("\\", "/"))) return false;
+  if (log.code === "MODULE_LEVEL_DIRECTIVE") return /["']use client["']/.test(log.message ?? "");
+  return log.code === "SOURCEMAP_ERROR" && log.loc?.line === 1;
+}
+
 export function shouldLogRollupBuildMessage(
   level: "warn" | "info" | "debug",
-  log: { code?: string; message?: string; names?: readonly string[] }
+  log: { code?: string; message?: string; names?: readonly string[]; id?: string; loc?: { line?: number } }
 ) {
+  if (level === "warn" && isOuroUiClientDirectiveNotice(log)) return false;
   if (level !== "warn" || log.code !== "EMPTY_BUNDLE") return true;
   const names = emptyBundleChunkNames(log);
   return names.length === 0 || !names.every((name) => SERVER_ONLY_ROUTE_CHUNKS.has(name));

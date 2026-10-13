@@ -78,10 +78,31 @@ export default defineConfig({
   // Pre-bundle Base UI's entry points up front, as Ouro UI's own repository does: a dependency
   // Vite discovers mid-run triggers a re-optimization and reload, which can load React twice.
   optimizeDeps: {
-    include: ["@base-ui/react/button", "@base-ui/react/dialog", "@base-ui/react/drawer"],
+    include: [
+      "@base-ui/react/alert-dialog",
+      "@base-ui/react/autocomplete",
+      "@base-ui/react/button",
+      "@base-ui/react/checkbox",
+      "@base-ui/react/checkbox-group",
+      "@base-ui/react/combobox",
+      "@base-ui/react/dialog",
+      "@base-ui/react/drawer",
+      "@base-ui/react/field",
+      "@base-ui/react/fieldset",
+      "@base-ui/react/form",
+      "@base-ui/react/radio",
+      "@base-ui/react/radio-group",
+      "@base-ui/react/select",
+      "@base-ui/react/switch",
+      "@base-ui/react/tooltip",
+    ],
   },
   test: {
     projects,
+    // Vitest prints a test that ran longer than this as "✓ <title> <n>ms", and the warning policy
+    // rejects a line that reads as a warning. Ouro UI's titles come from its registry as they are
+    // (one is "warn for appearance classes on parts"), so no title is ever printed as slow here.
+    slowTestThreshold: 3_600_000,
     coverage: {
       provider: "istanbul",
       include: ["app/components/ouro/**/*.{ts,tsx}", "app/lib/ouro/**/*.{ts,tsx}"],

@@ -29,6 +29,12 @@ const TEST_RESULT_LINE_PATTERN =
   /^[✓↓×]\s+(?!(?:warn(?:ings?)?|[A-Za-z]+warnings?)(?=[:!.,;\s([<{=-]|$))\S/i;
 const TEST_FILE_RESULT_LINE_PATTERN =
   /^[✓↓×]\s+(?:test|app)\/\S+\.test\.[cm]?[jt]sx?(?:\s+\(\d+\s+tests?\))?(?:\s+\d+(?:\.\d+)?(?:ms|s))?$/i;
+// A row of Vite's built-file table: a path under build/, its size, and optionally its gzip size.
+// A chunk is named after a module in it, so a module called use-dev-warnings.ts (Ouro UI has one)
+// gives "build/client/assets/use-dev-warnings-DRRKi67r.js  27.77 kB │ gzip: 8.72 kB". That is a
+// file name, not a diagnostic. The path allows no spaces or colons, so a message cannot ride on it.
+const BUILT_FILE_ROW_PATTERN =
+  /^build\/[A-Za-z0-9._\/$-]+\s+\d+(?:\.\d+)? kB(?: │ gzip:\s+\d+(?:\.\d+)? kB)?$/;
 const OSC_SEQUENCE_PATTERN = /(?:\u001B\]|\u009D)[\s\S]*?(?:\u0007|\u001B\\|\u009C)/g;
 const CSI_SEQUENCE_PATTERN = /(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]/g;
 const SGR_SEQUENCE_PATTERN = /^(?:\u001B\[|\u009B)[0-?]*[ -/]*m$/;
@@ -84,6 +90,7 @@ export type WarningGateCommandRunner = (
 ) => Promise<WarningGateCommandResult>;
 
 function isWarningLine(line: string): boolean {
+  if (BUILT_FILE_ROW_PATTERN.test(line)) return false;
   if (
     TEST_RESULT_LINE_PATTERN.test(line) ||
     TEST_FILE_RESULT_LINE_PATTERN.test(line)
