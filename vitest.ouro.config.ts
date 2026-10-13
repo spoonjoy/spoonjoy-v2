@@ -67,6 +67,13 @@ const projects = ouroTestProjects({
   ];
 });
 
+// Stopgap for an Ouro UI defect: its Select test "is disabled and read-only on request" rerenders
+// an uncontrolled Select with a new defaultValue, and Base UI answers with this development
+// message on the console. The test passes; the message alone fails Spoonjoy's zero-warning run.
+// Only this exact message is dropped, so any other console output from Ouro UI's tests still fails.
+const BASE_UI_SELECT_DEFAULT_VALUE_MESSAGE =
+  "Base UI: A component is changing the default value state of an uncontrolled Select after being initialized.";
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -99,6 +106,7 @@ export default defineConfig({
   },
   test: {
     projects,
+    onConsoleLog: (log) => (log.includes(BASE_UI_SELECT_DEFAULT_VALUE_MESSAGE) ? false : undefined),
     // Vitest prints a test that ran longer than this as "✓ <title> <n>ms", and the warning policy
     // rejects a line that reads as a warning. Ouro UI's titles come from its registry as they are
     // (one is "warn for appearance classes on parts"), so no title is ever printed as slow here.
