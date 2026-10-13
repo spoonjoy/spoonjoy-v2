@@ -504,7 +504,7 @@ export default function ShoppingList() {
         <Form method="post" className="mt-4" ref={addItemFormRef}>
           <input type="hidden" name="intent" value="addItem" />
           <input type="hidden" name="writeToken" value={addItemToken} />
-          <div className="space-y-4">
+          <div className="grid gap-4">
             <TextField
               ref={addItemInputRef}
               label="Item"
@@ -544,7 +544,7 @@ export default function ShoppingList() {
                 </div>
               </div>
             )}
-            <Button type="submit">Add</Button>
+            <Button type="submit" className="justify-self-start">Add</Button>
           </div>
         </Form>
       </div>

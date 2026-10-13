@@ -63,7 +63,7 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
   }
 
   return (
-    <div className="space-y-3">
+    <div className="grid gap-3">
       <TextField
         label="Name (optional)"
         name="passkey-name"
@@ -71,7 +71,7 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      <Button type="button" disabled={status === "pending"} onClick={handleClick}>
+      <Button type="button" className="justify-self-start" disabled={status === "pending"} onClick={handleClick}>
         {status === "pending" ? "Waiting for passkey…" : "Add a passkey"}
       </Button>
       {status === "added" && (

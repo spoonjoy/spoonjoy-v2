@@ -32,6 +32,33 @@ function listTextFiles(dirs: string[]): string[] {
 }
 
 describe("Spoonjoy UI design-system hygiene", () => {
+  it("spaces an Ouro UI field from its siblings with a gap, not a margin", () => {
+    // Stopgap for the Ouro UI defect "a field's root sets m-0, which beats the margin space-y and
+    // space-x put on children": the field touches what follows it. Remove with the fix (v0.8.0).
+    const field = /^<(TextField|TextArea|Field|Select|Fieldset)\b/;
+    const indentOf = (line: string) => line.length - line.trimStart().length;
+    const offenders: string[] = [];
+
+    for (const file of listTextFiles(APP_AND_STORY_FILES)) {
+      if (file.startsWith("app/components/ouro/")) continue;
+      const lines = readSourceFile(file).split("\n");
+      lines.forEach((line, index) => {
+        if (!/className=.*\bspace-[xy]-\d/.test(line)) return;
+        // The element's direct children are the lines one step deeper, up to its closing tag.
+        for (let next = index + 1; next < lines.length; next += 1) {
+          const child = lines[next];
+          if (child.trim() === "") continue;
+          if (indentOf(child) <= indentOf(line)) break;
+          if (indentOf(child) === indentOf(line) + 2 && field.test(child.trim())) {
+            offenders.push(`${file}:${next + 1}`);
+          }
+        }
+      });
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   it("keeps button chrome flat enough to avoid doubled-button artifacts", () => {
     const content = readSourceFile("app/components/ui/button.tsx");
 

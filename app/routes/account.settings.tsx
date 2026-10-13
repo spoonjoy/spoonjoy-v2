@@ -542,7 +542,7 @@ export default function AccountSettings() {
             ) : passwordFormState === "removeConfirm" ? (
               <div className="space-y-4">
                 <Text>Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
-                <RouterForm method="post" className="space-y-4">
+                <RouterForm method="post" className="grid gap-4">
                   <input type="hidden" name="intent" value="removePassword" />
                   <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                   <div className="flex flex-wrap gap-3">
