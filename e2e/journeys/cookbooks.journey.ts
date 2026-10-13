@@ -100,7 +100,7 @@ test.describe("Cookbooks", () => {
     });
     await saveDialog.getByRole("textbox", { name: "Create new cookbook", exact: true }).fill(title);
     await saveDialog.getByRole("button", { name: "Create & Save", exact: true }).click();
-    await expect(saveDialog.getByRole("alert")).toHaveText("You already have a cookbook with this title");
+    await expect(saveDialog.getByText("You already have a cookbook with this title", { exact: true })).toBeVisible();
     await expect(cookbookToggle).toHaveAttribute("aria-pressed", "false");
 
     // The toggle flips optimistically, so wait for the save itself before leaving the page.
@@ -197,7 +197,7 @@ test.describe("Cookbooks", () => {
     });
     await titleField.fill("   ");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Title is required" })).toBeVisible();
+    await expect(page.getByText("Title is required", { exact: true })).toBeVisible();
     await expect(titleField).toBeVisible();
     await expectAccessible();
 

@@ -5,6 +5,7 @@ import { test, expect } from "./support/journey";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { persona } from "./support/personas";
 import { fillSecret } from "./support/secret";
+import { requiredLabel } from "./support/forms";
 
 const RISOTTO = "/recipes/qa-kitchen-recipe-risotto";
 
@@ -34,7 +35,7 @@ test.describe("Deep links, signed out", () => {
     await expectAccessible();
 
     await page.getByLabel("Username or email").fill(friend.username);
-    await fillSecret(page.getByLabel("Password"), friend.password);
+    await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), friend.password);
     await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/account/settings"));
     await expect(page.getByRole("heading", { level: 1, name: "Account settings", exact: true })).toBeVisible();

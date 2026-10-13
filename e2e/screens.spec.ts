@@ -12,7 +12,7 @@ const EMPTY_STORAGE = { cookies: [], origins: [] };
 const OUT = "screens";
 
 const SIGNED_OUT = ["/", "/recipes", "/search", "/chefs", "/login", "/signup"];
-const SIGNED_IN = ["/", "/recipes", "/my-recipes", "/cookbooks", "/shopping-list", "/account/settings"];
+const SIGNED_IN = ["/", "/recipes", "/my-recipes", "/cookbooks", "/shopping-list", "/account/settings", "/recipes/new", "/cookbooks/new"];
 
 const VIEWPORTS = [
   { name: "phone", width: 390, height: 844 },

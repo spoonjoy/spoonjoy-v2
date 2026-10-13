@@ -16,6 +16,7 @@ import { test, expect } from "./support/journey";
 import type { Page, Response } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
+import { requiredLabel } from "./support/forms";
 
 const SHOPPING_LIST = "/shopping-list";
 const SHOPPING_LIST_ACTION = "/shopping-list.data";
@@ -28,7 +29,7 @@ const FALLBACK_PARSER =
   "if that secret was added, update these expected values";
 
 function itemField(page: Page) {
-  return page.getByLabel("Item", { exact: true });
+  return page.getByLabel(requiredLabel("Item"), { exact: true });
 }
 
 function addSection(page: Page) {
@@ -308,7 +309,7 @@ test.describe("Shopping list", () => {
       review.getByText("Couldn't confidently parse one item. Review and correct before adding."),
       FALLBACK_PARSER,
     ).toBeVisible();
-    await expect(review.getByLabel("Ingredient", { exact: true }), FALLBACK_PARSER).toHaveValue("salt");
+    await expect(review.getByLabel(requiredLabel("Ingredient"), { exact: true }), FALLBACK_PARSER).toHaveValue("salt");
     await expect(review.getByLabel("Quantity", { exact: true }), FALLBACK_PARSER).toHaveValue("");
     await expect(review.getByLabel("Unit", { exact: true }), FALLBACK_PARSER).toHaveValue("");
     // The typed text stays for the review; nothing is on the list yet.

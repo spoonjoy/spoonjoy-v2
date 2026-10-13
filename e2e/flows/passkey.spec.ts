@@ -41,7 +41,7 @@ test.describe('Passkey lifecycle', () => {
     await page.goto('/signup');
     await page.getByLabel('Email').first().fill(user.email);
     await page.getByLabel('Username').first().fill(user.username);
-    await fillSecret(page.getByLabel('Password', { exact: true }).first(), new Secret(user.password));
+    await fillSecret(page.getByLabel('Password*', { exact: true }).first(), new Secret(user.password));
     await fillSecret(page.getByLabel('Confirm Password').first(), new Secret(user.password));
     await page.getByRole('button', { name: /sign up/i }).first().click();
     await expect(page).toHaveURL('/');
