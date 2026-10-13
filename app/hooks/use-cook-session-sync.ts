@@ -19,6 +19,14 @@ function cookSessionEngineKey(userId: string, recipeId: string): string {
   return `${userId}\u0000${recipeId}`;
 }
 
+/** Called only after the recipe's delete action confirms success. */
+export function confirmCookSessionRecipeDeletion(userId: string, recipeId: string): void {
+  const key = cookSessionEngineKey(userId, recipeId);
+  activeCookSessionEngines.get(key)?.dispose();
+  activeCookSessionEngines.delete(key);
+  removeSyncedCookCache(userId, recipeId);
+}
+
 /**
  * App-wide: whenever the signed-in user changes (including to signed out), drops cached cook
  * progress that belongs to any other account. Called from the root with the root loader's user.
@@ -137,7 +145,8 @@ export function useCookSessionSync({
         if (activeCookSessionEngines.get(key) === engine) activeCookSessionEngines.delete(key);
       };
       if (latest.current.deleting) {
-        // The recipe is being deleted: a save in flight may finish, but nothing more is sent.
+        // Submission stops owned work and ignores obsolete completions. Keep the cached queue
+        // until the action confirms deletion: an unsuccessful delete must be able to resume it.
         engine.dispose();
         forget();
         return;

@@ -264,6 +264,22 @@ describe("createCookSessionClient", () => {
     ]);
   });
 
+  it("passes an abort signal to the request, and an aborted request is not reported as a server answer", async () => {
+    const controller = new AbortController();
+    const fetch = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    }));
+    const client = createCookSessionClient("r", "user-1", { fetch: fetch as unknown as typeof globalThis.fetch, mutationId: () => "m-1" });
+
+    const read = client.read({ signal: controller.signal });
+    const start = client.start({ signal: controller.signal });
+    const patch = client.patch(snapshot(1), { scaleFactor: 2 }, { signal: controller.signal });
+    expect(fetch.mock.calls.map(([, init]) => init.signal)).toEqual([controller.signal, controller.signal, controller.signal]);
+    controller.abort();
+
+    await expect(Promise.all([read, start, patch])).resolves.toEqual([{ kind: "transient" }, { kind: "transient" }, { kind: "transient" }]);
+  });
+
   it("sends a leave-time flush with keepalive, and only while the body is well under the keepalive limit", async () => {
     expect(MAX_KEEPALIVE_BODY_BYTES).toBeLessThanOrEqual(64 * 1024 / 2);
     const fetch = respond(200, { state });
@@ -350,8 +366,8 @@ class FakeClient implements CookSessionClient {
 
   read = vi.fn(async () => this.next(this.reads, "read"));
   start = vi.fn(async () => this.next(this.starts, "start"));
-  patch = vi.fn(async (server: CookServerSnapshot, changes: Partial<CookProgressValue>, options?: { keepalive?: boolean }) => {
-    this.patchCalls.push(options ? { server, changes, options } : { server, changes });
+  patch = vi.fn(async (server: CookServerSnapshot, changes: Partial<CookProgressValue>, options?: { keepalive?: boolean; signal?: AbortSignal }) => {
+    this.patchCalls.push(options?.keepalive ? { server, changes, options: { keepalive: true } } : { server, changes });
     return this.next(this.patches, "patch");
   });
 
