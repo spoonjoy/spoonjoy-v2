@@ -79,6 +79,7 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
       "--success": "var(--sj-herb)",
       "--success-foreground": "var(--sj-paper)",
       "--border": "var(--sj-border)",
+      "--input": "var(--sj-border-strong)",
       "--ring": "var(--sj-brass)",
       "--radius": "var(--sj-radius-control)",
     });

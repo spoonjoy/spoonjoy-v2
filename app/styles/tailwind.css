@@ -143,6 +143,7 @@
   --success: var(--sj-herb);
   --success-foreground: var(--sj-paper);
   --border: var(--sj-border);
+  --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
 }
@@ -794,10 +795,14 @@ body:has(#cook) .sj-mobile-surface {
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
+  --color-input: var(--input);
   --color-ring: var(--ring);
   --color-destructive-foreground: var(--destructive-foreground);
   /* Ouro UI's corner radii follow --radius (the control radius), as in a shadcn theme. Spoonjoy's own
-     UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes. */
+     UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes.
+     --radius-md is what Ouro's text fields and selects use: 2px under the control radius, as shadcn
+     has it, which is --sj-radius-small, the corner Spoonjoy's fields have always had. */
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);

@@ -27,6 +27,8 @@ import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/ui/theme-provider";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 import { ToastProvider } from "~/components/ui/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
 import { MobileNav, DockContextProvider } from "~/components/navigation";
@@ -318,8 +320,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
         <ThemeProvider>
-          <SkipLink />
-          {children}
+          {/* Ouro UI's links and link buttons navigate through React Router. */}
+          <OuroProvider linkComponent={OuroRouterLink}>
+            <SkipLink />
+            {children}
+          </OuroProvider>
         </ThemeProvider>
         <ScrollRestoration nonce={nonce} />
         <Scripts nonce={nonce} />
