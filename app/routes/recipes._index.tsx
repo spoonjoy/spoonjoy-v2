@@ -4,7 +4,6 @@ import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Heading, Subheading } from "~/components/ui/heading";
-import { Input } from "~/components/ui/input";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
@@ -111,7 +110,10 @@ export default function RecipesIndex() {
                 </label>
                 <div className="flex min-h-14 items-center border-y border-[var(--sj-border-strong)] bg-transparent">
                   <SearchIcon className="ml-1 mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-                  <Input
+                  {/* A plain input, not Ouro UI's TextField. Stopgap for an Ouro UI gap: TextField
+                      cannot render a frameless, display-size input inside the app's own frame (its
+                      className is layout only and it has no size or variant). */}
+                  <input
                     ref={searchInputRef}
                     id="public-recipe-search"
                     name="q"
@@ -121,7 +123,7 @@ export default function RecipesIndex() {
                     // server-rendered query (the browser skips form restoration for these fields).
                     autoComplete="off"
                     placeholder="tomato, beans, lemon"
-                    className="min-w-0 flex-1 before:hidden after:hidden [&_input]:h-14 [&_input]:border-0 [&_input]:bg-transparent [&_input]:px-0 [&_input]:py-0 [&_input]:font-sj-display [&_input]:text-xl/7 sm:[&_input]:text-2xl/8 [&_input]:outline-none [&_input]:placeholder:text-[var(--sj-ink-soft)]"
+                    className="block h-14 min-h-11 w-full min-w-0 flex-1 appearance-none rounded-[var(--sj-radius-small)] border-0 bg-transparent p-0 font-sj-display text-xl/7 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)] sm:text-2xl/8 dark:scheme-dark"
                   />
                 </div>
                 <div className="flex flex-wrap gap-3">

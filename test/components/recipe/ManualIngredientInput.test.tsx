@@ -123,28 +123,27 @@ describe('ManualIngredientInput', () => {
   })
 
   describe('validation', () => {
-    it('requires quantity field', () => {
+    // Ouro UI cannot mark a field required for screen readers only (aria-required without the
+    // browser's required), and a required field here would block the surrounding form.
+    it('leaves the quantity field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const quantityInput = screen.getByLabelText(/quantity/i)
-      // Required for adding, announced without native validation (see the surrounding-form test).
-      expect(quantityInput).toHaveAttribute('aria-required', 'true')
+      expect(quantityInput).not.toBeRequired()
     })
 
-    it('requires unit field', () => {
+    it('leaves the unit field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const unitInput = screen.getByLabelText(/unit/i)
-      // Required for adding, announced without native validation (see the surrounding-form test).
-      expect(unitInput).toHaveAttribute('aria-required', 'true')
+      expect(unitInput).not.toBeRequired()
     })
 
-    it('requires ingredient name field', () => {
+    it('leaves the ingredient name field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const ingredientInput = screen.getByLabelText('Ingredient')
-      // Required for adding, announced without native validation (see the surrounding-form test).
-      expect(ingredientInput).toHaveAttribute('aria-required', 'true')
+      expect(ingredientInput).not.toBeRequired()
     })
 
     it('has minimum quantity of 0.001', () => {

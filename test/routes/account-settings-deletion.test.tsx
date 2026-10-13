@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, findShownAlert, queryShownAlert } from "../utils";
 import { getLocalDb } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -227,15 +227,28 @@ describe("Account settings - Your data section", () => {
     expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
     // Neutral guidance before any attempt, and no error yet.
     expect(screen.getByText(/signed in within the last 10 minutes/)).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(queryShownAlert()).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in again" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Type your username, ada, to confirm"), "ada");
     await user.click(screen.getByRole("button", { name: "Delete my account" }));
 
     // A failed attempt's message replaces the guidance.
-    expect(await screen.findByRole("alert")).toHaveTextContent("For your safety, sign in again");
+    expect(await findShownAlert()).toHaveTextContent("For your safety, sign in again");
     expect(screen.queryByText(/signed in within the last 10 minutes/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Sign in again" }));
     expect(posted.map((f) => f.intent)).toEqual(["deleteAccount", "reauthenticate"]);
+  });
+
+  it("shows a failure that names no cause at the top of the deletion form", async () => {
+    const user = userEvent.setup();
+    renderSettings(true, { success: false, intent: "deleteAccount", message: "Spoonjoy couldn't delete your account just now." }, () => undefined);
+
+    await user.click(await screen.findByRole("button", { name: "Delete account…" }));
+    await user.type(screen.getByLabelText("Type your username, ada, to confirm"), "ada");
+    await user.type(screen.getByLabelText("Current password"), "secret");
+    await user.click(screen.getByRole("button", { name: "Delete my account" }));
+
+    expect(await findShownAlert()).toHaveTextContent("Spoonjoy couldn't delete your account just now.");
+    expect(screen.getByLabelText("Current password")).not.toHaveAttribute("aria-invalid");
   });
 });

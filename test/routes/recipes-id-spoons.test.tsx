@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, findShownAlert, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { ToastProvider } from "~/components/ui/toast";
 import { data } from "react-router";
@@ -489,7 +489,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     await userEvent.type(await screen.findByLabelText(/^note/i), "saved once");
     await userEvent.click(screen.getByRole("button", { name: /^log cook$/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(D1_WRITE_UNAVAILABLE_MESSAGE);
+    expect(await findShownAlert()).toHaveTextContent(D1_WRITE_UNAVAILABLE_MESSAGE);
     expect(screen.getByLabelText(/^note/i)).toHaveValue("saved once");
     expect(screen.queryByRole("status")).toBeNull();
 
@@ -509,7 +509,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     await waitFor(() => expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull(), { timeout: 5000 });
     await userEvent.click(screen.getByRole("button", { name: /log cook/i }));
     await screen.findByRole("heading", { name: /log a cook/i });
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(queryShownAlert()).toBeNull();
   });
 
   it("refuses an oversized spoon upload with 413 before buffering the whole body", async () => {

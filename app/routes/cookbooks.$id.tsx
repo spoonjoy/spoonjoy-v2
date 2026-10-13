@@ -1,6 +1,6 @@
 import type { Route } from "./+types/cookbooks.$id";
 import { chefDisplayName } from "~/lib/username";
-import { redirect, useLoaderData, useActionData, Form, data, useSubmit, type AppLoadContext } from "react-router";
+import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -15,7 +15,7 @@ import {
   type PostHogServerEnv,
 } from "~/lib/analytics-server";
 import { formatServingsLabel } from "~/lib/quantity";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { absoluteUrlFromRequest, cookbookOgPath } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { listImageProps } from "~/lib/image-loading";
@@ -74,11 +74,11 @@ function captureCookbookActionFailure(
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/ui/button";
 import { Text, Strong } from "~/components/ui/text";
-import { Link } from "~/components/ui/link";
-import { Input } from "~/components/ui/input";
-import { Select } from "~/components/ui/select";
-import { Field, Label } from "~/components/ui/fieldset";
-import { ValidationError } from "~/components/ui/validation-error";
+import { Link as CatalystLink } from "~/components/ui/link";
+import { Form } from "~/components/ouro/form/form";
+import { Link } from "~/components/ouro/link/link";
+import { NativeSelect } from "~/components/ouro/select/native-select";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { useToast } from "~/components/ui/toast";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
@@ -355,6 +355,8 @@ export default function CookbookDetail() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
+  // The rename's error belongs on the title field.
+  const titleErrors = useMemo(() => (titleError ? { title: titleError } : undefined), [titleError]);
   const submit = useSubmit();
   // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
   useDockSuppressed(isEditingTitle);
@@ -406,7 +408,7 @@ export default function CookbookDetail() {
         <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
           <Link
             href="/cookbooks"
-            className="sj-link inline-flex min-h-11 items-center"
+            className="inline-flex min-h-11 items-center"
           >
             ← Back to cookbooks
           </Link>
@@ -480,7 +482,7 @@ export default function CookbookDetail() {
 
                 return (
                   <li key={item.id} className="border-b border-[var(--sj-border)] last:border-b-0">
-                    <Link
+                    <CatalystLink
                       href={`/recipes/${item.recipe.id}`}
                       className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
                       aria-label={item.recipe.title}
@@ -509,7 +511,7 @@ export default function CookbookDetail() {
                           {servingsLabel}
                         </span>
                       ) : null}
-                    </Link>
+                    </CatalystLink>
                   </li>
                 );
               })}
@@ -560,20 +562,21 @@ export default function CookbookDetail() {
 
                 {isEditingTitle ? (
                   <div className="mt-5">
-                    <Form method="post" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <Form
+                      method="post"
+                      errors={titleErrors}
+                      render={<RouterForm />}
+                      className="flex flex-col gap-3 sm:flex-row sm:items-end"
+                    >
                       <input type="hidden" name="intent" value="updateTitle" />
-                      <Field className="min-w-0 flex-1">
-                        <Label>Cookbook title</Label>
-                        <Input
-                          type="text"
-                          name="title"
-                          defaultValue={cookbook.title}
-                          required
-                          autoFocus
-                          invalid={titleError ? true : undefined}
-                          className="[&_input]:text-2xl [&_input]:font-bold"
-                        />
-                      </Field>
+                      <TextField
+                        label="Cookbook title"
+                        name="title"
+                        defaultValue={cookbook.title}
+                        required
+                        autoFocus
+                        className="min-w-0 flex-1"
+                      />
                       <Button type="submit">
                         Save
                       </Button>
@@ -585,29 +588,22 @@ export default function CookbookDetail() {
                         Cancel
                       </Button>
                     </Form>
-                    <ValidationError error={titleError} className="mt-3" />
                   </div>
                 ) : null}
 
                 {availableRecipes.length > 0 ? (
                   <div className="mt-6 border-t border-[var(--sj-border)] pt-6">
                     <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Add recipe to cookbook</h3>
-                    <Form method="post" className="mt-3 flex flex-col gap-4 sm:flex-row">
+                    <Form method="post" render={<RouterForm />} className="mt-3 flex flex-col gap-4 sm:flex-row">
                       <input type="hidden" name="intent" value="addRecipe" />
-                      <Field className="min-w-0 flex-1">
-                        <Label>Recipe</Label>
-                        <Select
-                          name="recipeId"
-                          required
-                        >
-                          <option value="">Select a recipe...</option>
-                          {availableRecipes.map((recipe) => (
-                            <option key={recipe.id} value={recipe.id}>
-                              {recipe.title}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
+                      <NativeSelect
+                        label="Recipe"
+                        name="recipeId"
+                        required
+                        placeholder="Select a recipe..."
+                        options={availableRecipes.map((recipe) => ({ value: recipe.id, label: recipe.title }))}
+                        className="min-w-0 flex-1"
+                      />
                       <Button type="submit" className="sm:self-end">
                         Add recipe
                       </Button>

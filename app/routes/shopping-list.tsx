@@ -16,9 +16,10 @@ import {
 import { Text, TextLink } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { Plus } from "lucide-react";
-import { Input } from "~/components/ui/input";
-import { Field, Label } from "~/components/ui/fieldset";
-import { Select } from "~/components/ui/select";
+import { Field } from "~/components/ouro/field/field";
+import { FieldControl } from "~/components/ouro/field/field-parts";
+import { NativeSelect } from "~/components/ouro/select/native-select";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Link } from "~/components/ui/link";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
@@ -504,56 +505,42 @@ export default function ShoppingList() {
           <input type="hidden" name="intent" value="addItem" />
           <input type="hidden" name="writeToken" value={addItemToken} />
           <div className="space-y-4">
-            <Field>
-              <Label>Item</Label>
-              <Input
-                ref={addItemInputRef}
-                type="text"
-                name="ingredientText"
-                required
-                placeholder="e.g., 2 lbs chicken breast or a dozen eggs"
-                defaultValue={actionData?.parseDraft?.originalText || ""}
-                className="[&_input]:rounded-[var(--sj-radius-small)]"
-              />
-            </Field>
+            <TextField
+              ref={addItemInputRef}
+              label="Item"
+              name="ingredientText"
+              required
+              placeholder="e.g., 2 lbs chicken breast or a dozen eggs"
+              defaultValue={actionData?.parseDraft?.originalText || ""}
+            />
             {actionData?.parseDraft && (
               <div className="border-y border-[var(--sj-border)] py-4">
                 <p className="text-sm text-[var(--sj-ink-soft)]">
                   {actionData?.errors?.parse || "Review the parsed item before adding."}
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mt-3">
-                  <Field>
-                    <Label>Quantity</Label>
-                    <Input
+                  {/* Ouro UI's TextField has no number type, so the quantity is its Field and control. */}
+                  <Field label="Quantity" name="quantity">
+                    <FieldControl
                       type="number"
-                      name="quantity"
                       step="0.01"
                       placeholder="2"
                       defaultValue={actionData.parseDraft.quantity}
-                      className="[&_input]:rounded-[var(--sj-radius-small)]"
                     />
                   </Field>
-                  <Field>
-                    <Label>Unit</Label>
-                    <Input
-                      type="text"
-                      name="unitName"
-                      placeholder="lb"
-                      defaultValue={actionData.parseDraft.unitName}
-                      className="[&_input]:rounded-[var(--sj-radius-small)]"
-                    />
-                  </Field>
-                  <Field>
-                    <Label>Ingredient</Label>
-                    <Input
-                      type="text"
-                      name="ingredientName"
-                      required
-                      placeholder="chicken breast"
-                      defaultValue={actionData.parseDraft.ingredientName}
-                      className="[&_input]:rounded-[var(--sj-radius-small)]"
-                    />
-                  </Field>
+                  <TextField
+                    label="Unit"
+                    name="unitName"
+                    placeholder="lb"
+                    defaultValue={actionData.parseDraft.unitName}
+                  />
+                  <TextField
+                    label="Ingredient"
+                    name="ingredientName"
+                    required
+                    placeholder="chicken breast"
+                    defaultValue={actionData.parseDraft.ingredientName}
+                  />
                 </div>
               </div>
             )}
@@ -569,28 +556,15 @@ export default function ShoppingList() {
           <Form method="post" className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-end">
             <input type="hidden" name="intent" value="addFromRecipe" />
             <input type="hidden" name="writeToken" value={addRecipeToken} />
-            <Field>
-              <Label htmlFor="shopping-recipe-id">Recipe</Label>
-              <Select id="shopping-recipe-id" name="recipeId" required>
-                <option value="">Select a recipe...</option>
-                {recipes.map((recipe) => (
-                  <option key={recipe.id} value={recipe.id}>
-                    {recipe.title}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field>
-              <Label htmlFor="shopping-recipe-scale">Scale</Label>
-              <Input
-                id="shopping-recipe-scale"
-                type="number"
-                name="scaleFactor"
-                min="0.25"
-                step="0.25"
-                defaultValue="1"
-                inputMode="decimal"
-              />
+            <NativeSelect
+              label="Recipe"
+              name="recipeId"
+              required
+              placeholder="Select a recipe..."
+              options={recipes.map((recipe) => ({ value: recipe.id, label: recipe.title }))}
+            />
+            <Field label="Scale" name="scaleFactor">
+              <FieldControl type="number" min="0.25" step="0.25" defaultValue="1" inputMode="decimal" />
             </Field>
             <Button type="submit">
               Add ingredients

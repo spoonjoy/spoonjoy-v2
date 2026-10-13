@@ -7,7 +7,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, findShownAlert, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -378,7 +378,7 @@ describe("Account settings - identity", () => {
       await userEvents.click(await screen.findByRole("button", { name: "Edit" }));
       await userEvents.click(screen.getByRole("button", { name: "Save" }));
 
-      expect(await screen.findByRole("alert")).toHaveTextContent("This username is already taken");
+      expect(await findShownAlert()).toHaveTextContent("This username is already taken");
       expect(screen.getByLabelText("Username")).toBeInTheDocument();
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
       // It is not repeated under the profile photo.
@@ -441,7 +441,7 @@ describe("Account settings - identity", () => {
 
       expect(await within(photoSection).findByText("Please upload an image file")).toBeInTheDocument();
       expect(screen.getAllByText("Please upload an image file")).toHaveLength(1);
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(queryShownAlert()).not.toBeInTheDocument();
     });
   });
 });

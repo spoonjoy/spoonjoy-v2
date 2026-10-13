@@ -3,11 +3,11 @@ import { Plus, ShoppingCart, Trash2, UtensilsCrossed } from 'lucide-react'
 import { Avatar } from '../app/components/ui/avatar'
 import { Badge } from '../app/components/ui/badge'
 import { Button } from '../app/components/ui/button'
-import { Field, FieldGroup, Fieldset, Label, Legend, Description, ErrorMessage } from '../app/components/ui/fieldset'
+import { Fieldset } from '../app/components/ouro/field/fieldset'
+import { TextArea } from '../app/components/ouro/text-field/text-area'
+import { TextField } from '../app/components/ouro/text-field/text-field'
 import { Heading, Subheading } from '../app/components/ui/heading'
-import { Input } from '../app/components/ui/input'
 import { Text, TextLink } from '../app/components/ui/text'
-import { Textarea } from '../app/components/ui/textarea'
 
 const meta: Meta = {
   title: 'App/Foundation',
@@ -62,27 +62,21 @@ export const KitchenActions: Story = {
 export const RecipeFormBasics: Story = {
   render: () => (
     <section className="sj-panel max-w-2xl rounded-[var(--sj-radius-surface)] p-6">
-      <Fieldset>
-        <Legend>Recipe basics</Legend>
-        <Text>Fields are shown the way recipe creation uses them: clear labels, helpful copy, and visible errors.</Text>
-        <FieldGroup className="mt-6">
-          <Field>
-            <Label>Recipe title</Label>
-            <Description>Use the name your family would recognize.</Description>
-            <Input type="text" defaultValue="Sunday tomato soup" />
-          </Field>
-
-          <Field>
-            <Label>Why this recipe matters</Label>
-            <Textarea rows={4} defaultValue="A bright, low-fuss soup for chilly afternoons." />
-          </Field>
-
-          <Field>
-            <Label>Missing detail</Label>
-            <Input type="text" aria-invalid="true" defaultValue="" placeholder="e.g., servings" />
-            <ErrorMessage>Add at least one serving note before publishing.</ErrorMessage>
-          </Field>
-        </FieldGroup>
+      <Fieldset
+        legend="Recipe basics"
+        description="Fields are shown the way recipe creation uses them: clear labels, helpful copy, and visible errors."
+      >
+        <TextField
+          label="Recipe title"
+          description="Use the name your family would recognize."
+          defaultValue="Sunday tomato soup"
+        />
+        <TextArea label="Why this recipe matters" rows={4} defaultValue="A bright, low-fuss soup for chilly afternoons." />
+        <TextField
+          label="Missing detail"
+          placeholder="e.g., servings"
+          error="Add at least one serving note before publishing."
+        />
       </Fieldset>
     </section>
   ),

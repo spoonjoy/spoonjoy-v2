@@ -5,7 +5,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { data } from "react-router";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/recipes.$id.edit";
 import EditRecipe from "~/routes/recipes.$id.edit";
@@ -2578,7 +2578,7 @@ describe("Recipes $id Edit Route", () => {
       await screen.findByRole("button", { name: "Save recipe" });
 
       // Clear and type new values
-      const titleInput = screen.getByLabelText(/^Title$/i);
+      const titleInput = screen.getByLabelText(requiredLabel("Title"));
       const descriptionInput = screen.getByLabelText(/Description/);
       const servingsInput = screen.getByLabelText(/Servings/);
 
@@ -2633,7 +2633,7 @@ describe("Recipes $id Edit Route", () => {
       expect(await screen.findByText(conflict)).toBeInTheDocument();
       await waitForSaveToSettle();
       // The cook's edits are still in the form.
-      expect(screen.getByLabelText(/^Title$/i)).toHaveValue("Original Title");
+      expect(screen.getByLabelText(requiredLabel("Title"))).toHaveValue("Original Title");
 
       await user.click(screen.getByRole("button", { name: "Save recipe" }));
       await waitFor(() => {
@@ -2686,7 +2686,7 @@ describe("Recipes $id Edit Route", () => {
       await screen.findByRole("button", { name: "Save recipe" });
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
 
-      const titleInput = screen.getByLabelText(/^Title$/i);
+      const titleInput = screen.getByLabelText(requiredLabel("Title"));
       const descriptionInput = screen.getByLabelText(/Description/);
       const servingsInput = screen.getByLabelText(/Servings/);
 

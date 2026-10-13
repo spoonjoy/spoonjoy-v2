@@ -8,7 +8,7 @@ import { Avatar } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/button";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
@@ -238,14 +238,16 @@ export default function UserProfile() {
               <Text className="mt-1 text-sm">
                 Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
-              <Link href={`/?chef=${profile.username}`} className="sj-link mt-2 inline-flex min-h-11 items-center text-sm">
-                Open kitchen view
-              </Link>
+              <p className="m-0 mt-2 text-sm">
+                <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
+                  Open kitchen view
+                </Link>
+              </p>
               <nav className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-sj-ui text-sm font-bold" aria-label={`${profile.username} kitchen relationships`}>
-                <Link href={`${profileHref}/fellow-chefs`} className="sj-link inline-flex min-h-11 items-center">
+                <Link href={`${profileHref}/fellow-chefs`} className="inline-flex min-h-11 items-center">
                   Fellow chefs · {fellowChefsCount}
                 </Link>
-                <Link href={`${profileHref}/kitchen-visitors`} className="sj-link inline-flex min-h-11 items-center">
+                <Link href={`${profileHref}/kitchen-visitors`} className="inline-flex min-h-11 items-center">
                   Kitchen visitors · {kitchenVisitorsCount}
                 </Link>
               </nav>

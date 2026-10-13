@@ -13,10 +13,11 @@
  */
 
 import { ArrowDown, ArrowUp, Save, Trash2 } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '~/components/ui/button'
-import { Input } from '~/components/ui/input'
-import { Textarea } from '~/components/ui/textarea'
+import { Field } from '~/components/ouro/field/field'
+import { FieldControl } from '~/components/ouro/field/field-parts'
+import { TextArea } from '~/components/ouro/text-field/text-area'
 import { IngredientInputToggle, type IngredientInputMode } from './IngredientInputToggle'
 import { IngredientParseInput } from './IngredientParseInput'
 import { ManualIngredientInput } from './ManualIngredientInput'
@@ -73,9 +74,6 @@ export function StepEditorCard({
   autoFocusInstructions = false,
   onFocused,
 }: StepEditorCardProps) {
-  const id = useId()
-  const instructionsId = `${id}-instructions`
-  const durationId = `${id}-duration`
   const instructionsRef = useRef<HTMLTextAreaElement>(null)
 
   // Auto-focus instructions textarea when requested
@@ -196,38 +194,28 @@ export function StepEditorCard({
       </div>
 
       {/* Instructions textarea */}
-      <div className="mb-4">
-        <label htmlFor={instructionsId} className="font-sj-ui mb-2 block text-sm font-bold">
-          Instructions
-        </label>
-        <Textarea
-          ref={instructionsRef}
-          id={instructionsId}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Describe what to do in this step..."
-          rows={3}
-          required
-          disabled={disabled}
-          resizable
-        />
-      </div>
+      <TextArea
+        ref={instructionsRef}
+        label="Instructions"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Describe what to do in this step..."
+        rows={3}
+        required
+        disabled={disabled}
+        className="mb-4"
+      />
 
-      {/* Duration input */}
-      <div className="mb-4">
-        <label htmlFor={durationId} className="font-sj-ui mb-2 block text-sm font-bold">
-          Duration (minutes)
-        </label>
-        <Input
+      {/* Duration input. Ouro UI's TextField has no number type, so this is its Field and control. */}
+      <Field label="Duration (minutes)" disabled={disabled} className="mb-4">
+        <FieldControl
           type="number"
-          id={durationId}
           value={duration}
           onChange={(e) => setDuration(e.target.value)}
           placeholder="Optional"
           min="1"
-          disabled={disabled}
         />
-      </div>
+      </Field>
 
       {/* Ingredient input section */}
       <div className="mb-4 border-t border-[var(--sj-border)] pt-4">

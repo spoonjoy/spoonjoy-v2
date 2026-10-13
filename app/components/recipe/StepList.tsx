@@ -14,7 +14,7 @@ import { Reorder, useDragControls } from 'motion/react'
 import { GripVertical, Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Button } from '~/components/ui/button'
-import { Link } from '~/components/ui/link'
+import { Link } from '~/components/ouro/link/link'
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from '~/components/ui/dialog'
 import { StepEditorCard, type StepData } from './StepEditorCard'
 
@@ -275,7 +275,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
       {recipeId && !recipeId.startsWith('new-') ? (
         <Link
           href={`/recipes/${recipeId}/steps/new`}
-          className="sj-link inline-flex min-h-11 items-center gap-2"
+          className="inline-flex min-h-11 items-center gap-2"
         >
           + Add step
         </Link>

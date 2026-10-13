@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen } from "@testing-library/react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, findShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { action as newRecipeAction } from "~/routes/recipes.new";
 import { action as newStepAction } from "~/routes/recipes.$id.steps.new";
@@ -303,7 +303,7 @@ describe("E2E: Step Deletion Protection", () => {
       // Wait for the page to render
       await screen.findByRole("heading", { name: /Edit Step/i });
 
-      const errorElement = await screen.findByRole("alert");
+      const errorElement = await findShownAlert();
       expect(errorElement).toHaveTextContent(
         "Cannot delete Step 1 because it is used by Step 2"
       );
@@ -347,8 +347,10 @@ describe("E2E: Step Deletion Protection", () => {
       // Wait for the page to render
       await screen.findByRole("heading", { name: /Edit Step/i });
 
-      const errorElement = await screen.findByRole("alert");
-      expect(errorElement).toHaveClass("bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))]");
+      const errorElement = await findShownAlert();
+      // Ouro UI's Alert, in its destructive tone.
+      expect(errorElement).toHaveAttribute("data-ouro", "alert");
+      expect(errorElement).toHaveAttribute("data-tone", "destructive");
     });
 
     it("should not show deletion error when no error exists", async () => {

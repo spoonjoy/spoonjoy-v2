@@ -847,11 +847,11 @@ describe('StepEditorCard', () => {
       expect(touchTarget?.className).toContain('pointer-fine:hidden')
     }
 
-    it('ingredient toggle renders a coarse-pointer touch target', () => {
+    it("ingredient toggle is Ouro UI's switch, which brings its own 44px touch target", () => {
       const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
-      expectCoarsePointerTouchTarget(screen.getByRole('switch'))
+      expect(screen.getByRole('switch').closest('[data-ouro="switch"]')).toBeInTheDocument()
     })
 
     it('save button renders a coarse-pointer touch target', () => {

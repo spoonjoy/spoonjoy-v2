@@ -2758,23 +2758,26 @@ describe("Recipes $id Route", () => {
       await user.type(titleInput, "Weeknights");
       await user.click(screen.getByRole("button", { name: "Create & Save" }));
 
-      expect(await within(dialog).findByRole("alert")).toHaveTextContent("You already have a cookbook with this title");
+      // The message shows under the title field, which is marked invalid and described by it.
+      expect(await within(dialog).findByText("You already have a cookbook with this title")).toBeInTheDocument();
       expect(titleInput).toHaveAttribute("aria-invalid", "true");
+      expect(titleInput).toHaveAccessibleDescription("You already have a cookbook with this title");
       expect(titleInput).toHaveValue("Weeknights");
       expect(screen.getByTestId("cookbook-item-cb-1")).toHaveAttribute("aria-pressed", "false");
 
       await user.type(titleInput, " again");
-      expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+      expect(within(dialog).queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
       expect(titleInput).not.toHaveAttribute("aria-invalid");
 
       await user.click(screen.getByRole("button", { name: "Create & Save" }));
-      expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
+      expect(await within(dialog).findByText("You already have a cookbook with this title")).toBeInTheDocument();
       await closeSaveModal(user);
 
       // Reopening starts clean.
       await openSaveModalFromHeader();
       const reopened = await screen.findByRole("dialog", { name: "Save to cookbook" });
-      expect(within(reopened).queryByRole("alert")).not.toBeInTheDocument();
+      expect(within(reopened).queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
+      expect(within(reopened).getByLabelText("Create new cookbook")).not.toHaveAttribute("aria-invalid");
       await closeSaveModal(user);
     });
 

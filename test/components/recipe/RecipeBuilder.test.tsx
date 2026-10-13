@@ -16,13 +16,14 @@
  * - Character limits on inputs
  */
 
-import { render, screen, within, act } from "@testing-library/react";
+import { render, screen, within, act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoutesStub } from "react-router";
 import { useState } from "react";
 import { RecipeBuilder } from "~/components/recipe/RecipeBuilder";
 import type { StepData } from "~/components/recipe/StepEditorCard";
+import { getShownAlert, requiredLabel } from "../../utils";
 
 // Mock localStorage for IngredientInputToggle used by StepEditorCard
 let localStorageStore: Record<string, string> = {};
@@ -142,6 +143,17 @@ describe("RecipeBuilder", () => {
 
       // Should have servings input
       expect(screen.getByLabelText(/servings/i)).toBeInTheDocument();
+    });
+
+    it("submits nothing when Enter is pressed in a detail field: the Save button saves", () => {
+      const Wrapper = createTestWrapper();
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+
+      // With the required title filled in, the browser's own checks let the submit through.
+      fireEvent.change(screen.getByLabelText(requiredLabel("Title")), { target: { value: "Soup" } });
+      const detailsForm = screen.getByLabelText(/servings/i).closest("form")!;
+      // fireEvent returns false when the event's default action was prevented.
+      expect(fireEvent.submit(detailsForm)).toBe(false);
     });
 
     it("renders StepList section", () => {
@@ -712,7 +724,7 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
       // Find the file input (it should be present in the image upload component)
-      const fileInput = screen.getByLabelText(/recipe image/i);
+      const fileInput = screen.getByLabelText("Upload recipe image");
 
       // Create first image file
       const firstFile = new File(["content1"], "image1.jpg", {
@@ -748,7 +760,7 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
       // Find the file input and upload an image
-      const fileInput = screen.getByLabelText(/recipe image/i);
+      const fileInput = screen.getByLabelText("Upload recipe image");
       const file = new File(["content"], "image.jpg", { type: "image/jpeg" });
       await userEvent.upload(fileInput, file);
 
@@ -927,7 +939,6 @@ describe("RecipeBuilder", () => {
 
       // Verify the servings input has error styling
       const servingsInput = screen.getByLabelText(/servings/i);
-      expect(servingsInput).toHaveAttribute("data-invalid");
       expect(servingsInput).toHaveAttribute("aria-invalid", "true");
       expect(servingsInput).toHaveAccessibleDescription("Servings cannot exceed 100 characters");
     });
@@ -938,7 +949,7 @@ describe("RecipeBuilder", () => {
       });
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
-      expect(screen.getByRole("alert")).toHaveTextContent("Step 1: Step description is required");
+      expect(getShownAlert()).toHaveTextContent("Step 1: Step description is required");
     });
   });
 });

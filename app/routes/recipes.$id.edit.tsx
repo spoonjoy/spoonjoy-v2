@@ -12,8 +12,8 @@ import {
 } from "~/lib/recipe-d1-edits.server";
 import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { requireUserId } from "~/lib/session.server";
-import { Link } from "~/components/ui/link";
-import { ValidationError } from "~/components/ui/validation-error";
+import { Alert } from "~/components/ouro/alert/alert";
+import { Link } from "~/components/ouro/link/link";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import { ImportedRecipeNotice } from "~/components/recipe/RecipeImportPanel";
@@ -636,7 +636,7 @@ export default function EditRecipe() {
       <CookbookHeader
         eyebrow="Edit recipe"
         title="Edit Recipe"
-        action={<Link href={`/recipes/${recipe.id}`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        action={<Link href={`/recipes/${recipe.id}`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
       />
 
       {imported ? <ImportedRecipeNotice sourceUrl={recipe.sourceUrl} /> : null}
@@ -659,11 +659,11 @@ export default function EditRecipe() {
         </Form>
 
         {actionData?.errors?.reorder && (
-          <ValidationError error={actionData.errors.reorder} className="mb-4" />
+          <Alert tone="destructive" title={actionData.errors.reorder} className="mb-4" />
         )}
 
         {actionData?.errors?.stepDeletion && (
-          <ValidationError error={actionData.errors.stepDeletion} className="mb-4" />
+          <Alert tone="destructive" title={actionData.errors.stepDeletion} className="mb-4" />
         )}
 
         <RecipeBuilder
@@ -685,7 +685,7 @@ export default function EditRecipe() {
         <section aria-label="Recipe steps" className="mt-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <CookbookSectionTitle className="my-0 flex-1">Recipe Steps</CookbookSectionTitle>
-            <Link href={`/recipes/${recipe.id}/steps/new`} className="sj-link inline-flex min-h-11 items-center">+ Add step</Link>
+            <Link href={`/recipes/${recipe.id}/steps/new`} className="inline-flex min-h-11 items-center">+ Add step</Link>
           </div>
 
           {recipe.steps.length === 0 ? (

@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, requiredLabel } from "../utils";
 
 vi.mock("motion/react", () => {
   const MotionDiv = ({
@@ -198,7 +198,7 @@ describe("shopping list UX updates", () => {
     await waitFor(() => expect(input.value).toBe(""));
     await addItem(3);
 
-    fireEvent.change(screen.getByLabelText("Recipe"), { target: { value: "recipe-1" } });
+    fireEvent.change(screen.getByLabelText(requiredLabel("Recipe")), { target: { value: "recipe-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Add ingredients" }));
     await waitFor(() => expect(tokens).toHaveLength(4));
     await waitFor(() => expect((document.querySelectorAll("input[name='writeToken']")[1] as HTMLInputElement).value).not.toBe(tokens[3]!.token));
@@ -501,7 +501,7 @@ describe("shopping list UX updates", () => {
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    fireEvent.change(await screen.findByLabelText("Item"), { target: { value: "2 apples" } });
+    fireEvent.change(await screen.findByLabelText(requiredLabel("Item")), { target: { value: "2 apples" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     expect(await screen.findByText("Review the parsed item before adding.")).toBeInTheDocument();
@@ -667,7 +667,7 @@ describe("shopping list UX updates", () => {
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    fireEvent.change(await screen.findByLabelText("Recipe"), { target: { value: "recipe-1" } });
+    fireEvent.change(await screen.findByLabelText(requiredLabel("Recipe")), { target: { value: "recipe-1" } });
     fireEvent.change(screen.getByLabelText("Scale"), { target: { value: "1.5" } });
     fireEvent.click(screen.getByRole("button", { name: "Add ingredients" }));
 

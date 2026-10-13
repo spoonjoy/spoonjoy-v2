@@ -272,16 +272,19 @@ describe("HTML5 validation attributes", () => {
       expect(quantityInput).toHaveAttribute("max", String(QUANTITY_MAX));
     });
 
-    it("quantity field has required attribute", async () => {
+    // The add-ingredient fields also sit inside the Add Step page's form, where a required field
+    // would block saving the step. Ouro UI cannot mark a field required for screen readers only
+    // (aria-required without the browser's required), so these fields are not marked at all.
+    it("quantity field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const quantityInput = await screen.findByLabelText(/Quantity/);
-      expect(quantityInput).toBeRequired();
+      expect(quantityInput).not.toBeRequired();
     });
 
-    it("unitName field has required attribute", async () => {
+    it("unitName field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const unitNameInput = await screen.findByLabelText(/Unit/);
-      expect(unitNameInput).toBeRequired();
+      expect(unitNameInput).not.toBeRequired();
     });
 
     it("unitName field has maxLength attribute", async () => {
@@ -290,10 +293,10 @@ describe("HTML5 validation attributes", () => {
       expect(unitNameInput).toHaveAttribute("maxLength", String(UNIT_NAME_MAX_LENGTH));
     });
 
-    it("ingredientName field has required attribute", async () => {
+    it("ingredientName field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const ingredientNameInput = await screen.findByLabelText(/Ingredient/);
-      expect(ingredientNameInput).toBeRequired();
+      expect(ingredientNameInput).not.toBeRequired();
     });
 
     it("ingredientName field has maxLength attribute", async () => {

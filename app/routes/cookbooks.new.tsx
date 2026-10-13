@@ -1,14 +1,14 @@
 import type { Route } from "./+types/cookbooks.new";
-import { Form, redirect, data, useActionData } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Fieldset, Field, Label, ErrorMessage } from "~/components/ui/fieldset";
-import { Link } from "~/components/ui/link";
+import { Form } from "~/components/ouro/form/form";
+import { Link } from "~/components/ouro/link/link";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ui/text";
-import { ValidationError } from "~/components/ui/validation-error";
+import { useFormErrors } from "~/hooks/use-form-errors";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 import {
   D1_WRITE_UNAVAILABLE_CODE,
@@ -132,6 +132,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function NewCookbook() {
   const actionData = useActionData<ActionData>();
+  const formErrors = useFormErrors(actionData?.errors);
   // One cookbook per opening of the page: a create after a 503, or a double tap, makes it once.
   const [cookbookToken] = useWriteToken();
 
@@ -144,35 +145,21 @@ export default function NewCookbook() {
           </Text>
           <Link
             href="/cookbooks"
-            className="sj-link mt-4 inline-flex min-h-11 items-center"
+            className="mt-4 inline-flex min-h-11 items-center"
           >
             ← Back to cookbooks
           </Link>
         </CookbookHeader>
 
-        {/* istanbul ignore next -- @preserve */ actionData?.errors?.general && (
-          <ValidationError error={actionData.errors.general} className="mb-4" />
-        )}
-
         <SettingsPanel title="Cookbook title">
-        <Form method="post">
-          <input type="hidden" name="cookbookToken" value={cookbookToken} />
-          <Fieldset className="space-y-6">
-            <Field>
-              <Label>Cookbook Title *</Label>
-              <Input
-                type="text"
-                name="title"
-                required
-                placeholder="e.g., Family Favorites, Holiday Recipes"
-                data-invalid={/* istanbul ignore next -- @preserve */ actionData?.errors?.title ? true : undefined}
-              />
-              {/* istanbul ignore next -- @preserve */ actionData?.errors?.title && (
-                <ErrorMessage>
-                  {actionData.errors.title}
-                </ErrorMessage>
-              )}
-            </Field>
+          <Form method="post" errors={formErrors} render={<RouterForm />} className="gap-6">
+            <input type="hidden" name="cookbookToken" value={cookbookToken} />
+            <TextField
+              label="Cookbook Title"
+              name="title"
+              required
+              placeholder="e.g., Family Favorites, Holiday Recipes"
+            />
 
             <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
               <Button href="/cookbooks" plain>
@@ -182,8 +169,7 @@ export default function NewCookbook() {
                 Create cookbook
               </Button>
             </div>
-          </Fieldset>
-        </Form>
+          </Form>
         </SettingsPanel>
       </div>
     </CookbookPage>

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, getShownAlert, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader as newRecipeLoader, action as newRecipeAction } from "~/routes/recipes.new";
 import NewRecipe from "~/routes/recipes.new";
@@ -80,12 +80,12 @@ describe("RecipeBuilder Route Integration", () => {
         expect(await screen.findByRole("button", { name: "Create recipe" })).toBeInTheDocument();
 
         // RecipeBuilder uses "Title" label, not "Recipe Title *"
-        expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Title"))).toBeInTheDocument();
         expect(screen.getByLabelText(/Description/)).toBeInTheDocument();
         expect(screen.getByLabelText(/Servings/)).toBeInTheDocument();
 
         // RecipeBuilder has "Recipe Image" label for image upload, not "Image URL"
-        expect(screen.getByLabelText(/Recipe image/i)).toBeInTheDocument();
+        expect(screen.getByLabelText("Upload recipe image")).toBeInTheDocument();
       });
 
       it("should render RecipeImageUpload component instead of URL input", async () => {
@@ -178,7 +178,7 @@ describe("RecipeBuilder Route Integration", () => {
         await screen.findByRole("button", { name: "Create recipe" });
 
         // Fill out form
-        fireEvent.change(screen.getByLabelText(/^Title$/i), {
+        fireEvent.change(screen.getByLabelText(requiredLabel("Title")), {
           target: { value: "My New Recipe" },
         });
         fireEvent.change(screen.getByLabelText(/Description/), {
@@ -274,7 +274,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         // RecipeBuilder uses role="alert" for general errors
         await waitFor(() => {
-          expect(screen.getByRole("alert")).toHaveTextContent("Failed to create recipe. Please try again.");
+          expect(getShownAlert()).toHaveTextContent("Failed to create recipe. Please try again.");
         });
       });
     });
@@ -298,7 +298,7 @@ describe("RecipeBuilder Route Integration", () => {
 
         render(<Stub initialEntries={["/recipes/new"]} />);
 
-        const titleInput = await screen.findByLabelText(/^Title$/i);
+        const titleInput = await screen.findByLabelText(requiredLabel("Title"));
         await user.type(titleInput, "Test Recipe");
 
         const submitButton = screen.getByRole("button", { name: "Create recipe" });
@@ -345,7 +345,7 @@ describe("RecipeBuilder Route Integration", () => {
         expect(await screen.findByRole("button", { name: "Save recipe" })).toBeInTheDocument();
 
         // RecipeBuilder uses "Title" label
-        expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Title"))).toBeInTheDocument();
       });
 
       it("should render RecipeImageUpload with existing image preview", async () => {
@@ -410,7 +410,7 @@ describe("RecipeBuilder Route Integration", () => {
         await screen.findByRole("button", { name: "Save recipe" });
 
         // RecipeBuilder should be populated with recipe data
-        expect(screen.getByLabelText(/^Title$/i)).toHaveValue("Existing Recipe Title");
+        expect(screen.getByLabelText(requiredLabel("Title"))).toHaveValue("Existing Recipe Title");
         expect(screen.getByLabelText(/Description/)).toHaveValue("Existing description text");
         expect(screen.getByLabelText(/Servings/)).toHaveValue("6-8");
       });

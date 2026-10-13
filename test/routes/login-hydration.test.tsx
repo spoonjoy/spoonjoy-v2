@@ -71,8 +71,8 @@ describe("Login hydration", () => {
     container.innerHTML = renderToString(loginTree());
     document.body.appendChild(container);
 
-    const identifierInput = container.querySelector<HTMLInputElement>("#identifier")!;
-    const passwordInput = container.querySelector<HTMLInputElement>("#password")!;
+    const identifierInput = container.querySelector<HTMLInputElement>('input[name="identifier"]')!;
+    const passwordInput = container.querySelector<HTMLInputElement>('input[name="password"]')!;
     expect(identifierInput.value).toBe("");
 
     // The person types while the client bundle is still loading.
@@ -83,10 +83,10 @@ describe("Login hydration", () => {
     });
 
     // React adopted the server input rather than replacing it.
-    expect(container.querySelector("#identifier")).toBe(identifierInput);
+    expect(container.querySelector('input[name="identifier"]')).toBe(identifierInput);
     expect(identifierInput.value).toBe(TYPED);
 
-    // Moving focus re-renders the Headless UI input. A controlled input would
+    // Moving focus can re-render the field. A controlled input would
     // have its DOM value reset to React state here.
     await act(async () => {
       identifierInput.focus();

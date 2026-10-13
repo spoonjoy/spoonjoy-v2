@@ -12,8 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Field, Label } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import {
@@ -65,17 +64,13 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
 
   return (
     <div className="space-y-3">
-      <Field>
-        <Label htmlFor="passkey-name">Name (optional)</Label>
-        <Input
-          type="text"
-          id="passkey-name"
-          name="passkey-name"
-          placeholder="e.g. MacBook Touch ID"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </Field>
+      <TextField
+        label="Name (optional)"
+        name="passkey-name"
+        placeholder="e.g. MacBook Touch ID"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
       <Button type="button" disabled={status === "pending"} onClick={handleClick}>
         {status === "pending" ? "Waiting for passkey…" : "Add a passkey"}
       </Button>

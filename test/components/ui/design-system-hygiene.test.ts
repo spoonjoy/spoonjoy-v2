@@ -8,14 +8,6 @@ const APP_AND_STORY_FILES = [
   "stories",
 ];
 
-const FORM_PRIMITIVES = [
-  "app/components/ui/checkbox.tsx",
-  "app/components/ui/combobox.tsx",
-  "app/components/ui/listbox.tsx",
-  "app/components/ui/select.tsx",
-  "app/components/ui/textarea.tsx",
-];
-
 function readSourceFile(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), "utf-8");
 }
@@ -40,15 +32,6 @@ function listTextFiles(dirs: string[]): string[] {
 }
 
 describe("Spoonjoy UI design-system hygiene", () => {
-  it.each(FORM_PRIMITIVES)("%s uses Spoonjoy radius tokens, not stale Catalyst radius math", (filePath) => {
-    const content = readSourceFile(filePath);
-
-    expect(content).not.toContain("calc(var(--radius-lg)-1px)");
-    expect(content).not.toContain("rounded-lg");
-    expect(content).not.toContain("rounded-xl");
-    expect(content).toContain("var(--sj-radius-small)");
-  });
-
   it("keeps button chrome flat enough to avoid doubled-button artifacts", () => {
     const content = readSourceFile("app/components/ui/button.tsx");
 

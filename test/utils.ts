@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { waitFor } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
 
 type StubRouteObject = Parameters<typeof createRoutesStub>[0][number];
@@ -117,4 +118,41 @@ export async function getOrCreateIngredientRef(db: any, name: string) {
   }
 
   return ingredientRef;
+}
+
+/**
+ * The label text of a required field. Ouro UI marks a required field's label with an asterisk,
+ * which screen readers skip but which is part of the label's text, so `getByLabelText("Email")`
+ * no longer finds a required Email field: `getByLabelText(requiredLabel("Email"))` does.
+ */
+export function requiredLabel(label: string) {
+  return `${label}*`;
+}
+
+/**
+ * The alerts that say something. Ouro UI's Form keeps a `role="alert"` region at its top for its
+ * own messages, empty until there is one, so `getByRole("alert")` on a page with a Form finds
+ * that region as well as the alert a test means.
+ */
+export function shownAlerts(container: HTMLElement = document.body): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>('[role="alert"]')).filter(
+    (alert) => alert.textContent !== "",
+  );
+}
+
+/** The one alert that says something; throws when there is none or more than one. */
+export function getShownAlert(container?: HTMLElement): HTMLElement {
+  const alerts = shownAlerts(container);
+  if (alerts.length !== 1) throw new Error(`Expected one alert with a message, found ${alerts.length}.`);
+  return alerts[0];
+}
+
+/** Waits for the one alert that says something. */
+export function findShownAlert(options: { container?: HTMLElement; timeout?: number } = {}): Promise<HTMLElement> {
+  return waitFor(() => getShownAlert(options.container), { timeout: options.timeout });
+}
+
+/** The one alert that says something, or null when no alert does. */
+export function queryShownAlert(container?: HTMLElement): HTMLElement | null {
+  return shownAlerts(container)[0] ?? null;
 }

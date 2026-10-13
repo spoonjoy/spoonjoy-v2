@@ -27,10 +27,9 @@ import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
-import { Field, Label } from "~/components/ui/fieldset";
+import { Form } from "~/components/ouro/form/form";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ui/heading";
-import { Input } from "~/components/ui/input";
-import { ValidationError } from "~/components/ui/validation-error";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
@@ -668,6 +667,11 @@ export default function RecipeDetail() {
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   const [createCookbookError, setCreateCookbookError] = useState<string | null>(null);
+  // The create's error belongs on the cookbook name field.
+  const createCookbookErrors = useMemo(
+    () => (createCookbookError ? { title: createCookbookError } : undefined),
+    [createCookbookError],
+  );
 
   useEffect(() => {
     const loggedSpoonId = actionData?.success && actionData.intent === "createSpoon"
@@ -1170,9 +1174,11 @@ export default function RecipeDetail() {
         onOpenChange={setIsSaveModalOpen}
         footer={
           <div className="w-full" data-testid="save-modal-footer">
-            <createCookbookFetcher.Form
+            <Form
               method="post"
-              className="space-y-3"
+              errors={createCookbookErrors}
+              render={<createCookbookFetcher.Form />}
+              className="gap-3"
               onSubmit={(event) => {
                 const title = newCookbookTitle.trim();
                 if (!title) {
@@ -1184,23 +1190,17 @@ export default function RecipeDetail() {
               }}
             >
               <input type="hidden" name="intent" value="createCookbookAndSave" />
-              <Field>
-                <Label htmlFor="new-cookbook-input">Create new cookbook</Label>
-                <Input
-                  id="new-cookbook-input"
-                  name="title"
-                  type="text"
-                  placeholder="Cookbook name"
-                  value={newCookbookTitle}
-                  onChange={(event) => {
-                    setNewCookbookTitle(event.target.value);
-                    setCreateCookbookError(null);
-                  }}
-                  invalid={createCookbookError ? true : undefined}
-                  data-testid="new-cookbook-input"
-                />
-              </Field>
-              <ValidationError error={createCookbookError} />
+              <TextField
+                label="Create new cookbook"
+                name="title"
+                placeholder="Cookbook name"
+                value={newCookbookTitle}
+                onChange={(event) => {
+                  setNewCookbookTitle(event.target.value);
+                  setCreateCookbookError(null);
+                }}
+                data-testid="new-cookbook-input"
+              />
               <Button
                 type="submit"
                 disabled={newCookbookTitle.trim().length === 0 || createCookbookFetcher.state !== "idle"}
@@ -1208,7 +1208,7 @@ export default function RecipeDetail() {
               >
                 Create & Save
               </Button>
-            </createCookbookFetcher.Form>
+            </Form>
           </div>
         }
       >

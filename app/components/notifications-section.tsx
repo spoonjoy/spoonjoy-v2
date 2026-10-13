@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
-import { Switch, SwitchField, SwitchGroup } from "~/components/ui/switch";
-import { Label } from "~/components/ui/fieldset";
+import { Fieldset } from "~/components/ouro/field/fieldset";
+import { Switch } from "~/components/ouro/switch/switch";
 import {
   Dialog,
   DialogActions,
@@ -162,22 +162,17 @@ export function NotificationsSection({
         </div>
       )}
 
-      <div className="mt-6">
-        <Text className="text-sm font-medium">What to notify me about</Text>
-        <SwitchGroup className="mt-3">
-          {PREF_LABELS.map(({ key, label }) => (
-            <SwitchField key={key}>
-              <Label>{label}</Label>
-              <Switch
-                aria-label={label}
-                checked={prefs[key]}
-                disabled={!subscribed}
-                onChange={(next) => onTogglePreference(key, next)}
-              />
-            </SwitchField>
-          ))}
-        </SwitchGroup>
-      </div>
+      <Fieldset legend="What to notify me about" className="mt-6 gap-3">
+        {PREF_LABELS.map(({ key, label }) => (
+          <Switch
+            key={key}
+            label={label}
+            checked={prefs[key]}
+            disabled={!subscribed}
+            onCheckedChange={(next) => onTogglePreference(key, next)}
+          />
+        ))}
+      </Fieldset>
 
       <Dialog open={iosDialogOpen} onClose={setIosDialogOpen}>
         <DialogTitle>Add Spoonjoy to your Home Screen first</DialogTitle>

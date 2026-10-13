@@ -1,6 +1,6 @@
 import type { Route } from "./+types/login";
 import { useRef } from "react";
-import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1 } from "~/lib/auth.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -12,11 +12,11 @@ import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { PasskeySignInButton } from "~/components/auth/PasskeySignInButton";
 import { Heading } from "~/components/ui/heading";
-import { Field, Label, ErrorMessage } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
+import { Form } from "~/components/ouro/form/form";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/ui/button";
 import { Text, TextLink } from "~/components/ui/text";
-import { ValidationError } from "~/components/ui/validation-error";
+import { useFormErrors } from "~/hooks/use-form-errors";
 
 interface ActionData {
   errors?: {
@@ -120,6 +120,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function Login() {
   const actionData = useActionData<ActionData>();
+  const formErrors = useFormErrors(actionData?.errors);
   const loaderData = useLoaderData<LoaderData | null>();
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();
@@ -141,10 +142,6 @@ export default function Login() {
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
 
-        {actionData?.errors?.general && (
-          <ValidationError error={actionData.errors.general} className="mt-4" />
-        )}
-
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
@@ -152,40 +149,24 @@ export default function Login() {
           </>
         )}
 
-        <Form method="post" className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
-          <Field>
-            <Label htmlFor="identifier">Username or email</Label>
-            <Input
-              type="text"
-              id="identifier"
-              name="identifier"
-              autoComplete="username webauthn"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-              ref={identifierRef}
-              invalid={!!actionData?.errors?.identifier}
-            />
-            {actionData?.errors?.identifier && (
-              <ErrorMessage>{actionData.errors.identifier}</ErrorMessage>
-            )}
-          </Field>
-
-          <Field>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              type="password"
-              id="password"
-              name="password"
-              autoComplete="current-password"
-              required
-              invalid={/* istanbul ignore next -- @preserve */ !!actionData?.errors?.password}
-            />
-            {/* istanbul ignore next -- @preserve */ actionData?.errors?.password && (
-              <ErrorMessage>{actionData.errors.password}</ErrorMessage>
-            )}
-          </Field>
+        {/* The action's messages land on the fields by name; "general" shows at the top of the form. */}
+        <Form
+          method="post"
+          errors={formErrors}
+          render={<RouterForm />}
+          className={oauthProviders.length > 0 ? "gap-6" : "mt-8 gap-6"}
+        >
+          <TextField
+            label="Username or email"
+            name="identifier"
+            autoComplete="username webauthn"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            ref={identifierRef}
+          />
+          <TextField label="Password" type="password" name="password" autoComplete="current-password" required />
 
           <Button type="submit" className="w-full">
             Log in

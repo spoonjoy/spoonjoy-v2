@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
 
 vi.mock("motion/react", () => {
@@ -742,7 +742,7 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("Add item")).toBeInTheDocument();
-      expect(screen.getByLabelText("Item")).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Item"))).toBeInTheDocument();
       expect(
         screen.getByPlaceholderText("e.g., 2 lbs chicken breast or a dozen eggs")
       ).toBeInTheDocument();

@@ -3,7 +3,7 @@ import { redirect, data, useActionData, useNavigate, useNavigation, Form } from 
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
@@ -445,7 +445,7 @@ export default function NewRecipe() {
       <CookbookHeader
         eyebrow="New recipe"
         title="Write the version future-you can actually cook."
-        action={<Link href="/recipes" className="sj-link inline-flex min-h-11 items-center">← Back to recipes</Link>}
+        action={<Link href="/recipes" className="inline-flex min-h-11 items-center">← Back to recipes</Link>}
       >
         <Text>
           Bring in a recipe you already have, or start with the story and the photo and shape the method into steps.

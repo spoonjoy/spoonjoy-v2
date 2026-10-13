@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
-import { Form, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
@@ -15,17 +15,18 @@ import {
 import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Textarea } from "~/components/ui/textarea";
-import { ErrorMessage, Field, Label } from "~/components/ui/fieldset";
+import { Alert } from "~/components/ouro/alert/alert";
+import { Fieldset } from "~/components/ouro/field/fieldset";
+import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { Link } from "~/components/ouro/link/link";
+import { Select } from "~/components/ouro/select/select";
+import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ui/text";
-import { Link } from "~/components/ui/link";
-import { ValidationError } from "~/components/ui/validation-error";
 import { useToast } from "~/components/ui/toast";
-import { Listbox, ListboxOption, ListboxLabel } from "~/components/ui/listbox";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
@@ -610,15 +611,7 @@ export default function EditStep() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { showToast } = useToast();
 
-  // Initialize selected steps from existing usingSteps
-  const [selectedSteps, setSelectedSteps] = useState<number[]>(
-    step.usingSteps?.map((u) => u.outputStepNum) || []
-  );
-
   const stepDeletionError = actionData?.errors?.stepDeletion;
-  const stepTitleErrorId = "edit-step-title-error";
-  const usesStepsErrorId = "edit-step-uses-steps-error";
-  const descriptionErrorId = "edit-step-description-error";
 
   // Why an ingredient, or an Add All batch, could not be added (invalid field,
   // already in the recipe, nothing to add).
@@ -634,9 +627,22 @@ export default function EditStep() {
   ].filter((error): error is string => Boolean(error));
   const showUsesStepsPicker = step.stepNum !== 1 && availableSteps.length > 0;
 
-  const stepDeletionErrorElement = stepDeletionError
-    ? <ValidationError error={stepDeletionError} className="mb-4" />
-    : null;
+  // The update's messages for the step form, by field name. Without the picker (step 1, or no
+  // earlier steps) no field shows a usesSteps error, so it joins the message at the top of the
+  // form; otherwise Update would fail silently.
+  const errors = actionData?.errors;
+  const formErrors = useMemo<FormErrors | undefined>(() => {
+    if (!errors) return undefined;
+    const formErrors: FormErrors = {};
+    if (errors.stepTitle) formErrors.stepTitle = errors.stepTitle;
+    if (errors.description) formErrors.description = errors.description;
+    if (errors.usesSteps && showUsesStepsPicker) formErrors.usesSteps = errors.usesSteps;
+    const whole = [errors.general, showUsesStepsPicker ? undefined : errors.usesSteps].filter(
+      (message): message is string => Boolean(message),
+    );
+    if (whole.length > 0) formErrors.form = whole;
+    return formErrors;
+  }, [errors, showUsesStepsPicker]);
 
   useEffect(() => {
     if (searchParams.get("created") === "1") {
@@ -702,97 +708,46 @@ export default function EditStep() {
       <CookbookHeader
         eyebrow={`Step ${step.stepNum}`}
         title="Edit Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
       >
         <Text>Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
       </CookbookHeader>
 
       <div className="mt-8 max-w-4xl">
-        {actionData?.errors?.general && (
-          <ValidationError error={actionData.errors.general} className="mb-4" />
-        )}
-
-        <Form method="post" className="sj-form-section flex flex-col gap-6">
-          <Field>
-            <Label>
-              Step Title (optional)
-            </Label>
-            <Input
-              type="text"
-              name="stepTitle"
-              maxLength={STEP_TITLE_MAX_LENGTH}
-              defaultValue={step.stepTitle || ""}
-              invalid={!!actionData?.errors?.stepTitle}
-              aria-invalid={actionData?.errors?.stepTitle ? true : undefined}
-              aria-describedby={actionData?.errors?.stepTitle ? stepTitleErrorId : undefined}
-            />
-            {actionData?.errors?.stepTitle && (
-              <ErrorMessage id={stepTitleErrorId}>{actionData.errors.stepTitle}</ErrorMessage>
-            )}
-          </Field>
+        <Form method="post" errors={formErrors} render={<RouterForm />} className="sj-form-section gap-6">
+          <TextField
+            label="Step Title (optional)"
+            name="stepTitle"
+            maxLength={STEP_TITLE_MAX_LENGTH}
+            defaultValue={step.stepTitle || ""}
+          />
 
           {step.stepNum === 1 ? (
-            <Field>
-              <Label>Uses output from</Label>
+            <Fieldset legend="Uses output from">
               <Text className="italic">No previous steps available</Text>
-            </Field>
+            </Fieldset>
           ) : availableSteps.length > 0 && (
-            <Field>
-              <Label>Uses output from (optional)</Label>
-              <Listbox
-                multiple
-                value={selectedSteps}
-                onChange={setSelectedSteps}
-                aria-label="Select previous steps"
-                aria-invalid={actionData?.errors?.usesSteps ? true : undefined}
-                aria-describedby={actionData?.errors?.usesSteps ? usesStepsErrorId : undefined}
-                placeholder="Select previous steps (optional)"
-              >
-                {availableSteps.map((availableStep) => (
-                  <ListboxOption key={availableStep.stepNum} value={availableStep.stepNum}>
-                    <ListboxLabel>
-                      Step {availableStep.stepNum}{availableStep.stepTitle ? `: ${availableStep.stepTitle}` : ""}
-                    </ListboxLabel>
-                  </ListboxOption>
-                ))}
-              </Listbox>
-              {actionData?.errors?.usesSteps && (
-                <ErrorMessage id={usesStepsErrorId}>
-                  {actionData.errors.usesSteps}
-                </ErrorMessage>
-              )}
-              {selectedSteps.map((stepNum) => (
-                <input key={stepNum} type="hidden" name="usesSteps" value={stepNum} />
-              ))}
-            </Field>
-          )}
-
-          <Field>
-            <Label>
-              Description *
-            </Label>
-            <Textarea
-              name="description"
-              rows={6}
-              required
-              maxLength={STEP_DESCRIPTION_MAX_LENGTH}
-              defaultValue={step.description}
-              invalid={!!actionData?.errors?.description}
-              aria-invalid={actionData?.errors?.description ? true : undefined}
-              aria-describedby={actionData?.errors?.description ? descriptionErrorId : undefined}
+            <Select
+              label="Uses output from (optional)"
+              name="usesSteps"
+              multiple
+              defaultValue={step.usingSteps.map((u) => String(u.outputStepNum))}
+              placeholder="Select previous steps (optional)"
+              options={availableSteps.map((availableStep) => ({
+                value: String(availableStep.stepNum),
+                label: `Step ${availableStep.stepNum}${availableStep.stepTitle ? `: ${availableStep.stepTitle}` : ""}`,
+              }))}
             />
-            {actionData?.errors?.description && (
-              <ErrorMessage id={descriptionErrorId}>
-                {actionData.errors.description}
-              </ErrorMessage>
-            )}
-          </Field>
-
-          {/* Without the picker (step 1, or no earlier steps) nothing else shows
-              this error, and Update would fail silently. */}
-          {!showUsesStepsPicker && (
-            <ValidationError error={actionData?.errors?.usesSteps} />
           )}
+
+          <TextArea
+            label="Description"
+            name="description"
+            rows={6}
+            required
+            maxLength={STEP_DESCRIPTION_MAX_LENGTH}
+            defaultValue={step.description}
+          />
 
           <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
             <Button href={`/recipes/${recipe.id}/edit`} plain>
@@ -804,7 +759,9 @@ export default function EditStep() {
           </div>
         </Form>
 
-        <div className="mt-4">{stepDeletionErrorElement}</div>
+        <div className="mt-4">
+          {stepDeletionError ? <Alert tone="destructive" title={stepDeletionError} className="mb-4" /> : null}
+        </div>
 
         <SettingsPanel
           title="Ingredients"
@@ -817,7 +774,13 @@ export default function EditStep() {
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           </div>
 
-          <ValidationError error={ingredientErrors} className="mb-4" />
+          {ingredientErrors.length > 0 ? (
+            <div className="mb-4 grid gap-2">
+              {ingredientErrors.map((message) => (
+                <Alert key={message} tone="destructive" title={message} />
+              ))}
+            </div>
+          ) : null}
 
           {showIngredientForm && (
             <div className="mb-4 border-y border-[var(--sj-border)] py-5">

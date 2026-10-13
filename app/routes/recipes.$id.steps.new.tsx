@@ -1,16 +1,17 @@
 import type { Route } from "./+types/recipes.$id.steps.new";
-import { Form, redirect, data, useActionData, useLoaderData, useNavigate } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useNavigate } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Textarea } from "~/components/ui/textarea";
-import { Fieldset, Field, Label, ErrorMessage } from "~/components/ui/fieldset";
+import { Fieldset } from "~/components/ouro/field/fieldset";
+import { Form } from "~/components/ouro/form/form";
+import { Link } from "~/components/ouro/link/link";
+import { Select } from "~/components/ouro/select/select";
+import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text, Strong } from "~/components/ui/text";
-import { Link } from "~/components/ui/link";
-import { ValidationError } from "~/components/ui/validation-error";
-import { Listbox, ListboxOption, ListboxLabel } from "~/components/ui/listbox";
+import { useFormErrors } from "~/hooks/use-form-errors";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 import {
@@ -408,19 +409,19 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   }
 }
 
+// The step form's own fields. An ingredient's errors show under the ingredient inputs.
+const STEP_FIELDS = ["stepTitle", "usesSteps", "description"] as const;
+
 export default function NewStep() {
   const { recipe, nextStepNum, availableSteps } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
-  const [selectedSteps, setSelectedSteps] = useState<number[]>([]);
   const [ingredientInputMode, setIngredientInputMode] = useState<IngredientInputMode>("ai");
   const [ingredients, setIngredients] = useState<ParsedIngredient[]>([]);
   const [parsedIngredients, setParsedIngredients] = useState<ParsedIngredient[]>([]);
   // One step per opening of the page: a save after a 503, or a double tap, writes it once.
   const [stepToken] = useWriteToken();
   const navigate = useNavigate();
-  const stepTitleErrorId = "new-step-title-error";
-  const usesStepsErrorId = "new-step-uses-steps-error";
-  const descriptionErrorId = "new-step-description-error";
+  const formErrors = useFormErrors(actionData?.errors, STEP_FIELDS);
 
   const parsedListShown = ingredientInputMode !== "manual" && parsedIngredients.length > 0;
 
@@ -462,91 +463,47 @@ export default function NewStep() {
       <CookbookHeader
         eyebrow={`Step ${nextStepNum}`}
         title="Add Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="sj-link inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
       >
         <Text>Write the next bit of method for {recipe.title}.</Text>
       </CookbookHeader>
 
       <div className="mt-8 max-w-4xl">
-        {/* istanbul ignore next -- @preserve */ actionData?.errors?.general && (
-          <ValidationError error={actionData.errors.general} className="mb-4" />
-        )}
-
-        <Form method="post" className="sj-form-section">
+        {/* The save's messages land on the fields by name; "general" shows at the top of the form. */}
+        <Form method="post" errors={formErrors} render={<RouterForm />} className="sj-form-section gap-6">
           <input type="hidden" name="stepToken" value={stepToken} />
-          <Fieldset className="space-y-6">
-            <Field>
-              <Label>Step Title (optional)</Label>
-              <Input
-                type="text"
-                name="stepTitle"
-                maxLength={STEP_TITLE_MAX_LENGTH}
-                placeholder="e.g., Prepare the dough"
-                data-invalid={actionData?.errors?.stepTitle ? true : undefined}
-                aria-invalid={actionData?.errors?.stepTitle ? true : undefined}
-                aria-describedby={actionData?.errors?.stepTitle ? stepTitleErrorId : undefined}
-              />
-              {actionData?.errors?.stepTitle && (
-                <ErrorMessage id={stepTitleErrorId}>
-                  {actionData.errors.stepTitle}
-                </ErrorMessage>
-              )}
-            </Field>
+            <TextField
+              label="Step Title (optional)"
+              name="stepTitle"
+              maxLength={STEP_TITLE_MAX_LENGTH}
+              placeholder="e.g., Prepare the dough"
+            />
 
             {nextStepNum === 1 ? (
-              <Field>
-                <Label>Uses output from</Label>
+              <Fieldset legend="Uses output from">
                 <Text className="italic">No previous steps available</Text>
-              </Field>
+              </Fieldset>
             ) : availableSteps.length > 0 && (
-              <Field>
-                <Label>Uses output from (optional)</Label>
-                <Listbox
-                  multiple
-                value={selectedSteps}
-                onChange={setSelectedSteps}
-                aria-label="Select previous steps"
-                aria-invalid={actionData?.errors?.usesSteps ? true : undefined}
-                aria-describedby={actionData?.errors?.usesSteps ? usesStepsErrorId : undefined}
+              <Select
+                label="Uses output from (optional)"
+                name="usesSteps"
+                multiple
                 placeholder="Select previous steps (optional)"
-              >
-                  {availableSteps.map((step) => (
-                    <ListboxOption key={step.stepNum} value={step.stepNum}>
-                      <ListboxLabel>
-                        Step {step.stepNum}{step.stepTitle ? `: ${step.stepTitle}` : ""}
-                      </ListboxLabel>
-                    </ListboxOption>
-                  ))}
-                </Listbox>
-                {actionData?.errors?.usesSteps && (
-                  <ErrorMessage id={usesStepsErrorId}>
-                    {actionData.errors.usesSteps}
-                  </ErrorMessage>
-                )}
-                {selectedSteps.map((stepNum) => (
-                  <input key={stepNum} type="hidden" name="usesSteps" value={stepNum} />
-                ))}
-              </Field>
+                options={availableSteps.map((step) => ({
+                  value: String(step.stepNum),
+                  label: `Step ${step.stepNum}${step.stepTitle ? `: ${step.stepTitle}` : ""}`,
+                }))}
+              />
             )}
 
-            <Field>
-              <Label>Description *</Label>
-              <Textarea
-                name="description"
-                rows={6}
-                required
-                maxLength={STEP_DESCRIPTION_MAX_LENGTH}
-                placeholder="Describe what to do in this step..."
-                data-invalid={actionData?.errors?.description ? true : undefined}
-                aria-invalid={actionData?.errors?.description ? true : undefined}
-                aria-describedby={actionData?.errors?.description ? descriptionErrorId : undefined}
-              />
-              {actionData?.errors?.description && (
-                <ErrorMessage id={descriptionErrorId}>
-                  {actionData.errors.description}
-                </ErrorMessage>
-              )}
-            </Field>
+            <TextArea
+              label="Description"
+              name="description"
+              rows={6}
+              required
+              maxLength={STEP_DESCRIPTION_MAX_LENGTH}
+              placeholder="Describe what to do in this step..."
+            />
 
             <section className="border-t border-[var(--sj-border)] pt-6">
               <h2 className="font-sj-display text-3xl/9 font-semibold text-[var(--sj-ink)]">
@@ -623,14 +580,13 @@ export default function NewStep() {
             </section>
 
             <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
-              <Link href={`/recipes/${recipe.id}/edit`} className="sj-link inline-flex min-h-11 items-center self-center sm:self-auto">
+              <Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center self-center sm:self-auto">
                 Cancel
               </Link>
               <Button type="submit">
                 Create
               </Button>
             </div>
-          </Fieldset>
         </Form>
       </div>
     </CookbookPage>

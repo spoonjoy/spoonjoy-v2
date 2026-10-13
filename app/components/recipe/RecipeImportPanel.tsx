@@ -6,15 +6,16 @@
  * New Recipe action, which runs the shared import pipeline and opens the imported recipe in
  * the editor for review.
  */
-import { useId, useRef, useState, type FormEvent } from "react";
-import * as Headless from "@headlessui/react";
-import { Form, useNavigation } from "react-router";
+import { useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { Form as RouterForm, useNavigation } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Description, ErrorMessage, Field, Label } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
-import { Textarea } from "~/components/ui/textarea";
-import { Link } from "~/components/ui/link";
+import { Field } from "~/components/ouro/field/field";
+import { FieldControl } from "~/components/ouro/field/field-parts";
+import { Form } from "~/components/ouro/form/form";
+import { Link } from "~/components/ouro/link/link";
+import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextField } from "~/components/ouro/text-field/text-field";
 
 export type RecipeImportKind = "link" | "text" | "photo";
 
@@ -53,19 +54,11 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
     navigation.state !== "idle" && navigation.formData?.get("intent") === "import";
   const showResult = result && result.kind === kind;
 
-  const errorNode = showResult ? (
-    <ErrorMessage>
-      {result.message}
-      {result.existingRecipe ? (
-        <>
-          {" "}
-          <Link href={`/recipes/${result.existingRecipe.id}`} className="sj-link">
-            Open it
-          </Link>
-        </>
-      ) : null}
-    </ErrorMessage>
-  ) : null;
+  // The import's message belongs on the field the cook filled in.
+  const formErrors = useMemo(
+    () => (result && result.kind === kind ? { [FIELD_NAME[kind]]: result.message } : undefined),
+    [result, kind],
+  );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const form = event.currentTarget;
@@ -112,65 +105,65 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
         ))}
       </div>
 
-      <Form method="post" encType="multipart/form-data" onSubmit={handleSubmit} className="mt-6 max-w-xl space-y-4" aria-labelledby={headingId}>
+      <Form
+        method="post"
+        encType="multipart/form-data"
+        errors={formErrors}
+        render={<RouterForm />}
+        onSubmit={handleSubmit}
+        className="mt-6 max-w-xl gap-4"
+        aria-labelledby={headingId}
+      >
         <input type="hidden" name="intent" value="import" />
         <input type="hidden" name="importKind" value={kind} />
         <input type="hidden" name="importId" defaultValue="" />
         {kind === "link" ? (
-          <Field>
-            <Label>Recipe link</Label>
-            <Input
-              key="url"
-              name="url"
-              type="url"
-              inputMode="url"
-              autoComplete="off"
-              placeholder="https://"
-              maxLength={URL_MAX_LENGTH}
-              required
-              disabled={pending}
-              invalid={showResult || undefined}
-            />
-            <Description>Any recipe page, or a YouTube or TikTok video with the recipe in its description.</Description>
-            {errorNode}
-          </Field>
+          <TextField
+            key="url"
+            label="Recipe link"
+            name="url"
+            type="url"
+            autoComplete="off"
+            placeholder="https://"
+            maxLength={URL_MAX_LENGTH}
+            required
+            disabled={pending}
+            description="Any recipe page, or a YouTube or TikTok video with the recipe in its description."
+          />
         ) : kind === "photo" ? (
-          <Field disabled={pending}>
-            <Label>Recipe photo</Label>
-            <Headless.Input
-              key="photo"
-              name="photo"
+          <Field
+            key="photo"
+            label="Recipe photo"
+            name="photo"
+            required
+            disabled={pending}
+            description="A recipe card, a cookbook page or a screenshot, with the whole recipe in frame. Spoonjoy reads the title, ingredients and steps from it."
+          >
+            <FieldControl
               type="file"
               accept={PHOTO_ACCEPT}
-              required
-              invalid={showResult || undefined}
-              data-slot="control"
-              className="block w-full font-sj-ui text-sm/6 text-[var(--sj-ink-soft)] file:mr-4 file:min-h-11 file:cursor-pointer file:border file:border-[var(--sj-ink)] file:bg-transparent file:px-4 file:font-sj-ui file:text-xs file:font-bold file:uppercase file:tracking-[0.14em] file:text-[var(--sj-ink)] hover:file:bg-[var(--sj-ink)] hover:file:text-[var(--sj-paper)] data-disabled:opacity-50"
+              render={<input className="file:me-3 file:h-full file:cursor-pointer file:border-0 file:bg-transparent file:p-0 file:font-semibold file:text-[var(--sj-ink)]" />}
             />
-            <Description>
-              A recipe card, a cookbook page or a screenshot, with the whole recipe in frame. Spoonjoy reads the title, ingredients and steps from it.
-            </Description>
-            {errorNode}
           </Field>
         ) : (
-          <Field>
-            <Label>Recipe text</Label>
-            <Textarea
-              key="text"
-              name="text"
-              rows={8}
-              placeholder={"Title\n\nIngredients\n\nSteps"}
-              maxLength={TEXT_MAX_LENGTH}
-              required
-              disabled={pending}
-              invalid={showResult || undefined}
-            />
-            <Description>
-              Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead.
-            </Description>
-            {errorNode}
-          </Field>
+          <TextArea
+            key="text"
+            label="Recipe text"
+            name="text"
+            rows={8}
+            placeholder={"Title\n\nIngredients\n\nSteps"}
+            maxLength={TEXT_MAX_LENGTH}
+            required
+            disabled={pending}
+            description="Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead."
+          />
         )}
+        {/* A field's error is text only, so the way to the recipe already imported follows it. */}
+        {showResult && result.existingRecipe ? (
+          <p className="m-0 text-sm/6">
+            <Link href={`/recipes/${result.existingRecipe.id}`}>Open it</Link>
+          </p>
+        ) : null}
 
         <Button type="submit" disabled={pending} aria-busy={pending ? "true" : undefined}>
           {pending ? <Loader2 className="size-4 animate-spin" data-slot="icon" /> : null}
