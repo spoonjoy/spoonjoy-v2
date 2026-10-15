@@ -77,8 +77,8 @@ const backdropClass =
 const viewportClasses = {
   bottom: "items-end justify-center",
   top: "items-start justify-center",
-  left: "justify-start",
-  right: "justify-end",
+  left: "[justify-content:left]",
+  right: "[justify-content:right]",
 } as const;
 
 const popupBase =

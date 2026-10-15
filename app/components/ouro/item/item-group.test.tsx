@@ -99,8 +99,8 @@ describe("ItemGroup", () => {
         {[]}
       </ItemGroup>,
     );
-    await expect.element(page.getByText("OAuth app connections")).toBeVisible();
-    await expect.element(page.getByText("No active OAuth app connections.")).toBeVisible();
+    await expect.element(page.getByText("OAuth app connections", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("No active OAuth app connections.", { exact: true })).toBeVisible();
     expect(group.querySelector("ul")).toBeNull();
   });
 

@@ -63,7 +63,7 @@ describe("Badge", () => {
     expect(badge.querySelector("[data-ouro-touch-target]")).toBeNull();
   });
 
-  it("gives every tone and variant a distinct look", async () => {
+  it.each(["the app theme", "aliased secondary tokens"])("resolves every tone and variant against %s", async (theme) => {
     const tones = ["primary", "secondary", "destructive", "success", "warning"] as const;
     const variants = ["solid", "soft", "outline"] as const;
     const { host } = await render(
@@ -77,11 +77,35 @@ describe("Badge", () => {
         )}
       </>,
     );
-    const looks = [...host.querySelectorAll<HTMLElement>('[data-ouro="badge"]')].map((badge) => {
-      const style = getComputedStyle(badge);
-      return `${style.color}|${style.backgroundColor}|${style.borderColor}`;
-    });
-    expect(new Set(looks).size).toBe(tones.length * variants.length);
+    if (theme === "aliased secondary tokens") {
+      host.style.setProperty("--secondary", "var(--muted)");
+      host.style.setProperty("--secondary-foreground", "var(--foreground)");
+    }
+    const badges = [...host.querySelectorAll<HTMLElement>('[data-ouro="badge"]')];
+    const probe = document.createElement("span");
+    host.append(probe);
+    for (const [index, variant] of variants.entries()) for (const [toneIndex, tone] of tones.entries()) {
+      const secondary = tone === "secondary";
+      const expected = variant === "solid"
+        ? { color: `var(--${tone}-foreground)`, backgroundColor: `var(--${tone})`, borderColor: "transparent" }
+        : variant === "soft"
+          ? {
+            color: secondary ? "var(--foreground)" : `color-mix(in oklab, var(--${tone}) 80%, var(--foreground))`,
+            backgroundColor: secondary ? "var(--muted)" : `color-mix(in oklab, var(--${tone}) 10%, transparent)`,
+            borderColor: "transparent",
+          }
+          : {
+            color: secondary ? "var(--foreground)" : `var(--${tone})`,
+            backgroundColor: "transparent",
+            borderColor: secondary ? "var(--border)" : `color-mix(in oklab, var(--${tone}) 45%, transparent)`,
+          };
+      Object.assign(probe.style, expected);
+      const actual = getComputedStyle(badges[index * tones.length + toneIndex]!);
+      const reference = getComputedStyle(probe);
+      for (const property of ["color", "backgroundColor", "borderColor"] as const) {
+        expect(actual[property], `${variant}/${tone} ${property}`).toBe(reference[property]);
+      }
+    }
   });
 
   it("renders a button with onClick, with a touch target and press feedback", async () => {

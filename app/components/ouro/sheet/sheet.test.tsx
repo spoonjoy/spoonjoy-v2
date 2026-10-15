@@ -21,6 +21,7 @@ import { registerSheetProperties } from "~/components/ouro/sheet/sheet-styles";
 import { Sheet, type SheetProps } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pageCss } from "~/lib/ouro/testing/page-css";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 // Drag and velocity tests run in Chromium only (plan amendment): WebKit drag is covered
 // by the recorded feel check. Everything else runs in Chromium and WebKit at 390x844.
@@ -549,8 +550,9 @@ describe("dragging (Chromium)", () => {
     await settled();
     const sheet = popup()!;
     const seen: string[] = [];
-    for (let i = 0; i < 4; i++) {
-      await userEvent.keyboard("{Tab}");
+    for (const name of ["First", "Second", "Close", "First"]) {
+      await pressTab();
+      await expect.poll(() => document.activeElement?.textContent).toBe(name);
       expect(sheet.contains(document.activeElement)).toBe(true);
       seen.push(document.activeElement!.textContent ?? "");
     }
@@ -622,16 +624,25 @@ describe("dragging (Chromium)", () => {
 });
 
 describe("sides", () => {
-  it.each([
-    ["top", (r: DOMRect) => Math.round(r.top) === 0 && Math.round(r.width) === innerWidth],
-    ["left", (r: DOMRect) => Math.round(r.left) === 0 && Math.round(r.height) === innerHeight],
-    ["right", (r: DOMRect) => Math.round(r.right) === innerWidth && Math.round(r.height) === innerHeight],
-  ] as const)("slides in from the %s edge", async (side, atEdge) => {
-    const sheet = await openUncontrolled({ side });
-    expect(sheet.getAttribute("data-side")).toBe(side);
-    expect(atEdge(sheet.getBoundingClientRect())).toBe(true);
-    expect(sheet.getBoundingClientRect().width).toBeLessThanOrEqual(innerWidth);
-  });
+  for (const direction of ["ltr", "rtl"]) {
+    it.each([
+      ["top", (r: DOMRect) => Math.round(r.top) === 0 && Math.round(r.width) === innerWidth],
+      ["left", (r: DOMRect) => Math.round(r.left) === 0 && Math.round(r.height) === innerHeight],
+      ["right", (r: DOMRect) => Math.round(r.right) === innerWidth && Math.round(r.height) === innerHeight],
+    ] as const)(`slides in from the %s edge in ${direction}`, async (side, atEdge) => {
+      const previous = document.documentElement.getAttribute("dir");
+      document.documentElement.dir = direction;
+      try {
+        const sheet = await openUncontrolled({ side });
+        expect(sheet.getAttribute("data-side")).toBe(side);
+        expect(atEdge(sheet.getBoundingClientRect())).toBe(true);
+        expect(sheet.getBoundingClientRect().width).toBeLessThanOrEqual(innerWidth);
+      } finally {
+        if (previous === null) document.documentElement.removeAttribute("dir");
+        else document.documentElement.setAttribute("dir", previous);
+      }
+    });
+  }
 });
 
 describe("close control", () => {
