@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -492,7 +492,31 @@ describe("Account settings - revocable sessions", () => {
   });
 
   describe("component - password change disconnect choice", () => {
-    function renderPasswordForm(onSubmit: (form: FormData) => void) {
+    it("keeps the real fetcher pending until its accepted reply, then fully closes the form inside act", async () => {
+      const user = userEvent.setup();
+      const forms: FormData[] = [];
+      let accept!: (answer: { success: boolean; message: string }) => void;
+      const answer = new Promise<{ success: boolean; message: string }>((resolve) => { accept = resolve; });
+      renderPasswordForm((form) => forms.push(form), answer);
+      await fillPasswordForm(user);
+      await user.click(screen.getByRole("button", { name: "Change password" }));
+      await waitFor(() => expect(forms).toHaveLength(1));
+      expect(screen.getByLabelText("New password")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Change password" })).toBeDisabled();
+      expect(screen.queryByText("Your password has been changed.")).not.toBeInTheDocument();
+      await act(async () => {
+        accept({ success: true, message: "Your password has been changed." });
+        await answer;
+      });
+      await waitFor(() => expect(screen.queryByLabelText("New password")).not.toBeInTheDocument());
+      expect(screen.getByRole("status")).toHaveTextContent("Your password has been changed.");
+      expect(screen.getByRole("button", { name: "Change password" })).toBeEnabled();
+    });
+
+    function renderPasswordForm(
+      onSubmit: (form: FormData) => void,
+      answer: Promise<{ success: boolean; message: string }>,
+    ) {
       const Stub = createTestRoutesStub([
         {
           path: "/account/settings",
@@ -511,7 +535,7 @@ describe("Account settings - revocable sessions", () => {
           }),
           action: async ({ request }) => {
             onSubmit(await request.formData());
-            return { success: true, message: "Your password has been changed." };
+            return answer;
           },
         },
       ]);
@@ -525,10 +549,27 @@ describe("Account settings - revocable sessions", () => {
       await user.type(screen.getByLabelText("Confirm password"), "newPassword456!");
     }
 
+    function holdPasswordReply() {
+      let accept!: (answer: { success: boolean; message: string }) => void;
+      const answer = new Promise<{ success: boolean; message: string }>((resolve) => { accept = resolve; });
+      return {
+        answer,
+        async finish() {
+          // Own the real Router reply boundary, including the success effect and field cleanup.
+          await act(async () => {
+            accept({ success: true, message: "Your password has been changed." });
+            await answer;
+          });
+          await waitFor(() => expect(screen.queryByLabelText("New password")).not.toBeInTheDocument());
+        },
+      };
+    }
+
     it("disconnects other devices, apps, agents and API tokens unless the chef unticks it", async () => {
       const user = userEvent.setup();
       const forms: FormData[] = [];
-      renderPasswordForm((form) => forms.push(form));
+      const reply = holdPasswordReply();
+      renderPasswordForm((form) => forms.push(form), reply.answer);
 
       await fillPasswordForm(user);
       const choice = screen.getByRole("checkbox", { name: /also sign out other devices and disconnect apps, agents and api tokens/i });
@@ -539,14 +580,15 @@ describe("Account settings - revocable sessions", () => {
       expect(forms[0].get("intent")).toBe("changePassword");
       expect(forms[0].get("connectionsChoice")).toBe("1");
       expect(forms[0].get("revokeConnections")).toBe("1");
-      // Let the action's result render, so its state update lands inside the test.
+      await reply.finish();
       expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
     });
 
     it("keeps apps and tokens connected when the chef unticks the box", async () => {
       const user = userEvent.setup();
       const forms: FormData[] = [];
-      renderPasswordForm((form) => forms.push(form));
+      const reply = holdPasswordReply();
+      renderPasswordForm((form) => forms.push(form), reply.answer);
 
       await fillPasswordForm(user);
       await user.click(screen.getByRole("checkbox", { name: /also sign out other devices/i }));
@@ -555,6 +597,7 @@ describe("Account settings - revocable sessions", () => {
       await waitFor(() => expect(forms).toHaveLength(1));
       expect(forms[0].get("connectionsChoice")).toBe("1");
       expect(forms[0].has("revokeConnections")).toBe(false);
+      await reply.finish();
       expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
     });
   });
