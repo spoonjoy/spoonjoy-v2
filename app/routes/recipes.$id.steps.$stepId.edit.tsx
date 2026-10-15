@@ -621,6 +621,9 @@ export default function EditStep() {
   // already in the recipe, nothing to add).
   const addAllErrors = addAllFetcher.data?.errors;
   const ingredientErrors = [
+    // The initial progressive-post general message already has one display surface
+    // in the primary baseline. Later route answers belong here, not to its fetcher.
+    actionData === initialActionData ? undefined : actionData?.errors?.general,
     actionData?.errors?.quantity,
     actionData?.errors?.unitName,
     actionData?.errors?.ingredientName,

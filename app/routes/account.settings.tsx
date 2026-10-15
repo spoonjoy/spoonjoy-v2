@@ -1,5 +1,5 @@
 import type { Route } from "./+types/account.settings";
-import { useLoaderData, useActionData, useRevalidator, Form as RouterForm } from "react-router";
+import { useLoaderData, useActionData, useRevalidator, useFetcher, Form as RouterForm } from "react-router";
 import { useState, useEffect } from "react";
 import {
   handleAccountSettingsAction,
@@ -60,7 +60,6 @@ function formatPasskeyDate(iso: string): string {
 const USER_INFO_FIELDS = ["email", "username", "currentPassword"] as const;
 const NEW_PASSWORD_FIELDS = ["newPassword"] as const;
 const USER_INFO_INTENTS = ["updateUserInfo"] as const;
-const PASSWORD_INTENTS = ["changePassword", "setPassword"] as const;
 const DELETE_INTENTS = ["deleteAccount"] as const;
 
 export default function AccountSettings() {
@@ -68,16 +67,25 @@ export default function AccountSettings() {
   const actionData = useActionData<AccountSettingsActionResult>();
   const [initialActionData] = useState(actionData);
   const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
-  const passwordAnswer = useIntentAnswer(actionData, PASSWORD_INTENTS);
+  const passwordFetcher = useFetcher<AccountSettingsActionResult>();
+  const [passwordBaseline, setPasswordBaseline] = useState(initialActionData);
+  const passwordAnswer = passwordFetcher.data;
+  const passwordData = passwordAnswer ?? passwordBaseline;
   const deleteAnswer = useIntentAnswer(actionData, DELETE_INTENTS);
   const userInfoErrors = useFormErrors((userInfoAnswer ?? initialActionData)?.fieldErrors, USER_INFO_FIELDS, userInfoAnswer);
-  const newPasswordErrors = useFormErrors((passwordAnswer ?? initialActionData)?.fieldErrors, NEW_PASSWORD_FIELDS, passwordAnswer);
+  const newPasswordErrors = useFormErrors({
+    ...passwordData?.fieldErrors,
+    general: passwordData?.success === false && !passwordData.fieldErrors ? passwordData.message : undefined,
+  }, NEW_PASSWORD_FIELDS, passwordAnswer);
   const revalidator = useRevalidator();
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [renamingPasskeyId, setRenamingPasskeyId] = useState<string | null>(null);
-  const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">("idle");
+  const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">(
+    // Initial progressive-post errors are display only, never client acceptance authority.
+    initialActionData?.fieldErrors?.newPassword ? (user.hasPassword ? "change" : "set") : "idle",
+  );
   const [isConfirmingSignOutEverywhere, setIsConfirmingSignOutEverywhere] = useState(false);
   const apiCredentials = user.apiCredentials ?? [];
   const oauthConnections = user.oauthConnections ?? [];
@@ -88,17 +96,26 @@ export default function AccountSettings() {
     if (actionData?.fieldErrors?.email || actionData?.fieldErrors?.username || actionData?.fieldErrors?.currentPassword) {
       setIsEditing(true);
     }
-    if (actionData?.fieldErrors?.newPassword) {
-      // Determine which password form to open based on user state
-      setPasswordFormState(user.hasPassword ? "change" : "set");
-    }
     if (actionData?.success && actionData.intent === "updateUserInfo") {
       setIsEditing(false);
     }
-    if (actionData?.success && (actionData.intent === "changePassword" || actionData.intent === "setPassword")) {
-      setPasswordFormState("idle");
-    }
   }, [actionData, user.hasPassword]);
+
+  useEffect(() => {
+    if (passwordAnswer?.success) setPasswordFormState("idle");
+  }, [passwordAnswer]);
+
+  const openPasswordForm = (mode: "change" | "set") => {
+    passwordFetcher.reset();
+    setPasswordBaseline(undefined);
+    setPasswordFormState(mode);
+  };
+  const cancelPasswordForm = () => {
+    // Router owns cancellation and drops the response; no submit counter or guessed receipt.
+    passwordFetcher.reset();
+    setPasswordBaseline(undefined);
+    setPasswordFormState("idle");
+  };
 
   const linkedProviders = new Set(user.oauthAccounts.map((a) => a.provider));
 
@@ -515,10 +532,13 @@ export default function AccountSettings() {
       {/* Password Section */}
       <SettingsPanel testId="password-section" title="Password">
         <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
+        {passwordAnswer?.success && passwordAnswer.message ? (
+          <div role="status" className="mt-4 text-sm text-[var(--sj-herb)]">{passwordAnswer.message}</div>
+        ) : null}
         <div className="mt-4">
           {user.hasPassword ? (
             passwordFormState === "change" ? (
-              <Form method="post" errors={newPasswordErrors} render={<RouterForm />} className="gap-4">
+              <Form method="post" errors={newPasswordErrors} render={<passwordFetcher.Form />} className="gap-4">
                 <input type="hidden" name="intent" value="changePassword" />
                 <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                 <TextField
@@ -538,10 +558,10 @@ export default function AccountSettings() {
                   defaultChecked
                 />
                 <div className="flex flex-wrap gap-3">
-                  <Button type="submit">
+                  <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Change password
                   </Button>
-                  <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
+                  <Button type="button" plain onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
@@ -564,7 +584,7 @@ export default function AccountSettings() {
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
-                <Button type="button" plain onClick={() => setPasswordFormState("change")}>
+                <Button type="button" plain onClick={() => openPasswordForm("change")}>
                   Change password
                 </Button>
                 {canRemovePassword && (
@@ -576,7 +596,7 @@ export default function AccountSettings() {
             )
           ) : (
             passwordFormState === "set" ? (
-              <Form method="post" errors={newPasswordErrors} render={<RouterForm />} className="gap-4">
+              <Form method="post" errors={newPasswordErrors} render={<passwordFetcher.Form />} className="gap-4">
                 <input type="hidden" name="intent" value="setPassword" />
                 <TextField
                   label="New password"
@@ -587,10 +607,10 @@ export default function AccountSettings() {
                 />
                 <TextField label="Confirm password" type="password" name="confirmPassword" autoComplete="new-password" />
                 <div className="flex flex-wrap gap-3">
-                  <Button type="submit">
+                  <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Set password
                   </Button>
-                  <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
+                  <Button type="button" plain onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
@@ -600,7 +620,7 @@ export default function AccountSettings() {
                 <Text className="mb-4">
                   You don't have a password set. Set one to enable email/password login.
                 </Text>
-                <Button type="button" plain onClick={() => setPasswordFormState("set")}>
+                <Button type="button" plain onClick={() => openPasswordForm("set")}>
                   Set password
                 </Button>
               </div>
