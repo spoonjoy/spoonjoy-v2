@@ -48,7 +48,7 @@ import React from "react";
 // happy-dom does not compile the app's Tailwind stylesheet. Supply its installed base
 // token here; CI's Ouro browser projects load the actual stylesheet and check the theme.
 beforeAll(() => {
-  document.documentElement.style.setProperty("--ouro-layer", "50");
+  if (typeof document !== "undefined") document.documentElement.style.setProperty("--ouro-layer", "50");
 });
 
 // Mock Motion's Reorder components to render children directly in tests

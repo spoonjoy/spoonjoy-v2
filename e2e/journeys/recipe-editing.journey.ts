@@ -289,6 +289,13 @@ test.describe("Recipe create and edit", () => {
     await page.getByRole("button", { name: "Import recipe", exact: true }).click();
     await expect(importAnswer).toBeVisible();
     await expect(page).toHaveURL(pathUrl("/recipes/new"));
+    const linkField = page.getByLabel(requiredLabel("Recipe link"), { exact: true });
+    await linkField.fill("https://example.com/recipes/another-soup");
+    await expect(linkField).not.toHaveAttribute("aria-invalid", "true");
+    await page.getByRole("button", { name: "Import recipe", exact: true }).click();
+    await expect(importAnswer).toBeVisible();
+    await expect(linkField).toHaveAttribute("aria-invalid", "true");
+    await expect(linkField).toBeFocused();
 
     await page.getByRole("button", { name: "Paste text", exact: true }).click();
     await expect(page.getByLabel(requiredLabel("Recipe text"), { exact: true })).toBeVisible();

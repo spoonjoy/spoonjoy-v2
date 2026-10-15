@@ -2910,7 +2910,10 @@ describe("Recipes $id Edit Route", () => {
           title: "Test Recipe",
           description: null,
           servings: null,
-          steps: [],
+          steps: [
+            { id: "step-1", stepNum: 1, stepTitle: "First", description: "First step", ingredients: [] },
+            { id: "step-2", stepNum: 2, stepTitle: "Second", description: "Second step", ingredients: [] },
+          ],
         },
           coverImageUrl: "",
         formattedSteps: [],
@@ -2921,17 +2924,20 @@ describe("Recipes $id Edit Route", () => {
           path: "/recipes/:id/edit",
           Component: EditRecipe,
           loader: () => mockData,
-          action: () => ({
-            errors: { reorder: "Cannot move Step 1 to position 2 because Step 2 uses its output" },
-          }),
+          action: async ({ request }) => {
+            const posted = await request.formData();
+            expect(posted.get("intent")).toBe("reorderStep");
+            expect(posted.get("direction")).toBe("down");
+            return { errors: { reorder: "Cannot move Step 1 to position 2 because Step 2 uses its output" } };
+          },
         },
       ]);
 
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      // Wait for form to render and submit to trigger action data
+      // A reorder uses its actual route form, not the builder's independent save transport.
       await screen.findByRole("button", { name: "Save recipe" });
-      await user.click(screen.getByRole("button", { name: "Save recipe" }));
+      await user.click(screen.getAllByRole("button", { name: "Move down", exact: true })[0]);
 
       // Wait for the reorder error to appear
       await waitFor(() => {

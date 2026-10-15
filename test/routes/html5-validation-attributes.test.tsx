@@ -273,18 +273,20 @@ describe("HTML5 validation attributes", () => {
     });
 
     // The add-ingredient fields also sit inside the Add Step page's form, where a required field
-    // would block saving the step. Ouro UI cannot mark a field required for screen readers only
-    // (aria-required without the browser's required), so these fields are not marked at all.
+    // would block saving the step. aria-required now describes the local add operation
+    // without a native required constraint (toBeRequired combines both attributes).
     it("quantity field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const quantityInput = await screen.findByLabelText(/Quantity/);
-      expect(quantityInput).not.toBeRequired();
+      expect(quantityInput).not.toHaveAttribute("required");
+      expect(quantityInput).toHaveAttribute("aria-required", "true");
     });
 
     it("unitName field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const unitNameInput = await screen.findByLabelText(/Unit/);
-      expect(unitNameInput).not.toBeRequired();
+      expect(unitNameInput).not.toHaveAttribute("required");
+      expect(unitNameInput).toHaveAttribute("aria-required", "true");
     });
 
     it("unitName field has maxLength attribute", async () => {
@@ -296,7 +298,8 @@ describe("HTML5 validation attributes", () => {
     it("ingredientName field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const ingredientNameInput = await screen.findByLabelText(/Ingredient/);
-      expect(ingredientNameInput).not.toBeRequired();
+      expect(ingredientNameInput).not.toHaveAttribute("required");
+      expect(ingredientNameInput).toHaveAttribute("aria-required", "true");
     });
 
     it("ingredientName field has maxLength attribute", async () => {

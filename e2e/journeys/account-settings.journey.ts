@@ -150,6 +150,13 @@ test.describe("Account settings", () => {
     await userInfo(page).getByRole("button", { name: "Save", exact: true }).click();
     await expect(userInfo(page).getByText("Enter your current password to confirm it's you.", { exact: true })).toBeVisible();
     await expect(userInfo(page).getByLabel("Current password", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    const proofPassword = userInfo(page).getByLabel("Current password", { exact: true });
+    await fillSecret(proofPassword, Secret.generate());
+    await proofPassword.clear();
+    await expect(proofPassword).not.toHaveAttribute("aria-invalid", "true");
+    await userInfo(page).getByRole("button", { name: "Save", exact: true }).click();
+    await expect(proofPassword).toHaveAccessibleDescription("Needed only to change your email. Enter your current password to confirm it's you.");
+    await expect(proofPassword).toBeFocused();
     await testInfo.attach("email-change-needs-password", { body: await userInfo(page).screenshot(), contentType: "image/png" });
 
     await verifyAfterReload(async () => {
