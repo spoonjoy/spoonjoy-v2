@@ -9,7 +9,8 @@
 //     optionally also constrains the match to an issue whose (redacted) source location
 //     matches that pattern too, so an allowance can't be credited by an unrelated error that
 //     happens to share the same text. A registered pattern that never matches anything also
-//     fails the test, so a stale allowance can't linger.
+//     fails the test, so a stale allowance can't linger. A scenario may explicitly opt into
+//     optional browser network noise, with a required URL scope, when emitting it is not a contract.
 //   - consoleGate: an `{ auto: true }` fixture that watches the test's own `page` for
 //     console-error and pageerror events and fails the test at teardown, listing every
 //     unexpected message, if any occurred. See watchConsole() below for the collection itself
@@ -84,6 +85,7 @@ interface ExpectedConsolePattern {
   pattern: RegExp;
   /** When set, an issue must also have a (redacted) location matching this to be credited. */
   url?: RegExp;
+  optional?: boolean;
   matched: boolean;
 }
 
@@ -118,7 +120,7 @@ function resolveConsoleExpectations(
     expectation.matched = true;
     return false;
   });
-  const neverMatched = expectations.filter((expectation) => !expectation.matched);
+  const neverMatched = expectations.filter((expectation) => !expectation.matched && !expectation.optional);
   return { unmatched, neverMatched };
 }
 
@@ -204,6 +206,8 @@ export type ExpectAccessible = () => Promise<void>;
 export interface ExpectConsoleErrorOptions {
   /** Also require the issue's (redacted) source location to match this pattern. */
   url?: RegExp;
+  /** Browser network noise may be absent. Requires `url`; does not allow extra errors. */
+  optional?: boolean;
 }
 export type ExpectConsoleError = (pattern: RegExp, options?: ExpectConsoleErrorOptions) => void;
 
@@ -251,7 +255,10 @@ export const test = base.extend<JourneyFixtures>({
 
   expectConsoleError: async ({ consoleExpectations }, use) => {
     await use((pattern, options) => {
-      consoleExpectations.push({ pattern, url: options?.url, matched: false });
+      if (options?.optional && !options.url) {
+        throw new Error("Optional console diagnostics require a URL scope");
+      }
+      consoleExpectations.push({ pattern, url: options?.url, optional: options?.optional, matched: false });
     });
   },
 

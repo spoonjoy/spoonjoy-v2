@@ -66,7 +66,7 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
     await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
     const instructions = await addFirstRecipeStep(page);
-    const title = page.getByLabel(/^Title\*$/).last();
+    const title = page.getByLabel('Title', { exact: true });
     const uniqueTitle = `Mobile Audit ${Date.now()}`;
     await title.fill(uniqueTitle);
     await expect(title).toHaveValue(uniqueTitle);
@@ -84,7 +84,7 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
       await page.goto('/recipes/new');
       const createTitle = `e2e mobile edit audit ${Date.now()}`;
       const createAction = page.getByRole('button', { name: 'Create recipe' });
-      const createTitleInput = page.getByLabel(/^Title\*$/).last();
+      const createTitleInput = page.getByLabel('Title', { exact: true });
       await expect.poll(async () => {
         await createTitleInput.fill(createTitle);
         return createAction.getAttribute('aria-disabled');
@@ -98,7 +98,7 @@ test.describe('Mobile RecipeBuilder and tab bar audit', () => {
       await expect(page.getByRole('navigation', { name: 'Spoonjoy navigation' })).toHaveCount(0);
 
       const updatedTitle = `Mobile Dock Save ${Date.now()}`;
-      await page.getByLabel(/^Title\*$/).last().fill(updatedTitle);
+      await page.getByLabel('Title', { exact: true }).fill(updatedTitle);
       const saveAction = page.getByRole('button', { name: 'Save recipe' });
       await saveAction.scrollIntoViewIfNeeded();
       await expectTouchTarget(saveAction, 'edit Save Recipe button');
