@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import type { PrismaClient as PrismaClientType } from "@prisma/client";
@@ -173,6 +175,64 @@ describe("Account deleted page", () => {
 });
 
 describe("Account settings - Your data section", () => {
+  it("preserves an actual initial deletion refusal through SSR, hydration and an unrelated profile answer", async () => {
+    // happy-dom omits this standard property; reflect browser behaviour for Headless UI hydration.
+    const autofocus = Object.getOwnPropertyDescriptor(HTMLButtonElement.prototype, "autofocus");
+    Object.defineProperty(HTMLButtonElement.prototype, "autofocus", {
+      configurable: true,
+      get(this: HTMLButtonElement) { return this.hasAttribute("autofocus"); },
+    });
+    const { user, cookie } = await passwordChef();
+    const initial = await postAction(cookie, {
+      intent: "deleteAccount", confirmUsername: user.username, password: "wrong",
+    });
+    expect(initial).toMatchObject({ intent: "deleteAccount", error: "password_incorrect" });
+    const loaderData = {
+      user: { ...user, hasPassword: true, oauthAccounts: [], photoUrl: null, passkeys: [] },
+      notifications: { pushSubscribed: false, preferences: {} },
+    };
+    const Stub = createTestRoutesStub([{
+      id: "account",
+      path: "/account/settings",
+      Component: AccountSettings,
+      loader: () => loaderData,
+      action: async ({ request }) => {
+        expect((await request.formData()).get("intent")).toBe("updateUserInfo");
+        return { success: true, intent: "updateUserInfo", message: "Profile saved" };
+      },
+    }]);
+    const tree = <Stub initialEntries={["/account/settings"]}
+      hydrationData={{ loaderData: { account: loaderData }, actionData: { account: initial } }} />;
+    const host = document.createElement("div");
+    const outside = document.createElement("button");
+    host.innerHTML = renderToString(tree);
+    document.body.append(outside, host);
+    outside.focus();
+    const password = host.querySelector<HTMLInputElement>('input[name="password"]')!;
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    const recoverable = vi.fn();
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    try {
+      await act(async () => { root = hydrateRoot(host, tree, { onRecoverableError: recoverable }); });
+      expect(recoverable).not.toHaveBeenCalled();
+      expect(outside).toHaveFocus();
+      expect(screen.getByLabelText("Current password")).toBe(password);
+      expect(password).toHaveAccessibleDescription("That password isn't right.");
+      const userEventDriver = userEvent.setup();
+      await userEventDriver.click(within(screen.getByTestId("user-info-section")).getByRole("button", { name: "Edit" }));
+      await userEventDriver.click(screen.getByRole("button", { name: "Save", exact: true }));
+      expect(await screen.findByText("Profile saved")).toBeInTheDocument();
+      expect(password).toHaveAccessibleDescription("That password isn't right.");
+      expect(password).not.toHaveFocus();
+    } finally {
+      await act(async () => root?.unmount());
+      host.remove();
+      outside.remove();
+      if (autofocus) Object.defineProperty(HTMLButtonElement.prototype, "autofocus", autofocus);
+      else Reflect.deleteProperty(HTMLButtonElement.prototype, "autofocus");
+    }
+  });
+
   function renderSettings(hasPassword: boolean, result: Record<string, unknown> | null, onAction: (fields: Record<string, string>) => void) {
     const loaderData = {
       user: { id: "u1", email: "ada@example.com", username: "ada", hasPassword, oauthAccounts: [{ provider: "github", providerUsername: "ada" }], photoUrl: null, passkeys: [] },

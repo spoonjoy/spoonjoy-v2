@@ -55,6 +55,20 @@ describe("useFormMessage", () => {
   });
 
   describe("explicit intent ownership", () => {
+    it("already owns initial tagged deletion and retains it through unrelated accepted answers", () => {
+      const initial = { intent: "deleteAccount", error: "password_incorrect", message: "That password isn't right." };
+      const { result, rerender } = renderHook(
+        ({ source }: { source: typeof initial | { intent: string } | undefined }) =>
+          useIntentAnswer(source, ["deleteAccount"]),
+        { initialProps: { source: initial } },
+      );
+      expect(result.current).toBe(initial);
+      rerender({ source: { intent: "updateUserInfo" } });
+      expect(result.current).toBe(initial);
+      rerender({ source: undefined });
+      expect(result.current).toBe(initial);
+    });
+
     it("retains the actual own answer through unrelated, missing and malformed intents", () => {
       const intents = ["updateUserInfo"];
       const first = { intent: "updateUserInfo", private: "not a message" };

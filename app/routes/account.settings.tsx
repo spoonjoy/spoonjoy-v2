@@ -665,7 +665,7 @@ export default function AccountSettings() {
       <AccountDataSection
         username={user.username}
         hasPassword={user.hasPassword}
-        deleteError={deleteAnswer ?? (initialActionData?.intent === "deleteAccount" ? initialActionData : null)}
+        deleteError={deleteAnswer}
       />
       </div>
     </CookbookPage>
