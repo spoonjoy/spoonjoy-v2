@@ -4,7 +4,7 @@ import type { CSSProperties, HTMLAttributes, JSX, ReactNode, Ref } from "react";
 import { fontFor, isWeight, sizeFor, toneFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { toneWarning } from "~/lib/ouro/tones";
 import { alignClasses, checkAlign, type TextAlign } from "~/components/ouro/text/text-styles";
 
@@ -162,7 +162,10 @@ export function Text(props: TextProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   const classes = cn(
-    "m-0",
+    // A `<p>` has a margin in the browser's stylesheet. It is cleared in a sublayer of
+    // Tailwind's utilities (`[@layer_ouro-reset]:`), which every plain utility beats whatever
+    // its specificity: a parent's `space-y-4` (a `:where()` rule) and the app's margin class.
+    "[@layer_ouro-reset]:m-0",
     sizes[size],
     tones[tone],
     align && alignClasses[align],

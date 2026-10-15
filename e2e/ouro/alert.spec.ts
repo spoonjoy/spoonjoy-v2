@@ -1,5 +1,4 @@
-// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
-import { expect, test } from "../fixtures";
+import { expect, test } from "../ouro-fixtures";
 import { openStory } from "./story";
 
 test("a destructive alert is an alert, and its close button dismisses it", async ({ page }) => {

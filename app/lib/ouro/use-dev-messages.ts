@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { devWarn } from "~/lib/ouro/dev";
+import { checkTheme, devWarn } from "~/lib/ouro/dev";
 
 /** A dev message as `[problem, fix]`, or a falsy value when that check passes. */
 export type DevWarning = readonly [problem: string, fix: string] | false | undefined;
@@ -27,6 +27,8 @@ export function useDevWarnings(component: string, collect: (() => DevWarning[]) 
   useEffect(() => {
     /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
     if (process.env.NODE_ENV !== "production") {
+      // Every component passes through here, so this is where the page's theme is checked, once.
+      checkTheme();
       /* istanbul ignore if @preserve -- components pass `collect` in every development render */
       if (!collect) return;
       for (const warning of collect()) {

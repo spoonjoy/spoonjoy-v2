@@ -1,10 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { Combobox } from "~/components/ouro/combobox/combobox";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTint } from "~/lib/ouro/testing/press";
 import { rotate } from "~/lib/ouro/testing/rotate";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 // Runs in the `touch` project: Chromium as a 390x844 phone with a coarse pointer.
 
@@ -144,7 +147,7 @@ describe("Combobox on a phone", () => {
       </form>,
     );
     const form = host.querySelector("form")!;
-    const clear = () => host.querySelector<HTMLButtonElement>('button[aria-label="Clear"]');
+    const clear = () => host.querySelector<HTMLButtonElement>("button[data-ouro-combobox-clear]");
     expect(clear()).not.toBeNull();
     expect(clear()!.tabIndex).toBe(0);
     expect(clear()!.closest("[aria-hidden]")).toBeNull();
@@ -154,7 +157,7 @@ describe("Combobox on a phone", () => {
     const cy = rect.top + rect.height / 2;
     expect(document.elementFromPoint(cx, cy - 21)?.closest("button")).toBe(clear());
     expect(document.elementFromPoint(cx, cy + 21)?.closest("button")).toBe(clear());
-    await commands.tap('button[aria-label="Clear"]');
+    await commands.tap("button[data-ouro-combobox-clear]");
     expect(onValueChange).toHaveBeenLastCalledWith(null);
     expect(new FormData(form).get("herb")).toBe("");
     expect(host.querySelector(TRIGGER)!.textContent).toContain("Pick a herb");
@@ -169,7 +172,7 @@ describe("Combobox on a phone", () => {
     await expect.poll(sheet).toBeNull();
     expect(new FormData(form).get("herb")).toBe("Chives");
     host.querySelector<HTMLElement>(TRIGGER)!.focus();
-    await userEvent.keyboard("{Tab}");
+    await pressTab();
     expect(document.activeElement).toBe(clear());
     await userEvent.keyboard("{Enter}");
     expect(new FormData(form).get("herb")).toBe("");
@@ -235,6 +238,142 @@ describe("Combobox on a phone", () => {
     expect(onValueChange).toHaveBeenLastCalledWith("Thai");
   });
 
+  it.each(["Italian", undefined])("keeps uncontrolled custom edits and clears across both responsive directions (%s)", async (defaultValue) => {
+    await rotate(844, 390);
+    const onValueChange = vi.fn();
+    const host = await render(
+      <form><Combobox label="Cuisine" name="cuisine" allowCustomValue defaultValue={defaultValue} items={["Italian", "Thai"]} placeholder="Any cuisine" onValueChange={onValueChange} /></form>,
+    );
+    const form = host.querySelector("form")!;
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[role="combobox"]')!, "Sushi");
+    expect(new FormData(form).get("cuisine")).toBe("Sushi");
+    const changes = onValueChange.mock.calls.length;
+    await rotate(390, 844);
+    await expect.poll(() => host.querySelector(TRIGGER)?.textContent).toContain("Sushi");
+    expect(new FormData(form).get("cuisine")).toBe("Sushi");
+    await rotate(844, 390);
+    await expect.poll(() => host.querySelector('input[role="combobox"]')).not.toBeNull();
+    const input = host.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    expect(input.value).toBe("Sushi");
+    expect(new FormData(form).get("cuisine")).toBe("Sushi");
+    expect(onValueChange).toHaveBeenCalledTimes(changes);
+    await userEvent.clear(input);
+    const clears = onValueChange.mock.calls.length;
+    await rotate(390, 844);
+    await expect.poll(() => host.querySelector(TRIGGER)?.textContent).toContain("Any cuisine");
+    expect(new FormData(form).get("cuisine")).toBe("");
+    await rotate(844, 390);
+    await expect.poll(() => host.querySelector('input[role="combobox"]')).not.toBeNull();
+    expect(host.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe("");
+    expect(onValueChange).toHaveBeenCalledTimes(clears);
+  });
+
+  it("keeps an app-controlled custom value and emits no change solely for a responsive swap", async () => {
+    const onValueChange = vi.fn();
+    const host = await render(
+      <form><Combobox label="Cuisine" name="cuisine" allowCustomValue value="Sushi" defaultValue="Italian" items={["Italian"]} onValueChange={onValueChange} /></form>,
+    );
+    expect(host.querySelector(TRIGGER)!.textContent).toContain("Sushi");
+    await rotate(844, 390);
+    await expect.poll(() => host.querySelector('input[role="combobox"]')).not.toBeNull();
+    expect(host.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe("Sushi");
+    expect(new FormData(host.querySelector("form")!).get("cuisine")).toBe("Sushi");
+    await rotate(390, 844);
+    await expect.poll(() => host.querySelector(TRIGGER)).not.toBeNull();
+    expect(host.querySelector(TRIGGER)!.textContent).toContain("Sushi");
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, "Italian", "Italian"],
+    [true, "Italian", "Italian"],
+    [false, undefined, ""],
+    [true, undefined, ""],
+  ] as const)("restores an uncontrolled custom default on native form reset (sheet=%s, default=%s)", async (portrait, defaultValue, expected) => {
+    await rotate(portrait ? 390 : 844, portrait ? 844 : 390);
+    const onValueChange = vi.fn();
+    const host = await render(
+      <form><Combobox label="Cuisine" name="cuisine" allowCustomValue defaultValue={defaultValue} items={["Italian"]} placeholder="Any cuisine" onValueChange={onValueChange} /></form>,
+    );
+    if (portrait) {
+      await commands.tap(TRIGGER);
+      await opened();
+      await userEvent.fill(sheet()!.querySelector("input")!, "Sushi");
+      await expect.poll(() => sheet()!.querySelector('[role="option"]')?.textContent).toBe("Use “Sushi”");
+      await commands.tap('[role="option"]:nth-child(1)');
+      await expect.poll(sheet).toBeNull();
+    } else {
+      await userEvent.fill(host.querySelector<HTMLInputElement>('input[role="combobox"]')!, "Sushi");
+    }
+    const form = host.querySelector("form")!;
+    expect(new FormData(form).get("cuisine")).toBe("Sushi");
+    await act(async () => form.reset());
+    await expect.poll(() => new FormData(form).get("cuisine")).toBe(expected);
+    if (portrait) expect(host.querySelector(TRIGGER)!.textContent).toContain(expected || "Any cuisine");
+    else expect(host.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe(expected);
+    expect(onValueChange).toHaveBeenLastCalledWith(expected);
+  });
+
+  it("resets an unnamed uncontrolled custom field without needing an onValueChange callback", async () => {
+    await rotate(844, 390);
+    const host = await render(<form><Combobox label="Cuisine" allowCustomValue defaultValue="Italian" items={["Italian"]} /></form>);
+    const input = host.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await userEvent.fill(input, "Sushi");
+    await act(async () => host.querySelector("form")!.reset());
+    await expect.poll(() => input.value).toBe("Italian");
+    await act(async () => host.querySelector("form")!.reset());
+    expect(input.value).toBe("Italian");
+  });
+
+  it.each(["Sushi", "Thai"])("leaves ownership with the app when reset makes the custom field controlled (%s)", async (next) => {
+    await rotate(844, 390);
+    const onValueChange = vi.fn();
+    function Picker() {
+      const [value, setValue] = useState<string>();
+      return <form onReset={() => flushSync(() => setValue(next))}>
+        <Combobox label="Cuisine" name="cuisine" allowCustomValue value={value} defaultValue="Italian" items={["Italian", "Thai"]} onValueChange={onValueChange} />
+      </form>;
+    }
+    const host = await render(<Picker />);
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[role="combobox"]')!, "Sushi");
+    onValueChange.mockClear();
+    await act(async () => host.querySelector("form")!.reset());
+    expect(host.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe(next);
+    expect(new FormData(host.querySelector("form")!).get("cuisine")).toBe(next);
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps a custom selection on a prevented reset or another form's reset", async () => {
+    await rotate(844, 390);
+    let prevent = true;
+    const host = await render(<form onReset={(event) => { if (prevent) event.preventDefault(); }}>
+      <Combobox label="Cuisine" name="cuisine" allowCustomValue defaultValue="Italian" items={["Italian"]} />
+    </form>);
+    const input = host.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await userEvent.fill(input, "Sushi");
+    await act(async () => host.querySelector("form")!.reset());
+    expect(input.value).toBe("Sushi");
+    prevent = false;
+    const other = document.createElement("form");
+    host.querySelector("form")!.append(other);
+    await act(async () => other.reset());
+    expect(input.value).toBe("Sushi");
+  });
+
+  it("does not reset a custom input that unmounts during reset", async () => {
+    await rotate(844, 390);
+    function Picker() {
+      const [shown, setShown] = useState(true);
+      return <form onReset={() => flushSync(() => setShown(false))}>
+        {shown && <Combobox label="Cuisine" name="cuisine" allowCustomValue defaultValue="Italian" items={["Italian"]} />}
+      </form>;
+    }
+    const host = await render(<Picker />);
+    await userEvent.fill(host.querySelector<HTMLInputElement>('input[role="combobox"]')!, "Sushi");
+    await act(async () => host.querySelector("form")!.reset());
+    expect(host.querySelector('input[role="combobox"]')).toBeNull();
+  });
+
   it("clears typed text to an empty string with allowCustomValue", async () => {
     const onValueChange = vi.fn();
     function Cuisine() {
@@ -254,7 +393,7 @@ describe("Combobox on a phone", () => {
       );
     }
     const host = await render(<Cuisine />);
-    expect(host.querySelector('button[aria-label="Clear"]')).toBeNull();
+    expect(host.querySelector("button[data-ouro-combobox-clear]")).toBeNull();
     await commands.tap(TRIGGER);
     const panel = await opened();
     await commands.tap('[data-ouro="sheet"] input[role="combobox"]');
@@ -262,7 +401,7 @@ describe("Combobox on a phone", () => {
     await commands.tap('[role="option"]:nth-child(1)');
     await expect.poll(sheet).toBeNull();
     expect(host.querySelector(TRIGGER)!.textContent).toContain("Georgian");
-    await commands.tap('button[aria-label="Clear"]');
+    await commands.tap("button[data-ouro-combobox-clear]");
     expect(onValueChange).toHaveBeenLastCalledWith("");
     expect(host.querySelector(TRIGGER)!.textContent).toContain("Any cuisine");
   });
@@ -330,7 +469,7 @@ describe("Combobox on a phone", () => {
   it("gives chip remove buttons a 44px hit area", async () => {
     await rotate(844, 390);
     const host = await render(<Combobox label="Herbs" multiple items={herbs} defaultValue={["Basil"]} />);
-    const remove = host.querySelector<HTMLElement>('button[aria-label="Remove Basil"]')!;
+    const remove = host.querySelector<HTMLElement>("button[data-ouro-combobox-chip-remove]")!;
     const rect = remove.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -355,5 +494,49 @@ describe("Combobox server error on a phone", () => {
     expect(host.querySelector(TRIGGER)!.getAttribute("aria-invalid")).toBe("true");
     await act(async () => host.querySelector("form")!.requestSubmit());
     expect(sent!.get("herb")).toBe("Dill");
+  });
+});
+
+describe("Combobox pressed on a phone", () => {
+  it("tints the field's button on pointer-down", async () => {
+    const host = await render(<Combobox label="Herb" items={herbs} />);
+    const { rest, pressed, active } = await pressTint(host.querySelector<HTMLElement>(TRIGGER)!);
+    expect(active).toBe(true);
+    expect(pressed).not.toBe(rest);
+  });
+
+  it("tints an item in the sheet on pointer-down, from the press alone", async () => {
+    await render(<Combobox label="Herb" items={herbs} />);
+    await commands.tap(TRIGGER);
+    const panel = await opened();
+    const item = [...panel.querySelectorAll<HTMLElement>('[role="option"]')][2]!;
+    const { rest, pressed, active } = await pressTint(item, { clearHighlight: true });
+    expect(active).toBe(true);
+    expect(pressed).not.toBe(rest);
+  });
+
+  it("does not tint a disabled item", async () => {
+    await render(<Combobox label="Herb" items={[{ value: "a", label: "Basil" }, { value: "b", label: "Dill", disabled: true }]} />);
+    await commands.tap(TRIGGER);
+    const panel = await opened();
+    const item = [...panel.querySelectorAll<HTMLElement>('[role="option"]')][1]!;
+    const rest = getComputedStyle(item).backgroundColor;
+    item.setAttribute("data-press-target", "");
+    await commands.pointerPress({ selector: "[data-press-target]", action: "down" });
+    try {
+      await expect.poll(() => item.matches(":active")).toBe(true);
+      item.removeAttribute("data-highlighted");
+      expect(getComputedStyle(item).backgroundColor).toBe(rest);
+    } finally {
+      await commands.pointerPress({ selector: "[data-press-target]", action: "up" });
+    }
+  });
+
+  it("tints a chip's remove button on pointer-down in the wide layout, where hover is off for a finger", async () => {
+    await rotate(844, 390);
+    const host = await render(<Combobox label="Herbs" multiple items={herbs} defaultValue={["Basil"]} />);
+    const { rest, pressed, active } = await pressTint(host.querySelector<HTMLElement>("[data-ouro-combobox-chip-remove]")!);
+    expect(active).toBe(true);
+    expect(pressed).not.toBe(rest);
   });
 });

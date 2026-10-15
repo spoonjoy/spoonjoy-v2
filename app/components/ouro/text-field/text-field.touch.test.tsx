@@ -48,7 +48,7 @@ it("keeps focus and the cursor in the input when the password toggle is tapped",
   const input = host.querySelector("input")!;
   await commands.tap("input");
   input.setSelectionRange(4, 4);
-  await commands.tap('button[aria-label="Show password"]');
+  await commands.tap('button[data-ouro-show-password]');
   expect(input.type).toBe("text");
   expect(document.activeElement).toBe(input);
   expect([input.selectionStart, input.selectionEnd]).toEqual([4, 4]);
@@ -57,14 +57,14 @@ it("keeps focus and the cursor in the input when the password toggle is tapped",
 it("refocuses the input when the clear button is tapped", async () => {
   const host = await render(<TextField label="Search" type="search" clearable defaultValue="pasta" />);
   const input = host.querySelector("input")!;
-  await commands.tap('button[aria-label="Clear"]');
+  await commands.tap('button[data-ouro-clear]');
   expect(input.value).toBe("");
   expect(document.activeElement).toBe(input);
 });
 
 it("gives the toggle a 44px hit area, though it is smaller than the box", async () => {
   const host = await render(<TextField label="Password" type="password" />);
-  const toggle = host.querySelector<HTMLElement>('button[aria-label="Show password"]')!;
+  const toggle = host.querySelector<HTMLElement>('button[data-ouro-show-password]')!;
   const rect = toggle.getBoundingClientRect();
   expect(rect.height).toBeLessThan(44);
   const cx = rect.left + rect.width / 2;
@@ -98,8 +98,8 @@ it("keeps 16px text and a 44px box on a landscape phone, past the sm breakpoint"
 
 it("keeps the clear button's and the toggle's touch areas apart", async () => {
   const host = await render(<TextField label="PIN" type="password" clearable defaultValue="1234" />);
-  const clear = host.querySelector<HTMLElement>('button[aria-label="Clear"]')!;
-  const toggle = host.querySelector<HTMLElement>('button[aria-label="Show password"]')!;
+  const clear = host.querySelector<HTMLElement>('button[data-ouro-clear]')!;
+  const toggle = host.querySelector<HTMLElement>('button[data-ouro-show-password]')!;
   const a = clear.getBoundingClientRect();
   const b = toggle.getBoundingClientRect();
   const y = a.top + a.height / 2;

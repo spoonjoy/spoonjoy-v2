@@ -1,5 +1,5 @@
 import { toneFor } from "~/lib/ouro/appearance-hints";
-import type { DevWarning } from "~/lib/ouro/use-dev-warnings";
+import type { DevWarning } from "~/lib/ouro/use-dev-messages";
 
 export {
   choicesClass,
@@ -11,7 +11,9 @@ export {
   inlineLabelClass,
   inlineRootClass,
   labelClass,
+  labelFrameClass,
   legendClass,
+  requiredMarkClass,
   rootClass,
 };
 export type { ContractGuesses };
@@ -25,7 +27,7 @@ export type { ContractGuesses };
  *
  * @internal
  */
-const rootClass = "m-0 box-border grid min-w-0 content-start gap-2";
+const rootClass = "group/field box-border grid min-w-0 content-start gap-2";
 
 /**
  * A field whose control comes first, with the label to its right (a checkbox, a switch, a
@@ -33,7 +35,7 @@ const rootClass = "m-0 box-border grid min-w-0 content-start gap-2";
  *
  * @internal
  */
-const inlineRootClass = "m-0 box-border grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-start gap-x-3 gap-y-1";
+const inlineRootClass = "group/field box-border grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start items-start gap-x-3 gap-y-1";
 
 /**
  * The label beside an inline control, which is also its tap target: 16px text on 24px lines
@@ -57,12 +59,36 @@ const choicesClass = {
 } as const;
 
 /**
- * The label: medium weight, faded with the field when it is disabled.
+ * The element around the label, which sizes its text and takes the field's layout classes.
+ * The required marker hangs off it, not off the label, so the label's text stays the label.
  *
  * @internal
  */
-const labelClass =
-  "m-0 block justify-self-start text-sm leading-5 font-medium text-foreground select-none data-disabled:opacity-50";
+const labelFrameClass = "block justify-self-start text-sm leading-5 select-none";
+
+/**
+ * The label: medium weight, faded with the field when it is disabled. Inline, so the required
+ * marker follows its last word, and padded to its line height, so its hit area is every
+ * line it wraps to and the gaps between them: a checkbox's or switch's label is the
+ * control's tap target on a phone. Vertical padding on an inline box does not move the lines.
+ *
+ * @internal
+ */
+const labelClass = "m-0 inline py-[calc((1lh-1em)/2)] font-medium text-foreground data-disabled:opacity-50";
+
+/**
+ * The required marker, on the element around a label or on a group's legend: an asterisk
+ * drawn by CSS, so it is in no element's text and no control's name. `getByLabelText("Email")`
+ * and `getByLabel("Email", { exact: true })` find a required field, and screen readers hear
+ * "required" from the control. Its alternative text is empty, so screen readers in reading
+ * mode do not say "star"; a browser without that syntax shows the plain asterisk. It is
+ * generated text, so forced colors keep it visible. It fades when the field is disabled.
+ *
+ * @internal
+ */
+const requiredMarkClass =
+  "after:ms-0.5 after:font-medium after:text-destructive after:content-['*'] supports-[content:'*'_/_'']:after:content-['*'_/_''] " +
+  "group-data-disabled/field:after:opacity-50";
 
 /**
  * Supporting text under the label, and under a fieldset's legend. It stays at full contrast when the
@@ -80,10 +106,10 @@ const descriptionClass = "m-0 text-sm leading-5 text-muted-foreground";
  */
 const errorClass =
   "m-0 text-sm leading-5 text-destructive " +
-  "[transition:opacity_var(--ouro-duration-base)_ease-out,translate_var(--ouro-duration-base)_ease-out] " +
+  "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),translate_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "data-starting-style:opacity-0 data-starting-style:-translate-y-1 " +
   "data-ending-style:opacity-0 data-ending-style:-translate-y-1 " +
-  "motion-reduce:[transition:opacity_var(--ouro-duration-base)_ease-out] " +
+  "motion-reduce:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "motion-reduce:data-starting-style:translate-y-0 motion-reduce:data-ending-style:translate-y-0 " +
   "[&_ul]:m-0 [&_ul]:list-disc [&_ul]:ps-5";
 
@@ -108,7 +134,7 @@ const controlClass =
   "rounded-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] placeholder:text-muted-foreground " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "transition-[border-color] duration-(--ouro-duration-fast) ease-out " +
+  "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
   "aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 " +
   "dark:bg-input/30";
 

@@ -58,3 +58,25 @@ it("keeps the 20px box and 16px label on a landscape phone, past the sm breakpoi
   expect(host.querySelector<HTMLElement>('[role="checkbox"]')!.getBoundingClientRect().height).toBe(20);
   expect(getComputedStyle(host.querySelector("label")!).fontSize).toBe("16px");
 });
+
+it("toggles from a tap between two lines of a wrapped label", async () => {
+  const host = await render(
+    <div style={{ width: 200 }}>
+      <Checkbox label="Send me the weekly shopping list and the recipe digest" />
+    </div>,
+  );
+  const label = host.querySelector("label")!;
+  const box = host.querySelector<HTMLElement>('[role="checkbox"]')!;
+  const lines = [...label.getClientRects()];
+  expect(lines.length).toBeGreaterThan(1);
+  // The middle of the band between the first two lines of text.
+  const x = lines[0]!.left + 10;
+  const y = (lines[0]!.bottom + lines[1]!.top) / 2;
+  expect(document.elementFromPoint(x, y)).toBe(label);
+  // Every point down the label, from its first line to its last, is the label.
+  const frame = label.closest<HTMLElement>("[data-ouro-label]")!.getBoundingClientRect();
+  for (let at = Math.ceil(frame.top); at < frame.bottom; at += 1) expect(document.elementFromPoint(x, at)).toBe(label);
+  await commands.touchStep({ type: "touchStart", x, y });
+  await commands.touchStep({ type: "touchEnd" });
+  await expect.poll(() => box.getAttribute("aria-checked")).toBe("true");
+});

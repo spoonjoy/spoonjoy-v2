@@ -57,3 +57,21 @@ it("keeps the phone size and 16px label on a landscape phone, past the sm breakp
   expect(host.querySelector<HTMLElement>('[role="switch"]')!.getBoundingClientRect().height).toBe(24);
   expect(getComputedStyle(host.querySelector("label")!).fontSize).toBe("16px");
 });
+
+it("switches from a tap between two lines of a wrapped label", async () => {
+  const host = await render(
+    <div style={{ width: 220 }}>
+      <Switch label="Tell me when someone cooks one of my recipes" />
+    </div>,
+  );
+  const label = host.querySelector("label")!;
+  const control = host.querySelector<HTMLElement>('[role="switch"]')!;
+  const lines = [...label.getClientRects()];
+  expect(lines.length).toBeGreaterThan(1);
+  const x = lines[0]!.left + 10;
+  const y = (lines[0]!.bottom + lines[1]!.top) / 2;
+  expect(document.elementFromPoint(x, y)).toBe(label);
+  await commands.touchStep({ type: "touchStart", x, y });
+  await commands.touchStep({ type: "touchEnd" });
+  await expect.poll(() => control.getAttribute("aria-checked")).toBe("true");
+});

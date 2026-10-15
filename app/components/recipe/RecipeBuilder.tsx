@@ -51,6 +51,8 @@ export interface RecipeBuilderProps {
   disabled?: boolean
   loading?: boolean
   saveRequestSignal?: number
+  /** The actual response accepted by this builder's own save form; absent for SSR display. */
+  answer?: object
   errors?: {
     title?: string
     description?: string
@@ -77,9 +79,10 @@ export function RecipeBuilder({
   loading = false,
   saveRequestSignal = 0,
   errors,
+  answer,
   showSteps = true,
 }: RecipeBuilderProps) {
-  const detailErrors = useFormErrors(errors, DETAIL_FIELDS)
+  const detailErrors = useFormErrors(errors, DETAIL_FIELDS, answer)
 
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading

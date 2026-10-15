@@ -20,17 +20,17 @@ const radioClass =
   "aria-invalid:border-destructive " +
   "cursor-default select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "not-aria-invalid:not-data-disabled:not-data-checked:hover:border-foreground " +
-  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) active:duration-(--ouro-duration-fast) active:ease-out " +
+  "not-aria-invalid:not-data-disabled:not-data-checked:pointer-fine:hover:border-foreground " +
+  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50";
 
 /**
- * The dot in a chosen radio: it springs in from nothing, and with reduced motion fades in.
+ * The dot in a chosen radio: it grows in from 95% as it fades in, and with reduced motion only fades.
  *
  * @internal
  */
 const dotClass =
   "pointer-events-none block size-2 rounded-full bg-primary-foreground sm:pointer-fine:size-1.5 " +
-  "scale-0 data-checked:scale-100 motion-safe:transition-[scale] motion-safe:duration-(--ouro-spring-duration) motion-safe:ease-(--ouro-ease-spring) " +
-  "motion-reduce:scale-100 motion-reduce:opacity-0 motion-reduce:data-checked:opacity-100 " +
-  "motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast)";
+  "scale-95 opacity-0 data-checked:scale-100 data-checked:opacity-100 " +
+  "motion-safe:[transition:scale_var(--ouro-duration-fast)_var(--ouro-ease-out),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
+  "motion-reduce:scale-100 motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast)";

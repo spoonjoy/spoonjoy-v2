@@ -1,11 +1,12 @@
-// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
-import { expect, test } from "../fixtures";
+import { expect, test } from "../ouro-fixtures";
 import { openStory } from "./story";
 
 test("clicking a label focuses its control, which is described and marked", async ({ page }) => {
   await openStory(page, "forms-field--states");
-  await page.locator("label").filter({ hasText: /^Email\*$/ }).click();
-  const email = page.getByRole("textbox", { name: "Email" });
+  // A required field's label is its text alone: the marker is CSS, so an exact lookup finds it.
+  const email = page.getByLabel("Email", { exact: true });
+  await expect(email).toHaveAccessibleName("Email");
+  await page.locator("label").filter({ hasText: /^Email$/ }).click();
   await expect(email).toBeFocused();
   await expect(email).toHaveAttribute("aria-required", "true");
   await expect(email).toHaveAccessibleDescription("We send the shopping list here.");

@@ -75,7 +75,8 @@ import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/ui/button";
 import { Text, Strong } from "~/components/ui/text";
 import { Link as CatalystLink } from "~/components/ui/link";
-import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { Form } from "~/components/ouro/form/form";
+import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -354,9 +355,12 @@ export default function CookbookDetail() {
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [recipeToRemove, setRecipeToRemove] = useState<string | null>(null);
-  // The rename's error belongs on the title field. Each refusal sets a new object, even with the
-  // same message: the form shows a message again only for a new object.
-  const [titleErrors, setTitleErrors] = useState<FormErrors>();
+  const [titleAnswer, setTitleAnswer] = useState<CookbookActionData>();
+  const titleErrors = useFormErrors(
+    typeof titleAnswer?.error === "string" ? { title: titleAnswer.error } : undefined,
+    undefined,
+    titleAnswer,
+  );
   const submit = useSubmit();
   // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
   useDockSuppressed(isEditingTitle);
@@ -376,21 +380,21 @@ export default function CookbookDetail() {
     }
     if (actionData?.intent !== "updateTitle") return;
     if (typeof actionData.error === "string") {
-      setTitleErrors({ title: actionData.error });
+      setTitleAnswer(actionData);
       return;
     }
-    setTitleErrors(undefined);
+    setTitleAnswer(undefined);
     setIsEditingTitle(false);
     showToast({ message: "Cookbook renamed." });
   }, [actionData, showToast]);
 
   const openTitleEditor = () => {
-    setTitleErrors(undefined);
+    setTitleAnswer(undefined);
     setIsEditingTitle(true);
   };
 
   const closeTitleEditor = () => {
-    setTitleErrors(undefined);
+    setTitleAnswer(undefined);
     setIsEditingTitle(false);
   };
 

@@ -99,9 +99,6 @@ function countVisibleInputs(content: string): number {
  * (app/components/ouro/text-field/text-field.tsx).
  */
 const ALLOWED_RAW_INPUTS: Record<string, number> = {
-  // Stopgap for the Ouro UI gap "TextField cannot render a frameless, display-size input inside
-  // the app's own frame": the hero search. Remove with the fix (v0.8.0).
-  "app/routes/recipes._index.tsx": 1,
   // The image file input of the hidden form that carries RecipeBuilder's data to the action.
   "app/routes/recipes.new.tsx": 1,
   "app/routes/recipes.$id.edit.tsx": 1,

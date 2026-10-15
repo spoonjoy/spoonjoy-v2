@@ -4,8 +4,8 @@ import type { JSX, ReactNode, Ref, SelectHTMLAttributes } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl, type FieldControlProps } from "~/components/ouro/field/field-parts";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
-import { FieldOwnerContext } from "~/lib/ouro/use-field";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { FieldOwnerContext, type ErrorMessages } from "~/lib/ouro/use-field";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /** One choice: the `value` it submits and the `label` it shows. */
 export interface NativeSelectOption {
@@ -38,9 +38,9 @@ export interface NativeSelectOwnProps {
   description?: ReactNode | undefined;
   /**
    * What is wrong, from your server action or client check. The message (or several, as a
-   * list) shows under the select, which gets `aria-invalid`. An empty string or array means valid.
+   * list) shows under the select, which gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
    */
-  error?: string | string[] | undefined;
+  error?: ErrorMessages | undefined;
   /** A choice is required: the form will not submit without one, and the label gets a marker. */
   required?: boolean | undefined;
   /** Disables the select and fades it. */
@@ -109,8 +109,8 @@ const selectClass =
   "rounded-md border border-solid border-input bg-transparent text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] cursor-pointer [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "transition-[border-color] duration-(--ouro-duration-fast) ease-out " +
-  "hover:not-disabled:border-ring/60 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 " +
+  "transition-[border-color] duration-(--ouro-duration-fast) ease-[ease] " +
+  "pointer-fine:hover:not-disabled:border-ring/60 aria-invalid:border-destructive disabled:cursor-not-allowed disabled:opacity-50 " +
   "dark:bg-input/30 [&:has(option[value='']:checked)]:text-muted-foreground [&_option]:bg-popover [&_option]:text-popover-foreground dark:scheme-dark";
 
 /** The chevron at the end of the box, drawn in the muted text color; presses go to the select. */

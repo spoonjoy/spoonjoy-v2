@@ -6,7 +6,7 @@
  * New Recipe action, which runs the shared import pipeline and opens the imported recipe in
  * the editor for review.
  */
-import { useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Form as RouterForm, useNavigation } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -16,6 +16,7 @@ import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
+import { formErrors } from "~/lib/ouro/form-answer";
 
 export type RecipeImportKind = "link" | "text" | "photo";
 
@@ -44,6 +45,10 @@ function newImportId(): string {
 
 export function RecipeImportPanel({ result }: { result?: RecipeImportActionData }) {
   const navigation = useNavigation();
+  const [acceptedResult, setAcceptedResult] = useState(result);
+  useEffect(() => {
+    if (navigation.state === "idle") setAcceptedResult(result);
+  }, [result, navigation.state]);
   const [kind, setKind] = useState<RecipeImportKind>(result?.kind ?? "link");
   const headingId = useId();
   // One id per distinct submission: a second submit of the same link or text reuses it, so the
@@ -52,11 +57,15 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
 
   const pending =
     navigation.state !== "idle" && navigation.formData?.get("intent") === "import";
-  const showResult = result && result.kind === kind;
+  const showResult = acceptedResult && acceptedResult.kind === kind;
 
-  // The import's message belongs on the field the cook filled in. One object per answer: the
-  // form takes a new object as a new answer and moves focus to the field.
-  const resultErrors = useMemo(() => (result ? { [FIELD_NAME[result.kind]]: result.message } : undefined), [result]);
+  // Keep the actual import response as acceptance authority. A message can now include
+  // its action link, so assistive technology describes the complete refusal on the field.
+  const resultErrors = formErrors(acceptedResult, acceptedResult ? {
+    [FIELD_NAME[acceptedResult.kind]]: acceptedResult.existingRecipe
+      ? <>{acceptedResult.message} <Link inline href={`/recipes/${acceptedResult.existingRecipe.id}`}>Open it</Link></>
+      : acceptedResult.message,
+  } : undefined);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const form = event.currentTarget;
@@ -108,7 +117,7 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
         key={kind}
         method="post"
         encType="multipart/form-data"
-        errors={showResult ? resultErrors : undefined}
+        errors={showResult ? resultErrors : formErrors(undefined)}
         render={<RouterForm />}
         onSubmit={handleSubmit}
         className="mt-6 max-w-xl gap-4"
@@ -158,12 +167,6 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
             description="Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead."
           />
         )}
-        {/* A field's error is text only, so the way to the recipe already imported follows it. */}
-        {showResult && result.existingRecipe ? (
-          <p className="m-0 text-sm/6">
-            <Link href={`/recipes/${result.existingRecipe.id}`}>Open it</Link>
-          </p>
-        ) : null}
 
         <Button type="submit" disabled={pending} aria-busy={pending ? "true" : undefined}>
           {pending ? <Loader2 className="size-4 animate-spin" data-slot="icon" /> : null}

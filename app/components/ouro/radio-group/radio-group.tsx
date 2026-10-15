@@ -7,8 +7,8 @@ import { Field } from "~/components/ouro/field/field";
 import { choicesClass, contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { FieldOwnerContext, useField } from "~/lib/ouro/use-field";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { FieldOwnerContext, useField, type ErrorMessages } from "~/lib/ouro/use-field";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { dotClass, radioClass } from "~/components/ouro/radio-group/radio-group-styles";
 
 /** One choice in a {@link RadioGroup}'s `options`. */
@@ -36,9 +36,9 @@ export interface RadioGroupOwnProps {
   description?: ReactNode | undefined;
   /**
    * What is wrong, from your server action or client check, shown under the choices; every
-   * radio gets `aria-invalid`. An empty string or array means valid.
+   * radio gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
    */
-  error?: string | string[] | undefined;
+  error?: ErrorMessages | undefined;
   /** A choice must be picked to submit the form: the group gets `aria-required`, and the legend a marker. */
   required?: boolean | undefined;
   /** Disables every radio and fades the group. */

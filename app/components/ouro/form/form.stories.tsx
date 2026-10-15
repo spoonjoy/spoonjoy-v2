@@ -5,6 +5,7 @@ import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
+import { formErrors } from "~/lib/ouro/form-answer";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -19,18 +20,18 @@ const surface = {
 
 /** A stand-in for a server action: it answers on the next tick, with errors for a taken name. */
 function useAction() {
-  const [errors, setErrors] = useState<FormErrors | undefined>();
+  const [answer, setAnswer] = useState<{ errors: FormErrors | undefined }>();
   const [saved, setSaved] = useState(false);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get("name"));
     setTimeout(() => {
       const next = name.toLowerCase() === "pasta" ? { name: "You already have a recipe called Pasta." } : undefined;
-      setErrors(next);
+      setAnswer({ errors: next });
       setSaved(!next);
     });
   };
-  return { errors, saved, submit };
+  return { errors: formErrors(answer, answer?.errors), saved, submit };
 }
 
 const meta = {

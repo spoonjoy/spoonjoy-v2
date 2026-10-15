@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.new";
-import { redirect, data, useActionData, useNavigate, useNavigation, Form } from "react-router";
+import { redirect, data, useActionData, useNavigate, useNavigation, useFetcher } from "react-router";
 import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
@@ -384,6 +384,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function NewRecipe() {
   const actionData = useActionData<ActionData>();
+  // A progressive-post response is an initial display baseline, never a client arrival.
+  const [initialActionData] = useState(actionData);
+  const saveFetcher = useFetcher<ActionData>();
+  const [saveAnswer, setSaveAnswer] = useState<ActionData>();
+  const saveData = saveAnswer ?? initialActionData;
   const navigate = useNavigate();
   const navigation = useNavigation();
   const formRef = useRef<HTMLFormElement>(null);
@@ -392,14 +397,18 @@ export default function NewRecipe() {
   const [submitStarted, setSubmitStarted] = useState(false);
   // One recipe per opening of the page: a save after a 503, or a double tap, writes it once.
   const [recipeToken] = useWriteToken();
-  const isLoading = navigation.state === 'submitting' || submitStarted;
+  const isLoading = saveFetcher.state === "submitting" || navigation.state === 'submitting' ||
+    (submitStarted && saveFetcher.state === "idle");
 
   useEffect(() => {
-    if (navigation.state === "idle") {
+    if (navigation.state === "idle" && saveFetcher.state !== "submitting") {
       submitInFlightRef.current = false;
       setSubmitStarted(false);
     }
-  }, [navigation.state]);
+    // Present the actual completed save after its fields are enabled again. While
+    // revalidating, retain the previous accepted response rather than stale projections.
+    if (saveFetcher.state === "idle") setSaveAnswer(saveFetcher.data);
+  }, [navigation.state, saveFetcher.state, saveFetcher.data]);
 
   const handleCancel = () => {
     navigate("/recipes");
@@ -407,7 +416,7 @@ export default function NewRecipe() {
 
   const handleSave = (recipeData: RecipeBuilderData) => {
     /* istanbul ignore next -- @preserve duplicate-submit latch is asserted through route action call counts */
-    if (submitInFlightRef.current || navigation.state !== "idle") {
+    if (submitInFlightRef.current || navigation.state !== "idle" || saveFetcher.state !== "idle") {
       return;
     }
 
@@ -453,7 +462,7 @@ export default function NewRecipe() {
       </CookbookHeader>
 
       {/* Hidden form for submitting data to the action */}
-      <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden">
+      <saveFetcher.Form ref={formRef} method="post" encType="multipart/form-data" className="hidden">
         <input type="hidden" name="recipeToken" value={recipeToken} />
         <input type="hidden" name="title" />
         <textarea name="description" className="hidden" />
@@ -461,7 +470,7 @@ export default function NewRecipe() {
         <input type="hidden" name="steps" />
         <input type="hidden" name="clearImage" />
         <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
-      </Form>
+      </saveFetcher.Form>
 
       <div className="mt-8 max-w-5xl">
         <RecipeImportPanel result={actionData?.importResult} />
@@ -471,7 +480,8 @@ export default function NewRecipe() {
         <RecipeBuilder
           onSave={handleSave}
           onCancel={handleCancel}
-          errors={actionData?.errors}
+          errors={saveData?.errors}
+          answer={saveAnswer}
           loading={isLoading}
         />
       </div>

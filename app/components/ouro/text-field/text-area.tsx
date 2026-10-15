@@ -7,9 +7,10 @@ import { FieldControl, type FieldControlProps } from "~/components/ouro/field/fi
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { cn } from "~/lib/ouro/cn";
 import { useMergedRef } from "~/lib/ouro/refs";
-import { FieldOwnerContext } from "~/lib/ouro/use-field";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
-import { fitHeight, textAreaClass } from "~/components/ouro/text-field/text-area-styles";
+import { FieldOwnerContext, type ErrorMessages } from "~/lib/ouro/use-field";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { fitHeight, textAreaClass, textAreaSizes, textAreaVariants } from "~/components/ouro/text-field/text-area-styles";
+import { controlSizeWarning, controlVariantWarning } from "~/components/ouro/text-field/text-field-styles";
 
 /** The props TextArea adds to the textarea attributes it passes through. */
 export interface TextAreaOwnProps {
@@ -24,9 +25,9 @@ export interface TextAreaOwnProps {
   description?: ReactNode | undefined;
   /**
    * What is wrong, from your server action or client check. The message (or several, as a
-   * list) shows under the field, which gets `aria-invalid`. An empty string or array means valid.
+   * list) shows under the field, which gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
    */
-  error?: string | string[] | undefined;
+  error?: ErrorMessages | undefined;
   /** The field must be filled: it gets `required` and `aria-required`, and the label a marker. */
   required?: boolean | undefined;
   /** Disables the field and fades it. */
@@ -38,6 +39,20 @@ export interface TextAreaOwnProps {
    * `label`, which stays visible.
    */
   placeholder?: string | undefined;
+  /**
+   * The frame. `outline` draws the bordered box. `plain` draws no border, background or
+   * padding, for a textarea inside a frame your app draws (a chat composer with its send
+   * button in the same box); it keeps the focus outline, and the error message still shows
+   * under it, but with no border to turn red, color your own frame for an invalid field.
+   * Any other string is a type error whose message names the fix. @default "outline"
+   */
+  variant?: "outline" | "plain" | (string & { 'default is "outline"; ghost, unstyled and borderless are "plain"': never }) | undefined;
+  /**
+   * Text size. `md` is 16px on phones and steps down to 14px from the `sm` breakpoint (640px).
+   * `lg` is 20px at every width. The font family is inherited, so set a display font on a
+   * parent. @default "md"
+   */
+  size?: "md" | "lg" | (string & { 'default is "md"; "lg" is 20px text': never }) | undefined;
   /** Lines of text it shows; with `autoGrow`, the fewest it shows. @default 3 */
   rows?: number | undefined;
   /**
@@ -92,6 +107,9 @@ const owner = { name: "TextArea", data: "text-area" };
  * `label`, and `error` from your server action or client check. `autoGrow` makes it grow
  * with the text from `rows` lines up to `maxRows`.
  *
+ * `variant="plain"` draws no frame, for a textarea inside a box your app draws, and
+ * `size="lg"` sets 20px text.
+ *
  * Use `TextField` instead for one line, and `Field` with `FieldControl` for a control that
  * is not text.
  *
@@ -101,6 +119,13 @@ const owner = { name: "TextArea", data: "text-area" };
  * @example
  * <TextArea label="Notes" name="notes" description="Only you see these." />
  * <TextArea label="Message" name="message" autoGrow rows={2} maxRows={8} required error={errors?.message} />
+ *
+ * @example
+ * // A chat composer: the box is the app's, and the textarea inside it has no frame.
+ * <form className="flex items-end gap-2 rounded-xl border border-border p-2 focus-within:border-ring">
+ *   <TextArea label="Message" hideLabel name="message" placeholder="Ask anything" variant="plain" autoGrow rows={1} maxRows={8} className="flex-1" />
+ *   <Button type="submit">Send</Button>
+ * </form>
  */
 export function TextArea(props: TextAreaProps): JSX.Element {
   const {
@@ -111,6 +136,8 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     required,
     disabled,
     name,
+    variant: variantProp = "outline",
+    size: sizeProp = "md",
     rows = 3,
     autoGrow = false,
     maxRows,
@@ -130,12 +157,16 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     ...rest
   } = props;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const variant = Object.hasOwn(textAreaVariants, variantProp) ? (variantProp as keyof typeof textAreaVariants) : "outline";
+  const size = Object.hasOwn(textAreaSizes, sizeProp) ? (sizeProp as keyof typeof textAreaSizes) : "md";
 
   useDevWarnings(
     "TextArea",
     process.env.NODE_ENV !== "production"
       ? () => [
           ...contractWarnings("TextArea", { errorMessage, helperText, isInvalid, invalid, isRequired, isDisabled }),
+          variant !== variantProp && controlVariantWarning("TextArea", String(variantProp)),
+          size !== sizeProp && controlSizeWarning("TextArea", sizeProp),
           minRows !== undefined && ["minRows is not a prop; rows is the minimum", `<TextArea autoGrow rows={${String(minRows)}} maxRows={8}>`],
           autoResize !== undefined && ["autoResize is not a prop", "<TextArea autoGrow>"],
           autosize !== undefined && ["autosize is not a prop", "<TextArea autoGrow>"],
@@ -162,18 +193,26 @@ export function TextArea(props: TextAreaProps): JSX.Element {
     if (autoGrow) fitHeight(event.currentTarget, rows, maxRows);
     onChange?.(event);
   };
-  // The text rewraps when the width changes (a rotated phone, a resized window).
+  // The text rewraps when the width changes (a rotated phone, a resized window). The refit
+  // runs in the next frame, never inside the observer's callback: a height set there is a new
+  // observation the browser cannot deliver in the same frame, which it reports on the window
+  // as "ResizeObserver loop completed with undelivered notifications".
   useEffect(() => {
     if (!autoGrow) return;
     const textarea = textareaRef.current!;
     let width = textarea.offsetWidth;
+    let frame = 0;
     const observer = new ResizeObserver(() => {
       if (textarea.offsetWidth === width) return;
       width = textarea.offsetWidth;
-      fitHeight(textarea, rows, maxRows);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => fitHeight(textarea, rows, maxRows));
     });
     observer.observe(textarea);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [autoGrow, rows, maxRows]);
 
   const setRef = useMergedRef(ref, textareaRef);
@@ -198,7 +237,9 @@ export function TextArea(props: TextAreaProps): JSX.Element {
             <textarea
               {...(controlProps as TextareaHTMLAttributes<HTMLTextAreaElement>)}
               rows={rows}
-              className={cn(textAreaClass, autoGrow ? "resize-none" : "resize-y")}
+              data-variant={variant}
+              data-size={size}
+              className={cn(textAreaClass, textAreaVariants[variant], textAreaSizes[size], autoGrow ? "resize-none" : "resize-y")}
             />
           )}
         />

@@ -18,7 +18,7 @@ import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { RouterLink } from "~/lib/ouro/router-link";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { toneWarning } from "~/lib/ouro/tones";
 
 /** An icon component, such as one from `lucide-react` or `@heroicons/react`. */
@@ -143,16 +143,16 @@ export type ButtonProps = ButtonLinkProps | ButtonButtonProps;
 
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 const base =
-  "press relative m-0 box-border inline-flex shrink-0 items-center justify-center align-middle " +
+  "press relative box-border inline-flex shrink-0 items-center justify-center align-middle " +
   "rounded-lg border border-solid font-medium whitespace-nowrap " +
   "no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   // A state layer in the text color: a light wash on hover, a deeper one while pressed.
   "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:bg-current " +
-  "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-out " +
-  "not-data-disabled:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
+  "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
+  "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
   // Press feedback: scale only when motion is allowed and the button is enabled.
-  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) active:duration-(--ouro-duration-fast) active:ease-out " +
+  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress";
 
 // Height and padding step down to desktop density at the `sm` breakpoint through two
@@ -184,11 +184,11 @@ const looks = {
     warning: "border-transparent bg-warning text-warning-foreground",
   },
   soft: {
-    primary: "border-transparent bg-primary/10 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]",
-    secondary: "border-transparent bg-secondary/50 text-secondary-foreground",
-    destructive: "border-transparent bg-destructive/10 text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))]",
-    success: "border-transparent bg-success/10 text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))]",
-    warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))]",
+    primary: "border-transparent bg-primary/10 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:border-current",
+    secondary: "border-transparent bg-secondary/50 text-secondary-foreground contrast-more:border-current",
+    destructive: "border-transparent bg-destructive/10 text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:border-current",
+    success: "border-transparent bg-success/10 text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:border-current",
+    warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:border-current",
   },
   outline: {
     primary: "border-primary/45 bg-transparent text-primary",
@@ -245,7 +245,7 @@ function Spinner(): JSX.Element {
   return (
     <span
       aria-hidden="true"
-      className="absolute inset-0 flex items-center justify-center transition-opacity duration-(--ouro-duration-base) ease-out starting:opacity-0"
+      className="absolute inset-0 flex items-center justify-center transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) starting:opacity-0"
     >
       <svg
         data-ouro-spinner=""
@@ -358,7 +358,7 @@ export function Button(props: ButtonProps): JSX.Element {
       <span
         data-ouro-label=""
         className={cn(
-          "relative inline-flex items-center gap-[inherit] transition-opacity duration-(--ouro-duration-fast) ease-out",
+          "relative inline-flex items-center gap-[inherit] transition-opacity duration-(--ouro-duration-fast) ease-(--ouro-ease-out)",
           loading && "opacity-0",
         )}
       >
@@ -383,8 +383,8 @@ export function Button(props: ButtonProps): JSX.Element {
         data-variant={variant}
         data-loading={loading ? "" : undefined}
         data-disabled={loading ? "" : undefined}
-        aria-busy={loading || undefined}
-        aria-disabled={loading || undefined}
+        aria-busy={loading || anchorProps["aria-busy"]}
+        aria-disabled={loading || anchorProps["aria-disabled"]}
       >
         {content}
       </RouterLink>
@@ -405,7 +405,7 @@ export function Button(props: ButtonProps): JSX.Element {
       data-ouro="button"
       data-variant={variant}
       data-loading={loading ? "" : undefined}
-      aria-busy={loading || undefined}
+      aria-busy={loading || buttonProps["aria-busy"]}
     >
       {content}
     </BaseButton>

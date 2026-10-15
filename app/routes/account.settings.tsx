@@ -14,7 +14,7 @@ import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { useFormErrors } from "~/hooks/use-form-errors";
+import { useFormErrors, useIntentAnswer } from "~/hooks/use-form-errors";
 import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
@@ -59,12 +59,19 @@ function formatPasskeyDate(iso: string): string {
 // errors for its own fields.
 const USER_INFO_FIELDS = ["email", "username", "currentPassword"] as const;
 const NEW_PASSWORD_FIELDS = ["newPassword"] as const;
+const USER_INFO_INTENTS = ["updateUserInfo"] as const;
+const PASSWORD_INTENTS = ["changePassword", "setPassword"] as const;
+const DELETE_INTENTS = ["deleteAccount"] as const;
 
 export default function AccountSettings() {
   const { user, oauthError, notifications } = useLoaderData<AccountSettingsLoaderData>();
   const actionData = useActionData<AccountSettingsActionResult>();
-  const userInfoErrors = useFormErrors(actionData?.fieldErrors, USER_INFO_FIELDS);
-  const newPasswordErrors = useFormErrors(actionData?.fieldErrors, NEW_PASSWORD_FIELDS);
+  const [initialActionData] = useState(actionData);
+  const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
+  const passwordAnswer = useIntentAnswer(actionData, PASSWORD_INTENTS);
+  const deleteAnswer = useIntentAnswer(actionData, DELETE_INTENTS);
+  const userInfoErrors = useFormErrors((userInfoAnswer ?? initialActionData)?.fieldErrors, USER_INFO_FIELDS, userInfoAnswer);
+  const newPasswordErrors = useFormErrors((passwordAnswer ?? initialActionData)?.fieldErrors, NEW_PASSWORD_FIELDS, passwordAnswer);
   const revalidator = useRevalidator();
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
@@ -638,7 +645,7 @@ export default function AccountSettings() {
       <AccountDataSection
         username={user.username}
         hasPassword={user.hasPassword}
-        deleteError={actionData?.intent === "deleteAccount" ? actionData : null}
+        deleteError={deleteAnswer ?? (initialActionData?.intent === "deleteAccount" ? initialActionData : null)}
       />
       </div>
     </CookbookPage>

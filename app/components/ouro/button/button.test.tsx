@@ -6,6 +6,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { Button } from "~/components/ouro/button/button";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 
 
@@ -191,6 +192,24 @@ describe("loading", () => {
     );
     host.querySelector("button")!.click();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps an aria-busy and aria-disabled the app passes while it is not loading", async () => {
+    const { button, rerender } = await render(
+      <Button aria-busy aria-disabled>
+        Save recipe
+      </Button>,
+    );
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    await rerender(
+      <Button href="/recipes" aria-busy aria-disabled>
+        Recipes
+      </Button>,
+    );
+    const link = document.querySelector<HTMLElement>('a[data-ouro="button"]')!;
+    expect(link.getAttribute("aria-busy")).toBe("true");
+    expect(link.getAttribute("aria-disabled")).toBe("true");
   });
 
   it("renders a busy link that cannot be followed", async () => {
@@ -442,7 +461,7 @@ describe("appearance", () => {
     );
     const button = host.querySelector("button")!;
     document.body.focus();
-    await userEvent.tab();
+    await pressTab();
     expect(document.activeElement).toBe(button);
     expect(button.matches(":focus-visible")).toBe(true);
     const style = getComputedStyle(button);
@@ -532,9 +551,9 @@ describe("className", () => {
         <Button className="mt-4 w-full">Go</Button>
       </div>,
     );
-    // Button sets m-0; cn keeps it for the other sides and the app's mt-4 wins on top.
+    // Button sets no margin of its own, so the app's mt-4 is the only one.
     expect(button.classList.contains("mt-4")).toBe(true);
-    expect(button.classList.contains("m-0")).toBe(true);
+    expect(button.classList.contains("m-0")).toBe(false);
     expect(getComputedStyle(button).marginTop).toBe("16px");
     expect(getComputedStyle(button).marginBottom).toBe("0px");
     expect(button.getBoundingClientRect().width).toBe(host.firstElementChild!.getBoundingClientRect().width);
@@ -788,5 +807,47 @@ describe("Button server rendering", () => {
     expect(html).toContain('href="/x"');
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("Button under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts under a button that is not the last child", async () => {
+    const { host } = await render(
+      <div className="space-y-4">
+        <Button fullWidth>Save</Button>
+        <Button fullWidth>Cancel</Button>
+      </div>,
+    );
+    const [save, cancel] = [...host.querySelectorAll<HTMLElement>('[data-ouro="button"]')];
+    expect(getComputedStyle(save!).marginBottom).toBe("16px");
+    expect(getComputedStyle(cancel!).marginBottom).toBe("0px");
+  });
+});
+
+describe("Button under more contrast", () => {
+  it("gives the soft look a visible border with prefers-contrast: more", async () => {
+    const { button } = await render(<Button variant="soft">Soft</Button>);
+    expect(getComputedStyle(button).borderTopColor).toBe("rgba(0, 0, 0, 0)");
+    await commands.emulateMedia({ contrast: "more" });
+    try {
+      await expect.poll(() => getComputedStyle(button).borderTopColor).toBe(getComputedStyle(button).color);
+    } finally {
+      await commands.emulateMedia({ contrast: "no-preference" });
+    }
+  });
+});
+
+describe("Button state layer", () => {
+  it("shows the deeper pressed wash, not the hover wash, while a mouse presses a hovered button", async () => {
+    const { button } = await render(<Button>Save</Button>);
+    const wash = () => getComputedStyle(button, "::before").opacity;
+    await userEvent.hover(button);
+    await expect.poll(wash).toBe("0.08");
+    await commands.pointerPress({ selector: "[data-ouro]", action: "down" });
+    try {
+      await expect.poll(wash).toBe("0.14");
+    } finally {
+      await commands.pointerPress({ action: "up" });
+    }
   });
 });

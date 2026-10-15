@@ -58,6 +58,7 @@ describe('ManualIngredientInput', () => {
       for (const input of Array.from(outer.querySelectorAll('input'))) {
         expect(input).not.toHaveAttribute('name')
         expect(input).not.toHaveAttribute('required')
+        expect(input).toHaveAttribute('aria-required', 'true')
       }
 
       await userEvent.type(screen.getByLabelText(/quantity/i), '2')
@@ -123,27 +124,30 @@ describe('ManualIngredientInput', () => {
   })
 
   describe('validation', () => {
-    // Ouro UI cannot mark a field required for screen readers only (aria-required without the
-    // browser's required), and a required field here would block the surrounding form.
+    // aria-required describes the local add operation; only native required could
+    // block the surrounding form. toBeRequired also includes aria-required.
     it('leaves the quantity field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const quantityInput = screen.getByLabelText(/quantity/i)
-      expect(quantityInput).not.toBeRequired()
+      expect(quantityInput).not.toHaveAttribute('required')
+      expect(quantityInput).toHaveAttribute('aria-required', 'true')
     })
 
     it('leaves the unit field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const unitInput = screen.getByLabelText(/unit/i)
-      expect(unitInput).not.toBeRequired()
+      expect(unitInput).not.toHaveAttribute('required')
+      expect(unitInput).toHaveAttribute('aria-required', 'true')
     })
 
     it('leaves the ingredient name field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const ingredientInput = screen.getByLabelText('Ingredient')
-      expect(ingredientInput).not.toBeRequired()
+      expect(ingredientInput).not.toHaveAttribute('required')
+      expect(ingredientInput).toHaveAttribute('aria-required', 'true')
     })
 
     it('has minimum quantity of 0.001', () => {

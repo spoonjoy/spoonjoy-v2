@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { devThrow, devWarn } from "~/lib/ouro/dev";
+import { checkTheme, devThrow, devWarn } from "~/lib/ouro/dev";
 
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
@@ -51,5 +51,52 @@ describe("devThrow", () => {
     expect(() => devThrow("Sheet.Title", "outside Sheet", "<Sheet title='x' />")).toThrow(
       "[ouro-ui] Sheet.Title: outside Sheet. Fix: <Sheet title='x' />.",
     );
+  });
+});
+
+describe("checkTheme", () => {
+  const MESSAGE =
+    "[ouro-ui] theme: ouro-base is not in this page's CSS (--ouro-layer is unset), so overlays have no backdrop, layer or motion and fields have no border. Fix: npx shadcn@latest add ourostack/ouro-ui/ouro-base#v0.8.0.";
+  const root = document.documentElement;
+  const again = () => delete (window as unknown as Record<symbol, unknown>)[Symbol.for("ouro-ui.theme-checked")];
+  /** The page as it is in an app that never added ouro-base: the token has no value. */
+  const withoutTheme = () => root.style.setProperty("--ouro-layer", "initial");
+
+  afterEach(() => {
+    root.style.removeProperty("--ouro-layer");
+    again();
+  });
+
+  it("says nothing on a page that has ouro-base", () => {
+    again();
+    expect(getComputedStyle(root).getPropertyValue("--ouro-layer").trim()).not.toBe("");
+    checkTheme();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("checks a page that is still loading once it has loaded", () => {
+    again();
+    const listen = vi.spyOn(window, "addEventListener");
+    vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    withoutTheme();
+    checkTheme();
+    expect(warn).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledWith("load", expect.any(Function), { once: true });
+    // The stylesheet arrived before the load event: nothing to say.
+    root.style.removeProperty("--ouro-layer");
+    (listen.mock.calls[0]![1] as () => void)();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("names the command that adds ouro-base, once per page, when the token is unset", () => {
+    again();
+    withoutTheme();
+    checkTheme();
+    expect(warn.mock.calls).toEqual([[MESSAGE]]);
+    root.style.removeProperty("--ouro-layer");
+    checkTheme();
+    withoutTheme();
+    checkTheme();
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });

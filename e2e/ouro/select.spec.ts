@@ -1,5 +1,4 @@
-// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
-import { expect, test } from "../fixtures";
+import { expect, test } from "../ouro-fixtures";
 import { openStory, settledBox } from "./story";
 
 test("chooses an option with the mouse and the keyboard", async ({ page }) => {
@@ -12,7 +11,9 @@ test("chooses an option with the mouse and the keyboard", async ({ page }) => {
   await expect(course).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("listbox")).toBeVisible();
+  await expect(page.getByRole("option", { name: "Main", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("option", { name: "Side", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(course).toHaveText("Side");
 });

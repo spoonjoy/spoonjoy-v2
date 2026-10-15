@@ -203,7 +203,9 @@ describe("CheckboxGroup", () => {
       </form>,
     );
     const form = host.querySelector("form")!;
-    expect(root.querySelector("[data-ouro-legend] [data-ouro-required]")).not.toBeNull();
+    const legend = root.querySelector<HTMLElement>("[data-ouro-legend][data-ouro-required]")!;
+    expect(getComputedStyle(legend, "::after").content).toBe('"*" / ""');
+    expect(legend.querySelector("[aria-hidden]")).toBeNull();
     expect(form.checkValidity()).toBe(false);
     const first = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
     expect(first.validationMessage).toBe("Choose at least one.");

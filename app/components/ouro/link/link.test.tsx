@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { commands, page } from "vitest/browser";
 import { Link } from "~/components/ouro/link/link";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
@@ -148,6 +148,27 @@ describe("Link", () => {
   });
 });
 
+describe("Link with a mouse", () => {
+  it("is as tall as its text with a fine pointer, standing alone or in a sentence", async () => {
+    expect(matchMedia("(pointer: fine)").matches).toBe(true);
+    const { host } = await render(
+      <>
+        <div>
+          <Link href="/forgot">Forgot password?</Link>
+        </div>
+        <p>
+          Read the <Link href="/terms">terms</Link> first.
+        </p>
+      </>,
+    );
+    for (const link of host.querySelectorAll<HTMLElement>('[data-ouro="link"]')) {
+      expect(getComputedStyle(link).display).toBe("inline");
+      expect(link.getBoundingClientRect().height).toBeLessThan(30);
+    }
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 describe("Link development messages", () => {
   it.each([
     ["to", { to: "/recipes" }, "to is not a prop", '<Link href="/recipes">'],
@@ -216,5 +237,30 @@ describe("Link development messages", () => {
     expect(html).toContain("opens in a new tab");
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("Link press feedback", () => {
+  it("dims while the pointer is down, like an Accordion trigger, and never scales", async () => {
+    // Releasing the press clicks the link; keep the test page where it is.
+    const { link } = await render(
+      <Link href="/recipes" onClick={(event) => event.preventDefault()}>
+        Recipes
+      </Link>,
+    );
+    expect(getComputedStyle(link).opacity).toBe("1");
+    await commands.pointerPress({ selector: '[data-ouro="link"]', action: "down" });
+    try {
+      expect(getComputedStyle(link).opacity).toBe("0.7");
+      expect(getComputedStyle(link).scale).toBe("none");
+    } finally {
+      await commands.pointerPress({ action: "up" });
+    }
+  });
+
+  it("eases its underline color with the plain ease curve", async () => {
+    const { link } = await render(<Link href="/recipes">Recipes</Link>);
+    expect(getComputedStyle(link).transitionTimingFunction).toBe("ease");
+    expect(getComputedStyle(link).transitionDuration).toBe("0.15s");
   });
 });

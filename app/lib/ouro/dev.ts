@@ -66,3 +66,37 @@ export function devThrow(component: string, problem: string, fix: string): never
     throw new Error(`[ouro-ui] ${component}: ${problem}`);
   }
 }
+
+/** Marks the page as checked, on `window`, so two copies of this module still check once. */
+const THEME_CHECKED = Symbol.for("ouro-ui.theme-checked");
+
+/**
+ * Checks once per page, in development, that the app's CSS has `ouro-base`, and logs the
+ * command that adds it when it does not. No component installs `ouro-base`, and without it
+ * nothing fails: a sheet has no backdrop, layer or motion and a field no border.
+ * `--ouro-layer` on the document root stands for the whole item, because only `ouro-base`
+ * defines it. A page still loading its stylesheets is checked when it has loaded.
+ *
+ * Internal: `useDevWarnings` calls it when the first Ouro UI component mounts.
+ *
+ * @example
+ * if (process.env.NODE_ENV !== "production") checkTheme();
+ */
+export function checkTheme(): void {
+  /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
+  if (process.env.NODE_ENV !== "production") {
+    const page = window as unknown as Record<symbol, boolean | undefined>;
+    if (page[THEME_CHECKED]) return;
+    page[THEME_CHECKED] = true;
+    const check = () => {
+      if (getComputedStyle(document.documentElement).getPropertyValue("--ouro-layer").trim() !== "") return;
+      devWarn(
+        "theme",
+        "ouro-base is not in this page's CSS (--ouro-layer is unset), so overlays have no backdrop, layer or motion and fields have no border",
+        "npx shadcn@latest add ourostack/ouro-ui/ouro-base#v0.8.0",
+      );
+    };
+    if (document.readyState === "complete") check();
+    else window.addEventListener("load", check, { once: true });
+  }
+}

@@ -3,8 +3,12 @@ import { type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page } from "vitest/browser";
+import { commands, page, server } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
+import { RadioGroup } from "~/components/ouro/radio-group/radio-group";
+import { Select } from "~/components/ouro/select/select";
+import { Form as OuroForm } from "~/components/ouro/form/form";
 import {
   FieldControl,
   FieldDescription,
@@ -127,6 +131,46 @@ describe("Field wiring", () => {
     expect(input.hasAttribute("aria-invalid")).toBe(false);
   });
 
+  it("shows an error that is a React node, such as a message with a link, and describes the control with it", async () => {
+    const { host, input } = await render(
+      <Field
+        label="Recipe link"
+        error={
+          <>
+            You already brought this one in as Soup. <a href="/recipes/soup">Open it</a>
+          </>
+        }
+      >
+        <FieldControl />
+      </Field>,
+    );
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    const error = host.querySelector<HTMLElement>(`#${CSS.escape(describedBy(input)[0]!)}`)!;
+    expect(error.textContent).toBe("You already brought this one in as Soup. Open it");
+    expect(error.querySelector("a")!.getAttribute("href")).toBe("/recipes/soup");
+    await expect.element(page.getByRole("textbox", { name: "Recipe link" })).toHaveAccessibleDescription("You already brought this one in as Soup. Open it");
+    await expect.element(page.getByRole("link", { name: "Open it" })).toBeVisible();
+  });
+
+  it("lists nodes and strings from an error array, and counts null, false and empty text as no error", async () => {
+    const { host, input, rerender } = await render(
+      // The types take text and elements only; untyped code can leave a condition's null or false behind.
+      <Field label="Password" error={["Use 8 or more characters.", <a key="rules" href="/rules">Read the rules</a>, null, false, ""] as string[]}>
+        <FieldControl />
+      </Field>,
+    );
+    expect([...host.querySelectorAll("li")].map((item) => item.textContent)).toEqual(["Use 8 or more characters.", "Read the rules"]);
+    for (const empty of [null, false, "", [], [null, ""]]) {
+      await rerender(
+        <Field label="Password" error={empty as string[]}>
+          <FieldControl />
+        </Field>,
+      );
+      expect(input.hasAttribute("aria-invalid")).toBe(false);
+      expect(describedBy(input)).toEqual([]);
+    }
+  });
+
   it("shows every message of an error array as a list", async () => {
     const { input, host } = await render(
       <Field label="Password" error={["Use 8 or more characters.", "Add a number."]}>
@@ -170,19 +214,86 @@ describe("Field wiring", () => {
     expect(input.hasAttribute("aria-invalid")).toBe(false);
   });
 
-  it("sets required and aria-required, and marks the label without changing its name", async () => {
-    const { input, label } = await render(
+  it("sets required and aria-required, and marks the label without adding to its text or name", async () => {
+    const { input, label, host } = await render(
       <Field label="Email" required>
         <FieldControl />
       </Field>,
     );
     expect(input.required).toBe(true);
     expect(input.getAttribute("aria-required")).toBe("true");
-    const marker = label.querySelector<HTMLElement>("[data-ouro-required]")!;
-    expect(marker.textContent).toBe("*");
-    expect(marker.getAttribute("aria-hidden")).toBe("true");
-    expect(getComputedStyle(marker).display).not.toBe("none");
+    // The marker is CSS on the element around the label: no element and no text of its own.
+    const marked = host.querySelector<HTMLElement>("[data-ouro-required]")!;
+    expect(marked.contains(label)).toBe(true);
+    expect(marked).not.toBe(label);
+    expect(getComputedStyle(marked, "::after").content).toBe('"*" / ""');
+    expect(getComputedStyle(label, "::after").content).toBe("none");
+    expect(label.textContent).toBe("Email");
+    expect(host.textContent).toBe("Email");
     await expect.element(page.getByRole("textbox", { name: "Email", exact: true })).toBeVisible();
+  });
+
+  it("finds a required field by its exact label, as Testing Library and Playwright look it up", async () => {
+    const { input, label } = await render(
+      <Field label="Email" required>
+        <FieldControl />
+      </Field>,
+    );
+    // Testing Library's getByLabelText("Email") compares the whole text of the <label>.
+    expect([...document.querySelectorAll("label")].filter((element) => element.textContent === "Email")).toEqual([label]);
+    // Playwright's getByLabel("Email", { exact: true }), which Vitest's getByLabelText shares.
+    expect(page.getByLabelText("Email", { exact: true }).elements()).toEqual([input]);
+    expect(page.getByLabelText("Email", { exact: false }).elements()).toEqual([input]);
+  });
+
+  it("shows the required marker beside the label, and in forced colors too", async () => {
+    const { host } = await render(
+      <>
+        <Field label="Email" required>
+          <FieldControl />
+        </Field>
+        <Field label="Email">
+          <FieldControl />
+        </Field>
+      </>,
+    );
+    const [required, plain] = [...host.querySelectorAll<HTMLElement>("[data-ouro-label]")];
+    const markerWidth = () => required!.getBoundingClientRect().width - plain!.getBoundingClientRect().width;
+    expect(markerWidth()).toBeGreaterThan(4);
+    // WebKit has no forced-colors mode to check.
+    if (server.browser !== "chromium") return;
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      await expect.poll(() => matchMedia("(forced-colors: active)").matches).toBe(true);
+      // Generated text takes the forced text color, so it shows on any forced background.
+      const probe = document.createElement("span");
+      probe.style.color = "CanvasText";
+      host.append(probe);
+      const after = getComputedStyle(required!, "::after");
+      expect(after.content).toBe('"*" / ""');
+      expect(after.color).toBe(getComputedStyle(probe).color);
+      expect(markerWidth()).toBeGreaterThan(4);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("passes aria-required through, to say a control is required without the browser's blocking check", async () => {
+    const { input, rerender } = await render(
+      <Field label="Quantity">
+        <FieldControl aria-required />
+      </Field>,
+    );
+    expect(input.getAttribute("aria-required")).toBe("true");
+    expect(input.required).toBe(false);
+    // A required field stays required whatever the control is passed.
+    await rerender(
+      <Field label="Quantity" required>
+        <FieldControl aria-required={false} />
+      </Field>,
+    );
+    expect(input.getAttribute("aria-required")).toBe("true");
+    expect(input.required).toBe(true);
   });
 
   it("has no required marker or aria-required by default", async () => {
@@ -193,7 +304,8 @@ describe("Field wiring", () => {
     );
     expect(input.required).toBe(false);
     expect(input.hasAttribute("aria-required")).toBe(false);
-    expect(label.querySelector("[data-ouro-required]")).toBeNull();
+    expect(label.closest("[data-ouro-label]")!.hasAttribute("data-ouro-required")).toBe(false);
+    expect(getComputedStyle(label.closest("[data-ouro-label]")!, "::after").content).toBe("none");
   });
 
   it("disables the control with disabled and fades the label", async () => {
@@ -221,7 +333,8 @@ describe("Field wiring", () => {
         <FieldControl />
       </Field>,
     );
-    const rect = label.getBoundingClientRect();
+    // The element around the label is what hides, so a required marker hides with it.
+    const rect = label.closest("[data-ouro-label]")!.getBoundingClientRect();
     expect(rect.width).toBeLessThanOrEqual(1);
     expect(rect.height).toBeLessThanOrEqual(1);
     await expect.element(page.getByRole("textbox", { name: "Search recipes" })).toBeInTheDocument();
@@ -417,6 +530,62 @@ describe("Field development messages", () => {
   });
 });
 
+describe("Required marker", () => {
+  it("is an asterisk with empty alternative text, so screen readers do not read it", async () => {
+    const { label } = await render(
+      <Field label="Email" required>
+        <FieldControl />
+      </Field>,
+    );
+    const content = getComputedStyle(label.closest("[data-ouro-label]")!, "::after").content;
+    expect(content.replace(/\s+/g, " ")).toBe('"*" / ""');
+  });
+
+  it.each<[string, () => ReactNode, string]>([
+    ["a field with a <label>", () => <Field label="Email" required disabled><FieldControl /></Field>, "[data-ouro-label]"],
+    ["a field whose label is not a <label>", () => <Select label="Course" required disabled options={[{ value: "main", label: "Main" }]} />, "[data-ouro-label]"],
+    ["a group's legend", () => <RadioGroup legend="Size" required disabled options={[{ value: "s", label: "Small" }]} />, "[data-ouro-legend]"],
+  ])("fades with %s when it is disabled", async (_name, node, frame) => {
+    const { host } = await render(node());
+    expect(getComputedStyle(host.querySelector(frame)!, "::after").opacity).toBe("0.5");
+  });
+});
+
+describe("Helper text after the control", () => {
+  it("links a FieldDescription placed after the control in a Field, and keeps the error after it", async () => {
+    const { input, host, field } = await render(
+      <OuroForm errors={{ email: "That email is taken." }}>
+        <Field label="Email" name="email">
+          <FieldControl type="email" />
+          <FieldDescription>We never share it.</FieldDescription>
+        </Field>
+      </OuroForm>,
+    );
+    const order = [...field.children].map((child) => child.textContent);
+    expect(order).toEqual(["Email", "", "We never share it.", "That email is taken."]);
+    await expect.poll(() => describedBy(input).map((id) => host.querySelector(`#${CSS.escape(id)}`)?.textContent)).toEqual(
+      expect.arrayContaining(["We never share it.", "That email is taken."]),
+    );
+    await expect.element(page.getByRole("textbox", { name: "Email", exact: true })).toHaveAccessibleDescription("That email is taken. We never share it.");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("links a FieldDescription placed after the control in a field built from parts", async () => {
+    const { input, field } = await render(
+      <FieldRoot name="email">
+        <FieldLabel>Email</FieldLabel>
+        <FieldControl type="email" />
+        <FieldDescription>We never share it.</FieldDescription>
+        <FieldError />
+      </FieldRoot>,
+    );
+    expect([...field.children].map((child) => child.textContent)).toEqual(["Email", "", "We never share it."]);
+    await expect.element(page.getByRole("textbox", { name: "Email", exact: true })).toHaveAccessibleDescription("We never share it.");
+    expect(input.name).toBe("email");
+  });
+});
+
 describe("Field parts", () => {
   it("compose a field with the same wiring", async () => {
     const { input, label, host } = await render(
@@ -431,7 +600,8 @@ describe("Field parts", () => {
     expect(input.name).toBe("email");
     expect(input.getAttribute("aria-required")).toBe("true");
     expect(input.getAttribute("aria-invalid")).toBe("true");
-    expect(label.querySelector("[data-ouro-required]")).not.toBeNull();
+    expect(label.closest("[data-ouro-required]")).not.toBeNull();
+    expect(label.textContent).toBe("Email");
     const ids = describedBy(input);
     expect(ids).toHaveLength(2);
     for (const id of ids) expect(host.querySelector(`#${CSS.escape(id)}`)).not.toBeNull();
@@ -451,7 +621,7 @@ describe("Field parts", () => {
     error.mockRestore();
   });
 
-  it("warn for appearance classes on parts", async () => {
+  it("warns about appearance classes on parts", async () => {
     await render(
       <FieldRoot className="shadow-lg">
         <FieldLabel className="font-bold">Email</FieldLabel>
@@ -535,5 +705,23 @@ describe("Field server rendering", () => {
     const [email, name] = [...host.querySelectorAll("input")];
     expect(email!.labels![0]!.textContent).toContain("Email");
     expect(name!.labels![0]!.textContent).toBe("Name");
+  });
+});
+
+describe("Field under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts between the Field and the button below it", async () => {
+    // The parent's rule has zero specificity, so a margin class on the root would beat it.
+    const { host } = await render(
+      <div className="space-y-4">
+        <Field label="Email">
+          <FieldControl />
+        </Field>
+        <Button>Save</Button>
+      </div>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="field"]')!;
+    const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+    expect(getComputedStyle(root).marginBottom).toBe("16px");
+    expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });

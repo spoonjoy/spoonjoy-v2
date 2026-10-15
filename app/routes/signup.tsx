@@ -158,7 +158,7 @@ export default function Signup() {
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? undefined;
-  const formErrors = useFormErrors(actionData?.errors);
+  const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
 
   return (
     <AuthLayout

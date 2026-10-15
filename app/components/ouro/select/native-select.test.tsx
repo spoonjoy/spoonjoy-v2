@@ -123,6 +123,12 @@ describe("NativeSelect", () => {
     expect(select.getAttribute("aria-invalid")).toBe("true");
   });
 
+  it("passes aria-required through without making the select natively required", async () => {
+    const { select } = await render(<NativeSelect label="Country" options={countries} aria-required />);
+    expect(select.getAttribute("aria-required")).toBe("true");
+    expect(select.required).toBe(false);
+  });
+
   it("shows an error from the prop or the Form, and drops the Form's once changed", async () => {
     const { select } = await render(
       <Form errors={{ country: "We do not ship there." }}>

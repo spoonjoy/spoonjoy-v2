@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
+import { Button } from "~/components/ouro/button/button";
 import { TextField } from "~/components/ouro/text-field/text-field";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
@@ -102,6 +103,25 @@ export const States: Story = {
         defaultValue="pasta"
       />
       <TextField label="Cookbook" name="cookbook" disabled description="Shared cookbooks can't be renamed." defaultValue="Weeknights" />
+    </Surface>
+  ),
+};
+
+/**
+ * A page's main search: the row draws the two rules, and the field inside it has no frame
+ * (`variant="plain"`) and large text (`size="lg"`). The font family comes from the row.
+ */
+export const HeroSearch: Story = {
+  render: () => (
+    <Surface>
+      <form
+        role="search"
+        style={{ display: "flex", alignItems: "center", gap: 12, borderBlock: "1px solid var(--border)", fontFamily: "Georgia, serif" }}
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <TextField label="Search recipes" hideLabel type="search" name="q" placeholder="tomato, beans, lemon" variant="plain" size="lg" startAdornment={<SearchIcon />} className="flex-1" />
+        <Button type="submit">Search</Button>
+      </form>
     </Surface>
   ),
 };

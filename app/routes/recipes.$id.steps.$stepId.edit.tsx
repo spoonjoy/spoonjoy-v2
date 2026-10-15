@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
-import { Form as RouterForm, redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
+import { redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
@@ -21,6 +21,7 @@ import { Button } from "~/components/ui/button";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
 import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
@@ -602,6 +603,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 export default function EditStep() {
   const { recipe, step, availableSteps } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
+  const [initialActionData] = useState(actionData);
+  const updateFetcher = useFetcher<ActionData>();
+  const updateData = updateFetcher.data ?? initialActionData;
   const [showIngredientForm, setShowIngredientForm] = useState(false);
   const [ingredientToRemove, setIngredientToRemove] = useState<string | null>(null);
   const [ingredientInputMode, setIngredientInputMode] = useState<IngredientInputMode>('ai');
@@ -630,19 +634,18 @@ export default function EditStep() {
   // The update's messages for the step form, by field name. Without the picker (step 1, or no
   // earlier steps) no field shows a usesSteps error, so it joins the message at the top of the
   // form; otherwise Update would fail silently.
-  const errors = actionData?.errors;
+  const errors = updateData?.errors;
   const formErrors = useMemo<FormErrors | undefined>(() => {
-    if (!errors) return undefined;
     const formErrors: FormErrors = {};
-    if (errors.stepTitle) formErrors.stepTitle = errors.stepTitle;
-    if (errors.description) formErrors.description = errors.description;
-    if (errors.usesSteps && showUsesStepsPicker) formErrors.usesSteps = errors.usesSteps;
-    const whole = [errors.general, showUsesStepsPicker ? undefined : errors.usesSteps].filter(
+    if (errors?.stepTitle) formErrors.stepTitle = errors.stepTitle;
+    if (errors?.description) formErrors.description = errors.description;
+    if (errors?.usesSteps && showUsesStepsPicker) formErrors.usesSteps = errors.usesSteps;
+    const whole = [errors?.general, showUsesStepsPicker ? undefined : errors?.usesSteps].filter(
       (message): message is string => Boolean(message),
     );
     if (whole.length > 0) formErrors.form = whole;
-    return formErrors;
-  }, [errors, showUsesStepsPicker]);
+    return bindFormErrors(updateFetcher.data, formErrors);
+  }, [errors, showUsesStepsPicker, updateFetcher.data]);
 
   useEffect(() => {
     if (searchParams.get("created") === "1") {
@@ -714,7 +717,7 @@ export default function EditStep() {
       </CookbookHeader>
 
       <div className="mt-8 max-w-4xl">
-        <Form method="post" errors={formErrors} render={<RouterForm />} className="sj-form-section gap-6">
+        <Form method="post" errors={formErrors} render={<updateFetcher.Form />} className="sj-form-section gap-6">
           <TextField
             label="Step Title (optional)"
             name="stepTitle"

@@ -34,6 +34,17 @@ expectTypeOf<{ label: "Passwort"; showPasswordLabel: 1 }>().not.toExtend<TextFie
 // @ts-expect-error hidePasswordLabel is not a prop.
 createElement(TextField, { label: "Passwort", type: "password", hidePasswordLabel: "Passwort verbergen" });
 
+// The frame and the size are named values; the input's numeric `size` attribute is not one.
+for (const variant of ["outline", "plain"] as const) createElement(TextField, { label: "Search", variant });
+for (const size of ["md", "lg"] as const) createElement(TextField, { label: "Search", size });
+expectTypeOf<{ label: "Search"; variant: "ghost" }>().not.toExtend<TextFieldProps>();
+expectTypeOf<{ label: "Search"; variant: string }>().not.toExtend<TextFieldProps>();
+expectTypeOf<{ label: "Search"; size: "sm" }>().not.toExtend<TextFieldProps>();
+expectTypeOf<{ label: "Search"; size: 20 }>().not.toExtend<TextFieldProps>();
+// The other field components' types are not TextField types.
+expectTypeOf<{ label: "When"; type: "datetime-local" }>().not.toExtend<TextFieldProps>();
+expectTypeOf<{ label: "Photo"; type: "file" }>().not.toExtend<TextFieldProps>();
+
 // The label is required, and is a string.
 expectTypeOf<{ type: "email" }>().not.toExtend<TextFieldProps>();
 expectTypeOf<{ label: 1 }>().not.toExtend<TextFieldProps>();

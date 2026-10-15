@@ -5,6 +5,7 @@ import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ui/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -105,16 +106,17 @@ export default function RecipesIndex() {
 
             <div className="border-t border-[var(--sj-border)] pt-4 sm:pt-5 lg:border-t-0">
               <Form method="get" role="search" className="grid gap-3">
-                <label htmlFor="public-recipe-search" className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
+                <span className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
                   Search recipes
-                </label>
-                <div className="flex min-h-14 items-center border-y border-[var(--sj-border-strong)] bg-transparent">
+                </span>
+                <div className="font-sj-display flex min-h-14 items-center border-y border-[var(--sj-border-strong)] bg-transparent">
                   <SearchIcon className="ml-1 mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-                  {/* A plain input, not Ouro UI's TextField. Stopgap for an Ouro UI gap: TextField
-                      cannot render a frameless, display-size input inside the app's own frame (its
-                      className is layout only and it has no size or variant). */}
-                  <input
+                  <TextField
                     ref={searchInputRef}
+                    label="Search recipes"
+                    hideLabel
+                    variant="plain"
+                    size="lg"
                     id="public-recipe-search"
                     name="q"
                     type="search"
@@ -123,7 +125,7 @@ export default function RecipesIndex() {
                     // server-rendered query (the browser skips form restoration for these fields).
                     autoComplete="off"
                     placeholder="tomato, beans, lemon"
-                    className="block h-14 min-h-11 w-full min-w-0 flex-1 appearance-none rounded-[var(--sj-radius-small)] border-0 bg-transparent p-0 font-sj-display text-xl/7 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)] sm:text-2xl/8 dark:scheme-dark"
+                    className="min-w-0 flex-1"
                   />
                 </div>
                 <div className="flex flex-wrap gap-3">

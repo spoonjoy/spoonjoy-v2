@@ -4,10 +4,19 @@ import { Field as BaseField } from "@base-ui/react/field";
 import { useCallback, useEffect, useId, useMemo, useRef, type FormEvent, type JSX, type ReactElement, type ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { FieldContext, FieldOwnerContext, useField, useFieldOwner, useFormErrors } from "~/lib/ouro/use-field";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import {
+  errorMessageKey,
+  errorMessages,
+  FieldContext,
+  FieldOwnerContext,
+  useField,
+  useFieldOwner,
+  useFormErrors,
+  type ErrorMessages,
+} from "~/lib/ouro/use-field";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { FieldDescription, FieldError, FieldLabel } from "~/components/ouro/field/field-parts";
-import { fieldHint, inlineRootClass, labelClass, rootClass } from "~/components/ouro/field/field-styles";
+import { fieldHint, inlineRootClass, labelFrameClass, requiredMarkClass, rootClass } from "~/components/ouro/field/field-styles";
 
 /**
  * The props every Ouro form control takes, with these exact names: a required `label`,
@@ -24,12 +33,14 @@ export interface FieldProps {
   /** Supporting text under the label, read after the label through `aria-describedby`. */
   description?: ReactNode | undefined;
   /**
-   * What is wrong, from your server action or client check. A message (or several, as a
-   * list, each shown once) shows under the control, which gets `aria-invalid` and points at the message
-   * with `aria-describedby`. An empty string or array means valid. It only shows: it never
-   * blocks the next submit of the form around it.
+   * What is wrong, from your server action or client check. A message (or several, as an
+   * array, each shown once as a list item) shows under the control, which gets `aria-invalid`
+   * and points at the message with `aria-describedby`. A message is text or a React node, so
+   * it can carry a link: `error={<>Already imported. <Link href="/recipes/soup">Open it</Link></>}`.
+   * An empty string or array means valid. It only
+   * shows: it never blocks the next submit of the form around it.
    */
-  error?: string | string[] | undefined;
+  error?: ErrorMessages | undefined;
   /** The control must be filled: it gets `required` and `aria-required`, and the label a marker. */
   required?: boolean | undefined;
   /** Disables the control and fades the field. */
@@ -76,12 +87,6 @@ const defaultFrame = (label: ReactElement, rest: ReactNode): ReactNode => (
 /** The owner a plain Field has, restored for the Field's own children. */
 const fieldOwner = { name: "Field", data: "field" };
 
-/** The messages in an `error` prop, without empty ones or repeats (merged validators can repeat one). */
-function messagesOf(error: string | string[] | undefined): string[] {
-  if (error === undefined) return [];
-  return [...new Set(Array.isArray(error) ? error : [error])].filter((message) => message !== "");
-}
-
 /**
  * The label is connected when its `for` names an element inside the field, or when an element
  * inside the field names it in `aria-labelledby`: a range Slider's group names the label
@@ -109,12 +114,34 @@ function labelConnected(root: HTMLElement, data: string, labelId: string, native
  * it has no `error` of its own. The control is `FieldControl`, from `field-parts`. Use `Fieldset` instead to group several controls under one legend,
  * and the `FieldRoot` parts when the label, control and error need another layout.
  *
+ * The order is fixed: label, `description`, control, error. To put helper text after the
+ * control, leave `description` out and render a `FieldDescription` after the `FieldControl`.
+ * It is linked to the control (`aria-describedby`) wherever it sits, and the error still
+ * comes last. `TextField` and the other one-tag controls take no children, so build that
+ * field from `Field` and `FieldControl`.
+ *
+ * The required marker is drawn with CSS beside the label and is not part of its text, so a
+ * test finds the field by the label alone: `getByLabelText("Email")`, or Playwright's
+ * `getByLabel("Email", { exact: true })`. The marker stays visible in forced colors.
+ *
+ * A field's error is the control's description, not an alert, so screen readers read it
+ * when focus reaches the field (a `Form` moves focus to the first invalid one). In a test,
+ * assert it with `toHaveAccessibleDescription("Enter an email address.")` or `getByText`;
+ * `getByRole("alert")` finds only a Form's message about the whole form.
+ *
  * @group Forms
  * @see https://ourostack.github.io/ouro-ui/docs/field
  *
  * @example
  * <Field label="Email" name="email" required description="We never share it." error={errors?.email}>
  *   <FieldControl type="email" autoComplete="email" />
+ * </Field>
+ *
+ * @example
+ * // Helper text after the control: a FieldDescription placed where it shows.
+ * <Field label="Password" name="password" required error={errors?.password}>
+ *   <FieldControl type="password" autoComplete="new-password" />
+ *   <FieldDescription>Use 8 or more characters.</FieldDescription>
  * </Field>
  */
 export function Field(props: FieldProps): JSX.Element {
@@ -152,7 +179,7 @@ export function Field(props: FieldProps): JSX.Element {
   // here, while rendering, puts the message id in the server HTML's aria-describedby.
   const form = useFormErrors();
   const formError = error === undefined && name !== undefined ? form?.errors[name] : undefined;
-  const messages = item ? [] : messagesOf(error ?? formError);
+  const messages = item ? [] : errorMessages(error ?? formError);
   const invalid = messages.length > 0;
   const hasDescription = description !== undefined && description !== null && description !== false && description !== "";
   const labelId = `${id}-label`;
@@ -225,15 +252,17 @@ export function Field(props: FieldProps): JSX.Element {
     layout === "group" ? (
       // A group's name: not a <label>, because a group has no one element to focus. It names a
       // section rather than a control, so it keeps full contrast when the group is disabled.
-      <div id={labelId} data-ouro-legend="" className={cn(labelClass, hideLabel && "sr-only")}>
-        {label}
-        {required && (
-          <span aria-hidden="true" data-ouro-required="" className="ms-0.5 text-destructive">
-            *
-          </span>
-        )}
-        {/* The asterisk is hidden; a group with no aria-required says "required" in words. */}
-        {required && owner.requiredLabel && <span className="sr-only"> {owner.requiredLabel}</span>}
+      // The required marker is CSS on the legend, outside the element that names the group.
+      <div
+        data-ouro-legend=""
+        {...(required ? { "data-ouro-required": "" } : {})}
+        className={cn(labelFrameClass, required && requiredMarkClass, hideLabel && "sr-only")}
+      >
+        <span id={labelId} className="font-medium text-foreground">
+          {label}
+          {/* The asterisk is not text; a group with no aria-required says "required" in words. */}
+          {required && owner.requiredLabel && <span className="sr-only"> {owner.requiredLabel}</span>}
+        </span>
       </div>
     ) : (
       <FieldLabel
@@ -255,8 +284,8 @@ export function Field(props: FieldProps): JSX.Element {
     <FieldError id={errorId} match className={layout === "inline" ? "col-start-2" : undefined}>
       {messages.length > 1 ? (
         <ul>
-          {messages.map((message) => (
-            <li key={message}>{message}</li>
+          {messages.map((message, index) => (
+            <li key={errorMessageKey(message, index)}>{message}</li>
           ))}
         </ul>
       ) : (

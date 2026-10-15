@@ -3,6 +3,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { Checkbox, type CheckboxProps } from "~/components/ouro/checkbox/checkbox";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
@@ -222,7 +223,9 @@ describe("Checkbox", () => {
     );
     expect(box.getAttribute("aria-required")).toBe("true");
     expect(input.required).toBe(true);
-    expect(label.querySelector("[data-ouro-required]")).not.toBeNull();
+    expect(label.closest("[data-ouro-required]")).not.toBeNull();
+    expect(label.textContent).toBe("I accept the terms");
+    expect(page.getByLabelText("I accept the terms", { exact: true }).elements()).toContain(box);
     expect(host.querySelector("form")!.checkValidity()).toBe(false);
     await userEvent.click(box);
     expect(host.querySelector("form")!.checkValidity()).toBe(true);
@@ -275,7 +278,7 @@ describe("Checkbox", () => {
 
   it("hides the label visually with hideLabel and keeps the name", async () => {
     const { label } = await render(<Checkbox label="Select row" hideLabel />);
-    expect(label.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    expect(label.closest("[data-ouro-label]")!.getBoundingClientRect().width).toBeLessThanOrEqual(1);
     await expect.element(page.getByRole("checkbox", { name: "Select row" })).toBeInTheDocument();
   });
 
@@ -313,23 +316,26 @@ describe("Checkbox look", () => {
     expect(box.getBoundingClientRect().height).toBe(16);
     expect(getComputedStyle(label).fontSize).toBe("14px");
     const labelLine = parseFloat(getComputedStyle(label).lineHeight);
-    const boxCenter = box.getBoundingClientRect().top + 8 - label.getBoundingClientRect().top;
+    const boxCenter = box.getBoundingClientRect().top + 8 - label.closest("[data-ouro-label]")!.getBoundingClientRect().top;
     expect(boxCenter).toBeCloseTo(labelLine / 2, 0);
   });
 
-  it("draws the tick along its path when checked, and only fades it with reduced motion", async () => {
+  it("grows the tick in from 95% as it fades in when checked, and only fades it with reduced motion", async () => {
     const { box, host } = await render(<Checkbox label="Basil" />);
     const tick = host.querySelector("path")!;
-    expect(getComputedStyle(tick).strokeDashoffset).toBe("1px");
-    expect(getComputedStyle(tick).transitionProperty).toContain("stroke-dashoffset");
+    expect(getComputedStyle(tick).opacity).toBe("0");
+    expect(Number.parseFloat(getComputedStyle(tick).scale)).toBeCloseTo(0.95, 2);
+    expect(getComputedStyle(tick).transitionProperty).toBe("opacity, scale");
+    expect(getComputedStyle(tick).transitionTimingFunction).toBe("cubic-bezier(0.23, 1, 0.32, 1), cubic-bezier(0.23, 1, 0.32, 1)");
     await userEvent.click(box);
-    await expect.poll(() => getComputedStyle(tick).strokeDashoffset).toBe("0px");
+    await expect.poll(() => getComputedStyle(tick).opacity).toBe("1");
+    await expect.poll(() => Number.parseFloat(getComputedStyle(tick).scale) || 1).toBeCloseTo(1, 3);
     await commands.emulateMedia({ reducedMotion: "reduce" });
     expect(getComputedStyle(tick).transitionProperty).toBe("opacity");
     expect(getComputedStyle(tick).opacity).toBe("1");
     await userEvent.click(box);
     await expect.poll(() => getComputedStyle(tick).opacity).toBe("0");
-    expect(getComputedStyle(tick).strokeDashoffset).toBe("0px");
+    expect(Number.parseFloat(getComputedStyle(tick).scale) || 1).toBeCloseTo(1, 3);
   });
 
   it("presses in while the pointer is down, but not with reduced motion", async () => {
@@ -465,5 +471,21 @@ describe("Checkbox on the server", () => {
     const box = host.querySelector<HTMLElement>('[role="checkbox"]')!;
     await userEvent.click(box);
     expect(box.getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("Checkbox under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts between the Checkbox and the button below it", async () => {
+    // The parent's rule has zero specificity, so a margin class on the root would beat it.
+    const { host } = await render(
+      <div className="space-y-4">
+        <Checkbox label="Basil" />
+        <Button>Save</Button>
+      </div>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="checkbox"]')!;
+    const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+    expect(getComputedStyle(root).marginBottom).toBe("16px");
+    expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });

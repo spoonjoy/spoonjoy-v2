@@ -37,7 +37,7 @@ export interface SpoonDialogProps {
   actionUrl: string;
   isOriginCookCandidate: boolean;
   coverPromptMode?: "none" | "first-photo" | "optional-update";
-  /** What the server refused, for the form: a new object for each refusal. */
+  /** Messages bound to this dialog's actual accepted response with formErrors. */
   errors?: FormErrors;
 }
 

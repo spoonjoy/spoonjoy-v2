@@ -216,6 +216,7 @@ describe("RecipeImportPanel", () => {
     expect(await screen.findByText("You already brought this one in as “Soup”.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open it" })).toHaveAttribute("href", "/recipes/r-soup");
     expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAccessibleDescription("Any recipe page, or a YouTube or TikTok video with the recipe in its description. You already brought this one in as “Soup”. Open it");
 
     await user.click(screen.getByRole("button", { name: "Paste text" }));
     expect(screen.queryByText("You already brought this one in as “Soup”.")).not.toBeInTheDocument();

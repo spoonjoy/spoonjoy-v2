@@ -24,6 +24,12 @@ expectTypeOf<{
 }>().toExtend<TextAreaProps>();
 expectTypeOf<{ label: "Notes"; value: "Salt"; onValueChange: (value: string) => void }>().toExtend<TextAreaProps>();
 
+// The frame and the size are named values.
+for (const variant of ["outline", "plain"] as const) createElement(TextArea, { label: "Message", variant });
+for (const size of ["md", "lg"] as const) createElement(TextArea, { label: "Message", size });
+expectTypeOf<{ label: "Message"; variant: "ghost" }>().not.toExtend<TextAreaProps>();
+expectTypeOf<{ label: "Message"; size: "sm" }>().not.toExtend<TextAreaProps>();
+
 // The label is required, and is a string.
 expectTypeOf<{ rows: 3 }>().not.toExtend<TextAreaProps>();
 expectTypeOf<{ label: 1 }>().not.toExtend<TextAreaProps>();

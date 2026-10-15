@@ -14,8 +14,9 @@ import {
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { checkOpenMode } from "~/lib/ouro/open-mode";
 import { useMergedRef } from "~/lib/ouro/refs";
+import { serverElement } from "~/lib/ouro/server-element";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { lastInput } from "~/lib/ouro/last-input";
 import { useSheetPresentation } from "~/lib/ouro/use-sheet-presentation";
 import { sheetHint } from "~/components/ouro/sheet/sheet-styles";
@@ -136,9 +137,10 @@ type TriggerProps = {
  */
 const closeClass =
   "absolute top-3 end-3 box-border inline-flex size-8 items-center justify-center m-0 p-0 border-0 rounded-lg " +
-  "bg-transparent text-muted-foreground cursor-pointer [-webkit-tap-highlight-color:transparent] " +
-  "[transition:background-color_var(--ouro-duration-fast)_ease-out,color_var(--ouro-duration-fast)_ease-out] " +
-  "not-disabled:hover:bg-accent not-disabled:hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50 " +
+  "press bg-transparent text-muted-foreground cursor-pointer [-webkit-tap-highlight-color:transparent] " +
+  "not-disabled:pointer-fine:hover:bg-accent not-disabled:pointer-fine:hover:text-accent-foreground " +
+  "not-disabled:active:bg-accent not-disabled:active:text-accent-foreground motion-safe:not-disabled:active:scale-(--ouro-press-scale) " +
+  "disabled:cursor-not-allowed disabled:opacity-50 " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid [&>svg]:size-4";
 
 /** The close button's icon: a 16px cross in the text color. */
@@ -328,11 +330,13 @@ export function DialogFrame({
   // software keyboard); the cloned trigger records it here instead.
   const [lastPointer, setLastPointer] = useState<string>();
   const [tapOpened, setTapOpened] = useState(false);
-  const triggerProps = (trigger?.props ?? {}) as TriggerProps;
+  // A Server Component's trigger can arrive as a lazy wrapper; resolve it before cloning.
+  const triggerElement = serverElement(trigger);
+  const triggerProps = (triggerElement?.props ?? {}) as TriggerProps;
   const mergedTriggerRef = useMergedRef(triggerProps.ref, triggerRef);
   const triggerNode =
     trigger !== undefined &&
-    cloneElement(trigger as ReactElement<TriggerProps>, {
+    cloneElement(triggerElement as ReactElement<TriggerProps>, {
       ref: mergedTriggerRef,
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         triggerProps.onPointerDown?.(event);

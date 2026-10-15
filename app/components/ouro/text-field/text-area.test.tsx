@@ -3,6 +3,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { TextArea, type TextAreaProps } from "~/components/ouro/text-field/text-area";
 import { act } from "~/lib/ouro/testing/act";
 
@@ -113,6 +114,12 @@ describe("TextArea", () => {
     expect(onValueChange).toHaveBeenLastCalledWith("Salt!", expect.anything());
   });
 
+  it("passes aria-required through without making the textarea natively required", async () => {
+    const { textarea } = await render(<TextArea label="Method" aria-required />);
+    expect(textarea.getAttribute("aria-required")).toBe("true");
+    expect(textarea.required).toBe(false);
+  });
+
   it("keeps the size the user dragged it to while they type", async () => {
     const { textarea } = await render(<TextArea label="Notes" defaultValue="Salt" />);
     // The resize handle writes the dragged size into the inline style.
@@ -200,6 +207,33 @@ describe("TextArea autoGrow", () => {
     await expect.poll(() => height(textarea)).toBeGreaterThan(wide);
   });
 
+  it("refits after a width change without a ResizeObserver loop error reaching the window", async () => {
+    // A resize done inside the observer's own callback leaves an observation the browser cannot
+    // deliver in that frame, which it reports as an error event on the window: error trackers
+    // record it, and a test run that allows no console output fails on it.
+    const loops: string[] = [];
+    const onError = (event: ErrorEvent) => {
+      if (/ResizeObserver loop/.test(event.message)) loops.push(event.message);
+    };
+    window.addEventListener("error", onError);
+    const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      const { host, textarea } = await render(<TextArea label="Notes" autoGrow rows={1} defaultValue={"word ".repeat(30).trim()} />);
+      const wide = height(textarea);
+      host.style.width = "200px";
+      await expect.poll(() => height(textarea)).toBeGreaterThan(wide);
+      const narrow = height(textarea);
+      host.style.width = "360px";
+      await expect.poll(() => height(textarea)).toBeLessThan(narrow);
+      // The browser reports a loop as it finishes the frame that had one.
+      await frame();
+      await frame();
+      expect(loops).toEqual([]);
+    } finally {
+      window.removeEventListener("error", onError);
+    }
+  });
+
   it("never caps below rows", async () => {
     const { textarea } = await render(<TextArea label="Notes" autoGrow rows={3} maxRows={2} defaultValue={"1\n2\n3\n4\n5"} />);
     expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
@@ -213,6 +247,50 @@ describe("TextArea autoGrow", () => {
     expect(textarea.style.height).toBe("");
     expect(height(textarea)).toBeCloseTo(linesHeight(textarea, 3), 0);
     expect(getComputedStyle(textarea).resize).toBe("vertical");
+  });
+});
+
+describe("TextArea variant and size", () => {
+  it("draws no frame of its own with variant plain, and still outlines on keyboard focus", async () => {
+    const { textarea } = await render(<TextArea label="Message" hideLabel variant="plain" autoGrow rows={1} />);
+    const box = getComputedStyle(textarea);
+    expect(textarea.dataset.variant).toBe("plain");
+    expect(box.borderTopWidth).toBe("0px");
+    expect(box.paddingLeft).toBe("0px");
+    expect(box.paddingTop).toBe("0px");
+    expect(box.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(textarea.getBoundingClientRect().height).toBe(parseFloat(box.lineHeight));
+    textarea.focus();
+    await expect.poll(() => getComputedStyle(textarea).outlineStyle).toBe("solid");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("sets 20px text on 28px lines with size lg, at phone and desktop widths", async () => {
+    await page.viewport(390, 844);
+    const { textarea } = await render(<TextArea label="Message" size="lg" />);
+    expect(textarea.dataset.size).toBe("lg");
+    expect(getComputedStyle(textarea).fontSize).toBe("20px");
+    expect(getComputedStyle(textarea).lineHeight).toBe("28px");
+    await page.viewport(1280, 800);
+    await expect.poll(() => getComputedStyle(textarea).fontSize).toBe("20px");
+  });
+
+  it("is outlined at the medium size by default", async () => {
+    const { textarea } = await render(<TextArea label="Notes" />);
+    expect(textarea.dataset.variant).toBe("outline");
+    expect(textarea.dataset.size).toBe("md");
+  });
+
+  it.each([
+    ["a filled variant", { variant: "filled" }, 'variant="filled" is not a variant; use "outline" or "plain"', '<TextArea variant="outline">'],
+    ["a borderless variant", { variant: "borderless" }, 'variant="borderless" is not a variant; use "outline" or "plain"', '<TextArea variant="plain">'],
+    ["an unknown size", { size: "sm" }, 'size="sm" is not a size; use "md" or "lg"', '<TextArea size="md">'],
+  ] as const)("renders the default and names the fix for %s", async (_name, wrong, problem, fix) => {
+    const props = { label: "Notes", ...wrong } as unknown as TextAreaProps;
+    const { textarea } = await render(<TextArea {...props} />);
+    expect(textarea.dataset.variant).toBe("outline");
+    expect(textarea.dataset.size).toBe("md");
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] TextArea: ${problem}. Fix: ${fix}.`);
   });
 });
 
@@ -288,5 +366,21 @@ describe("TextArea server rendering", () => {
     expect(snapshot()).toEqual(before);
     expect(recoverable).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("TextArea under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts between the TextArea and the button below it", async () => {
+    // The parent's rule has zero specificity, so a margin class on the root would beat it.
+    const { host } = await render(
+      <div className="space-y-4">
+        <TextArea label="Notes" />
+        <Button>Save</Button>
+      </div>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="text-area"]')!;
+    const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+    expect(getComputedStyle(root).marginBottom).toBe("16px");
+    expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });

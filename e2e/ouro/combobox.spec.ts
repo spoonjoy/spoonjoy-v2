@@ -1,6 +1,5 @@
-// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
-import { expect, test } from "../fixtures";
-import { openStory } from "./story";
+import { expect, test } from "../ouro-fixtures";
+import { openStory, pressTab } from "./story";
 
 test("typing filters the list, and Enter picks the highlighted item", async ({ page }) => {
   await openStory(page, "forms-combobox--modes");
@@ -26,6 +25,6 @@ test("allowCustomValue keeps free text", async ({ page }) => {
   await openStory(page, "forms-combobox--modes");
   const cuisine = page.getByRole("combobox", { name: "Cuisine" });
   await cuisine.pressSequentially("Georgian");
-  await cuisine.press("Tab");
+  await pressTab(page);
   await expect(cuisine).toHaveValue("Georgian");
 });

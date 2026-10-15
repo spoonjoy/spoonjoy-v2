@@ -3,6 +3,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { Switch, type SwitchProps } from "~/components/ouro/switch/switch";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
@@ -287,6 +288,66 @@ describe("Switch look and motion", () => {
     await commands.pointerPress({ selector: '[role="switch"]', action: "up" });
   });
 
+  it("stretches by scaling and slides on translate, never by animating its width, with one timing for both", async () => {
+    const { thumb } = await render(<Switch label="Wi-Fi" />);
+    const style = getComputedStyle(thumb);
+    expect(style.transitionProperty).toBe("translate, scale");
+    expect(style.transitionDuration).toBe("0.16s, 0.16s");
+    expect(style.transitionTimingFunction).toBe("cubic-bezier(0.23, 1, 0.32, 1), cubic-bezier(0.23, 1, 0.32, 1)");
+    const width = style.width;
+    await commands.pointerPress({ selector: '[role="switch"]', action: "down" });
+    try {
+      await expect.poll(() => Number.parseFloat(getComputedStyle(thumb).scale)).toBeCloseTo(1.2, 2);
+      expect(getComputedStyle(thumb).width).toBe(width);
+    } finally {
+      await commands.pointerPress({ selector: '[role="switch"]', action: "up" });
+    }
+  });
+
+  it.each([
+    ["on", false],
+    ["off", true],
+  ] as const)("moves the thumb only toward where it is going, and stays inside the track, when a pointer turns the switch %s", async (_name, startChecked) => {
+    const { track, thumb } = await render(<Switch label="Wi-Fi" defaultChecked={startChecked} />);
+    await settled(thumb);
+    const inner = () => {
+      const box = track.getBoundingClientRect();
+      const border = Number.parseFloat(getComputedStyle(track).borderLeftWidth);
+      return { left: box.left + border, right: box.right - border };
+    };
+    const edges = () => {
+      const box = thumb.getBoundingClientRect();
+      return { left: box.left, right: box.right };
+    };
+    const direction = startChecked ? -1 : 1;
+    const samples: { left: number; right: number }[] = [];
+    await commands.pointerPress({ selector: '[role="switch"]', action: "down" });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const pressed = edges();
+    let sampling = true;
+    const sample = () => {
+      samples.push(edges());
+      if (sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    await commands.pointerPress({ selector: '[role="switch"]', action: "up" });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    sampling = false;
+    await settled(thumb);
+    const frames = [pressed, ...samples, edges()];
+    const bounds = inner();
+    for (const frame of frames) {
+      expect(frame.left).toBeGreaterThanOrEqual(bounds.left - 0.5);
+      expect(frame.right).toBeLessThanOrEqual(bounds.right + 0.5);
+    }
+    // Neither edge ever moves against the direction of travel by more than a pixel.
+    for (let index = 1; index < frames.length; index++) {
+      expect((frames[index]!.left - frames[index - 1]!.left) * direction).toBeGreaterThanOrEqual(-1);
+      expect((frames[index]!.right - frames[index - 1]!.right) * direction).toBeGreaterThanOrEqual(-1);
+    }
+    expect(track.getAttribute("aria-checked")).toBe(String(!startChecked));
+  });
+
   it("does not stretch or slide with reduced motion", async () => {
     await commands.emulateMedia({ reducedMotion: "reduce" });
     const { thumb } = await render(<Switch label="Wi-Fi" />);
@@ -311,7 +372,7 @@ describe("Switch look and motion", () => {
     const { track, label } = await render(<Switch label="Wi-Fi" />);
     expect(track.getBoundingClientRect().height).toBe(20);
     expect(getComputedStyle(label).fontSize).toBe("14px");
-    const center = track.getBoundingClientRect().top + 10 - label.getBoundingClientRect().top;
+    const center = track.getBoundingClientRect().top + 10 - label.closest("[data-ouro-label]")!.getBoundingClientRect().top;
     expect(center).toBeCloseTo(parseFloat(getComputedStyle(label).lineHeight) / 2, 0);
   });
 });
@@ -397,5 +458,21 @@ describe("Switch on the server", () => {
     const track = host.querySelector<HTMLElement>('[role="switch"]')!;
     await userEvent.click(track);
     expect(track.getAttribute("aria-checked")).toBe("false");
+  });
+});
+
+describe("Switch under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts between the Switch and the button below it", async () => {
+    // The parent's rule has zero specificity, so a margin class on the root would beat it.
+    const { host } = await render(
+      <div className="space-y-4">
+        <Switch label="Wi-Fi" />
+        <Button>Save</Button>
+      </div>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="switch"]')!;
+    const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+    expect(getComputedStyle(root).marginBottom).toBe("16px");
+    expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });

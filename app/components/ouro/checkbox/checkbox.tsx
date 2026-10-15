@@ -6,8 +6,8 @@ import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { FieldOwnerContext, useField } from "~/lib/ouro/use-field";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { FieldOwnerContext, useField, type ErrorMessages } from "~/lib/ouro/use-field";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { boxClass, dashClass, indicatorClass, tickClass } from "~/components/ouro/checkbox/checkbox-styles";
 
 /** Props for {@link Checkbox}. */
@@ -23,10 +23,10 @@ export interface CheckboxProps {
   description?: ReactNode | undefined;
   /**
    * What is wrong, from your server action or client check, shown under the label; the box
-   * gets `aria-invalid`. An empty string or array means valid. In a `CheckboxGroup`, pass it
+   * gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid. In a `CheckboxGroup`, pass it
    * to the group.
    */
-  error?: string | string[] | undefined;
+  error?: ErrorMessages | undefined;
   /**
    * The box must be checked to submit the form (accepting terms): it gets `required` and
    * `aria-required`, and the label a marker. In a `CheckboxGroup`, pass it to the group.
@@ -127,7 +127,7 @@ function CheckboxBox(props: {
 /**
  * A labeled checkbox on the Field contract, with the label to its right: pass `label`, and
  * `checked` with `onCheckedChange` (or `defaultChecked`). Clicking the label toggles it,
- * Space toggles it from the keyboard, the tick draws itself, and `indeterminate` shows a
+ * Space toggles it from the keyboard, the tick fades in, and `indeterminate` shows a
  * dash announced as "mixed". With `name`, a checked box submits `name=value` with its form.
  *
  * Use `CheckboxGroup` instead for several choices under one legend that submit together,

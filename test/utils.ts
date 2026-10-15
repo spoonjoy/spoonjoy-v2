@@ -121,18 +121,15 @@ export async function getOrCreateIngredientRef(db: any, name: string) {
 }
 
 /**
- * The label text of a required field. Ouro UI marks a required field's label with an asterisk,
- * which screen readers skip but which is part of the label's text, so `getByLabelText("Email")`
- * no longer finds a required Email field: `getByLabelText(requiredLabel("Email"))` does.
+ * Required markers are CSS decoration in Ouro v0.8, not part of the label text.
  */
 export function requiredLabel(label: string) {
-  return `${label}*`;
+  return label;
 }
 
 /**
- * The alerts that say something. Ouro UI's Form keeps a `role="alert"` region at its top for its
- * own messages, empty until there is one, so `getByRole("alert")` on a page with a Form finds
- * that region as well as the alert a test means.
+ * The alerts that say something. An accepted form refusal and standalone alerts can
+ * coexist; callers can scope this to the form or dialog they are checking.
  */
 export function shownAlerts(container: HTMLElement = document.body): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>('[role="alert"]')).filter(

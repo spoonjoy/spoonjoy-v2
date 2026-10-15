@@ -17,6 +17,7 @@ import {
   SheetTrigger,
   SheetViewport,
 } from "~/components/ouro/sheet/sheet-parts";
+import { registerSheetProperties } from "~/components/ouro/sheet/sheet-styles";
 import { Sheet, type SheetProps } from "~/components/ouro/sheet/sheet";
 import { act } from "~/lib/ouro/testing/act";
 import { pageCss } from "~/lib/ouro/testing/page-css";
@@ -149,8 +150,8 @@ async function springBack(sheet: HTMLElement, gesture: () => Promise<void>): Pro
   return Math.max(0, ...durations);
 }
 
-/** The theme's spring duration, the longest a release may take (--drawer-swipe-strength is at most 1). */
-const springDuration = () => ms(getComputedStyle(document.documentElement).getPropertyValue("--ouro-spring-duration"));
+/** The theme's sheet duration, the longest a release may take (--drawer-swipe-strength is at most 1). */
+const springDuration = () => ms(getComputedStyle(document.documentElement).getPropertyValue("--ouro-duration-sheet"));
 
 /** Drags the sheet by its handle area (outside Drawer.Content, so a mouse drag swipes). */
 async function dragSheet(dy: number, { durationMs = 600, steps = 12, hold = false } = {}) {
@@ -190,12 +191,10 @@ describe("opening and closing", () => {
     expect(getComputedStyle(sheet).maxHeight).toBe(`${innerHeight - 32}px`);
   });
 
-  // Spoonjoy's test for its stopgap in sheet-parts.tsx (the Ouro HX defect "the sheet viewport is a
-  // scroll container"), reapplied after the v0.7.0 upgrade overwrote it.
   it("stays on the bottom edge after something scrolls a control into view while the sheet is off it", async () => {
-    // Scrolling a control into view while the sheet sits lower than its resting place (as it does
-    // while it enters) used to scroll the full-screen viewport, which kept that offset once the sheet
-    // came to rest, so the sheet floated mid-screen with blank space below it.
+    // Scrolling a control into view while the sheet sits lower than its resting place (as it
+    // does while it enters) must not scroll the full-screen viewport: the offset would stay
+    // once the sheet came to rest, and the sheet would float mid-screen above a blank strip.
     const sheet = await openUncontrolled();
     sheet.style.translate = "0 400px";
     page.getByRole("textbox", { name: "Note" }).element().scrollIntoView({ block: "center" });
@@ -383,16 +382,52 @@ describe("feel", () => {
     expect(Number(getComputedStyle(layer).opacity)).toBeCloseTo(0.2, 2);
   });
 
-  it("releases with the theme spring scaled by --drawer-swipe-strength", async () => {
+  it("releases on the drawer curve over the sheet duration, scaled by --drawer-swipe-strength", async () => {
     const sheet = await openUncontrolled();
     const style = getComputedStyle(sheet);
     const index = style.transitionProperty.split(", ").indexOf("transform");
     expect(index).toBeGreaterThanOrEqual(0);
-    expect(style.transitionDuration.split(", ")[index]).toBe("0.75s");
-    expect(style.transitionTimingFunction.split(", ")[index]).toMatch(/^linear\(/);
+    expect(style.transitionDuration.split(", ")[index]).toBe("0.5s");
+    // The curve has no overshoot: a sheet that is let go comes to rest without a bounce.
+    expect(style.transitionTimingFunction).toBe("cubic-bezier(0.32, 0.72, 0, 1)");
     sheet.style.setProperty("--drawer-swipe-strength", "0.5");
     const scaled = getComputedStyle(sheet);
-    expect(scaled.transitionDuration.split(", ")[index]).toBe("0.375s");
+    expect(scaled.transitionDuration.split(", ")[index]).toBe("0.25s");
+  });
+
+  it("fades the backdrop in step with the sheet: the same duration and curve", async () => {
+    await openUncontrolled();
+    const style = getComputedStyle(backdrop()!);
+    expect(style.transitionProperty).toBe("opacity");
+    expect(style.transitionDuration).toBe("0.5s");
+    expect(style.transitionTimingFunction).toBe("cubic-bezier(0.32, 0.72, 0, 1)");
+  });
+
+  it("keeps the variables a drag rewrites out of the sheet's content", async () => {
+    const sheet = await openUncontrolled();
+    const inside = sheet.querySelector<HTMLElement>("[data-ouro-sheet-content]")!;
+    sheet.style.setProperty("--drawer-swipe-movement-y", "40px");
+    expect(getComputedStyle(sheet).getPropertyValue("--ouro-sheet-y")).toBe("40px");
+    // Not inherited: the content's value is the registered initial one, so a drag frame restyles the sheet alone.
+    for (const name of ["--ouro-sheet-y", "--ouro-sheet-x", "--ouro-sheet-grab"]) {
+      expect(getComputedStyle(inside).getPropertyValue(name), name).toBe("0px");
+    }
+    expect(getComputedStyle(inside).getPropertyValue("--ouro-sheet-transform")).toBe("");
+  });
+
+  it("registers its variables once: a second copy of the module finds them registered and does nothing", () => {
+    expect(() => registerSheetProperties()).not.toThrow();
+  });
+
+  it("pads a sheet at a lower snap point by the part below the screen, and holds that padding through a drag", async () => {
+    const sheet = await openUncontrolled({ snapPoints: [0.5, 1] });
+    const offset = Number.parseFloat(getComputedStyle(sheet).getPropertyValue("--drawer-snap-point-offset"));
+    expect(offset).toBeGreaterThan(100);
+    const padding = Number.parseFloat(getComputedStyle(sheet).paddingBottom);
+    expect(padding).toBeGreaterThanOrEqual(offset);
+    // A drag moves the sheet, not its layout: the padding follows the snap point, never the finger.
+    sheet.style.setProperty("--drawer-swipe-movement-y", "60px");
+    expect(Number.parseFloat(getComputedStyle(sheet).paddingBottom)).toBe(padding);
   });
 
   it("drops transform motion under reduced motion and keeps an opacity fade", async () => {
@@ -474,9 +509,11 @@ describe("dragging (Chromium)", () => {
     const sheet = await openUncontrolled();
     for (const pull of [1, 2, 5, 12, 40, 80]) {
       let lift = 0;
+      // The sheet is taken where it stands, which may be a fraction of a pixel short of rest.
+      const from = translation(sheet).y;
       const duration = await springBack(sheet, async () => {
         await dragSheet(-pull, { durationMs: 200, steps: Math.max(2, Math.min(pull, 10)), hold: true });
-        lift = -translation(sheet).y;
+        lift = from - translation(sheet).y;
         await commands.pointerPress({ action: "up" });
       });
       expect(lift, `lift for a ${pull}px pull`).toBeLessThanOrEqual(pull + 0.01);
@@ -546,6 +583,27 @@ describe("dragging (Chromium)", () => {
     await commands.pointerPress({ action: "up" });
     expect(progress).toBeGreaterThan(0.2);
     expect(opacity).toBeCloseTo(0.4 * (1 - progress), 2);
+  });
+
+  chromiumOnly("stays under the mouse when it is caught on its way back to rest, and follows from there", async () => {
+    const sheet = await openUncontrolled();
+    // A long settle, stopped part-way: the sheet stands off its rest position, as it does for a moment after any release.
+    document.documentElement.style.setProperty("--ouro-duration-sheet", "20s");
+    try {
+      await dragSheet(100, { durationMs: 600, steps: 12 });
+      await expect.poll(() => getAnimations(sheet)).toBeGreaterThan(0);
+      for (const animation of sheet.getAnimations()) animation.pause();
+      const frozen = translation(sheet).y;
+      expect(frozen).toBeGreaterThan(40);
+      // Base UI measures from the first of the four moves, so the sheet moves 30px of the 40.
+      await dragSheet(40, { durationMs: 200, steps: 4, hold: true });
+      expect(sheet.hasAttribute("data-swiping")).toBe(true);
+      expect(Math.abs(translation(sheet).y - (frozen + 30))).toBeLessThan(1);
+    } finally {
+      document.documentElement.style.removeProperty("--ouro-duration-sheet");
+      await commands.pointerPress({ action: "up" });
+    }
+    await expect.poll(() => isIdentity(sheet)).toBe(true);
   });
 
   chromiumOnly("reopens fully after a partial drag, release and Escape (review focus 3)", async () => {
@@ -781,6 +839,102 @@ describe("Sheet parts", () => {
     expect(document.querySelector("[data-ouro-sheet-handle]")!.getAttribute("aria-hidden")).toBe("true");
     await userEvent.click(page.getByRole("button", { name: "Done" }));
     await expect.poll(() => popup()).toBeNull();
+  });
+
+  it("forwards a ref passed to SheetViewport", async () => {
+    const ref = createRef<HTMLDivElement>();
+    await render(
+      <SheetRoot defaultOpen>
+        <SheetPortal>
+          <SheetViewport ref={ref}>
+            <SheetPopup>
+              <SheetTitle>Ref</SheetTitle>
+            </SheetPopup>
+          </SheetViewport>
+        </SheetPortal>
+      </SheetRoot>,
+    );
+    await expect.poll(() => viewport()).not.toBeNull();
+    expect(ref.current).toBe(viewport());
+  });
+
+  it("measures where the sheet is only for a press inside its viewport, and not once it is let go", async () => {
+    await render(
+      <SheetRoot defaultOpen>
+        <SheetPortal>
+          <SheetViewport>
+            <SheetPopup>
+              <SheetTitle>Grab</SheetTitle>
+            </SheetPopup>
+          </SheetViewport>
+        </SheetPortal>
+      </SheetRoot>,
+    );
+    await settled();
+    const sheet = popup()!;
+    const grab = () => sheet.style.getPropertyValue("--ouro-sheet-grab");
+    const fire = (target: Element, type: string) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7 }));
+    // A press elsewhere on the page, then a move: nothing is measured.
+    fire(document.body, "pointerdown");
+    fire(document.body, "pointermove");
+    expect(grab()).toBe("");
+    // A move with nothing pressed: nothing either.
+    fire(document.body, "pointerup");
+    fire(sheet, "pointermove");
+    expect(grab()).toBe("");
+    // A press on the sheet at rest: it is 0px from rest, and stays so for that press.
+    fire(sheet, "pointerdown");
+    expect(grab()).toBe("0px");
+    fire(sheet, "pointerup");
+    // A press while the sheet is still moving: each move measures again.
+    const moving = sheet.animate([{ transform: "translateY(25px)" }, { transform: "translateY(25px)" }], { duration: 60_000 });
+    fire(sheet, "pointerdown");
+    expect(grab()).toBe("25px");
+    moving.effect!.updateTiming({ duration: 60_001 });
+    (moving.effect as KeyframeEffect).setKeyframes([{ transform: "translateY(20px)" }, { transform: "translateY(20px)" }]);
+    fire(sheet, "pointermove");
+    expect(grab()).toBe("20px");
+    // Once a move finds it standing still, the measuring stops for the rest of the press: no style is read on later moves.
+    moving.cancel();
+    fire(sheet, "pointermove");
+    expect(grab()).toBe("0px");
+    const read = vi.spyOn(window, "getComputedStyle");
+    sheet.style.transform = "translateY(50px)";
+    fire(sheet, "pointermove");
+    fire(sheet, "pointermove");
+    expect(read).not.toHaveBeenCalled();
+    expect(grab()).toBe("0px");
+    read.mockRestore();
+    sheet.style.transform = "";
+    // A new press measures afresh, and the end of a press stops it too.
+    const again = sheet.animate([{ transform: "translateY(25px)" }, { transform: "translateY(25px)" }], { duration: 60_000 });
+    fire(sheet, "pointerdown");
+    expect(grab()).toBe("25px");
+    fire(sheet, "pointercancel");
+    again.cancel();
+    fire(sheet, "pointermove");
+    expect(grab()).toBe("25px");
+    // Released, the measurement no longer moves the sheet.
+    expect(getComputedStyle(sheet).getPropertyValue("--ouro-sheet-grab")).toBe("0px");
+  });
+
+  it("measures nothing in a viewport that holds no popup, and stops listening when it unmounts", async () => {
+    await render(
+      <SheetRoot defaultOpen>
+        <SheetPortal>
+          <SheetViewport>
+            <p>No popup yet</p>
+          </SheetViewport>
+        </SheetPortal>
+      </SheetRoot>,
+    );
+    await expect.poll(() => viewport()).not.toBeNull();
+    const layer = viewport()!;
+    expect(() => layer.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))).not.toThrow();
+    const removed = vi.spyOn(window, "removeEventListener");
+    await act(async () => roots.splice(0).forEach((root) => root.unmount()));
+    expect(removed.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining(["pointercancel", "pointerdown", "pointermove", "pointerup"]));
+    removed.mockRestore();
   });
 
   it("forwards a ref passed to SheetBackdrop, as an object or a callback", async () => {

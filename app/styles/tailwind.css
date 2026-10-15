@@ -152,7 +152,7 @@
    with the phone tab bar (z-50). Raising it to Catalyst's dialog layer (z-60) puts them above the tab
    bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. This is
    Spoonjoy's own unlayered :root rule after the Ouro tokens, as Ouro UI's README asks; the
-   --ouro-layer: 50 line above is ouro-base's and every shadcn add resets it. */
+   --ouro-layer: 50 line above is ouro-base's; v0.8 component adds leave this file alone. */
 :root {
   --ouro-layer: 60;
 }
@@ -802,11 +802,13 @@ body:has(#cook) .sj-mobile-surface {
      UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes.
      --radius-md is what Ouro's text fields and selects use: 2px under the control radius, as shadcn
      has it, which is --sj-radius-small, the corner Spoonjoy's fields have always had. */
+  --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);

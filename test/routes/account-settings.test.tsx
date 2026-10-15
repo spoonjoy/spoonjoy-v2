@@ -5153,6 +5153,7 @@ describe("Account Settings Route", () => {
           success: false,
           error: "email_taken" as const,
           message: "Email is already in use",
+          intent: "updateUserInfo",
           fieldErrors: {
             email: "This email is already taken",
           },
@@ -5203,6 +5204,7 @@ describe("Account Settings Route", () => {
           success: false,
           error: "username_taken" as const,
           message: "Username is already in use",
+          intent: "updateUserInfo",
           fieldErrors: {
             username: "This username is already taken",
           },

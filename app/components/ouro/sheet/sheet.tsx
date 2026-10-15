@@ -3,7 +3,7 @@
 import type { JSX, ReactElement, ReactNode, RefObject } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { checkOpenMode } from "~/lib/ouro/open-mode";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import {
   SheetBackdrop,
   SheetClose,

@@ -3,6 +3,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
 import { TextField, type TextFieldProps } from "~/components/ouro/text-field/text-field";
@@ -33,7 +34,7 @@ async function render(node: ReactNode) {
       return host.querySelector<HTMLElement>("[data-ouro-input-group]")!;
     },
     button(name: string) {
-      return [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-label") === name) ?? null;
+      return [...host.querySelectorAll("button")].find((button) => button.textContent === name) ?? null;
     },
   };
 }
@@ -93,6 +94,12 @@ describe("TextField", () => {
     expect(input.value).toBe("Pasta!");
     expect(onChange).toHaveBeenCalled();
     expect(onValueChange).toHaveBeenLastCalledWith("Pasta!", expect.anything());
+  });
+
+  it("passes aria-required through without making the input natively required", async () => {
+    const { input } = await render(<TextField label="Quantity" aria-required />);
+    expect(input.getAttribute("aria-required")).toBe("true");
+    expect(input.required).toBe(false);
   });
 
   it("forwards its ref to the input", async () => {
@@ -165,6 +172,18 @@ describe("TextField types", () => {
     );
   });
 
+  it.each([
+    ["datetime-local", "has no date-and-time field; DatePicker picks the date and a time TextField the time", '<DatePicker label="When" name="date" /> and <TextField label="Time" type="time" name="time" />'],
+    ["file", "FileField picks and lists files", '<FileField label="When" name="file" />'],
+    ["month", "DatePicker picks dates from a calendar", '<DatePicker label="When" />, or <TextField type="date"> for the OS picker'],
+    ["week", "DatePicker picks dates from a calendar", '<DatePicker label="When" />, or <TextField type="date"> for the OS picker'],
+  ] as const)("renders a text input and names the component for type=%s", async (type, why, fix) => {
+    const props = { label: "When", type } as unknown as TextFieldProps;
+    const { input } = await render(<TextField {...props} />);
+    expect(input.type).toBe("text");
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] TextField: type="${type}" is not a TextField type; ${why}. Fix: ${fix}.`);
+  });
+
   it("renders a text input and lists the types for any other type", async () => {
     const props = { label: "Color", type: "color" } as unknown as TextFieldProps;
     const { input } = await render(<TextField {...props} />);
@@ -185,12 +204,25 @@ describe("TextField password toggle", () => {
     await userEvent.click(show);
     expect(input.type).toBe("text");
     // The name stays fixed; the pressed state says whether the password shows.
-    expect(show.getAttribute("aria-label")).toBe("Show password");
+    expect(show.textContent).toBe("Show password");
     expect(show.getAttribute("aria-pressed")).toBe("true");
     expect(button("Hide password")).toBeNull();
     await userEvent.click(show);
     expect(input.type).toBe("password");
     expect(show.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("leaves a loose label lookup for the field on the input, not on the toggle or the clear button", async () => {
+    const { input } = await render(<TextField label="Password" type="password" clearable clearLabel="Clear password" defaultValue="hunter22" />);
+    // Playwright's getByLabel("Password") takes any element whose label text contains the
+    // words, and an aria-label is label text. The buttons are named by their own (visually
+    // hidden) text, which is a name but not a label, so only the input matches.
+    expect(page.getByLabelText("Password", { exact: false }).elements()).toEqual([input]);
+    for (const name of ["Show password", "Clear password"]) {
+      const button = page.getByRole("button", { name, exact: true });
+      await expect.element(button).toBeVisible();
+      expect(button.element().hasAttribute("aria-label")).toBe(false);
+    }
   });
 
   it("names the toggle and the clear button with showPasswordLabel and clearLabel", async () => {
@@ -200,7 +232,7 @@ describe("TextField password toggle", () => {
     const toggle = button("Passwort anzeigen")!;
     await userEvent.click(toggle);
     expect(input.type).toBe("text");
-    expect(toggle.getAttribute("aria-label")).toBe("Passwort anzeigen");
+    expect(toggle.textContent).toBe("Passwort anzeigen");
     expect(button("Leeren")).not.toBeNull();
     expect(button("Show password")).toBeNull();
     expect(button("Clear")).toBeNull();
@@ -391,7 +423,7 @@ describe("TextField adornments", () => {
   it("puts the end adornment after the clear button and the password toggle", async () => {
     const { group } = await render(<TextField label="PIN" type="password" clearable defaultValue="1" endAdornment="!" />);
     const order = [...group.querySelectorAll("input, button, [data-ouro-adornment]")].map(
-      (child) => child.getAttribute("aria-label") ?? child.getAttribute("data-ouro-adornment") ?? child.tagName,
+      (child) => child.getAttribute("data-ouro-adornment") ?? (child.textContent || child.tagName),
     );
     expect(order).toEqual(["INPUT", "Clear", "Show password", "end"]);
   });
@@ -494,6 +526,71 @@ describe("TextField looks", () => {
   });
 });
 
+describe("TextField variant and size", () => {
+  it("draws no frame of its own with variant plain, and still outlines on keyboard focus", async () => {
+    const { group, input } = await render(<TextField label="Search recipes" hideLabel type="search" variant="plain" />);
+    const box = getComputedStyle(group);
+    expect(group.dataset.variant).toBe("plain");
+    expect(box.borderTopWidth).toBe("0px");
+    expect(box.paddingLeft).toBe("0px");
+    expect(box.paddingRight).toBe("0px");
+    expect(box.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    input.focus();
+    await expect.poll(() => getComputedStyle(group).outlineStyle).toBe("solid");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("keeps a plain field's buttons inside its box", async () => {
+    const { group, button } = await render(<TextField label="Search" type="search" variant="plain" clearable defaultValue="basil" />);
+    expect(button("Clear")!.getBoundingClientRect().right).toBeLessThanOrEqual(group.getBoundingClientRect().right + 0.5);
+  });
+
+  it("sets 20px text in a taller box with size lg, at phone and desktop widths", async () => {
+    await page.viewport(390, 844);
+    const { group, input } = await render(<TextField label="Search" size="lg" startAdornment={<svg aria-hidden="true" />} />);
+    expect(group.dataset.size).toBe("lg");
+    expect(getComputedStyle(input).fontSize).toBe("20px");
+    expect(group.getBoundingClientRect().height).toBe(56);
+    expect(group.querySelector("svg")!.getBoundingClientRect().width).toBe(20);
+    await page.viewport(1280, 800);
+    await expect.poll(() => group.getBoundingClientRect().height).toBe(48);
+    expect(getComputedStyle(input).fontSize).toBe("20px");
+  });
+
+  it("is outlined at the medium size by default", async () => {
+    const { group } = await render(<TextField label="Name" />);
+    expect(group.dataset.variant).toBe("outline");
+    expect(group.dataset.size).toBe("md");
+  });
+
+  it("sits inside the app's own bordered row: the row draws the one frame", async () => {
+    const { host, group, input } = await render(
+      <div data-row="" className="flex items-center border-y border-border">
+        <TextField label="Search recipes" hideLabel type="search" variant="plain" size="lg" className="flex-1" />
+      </div>,
+    );
+    const row = host.querySelector<HTMLElement>("[data-row]")!;
+    expect(input.getBoundingClientRect().left).toBe(row.getBoundingClientRect().left);
+    expect(group.getBoundingClientRect().width).toBe(row.getBoundingClientRect().width);
+    expect(row.getBoundingClientRect().height).toBe(group.getBoundingClientRect().height + 2);
+  });
+
+  it.each([
+    ["a filled variant", { variant: "filled" }, 'variant="filled" is not a variant; use "outline" or "plain"', '<TextField variant="outline">'],
+    ["shadcn's ghost", { variant: "ghost" }, 'variant="ghost" is not a variant; use "outline" or "plain"', '<TextField variant="plain">'],
+    ["an unstyled variant", { variant: "unstyled" }, 'variant="unstyled" is not a variant; use "outline" or "plain"', '<TextField variant="plain">'],
+    ["an unknown size", { size: "xl" }, 'size="xl" is not a size; use "md" or "lg"', '<TextField size="md">'],
+    ["the input's size attribute", { size: 20 }, "size={20} is not a size; a width in characters is not supported, so set the width with className", '<TextField className="w-40">'],
+  ] as const)("renders the default and names the fix for %s", async (_name, wrong, problem, fix) => {
+    const props = { label: "Name", ...wrong } as unknown as TextFieldProps;
+    const { group, input } = await render(<TextField {...props} />);
+    expect(group.dataset.variant).toBe("outline");
+    expect(group.dataset.size).toBe("md");
+    expect(input.hasAttribute("size")).toBe(false);
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] TextField: ${problem}. Fix: ${fix}.`);
+  });
+});
+
 describe("TextField development messages", () => {
   it.each([
     ["errorMessage", { errorMessage: "Required." }, "errorMessage is not a prop", '<TextField error="Required.">'],
@@ -567,8 +664,8 @@ describe("TextField server rendering", () => {
     expect(email!.getAttribute("inputmode")).toBe("email");
     expect(email!.getAttribute("autocomplete")).toBe("email");
     expect(describedBy(price!).map((id) => doc.getElementById(id)!.textContent)).toEqual(["$", "per jar"]);
-    expect(doc.querySelector('button[aria-label="Clear"]')).not.toBeNull();
-    expect(doc.querySelector('button[aria-label="Show password"]')!.getAttribute("aria-pressed")).toBe("false");
+    expect(doc.querySelector("button[data-ouro-clear]")).not.toBeNull();
+    expect(doc.querySelector("button[data-ouro-show-password]")!.getAttribute("aria-pressed")).toBe("false");
     expect(error).not.toHaveBeenCalled();
   });
 
@@ -591,8 +688,24 @@ describe("TextField server rendering", () => {
     expect(recoverable).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
     // Hydrated, the controls work.
-    const clear = host.querySelector<HTMLButtonElement>('button[aria-label="Clear"]')!;
+    const clear = host.querySelector<HTMLButtonElement>("button[data-ouro-clear]")!;
     await userEvent.click(clear);
     expect(host.querySelectorAll("input")[1]!.value).toBe("");
+  });
+});
+
+describe("TextField under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts between the TextField and the button below it", async () => {
+    // The parent's rule has zero specificity, so a margin class on the root would beat it.
+    const { host } = await render(
+      <div className="space-y-4">
+        <TextField label="Email" />
+        <Button>Save</Button>
+      </div>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="text-field"]')!;
+    const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+    expect(getComputedStyle(root).marginBottom).toBe("16px");
+    expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });

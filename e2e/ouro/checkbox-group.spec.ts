@@ -1,5 +1,4 @@
-// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
-import { expect, test } from "../fixtures";
+import { expect, test } from "../ouro-fixtures";
 import { openStory } from "./story";
 
 test("the group is named by its legend and each box toggles on its own", async ({ page }) => {

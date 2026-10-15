@@ -8,6 +8,10 @@ expectTypeOf<{ href: "/recipes"; children: "Recipes" }>().toExtend<LinkProps>();
 expectTypeOf<{ href: "https://ouro.bot"; external: true; tone: "secondary"; rel: "nofollow"; children: "Ouro" }>().toExtend<LinkProps>();
 expectTypeOf<ComponentProps<typeof Link>>().toEqualTypeOf<LinkProps>();
 
+// inline says whether the link sits in running text.
+expectTypeOf<{ href: "/terms"; inline: true; children: "terms" }>().toExtend<LinkProps>();
+expectTypeOf<{ href: "/terms"; inline: "yes"; children: "terms" }>().not.toExtend<LinkProps>();
+
 // href is required; `to` is the router habit, and names href.
 expectTypeOf<{ children: "Recipes" }>().not.toExtend<LinkProps>();
 expectTypeOf<{ href: "/x"; to: "/recipes"; children: "Recipes" }>().not.toExtend<LinkProps>();

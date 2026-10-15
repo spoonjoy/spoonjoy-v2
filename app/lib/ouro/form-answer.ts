@@ -1,0 +1,104 @@
+import { isValidElement } from "react";
+import { devThrow } from "~/lib/ouro/dev";
+import type { ErrorMessages } from "~/lib/ouro/use-field";
+
+/** Display messages by field name; `form` holds messages about the whole form. */
+export type FormErrors = Record<string, ErrorMessages | null | undefined>;
+
+/** An accepted-answer key, compared with `Object.is`. Advance it on acceptance, never submit start. */
+export type FormErrorKey = string | number | bigint | boolean | symbol | object;
+
+declare const errorValueBrand: unique symbol;
+
+/**
+ * A read-only message snapshot with private, in-memory answer identity. Create it with
+ * `formErrors`; JSON, spread, structured cloning and server-component transport retain
+ * only the messages, not its identity. Reconstruct it beside Form in each environment.
+ * Array containers are snapshotted and frozen; React elements are retained, not cloned.
+ * React nodes are render inputs, not a promise that arbitrary node graphs JSON-serialize.
+ */
+export type FormErrorValue = Readonly<FormErrors> & { readonly [errorValueBrand]: true };
+
+/** The private identity decoded by Form; tokens never retain source objects. @internal */
+export type FormErrorIdentity = { readonly kind: "answer" | "key" | "none"; readonly value: FormErrorKey | undefined };
+
+const values = new WeakMap<object, FormErrorIdentity>();
+const tokens = new WeakMap<object, object>();
+
+function token(source: object): object {
+  let identity = tokens.get(source);
+  if (!identity) {
+    identity = Object.freeze({});
+    tokens.set(source, identity);
+  }
+  return identity;
+}
+
+const isObject = (value: unknown): value is object => (typeof value === "object" && value !== null) || typeof value === "function";
+
+/**
+ * Binds a message projection to the accepted answer that owns it, inside Form's single
+ * `errors` prop: `errors={formErrors(actionData, actionData?.errors)}`. Fresh values and
+ * mapped messages for the same answer are presentation updates, not new answers; edited
+ * fields stay cleared. A different accepted answer resets those clears and focuses once.
+ *
+ * Without a key, use an object answer; `null`/`undefined` mean no accepted answer yet.
+ * Cached/reused or primitive answers need `{ key }`, advanced only when that answer is
+ * accepted. Keys use `Object.is`, including `0`, `""`, `false`, `NaN` and signed zero;
+ * an explicitly null/undefined key is invalid. A key overrides source identity.
+ *
+ * No source properties are read or retained in the returned value or its metadata.
+ * Only selected messages are enumerable/serializable; do not select private payload
+ * fields as messages. Construct beside Form, including on the undefined-answer baseline.
+ * After serialization, reconstruct from the locally accepted answer or a safe acceptance
+ * key transported separately; JSON/spread of this value alone loses answer identity.
+ * The caller selects an accepted, form-local source; this does not certify cancellation,
+ * partition route-global data between forms, or observe a framework's requests.
+ *
+ * @example
+ * import { formErrors } from "@/lib/ouro/form-answer";
+ * <Form errors={formErrors(actionData, { email: actionData?.email, form: actionData?.general })} />
+ *
+ * @example
+ * // Reused payload: acceptance.key changes on completed acceptance, not while pending.
+ * <Form errors={formErrors(acceptance.data, acceptance.data.errors, { key: acceptance.key })} />
+ */
+export function formErrors(answer: object | null | undefined, messages?: FormErrors | null): FormErrorValue;
+export function formErrors(answer: unknown, messages: FormErrors | null | undefined, options: { key: FormErrorKey }): FormErrorValue;
+export function formErrors(answer: unknown, messages?: FormErrors | null, options?: { key: FormErrorKey }): FormErrorValue {
+  let identity: FormErrorIdentity;
+  if (options !== undefined) {
+    const key = Object.hasOwn(options, "key") ? options.key : undefined;
+    if (key === null || key === undefined) {
+      devThrow("Form", "formErrors key must not be null or undefined",
+        process.env.NODE_ENV !== "production" ? "pass { key: acceptedAnswerKey }, advanced only when the answer is accepted" : /* istanbul ignore next @preserve -- production only */ "");
+    }
+    identity = { kind: "key", value: isObject(key) ? token(key) : key };
+  } else if (answer === null || answer === undefined) {
+    identity = { kind: "none", value: undefined };
+  } else if (isObject(answer)) {
+    identity = { kind: "answer", value: token(answer) };
+  } else {
+    devThrow("Form", "formErrors needs an object answer or an accepted key",
+      process.env.NODE_ENV !== "production" ? "formErrors(answer, messages, { key: acceptedAnswerKey })" : /* istanbul ignore next @preserve -- production only */ "");
+  }
+  if (messages !== null && messages !== undefined && (typeof messages !== "object" || Array.isArray(messages))) {
+    devThrow("Form", "formErrors messages must be a record",
+      process.env.NODE_ENV !== "production" ? 'formErrors(answer, { email: "Taken.", form: "Try again." })' : /* istanbul ignore next @preserve -- production only */ "");
+  }
+  const snapshot = Object.fromEntries(Object.entries(messages ?? {}).map(([name, message]) => {
+    const valid = (value: unknown) => value === null || value === undefined || typeof value === "string" || isValidElement(value);
+    if (!(Array.isArray(message) ? message.every(valid) : valid(message))) {
+      devThrow("Form", `formErrors messages for "${name}" must be text, React elements or arrays of them`,
+        process.env.NODE_ENV !== "production" ? "select only this form's display messages, not the answer payload" : /* istanbul ignore next @preserve -- production only */ "");
+    }
+    return [name, Array.isArray(message) ? Object.freeze([...message]) : message];
+  })) as FormErrors;
+  values.set(snapshot, Object.freeze(identity));
+  return Object.freeze(snapshot) as FormErrorValue;
+}
+
+/** Reads metadata without accessing any payload property; a copied record has none. @internal */
+export function formErrorIdentity(value: FormErrors | null | undefined): FormErrorIdentity | undefined {
+  return value === null || value === undefined ? undefined : values.get(value);
+}

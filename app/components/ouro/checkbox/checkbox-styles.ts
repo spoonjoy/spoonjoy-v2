@@ -20,28 +20,27 @@ const boxClass =
   "aria-invalid:border-destructive " +
   "cursor-default select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "not-aria-invalid:not-data-disabled:not-data-checked:not-data-indeterminate:hover:border-foreground " +
-  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) active:duration-(--ouro-duration-fast) active:ease-out " +
+  "not-aria-invalid:not-data-disabled:not-data-checked:not-data-indeterminate:pointer-fine:hover:border-foreground " +
+  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50";
 
 /**
- * The indicator, kept mounted so the tick can draw itself and undraw.
+ * The indicator, kept mounted so the tick can fade out as well as in.
  *
  * @internal
  */
 const indicatorClass = "pointer-events-none flex size-full items-center justify-center";
 
 /**
- * The tick draws itself along its path when the box is checked, as in RedwoodUI. With
- * reduced motion it fades in instead.
+ * The tick fades and grows in from 95% when the box is checked. With reduced motion it
+ * only fades.
  *
  * @internal
  */
 const tickClass =
-  "[stroke-dasharray:1] [stroke-dashoffset:1] group-data-checked:[stroke-dashoffset:0] group-data-indeterminate:hidden " +
-  "motion-safe:transition-[stroke-dashoffset] motion-safe:duration-(--ouro-duration-base) motion-safe:ease-out " +
-  "motion-reduce:[stroke-dashoffset:0] motion-reduce:opacity-0 motion-reduce:group-data-checked:opacity-100 " +
-  "motion-reduce:transition-opacity motion-reduce:duration-(--ouro-duration-fast)";
+  "origin-center [transform-box:fill-box] opacity-0 scale-95 group-data-checked:opacity-100 group-data-checked:scale-100 group-data-indeterminate:hidden " +
+  "[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out),scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
+  "motion-reduce:scale-100 motion-reduce:[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)]";
 
 /**
  * The dash a mixed box shows in place of the tick.

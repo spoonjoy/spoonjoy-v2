@@ -45,3 +45,15 @@ export async function slowDrag(page: Page, x: number, fromY: number, toY: number
   }
   await page.mouse.up();
 }
+
+/**
+ * Presses Tab, or Shift+Tab with `{ shift: true }`, so that focus moves to the next tab stop
+ * in every browser. WebKit on a Mac follows the system's "Keyboard navigation" setting: with
+ * it off, the default, Tab skips buttons, links and every control that is not a text field.
+ * Option+Tab is WebKit's key for "every control, whatever the setting", so this presses that
+ * there and plain Tab everywhere else. Use it instead of `page.keyboard.press("Tab")`.
+ */
+export async function pressTab(page: Page, { shift = false }: { shift?: boolean } = {}): Promise<void> {
+  const webkitOnMac = process.platform === "darwin" && page.context().browser()?.browserType().name() === "webkit";
+  await page.keyboard.press(`${shift ? "Shift+" : ""}${webkitOnMac ? "Alt+" : ""}Tab`);
+}

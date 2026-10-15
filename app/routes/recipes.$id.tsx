@@ -27,7 +27,8 @@ import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
-import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { Form } from "~/components/ouro/form/form";
+import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ui/heading";
 import { Link } from "~/components/ui/link";
@@ -659,17 +660,22 @@ export default function RecipeDetail() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
   // A cook the server could not save shows its message in the open dialog, which keeps the input.
-  // Each refusal sets a new object, even with the same message: the form shows a message again
-  // and moves focus to it only for a new object.
-  const [spoonErrors, setSpoonErrors] = useState<FormErrors>();
+  // Keep the response itself: a display projection must never manufacture acceptance.
+  const [spoonAnswer, setSpoonAnswer] = useState<{ error?: unknown }>();
+  const spoonErrors = useFormMessage(typeof spoonAnswer?.error === "string" ? spoonAnswer.error : undefined, spoonAnswer);
   const openSpoonDialog = useCallback(() => {
-    setSpoonErrors(undefined);
+    setSpoonAnswer(undefined);
     setIsSpoonDialogOpen(true);
   }, []);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
   // The create's error belongs on the cookbook name field.
-  const [createCookbookErrors, setCreateCookbookErrors] = useState<FormErrors>();
+  const [createCookbookAnswer, setCreateCookbookAnswer] = useState<{ error?: unknown }>();
+  const createCookbookErrors = useFormErrors(
+    typeof createCookbookAnswer?.error === "string" ? { title: createCookbookAnswer.error } : undefined,
+    undefined,
+    createCookbookAnswer,
+  );
 
   useEffect(() => {
     const loggedSpoonId = actionData?.success && actionData.intent === "createSpoon"
@@ -687,7 +693,7 @@ export default function RecipeDetail() {
 
   useEffect(() => {
     if (actionData?.intent === "createSpoon" && typeof actionData.error === "string") {
-      setSpoonErrors({ form: actionData.error });
+      setSpoonAnswer(actionData);
     }
   }, [actionData]);
 
@@ -697,7 +703,7 @@ export default function RecipeDetail() {
       return;
     }
 
-    setCreateCookbookErrors(undefined);
+    setCreateCookbookAnswer(undefined);
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
 
@@ -946,7 +952,7 @@ export default function RecipeDetail() {
   useEffect(() => {
     const result = createCookbookFetcher.data as { intent?: unknown; error?: unknown } | undefined;
     if (result?.intent === "createCookbookAndSave" && typeof result.error === "string") {
-      setCreateCookbookErrors({ title: result.error });
+      setCreateCookbookAnswer(result);
     }
   }, [createCookbookFetcher.data]);
 
@@ -1195,7 +1201,7 @@ export default function RecipeDetail() {
                 value={newCookbookTitle}
                 onChange={(event) => {
                   setNewCookbookTitle(event.target.value);
-                  setCreateCookbookErrors(undefined);
+                  setCreateCookbookAnswer(undefined);
                 }}
                 data-testid="new-cookbook-input"
               />

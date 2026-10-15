@@ -3,6 +3,7 @@ import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Select, type SelectProps } from "~/components/ouro/select/select";
@@ -31,7 +32,7 @@ async function render(node: ReactNode) {
       return host.querySelector<HTMLButtonElement>('[role="combobox"]')!;
     },
     get label() {
-      return host.querySelector<HTMLElement>('[data-ouro="select"] > div')!;
+      return host.querySelector<HTMLElement>('[data-ouro="select"] > [data-ouro-label] > div')!;
     },
     hidden(name: string) {
       return [...host.querySelectorAll<HTMLInputElement>(`input[name="${name}"]`)].map((input) => input.value);
@@ -196,6 +197,21 @@ describe("Select", () => {
     expect(hidden("courses")).toEqual(["starter", "main"]);
   });
 
+  it("posts one entry per chosen value under its name with multiple, for formData.getAll", async () => {
+    const { host, trigger } = await render(
+      <form>
+        <Select label="Courses" name="courses" multiple options={courses} />
+      </form>,
+    );
+    const posted = () => new FormData(host.querySelector("form")!).getAll("courses");
+    // Nothing chosen posts no entry, so the server reads an empty list.
+    expect(posted()).toEqual([]);
+    await open(trigger);
+    await userEvent.click(option("Main"));
+    await userEvent.click(option("Starter"));
+    expect(posted()).toEqual(["main", "starter"]);
+  });
+
   it("follows a controlled value", async () => {
     function Controlled() {
       const [value, setValue] = useState<string | null>("main");
@@ -246,7 +262,9 @@ describe("Select", () => {
   });
 
   it("is disabled and read-only on request", async () => {
-    const { trigger, rerender } = await render(<Select label="Course" options={courses} disabled />);
+    // The same defaultValue in both renders: changing it on an uncontrolled Select makes Base UI
+    // log a development message, and test output stays clean.
+    const { trigger, rerender } = await render(<Select label="Course" options={courses} disabled defaultValue="main" />);
     expect(trigger.hasAttribute("data-disabled")).toBe(true);
     await userEvent.click(trigger, { force: true });
     expect(popup()?.hasAttribute("data-open") ?? false).toBe(false);
@@ -307,6 +325,29 @@ describe("Select", () => {
     await open(trigger);
     await userEvent.click(option("Starter"));
     expect(trigger.textContent).toBe("Starter");
+  });
+});
+
+describe("Select popup motion", () => {
+  const timing = (element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    const split = (value: string) => value.split(/,\s(?![^(]*\))/);
+    return { duration: split(style.transitionDuration), easing: split(style.transitionTimingFunction)[0], property: style.transitionProperty };
+  };
+
+  it("grows from the point Base UI computes, in 200ms on the ease-out token, and leaves in 150ms", async () => {
+    const { trigger } = await render(<Select label="Course" options={courses} />);
+    await open(trigger);
+    const element = popup()!;
+    // Base UI holds transitions off for the first frame.
+    await expect.poll(() => getComputedStyle(element).transitionProperty).not.toBe("none");
+    await expect.poll(() => element.getAnimations().length).toBe(0);
+    element.style.setProperty("--transform-origin", "7px 3px");
+    expect(getComputedStyle(element).transformOrigin).toBe("7px 3px");
+    expect(timing(element)).toEqual({ duration: ["0.2s", "0.2s"], easing: "cubic-bezier(0.23, 1, 0.32, 1)", property: "opacity, scale" });
+    element.setAttribute("data-ending-style", "");
+    expect(getComputedStyle(element).transitionDuration).toBe("0.15s");
+    element.removeAttribute("data-ending-style");
   });
 });
 
@@ -398,7 +439,7 @@ describe("Select server rendering", () => {
     );
     const doc = new DOMParser().parseFromString(html, "text/html");
     const trigger = doc.querySelector('[role="combobox"]')!;
-    expect(doc.getElementById(trigger.getAttribute("aria-labelledby")!)!.textContent).toBe("Course*");
+    expect(doc.getElementById(trigger.getAttribute("aria-labelledby")!)!.textContent).toBe("Course");
     expect(description(trigger)).toEqual(["What you are cooking.", "That course is full."]);
     expect(trigger.getAttribute("aria-invalid")).toBe("true");
     expect(trigger.getAttribute("aria-required")).toBe("true");
@@ -425,5 +466,21 @@ describe("Select server rendering", () => {
     expect(host.querySelector('[role="combobox"]')!.textContent).toBe("Main");
     expect(recoverable).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("Select under a parent's spacing", () => {
+  it("keeps the 16px that space-y-4 puts between the Select and the button below it", async () => {
+    // The parent's rule has zero specificity, so a margin class on the root would beat it.
+    const { host } = await render(
+      <div className="space-y-4">
+        <Select label="Course" options={[{ value: "main", label: "Main" }]} />
+        <Button>Save</Button>
+      </div>,
+    );
+    const root = host.querySelector<HTMLElement>('[data-ouro="select"]')!;
+    const button = host.querySelector<HTMLElement>('[data-ouro="button"]')!;
+    expect(getComputedStyle(root).marginBottom).toBe("16px");
+    expect(Math.abs(button.getBoundingClientRect().top - root.getBoundingClientRect().bottom - 16)).toBeLessThanOrEqual(1);
   });
 });

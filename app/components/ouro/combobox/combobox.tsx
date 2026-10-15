@@ -2,16 +2,17 @@
 
 import { Autocomplete as BaseAutocomplete } from "@base-ui/react/autocomplete";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
-import { useMemo, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref, type RefObject } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { SheetFrame } from "~/components/ouro/sheet/sheet";
 import { endSlotClass, groupClass, inputClass } from "~/components/ouro/text-field/text-field-styles";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { FieldOwnerContext, useField, useFormErrors } from "~/lib/ouro/use-field";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { FieldOwnerContext, useField, useFormErrors, type ErrorMessages } from "~/lib/ouro/use-field";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { usePickerSheet } from "~/lib/ouro/use-sheet-presentation";
+import { useMergedRef } from "~/lib/ouro/refs";
 import {
   chipClass,
   chipRemoveClass,
@@ -48,9 +49,9 @@ export interface ComboboxBaseProps {
   description?: ReactNode | undefined;
   /**
    * What is wrong, from your server action or client check. The message (or several, as a
-   * list) shows under the field, which gets `aria-invalid`. An empty string or array means valid.
+   * list) shows under the field, which gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
    */
-  error?: string | string[] | undefined;
+  error?: ErrorMessages | undefined;
   /** Something must be picked: the input gets `aria-required`, and the label a marker. */
   required?: boolean | undefined;
   /** Disables the field and its buttons, and fades it. */
@@ -83,8 +84,9 @@ export interface ComboboxBaseProps {
    */
   emptyLabel?: string | undefined;
   /**
-   * The label of the button that clears the field. It shows while there is something to
-   * clear. Translate it with your app.
+   * The name of the button that clears the field, as visually hidden text and not an
+   * `aria-label`, so a test's label lookup for the field finds the field alone. It shows while
+   * there is something to clear. Translate it with your app.
    * @default "Clear"
    */
   clearLabel?: string | undefined;
@@ -167,7 +169,8 @@ export type ComboboxMultipleProps = ComboboxBaseProps & {
   /** Called with the picked items' values. */
   onValueChange?: ((value: string[]) => void) | undefined;
   /**
-   * The label of a chip's remove button, from the item's label. Translate it with your app.
+   * The name of a chip's remove button, from the item's label, as visually hidden text and not
+   * an `aria-label`. Translate it with your app.
    * @default (label) => `Remove ${label}`
    */
   removeLabel?: ((label: string) => string) | undefined;
@@ -217,6 +220,8 @@ interface Option {
 
 /** What the field shows inside it, from the props, for either way of picking. */
 interface ControlProps {
+  sheet: boolean;
+  onReset: (() => void) | undefined;
   label: string;
   items: readonly ComboboxItem[];
   multiple: boolean;
@@ -348,13 +353,24 @@ export function Combobox(props: ComboboxProps): JSX.Element {
     customValueLabel?: (text: string) => string;
   };
   const form = useFormErrors();
+  const [ownCustomValue, setOwnCustomValue] = useState(defaultValue ?? "");
   // A change drops a Form error for this name, as typing does in a text field.
   const handleValueChange = (next: never) => {
+    if (allowCustomValue && !multiple && value === undefined) setOwnCustomValue(next);
     if (name !== undefined) form?.clear(name);
     onValueChange?.(next);
   };
   const sheet = usePickerSheet();
   const custom = allowCustomValue && !multiple;
+  const customProps = props.allowCustomValue && !props.multiple ? props : undefined;
+  const resetCustom = customProps && customProps.value === undefined ? () => {
+    const next = customProps.defaultValue ?? "";
+    if (next !== ownCustomValue) {
+      setOwnCustomValue(next);
+      if (name !== undefined) form?.clear(name);
+      customProps.onValueChange?.(next);
+    }
+  } : undefined;
 
   useDevWarnings(
     "Combobox",
@@ -381,10 +397,12 @@ export function Combobox(props: ComboboxProps): JSX.Element {
   );
 
   const control: ControlProps = {
+    sheet,
+    onReset: resetCustom,
     label,
     items,
     multiple,
-    value,
+    value: custom && value === undefined ? ownCustomValue : value,
     defaultValue,
     onValueChange: handleValueChange,
     onInputChange,
@@ -486,8 +504,9 @@ function EndButtons({ clearLabel }: { clearLabel: string }): JSX.Element {
     <span className={endSlotClass}>
       <BaseCombobox.Clear
         render={
-          <Button variant="plain" tone="secondary" size="sm" aria-label={clearLabel} className="aspect-square px-0">
+          <Button variant="plain" tone="secondary" size="sm" data-ouro-combobox-clear="" className="aspect-square px-0">
             <CrossIcon />
+            <span className="sr-only">{clearLabel}</span>
           </Button>
         }
       />
@@ -498,10 +517,29 @@ function EndButtons({ clearLabel }: { clearLabel: string }): JSX.Element {
   );
 }
 
+/** Restores a custom value only after an uncancelled reset, unless a later edit or unmount won. */
+function useCustomReset(ref: RefObject<HTMLInputElement | HTMLButtonElement | null>, value: unknown, onReset: (() => void) | undefined) {
+  const latest = useRef({ value, onReset });
+  useLayoutEffect(() => { latest.current = { value, onReset }; });
+  useEffect(() => {
+    const element = ref.current;
+    const form = element?.form;
+    if (!form || !onReset) return;
+    const reset = (event: Event) => {
+      const before = latest.current.value;
+      queueMicrotask(() => {
+        if (!event.defaultPrevented && event.target === form && ref.current === element && latest.current.value === before) latest.current.onReset?.();
+      });
+    };
+    form.addEventListener("reset", reset);
+    return () => form.removeEventListener("reset", reset);
+  }, [ref, onReset]);
+}
+
 /** A Combobox that picks one item or several, on Base UI Combobox. */
 function ComboboxControl(props: ControlProps): JSX.Element {
   const { label, items, multiple, value, defaultValue, onValueChange, onInputChange, placeholder, required, loading } = props;
-  const { loadingLabel, emptyLabel, clearLabel, doneLabel, removeLabel, customValueLabel, custom, inputRef } = props;
+  const { loadingLabel, emptyLabel, clearLabel, doneLabel, removeLabel, customValueLabel, custom, inputRef, sheet } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
   // which would count it as a failed check and block the next submit.
@@ -536,9 +574,11 @@ function ComboboxControl(props: ControlProps): JSX.Element {
       : options;
   const shown = (option: Option) => (option.custom ? option.value : option.label);
 
-  const sheet = usePickerSheet();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const resetInputRef = useRef<HTMLInputElement>(null);
+  const setInputRef = useMergedRef(inputRef, resetInputRef);
+  useCustomReset(sheet ? triggerRef : resetInputRef, value, props.onReset);
   const report = onValueChange as ((value: string | string[] | null) => void) | undefined;
   const showEmpty = !onInputChange || text !== "";
 
@@ -566,7 +606,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
   const input = (className: string, extra: { "aria-label"?: string } = {}) => (
     <BaseCombobox.Input
       {...extra}
-      ref={inputRef}
+      ref={setInputRef}
       placeholder={placeholder}
       aria-describedby={sheet ? undefined : field.describedBy}
       {...(invalid && !sheet ? { "aria-invalid": true } : {})}
@@ -587,6 +627,11 @@ function ComboboxControl(props: ControlProps): JSX.Element {
       }}
       required={required}
       openOnInputClick
+      open={open}
+      onOpenChange={(next: boolean, details: { reason: string }) => {
+        // An inline trigger closes Base UI's always-open list; its own click opens our sheet.
+        if (!sheet || details.reason !== "trigger-press") setOpen(next);
+      }}
       {...(value !== undefined ? { value: toBase(value) } : { defaultValue: toBase(defaultValue) })}
       onValueChange={(next: Option | Option[] | null) =>
         report?.(Array.isArray(next) ? next.map((option) => option.value) : (next?.value ?? (custom ? "" : null)))
@@ -594,12 +639,6 @@ function ComboboxControl(props: ControlProps): JSX.Element {
       {...(sheet
         ? {
             inline: true,
-            open,
-            // An inline list counts as always open, so Base UI reads a trigger press as a
-            // close; the trigger's own click opens the sheet instead.
-            onOpenChange: (next: boolean, details: { reason: string }) => {
-              if (details.reason !== "trigger-press") setOpen(next);
-            },
           }
         : {})}
     >
@@ -631,8 +670,9 @@ function ComboboxControl(props: ControlProps): JSX.Element {
               className={sheetClearClass}
               onClick={() => triggerRef.current?.focus()}
               render={
-                <Button variant="plain" tone="secondary" size="sm" aria-label={clearLabel} className="aspect-square px-0">
+                <Button variant="plain" tone="secondary" size="sm" className="aspect-square px-0">
                   <CrossIcon />
+                  <span className="sr-only">{clearLabel}</span>
                 </Button>
               }
             />
@@ -674,9 +714,10 @@ function ComboboxControl(props: ControlProps): JSX.Element {
                       {picked.map((option) => (
                         <BaseCombobox.Chip key={option.value} data-ouro-combobox-chip="" className={chipClass}>
                           <span>{option.label}</span>
-                          <BaseCombobox.ChipRemove aria-label={removeLabel(option.label)} className={chipRemoveClass}>
+                          <BaseCombobox.ChipRemove data-ouro-combobox-chip-remove="" className={chipRemoveClass}>
                             <TouchTarget />
                             <CrossIcon />
+                            <span className="sr-only">{removeLabel(option.label)}</span>
                           </BaseCombobox.ChipRemove>
                         </BaseCombobox.Chip>
                       ))}
@@ -699,7 +740,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
 
 /** A Combobox that accepts any text, on Base UI Autocomplete. */
 function AutocompleteControl(props: ControlProps): JSX.Element {
-  const { items, value, defaultValue, onValueChange, onInputChange, placeholder, required, loading } = props;
+  const { items, value, onValueChange, onInputChange, placeholder, required, loading } = props;
   const { loadingLabel, emptyLabel, clearLabel, inputRef } = props;
   const field = useField()!;
   // Ouro's own invalid state (the error prop or the Form's error for this name), not Base UI's,
@@ -707,7 +748,9 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
   const invalid = field.invalid;
   const suggestions = useMemo(() => items.map((item) => toOption(item)), [items]);
   const report = onValueChange as ((value: string) => void) | undefined;
-  const [text, setText] = useState(() => ((value ?? defaultValue) as string | undefined) ?? "");
+  const resetInputRef = useRef<HTMLInputElement>(null);
+  const setInputRef = useMergedRef(inputRef, resetInputRef);
+  useCustomReset(resetInputRef, value, props.onReset);
   return (
     <BaseAutocomplete.Root
       items={suggestions}
@@ -715,9 +758,8 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
       filter={onInputChange ? null : undefined}
       required={required}
       openOnInputClick
-      {...(value !== undefined ? { value: value as string } : { defaultValue: (defaultValue as string | undefined) ?? "" })}
+      value={value as string}
       onValueChange={(next, details) => {
-        setText(next);
         report?.(next);
         // A picked suggestion is not a new search.
         if (details.reason !== "item-press") onInputChange?.(next);
@@ -725,7 +767,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
     >
       <BaseAutocomplete.InputGroup data-ouro-input-group="" className={groupClass}>
         <BaseAutocomplete.Input
-          ref={inputRef}
+          ref={setInputRef}
           placeholder={placeholder}
           aria-describedby={field.describedBy}
           {...(invalid ? { "aria-invalid": true } : {})}
@@ -738,7 +780,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
           loading={loading}
           loadingLabel={loadingLabel}
           emptyLabel={emptyLabel}
-          showEmpty={!onInputChange || (value !== undefined ? (value as string) : text) !== ""}
+          showEmpty={!onInputChange || value !== ""}
           className={listClass}
           renderItem={(option) => (
             <BaseAutocomplete.Item key={option.value} value={option} disabled={option.disabled} className={itemClass}>

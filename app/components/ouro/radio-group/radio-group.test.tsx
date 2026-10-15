@@ -8,6 +8,7 @@ import { Radio, RadioGroup, type RadioGroupProps, type RadioProps } from "~/comp
 import { Switch } from "~/components/ouro/switch/switch";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -115,7 +116,7 @@ describe("RadioGroup", () => {
       </>,
     );
     host.querySelector("button")!.focus();
-    await userEvent.keyboard("{Tab}");
+    await pressTab();
     // Tab lands on the chosen radio.
     expect(document.activeElement).toBe(radios[1]);
     await userEvent.keyboard("{ArrowDown}");
@@ -125,9 +126,9 @@ describe("RadioGroup", () => {
     await userEvent.keyboard("{ArrowUp}");
     expect(document.activeElement).toBe(radios[1]);
     expect(onValueChange).toHaveBeenLastCalledWith("medium");
-    await userEvent.keyboard("{Tab}");
+    await pressTab();
     expect(document.activeElement!.textContent).toBe("After");
-    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    await pressTab({ shift: true });
     expect(document.activeElement).toBe(radios[1]);
   });
 
@@ -190,7 +191,9 @@ describe("RadioGroup", () => {
         <RadioGroup legend="Size" name="size" options={sizes} required />
       </form>,
     );
-    expect(root.querySelector("[data-ouro-legend] [data-ouro-required]")).not.toBeNull();
+    const legend = root.querySelector<HTMLElement>("[data-ouro-legend][data-ouro-required]")!;
+    expect(getComputedStyle(legend, "::after").content).toBe('"*" / ""');
+    expect(legend.querySelector("[aria-hidden]")).toBeNull();
     expect(group.getAttribute("aria-required")).toBe("true");
     const form = host.querySelector("form")!;
     expect(form.checkValidity()).toBe(false);
@@ -303,6 +306,24 @@ describe("RadioGroup", () => {
     expect(getComputedStyle(radios[0]!).backgroundColor).toBe(themeColor("--primary"));
     const dot = host.querySelector<HTMLElement>("[data-ouro-radio-dot]")!;
     expect(dot.getBoundingClientRect().width).toBeGreaterThan(0);
+  });
+
+  it("grows the dot in from 95% as it fades in, never from nothing, and only fades with reduced motion", async () => {
+    const { radios, host } = await render(<RadioGroup legend="Size" options={sizes} defaultValue="small" />);
+    const dot = (radio: HTMLElement) => radio.querySelector<HTMLElement>("[data-ouro-radio-dot]")!;
+    const resting = getComputedStyle(dot(radios[1]!));
+    expect(resting.opacity).toBe("0");
+    expect(Number.parseFloat(resting.scale)).toBeCloseTo(0.95, 2);
+    expect(resting.transitionProperty).toBe("scale, opacity");
+    expect(resting.transitionDuration).toBe("0.15s, 0.15s");
+    expect(resting.transitionTimingFunction).toBe("cubic-bezier(0.23, 1, 0.32, 1), cubic-bezier(0.23, 1, 0.32, 1)");
+    await userEvent.click(radios[1]!);
+    await expect.poll(() => getComputedStyle(dot(radios[1]!)).opacity).toBe("1");
+    await expect.poll(() => Number.parseFloat(getComputedStyle(dot(radios[1]!)).scale) || 1).toBeCloseTo(1, 3);
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    expect(getComputedStyle(dot(radios[0]!)).transitionProperty).toBe("opacity");
+    expect(Number.parseFloat(getComputedStyle(dot(radios[1]!)).scale) || 1).toBeCloseTo(1, 3);
+    expect(host.querySelectorAll("[data-ouro-radio-dot]").length).toBe(radios.length);
   });
 
   it("fills the chosen radio with the primary color in dark mode too", async () => {

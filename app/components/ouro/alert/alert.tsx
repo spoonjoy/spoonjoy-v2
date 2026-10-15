@@ -6,7 +6,7 @@ import { fontFor, toneFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { toneWarning, type ToneName } from "~/lib/ouro/tones";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /** An icon component, such as one from `lucide-react` or `@heroicons/react`. */
 export type AlertIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -188,8 +188,14 @@ function toneFromSeverity(value: unknown): ToneName {
  * button when you pass `onDismiss`. Destructive and warning alerts are spoken at once
  * (`role="alert"`); the others politely (`role="status"`).
  *
+ * In and around forms, Alert is the component for a message that belongs to no field and
+ * to no form as a whole: a reorder or a deletion the server refused, a step that could not
+ * be parsed. Render it where the action was taken, with `action` for the way out.
+ *
  * Use `Toast` instead for a brief message that disappears by itself, `ConfirmDialog` to
  * ask before a destructive action, and `Field`'s `error` for a message about one field.
+ * Use `Form`'s `errors` instead for what a submit returned: a field's name as the key puts
+ * the message under that field, and the `form` key shows it at the top of the form.
  *
  * @group Display
  * @see https://ourostack.github.io/ouro-ui/docs/alert
@@ -254,18 +260,18 @@ export function Alert(props: AlertProps): JSX.Element {
       data-ouro="alert"
       data-tone={tone}
       className={cn(
-        "m-0 box-border flex w-full items-start gap-3 rounded-lg border border-solid p-4 text-foreground",
+        "box-border flex w-full items-start gap-3 rounded-lg border border-solid p-4 text-foreground",
         tones[tone].root,
         className,
       )}
     >
       {Icon && <Icon aria-hidden="true" data-ouro-alert-icon="" className={cn("mt-0.5 size-5 shrink-0", accent)} />}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div data-ouro-alert-title="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
+        <div data-ouro-alert-title="" data-ouro-text="" className={cn("text-base/6 font-medium sm:pointer-fine:text-sm/5", accent)}>
           {title}
         </div>
         {description !== undefined && (
-          <div data-ouro-alert-description="" className="text-base/6 sm:pointer-fine:text-sm/5">
+          <div data-ouro-alert-description="" data-ouro-text="" className="text-base/6 sm:pointer-fine:text-sm/5">
             {description}
           </div>
         )}

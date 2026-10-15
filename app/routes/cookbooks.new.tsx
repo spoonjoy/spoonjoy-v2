@@ -132,7 +132,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function NewCookbook() {
   const actionData = useActionData<ActionData>();
-  const formErrors = useFormErrors(actionData?.errors);
+  const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
   // One cookbook per opening of the page: a create after a 503, or a double tap, makes it once.
   const [cookbookToken] = useWriteToken();
 

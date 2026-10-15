@@ -121,7 +121,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function Login() {
   const actionData = useActionData<ActionData>();
-  const formErrors = useFormErrors(actionData?.errors);
+  const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
   const loaderData = useLoaderData<LoaderData | null>();
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();

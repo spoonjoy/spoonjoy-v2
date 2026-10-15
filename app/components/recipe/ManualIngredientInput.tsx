@@ -30,9 +30,8 @@ export function ManualIngredientInput({
   // Not a <form>: this sits inside the Add Step page's own form, and a nested
   // form is invalid HTML. The fields have no name and are not `required`, so
   // they neither travel with nor block that form's submission; Enter adds the
-  // ingredient here instead of submitting it. (They were aria-required before
-  // Ouro UI. Stopgap for an Ouro UI gap: a field cannot say it is required
-  // without the browser's `required`, which would block the page's form.)
+  // ingredient here instead of submitting it. aria-required describes this local
+  // add operation without adding a blocking constraint to the surrounding form.
   const handleAdd = () => {
     const trimmedUnit = unit.trim()
     const trimmedIngredientName = ingredientName.trim()
@@ -74,6 +73,7 @@ export function ManualIngredientInput({
         {/* Ouro UI's TextField has no number type, so the quantity is its Field and control. */}
         <Field label="Quantity" disabled={isDisabled}>
           <FieldControl
+            aria-required="true"
             type="number"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
@@ -86,6 +86,7 @@ export function ManualIngredientInput({
         </Field>
         <TextField
           label="Unit"
+          aria-required="true"
           value={unit}
           onChange={(e) => setUnit(e.target.value)}
           maxLength={UNIT_NAME_MAX_LENGTH}
@@ -95,6 +96,7 @@ export function ManualIngredientInput({
         />
         <TextField
           label="Ingredient"
+          aria-required="true"
           value={ingredientName}
           onChange={(e) => setIngredientName(e.target.value)}
           maxLength={INGREDIENT_NAME_MAX_LENGTH}

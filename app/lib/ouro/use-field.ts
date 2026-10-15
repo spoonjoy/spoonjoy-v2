@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactElement, type ReactNode } from "react";
+import { createContext, isValidElement, useContext, type ReactElement, type ReactNode } from "react";
 
 // The state a Field shares with its control and label, apart from the components so the
 // parts file exports only components (React Fast Refresh). Base UI's Field owns ids,
@@ -102,10 +102,38 @@ export function useFieldOwner(): FieldOwner {
   return useContext(FieldOwnerContext);
 }
 
+/** One error message: text, or a React element for a message that carries a link or other markup. */
+export type ErrorMessage = string | ReactElement;
+
+/** What an `error` prop or a `Form` `errors` value takes: one message, or several as an array. */
+export type ErrorMessages = ErrorMessage | ErrorMessage[];
+
+/**
+ * The messages an `error` holds, in order: one for a single value, one per item for an array,
+ * without repeats (merged validators can repeat one) or empty ones (`""`, and the `null` or
+ * `false` a condition leaves behind in untyped code).
+ *
+ * @internal
+ */
+export function errorMessages(error: ErrorMessages | null | undefined): ErrorMessage[] {
+  const list: unknown[] = Array.isArray(error) ? error : [error];
+  return [...new Set(list)].filter((message): message is ErrorMessage => typeof message === "string" ? message !== "" : isValidElement(message));
+}
+
+/**
+ * A React key for one of `errorMessages`' messages: the text itself, or its place in the list
+ * for a node.
+ *
+ * @internal
+ */
+export function errorMessageKey(message: ErrorMessage, index: number): string {
+  return typeof message === "string" ? `text:${message}` : `node:${index}`;
+}
+
 /** A form's server or client errors, by field name, as `Form` shares them with the fields inside it. */
 export interface FormErrorsValue {
   /** The messages for each field name; a field shows its own when it has no `error` prop. */
-  errors: Readonly<Record<string, string | string[]>>;
+  errors: Readonly<Record<string, ErrorMessages | null | undefined>>;
   /** Drops one field's message, once the user changes that field. */
   clear: (name: string) => void;
   /**

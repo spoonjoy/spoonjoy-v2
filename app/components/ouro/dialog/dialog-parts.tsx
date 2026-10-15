@@ -7,7 +7,7 @@ import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { devThrow } from "~/lib/ouro/dev";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { useBackdropAnchor } from "~/lib/ouro/use-backdrop-anchor";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
 import { cn } from "~/lib/ouro/cn";
 import { footerClass, iosBackdrop, sheetHint } from "~/components/ouro/sheet/sheet-styles";
@@ -18,16 +18,16 @@ export type { DialogSize } from "~/components/ouro/dialog/dialog-styles";
 const DialogContext = createContext(false);
 
 /*
- * Styles. The popup scales from 0.96 and fades in with the theme spring, and scales and
- * fades out quickly; reduced motion keeps only the fade. The viewport keeps a 1rem
+ * Styles. The popup scales from 0.96 and fades in over 300ms, and scales and
+ * fades out in 200ms, on the ease-out token; reduced motion keeps only the fade. The viewport keeps a 1rem
  * margin (or the safe area) on every side, so the dialog fits a phone; the body scrolls
  * when the dialog is taller than that. Class strings are literal so the app's Tailwind
  * finds them when it compiles.
  */
 const backdropClass =
   "fixed inset-0 z-1000 min-h-dvh bg-(--ouro-backdrop-color) opacity-(--ouro-backdrop-max) " +
-  "transition-opacity duration-(--ouro-duration-slow) ease-out " +
-  "data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-base) " +
+  "transition-opacity duration-(--ouro-duration-slow) ease-(--ouro-ease-out) " +
+  "data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-(--ouro-duration-base) data-ouro-instant:transition-none " +
   iosBackdrop;
 
 const viewportClass =
@@ -39,12 +39,12 @@ const popupClass =
   "relative box-border flex w-full max-h-full min-h-0 flex-col outline-none " +
   "rounded-xl bg-popover text-popover-foreground " +
   "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_16px_48px_rgb(0_0_0/0.18)] " +
-  "[transition:transform_var(--ouro-spring-duration)_var(--ouro-ease-spring),opacity_var(--ouro-duration-base)_ease-out] " +
+  "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
   "data-ending-style:[transform:scale(0.96)] data-ending-style:opacity-0 " +
-  "data-ending-style:duration-(--ouro-duration-base) data-ending-style:ease-in " +
-  "motion-reduce:[transition:opacity_var(--ouro-duration-base)_ease-out] " +
-  "motion-reduce:data-starting-style:[transform:none] motion-reduce:data-ending-style:[transform:none]";
+  "data-ending-style:duration-(--ouro-duration-base) " +
+  "motion-reduce:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
+  "motion-reduce:data-starting-style:[transform:none] motion-reduce:data-ending-style:[transform:none] data-ouro-instant:[transition:none]";
 
 const popupSizes = { sm: "max-w-[24rem]", md: "max-w-[32rem]", lg: "max-w-[40rem]" } as const;
 
@@ -151,8 +151,8 @@ export type DialogPopupProps = Omit<BaseDialog.Popup.Props, "className"> & {
 };
 
 /**
- * Part: the dialog panel. It scales up from 0.96 and fades in with the theme
- * spring, and scales and fades out; reduced motion keeps only the fade.
+ * Part: the dialog panel. It scales up from 0.96 and fades in over 300ms, and scales and
+ * fades out in 200ms; reduced motion keeps only the fade.
  */
 export function DialogPopup({ size: sizeProp = "md", ...props }: DialogPopupProps): JSX.Element {
   // A size that is not one of Ouro UI's (a type error) warns and renders md.

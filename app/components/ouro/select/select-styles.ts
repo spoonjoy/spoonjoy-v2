@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
+import { hasLazyType, serverNodes } from "~/lib/ouro/server-element";
 
 export { flattenOptions, groupLabelClass, itemClass, itemIndicatorClass, popupClass, positionerClass, sheetQuery, triggerClass, backdropClass, sheetTitleClass, isGroup };
 export type { SelectOption, SelectOptionGroup, SelectOptions };
@@ -48,11 +49,18 @@ function flattenOptions(options: SelectOptions | undefined, children: ReactNode,
   for (const entry of options ?? []) {
     for (const option of isGroup(entry) ? entry.options : [entry]) found.push({ value: option.value, label: option.label });
   }
-  const walk = (node: ReactNode): void => {
+  const walk = (given: ReactNode): void => {
+    // Items a Server Component passed can arrive inside a lazy wrapper with no props.
+    const node = serverNodes(given);
     if (Array.isArray(node)) return node.forEach(walk);
     if (!node || typeof node !== "object" || !("props" in node)) return;
-    const element = node as ReactElement<{ value?: string; children?: ReactNode }>;
-    if (element.type === itemType) found.push({ value: element.props.value!, label: element.props.children });
+    const element = node as ReactElement<{ value?: unknown; children?: ReactNode }>;
+    // An item is a `SelectItem`. Across a Server Component boundary its type is a lazy
+    // reference, never the component itself, so there it is known by its string `value`.
+    // (That also takes a client component with a string `value` that a Server Component put
+    // around the items for an item; nothing visible across the boundary tells them apart.)
+    const isItem = element.type === itemType || (hasLazyType(element) && typeof element.props.value === "string");
+    if (isItem) found.push({ value: element.props.value as string, label: element.props.children });
     else walk(element.props.children);
   };
   walk(children);
@@ -79,8 +87,8 @@ const triggerClass =
   "rounded-md border border-solid border-input bg-transparent text-start text-base text-foreground sm:pointer-fine:text-sm " +
   "font-[inherit] cursor-pointer select-none [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "transition-[border-color] duration-(--ouro-duration-fast) ease-out " +
-  "hover:not-data-disabled:border-ring/60 aria-invalid:border-destructive " +
+  "transition-[border-color,background-color] duration-(--ouro-duration-fast) ease-[ease] " +
+  "pointer-fine:hover:not-data-disabled:border-ring/60 not-data-disabled:active:bg-accent/60 aria-invalid:border-destructive " +
   "data-disabled:cursor-not-allowed data-disabled:opacity-50 dark:bg-input/30 " +
   "[&_[data-placeholder]]:text-muted-foreground [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground";
 
@@ -106,7 +114,7 @@ const popupClass =
   "box-border flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden outline-none " +
   "rounded-md border border-solid border-border bg-popover p-1 text-popover-foreground " +
   "[box-shadow:0_8px_24px_rgb(0_0_0/0.12)] origin-(--transform-origin) " +
-  "[transition:opacity_var(--ouro-duration-fast)_ease-out,scale_var(--ouro-duration-fast)_ease-out] " +
+  "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),scale_var(--ouro-duration-base)_var(--ouro-ease-out)] data-ending-style:duration-(--ouro-duration-fast) " +
   "data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 " +
   "data-[side=none]:data-starting-style:scale-100 data-[side=none]:data-starting-style:opacity-100 " +
   "motion-reduce:data-starting-style:scale-100 motion-reduce:data-ending-style:scale-100 " +
@@ -114,11 +122,12 @@ const popupClass =
   "data-[ouro-presentation=sheet]:rounded-none data-[ouro-presentation=sheet]:rounded-t-xl data-[ouro-presentation=sheet]:border-x-0 " +
   "data-[ouro-presentation=sheet]:border-b-0 data-[ouro-presentation=sheet]:px-2 data-[ouro-presentation=sheet]:pt-2 " +
   "data-[ouro-presentation=sheet]:pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] " +
-  "data-[ouro-presentation=sheet]:[transition:transform_var(--ouro-spring-duration)_var(--ouro-ease-spring),opacity_var(--ouro-duration-fast)_ease-out] " +
+  "data-[ouro-presentation=sheet]:[transition:translate_var(--ouro-duration-sheet)_var(--ouro-ease-drawer),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "data-[ouro-presentation=sheet]:data-starting-style:scale-100 data-[ouro-presentation=sheet]:data-ending-style:scale-100 " +
   "data-[ouro-presentation=sheet]:data-starting-style:opacity-100 data-[ouro-presentation=sheet]:data-ending-style:opacity-100 " +
   "data-[ouro-presentation=sheet]:data-starting-style:translate-y-full data-[ouro-presentation=sheet]:data-ending-style:translate-y-full " +
-  "motion-reduce:data-[ouro-presentation=sheet]:[transition:opacity_var(--ouro-duration-base)_ease-out] " +
+  "data-[ouro-presentation=sheet]:data-ending-style:duration-(--ouro-duration-base) " +
+  "motion-reduce:data-[ouro-presentation=sheet]:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] " +
   "motion-reduce:data-[ouro-presentation=sheet]:data-starting-style:translate-y-0 motion-reduce:data-[ouro-presentation=sheet]:data-ending-style:translate-y-0 " +
   "motion-reduce:data-[ouro-presentation=sheet]:data-starting-style:opacity-0 motion-reduce:data-[ouro-presentation=sheet]:data-ending-style:opacity-0";
 
@@ -129,7 +138,7 @@ const popupClass =
  */
 const backdropClass =
   "fixed inset-0 bg-(--ouro-backdrop-color) opacity-(--ouro-backdrop-max) " +
-  "[transition:opacity_var(--ouro-duration-base)_ease-out] data-starting-style:opacity-0 data-ending-style:opacity-0";
+  "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] data-starting-style:opacity-0 data-ending-style:opacity-0";
 
 /**
  * The sheet's heading: the field's label, so the user sees what they are choosing.
@@ -148,6 +157,7 @@ const itemClass =
   "relative box-border grid min-h-11 cursor-default grid-cols-[1rem_1fr] items-center gap-2 rounded-sm px-2 py-1.5 " +
   "text-base leading-6 outline-none select-none pointer-fine:min-h-8 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 " +
   "scroll-my-1 [-webkit-tap-highlight-color:transparent] data-highlighted:bg-accent data-highlighted:text-accent-foreground " +
+  "not-data-disabled:active:bg-accent not-data-disabled:active:text-accent-foreground " +
   "data-disabled:opacity-50 [&_svg]:size-4";
 
 /**

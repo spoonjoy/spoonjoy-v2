@@ -4,7 +4,7 @@ import { Fieldset as BaseFieldset } from "@base-ui/react/fieldset";
 import { useId, type JSX, type ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { descriptionClass, fieldHint, legendClass } from "~/components/ouro/field/field-styles";
 
 /** Props for {@link Fieldset}. Groups take `legend` where a single control takes `label`. */
@@ -82,7 +82,7 @@ export function Fieldset(props: FieldsetProps): JSX.Element {
       aria-labelledby={legendId}
       aria-describedby={hasDescription ? descriptionId : undefined}
       data-ouro="fieldset"
-      className={cn("m-0 box-border grid min-w-0 content-start gap-4 border-0 p-0", className)}
+      className={cn("[@layer_ouro-reset]:m-0 box-border grid min-w-0 content-start gap-4 border-0 p-0", className)}
     >
       {hasDescription ? (
         <div className="grid gap-1">

@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id.edit";
-import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "react-router";
+import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit, useFetcher } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
@@ -560,6 +560,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 export default function EditRecipe() {
   const { recipe, coverImageUrl, formattedSteps, imported } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
+  const [initialActionData] = useState(actionData);
+  const saveFetcher = useFetcher<ActionData>();
+  const [saveAnswer, setSaveAnswer] = useState<ActionData>();
+  const saveData = saveAnswer ?? initialActionData;
   const navigate = useNavigate();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -568,14 +572,16 @@ export default function EditRecipe() {
   const submitInFlightRef = useRef(false);
   const [stepToDelete, setStepToDelete] = useState<{ id: string; stepNum: number } | null>(null);
   const [submitStarted, setSubmitStarted] = useState(false);
-  const isLoading = navigation.state === 'submitting' || submitStarted;
+  const isLoading = saveFetcher.state === "submitting" || navigation.state === 'submitting' ||
+    (submitStarted && saveFetcher.state === "idle");
 
   useEffect(() => {
-    if (navigation.state === "idle") {
+    if (navigation.state === "idle" && saveFetcher.state !== "submitting") {
       submitInFlightRef.current = false;
       setSubmitStarted(false);
     }
-  }, [navigation.state]);
+    if (saveFetcher.state === "idle") setSaveAnswer(saveFetcher.data);
+  }, [navigation.state, saveFetcher.state, saveFetcher.data]);
 
   const handleCancel = () => {
     navigate(`/recipes/${recipe.id}`);
@@ -583,7 +589,7 @@ export default function EditRecipe() {
 
   const handleSave = (recipeData: RecipeBuilderData) => {
     /* istanbul ignore next -- @preserve duplicate-submit latch is asserted through route action call counts */
-    if (submitInFlightRef.current || navigation.state !== "idle") {
+    if (submitInFlightRef.current || navigation.state !== "idle" || saveFetcher.state !== "idle") {
       return;
     }
 
@@ -642,12 +648,12 @@ export default function EditRecipe() {
       {imported ? <ImportedRecipeNotice sourceUrl={recipe.sourceUrl} /> : null}
 
       <div className="mt-8 max-w-5xl">
-        <Form ref={formRef} method="post" encType="multipart/form-data" className="hidden" aria-hidden="true">
+        <saveFetcher.Form ref={formRef} method="post" encType="multipart/form-data" className="hidden" aria-hidden="true">
           <input type="hidden" name="id" value={recipe.id} />
           <input
             type="hidden"
             name="expectedUpdatedAt"
-            value={actionData?.currentUpdatedAt ?? loadedUpdatedAt(recipe.updatedAt)}
+            value={saveData?.currentUpdatedAt ?? loadedUpdatedAt(recipe.updatedAt)}
           />
           <input type="hidden" name="title" />
           <textarea name="description" className="hidden" />
@@ -656,7 +662,7 @@ export default function EditRecipe() {
           <input type="hidden" name="clearImage" />
           <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
           <button type="submit">Save recipe</button>
-        </Form>
+        </saveFetcher.Form>
 
         {actionData?.errors?.reorder && (
           <Alert tone="destructive" title={actionData.errors.reorder} className="mb-4" />
@@ -677,7 +683,8 @@ export default function EditRecipe() {
           }}
           onSave={handleSave}
           onCancel={handleCancel}
-          errors={actionData?.errors}
+          errors={saveData?.errors}
+          answer={saveAnswer}
           loading={isLoading}
           showSteps={false}
         />

@@ -6,6 +6,7 @@ import { act } from "~/lib/ouro/testing/act";
 import { Button } from "~/components/ouro/button/button";
 import { Sheet } from "~/components/ouro/sheet/sheet";
 import { Dialog } from "~/components/ouro/dialog/dialog";
+import { pressTint } from "~/lib/ouro/testing/press";
 import { rotate } from "~/lib/ouro/testing/rotate";
 
 // Runs in the `touch` project: Chromium as a 390x844 phone with a coarse pointer.
@@ -221,4 +222,22 @@ it("gives the centered dialog's close button a 44px hit area on a coarse pointer
   expect(hits(rect.right + 2, cy)).toBe(true);
   // Outside 44px it does not reach.
   expect(hits(cx - 23, cy)).toBe(false);
+});
+
+describe("Dialog close button pressed (landscape phone, 844x390)", () => {
+  it.each(["no-preference", "reduce"] as const)("tints on pointer-down from the press alone, with motion %s", async (motion) => {
+    await commands.emulateMedia({ reducedMotion: motion });
+    await rotate(844, 390);
+    await mount(
+      <Dialog title="Edit recipe" presentation="dialog" trigger={<Button>Edit</Button>}>
+        Body
+      </Dialog>,
+    );
+    await commands.tap(TRIGGER);
+    await opened();
+    const { rest, pressed, active } = await pressTint(popup()!.querySelector<HTMLElement>("[data-ouro-dialog-close]")!);
+    expect(active).toBe(true);
+    expect(pressed).not.toBe(rest);
+    await commands.emulateMedia({ reducedMotion: "no-preference" });
+  });
 });

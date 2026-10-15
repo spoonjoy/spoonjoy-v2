@@ -6,6 +6,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { Combobox, type ComboboxProps } from "~/components/ouro/combobox/combobox";
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTab } from "~/lib/ouro/testing/tab";
 
 const herbs = ["Basil", "Chives", "Dill", "Mint", "Oregano", "Parsley", "Rosemary", "Sage", "Thyme"];
 const cheeses = [
@@ -40,7 +41,7 @@ async function render(node: ReactNode) {
       return host.querySelector<HTMLElement>("[data-ouro-input-group]")!;
     },
     button(name: string) {
-      return [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-label") === name) ?? null;
+      return [...host.querySelectorAll("button")].find((button) => button.textContent === name) ?? null;
     },
   };
 }
@@ -245,7 +246,7 @@ describe("Combobox multiple", () => {
     const { input, host } = await render(
       <Combobox label="Herbs" name="herbs" multiple items={herbs} defaultValue={["Basil"]} onValueChange={onValueChange} />,
     );
-    const chips = () => [...host.querySelectorAll("[data-ouro-combobox-chip]")].map((chip) => chip.textContent);
+    const chips = () => [...host.querySelectorAll("[data-ouro-combobox-chip]")].map((chip) => chip.firstChild!.textContent);
     expect(chips()).toEqual(["Basil"]);
     await userEvent.click(input);
     await userEvent.type(input, "thy");
@@ -349,6 +350,14 @@ describe("Combobox allowCustomValue", () => {
 });
 
 describe("Combobox looks", () => {
+  it("draws TextField's bordered box around the input", async () => {
+    const { group } = await render(<Combobox label="Herb" items={herbs} />);
+    const box = getComputedStyle(group);
+    expect(box.borderTopStyle).toBe("solid");
+    expect(parseFloat(box.borderTopWidth)).toBeGreaterThan(0);
+    expect(parseFloat(box.paddingLeft)).toBeGreaterThan(0);
+  });
+
   it("uses a 16px font and a 44px box on phones, stepping down with a mouse on wider screens", async () => {
     await page.viewport(390, 844);
     const { input, group } = await render(<Combobox label="Herb" items={herbs} />);
@@ -367,7 +376,7 @@ describe("Combobox looks", () => {
     );
     const [valid, invalid] = [...host.querySelectorAll<HTMLElement>("[data-ouro-input-group]")];
     expect(getComputedStyle(invalid!).borderTopColor).not.toBe(getComputedStyle(valid!).borderTopColor);
-    await userEvent.keyboard("{Tab}");
+    await pressTab();
     await expect.poll(() => getComputedStyle(valid!).outlineStyle).toBe("solid");
   });
 
@@ -387,6 +396,55 @@ describe("Combobox looks", () => {
     await userEvent.keyboard("{ArrowDown}");
     await expect.poll(popup).not.toBeNull();
     expect(getComputedStyle(popup()!).transitionProperty).toBe("opacity");
+  });
+});
+
+describe("Combobox motion", () => {
+  const timing = (element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    return { duration: style.transitionDuration.split(", ")[0], easing: style.transitionTimingFunction.split(/,\s(?![^(]*\))/)[0] };
+  };
+
+  it("scales about the point Base UI computes next to its input, and leaves on the ease-out token", async () => {
+    const { input } = await render(<Combobox label="Herb" items={herbs} />);
+    await userEvent.click(input);
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(popup).not.toBeNull();
+    const element = popup()!;
+    element.style.setProperty("--transform-origin", "7px 3px");
+    expect(getComputedStyle(element).transformOrigin).toBe("7px 3px");
+    element.setAttribute("data-ending-style", "");
+    expect(timing(element)).toEqual({ duration: "0.15s", easing: "cubic-bezier(0.23, 1, 0.32, 1)" });
+    element.removeAttribute("data-ending-style");
+  });
+
+  it("leaves a loose label lookup for the field on the input, not on its clear or remove buttons", async () => {
+    const { host } = await render(
+      <>
+        <Combobox label="Herb" items={herbs} defaultValue="Basil" clearLabel="Clear herb" />
+        <Combobox label="Basil" multiple items={herbs} defaultValue={["Basil"]} />
+      </>,
+    );
+    const [single, multiple] = [...host.querySelectorAll<HTMLInputElement>('input[role="combobox"]')];
+    expect(page.getByLabelText("Herb", { exact: false }).elements()).toEqual([single]);
+    expect(page.getByLabelText("Basil", { exact: false }).elements()).toEqual([multiple]);
+    for (const name of ["Clear herb", "Remove Basil"]) {
+      const button = page.getByRole("button", { name, exact: true });
+      await expect.element(button).toBeInTheDocument();
+      expect(button.element().hasAttribute("aria-label")).toBe(false);
+    }
+  });
+
+  it("shrinks a chip's remove button on pointer-down", async () => {
+    await render(<Combobox label="Herbs" multiple items={herbs} defaultValue={["Basil"]} />);
+    const selector = "[data-ouro-combobox-chip-remove]";
+    const remove = document.querySelector<HTMLElement>(selector)!;
+    await commands.pointerPress({ selector, action: "down" });
+    try {
+      await expect.poll(() => getComputedStyle(remove).scale).toBe("0.97");
+    } finally {
+      await commands.pointerPress({ selector, action: "up" });
+    }
   });
 });
 
@@ -451,7 +509,7 @@ describe("Combobox server rendering", () => {
     expect(herb!.getAttribute("aria-invalid")).toBe("true");
     expect(herb!.getAttribute("value")).toBe("Dill");
     expect(describedBy(multi!).map((id) => doc.getElementById(id)!.textContent)).toEqual(["As many as you like."]);
-    expect(doc.querySelector("[data-ouro-combobox-chip]")!.textContent).toBe("Basil");
+    expect(doc.querySelector("[data-ouro-combobox-chip]")!.firstChild!.textContent).toBe("Basil");
     expect(doc.querySelector(`label[for="${cuisine!.id}"]`)!.textContent).toBe("Cuisine");
     expect(error).not.toHaveBeenCalled();
   });

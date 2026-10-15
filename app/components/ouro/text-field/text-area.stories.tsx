@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
+import { Button } from "~/components/ouro/button/button";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
@@ -64,6 +65,24 @@ export const States: Story = {
       <TextArea label="Notes" name="notes" required description="Only you see these." placeholder="Anything to remember" />
       <TextArea label="Review" name="review" error="Keep it under 500 characters." defaultValue="Lovely, but needed more salt." />
       <TextArea label="Shared notes" name="shared" disabled description="Only the owner can edit these." defaultValue="Use fresh lemons." />
+    </Surface>
+  ),
+};
+
+/**
+ * A chat composer: the box is the app's, and the textarea inside it has no frame
+ * (`variant="plain"`), so the send button sits in the same box.
+ */
+export const Composer: Story = {
+  render: () => (
+    <Surface>
+      <form
+        style={{ display: "flex", alignItems: "end", gap: 8, border: "1px solid var(--input)", borderRadius: "calc(var(--radius) + 4px)", padding: "8px 8px 8px 12px" }}
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <TextArea label="Message" hideLabel name="message" placeholder="Ask about this recipe" variant="plain" autoGrow rows={1} maxRows={6} className="flex-1" />
+        <Button type="submit">Send</Button>
+      </form>
     </Surface>
   ),
 };

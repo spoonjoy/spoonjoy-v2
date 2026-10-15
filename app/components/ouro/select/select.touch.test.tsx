@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { commands, page } from "vitest/browser";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { Select } from "~/components/ouro/select/select";
 import { act } from "~/lib/ouro/testing/act";
+import { pressTint } from "~/lib/ouro/testing/press";
 import { rotate } from "~/lib/ouro/testing/rotate";
 
 // Runs in the `touch` project: Chromium as a 390x844 phone with a coarse pointer
@@ -108,15 +109,105 @@ it("closes the sheet when the backdrop is tapped", async () => {
   await expect.poll(isOpen).toBe(false);
 });
 
-it("slides the sheet with transform, and only fades it with reduced motion", async () => {
+it("only fades the sheet with reduced motion", async () => {
   await commands.emulateMedia({ reducedMotion: "reduce" });
   await render(<Select label="Ingredient" options={ingredients.slice(0, 5)} />);
   await commands.tap('[role="combobox"]');
   await expect.poll(isOpen).toBe(true);
   await settled(popup());
   expect(getComputedStyle(popup()).transitionProperty).toBe("opacity");
-  await commands.emulateMedia({ reducedMotion: "no-preference" });
-  expect(getComputedStyle(popup()).transitionProperty).toBe("transform, opacity");
+});
+
+it("slides the sheet up from the bottom edge in 500ms on the drawer curve, and leaves in 200ms", async () => {
+  await render(<Select label="Ingredient" options={ingredients.slice(0, 5)} />);
+  const tops: number[] = [];
+  let sampling = true;
+  const sample = () => {
+    const element = document.querySelector<HTMLElement>('[data-ouro="select-popup"]');
+    if (element) tops.push(element.getBoundingClientRect().top);
+    if (sampling) requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+  await commands.tap('[role="combobox"]');
+  await expect.poll(isOpen).toBe(true);
+  await settled(popup());
+  sampling = false;
+  const style = getComputedStyle(popup());
+  expect(style.transitionProperty).toBe("translate, opacity");
+  expect(style.transitionDuration).toBe("0.5s, 0.15s");
+  expect(style.transitionTimingFunction).toBe("cubic-bezier(0.32, 0.72, 0, 1), cubic-bezier(0.23, 1, 0.32, 1)");
+  const rest = popup().getBoundingClientRect().top;
+  // It starts below the screen and passes through positions on the way to rest.
+  expect(Math.max(...tops)).toBeGreaterThanOrEqual(844);
+  expect(tops.some((top) => top > rest + 1 && top < 844 - 1)).toBe(true);
+  popup().setAttribute("data-ending-style", "");
+  expect(getComputedStyle(popup()).transitionDuration).toBe("0.2s");
+  popup().removeAttribute("data-ending-style");
+});
+
+describe("Select on a phone, pressed", () => {
+  it("tints the trigger under a held finger, without moving or transforming it", async () => {
+    const host = await render(<Select label="Course" options={[{ value: "a", label: "Starter" }]} />);
+    const trigger = host.querySelector<HTMLElement>('[role="combobox"]')!;
+    const box = JSON.stringify(trigger.getBoundingClientRect());
+    // A mouse opens the list on pointer-down, and the open list is its feedback. A finger
+    // opens it on release (the browser sends mousedown then), so for the whole hold the
+    // trigger is pressed with the list closed and the tint is the only feedback; holding the
+    // open back models that hold.
+    const hold = (event: Event) => event.stopImmediatePropagation();
+    const types = ["pointerdown", "mousedown", "click"];
+    for (const type of types) window.addEventListener(type, hold, true);
+    try {
+      const { rest, pressed, active } = await pressTint(trigger, {
+        during: () => {
+          const style = getComputedStyle(trigger);
+          expect([style.scale, style.transform]).toEqual(["none", "none"]);
+          expect(JSON.stringify(trigger.getBoundingClientRect())).toBe(box);
+        },
+      });
+      expect(active).toBe(true);
+      expect(pressed).not.toBe(rest);
+    } finally {
+      for (const type of types) window.removeEventListener(type, hold, true);
+    }
+  });
+
+  const options = [
+    { value: "a", label: "Starter" },
+    { value: "b", label: "Main" },
+    { value: "c", label: "Dessert", disabled: true },
+  ];
+
+  async function openSheet() {
+    await render(<Select label="Course" options={options} />);
+    await commands.tap('[role="combobox"]');
+    await expect.poll(isOpen).toBe(true);
+    await settled(popup());
+    return [...popup().querySelectorAll<HTMLElement>('[role="option"]')];
+  }
+
+  it("tints an option on pointer-down, from the press alone", async () => {
+    const [, main] = await openSheet();
+    const { rest, pressed, active } = await pressTint(main!, { clearHighlight: true });
+    expect(active).toBe(true);
+    expect(pressed).not.toBe(rest);
+  });
+
+  it("does not tint a disabled option, and stays open", async () => {
+    const [, , dessert] = await openSheet();
+    const rest = getComputedStyle(dessert!).backgroundColor;
+    dessert!.setAttribute("data-press-target", "");
+    await commands.pointerPress({ selector: "[data-press-target]", action: "down" });
+    try {
+      await expect.poll(() => dessert!.matches(":active")).toBe(true);
+      // Base UI may highlight the row under the pointer; only the press itself is in question.
+      dessert!.removeAttribute("data-highlighted");
+      expect(getComputedStyle(dessert!).backgroundColor).toBe(rest);
+    } finally {
+      await commands.pointerPress({ selector: "[data-press-target]", action: "up" });
+    }
+    expect(isOpen()).toBe(true);
+  });
 });
 
 it("keeps 44px controls and 16px text on a landscape phone, where the list opens by the trigger", async () => {

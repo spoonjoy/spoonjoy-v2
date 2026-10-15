@@ -144,7 +144,8 @@ describe("build output hygiene", () => {
     // line for an app that is not on React Server Components": every copied-in Ouro UI file
     // keeps the line, so only Spoonjoy's own source is held to this. The build's notices about
     // those files are filtered by scripts/build-output-hygiene.ts, under the same defect. Remove
-    // both with the fix (v0.8.0).
+    // both only when a pinned CLI install actually strips them. v0.8.0 installed via
+    // shadcn 4.21.1 and 4.21.4 still retains these directives in this React Router app.
     const ouroDirs = ["app/components/ouro", "app/lib/ouro"].map((dir) => path.join(process.cwd(), dir) + path.sep);
     const sourceFiles = (await findSourceFiles(path.join(process.cwd(), "app"))).filter(
       (filePath) => !ouroDirs.some((dir) => filePath.startsWith(dir)),

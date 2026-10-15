@@ -1,5 +1,5 @@
 import type { Route } from "./+types/recipes.$id.steps.new";
-import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useNavigate } from "react-router";
+import { redirect, data, useActionData, useLoaderData, useNavigate, useFetcher } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
@@ -415,13 +415,16 @@ const STEP_FIELDS = ["stepTitle", "usesSteps", "description"] as const;
 export default function NewStep() {
   const { recipe, nextStepNum, availableSteps } = useLoaderData<typeof loader>();
   const actionData = useActionData<ActionData>();
+  const [initialActionData] = useState(actionData);
+  const createFetcher = useFetcher<ActionData>();
+  const createData = createFetcher.data ?? initialActionData;
   const [ingredientInputMode, setIngredientInputMode] = useState<IngredientInputMode>("ai");
   const [ingredients, setIngredients] = useState<ParsedIngredient[]>([]);
   const [parsedIngredients, setParsedIngredients] = useState<ParsedIngredient[]>([]);
   // One step per opening of the page: a save after a 503, or a double tap, writes it once.
   const [stepToken] = useWriteToken();
   const navigate = useNavigate();
-  const formErrors = useFormErrors(actionData?.errors, STEP_FIELDS);
+  const formErrors = useFormErrors(createData?.errors, STEP_FIELDS, createFetcher.data);
 
   const parsedListShown = ingredientInputMode !== "manual" && parsedIngredients.length > 0;
 
@@ -470,7 +473,7 @@ export default function NewStep() {
 
       <div className="mt-8 max-w-4xl">
         {/* The save's messages land on the fields by name; "general" shows at the top of the form. */}
-        <Form method="post" errors={formErrors} render={<RouterForm />} className="sj-form-section gap-6">
+        <Form method="post" errors={formErrors} render={<createFetcher.Form />} className="sj-form-section gap-6">
           <input type="hidden" name="stepToken" value={stepToken} />
             <TextField
               label="Step Title (optional)"
@@ -533,19 +536,19 @@ export default function NewStep() {
                   </>
                 )}
 
-                {actionData?.errors?.quantity && (
+                {createData?.errors?.quantity && (
                   <p className="text-base/6 text-[var(--sj-tomato)] sm:text-sm/6" role="alert">
-                    {actionData.errors.quantity}
+                    {createData.errors.quantity}
                   </p>
                 )}
-                {actionData?.errors?.unitName && (
+                {createData?.errors?.unitName && (
                   <p className="text-base/6 text-[var(--sj-tomato)] sm:text-sm/6" role="alert">
-                    {actionData.errors.unitName}
+                    {createData.errors.unitName}
                   </p>
                 )}
-                {actionData?.errors?.ingredientName && (
+                {createData?.errors?.ingredientName && (
                   <p className="text-base/6 text-[var(--sj-tomato)] sm:text-sm/6" role="alert">
-                    {actionData.errors.ingredientName}
+                    {createData.errors.ingredientName}
                   </p>
                 )}
               </div>
