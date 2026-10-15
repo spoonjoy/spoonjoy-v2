@@ -19,6 +19,7 @@ import { DockContextProvider, MobileNav, shareContent } from "~/components/navig
 import {
   loader,
   action,
+  clientAction,
   meta,
   applyCreatedCookbookState,
   findRecipeStepsScrollTarget,
@@ -3367,6 +3368,11 @@ describe("Recipes $id Route", () => {
 
     it("sends no cook-session request once the cook confirms deleting the recipe, even with a change still unsent", async () => {
       window.localStorage.clear();
+      writeSyncedCookCache("user-1", "other-recipe", {
+        progress: { activeStepIndex: 0, activeStepId: null, scaleFactor: 3, checkedIngredientIds: [], checkedStepOutputIds: [] },
+        server: null,
+      });
+      const unrelated = window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "other-recipe"));
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ state: null })));
       const mockData = {
         recipe: {
@@ -3397,7 +3403,11 @@ describe("Recipes $id Route", () => {
           path: "/recipes/:id",
           Component: RecipeDetail,
           loader: () => mockData,
-          action: () => redirect("/recipes"),
+          action: ({ request, params }) => clientAction({
+            request,
+            params,
+            serverAction: async () => { throw redirect("/recipes"); },
+          } as never),
         },
         { path: "/recipes", Component: () => <h1>My recipes</h1> },
       ]);
@@ -3417,6 +3427,7 @@ describe("Recipes $id Route", () => {
         const confirm = await screen.findByRole("button", { name: "Delete" });
         fireEvent.click(screen.getByRole("button", { name: "Increase scale", hidden: true }));
         const requestsBeforeConfirm = fetchMock.mock.calls.length;
+        expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).not.toBeNull();
         fireEvent.click(confirm);
         await screen.findByRole("heading", { name: "My recipes" });
         await new Promise((resolve) => setTimeout(resolve, 400));
@@ -3424,6 +3435,8 @@ describe("Recipes $id Route", () => {
 
         expect(requestsBeforeConfirm).toBe(1);
         expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).toBeNull();
+        expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "other-recipe"))).toBe(unrelated);
       } finally {
         fetchMock.mockRestore();
         window.localStorage.clear();

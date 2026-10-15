@@ -35,9 +35,7 @@ function ingredient(page: Page, name: string) {
   return page.getByRole("checkbox", { name, exact: true });
 }
 
-// The recipe page syncs the cook's progress when it loads. Deleting the recipe stops the sync, but
-// a request already on its way still lands, and the server answers 404 for a deleted recipe: a
-// console error the journey would fail on. A cook deletes after the page has settled, so wait.
+// Establish the initial synced state before checking deletion and its cache cleanup.
 async function expectCookProgressSynced(page: Page) {
   await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
 }
@@ -213,10 +211,16 @@ test.describe("Recipe create and edit", () => {
     // --- Delete the recipe.
     await waitForHydration(page);
     await expectCookProgressSynced(page);
+    const cachedProgressKeys = await page.evaluate((path) => Object.keys(localStorage).filter((key) =>
+      key.startsWith("spoonjoy-cook-progress:") && key.endsWith(`:${path.split("/").at(-1)}`)), recipePath);
+    expect(cachedProgressKeys).toHaveLength(1);
     await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
+    await verifyAfterReload(async () => {
+      expect(await page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), cachedProgressKeys)).toEqual([null]);
+    });
 
     // Its page is gone. The browser logs the document's 404 as a console error; that one is
     // expected, and scoped to this recipe's URL.
