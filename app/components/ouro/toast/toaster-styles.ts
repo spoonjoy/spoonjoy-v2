@@ -16,16 +16,18 @@ const portalClass = "relative isolate z-[calc(var(--ouro-layer)+1)]";
  * The fixed region the toasts stack in: full width at the bottom of a phone, inside the
  * safe area, and spacing-scale 90 at the bottom end from `sm`. Each overridable
  * property has one unprefixed utility, so app layout classes win at every width.
+ * --theme resolves named/inline spacing aliases as the original utilities did;
+ * its fallback also supports a scale supplied through ordinary CSS variables.
  *
  * @internal
  */
 const viewportClass =
   "fixed outline-none " +
   "start-(--ouro-toaster-start) end-(--ouro-toaster-end) bottom-(--ouro-toaster-bottom) w-(--ouro-toaster-width) " +
-  "[--ouro-toaster-start:var(--spacing-4,calc(var(--spacing)*4))] [--ouro-toaster-end:var(--spacing-4,calc(var(--spacing)*4))] " +
+  "[--ouro-toaster-start:--theme(--spacing-4,var(--spacing-4,calc(var(--spacing)*4)))] [--ouro-toaster-end:--theme(--spacing-4,var(--spacing-4,calc(var(--spacing)*4)))] " +
   "[--ouro-toaster-bottom:max(1rem,env(safe-area-inset-bottom))] [--ouro-toaster-width:auto] " +
-  "sm:[--ouro-toaster-start:auto] sm:[--ouro-toaster-end:var(--spacing-6,calc(var(--spacing)*6))] " +
-  "sm:[--ouro-toaster-bottom:var(--spacing-6,calc(var(--spacing)*6))] sm:[--ouro-toaster-width:var(--spacing-90,calc(var(--spacing)*90))]";
+  "sm:[--ouro-toaster-start:auto] sm:[--ouro-toaster-end:--theme(--spacing-6,var(--spacing-6,calc(var(--spacing)*6)))] " +
+  "sm:[--ouro-toaster-bottom:--theme(--spacing-6,var(--spacing-6,calc(var(--spacing)*6)))] sm:[--ouro-toaster-width:--theme(--spacing-90,var(--spacing-90,calc(var(--spacing)*90)))]";
 
 /**
  * One toast. Collapsed, the newest is in front and the older ones peek out above it,
