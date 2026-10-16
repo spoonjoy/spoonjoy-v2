@@ -1,5 +1,9 @@
     const receipts: unknown[] = [];
-    const identify = (target: EventTarget | null) => target instanceof Element
+    const observerErrors: { phase: string; error: string }[] = [];
+    let truncated = 0;
+    const isElement = (target: EventTarget | null): target is Element =>
+      target !== null && "nodeType" in target && target.nodeType === Node.ELEMENT_NODE;
+    const identify = (target: EventTarget | null) => isElement(target)
       ? { tag: target.tagName, id: target.id, class: target.getAttribute("class"), label: target.getAttribute("aria-label") }
       : { kind: String(target) };
     const viewport = (host: Window) => ({
@@ -10,21 +14,26 @@
         scale: host.visualViewport.scale,
       },
     });
-    const snapshot = (phase: string, event?: Event) => {
-      if (receipts.length >= 200) return;
+    const collect = (phase: string, event?: Event, owner: Window = window) => {
+      if (receipts.length >= 200) {
+        truncated++;
+        return;
+      }
       const style = getComputedStyle(stepper);
-      const point = event instanceof MouseEvent ? { x: event.clientX, y: event.clientY } : null;
+      const point = event && "clientX" in event && "clientY" in event
+        && typeof event.clientX === "number" && typeof event.clientY === "number"
+        ? { x: event.clientX, y: event.clientY } : null;
       receipts.push({
-        phase, time: performance.now(),
+        phase, time: performance.now(), coordinateSpace: owner === window ? "child" : "parent",
         event: event && {
           type: event.type, trusted: event.isTrusted, target: identify(event.target),
-          containsTarget: event.target instanceof Node && stepper.contains(event.target),
-          point, buttons: event instanceof MouseEvent ? event.buttons : null,
-          button: event instanceof MouseEvent ? event.button : null,
-          pointerType: event instanceof PointerEvent ? event.pointerType : null,
-          hit: point && identify(document.elementFromPoint(point.x, point.y)),
+          containsTarget: isElement(event.target) && stepper.contains(event.target),
+          point, buttons: "buttons" in event ? event.buttons : null,
+          button: "button" in event ? event.button : null,
+          pointerType: "pointerType" in event ? event.pointerType : null,
+          hit: point && identify(owner.document.elementFromPoint(point.x, point.y)),
         },
-        active: stepper.matches(":active"), hover: stepper.matches(":hover"),
+        connected: stepper.isConnected, active: stepper.matches(":active"), hover: stepper.matches(":hover"),
         disabled: stepper.getAttribute("disabled"), dataDisabled: stepper.getAttribute("data-disabled"),
         background: style.backgroundColor, transition: style.transitionDuration,
         accent: style.getPropertyValue("--accent"), foreground: style.getPropertyValue("--foreground"),
@@ -40,9 +49,16 @@
         value: document.querySelector<HTMLInputElement>("input")?.value,
       });
     };
+    const snapshot = (phase: string, event?: Event, owner: Window = window) => {
+      try {
+        collect(phase, event, owner);
+      } catch (error) {
+        observerErrors.push({ phase, error: error instanceof Error ? error.stack ?? error.message : String(error) });
+      }
+    };
     const events = ["pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "focus", "blur", "visibilitychange"];
     const childListener = (event: Event) => snapshot("child-native", event);
-    const parentListener = (event: Event) => snapshot("parent-native", event);
+    const parentListener = (event: Event) => snapshot("parent-native", event, window.parent);
     for (const type of events) {
       window.addEventListener(type, childListener, true);
       window.parent.addEventListener(type, parentListener, true);
@@ -58,6 +74,9 @@ __ORIGINAL_BODY__
       }
       await annotate("NumberField native press receipts", {
         contentType: "application/json",
-        body: JSON.stringify(receipts, null, 2),
+        bodyEncoding: "utf-8",
+        body: JSON.stringify({ receipts, observerErrors, truncated }, null, 2),
       });
+      expect(observerErrors).toEqual([]);
+      expect(truncated).toBe(0);
     }
