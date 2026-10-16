@@ -22,19 +22,14 @@ if mode == "prepare":
 python3 "{helper / 'number-press-proof.py'}" observe "$root" "$app" "{evidence}"
 export NATIVE_PRESS_EVIDENCE="{evidence}"
 set +e
-NATIVE_PRESS_PHASE=full npx vitest run --reporter=verbose --reporter=json \\
-  --reporter="{helper / 'number-press-reporter.mjs'}" --outputFile="{evidence}/full-tests.json"
+NATIVE_PRESS_PHASE=release-closure npx vitest run src/components/ouro/number-field/number-field.test.tsx \\
+  -t "shows a pressed color that differs from the hover color" --reporter=verbose --reporter=json \\
+  --reporter="{helper / 'number-press-reporter.mjs'}" --outputFile="{evidence}/release-tests.json"
 full_status=$?
-printf '%s\\n' "$full_status" > "{evidence}/full-status.txt"
-for iteration in $(seq 1 5); do
-  NATIVE_PRESS_PHASE="target-$iteration" npx vitest run src/components/ouro/number-field/number-field.test.tsx \\
-    -t "shows a pressed color that differs from the hover color" \\
-    --reporter=verbose --reporter=json --reporter="{helper / 'number-press-reporter.mjs'}" \\
-    --outputFile="{evidence}/target-$iteration.json"
-  printf '%s\\n' "$?" > "{evidence}/target-$iteration-status.txt"
-done
+printf '%s\\n' "$full_status" > "{evidence}/release-status.txt"
 set -e
-test "$full_status" -eq 0
+echo "::endgroup::"
+exit "$full_status"
 """
     instrumented = original.replace(anchor, "\n" + hook)
     (evidence / "installer.original.sh").write_text(original)
@@ -80,7 +75,11 @@ elif mode == "observe":
         '      await expect.poll(color).not.toBe(hovered);',
     ).replace(
         '      await commands.pointerPress({ action: "up" });',
-        '      snapshot("before-up");\n      await commands.pointerPress({ action: "up" });\n      snapshot("after-up");',
+        '      snapshot("before-up");\n      await commands.pointerPress({ action: "up" });\n      snapshot("after-up");\n'
+        '      await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
+        '      snapshot("after-release-settled");\n'
+        '      expect(stepper.matches(":active")).toBe(false);\n'
+        '      expect(color()).toBe(hovered);',
     )
     observer = (helper / "number-press-observer.ts.txt").read_text()
     assert observer.count("__ORIGINAL_BODY__") == 1
@@ -106,6 +105,7 @@ elif mode == "observe":
         manifest[name] = digest(source.read_bytes())
     (evidence / "binding.json").write_text(json.dumps({
         "upstream": "4f7439c40e91166c598f180bd0ebefe633c4a30f",
+        "scope": "targeted post-release causal closure; not a full-suite qualification",
         "originalTest": digest(original.encode()), "observedTest": digest(instrumented.encode()),
         "installedFiles": manifest,
     }, indent=2) + "\n")

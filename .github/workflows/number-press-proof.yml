@@ -1,7 +1,7 @@
-name: Real installer NumberField native press diagnostic
+name: Real installer NumberField release causal closure
 on:
   push:
-    branches: [probe/ouro-number-press-20261016]
+    branches: [probe/ouro-number-release-20261016]
 permissions:
   contents: read
 defaults:
@@ -34,7 +34,7 @@ jobs:
           test "$(git -C upstream-ui rev-parse HEAD)" = "$PUBLIC_SOURCE"
           python3 .github/number-press-proof.py prepare "$GITHUB_WORKSPACE/upstream-ui" "$RUNNER_TEMP/app" "$RUNNER_TEMP/press-evidence"
           bash -n upstream-ui/scripts/install-test.sh
-      - name: Run real installer with settled hover and held-press diagnostic
+      - name: Observe settled hover, held press and released hover only
         working-directory: upstream-ui
         run: |
           scripts/install-test.sh ouro "$RUNNER_TEMP/app" "$PUBLIC_SOURCE" 2>&1 | tee "$RUNNER_TEMP/press-evidence/installer.log"

@@ -49,6 +49,7 @@
         stepper: identify(stepper),
         rules: phase === "after-down" ? relevantRules() : undefined,
         colorMixSupported: CSS.supports("background-color", "color-mix(in oklab, #f4f4f5 85%, #18181b)"),
+        emittedSupportsCondition: CSS.supports("color: color-mix(in lab, red, red)"),
         event: event && {
           type: event.type, trusted: event.isTrusted, target: identify(event.target),
           containsTarget: isElement(event.target) && stepper.contains(event.target),
