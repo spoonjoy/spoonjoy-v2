@@ -106,12 +106,67 @@ describe("Popover", () => {
     const element = await openUncontrolled({ side, align });
     const box = element.getBoundingClientRect();
     const anchor = trigger().getBoundingClientRect();
+    let diagnostic: string | undefined;
+    if (side === "right" && align === "end") {
+      const frames = [];
+      let frameWindow: Window = window;
+      for (let depth = 0; depth < 5; depth++) {
+        const frame = frameWindow.frameElement;
+        const parentWindow = frame?.ownerDocument.defaultView;
+        frames.push({
+          innerWidth: frameWindow.innerWidth,
+          innerHeight: frameWindow.innerHeight,
+          devicePixelRatio: frameWindow.devicePixelRatio,
+          visualViewportScale: frameWindow.visualViewport?.scale,
+          frameRect: frame?.getBoundingClientRect().toJSON(),
+          frameTransform: frame && parentWindow ? parentWindow.getComputedStyle(frame).transform : null,
+          frameZoom: frame && parentWindow ? parentWindow.getComputedStyle(frame).getPropertyValue("zoom") : null,
+        });
+        if (!parentWindow) break;
+        frameWindow = parentWindow;
+      }
+      const geometry = () => {
+        const positioner = element.closest<HTMLElement>('[data-ouro="popover-positioner"]');
+        const style = getComputedStyle(element);
+        const anchorStyle = getComputedStyle(trigger());
+        return {
+          box: element.getBoundingClientRect().toJSON(),
+          anchor: trigger().getBoundingClientRect().toJSON(),
+          popupOffsetHeight: element.offsetHeight,
+          popupOffsetWidth: element.offsetWidth,
+          positioner: positioner?.getBoundingClientRect().toJSON(),
+          positionerStyle: positioner?.style.cssText,
+          popupStyle: Object.fromEntries(
+            ["height", "width", "scale", "translate", "transform", "font-size", "line-height", "box-sizing"].map((property) => [
+              property, style.getPropertyValue(property),
+            ]),
+          ),
+          anchorHeight: anchorStyle.height,
+          anchorTransform: anchorStyle.transform,
+          fontsStatus: document.fonts.status,
+        };
+      };
+      const samples = [geometry()];
+      await nextFrame();
+      samples.push(geometry());
+      await nextFrame();
+      samples.push(geometry());
+      diagnostic = `POPOVER_GEOMETRY ${JSON.stringify({
+        originalBox: box.toJSON(),
+        originalAnchor: anchor.toJSON(),
+        originalEndMatches: Math.round(box.bottom) === Math.round(anchor.bottom),
+        rawEndDelta: box.bottom - anchor.bottom,
+        frames,
+        samples,
+      })}`;
+    }
     if (side === "top") expect(Math.round(anchor.top - box.bottom)).toBe(8);
     if (side === "right") expect(Math.round(box.left - anchor.right)).toBe(8);
     if (side === "left") expect(Math.round(anchor.left - box.right)).toBe(8);
     if (align === "start") expect(Math.round(box.left)).toBe(Math.round(anchor.left));
-    if (align === "end") expect(Math.round(box.bottom)).toBe(Math.round(anchor.bottom));
+    if (align === "end") expect(Math.round(box.bottom), diagnostic).toBe(Math.round(anchor.bottom));
     if (align === "center") expect(Math.abs(box.top + box.height / 2 - (anchor.top + anchor.height / 2))).toBeLessThanOrEqual(1);
+    if (diagnostic) throw new Error(diagnostic);
   });
 
   it("closes on Escape and returns focus to the trigger", async () => {

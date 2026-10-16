@@ -1,0 +1,57 @@
+name: Ouro Popover geometry diagnostic
+on:
+  push:
+    branches: [probe/ouro-popover-alignment-20261015]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+      - run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prisma:generate
+      - run: pnpm exec playwright install --with-deps webkit
+      - name: Record exact diagnostic source and unchanged runtime
+        run: |
+          git rev-parse HEAD > diagnostic-source.log
+          git diff b2d0ca73cb0a1165e967691363a07455bf085421 -- \
+            app/components/ouro/popover/popover.tsx \
+            app/components/ouro/popover/popover-parts.tsx \
+            app/components/ouro/popover/popover-styles.ts \
+            vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css > diagnostic-runtime.diff
+          test ! -s diagnostic-runtime.diff
+      - name: Capture original assertion geometry; intentional diagnostic failure is not qualification
+        run: |
+          set -o pipefail
+          pnpm exec vitest run --config vitest.ouro.config.ts --project ouro-webkit \
+            app/components/ouro/popover/popover.test.tsx \
+            -t 'sits on side right, aligned end' \
+            --reporter=default --reporter=json --outputFile.json=popover-geometry.json | tee popover-geometry.log
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: popover-geometry-${{ matrix.sample }}
+          path: |
+            diagnostic-source.log
+            diagnostic-runtime.diff
+            popover-geometry.json
+            popover-geometry.log
+          if-no-files-found: error
