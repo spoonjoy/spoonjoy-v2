@@ -22,10 +22,10 @@ const portalClass = "relative isolate z-[calc(var(--ouro-layer)+1)]";
 const viewportClass =
   "fixed outline-none " +
   "start-(--ouro-toaster-start) end-(--ouro-toaster-end) bottom-(--ouro-toaster-bottom) w-(--ouro-toaster-width) " +
-  "[--ouro-toaster-start:calc(var(--spacing)*4)] [--ouro-toaster-end:calc(var(--spacing)*4)] " +
+  "[--ouro-toaster-start:var(--spacing-4,calc(var(--spacing)*4))] [--ouro-toaster-end:var(--spacing-4,calc(var(--spacing)*4))] " +
   "[--ouro-toaster-bottom:max(1rem,env(safe-area-inset-bottom))] [--ouro-toaster-width:auto] " +
-  "sm:[--ouro-toaster-start:auto] sm:[--ouro-toaster-end:calc(var(--spacing)*6)] " +
-  "sm:[--ouro-toaster-bottom:calc(var(--spacing)*6)] sm:[--ouro-toaster-width:calc(var(--spacing)*90)]";
+  "sm:[--ouro-toaster-start:auto] sm:[--ouro-toaster-end:var(--spacing-6,calc(var(--spacing)*6))] " +
+  "sm:[--ouro-toaster-bottom:var(--spacing-6,calc(var(--spacing)*6))] sm:[--ouro-toaster-width:var(--spacing-90,calc(var(--spacing)*90))]";
 
 /**
  * One toast. Collapsed, the newest is in front and the older ones peek out above it,
