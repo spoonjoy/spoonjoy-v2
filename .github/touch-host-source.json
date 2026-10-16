@@ -1,0 +1,10 @@
+{
+  "upstreamRepository": "ourostack/ouro-ui",
+  "upstreamCommit": "2deea7c3af1faae0cdba90a2a3cfed6ad3b87dd6",
+  "upstreamPath": "registry/ouro/lib/ouro/testing/vitest.ts",
+  "consumerPath": "app/lib/ouro/testing/vitest.ts",
+  "sha256": "86ce4715db30baaeb5b058542df9de0adfe0bd09fcb366d7570a8194f8c5b4e2",
+  "normalization": "none: byte-identical committed source",
+  "consumerBase": "7f50e38bc1b838319bc67c11299e4a58e3e42b2b",
+  "scope": "private candidate qualification only; never actual consumer delivery or merge"
+}
