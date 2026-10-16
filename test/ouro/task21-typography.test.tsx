@@ -130,7 +130,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
     expect(more.getAttribute("href")).toBe("/recipes?after=a");
     await userEvent.dblClick(more);
     await expect.poll(() => requests).toBe(1);
-    expect(more.getAttribute("aria-busy")).toBe("true");
+    await expect.poll(() => more.getAttribute("aria-busy")).toBe("true");
     await act(async () => release());
     await expect.poll(() => host.querySelector('a[href="/recipes/b"]')).toBeTruthy();
     await expect.poll(() => document.activeElement).toBe(host.querySelector('a[href="/recipes/b"]'));
