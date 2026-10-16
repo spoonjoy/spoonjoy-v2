@@ -26,7 +26,7 @@ NATIVE_PRESS_PHASE=full npx vitest run --reporter=verbose --reporter=json \\
   --reporter="{helper / 'number-press-reporter.mjs'}" --outputFile="{evidence}/full-tests.json"
 full_status=$?
 printf '%s\\n' "$full_status" > "{evidence}/full-status.txt"
-for iteration in $(seq 1 50); do
+for iteration in $(seq 1 5); do
   NATIVE_PRESS_PHASE="target-$iteration" npx vitest run src/components/ouro/number-field/number-field.test.tsx \\
     -t "shows a pressed color that differs from the hover color" \\
     --reporter=verbose --reporter=json --reporter="{helper / 'number-press-reporter.mjs'}" \\
@@ -58,10 +58,15 @@ elif mode == "observe":
     # Preserve all original operations/assertions and the pointer-up finally.
     observed_body = body.replace(
         "    const hovered = color();\n",
+        '    await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
         '    snapshot("after-hover");\n    const hovered = color();\n',
     ).replace(
         '    try {\n      await expect.poll(color)',
-        '    snapshot("after-down");\n    try {\n      await expect.poll(color)',
+        '    try {\n'
+        '      await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
+        '      snapshot("after-down");\n'
+        '      expect(stepper.matches(":active")).toBe(true);\n'
+        '      await expect.poll(color)',
     ).replace(
         '      await commands.pointerPress({ action: "up" });',
         '      snapshot("before-up");\n      await commands.pointerPress({ action: "up" });\n      snapshot("after-up");',

@@ -14,6 +14,20 @@
         scale: host.visualViewport.scale,
       },
     });
+    const relevantRules = () => {
+      const found: string[] = [];
+      const visit = (rules: CSSRuleList) => {
+        for (const rule of Array.from(rules)) {
+          if (rule instanceof CSSStyleRule && (
+            rule.selectorText.includes("color-mix") && rule.selectorText.includes("not-data-disabled")
+            || rule.selectorText.includes("pointer-fine") && rule.selectorText.includes("hover") && rule.selectorText.includes("bg-accent")
+          )) found.push(rule.cssText);
+          else if (rule instanceof CSSGroupingRule) visit(rule.cssRules);
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) visit(sheet.cssRules);
+      return found;
+    };
     const collect = (phase: string, event?: Event, owner: Window = window) => {
       if (receipts.length >= 200) {
         truncated++;
@@ -25,6 +39,9 @@
         ? { x: event.clientX, y: event.clientY } : null;
       receipts.push({
         phase, time: performance.now(), coordinateSpace: owner === window ? "child" : "parent",
+        stepper: identify(stepper),
+        rules: phase === "after-down" ? relevantRules() : undefined,
+        colorMixSupported: CSS.supports("background-color", "color-mix(in oklab, #f4f4f5 85%, #18181b)"),
         event: event && {
           type: event.type, trusted: event.isTrusted, target: identify(event.target),
           containsTarget: isElement(event.target) && stepper.contains(event.target),
