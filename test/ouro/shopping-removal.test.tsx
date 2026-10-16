@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { shoppingRemovalFixture } from "./shopping-removal-fixture";
 
@@ -7,6 +7,36 @@ vi.mock("~/lib/shopping-list.server", () => ({
   handleShoppingListAction: () => { throw new Error("Browser fixture owns the Router action"); },
 }));
 let fixture: Awaited<ReturnType<typeof shoppingRemovalFixture>> | undefined;
+const focusTrace: unknown[] = [];
+const describe = (element: Element | null) => element && ({
+  tag: element.tagName, role: element.getAttribute("role"), text: element.textContent?.slice(0, 100),
+  label: element.getAttribute("aria-label"), connected: element.isConnected,
+  attributes: Object.fromEntries(Array.from(element.attributes).filter(({ name }) =>
+    name.startsWith("data-") || name.startsWith("aria-") || name === "inert").map(({ name, value }) => [name, value])),
+});
+const snapshot = () => ({
+  focused: describe(document.activeElement),
+  dialogs: Array.from(document.querySelectorAll('[role="alertdialog"]')).map(describe),
+  menus: Array.from(document.querySelectorAll('[role="menu"], [role="menuitem"]')).map(describe),
+});
+const trace = (event: Event) => {
+  focusTrace.push({
+    when: performance.now(), type: event.type, key: event instanceof KeyboardEvent ? event.key : undefined,
+    trusted: event.isTrusted, target: describe(event.target instanceof Element ? event.target : null),
+    ...snapshot(),
+  });
+  queueMicrotask(() => focusTrace.push({
+    when: performance.now(), after: event.type, prevented: event.defaultPrevented, ...snapshot(),
+  }));
+};
+beforeEach(() => {
+  focusTrace.length = 0;
+  for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.addEventListener(type, trace, true);
+});
+afterEach(async ({ annotate }) => {
+  for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.removeEventListener(type, trace, true);
+  await annotate(`KEYBOARD_FOCUS_DIAGNOSTIC ${JSON.stringify({ trace: focusTrace, final: snapshot(), writes: fixture?.writes })}`);
+});
 afterEach(async () => { await fixture?.dispose(); fixture = undefined; });
 
 it("real menu-to-modal focus, Escape, retained Remove and explicit confirmation preserve the actual row contract", async ({ annotate }) => {

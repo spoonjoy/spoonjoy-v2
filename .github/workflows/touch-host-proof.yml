@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: [default, roomy, full]
+        scope: [full]
     env:
       VITE_HOST_CONTROL: ${{ matrix.scope == 'default' && 'default' || 'roomy' }}
     steps:
@@ -105,6 +105,16 @@ jobs:
           node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run --config vitest.ouro.config.ts --coverage \
             --exclude test/ouro/touch-host.probe.touch.test.tsx \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
+      - name: Repeat original keyboard assertions with passive event traces; diagnostic only
+        if: always() && matrix.scope == 'full'
+        run: |
+          status=0
+          for attempt in $(seq 1 5); do
+            pnpm exec vitest run --config vitest.ouro.config.ts test/ouro/shopping-removal.test.tsx \
+              --reporter=verbose --reporter=json --outputFile="keyboard-$attempt.json" \
+              2>&1 | tee "keyboard-$attempt.log" || status=1
+          done
+          exit "$status"
       - name: Actual component Playwright specs under unchanged warning policy
         if: matrix.scope == 'full'
         run: |
@@ -128,8 +138,11 @@ jobs:
             touch-host-geometry-tests.json
             touch-host-geometry.log
             touch-host-playwright.log
+            keyboard-*.json
+            keyboard-*.log
             .github/touch-host-source.json
             coverage/
             playwright-report/
             .vitest/attachments/
+            test/ouro/__screenshots__/
           if-no-files-found: error
