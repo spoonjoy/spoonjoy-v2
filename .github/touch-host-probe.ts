@@ -1,7 +1,7 @@
 import type {} from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
 
-export const touchHostGeometry: BrowserCommand<[selector: string]> = async (ctx, selector) => {
+export const touchHostGeometry = (async (ctx, selector: string) => {
   const row = ctx.iframe.locator(selector);
   const physical = await row.boundingBox();
   if (!physical) throw new Error("Touch host probe row is not visible");
@@ -34,10 +34,10 @@ export const touchHostGeometry: BrowserCommand<[selector: string]> = async (ctx,
     local, physical, host, scale,
     origin: { x: physical.x - local.box.x * scale.x, y: physical.y - local.box.y * scale.y },
   };
-};
+}) satisfies BrowserCommand<[selector: string]>;
 
-export const touchHostWrongPoint: BrowserCommand<[]> = async (ctx) => {
+export const touchHostWrongPoint = (async (ctx) => {
   const box = await ctx.iframe.locator("[data-host-probe-spacer]").boundingBox();
   if (!box) throw new Error("Touch host probe spacer is not visible");
   await ctx.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
-};
+}) satisfies BrowserCommand<[]>;

@@ -9,8 +9,8 @@ import type { touchHostGeometry, touchHostWrongPoint } from "../../.github/touch
 
 declare module "vitest/browser" {
   interface BrowserCommands {
-    touchHostGeometry: typeof touchHostGeometry;
-    touchHostWrongPoint: typeof touchHostWrongPoint;
+    touchHostGeometry: (selector: string) => ReturnType<typeof touchHostGeometry>;
+    touchHostWrongPoint: () => Promise<void>;
   }
 }
 
