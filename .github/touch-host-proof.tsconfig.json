@@ -5,7 +5,7 @@
     "touch-host-proof.config.ts",
     "touch-host-pan-setup.ts",
     "preload-proof.config.ts",
-    "preload-e2e/pagination.spec.ts",
+    "ouro-fixtures.ts",
     "../test/ouro/touch-host.probe.touch.test.tsx",
     "../app/lib/ouro/testing/commands.touch.test.ts"
   ],

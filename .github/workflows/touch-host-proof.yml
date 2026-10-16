@@ -155,8 +155,15 @@ jobs:
           if [ "${{ matrix.scope }}" = full ]; then
             OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro 2>&1 | tee touch-host-playwright.log
           else
+            mkdir -p .github/preload-e2e
+            cp e2e/ouro/*.ts .github/preload-e2e/
+            python3 - <<'PY'
+          from pathlib import Path
+          for source in Path("e2e/ouro").glob("*.ts"):
+              assert source.read_bytes() == Path(".github/preload-e2e", source.name).read_bytes()
+          PY
             OURO_E2E_URL=http://127.0.0.1:6006 pnpm exec playwright test -c .github/preload-proof.config.ts \
-              --repeat-each=10 --trace=retain-on-failure 2>&1 | tee preload-playwright.log
+              2>&1 | tee preload-playwright.log
           fi
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

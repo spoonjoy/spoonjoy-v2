@@ -1,7 +1,7 @@
-import { expect, test as base } from "../../e2e/fixtures";
-import { openStory } from "../../e2e/ouro/story";
+import { mkdir, writeFile } from "node:fs/promises";
+import { expect, test as base } from "../e2e/fixtures";
 
-const test = base.extend<{ preloadAudit: void }>({
+export const test = base.extend<{ preloadAudit: void }>({
   preloadAudit: [
     async ({ page }, use, testInfo) => {
       const records: unknown[] = [];
@@ -42,19 +42,14 @@ const test = base.extend<{ preloadAudit: void }>({
         await use();
       } finally {
         await Promise.all(pending);
-        await testInfo.attach("preload-network.json", { body: Buffer.from(JSON.stringify(records, null, 2)), contentType: "application/json" });
+        await mkdir(testInfo.outputDir, { recursive: true });
+        const path = testInfo.outputPath("preload-network.json");
+        await writeFile(path, JSON.stringify(records, null, 2));
+        await testInfo.attach("preload-network.json", { path, contentType: "application/json" });
       }
     },
     { auto: true },
   ],
 });
 
-test("pagination links go to each page's address and mark the current page", async ({ page }) => {
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await openStory(page, "navigation-pagination--in-context");
-  const nav = page.getByRole("navigation", { name: "Pagination" });
-  await expect(nav.getByRole("link", { name: "Page 6", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(nav.getByRole("link", { name: "Next" })).toHaveAttribute("href", "?page=7");
-  await nav.getByRole("link", { name: "Page 12", exact: true }).click();
-  await expect(page).toHaveURL(/[?&]page=12$/);
-});
+export { expect };
