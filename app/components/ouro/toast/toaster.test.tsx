@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
@@ -110,6 +110,110 @@ afterEach(async () => {
 const warnings = () => warn.mock.calls.map((call: unknown[]) => String(call[0]));
 
 describe("Toaster", () => {
+  // Prospective cast lets the RED browser run reach unchanged pre-className runtime.
+  // toaster.test-d.ts independently checks the real public API without a cast.
+  const layoutProps = (className: string) => ({ className }) as unknown as ToasterProps;
+
+  it("lets unprefixed app clearance and width win on the actual viewport at phone and desktop widths", async () => {
+    const { root } = await render(<Toaster />);
+    for (const width of [414, 639, 640, 1024]) {
+      await page.viewport(width, 896);
+      for (const className of ["bottom-20", "w-80", "bottom-20 w-80"]) {
+        await act(async () => root.render(<Toaster {...layoutProps(className)} />));
+        const region = viewport()!;
+        const css = getComputedStyle(region);
+        const rect = region.getBoundingClientRect();
+        if (className.includes("bottom-20")) {
+          expect(css.bottom).toBe("80px");
+          expect(896 - rect.bottom).toBeCloseTo(80, 1);
+        }
+        if (className.includes("w-80")) expect(rect.width).toBeCloseTo(320, 1);
+        expect(region.className).toContain(className);
+        expect(region.parentElement!.className).not.toContain(className);
+      }
+    }
+    expect(warnings()).toEqual([]);
+  });
+
+  it("preserves logical default geometry across sm, RTL and a nonstandard spacing scale", async () => {
+    const { root } = await render(<Toaster />);
+    const region = viewport()!;
+    const oldSpacing = document.documentElement.style.getPropertyValue("--spacing");
+    try {
+      for (const spacing of ["0.25rem", "0.3rem"]) {
+        document.documentElement.style.setProperty("--spacing", spacing);
+        const unit = spacing === "0.25rem" ? 4 : 4.8;
+        for (const dir of ["ltr", "rtl"]) {
+          document.documentElement.dir = dir;
+          for (const width of [414, 639, 640, 1024]) {
+            await page.viewport(width, 896);
+            await act(async () => root.render(<Toaster />));
+            const rect = region.getBoundingClientRect();
+            const css = getComputedStyle(region);
+            const desktop = width >= 640;
+            expect(parseFloat(css.bottom)).toBeCloseTo(desktop ? 6 * unit : 16, 1);
+            expect(rect.width).toBeCloseTo(desktop ? 90 * unit : width - 8 * unit, 1);
+            expect(dir === "rtl" && desktop ? rect.left : width - rect.right).toBeCloseTo(desktop ? 6 * unit : 4 * unit, 1);
+            // Phone bottom is max(1rem, env(safe-area-inset-bottom)), not spacing(4).
+            const safeArea = document.createElement("div");
+            safeArea.style.bottom = "max(1rem, env(safe-area-inset-bottom))";
+            document.body.append(safeArea);
+            if (!desktop) expect(css.bottom).toBe(getComputedStyle(safeArea).bottom);
+            safeArea.remove();
+          }
+        }
+      }
+    } finally {
+      document.documentElement.removeAttribute("dir");
+      if (oldSpacing) document.documentElement.style.setProperty("--spacing", oldSpacing);
+      else document.documentElement.style.removeProperty("--spacing");
+    }
+  });
+
+  it("updates viewport layout without replacing or reannouncing a live toast or resetting its countdown", async () => {
+    const announced = watchAnnouncements();
+    try {
+      const { root } = await render(<Toaster {...layoutProps("bottom-20")} />);
+      const region = viewport()!;
+      const item = await show("Layout survives", { duration: 2400 });
+      const count = announced.count("Layout survives");
+      expect(count).toBe(1);
+      await elapse(1400);
+      await act(async () => root.render(<Toaster {...layoutProps("bottom-24 w-80")} />));
+      expect(viewport()).toBe(region);
+      expect(toastNamed("Layout survives")).toBe(item);
+      expect(getComputedStyle(region).bottom).toBe("96px");
+      expect(announced.count("Layout survives")).toBe(count);
+      expect(document.querySelectorAll('[data-ouro="toaster"]')).toHaveLength(1);
+      // Must expire on its original countdown, not a newly started 2400ms one.
+      await expect.poll(() => showing("Layout survives"), { timeout: 1800 }).toBe(false);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it.each([
+    ["bg-red-500", "sets appearance", ":root { --popover"],
+    ["text-center", "aligns content", "Toaster owns toast-content alignment; use <Toaster /> without the alignment class"],
+  ])("warns once after hydration for %s without recommending a portal wrapper", async (className, problem, hint) => {
+    const props = layoutProps(className);
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(<Toaster {...props} />);
+    expect(host.innerHTML).toBe("");
+    expect(warnings()).toEqual([]);
+    document.body.append(host);
+    mounted.push(host);
+    let root!: Root;
+    await act(async () => { root = hydrateRoot(host, <Toaster {...props} />); });
+    roots.push(root);
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toContain(problem);
+    expect(warnings()[0]).toContain(hint);
+    expect(warnings()[0]).not.toContain("<div");
+    await act(async () => root.render(<Toaster {...props} />));
+    expect(warnings()).toHaveLength(1);
+  });
+
   it("renders an empty, polite Notifications region in a portal", async () => {
     const { host } = await render(<Toaster />);
     const region = viewport()!;
