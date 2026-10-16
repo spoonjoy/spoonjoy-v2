@@ -157,7 +157,7 @@ test.describe("Recipe create and edit", () => {
     await expect(page.getByRole("button", { name: "Remove honey" })).toBeVisible();
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page).toHaveURL(/\/steps\/[^/?#]+\/edit(?:\?.*)?$/);
-    await expect(page.getByRole("status").filter({ hasText: "Step created successfully." })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "Step created successfully.", exact: true })).toBeVisible();
 
     // --- Change step 1's ingredient: bread becomes brioche.
     await page.getByRole("link", { name: "← Back to recipe" }).click();

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { ToastProvider } from "~/components/ui/toast";
+import { ToastProvider } from "~/components/feedback/toast";
 import { NotificationsSection } from "~/components/notifications-section";
 
 vi.mock("~/lib/push-client", () => ({

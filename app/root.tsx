@@ -29,7 +29,7 @@ import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/ui/theme-provider";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/ui/toast";
+import { ToastProvider } from "~/components/feedback/toast";
 import { ThemeToggle } from "~/components/ui/theme-toggle";
 import { MobileNav, DockContextProvider } from "~/components/navigation";
 import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";

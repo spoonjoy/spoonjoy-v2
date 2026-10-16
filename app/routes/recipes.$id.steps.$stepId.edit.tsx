@@ -27,7 +27,7 @@ import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ui/text";
-import { useToast } from "~/components/ui/toast";
+import { useToast } from "~/components/feedback/toast";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";

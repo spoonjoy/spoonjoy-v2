@@ -2,13 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { Bookmark, Plus } from 'lucide-react'
 import { Button } from '../ui/button'
 import {
-  Dropdown,
-  DropdownButton,
-  DropdownItem,
-  DropdownMenu,
-  DropdownDivider,
-  DropdownHeader,
-} from '../ui/dropdown'
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  MenuGroup,
+} from '../ouro/menu/menu'
 
 export interface Cookbook {
   id: string
@@ -144,8 +142,9 @@ export function SaveToCookbookDropdown({
   }
 
   return (
-    <Dropdown>
-      <DropdownButton
+    <Menu
+      align="end"
+      trigger={<Button
         plain
         disabled={disabled}
         className="flex items-center gap-1.5"
@@ -153,52 +152,49 @@ export function SaveToCookbookDropdown({
       >
         <Bookmark className="w-4 h-4" aria-hidden="true" />
         Save
-      </DropdownButton>
-      <DropdownMenu anchor="bottom end">
+      </Button>}
+    >
         {hasCookbooks ? (
           <>
-            <DropdownHeader className="text-sm font-medium text-[var(--sj-ink-soft)]">
-              Save to cookbook
-            </DropdownHeader>
+            <MenuGroup label="Save to cookbook">
             {cookbooksList.map(cookbook => {
               const isSaved = savedInCookbookIds.has(cookbook.id)
               return (
-                <DropdownItem
+                <MenuItem
                   key={cookbook.id}
-                  onClick={() => !isSaved && onSave(cookbook.id)}
+                  onClick={() => onSave(cookbook.id)}
                   disabled={isSaved}
                 >
-                  <span className={isSaved ? 'text-[var(--sj-ink-soft)] opacity-60' : ''}>
+                  <span>
                     {cookbook.title}
                     {isSaved && ' ✓'}
                   </span>
-                </DropdownItem>
+                </MenuItem>
               )
             })}
+            </MenuGroup>
             {(onCreateNew || onCreateAndSave) && (
               <>
-                <DropdownDivider />
-                <DropdownItem onClick={handleCreateClick}>
+                <MenuSeparator />
+                <MenuItem onClick={handleCreateClick}>
                   <Plus data-slot="icon" />
                   Create new cookbook
-                </DropdownItem>
+                </MenuItem>
               </>
             )}
           </>
         ) : (
           <>
-            <DropdownHeader className="text-sm text-[var(--sj-ink-soft)]">
-              No cookbooks yet
-            </DropdownHeader>
+            <MenuGroup label="No cookbooks yet">
             {(onCreateNew || onCreateAndSave) && (
-              <DropdownItem onClick={handleCreateClick}>
+              <MenuItem onClick={handleCreateClick}>
                 <Plus data-slot="icon" />
                 Create your first cookbook
-              </DropdownItem>
+              </MenuItem>
             )}
+            </MenuGroup>
           </>
         )}
-      </DropdownMenu>
-    </Dropdown>
+    </Menu>
   )
 }

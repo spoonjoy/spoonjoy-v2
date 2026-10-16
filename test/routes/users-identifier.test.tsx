@@ -545,7 +545,7 @@ describe("Users $identifier Route", () => {
       render(<Stub initialEntries={["/users/chef-empty"]} />);
 
       expect(await screen.findByRole("heading", { name: "chef-empty" })).toBeInTheDocument();
-      expect(screen.getByTitle("chef-empty")).toBeInTheDocument();
+      expect(screen.getByRole("img", { name: "chef-empty" })).toHaveTextContent("C");
       expect(profileLine("Joined May 2026 • 0 recipes • 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Open settings" })).toHaveAttribute("href", "/account/settings");
       expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();

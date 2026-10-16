@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -1885,6 +1885,18 @@ describe("Account Settings Route", () => {
     });
 
     describe("component - default avatar display", () => {
+      beforeEach(() => {
+        // Image transport is unavailable in happy-dom; exercise the real loaded
+        // Avatar using the browser's cached-image boundary.
+        vi.spyOn(window, "Image").mockImplementation(function () {
+          const image = document.createElement("img");
+          Object.defineProperty(image, "complete", { value: true });
+          Object.defineProperty(image, "naturalWidth", { value: 64 });
+          return image;
+        });
+      });
+      afterEach(() => vi.restoreAllMocks());
+
       it("should display default avatar (chef RJ) when user has no photo", async () => {
         const mockData = {
           user: {
@@ -1916,7 +1928,7 @@ describe("Account Settings Route", () => {
         const avatarImg = profilePhotoSection.querySelector("img");
         expect(avatarImg).toBeInTheDocument();
         expect(avatarImg).toHaveAttribute("src", DEFAULT_AVATAR_URL);
-        expect(avatarImg).toHaveAttribute("alt", expect.stringMatching(/profile|avatar|photo/i));
+        expect(screen.getByRole("img", { name: "Profile photo" })).toContainElement(avatarImg);
       });
 
       it("should display user's custom photo when they have one", async () => {
@@ -1980,8 +1992,7 @@ describe("Account Settings Route", () => {
         await screen.findByRole("heading", { name: /account settings/i });
         const profilePhotoSection = screen.getByTestId("profile-photo-section");
 
-        // Avatar component uses data-slot="avatar"
-        const avatar = profilePhotoSection.querySelector('[data-slot="avatar"]');
+        const avatar = within(profilePhotoSection).getByRole("img", { name: "Profile photo" });
         expect(avatar).toBeInTheDocument();
       });
     });

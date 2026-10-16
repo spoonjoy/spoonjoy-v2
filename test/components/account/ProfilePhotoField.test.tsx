@@ -59,6 +59,12 @@ beforeEach(() => {
 });
 
 describe("ProfilePhotoField", () => {
+  it("keeps a named profile preview when there is no photo", async () => {
+    renderField(null);
+    const preview = await screen.findByRole("img", { name: "Profile photo" });
+    expect(preview).toHaveTextContent("PP");
+  });
+
   it("shows the Upload Photo button and no Remove Photo button without a photo", async () => {
     renderField(null);
     expect(await screen.findByRole("button", { name: /upload photo/i })).toBeInTheDocument();

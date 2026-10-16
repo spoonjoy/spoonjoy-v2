@@ -1,7 +1,7 @@
 import { ImageOff, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from '../ui/link'
-import { Avatar } from '../ui/avatar'
+import { Avatar } from '../ouro/avatar/avatar'
 import { ScaleSelector } from './ScaleSelector'
 import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
@@ -103,10 +103,11 @@ export function RecipeHeader({
     <>
       <span data-testid="chef-avatar">
         <Avatar
+          name={chefName}
           src={resolvedChefPhotoUrl}
           initials={chefName.charAt(0).toUpperCase()}
           alt={chefName}
-          className="size-9 border border-[var(--sj-border)]"
+          size="md"
         />
       </span>
       <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink-soft)]">

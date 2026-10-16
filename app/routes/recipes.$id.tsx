@@ -24,7 +24,7 @@ import {
   loadRecipeDetail,
 } from "~/lib/recipe-detail.server";
 import { Button } from "~/components/ui/button";
-import { useToast } from "~/components/ui/toast";
+import { useToast } from "~/components/feedback/toast";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";

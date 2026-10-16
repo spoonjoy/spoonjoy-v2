@@ -1,7 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { ToastProvider, useToast } from "~/components/ui/toast";
+import { ToastProvider, useToast } from "~/components/feedback/toast";
 
 function ToastTestButton(props: {
   message: string;
@@ -73,6 +73,23 @@ describe("Toast", () => {
     vi.useRealTimers();
   });
 
+  it("offers an accessible dismiss control without a second app announcement", async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ToastTestButton message="Recipe saved" />
+      </ToastProvider>
+    );
+    await user.click(screen.getByRole("button", { name: "Show toast" }));
+    const liveMessages = [...document.querySelectorAll('[aria-live="polite"], [role="status"]')]
+      .filter((element) => element.textContent?.includes("Recipe saved"));
+    // Count announcement authorities, not both selectors on the same element.
+    expect(liveMessages).toHaveLength(1);
+    await user.keyboard("{F6}");
+    await user.click(screen.getByRole("button", { name: "Dismiss", exact: true }));
+    await waitFor(() => expect(screen.queryByText("Recipe saved")).not.toBeInTheDocument());
+  });
+
   it("renders a toast message via provider context", async () => {
     const user = userEvent.setup();
     render(
@@ -83,7 +100,7 @@ describe("Toast", () => {
 
     await user.click(screen.getByRole("button", { name: "Show toast" }));
 
-    expect(screen.getByTestId("toast-snackbar")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByText("Recipe saved")).toBeInTheDocument();
   });
 
@@ -99,8 +116,12 @@ describe("Toast", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show toast" }));
     expect(screen.getByText("Added to list")).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(3000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByText("Added to list").closest('[data-ouro="toast"]')).toHaveAttribute("data-ending-style");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(32);
     });
 
     expect(screen.queryByText("Added to list")).not.toBeInTheDocument();
@@ -137,18 +158,28 @@ describe("Toast", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Show first" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
     fireEvent.click(screen.getByRole("button", { name: "Show second" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
-    expect(screen.queryByText("First toast")).not.toBeInTheDocument();
+    expect(screen.getByText("First toast").closest('[data-ouro="toast"]')).toHaveAttribute("data-ending-style");
     expect(screen.getByText("Second toast")).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(2999);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2999);
     });
     expect(screen.getByText("Second toast")).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByText("Second toast").closest('[data-ouro="toast"]')).toHaveAttribute("data-ending-style");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(32);
     });
     expect(screen.queryByText("Second toast")).not.toBeInTheDocument();
   });
@@ -180,7 +211,7 @@ describe("Toast", () => {
 
     await user.click(screen.getByRole("button", { name: "Dismiss toast" }));
 
-    expect(screen.queryByTestId("toast-snackbar")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Notifications" })).toBeEmptyDOMElement();
   });
 
   it("default context functions are safe no-ops outside a provider", async () => {
@@ -191,6 +222,6 @@ describe("Toast", () => {
     await user.click(screen.getByRole("button", { name: "Default show" }));
     await user.click(screen.getByRole("button", { name: "Default dismiss" }));
 
-    expect(screen.queryByTestId("toast-snackbar")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Notifications" })).not.toBeInTheDocument();
   });
 });

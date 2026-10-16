@@ -71,7 +71,7 @@ async function openLogCook(page: Page) {
 async function saveCook(page: Page) {
   const dialog = logCookDialog(page);
   await dialog.getByRole("button", { name: "Log cook", exact: true }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Cook logged." })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "Cook logged.", exact: true })).toBeVisible();
   await expect(dialog).toBeHidden();
 }
 

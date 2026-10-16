@@ -80,7 +80,7 @@ import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { useToast } from "~/components/ui/toast";
+import { useToast } from "~/components/feedback/toast";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";

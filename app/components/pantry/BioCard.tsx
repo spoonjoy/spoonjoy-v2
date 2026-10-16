@@ -1,5 +1,5 @@
-import { Avatar } from '../ui/avatar'
-import { Badge } from '../ui/badge'
+import { Avatar } from '../ouro/avatar/avatar'
+import { Badge } from '../ouro/badge/badge'
 import { Button } from '../ui/button'
 import { Heading, Subheading } from '../ui/heading'
 import { Link } from '../ui/link'
@@ -41,10 +41,11 @@ export function BioCard({
     <section className="border-y border-[var(--sj-border)] py-5">
       <div className="flex items-start gap-3">
         <Avatar
+          name={name}
           src={resolveChefAvatarUrl(avatarUrl)}
           initials={initials}
           alt={name}
-          className="size-16 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
+          size="xl"
         />
         <div className="min-w-0 flex-1">
           {profileHref ? (
@@ -70,8 +71,8 @@ export function BioCard({
       <Text className="mt-4 text-sm/6">{bio}</Text>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Badge color="zinc">{recipeCount} recipes</Badge>
-        <Badge color="amber">{cookbookCount} cookbooks</Badge>
+        <Badge variant="soft">{recipeCount} recipes</Badge>
+        <Badge tone="warning" variant="soft">{cookbookCount} cookbooks</Badge>
       </div>
 
       {onEditProfile && (

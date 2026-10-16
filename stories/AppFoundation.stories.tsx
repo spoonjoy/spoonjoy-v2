@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Plus, ShoppingCart, Trash2, UtensilsCrossed } from 'lucide-react'
-import { Avatar } from '../app/components/ui/avatar'
-import { Badge } from '../app/components/ui/badge'
+import { Avatar } from '../app/components/ouro/avatar/avatar'
+import { Badge } from '../app/components/ouro/badge/badge'
 import { Button } from '../app/components/ui/button'
 import { Fieldset } from '../app/components/ouro/field/fieldset'
 import { TextArea } from '../app/components/ouro/text-field/text-area'
@@ -38,7 +38,7 @@ export const KitchenActions: Story = {
             that, it should earn it in product design first.
           </Text>
         </div>
-        <Badge color="amber">Current primitives</Badge>
+        <Badge tone="warning" variant="soft">Current primitives</Badge>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -95,12 +95,12 @@ export const PantryCardLanguage: Story = {
             <Subheading level={2}>Lemon pasta</Subheading>
             <Text className="mt-1">A fast, bright weeknight recipe with pantry-friendly ingredients.</Text>
           </div>
-          <Avatar initials="AM" alt="Ari Mendelow" className="size-9" />
+          <Avatar name="Ari Mendelow" initials="AM" size="md" />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge color="green">Easy</Badge>
-          <Badge color="zinc">20 minutes</Badge>
-          <Badge color="blue">Serves 2</Badge>
+          <Badge tone="success" variant="soft">Easy</Badge>
+          <Badge variant="soft">20 minutes</Badge>
+          <Badge variant="soft">Serves 2</Badge>
         </div>
         <Text>
           See the full flow in <Link href="/recipes/lemon-pasta">recipe view</Link>.

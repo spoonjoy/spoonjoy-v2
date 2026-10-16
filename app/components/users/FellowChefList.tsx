@@ -1,4 +1,4 @@
-import { Avatar } from "~/components/ui/avatar";
+import { Avatar } from "~/components/ouro/avatar/avatar";
 import { chefDisplayName } from "~/lib/username";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
@@ -51,10 +51,11 @@ export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
               className="grid min-h-17 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 py-3 no-underline"
             >
               <Avatar
+                name={chefDisplayName(row.username)}
                 src={resolveChefAvatarUrl(row.photoUrl)}
                 alt={chefDisplayName(row.username)}
                 initials={initials}
-                className="size-10 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)]"
+                size="md"
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="sj-link font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">

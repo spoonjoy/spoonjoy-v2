@@ -50,9 +50,9 @@ function confirmation(page: Page, text: string) {
   return page.getByRole("status").filter({ hasText: text });
 }
 
-// An avatar's <img>: an Avatar can also draw an initials <svg> titled with the same name.
+// Ouro names the Avatar wrapper; its nested image has empty alt to avoid a second name.
 function avatarImage(scope: Locator, name: string) {
-  return scope.locator("img").and(scope.getByRole("img", { name, exact: true }));
+  return scope.getByRole("img", { name, exact: true }).locator("img");
 }
 
 // The chef link in a recipe's header: named by the chef's username, and holding their avatar.
@@ -184,7 +184,7 @@ test.describe("Account settings", () => {
     await page.goto(SETTINGS);
     await waitForHydration(page);
     const photoSection = page.getByTestId("profile-photo-section");
-    const settingsAvatar = photoSection.getByRole("img", { name: "Profile photo", exact: true });
+    const settingsAvatar = avatarImage(photoSection, "Profile photo");
     await expect(settingsAvatar).toHaveAttribute("src", DEFAULT_AVATAR);
     const chooser = page.waitForEvent("filechooser");
     await photoSection.getByRole("button", { name: "Upload photo", exact: true }).click();

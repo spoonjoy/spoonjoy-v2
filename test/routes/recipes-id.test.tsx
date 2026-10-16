@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { data as routerData, Outlet, redirect, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { ToastProvider } from "~/components/ui/toast";
+import { ToastProvider } from "~/components/feedback/toast";
 
 vi.mock("~/components/navigation", async () => {
   const actual = await vi.importActual<typeof import("~/components/navigation")>("~/components/navigation");

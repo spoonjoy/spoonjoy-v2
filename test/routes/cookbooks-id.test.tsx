@@ -11,7 +11,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { data as routerData, redirect } from "react-router";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
-import { ToastProvider } from "~/components/ui/toast";
+import { ToastProvider } from "~/components/feedback/toast";
 
 vi.mock("~/components/navigation", () => ({
   shareContent: vi.fn(async () => ({ success: true, method: "native" })),
@@ -1886,7 +1886,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.change(input, { target: { value: "Renamed Title" } });
         fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-        expect(await screen.findByRole("status")).toHaveTextContent("Cookbook renamed.");
+        expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toHaveTextContent("Cookbook renamed.");
         expect(screen.queryByRole("textbox", { name: "Cookbook title" })).not.toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Edit title" })).toBeInTheDocument();
         expect(submitted).toEqual(["Renamed Title"]);
@@ -1907,7 +1907,7 @@ describe("Cookbooks $id Route", () => {
         const rejected = screen.getByRole("textbox", { name: "Cookbook title" });
         expect(rejected).toHaveAttribute("aria-invalid", "true");
         expect(rejected).toHaveAccessibleDescription("You already have a cookbook with this title");
-        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
@@ -1955,7 +1955,7 @@ describe("Cookbooks $id Route", () => {
 
         expect(await screen.findByText(/Spoonjoy couldn't save that just now\./)).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
-        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
       });
 
       it("says so when deleting could not be saved because the database was briefly unavailable", async () => {
@@ -1970,7 +1970,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("status")).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't save that just now/ })).toHaveTextContent("Spoonjoy couldn't save that just now.");
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -1988,7 +1988,7 @@ describe("Cookbooks $id Route", () => {
         await waitFor(() => {
           expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         });
-        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
         expect(queryShownAlert()).toBeNull();
       });
     });
