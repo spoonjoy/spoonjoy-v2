@@ -68,7 +68,7 @@ export function RecipeGrid({
           return (
             <article
               key={recipe.id}
-              className="group relative"
+              className="group relative border-b border-[var(--sj-border)]"
             >
               <Link
                 href={href}
@@ -142,7 +142,7 @@ export function RecipeGrid({
         <Subheading level={2} size="xl">Recipes</Subheading>
         <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</p>
       </div>
-      <div className="sj-list-ruled">
+      <div className={loadMore ? "border-t border-[var(--sj-border)]" : "sj-list-ruled"}>
         {loadMore ? (
           <ShowMore
             {...loadMore}

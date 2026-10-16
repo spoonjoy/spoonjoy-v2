@@ -15,12 +15,16 @@ interface NativeTouchEvent {
   timeStamp: number;
   pointerType: string | null;
   isTrusted: boolean;
+  detail: number | null;
+  defaultPrevented: boolean;
 }
 export interface ShoppingInputObservation {
   terminal: "touchend" | "touchcancel";
   events: NativeTouchEvent[];
   settlingBefore: boolean;
   settlingAfter: boolean;
+  openBefore: string | null;
+  openAfter: string | null;
 }
 declare global {
   interface Window {
@@ -50,11 +54,17 @@ export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ pag
   try {
     await frame.evaluate(() => {
       const events: NativeTouchEvent[] = [];
-      const types = ["touchstart", "touchmove", "touchend", "touchcancel", "pointerdown", "pointermove", "pointerup", "pointercancel"];
-      const listener = (event: Event) => events.push({
-        type: event.type, timeStamp: event.timeStamp, isTrusted: event.isTrusted,
-        pointerType: "pointerType" in event ? String(event.pointerType) : null,
-      });
+      const types = ["touchstart", "touchmove", "touchend", "touchcancel", "pointerdown", "pointermove", "pointerup", "pointercancel", "click"];
+      const listener = (event: Event) => {
+        const observed = {
+          type: event.type, timeStamp: event.timeStamp, isTrusted: event.isTrusted,
+          pointerType: "pointerType" in event ? String(event.pointerType) : null,
+          detail: "detail" in event ? Number(event.detail) : null,
+          defaultPrevented: event.defaultPrevented,
+        };
+        events.push(observed);
+        queueMicrotask(() => { observed.defaultPrevented = event.defaultPrevented; });
+      };
       window.__sjTask21NativeTouch = { events, types, listener };
       for (const type of types) window.addEventListener(type, listener, { capture: true, passive: true });
     });
@@ -69,6 +79,8 @@ export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ pag
       const at = await frame.evaluate(() => window.__sjTask21NativeTouch!.events.length);
       const settlingBefore = await frame.locator(input.selector).evaluate((row) =>
         row.querySelector('[data-ouro="swipe-actions"]')!.hasAttribute("data-ouro-settling"));
+      const openBefore = await frame.locator(input.selector).evaluate((row) =>
+        row.querySelector('[data-ouro="swipe-actions"]')!.getAttribute("data-open"));
       const send = gesture.points.map(([x, y, ms], index) => session.send("Input.dispatchTouchEvent", {
         type: index === 0 ? "touchStart" : "touchMove",
         touchPoints: [{ id: 1, x: box.x + box.width * x, y: box.y + box.height * y }],
@@ -90,8 +102,10 @@ export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ pag
       await frame.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
       const settlingAfter = await frame.locator(input.selector).evaluate((row) =>
         row.querySelector('[data-ouro="swipe-actions"]')!.hasAttribute("data-ouro-settling"));
+      const openAfter = await frame.locator(input.selector).evaluate((row) =>
+        row.querySelector('[data-ouro="swipe-actions"]')!.getAttribute("data-open"));
       observations.push({
-        terminal, settlingBefore, settlingAfter,
+        terminal, settlingBefore, settlingAfter, openBefore, openAfter,
         events: await frame.evaluate((at) => window.__sjTask21NativeTouch!.events.slice(at), at),
       });
     }
@@ -114,9 +128,17 @@ export const task21PrintMedia: BrowserCommand<["screen" | "print"]> = async ({ p
   await page.emulateMedia({ media });
 };
 
+/** Actual top-level coordinates, including the real test iframe placement. */
+export const shoppingInputBounds: BrowserCommand<[string]> = async ({ iframe }, selector) => {
+  const box = await iframe.locator(selector).boundingBox();
+  if (!box) throw new Error(`No visible native input target ${selector}`);
+  return box;
+};
+
 declare module "vitest/browser" {
   interface BrowserCommands {
     nativeShoppingInput(input: ShoppingInput): Promise<ShoppingInputObservation[]>;
     task21PrintMedia(media: "screen" | "print"): Promise<void>;
+    shoppingInputBounds(selector: string): Promise<{ x: number; y: number; width: number; height: number }>;
   }
 }

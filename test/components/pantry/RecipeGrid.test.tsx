@@ -38,6 +38,10 @@ describe('RecipeGrid', () => {
     }} />)
     expect(screen.getByText('55 total')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Lemon Pasta/ })).toHaveAttribute('href', '/recipes/r-1')
+    // ShowMore adds list wrappers; the actual app row must still own its rule,
+    // rather than relying on the old direct-child selector that no longer reaches it.
+    expect(screen.getByRole('link', { name: /Lemon Pasta/ }).closest('article'))
+      .toHaveClass('border-b', 'border-[var(--sj-border)]')
     const next = screen.getByRole('link', { name: 'Show more recipes' })
     expect(next).toHaveAttribute('href', '/users/ari?after=r-2')
     fireEvent.click(next)

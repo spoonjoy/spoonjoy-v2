@@ -157,7 +157,7 @@ export default function RecipesIndex() {
           </div>
 
           {recipes.length > 0 ? (
-            <div className="sj-list-ruled">
+            <div className="border-t border-[var(--sj-border)]">
               <ShowMore
                 ordered
                 items={recipes.map((recipe, index) => (
@@ -221,7 +221,7 @@ function RecipeRow({
     <Link
       ref={linkRef}
       href={`/recipes/${recipe.id}`}
-      className="group grid min-h-28 grid-cols-[2.5rem_5.25rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_7rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
+      className="group grid min-h-28 grid-cols-[2.5rem_5.25rem_minmax(0,1fr)] gap-4 border-b border-[var(--sj-border)] py-5 no-underline sm:grid-cols-[3rem_7rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
       aria-label={recipe.title}
     >
       <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">

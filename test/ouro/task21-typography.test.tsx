@@ -125,6 +125,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
   });
   try {
     await expect.poll(() => host.querySelector('a[href="/recipes/a"]')).toBeTruthy();
+    expect(getComputedStyle(host.querySelector('a[href="/recipes/a"]')!).borderBottomWidth).toBe("1px");
     const more = Array.from(host.querySelectorAll("a")).find((link) => link.textContent?.includes("Show more recipes"))!;
     expect(more.getAttribute("href")).toBe("/recipes?after=a");
     await userEvent.dblClick(more);
@@ -133,6 +134,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
     await act(async () => release());
     await expect.poll(() => host.querySelector('a[href="/recipes/b"]')).toBeTruthy();
     await expect.poll(() => document.activeElement).toBe(host.querySelector('a[href="/recipes/b"]'));
+    expect(getComputedStyle(host.querySelector('a[href="/recipes/b"]')!).borderBottomWidth).toBe("1px");
     expect(host.querySelector('a[href="/recipes/a"]')).not.toBeNull();
     expect(host.querySelector("[data-ouro-show-more-status]")!.textContent).toBe("Showing 2 recipes");
     expect(more.isConnected).toBe(false);

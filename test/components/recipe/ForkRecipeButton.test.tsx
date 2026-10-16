@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createTestRoutesStub } from "../../utils";
@@ -30,6 +30,27 @@ function renderButton(
 }
 
 describe("ForkRecipeButton", () => {
+  it("keeps the actual fork form in the released phone sheet footer", async () => {
+    const original = window.matchMedia.bind(window);
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+      const result = original(query);
+      if (query === "(min-width: 640px)") Object.defineProperty(result, "matches", { value: false });
+      return result;
+    });
+    try {
+      renderButton();
+      await userEvent.click(await screen.findByRole("button", { name: "Fork", exact: true }));
+      const dialog = await screen.findByRole("dialog", { name: 'Fork "Pasta"?' });
+      expect(dialog).toHaveAttribute("data-ouro-presentation", "sheet");
+      const submit = within(dialog).getByRole("button", { name: "Fork", exact: true }) as HTMLButtonElement;
+      expect(submit.form).not.toBeNull();
+      expect(submit.form).toHaveAttribute("action", "/recipes/recipe-1/fork");
+      expect(new FormData(submit.form!).get("forkToken")).toBeTruthy();
+    } finally {
+      media.mockRestore();
+    }
+  });
+
   it("renders the 'Fork' label when viewer is not the owner", async () => {
     renderButton({ isOwner: false });
     expect(

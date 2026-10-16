@@ -50,6 +50,33 @@ function stub(pages: Record<string, Data>) {
 }
 
 describe("useAppendingList and ShowMore", () => {
+  it("starts one real Router load when two native activations arrive before the loading render", async () => {
+    let requests = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const Stub = createTestRoutesStub([{
+      path: "/rows", Component: Rows,
+      loader: async ({ request }: { request: Request }) => {
+        if (new URL(request.url).searchParams.has("after")) {
+          requests++;
+          await held;
+          return { rows: [{ id: "b", name: "Bean" }], next: null, key: "k" };
+        }
+        return { rows: [{ id: "a", name: "Apple" }], next: "a", key: "k" };
+      },
+    }]);
+    render(<Stub initialEntries={["/rows"]} />);
+    const trigger = await screen.findByRole("link", { name: "Show more rows" });
+    try {
+      // One native event batch: React has not committed Router's deferred busy render.
+      act(() => { fireEvent.click(trigger); fireEvent.click(trigger); });
+      await waitFor(() => expect(requests).toBe(1));
+    } finally {
+      await act(async () => release());
+    }
+    expect(await screen.findByText("Bean")).toHaveFocus();
+  });
+
   it("does not ask twice while a real Router page request is held", async () => {
     let requests = 0;
     let release!: () => void;

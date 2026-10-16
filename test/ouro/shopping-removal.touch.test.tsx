@@ -49,7 +49,7 @@ async function cancelAndReturn() {
   expect(checkbox().getAttribute("aria-checked")).toBe("false");
 }
 
-it.each([100, 600])("a real %ims full swipe opens one confirmation, never a checkbox/write; repeated confirm writes once", async (duration, { annotate }) => {
+for (const duration of [100, 600]) it(`a real ${duration}ms full swipe opens one confirmation, never a checkbox/write; repeated confirm writes once`, async ({ annotate }) => {
   await mount();
   const native = await gesture([[.92, .5, 0], [.8, .5, duration / 4], [.55, .5, duration / 2], [.15, .5, duration]]);
   await expect.poll(() => dialog()).toBeTruthy();
@@ -69,12 +69,16 @@ it.each([100, 600])("a real %ims full swipe opens one confirmation, never a chec
   await annotate(`T21_NATIVE_FULL ${JSON.stringify({ duration, native, writes: fixture!.writes, pathname: fixture!.router.state.location.pathname })}`);
 });
 
-it("short fast reveal then row tap cancels rather than toggles; the other direction does not act", async () => {
+it("short fast reveal then row tap cancels rather than toggles; the other direction does not act", async ({ annotate }) => {
   await mount();
   await gesture([[.8, .5, 0], [.74, .5, 20], [.67, .5, 50]]);
   await expect.poll(() => fixture!.row().querySelector('[data-ouro="swipe-actions"]')?.getAttribute("data-open")).toBe("trailing");
   expect(dialog()).toBeNull();
-  await userEvent.click(page.getByRole("checkbox", { name: "lemons" }));
+  // Tap the actually visible row content. A locator click on the translated-offscreen
+  // checkbox may auto-scroll it into view, which legitimately closes a swipe first.
+  const native = await gesture([[.45, .5, 0], [.45, .5, 1]]);
+  await annotate(`T21_NATIVE_ROW_TAP ${JSON.stringify(native)}`);
+  expect(native.openBefore).toBe("trailing");
   await expect.poll(() => fixture!.row().querySelector('[data-ouro="swipe-actions"]')?.hasAttribute("data-open")).toBe(false);
   expect(fixture!.writes).toEqual([]);
   await gesture([[.15, .5, 0], [.3, .5, 100], [.8, .5, 600]]);
@@ -113,10 +117,19 @@ it("native release reversal and native touchCancel cannot invoke destructive con
   expect(fixture!.writes).toEqual([]);
 });
 
-it("vertical native input scrolls the real page and cancels the row recognizer", async () => {
+it("vertical native input scrolls the real page and cancels the row recognizer", async ({ annotate }) => {
   await mount();
   const before = scrollY;
-  await gesture([[.5, .6, 0], [.5, .2, 25], [.5, -3, 150]]);
+  const box = await commands.shoppingInputBounds('[data-shopping-item="proof-1"] [data-ouro="swipe-actions"]');
+  // Native scrolling needs compositor-delivered moves, not three coalesced timed
+  // samples. Use the unchanged released sequential touchDrag driver, as its own
+  // passing vertical-scroll regression does; never substitute a product clock.
+  await act(async () => commands.touchDrag({
+    from: [box.x + box.width / 2, box.y + box.height / 2],
+    to: [box.x + box.width / 2 + 12, box.y + box.height / 2 - 160],
+    steps: 12,
+  }));
+  await annotate(`T21_NATIVE_SCROLL ${JSON.stringify({ before, after: scrollY, box })}`);
   await expect.poll(() => scrollY).toBeGreaterThan(before);
   expect(dialog()).toBeNull();
   expect(fixture!.writes).toEqual([]);

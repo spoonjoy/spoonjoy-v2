@@ -27,7 +27,7 @@ test.describe("Public recipes", () => {
     await showMore.click();
     await expect.poll(() => rows.count()).toBeGreaterThan(firstPage);
     await expect(rows.nth(firstPage).getByRole("link")).toBeFocused();
-    await expect(page.getByTestId("show-more-status")).toHaveText(`Showing ${await rows.count()} recipes`);
+    await expect(page.locator("[data-ouro-show-more-status]")).toHaveText(`Showing ${await rows.count()} recipes`);
     // Appending stays on /recipes, so Back leaves the list rather than undoing a page.
     await expect(page).toHaveURL(/\/recipes$/);
     await expectAccessible();

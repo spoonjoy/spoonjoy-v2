@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog } from "~/components/ouro/dialog/dialog";
-import { DialogContent as DialogBody, DialogFooter as DialogActions } from "~/components/ouro/dialog/dialog-parts";
 import { Button } from "~/components/button";
 import { coverScale, clampOffset, getCropPixels, cropImageToBlob, type Size, type Offset } from "~/lib/image-crop";
 
@@ -77,8 +76,15 @@ export function ProfilePhotoCropper({ file, onConfirm, onCancel, outputSize = 51
   const scale = natural ? coverScale(natural, VIEWPORT) * zoom : 1;
 
   return (
-    <Dialog open size="sm" onOpenChange={onCancel} title="Crop your photo">
-      <DialogBody>
+    <Dialog open size="sm" onOpenChange={onCancel} title="Crop your photo"
+      footer={<>
+        <Button plain onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave} disabled={!natural}>
+          Save photo
+        </Button>
+      </>}>
         <div className="flex flex-col items-center gap-4">
           <div
             className="relative size-64 touch-none overflow-hidden rounded-full border border-[var(--sj-border)] bg-[var(--sj-flour)] shadow-[var(--sj-shadow-soft)]"
@@ -124,15 +130,6 @@ export function ProfilePhotoCropper({ file, onConfirm, onCancel, outputSize = 51
             className="w-64 accent-[var(--sj-brass)]"
           />
         </div>
-      </DialogBody>
-      <DialogActions>
-        <Button plain onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave} disabled={!natural}>
-          Save photo
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

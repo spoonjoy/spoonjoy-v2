@@ -64,6 +64,28 @@ async function settleDialogTransition() {
 }
 
 describe("ProfilePhotoCropper", () => {
+  it("keeps crop controls and working Save in the released phone sheet", async () => {
+    const original = window.matchMedia.bind(window);
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+      const result = original(query);
+      if (query === "(min-width: 640px)") Object.defineProperty(result, "matches", { value: false });
+      return result;
+    });
+    const onConfirm = vi.fn();
+    try {
+      render(<ProfilePhotoCropper file={makeFile()} onConfirm={onConfirm} onCancel={vi.fn()} />);
+      expect(await screen.findByRole("dialog", { name: "Crop your photo" }))
+        .toHaveAttribute("data-ouro-presentation", "sheet");
+      fireImageLoad(getPreviewImage(), 800, 600);
+      expect(screen.getByRole("slider", { name: "Zoom" })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Save photo" }));
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.any(Blob)));
+      await settleDialogTransition();
+    } finally {
+      media.mockRestore();
+    }
+  });
+
   it("creates an object URL from the file and uses it as the preview src", async () => {
     render(<ProfilePhotoCropper file={makeFile()} onConfirm={vi.fn()} onCancel={vi.fn()} />);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);

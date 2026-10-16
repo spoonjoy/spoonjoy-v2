@@ -423,6 +423,7 @@ describe("Recipes Index Route", () => {
     fireEvent.click(showMore);
 
     const third = await screen.findByRole("link", { name: "Third Soup" });
+    expect(third).toHaveClass("border-b", "border-[var(--sj-border)]");
     expect(screen.getByRole("link", { name: "First Soup" })).toBeInTheDocument();
     await waitFor(() => expect(third).toHaveFocus());
     expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 3 recipes");

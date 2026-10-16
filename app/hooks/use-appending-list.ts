@@ -50,6 +50,7 @@ export function useAppendingList<T extends { id: string }, D>({
   })
   const current = state.key === resetKey ? state : { key: resetKey, extra: [], nextCursor: page.nextCursor, firstNewIndex: null }
   const handledData = useRef<D | undefined>(data)
+  const pendingLoad = useRef(false)
   const [announcement, setAnnouncement] = useState('')
 
   useEffect(() => {
@@ -78,7 +79,12 @@ export function useAppendingList<T extends { id: string }, D>({
   const { load } = fetcher
   const cursor = current.nextCursor
   const showMore = useCallback(() => {
-    if (cursor) void load(loadHref(cursor))
+    // Native clicks can arrive in one batch before Router commits its loading
+    // render. The real load promise, not render timing, owns this in-flight gate.
+    if (cursor && !pendingLoad.current) {
+      pendingLoad.current = true
+      void load(loadHref(cursor)).finally(() => { pendingLoad.current = false })
+    }
   }, [cursor, load, loadHref])
 
   return {
