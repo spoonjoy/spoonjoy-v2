@@ -201,6 +201,32 @@ describe("Toaster", () => {
     }
   });
 
+  it("keeps named spacing-scale values on the viewport as well as the universal spacing fallback", async () => {
+    const style = document.documentElement.style;
+    const tokens = ["--spacing-4", "--spacing-6", "--spacing-90"];
+    const before = tokens.map((token) => style.getPropertyValue(token));
+    try {
+      style.setProperty("--spacing-4", "18px");
+      style.setProperty("--spacing-6", "28px");
+      style.setProperty("--spacing-90", "400px");
+      await render(<Toaster />);
+      await page.viewport(414, 896);
+      expect(viewport()!.getBoundingClientRect().width).toBeCloseTo(378, 1);
+      expect(viewport()!.getBoundingClientRect().left).toBeCloseTo(18, 1);
+      expect(getComputedStyle(viewport()!).bottom).toBe("16px");
+      await page.viewport(1024, 896);
+      const rect = viewport()!.getBoundingClientRect();
+      expect(rect.width).toBeCloseTo(400, 1);
+      expect(1024 - rect.right).toBeCloseTo(28, 1);
+      expect(getComputedStyle(viewport()!).bottom).toBe("28px");
+    } finally {
+      tokens.forEach((token, index) => {
+        if (before[index]) style.setProperty(token, before[index]!);
+        else style.removeProperty(token);
+      });
+    }
+  });
+
   it.each([
     ["bg-red-500", "sets appearance", ":root { --popover"],
     ["text-center", "aligns content", "Toaster owns toast-content alignment; use <Toaster /> without the alignment class"],

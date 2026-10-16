@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "ourostack/ouro-ui",
-  "upstreamCommit": "2645a38907aaa0c12b9d76fec4aca7b7460d8453",
+  "upstreamCommit": "2dd93847b0645937455ba443851e46f981c67827",
   "normalization": "@/registry/ouro/components/ouro/ -> ~/components/ouro/; @/registry/ouro/lib/ouro/ -> ~/lib/ouro/; no other changes",
   "files": [
     {
@@ -23,9 +23,9 @@
     },
     {
       "upstreamPath": "registry/ouro/components/ouro/toast/toaster.test.tsx",
-      "upstreamSha256": "c7db398cabc60c126d41ef284fb7f8a4218d6a665ee4301ca6096c78f6385c5b",
+      "upstreamSha256": "c61a222bffddc055476c3545b45d6d9adcb44e26cd14a3a84534fa9d67e55548",
       "proofPath": "app/components/ouro/toast/toaster.test.tsx",
-      "proofSha256": "ce2b33e9bfc26f4d21867666a1287c43c8a97cfc9b42042b8f27629f96c61f1c"
+      "proofSha256": "3e01ecae058346491114021ccb807607e6e0433fcd449e09362f5150e0cbb374"
     },
     {
       "upstreamPath": "registry/ouro/components/ouro/toast/toaster.test-d.ts",
