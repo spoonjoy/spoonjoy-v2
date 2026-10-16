@@ -64,7 +64,7 @@ const CALENDAR_FORMAT: Record<CalendarUnit, Intl.DateTimeFormatOptions> = {
  * Rendered markup has to come out the same on the server (a Worker: en-US, UTC) and in the
  * browser that hydrates it; a date formatted with the runtime's default locale or timezone
  * differs between the two for most viewers, and React reports a hydration mismatch. For the
- * viewer's own date, render <LocalDate> (~/components/ui/local-date), which starts from this and
+ * viewer's own date, render <LocalDate> (~/components/local-date), which starts from this and
  * swaps after hydration.
  */
 export function formatUtcCalendarDate(input: Date | string, unit: CalendarUnit = "day"): string {

@@ -1,7 +1,7 @@
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { chefDisplayName } from "~/lib/username";
-import { Link } from "~/components/ui/link";
-import { Text } from "~/components/ui/text";
+import { Link } from "~/components/navigation/app-link";
+import { Text } from "~/components/text";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 
@@ -62,14 +62,14 @@ export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
                   {chefDisplayName(row.username)}
                 </span>
               {summary ? (
-                <Text className="text-xs text-[var(--sj-ink-soft)]">
+                <p className="text-base/6 text-[var(--sj-ink-soft)] text-xs text-[var(--sj-ink-soft)]">
                   {summary}
-                </Text>
+                </p>
               ) : null}
               </div>
-              <Text className="font-sj-ui text-xs uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">
+              <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">
                 {row.latestInteractionLabel}
-              </Text>
+              </p>
             </Link>
           </li>
         );

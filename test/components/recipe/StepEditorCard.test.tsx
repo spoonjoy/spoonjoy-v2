@@ -841,10 +841,12 @@ describe('StepEditorCard', () => {
 
   describe('mobile optimization', () => {
     function expectCoarsePointerTouchTarget(element: HTMLElement) {
-      const touchTarget = element.querySelector('[data-slot="touch-target"][aria-hidden="true"]')
+      expect(element).toHaveAttribute('data-ouro', 'button')
+      const touchTarget = element.querySelector('[data-ouro-touch-target][aria-hidden="true"]')
       expect(touchTarget).toBeInTheDocument()
-      expect(touchTarget?.className).toContain('size-[max(100%,2.75rem)]')
-      expect(touchTarget?.className).toContain('pointer-fine:hidden')
+      expect(touchTarget?.className).toContain('size-[max(100%,44px)]')
+      expect(touchTarget?.className).toContain('hidden')
+      expect(touchTarget?.className).toContain('pointer-coarse:block')
     }
 
     it("ingredient toggle is Ouro UI's switch, which brings its own 44px touch target", () => {

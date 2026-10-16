@@ -1,8 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { AuthLayout } from '~/components/ui/auth-layout'
+import type { ComponentProps } from 'react'
+import { AuthPage } from '~/components/auth/auth-page'
+
+function AuthLayout(props: Omit<ComponentProps<typeof AuthPage>, 'formTitle'> & { formTitle?: string }) {
+  return <AuthPage formTitle="Log in" {...props} />
+}
 
 describe('AuthLayout', () => {
+  it('owns the form heading separately from the editorial title without nesting main', () => {
+    render(<AuthLayout formTitle="Connect your kitchen"><p>Form content</p></AuthLayout>)
+    expect(screen.getByRole('heading', { level: 1, name: 'Connect your kitchen' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Keep the good recipes close.' })).toBeInTheDocument()
+    expect(screen.queryByRole('main')).not.toBeInTheDocument()
+  })
   describe('rendering', () => {
     it('renders children', () => {
       render(

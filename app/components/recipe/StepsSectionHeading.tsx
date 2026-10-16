@@ -1,6 +1,4 @@
 import clsx from 'clsx'
-import { Heading } from '../ui/heading'
-import { Text } from '../ui/text'
 
 export interface StepsSectionHeadingProps {
   /** Whether any ingredient or step output is checked off, so there is progress to clear */
@@ -26,9 +24,9 @@ export function StepsSectionHeading({ hasProgress, onClearProgress }: StepsSecti
     <div className="mb-6 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-6 gap-y-2 border-t border-[var(--sj-border-strong)] pt-6 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
       <div className="col-start-1 row-start-1">
         <p className="sj-eyebrow sj-print-hidden">Cook mode</p>
-        <Heading level={2} className="mt-3 print:mt-0 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
+        <h2 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-3 print:mt-0 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11">
           Steps
-        </Heading>
+        </h2>
       </div>
       <button
         type="button"
@@ -47,9 +45,9 @@ export function StepsSectionHeading({ hasProgress, onClearProgress }: StepsSecti
       >
         Clear progress
       </button>
-      <Text className="col-span-2 row-start-2 font-sj-ui text-xs uppercase tracking-[0.18em] print:hidden sm:col-span-1 sm:col-start-3 sm:row-start-1">
+      <p className="text-base/6 text-[var(--sj-ink-soft)] col-span-2 row-start-2 font-sj-ui text-xs uppercase tracking-[0.18em] print:hidden sm:col-span-1 sm:col-start-3 sm:row-start-1">
         Tap ingredients as you go
-      </Text>
+      </p>
     </div>
   )
 }

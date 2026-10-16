@@ -10,10 +10,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { render, screen } from "@testing-library/react";
+import { Button } from "~/components/button";
 
 const ROOT = resolve(__dirname, "../..");
 const CSS = readFileSync(resolve(ROOT, "app/styles/tailwind.css"), "utf8");
-const BUTTON = readFileSync(resolve(ROOT, "app/components/ui/button.tsx"), "utf8");
 const MCP = readFileSync(resolve(ROOT, "app/routes/mcp.tsx"), "utf8");
 
 // The custom properties declared in the first block that opens with `selector {`.
@@ -58,13 +60,6 @@ const STATES = [
   { state: "disabled", label: "--sj-on-action-disabled", fill: "--sj-action-disabled" },
 ] as const;
 
-// The primary variant's class strings in button.tsx.
-function primaryClasses(): string {
-  const match = /\n {2}default: \[([\s\S]*?)\n {2}\],/.exec(BUTTON);
-  expect(match, "default variant in button.tsx").not.toBeNull();
-  return match![1];
-}
-
 describe("primary button contrast", () => {
   for (const [themeName, theme] of Object.entries(THEMES)) {
     describe(`${themeName} theme`, () => {
@@ -86,29 +81,23 @@ describe("primary button contrast", () => {
     expect(luminance(color(DARK, "--sj-on-action"))).toBeLessThan(luminance(color(DARK, "--sj-action")));
   });
 
-  it("button.tsx colours each primary state with exactly the checked tokens", () => {
-    const classes = primaryClasses();
-    const checked = new Set(STATES.flatMap(({ label, fill }) => [label, fill]));
-    const used = new Set(Array.from(classes.matchAll(/var\((--sj-[\w-]+)\)/g), (match) => match[1]));
-    expect([...used].sort()).toEqual([...checked].sort());
-    expect(classes).toContain("text-[var(--sj-on-action)]");
-    expect(classes).toContain("data-hover:bg-[var(--sj-action-hover)]");
-    expect(classes).toContain("data-active:bg-[var(--sj-action-hover)]");
-    expect(classes).toContain("data-disabled:bg-[var(--sj-action-disabled)]");
-    expect(classes).toContain("data-disabled:text-[var(--sj-on-action-disabled)]");
-  });
-
-  it("a disabled primary button keeps its colours instead of fading", () => {
-    expect(primaryClasses()).not.toMatch(/opacity/);
-    const base = /\n {2}base: \[([\s\S]*?)\n {2}\],/.exec(BUTTON)![1];
-    expect(base).not.toMatch(/opacity/);
-  });
-
-  it("the focus ring is the brass outline, offset onto the page", () => {
-    const base = /\n {2}base: \[([\s\S]*?)\n {2}\],/.exec(BUTTON)![1];
-    expect(base).toContain("data-focus:outline-2");
-    expect(base).toContain("data-focus:outline-offset-2");
-    expect(base).toContain("data-focus:outline-[var(--sj-brass)]");
+  it.each([false, true])("binds the actual released primary button to the checked app tokens (disabled=%s)", (disabled) => {
+    // happy-dom can evaluate these app-owned CSS rules; actual compiled colour/hover/
+    // pressed/focus/alpha measurements additionally run in the isolated browser lane.
+    const style = document.createElement("style");
+    style.textContent = CSS.slice(0, CSS.indexOf("/* Ouro UI's dialogs")).replace(/^@(import|source|config).*$/gm, "");
+    document.head.append(style);
+    try {
+      render(createElement(Button, { disabled, children: "Checked action" }));
+      const button = screen.getByRole("button", { name: "Checked action" });
+      const actual = getComputedStyle(button);
+      expect(actual.getPropertyValue("--primary").trim()).toBe(color(LIGHT, disabled ? "--sj-action-disabled" : "--sj-action"));
+      expect(actual.getPropertyValue("--primary-foreground").trim()).toBe(color(LIGHT, disabled ? "--sj-on-action-disabled" : "--sj-on-action"));
+      if (disabled) expect(actual.opacity).toBe("1");
+      expect(button).toHaveClass("bg-primary", "text-primary-foreground", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
+    } finally {
+      style.remove();
+    }
   });
 
   it("the MCP page's primary link uses the same label and hover tokens", () => {

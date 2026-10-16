@@ -1,6 +1,6 @@
 import { ImageOff, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link } from '../ui/link'
+import { Link } from '../navigation/app-link'
 import { Avatar } from '../ouro/avatar/avatar'
 import { ScaleSelector } from './ScaleSelector'
 import { scaleServingsText } from '~/lib/quantity'

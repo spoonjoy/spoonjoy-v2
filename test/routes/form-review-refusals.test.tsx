@@ -146,9 +146,15 @@ describe("account password accepted answers", () => {
       fieldErrors: { newPassword: SHORT_MESSAGE },
     });
     await waitFor(() => expect(password).toHaveAccessibleDescription(`Must be at least 8 characters ${SHORT_MESSAGE}`));
+    // FieldError's accessible description arrives before its real-frame entrance
+    // completion. Keep that state update in act, including under coverage load.
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(screen.getByText(SHORT_MESSAGE)).not.toHaveAttribute("data-starting-style");
     expect(password).toHaveFocus();
     await user.type(password, "x");
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
     expect(password).not.toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText(SHORT_MESSAGE)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Other answer", exact: true }));
     await screen.findByText("Other action answered");
     expect(password).not.toHaveAttribute("aria-invalid", "true");
@@ -158,6 +164,8 @@ describe("account password accepted answers", () => {
     expect(password).not.toHaveAttribute("aria-invalid", "true");
     await act(async () => release!());
     await waitFor(() => expect(password).toHaveAccessibleDescription(`Must be at least 8 characters ${SHORT_MESSAGE}`));
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(screen.getByText(SHORT_MESSAGE)).not.toHaveAttribute("data-starting-style");
     expect(password).toHaveFocus();
     expect(answers).toHaveLength(2);
   });

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { Dialog, DialogTitle, DialogBody, DialogActions } from "~/components/ui/dialog";
-import { Button } from "~/components/ui/button";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { DialogContent as DialogBody, DialogFooter as DialogActions } from "~/components/ouro/dialog/dialog-parts";
+import { Button } from "~/components/button";
 import { coverScale, clampOffset, getCropPixels, cropImageToBlob, type Size, type Offset } from "~/lib/image-crop";
 
 const VIEWPORT = 256;
@@ -76,8 +77,7 @@ export function ProfilePhotoCropper({ file, onConfirm, onCancel, outputSize = 51
   const scale = natural ? coverScale(natural, VIEWPORT) * zoom : 1;
 
   return (
-    <Dialog open size="sm" onClose={onCancel}>
-      <DialogTitle>Crop your photo</DialogTitle>
+    <Dialog open size="sm" onOpenChange={onCancel} title="Crop your photo">
       <DialogBody>
         <div className="flex flex-col items-center gap-4">
           <div

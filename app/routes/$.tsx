@@ -1,7 +1,7 @@
 import type { Route } from "./+types/$";
 import { data } from "react-router";
-import { Text } from "~/components/ui/text";
-import { Button } from "~/components/ui/button";
+import { Text } from "~/components/text";
+import { Button } from "~/components/button";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 
 export function meta({}: Route.MetaArgs) {

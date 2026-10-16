@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import { ThemeToggle, ThemeDropdown } from '~/components/ui/theme-toggle'
+import { ThemeToggle, ThemeDropdown } from '~/components/theme-toggle'
 import {
   THEME_SWITCH_DURATION_MS,
   THEME_SWITCHING_ATTRIBUTE,
   ThemeProvider,
-} from '~/components/ui/theme-provider'
+} from '~/components/theme-provider'
 
 // Mock localStorage
 const localStorageMock = (() => {

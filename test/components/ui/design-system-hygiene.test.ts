@@ -1,6 +1,10 @@
-import { readFileSync, readdirSync, statSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { resolve } from "path";
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { createElement } from "react";
+import { render, screen } from "@testing-library/react";
+import { Button } from "~/components/button";
 
 const APP_AND_STORY_FILES = [
   "app/components",
@@ -31,12 +35,43 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
+// All265 installed files were individually matched to the qualified v0.8.2 public
+// manifest at ad780afdc3d6dab6766454f11efdd94707f9fc8b, reversing ONLY the CLI alias
+// transformation. This digest is of the TAG'S selected sorted (path, SHA256) pairs,
+// not a blanket path-prefix trust rule or a hash regenerated from arbitrary app edits.
+const publishedPaths = new Set(listTextFiles(["app/components/ouro", "app/lib/ouro"]));
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+const normalizedRegistrySource = (source: string) => source
+  .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
+  .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/");
+function hasAppTrackingViolation(file: string, source: string) {
+  return !publishedPaths.has(file) && source.includes("tracking-[-");
+}
+
 describe("Spoonjoy UI design-system hygiene", () => {
-  it("uses one text link, Ouro UI's, outside Catalyst's own files", () => {
-    // Catalyst's TextLink (app/components/ui/text.tsx) looks different: tomato and semibold where
-    // Ouro UI's Link is the primary colour at normal weight.
+  it("does not ship or hide the retired Catalyst source directory", () => {
+    expect(existsSync(resolve(process.cwd(), "app/components/ui"))).toBe(false);
+  });
+  it("exempts only the exact unmodified installed public registry inventory", () => {
+    const pairs = [...publishedPaths].sort().map((file) => [
+      file, sha256(normalizedRegistrySource(readSourceFile(file))),
+    ]);
+    expect(pairs).toHaveLength(265);
+    expect(sha256(JSON.stringify(pairs))).toBe("8a99a561abe1ebc01415a6a57fb07a0a1f1a26eb603d511bea2db99061e2b0f9");
+  });
+
+  it("rejects prohibited app-authored tracking even under a registry-looking prefix", () => {
+    const source = '<h1 className="tracking-[-0.5em]">App copy</h1>';
+    expect(hasAppTrackingViolation("app/components/heading.tsx", source)).toBe(true);
+    expect(hasAppTrackingViolation("stories/App.stories.tsx", source)).toBe(true);
+    expect(hasAppTrackingViolation("app/components/ouro/unpublished-app-copy.tsx", source)).toBe(true);
+    expect(hasAppTrackingViolation("app/routes/recipes.tsx", '<h1 className="tracking-normal">Copy</h1>')).toBe(false);
+  });
+  it("uses one text link, Ouro UI's, outside the exact published inventory", () => {
+    // The retired TextLink looked different: tomato and semibold rather than the
+    // released Link's primary colour and normal weight.
     const offenders = listTextFiles(APP_AND_STORY_FILES)
-      .filter((file) => !file.startsWith("app/components/ui/") && !file.startsWith("app/components/ouro/"))
+      .filter((file) => !publishedPaths.has(file))
       .filter((file) => /\bTextLink\b/.test(readSourceFile(file)));
 
     expect(offenders).toEqual([]);
@@ -50,7 +85,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const offenders: string[] = [];
 
     for (const file of listTextFiles(APP_AND_STORY_FILES)) {
-      if (file.startsWith("app/components/ouro/")) continue;
+      if (publishedPaths.has(file)) continue;
       const lines = readSourceFile(file).split("\n");
       lines.forEach((line, index) => {
         if (!/className=.*\bspace-[xy]-\d/.test(line)) return;
@@ -70,17 +105,17 @@ describe("Spoonjoy UI design-system hygiene", () => {
   });
 
   it("keeps button chrome flat enough to avoid doubled-button artifacts", () => {
-    const content = readSourceFile("app/components/ui/button.tsx");
-
-    expect(content).not.toContain("0_10px_24px");
-    expect(content).not.toContain("linear-gradient");
-    expect(content).toContain("shadow-none");
+    render(createElement(Button, { children: "Flat action" }));
+    const button = screen.getByRole("button", { name: "Flat action" });
+    expect(button).toHaveAttribute("data-ouro", "button");
+    expect(button.className).not.toMatch(/0_10px_24px|linear-gradient|(?:^|\s)shadow(?:-|\s)/);
   });
 
   it("does not use negative letter spacing in app or story UI", () => {
-    const offenders = listTextFiles(APP_AND_STORY_FILES).filter((filePath) =>
-      readSourceFile(filePath).includes("tracking-[-"),
-    );
+    // App-authored typography keeps its rule. Published Heading's tighter large
+    // type is intentional (design-feel Type rule16), with exact provenance checked above.
+    const offenders = listTextFiles(APP_AND_STORY_FILES)
+      .filter((filePath) => hasAppTrackingViolation(filePath, readSourceFile(filePath)));
 
     expect(offenders).toEqual([]);
   });
@@ -91,7 +126,7 @@ describe("Spoonjoy UI design-system hygiene", () => {
     // Ouro UI (app/components/ouro) is installed from its registry and keeps Tailwind's radius
     // names; tailwind.css derives those radii from Spoonjoy's control radius instead.
     const offenders = listTextFiles(APP_AND_STORY_FILES)
-      .filter((filePath) => !filePath.startsWith("app/components/ouro/"))
+      .filter((filePath) => !publishedPaths.has(filePath))
       .filter((filePath) => staleRadiusPattern.test(readSourceFile(filePath)));
 
     expect(offenders).toEqual([]);

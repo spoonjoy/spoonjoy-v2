@@ -425,7 +425,7 @@ describe("Recipes Index Route", () => {
     const third = await screen.findByRole("link", { name: "Third Soup" });
     expect(screen.getByRole("link", { name: "First Soup" })).toBeInTheDocument();
     await waitFor(() => expect(third).toHaveFocus());
-    expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 3 recipes");
+    expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 3 recipes");
     expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
     expect(screen.getByText("3 recipes")).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);

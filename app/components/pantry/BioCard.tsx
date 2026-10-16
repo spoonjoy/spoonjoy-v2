@@ -1,9 +1,9 @@
 import { Avatar } from '../ouro/avatar/avatar'
 import { Badge } from '../ouro/badge/badge'
-import { Button } from '../ui/button'
-import { Heading, Subheading } from '../ui/heading'
-import { Link } from '../ui/link'
-import { Text } from '../ui/text'
+import { Button } from '../button'
+import { Heading } from '../heading'
+import { Link } from '../navigation/app-link'
+import { Text } from '../text'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 
 export interface BioCardProps {
@@ -50,25 +50,25 @@ export function BioCard({
         <div className="min-w-0 flex-1">
           {profileHref ? (
             <Link href={profileHref} className="no-underline hover:text-[var(--sj-tomato)]">
-              <Heading level={2} className="truncate text-2xl/8 font-semibold">
+              <Heading level={2} size="xl" className="truncate">
                 {name}
               </Heading>
             </Link>
           ) : (
-            <Heading level={2} className="truncate text-2xl/8 font-semibold">
+            <Heading level={2} size="xl" className="truncate">
               {name}
             </Heading>
           )}
 
           {(location || joinedLabel) && (
-            <Text className="font-sj-ui mt-1 text-xs uppercase tracking-[0.14em]">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui mt-1 text-xs uppercase tracking-[0.14em]">
               {[location, joinedLabel].filter(Boolean).join(' • ')}
-            </Text>
+            </p>
           )}
         </div>
       </div>
 
-      <Text className="mt-4 text-sm/6">{bio}</Text>
+      <Text size="sm" className="mt-4 leading-6">{bio}</Text>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Badge variant="soft">{recipeCount} recipes</Badge>
@@ -84,12 +84,12 @@ export function BioCard({
       )}
 
       <div className="mt-5 border-t border-[var(--sj-border)] pt-4">
-        <Subheading level={3} className="text-sm">
+        <h3 className="font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)] text-sm">
           Kitchen Snapshot
-        </Subheading>
-        <Text className="mt-1 text-xs">
+        </h3>
+        <p className="text-base/6 text-[var(--sj-ink-soft)] mt-1 text-xs">
           Keeping your pantry fresh with small-batch recipes and practical weeknight staples.
-        </Text>
+        </p>
       </div>
     </section>
   )

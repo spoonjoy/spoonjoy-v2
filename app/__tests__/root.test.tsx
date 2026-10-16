@@ -12,7 +12,7 @@ vi.mock('motion/react', () => ({
 }))
 
 import { MobileNav } from '~/components/navigation/mobile-nav'
-import { ThemeProvider } from '~/components/ui/theme-provider'
+import { ThemeProvider } from '~/components/theme-provider'
 
 function CurrentRootLayoutBehavior({ userId }: { userId: string | null }) {
   const isAuthenticated = !!userId

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { BellRing, TimerReset } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import type { CookTimerEntry, CookTimersController } from "~/hooks/use-cook-timers";
 import { formatTimerSeconds, remainingSeconds } from "~/lib/cook-timers";
 

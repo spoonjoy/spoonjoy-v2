@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 
-import { ThemeProvider } from "~/components/ui/theme-provider";
+import { ThemeProvider } from "~/components/theme-provider";
 import { AppNavbar } from "~/root";
 
 function renderNavbar(userId: string | null = null, path = "/") {

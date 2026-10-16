@@ -1,9 +1,9 @@
 import type { Route } from "./+types/terms";
 import type { ReactNode } from "react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Subheading } from "~/components/ui/heading";
+import { Subheading } from "~/components/heading";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 
 const LAST_UPDATED = "May 29, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
@@ -18,7 +18,7 @@ export function meta({}: Route.MetaArgs) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-8">
-      <Subheading level={2} className="text-2xl/8">{title}</Subheading>
+      <Subheading level={2} size="xl">{title}</Subheading>
       <div className="mt-3 space-y-3 text-base/7 text-[var(--sj-ink-soft)]">{children}</div>
     </section>
   );

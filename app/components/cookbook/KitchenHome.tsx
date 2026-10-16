@@ -1,9 +1,9 @@
 import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
-import { Button } from "~/components/ui/button";
-import { Link } from "~/components/ui/link";
-import { Heading, Subheading } from "~/components/ui/heading";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Link } from "~/components/navigation/app-link";
+import { Subheading } from "~/components/heading";
+import { Text } from "~/components/text";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
@@ -62,8 +62,8 @@ export function KitchenHome({
             />
             <div className="mt-5 lg:mt-0">
               <p className="font-sj-ui text-sm font-semibold tracking-[0.01em] text-[var(--sj-brass)]">@{kitchenUser.username}</p>
-              <Heading level={1} className="mt-3 text-5xl/12 sm:text-6xl/14 lg:text-7xl/16">{heading}</Heading>
-              <Text className="mt-2 text-sm">
+              <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-3 text-5xl/12 sm:text-6xl/14 lg:text-7xl/16">{heading}</h1>
+              <Text size="sm" className="mt-2">
                 {displayRecipes.length} {displayRecipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
             </div>
@@ -145,7 +145,7 @@ function RecipeIndex({
       <div className="flex items-end justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-3">
         <div>
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Contents</p>
-          <Subheading id="recipe-index-heading" level={2} className="mt-1 text-2xl/8">Recipe index</Subheading>
+          <Subheading id="recipe-index-heading" level={2} size="xl" className="mt-1">Recipe index</Subheading>
         </div>
         {isOwner && recipes.length > 0 ? <Link href="/recipes/new" className="font-sj-ui inline-flex min-h-11 items-center text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]">New +</Link> : null}
       </div>
@@ -165,7 +165,7 @@ function RecipeIndex({
             </div>
             <div>
               <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipes</p>
-              <Subheading level={2} className="mt-3 text-3xl/9 tracking-normal">Create your first recipe</Subheading>
+              <Subheading level={2} size="2xl" className="mt-3 leading-9">Create your first recipe</Subheading>
               <Text className="mt-3 max-w-md">
                 Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
               </Text>
@@ -177,7 +177,7 @@ function RecipeIndex({
                   </Button>
                 </div>
               ) : (
-                <Text className="mt-6 text-sm">No public recipes yet.</Text>
+                <Text size="sm" className="mt-6">No public recipes yet.</Text>
               )}
             </div>
           </div>
@@ -251,7 +251,7 @@ function CookbookShelf({
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Cookbooks</p>
-          <Subheading level={2} className="mt-1 text-2xl/8">Cookbooks</Subheading>
+          <Subheading level={2} size="xl" className="mt-1">Cookbooks</Subheading>
         </div>
         {isOwner ? <Button href="/cookbooks/new" plain>New cookbook</Button> : null}
       </div>
@@ -266,7 +266,7 @@ function CookbookShelf({
         <div className="grid gap-4 border-y border-dashed border-[var(--sj-border-strong)] py-7 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
           <BookOpen className="size-8 text-[var(--sj-action)]" aria-hidden="true" />
           <div>
-            <Subheading level={3} className="text-2xl/8">{isOwner ? "Build your first cookbook" : "No public cookbooks yet."}</Subheading>
+            <Subheading level={3} size="xl">{isOwner ? "Build your first cookbook" : "No public cookbooks yet."}</Subheading>
             <Text className="mt-1 max-w-2xl">
               {isOwner
                 ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal."

@@ -9,13 +9,13 @@ import {
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
 import { LogOut } from "lucide-react";
-import { Text } from "~/components/ui/text";
-import { Button } from "~/components/ui/button";
+import { Text } from "~/components/text";
+import { Button } from "~/components/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { useFormErrors, useIntentAnswer } from "~/hooks/use-form-errors";
-import { OAuthError } from "~/components/ui/oauth";
+import { OAuthError } from "~/components/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
@@ -150,7 +150,7 @@ export default function AccountSettings() {
           </RouterForm>
         )}
       >
-        <Text className="mt-4 max-w-2xl text-base/7">
+        <Text className="mt-4 max-w-2xl leading-7">
           Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
         </Text>
       </CookbookHeader>
@@ -200,7 +200,7 @@ export default function AccountSettings() {
                 autoComplete="current-password"
               />
             ) : (
-              <Text className="text-sm/6">
+              <Text size="sm" className="leading-6">
                 To change your email, you need to have signed in within the last 10 minutes. If it has been longer,
                 sign in again first.
               </Text>
@@ -226,14 +226,14 @@ export default function AccountSettings() {
         ) : null}
         {!isEditing && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Text className="border-y border-[var(--sj-border)] py-4">
+            <div className="border-y border-[var(--sj-border)] py-4"><Text>
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
               {user.email}
-            </Text>
-            <Text className="border-y border-[var(--sj-border)] py-4">
+            </Text></div>
+            <div className="border-y border-[var(--sj-border)] py-4"><Text>
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Username</span>
               {user.username}
-            </Text>
+            </Text></div>
           </div>
         )}
       </SettingsPanel>
@@ -251,9 +251,9 @@ export default function AccountSettings() {
 
         {/* Warning when can't unlink */}
         {!canUnlinkOAuth && user.oauthAccounts.length > 0 && (
-          <Text className="mt-3 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-3 text-sm text-[var(--sj-brass)]">
+          <p className="text-base/6 text-[var(--sj-ink-soft)] mt-3 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-3 text-sm text-[var(--sj-brass)]">
             You cannot unlink your OAuth provider because it is your only authentication method. Please set a password first.
-          </Text>
+          </p>
         )}
 
         <div className="mt-4 space-y-4">
@@ -273,22 +273,22 @@ export default function AccountSettings() {
                       {/* Only show provider name label if username doesn't contain it */}
                       {/* This avoids duplicate regex matches in tests */}
                       {!account!.providerUsername.toLowerCase().includes(provider) && (
-                        <Text className="font-medium text-[var(--sj-ink)]">
+                        <Text tone="default"><strong className="font-medium">
                           {capitalizeProvider(provider)}
-                        </Text>
+                        </strong></Text>
                       )}
-                      <Text className="text-sm">{account!.providerUsername}</Text>
+                      <Text size="sm">{account!.providerUsername}</Text>
                     </>
                   ) : (
-                    <Text className="font-medium text-[var(--sj-ink)]">
+                    <Text tone="default"><strong className="font-medium">
                       {capitalizeProvider(provider)}
-                    </Text>
+                    </strong></Text>
                   )}
                 </div>
                 {isLinked ? (
                   isShowingUnlinkConfirm ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Text className="text-sm">Are you sure?</Text>
+                      <Text size="sm">Are you sure?</Text>
                       <RouterForm method="post" className="inline">
                         <input type="hidden" name="intent" value="unlinkOAuth" />
                         <input type="hidden" name="provider" value={provider} />
@@ -345,9 +345,9 @@ export default function AccountSettings() {
 
         <div className="mt-5 space-y-6">
           <div>
-            <Text className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               Bearer credentials
-            </Text>
+            </p>
             {apiCredentials.length > 0 ? (
               <div className="mt-2 space-y-3">
                 {apiCredentials.map((credential) => (
@@ -356,15 +356,15 @@ export default function AccountSettings() {
                     className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
-                      <Text className="font-medium text-[var(--sj-ink)]">{credential.name}</Text>
-                      <Text className="break-words text-sm">
+                      <Text tone="default"><strong className="font-medium">{credential.name}</strong></Text>
+                      <Text size="sm" className="break-words">
                         {credential.tokenPrefix}... · {credential.scopes.join(", ") || "No scopes"}
                       </Text>
-                      <Text className="text-xs">
+                      <p className="text-base/6 text-[var(--sj-ink-soft)] text-xs">
                         Created {formatPasskeyDate(credential.createdAt)}
                         {credential.lastUsedAt ? ` · Last used ${formatPasskeyDate(credential.lastUsedAt)}` : ""}
                         {credential.expiresAt ? ` · Expires ${formatPasskeyDate(credential.expiresAt)}` : ""}
-                      </Text>
+                      </p>
                     </div>
                     <RouterForm method="post">
                       <input type="hidden" name="intent" value="revokeApiCredential" />
@@ -377,14 +377,14 @@ export default function AccountSettings() {
                 ))}
               </div>
             ) : (
-              <Text className="mt-2 text-sm">No active bearer credentials.</Text>
+              <Text size="sm" className="mt-2">No active bearer credentials.</Text>
             )}
           </div>
 
           <div>
-            <Text className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               OAuth app connections
-            </Text>
+            </p>
             {oauthConnections.length > 0 ? (
               <div className="mt-2 space-y-3">
                 {oauthConnections.map((connection) => {
@@ -395,14 +395,14 @@ export default function AccountSettings() {
                       className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <Text className="font-medium text-[var(--sj-ink)]">{appName}</Text>
-                        <Text className="break-words text-sm">
+                        <Text tone="default"><strong className="font-medium">{appName}</strong></Text>
+                        <Text size="sm" className="break-words">
                           {connection.resource || "REST API"} · {connection.scopes.join(", ") || "No scopes"}
                         </Text>
-                        <Text className="break-words text-xs">Issued by {connection.issuer}</Text>
-                        <Text className="text-xs">
+                        <p className="text-base/6 text-[var(--sj-ink-soft)] break-words text-xs">Issued by {connection.issuer}</p>
+                        <p className="text-base/6 text-[var(--sj-ink-soft)] text-xs">
                           Connected {formatPasskeyDate(connection.createdAt)} · {connection.refreshTokenCount} refresh token{connection.refreshTokenCount === 1 ? "" : "s"} · {connection.accessTokenCount} live access token{connection.accessTokenCount === 1 ? "" : "s"}
-                        </Text>
+                        </p>
                       </div>
                       <RouterForm method="post">
                         <input type="hidden" name="intent" value="disconnectOAuthClient" />
@@ -421,7 +421,7 @@ export default function AccountSettings() {
                 })}
               </div>
             ) : (
-              <Text className="mt-2 text-sm">No active OAuth app connections.</Text>
+              <Text size="sm" className="mt-2">No active OAuth app connections.</Text>
             )}
           </div>
         </div>
@@ -434,9 +434,9 @@ export default function AccountSettings() {
         </Text>
 
         {!canRemovePasskey && user.passkeys.length > 0 && (
-          <Text className="mt-3 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-3 text-sm text-[var(--sj-brass)]">
+          <p className="text-base/6 text-[var(--sj-ink-soft)] mt-3 border-y border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] py-3 text-sm text-[var(--sj-brass)]">
             This passkey is your only way to sign in. Add a password or another passkey before removing it.
-          </Text>
+          </p>
         )}
 
         {user.passkeys.length > 0 && (
@@ -472,14 +472,14 @@ export default function AccountSettings() {
                   ) : (
                     <>
                       <div>
-                        <Text className="font-medium text-[var(--sj-ink)]">{label}</Text>
+                        <Text tone="default"><strong className="font-medium">{label}</strong></Text>
                         {passkey.createdAt && (
-                          <Text className="text-sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
+                          <Text size="sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
                         )}
                       </div>
                       {isConfirming ? (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Text className="text-sm">Are you sure?</Text>
+                          <Text size="sm">Are you sure?</Text>
                           <RouterForm method="post" className="inline">
                             <input type="hidden" name="intent" value="removePasskey" />
                             <input type="hidden" name="credentialId" value={passkey.id} />
@@ -629,14 +629,14 @@ export default function AccountSettings() {
         </div>
 
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="sign-out-everywhere">
-          <Text className="font-medium text-[var(--sj-ink)]">Sign out everywhere</Text>
-          <Text className="mt-1 text-sm">
+          <Text tone="default"><strong className="font-medium">Sign out everywhere</strong></Text>
+          <Text size="sm" className="mt-1">
             Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app,
             agent and API token, including Claude. You stay signed in here; reconnect what you still use afterwards.
           </Text>
           {isConfirmingSignOutEverywhere ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Text className="text-sm">Are you sure?</Text>
+              <Text size="sm">Are you sure?</Text>
               <RouterForm method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
                 <input type="hidden" name="intent" value="signOutEverywhere" />
                 <Button type="submit" variant="destructive" aria-label="Confirm sign out everywhere">

@@ -2,6 +2,23 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
+import { nativeShoppingInput, task21PrintMedia } from "./test/ouro/native-shopping-input";
+
+// Native touchCancel is a CDP input capability, not a product/library API gap.
+// Register app-owned native input/print commands; preserve published coverage inputs.
+const projects = ouroTestProjects({
+  css: "./app/styles/tailwind.css",
+  page: { width: 1600, height: 1200 },
+  include: [
+    "app/components/ouro/**/*.test.{ts,tsx}",
+    "app/lib/ouro/**/*.test.{ts,tsx}",
+    "test/ouro/**/*.test.{ts,tsx}",
+  ],
+});
+for (const project of projects) {
+  const browser = project.test?.browser;
+  if (browser) browser.commands = { ...browser.commands, nativeShoppingInput, task21PrintMedia };
+}
 
 // Registry tests run only in CI browsers, with Spoonjoy's real theme and pinned Vitest 4.
 export default defineConfig({
@@ -35,16 +52,7 @@ export default defineConfig({
   test: {
     // Keep consumer integration measurements (test annotations) visible in CI's retained log.
     reporters: ["verbose"],
-    projects: ouroTestProjects({
-      css: "./app/styles/tailwind.css",
-      // Released test-kit option: Vitest 4 must not scale the test iframe.
-      page: { width: 1600, height: 1200 },
-      include: [
-        "app/components/ouro/**/*.test.{ts,tsx}",
-        "app/lib/ouro/**/*.test.{ts,tsx}",
-        "test/ouro/**/*.test.{ts,tsx}",
-      ],
-    }),
+    projects,
     coverage: {
       provider: "istanbul",
       include: ["app/components/ouro/**/*.{ts,tsx}", "app/lib/ouro/**/*.{ts,tsx}"],

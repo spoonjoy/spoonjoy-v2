@@ -6,17 +6,16 @@ import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD
 import { requestD1 } from "~/lib/d1-read.server";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
-import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/ui/oauth";
+import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/oauth";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
-import { AuthLayout } from "~/components/ui/auth-layout";
+import { AuthPage } from "~/components/auth/auth-page";
 import { PasskeySignInButton } from "~/components/auth/PasskeySignInButton";
-import { Heading } from "~/components/ui/heading";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 
 interface ActionData {
@@ -136,9 +135,8 @@ export default function Login() {
   const identifierRef = useRef<HTMLInputElement>(null);
 
   return (
-    <AuthLayout>
+    <AuthPage formTitle="Log in">
       <div className="w-full max-w-sm">
-        <Heading>Log in</Heading>
 
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
@@ -177,11 +175,11 @@ export default function Login() {
         <div className="my-6 border-t border-[var(--sj-border)]" aria-hidden="true" />
         <PasskeySignInButton identifierRef={identifierRef} redirectTo={redirectTo} />
 
-        <Text className="mt-6 text-center">
+        <Text align="center" className="mt-6">
           Don't have an account?{" "}
           <Link href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}>Sign up</Link>
         </Text>
       </div>
-    </AuthLayout>
+    </AuthPage>
   );
 }

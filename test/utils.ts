@@ -1,6 +1,9 @@
 import { faker } from "@faker-js/faker";
 import { waitFor } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
+import { createElement, type ComponentProps } from "react";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 
 type StubRouteObject = Parameters<typeof createRoutesStub>[0][number];
 
@@ -24,7 +27,15 @@ export function createTestRoutesStub(
   routes: StubRouteObject[],
   context?: Parameters<typeof createRoutesStub>[1]
 ) {
-  return createRoutesStub(addHydrateFallback(routes), context);
+  const RoutesStub = createRoutesStub(addHydrateFallback(routes), context);
+  // Match root.tsx's real released-component Router boundary. Document-request buttons
+  // opt out explicitly in the app adapter; ordinary buttons must exercise real SPA history.
+  return function TestRoutesStub(props: ComponentProps<typeof RoutesStub>) {
+    return createElement(OuroProvider, {
+      linkComponent: OuroRouterLink,
+      children: createElement(RoutesStub, props),
+    });
+  };
 }
 
 /**

@@ -224,11 +224,9 @@ describe("ConfirmationDialog", () => {
       await user.tab();
       await user.tab();
 
-      // After tabbing, focus should still be in the dialog
-      expect(
-        document.activeElement === cancelButton ||
-        document.activeElement === confirmButton
-      ).toBe(true);
+      // The released Dialog also has a named close button; every keyboard stop
+      // remains inside the actual modal, not just the former two-button list.
+      expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
     });
 
     it("should be keyboard navigable", async () => {
@@ -244,9 +242,9 @@ describe("ConfirmationDialog", () => {
         );
       });
 
-      // Tab to confirm button and press Enter
-      await user.tab();
-      await user.tab();
+      // Activate the actual confirm control from the keyboard. Tab trapping is
+      // checked separately and includes the released named close control.
+      screen.getByRole("button", { name: "Confirm" }).focus();
       await user.keyboard("{Enter}");
 
       // Either cancel or confirm should have been triggered
@@ -290,7 +288,7 @@ describe("ConfirmationDialog", () => {
       });
 
       // Should still render dialog
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByRole("dialog", { name: "Confirm" })).toBeInTheDocument();
     });
 
     it("should handle empty description gracefully", async () => {

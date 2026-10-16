@@ -1,8 +1,8 @@
 import { Form } from "react-router";
 import { Search as SearchIcon } from "lucide-react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Button } from "~/components/ui/button";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 
 // What a recipe link shows when its recipe is gone: whether it was deleted, a recipe search and the
 // recipe box (product audit 2026-10-09, finding 20). It never names the deleted recipe's chef: until

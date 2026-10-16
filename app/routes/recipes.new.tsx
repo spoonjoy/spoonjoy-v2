@@ -4,7 +4,7 @@ import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/ro
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import {

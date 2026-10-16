@@ -169,11 +169,39 @@ test.describe("Shopping list", () => {
     expect((await unchecked).status()).toBe(200);
     await expect(view(page, "Need", 1)).toBeVisible();
 
-    const removed = nextShoppingListAction(page, "removeItem");
+    const removeRequests: Array<Record<string, string>> = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === SHOPPING_LIST_ACTION) {
+        const payload = Object.fromEntries(new URLSearchParams(request.postData() ?? ""));
+        if (payload.intent === "removeItem") removeRequests.push(payload);
+      }
+    });
+    const selectedId = await page.locator("[data-shopping-item]").filter({ has: lemons }).getAttribute("data-shopping-item");
+    expect(selectedId).not.toBeNull();
     await page.getByRole("button", { name: "Remove lemons", exact: true }).press("Enter");
+    const removalDialog = page.getByRole("alertdialog", { name: 'Remove "lemons"?', exact: true });
+    await expect(removalDialog).toBeVisible();
+    await expect(removalDialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+    expect(removeRequests).toEqual([]);
+    await expect(page.locator('[role="checkbox"][aria-label="lemons"]')).toHaveAttribute("aria-checked", "false");
+    await removalDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(removalDialog).toBeHidden();
+    await expect(page.getByRole("button", { name: "Actions for lemons", exact: true })).toBeFocused();
+    expect(removeRequests).toEqual([]);
+    await page.getByRole("button", { name: "Actions for lemons", exact: true }).press("Enter");
+    await page.getByRole("menuitem", { name: "Delete lemons", exact: true }).press("Enter");
+    await expect(removalDialog).toBeVisible();
+    expect(removeRequests).toEqual([]);
+    // Released AlertDialog does not dismiss on outside press.
+    await page.mouse.click(1, 1);
+    await expect(removalDialog).toBeVisible();
+    const removed = nextShoppingListAction(page, "removeItem");
+    await removalDialog.getByRole("button", { name: "Remove", exact: true }).click();
     expect((await removed).status()).toBe(200);
+    expect(removeRequests).toEqual([{ intent: "removeItem", itemId: selectedId! }]);
     await expect(lemons).toBeHidden();
     await expect(emptyList(page)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Shopping list", exact: true })).toBeFocused();
 
     await verifyAfterReload(async () => {
       await expect(emptyList(page)).toBeVisible();

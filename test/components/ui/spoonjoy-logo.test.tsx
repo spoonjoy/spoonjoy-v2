@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { SpoonjoyLogo } from '~/components/ui/spoonjoy-logo'
+import { SpoonjoyLogo } from '~/components/spoonjoy-logo'
 
 describe('SpoonjoyLogo', () => {
   describe('rendering', () => {

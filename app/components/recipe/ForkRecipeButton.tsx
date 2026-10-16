@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
-import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
-import { Button } from "../ui/button";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { DialogContent as DialogBody, DialogFooter as DialogActions } from "~/components/ouro/dialog/dialog-parts";
+import { Button } from "../button";
 
 export interface ForkRecipeButtonProps {
   recipeId: string;
@@ -73,8 +74,7 @@ export function ForkRecipeButton({
           {triggerLabel}
         </Button>
       )}
-      <Dialog open={isOpen} onClose={setIsOpen} size="md">
-        <DialogTitle>{dialogTitle}</DialogTitle>
+      <Dialog open={isOpen} onOpenChange={setIsOpen} size="md" title={dialogTitle}>
         <DialogBody>
           {dialogBody}
           {failure ? (

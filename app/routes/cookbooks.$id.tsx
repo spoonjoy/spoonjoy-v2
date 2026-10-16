@@ -72,9 +72,9 @@ function captureCookbookActionFailure(
   }
 }
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
-import { Button } from "~/components/ui/button";
-import { Text, Strong } from "~/components/ui/text";
-import { Link as CatalystLink } from "~/components/ui/link";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
+import { Link as AppLink } from "~/components/navigation/app-link";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
@@ -428,7 +428,7 @@ export default function CookbookDetail() {
             ruled={false}
           >
             <Text className="m-0">
-              By <Strong>{cookbook.author.username}</Strong> ·{" "}
+              By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
               <span>
                 {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
               </span>
@@ -486,7 +486,7 @@ export default function CookbookDetail() {
 
                 return (
                   <li key={item.id} className="border-b border-[var(--sj-border)] last:border-b-0">
-                    <CatalystLink
+                    <AppLink
                       href={`/recipes/${item.recipe.id}`}
                       className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
                       aria-label={item.recipe.title}
@@ -515,7 +515,7 @@ export default function CookbookDetail() {
                           {servingsLabel}
                         </span>
                       ) : null}
-                    </CatalystLink>
+                    </AppLink>
                   </li>
                 );
               })}
@@ -549,7 +549,7 @@ export default function CookbookDetail() {
                     <Button
                       onClick={openTitleEditor}
                       plain
-                      className="text-sm"
+                      size="sm"
                     >
                       Edit title
                     </Button>
@@ -625,7 +625,8 @@ export default function CookbookDetail() {
                           <Button
                             type="button"
                             variant="destructive"
-                            className="w-full text-sm sm:w-auto"
+                            size="sm"
+                            className="w-full sm:w-auto"
                             aria-label={`Remove ${item.recipe.title} from cookbook`}
                             onClick={() => setRecipeToRemove(item.id)}
                           >

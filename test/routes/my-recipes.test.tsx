@@ -376,19 +376,24 @@ describe("My Recipes drawer route", () => {
       "href",
       "/my-recipes-paged?q=turnip+greens&page=3",
     );
+    // Adjacent-page semantics must survive the primitive swap, without losing the query.
+    expect(screen.getByRole("link", { name: "Previous page" })).toHaveAttribute("rel", "prev");
+    expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute("rel", "next");
 
     unmount();
-    render(<Stub initialEntries={["/my-recipes-paged-empty-query?page=2"]} />);
+    const second = render(<Stub initialEntries={["/my-recipes-paged-empty-query?page=2"]} />);
 
     expect(await screen.findByRole("link", { name: "Previous page" })).toHaveAttribute(
       "href",
       "/my-recipes-paged-empty-query",
     );
 
-    unmount();
+    second.unmount();
     render(<Stub initialEntries={["/my-recipes-paged-first-page"]} />);
 
-    expect(await screen.findByRole("button", { name: "Previous page" })).toBeDisabled();
+    // Released link pagination uses non-focusable disabled text, not a dead button.
+    expect((await screen.findByText("Previous page")).closest("[aria-disabled]")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("link", { name: "Previous page" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Next page" })).toHaveAttribute(
       "href",
       "/my-recipes-paged-first-page?page=2",

@@ -1,6 +1,6 @@
 import { Share2 } from 'lucide-react'
-import { Heading } from '../ui/heading'
-import { Link } from '../ui/link'
+import { Heading } from '../heading'
+import { Link } from '../navigation/app-link'
 import { CookbookCoverArt } from '../cookbook/CookbookCoverArt'
 
 export interface CookbookCardRecipeImage {
@@ -61,7 +61,7 @@ export function CookbookCard({
       {/* Editorial title + recipe count */}
       <div className="px-4 py-3">
         <Link href={link} className="inline-flex min-h-11 items-center no-underline hover:text-[var(--sj-tomato)]">
-          <Heading level={3} className="text-xl/7 font-semibold tracking-normal">
+          <Heading level={3} size="lg">
             {title}
           </Heading>
         </Link>

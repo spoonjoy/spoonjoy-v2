@@ -465,7 +465,7 @@ describe("Users $identifier Route", () => {
       const added = await screen.findByRole("link", { name: /\bPlain Rice\b/ });
       expect(screen.getByRole("link", { name: /\bMiso Soup\b/ })).toBeInTheDocument();
       await waitFor(() => expect(added).toHaveFocus());
-      expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 2 recipes");
+      expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 2 recipes");
       expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
     });
 

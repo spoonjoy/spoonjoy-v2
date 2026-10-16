@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Form as RouterForm, useNavigation } from "react-router";
 import { ImagePlus, Loader2 } from "lucide-react";
-import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
-import { Button } from "../ui/button";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { DialogContent as DialogBody, DialogFooter as DialogActions } from "~/components/ouro/dialog/dialog-parts";
+import { Button } from "../button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
@@ -139,8 +140,7 @@ export function SpoonDialog({
   }
 
   return (
-    <Dialog open={isOpen} onClose={dialogOnClose} size="md">
-      <DialogTitle>Log a cook</DialogTitle>
+    <Dialog open={isOpen} onOpenChange={dialogOnClose} size="md" title="Log a cook">
       <DialogBody className="mt-4">
         <Form
           ref={formRef}

@@ -17,7 +17,7 @@ import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalida
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
@@ -26,7 +26,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { useToast } from "~/components/feedback/toast";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";

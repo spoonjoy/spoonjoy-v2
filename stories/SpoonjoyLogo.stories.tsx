@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Plus, ShoppingCart } from 'lucide-react'
-import { SpoonjoyLogo } from '../app/components/ui/spoonjoy-logo'
+import { SpoonjoyLogo } from '../app/components/spoonjoy-logo'
 
 const meta: Meta<typeof SpoonjoyLogo> = {
   title: 'Brand/SpoonjoyLogo',

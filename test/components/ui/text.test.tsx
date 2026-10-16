@@ -1,81 +1,36 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
-import { Text, TextLink, Strong, Code } from '~/components/ui/text'
+import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Text } from "~/components/text";
 
-function TestWrapper({ children }: { children: React.ReactNode }) {
-  return <MemoryRouter>{children}</MemoryRouter>
-}
+describe("Spoonjoy body copy over released Text", () => {
+  it("keeps paragraph semantics, muted body defaults and layout attributes", () => {
+    render(<Text id="copy" className="mt-3" data-testid="copy">Body copy</Text>);
+    const copy = screen.getByTestId("copy");
+    expect(copy.tagName).toBe("P");
+    expect(copy).toHaveAttribute("id", "copy");
+    expect(copy).toHaveAttribute("data-ouro", "text");
+    expect(copy).toHaveClass("text-muted-foreground", "text-base", "leading-6", "mt-3");
+  });
 
-describe('Text components', () => {
-  describe('Text', () => {
-    it('renders children in a paragraph', () => {
-      render(<Text>Hello world</Text>)
-      expect(screen.getByText('Hello world')).toBeInTheDocument()
-    })
+  it("forwards supported size, semantic tone, alignment, roles and accessible relationships", () => {
+    render(<><h2 id="section">Connection</h2>
+      <Text size="sm" tone="destructive" align="center" role="alert" aria-labelledby="section">Could not connect</Text>
+    </>);
+    const alert = screen.getByRole("alert", { name: "Connection" });
+    expect(alert).toHaveTextContent("Could not connect");
+    expect(alert).toHaveClass("text-sm", "text-destructive", "text-center");
+    expect(alert).not.toHaveClass("leading-6");
+  });
 
-    it('renders as a p element', () => {
-      render(<Text>Paragraph text</Text>)
-      const element = screen.getByText('Paragraph text')
-      expect(element.tagName).toBe('P')
-    })
-
-    it('has data-slot attribute', () => {
-      render(<Text>Slotted text</Text>)
-      expect(screen.getByText('Slotted text')).toHaveAttribute('data-slot', 'text')
-    })
-
-    it('applies custom className', () => {
-      render(<Text className="custom-class">Custom text</Text>)
-      expect(screen.getByText('Custom text')).toHaveClass('custom-class')
-    })
-
-    it('passes additional props', () => {
-      render(<Text data-testid="test-text">With props</Text>)
-      expect(screen.getByTestId('test-text')).toBeInTheDocument()
-    })
-  })
-
-  describe('TextLink', () => {
-    it('renders as a link with href', () => {
-      render(<TextLink href="/test">Link text</TextLink>, { wrapper: TestWrapper })
-      expect(screen.getByRole('link', { name: 'Link text' })).toHaveAttribute('href', '/test')
-    })
-
-    it('applies custom className', () => {
-      render(
-        <TextLink href="/test" className="custom-link">
-          Styled link
-        </TextLink>,
-        { wrapper: TestWrapper }
-      )
-      expect(screen.getByRole('link', { name: 'Styled link' })).toHaveClass('custom-link')
-    })
-  })
-
-  describe('Strong', () => {
-    it('renders children in a strong element', () => {
-      render(<Strong>Bold text</Strong>)
-      const element = screen.getByText('Bold text')
-      expect(element.tagName).toBe('STRONG')
-    })
-
-    it('applies custom className', () => {
-      render(<Strong className="custom-strong">Custom bold</Strong>)
-      expect(screen.getByText('Custom bold')).toHaveClass('custom-strong')
-    })
-  })
-
-  describe('Code', () => {
-    it('renders children in a code element', () => {
-      render(<Code>const x = 1</Code>)
-      const element = screen.getByText('const x = 1')
-      expect(element.tagName).toBe('CODE')
-    })
-
-    it('applies custom className', () => {
-      render(<Code className="custom-code">console.log()</Code>)
-      expect(screen.getByText('console.log()')).toHaveClass('custom-code')
-    })
-  })
-})
+  it("preserves rich semantic content and explicit app Strong/Code treatments", () => {
+    render(<Text tone="default">
+      By <strong className="font-medium text-[var(--sj-ink)]">Ari</strong>
+      <code className="rounded-sm border border-[var(--sj-border)] bg-[var(--sj-flour)] px-0.5 text-sm font-medium text-[var(--sj-ink)] sm:text-[0.8125rem]">/recipes</code>
+      <a href="/recipes">Open recipes</a>
+    </Text>);
+    expect(screen.getByText("Ari").tagName).toBe("STRONG");
+    expect(screen.getByText("/recipes").tagName).toBe("CODE");
+    expect(screen.getByRole("link", { name: "Open recipes" })).toHaveAttribute("href", "/recipes");
+    expect(screen.getByText("Ari").closest("p")).toHaveClass("text-foreground");
+  });
+});

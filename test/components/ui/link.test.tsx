@@ -1,18 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useNavigate } from "react-router";
-import { Link } from "~/components/ui/link";
-
-// Mock React Router's navigate to track navigation
-const mockNavigate = vi.fn();
-vi.mock("react-router", async () => {
-  const actual = await vi.importActual("react-router");
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
+import { MemoryRouter } from "react-router";
+import { Link } from "~/components/navigation/app-link";
 
 // Wrapper component to provide React Router context
 function TestWrapper({ children }: { children: React.ReactNode }) {
@@ -200,7 +190,7 @@ describe("Link Component", () => {
       );
 
       const link = screen.getByRole("link", { name: "Sponsored Link" });
-      expect(link).toHaveAttribute("rel", "sponsored");
+      expect(link.getAttribute("rel")?.split(" ")).toEqual(["sponsored", "noopener", "noreferrer"]);
     });
   });
 

@@ -3422,10 +3422,15 @@ describe("Recipes $id Route", () => {
         // The delete dialog is open; then the page gets a change it has not sent yet (its save waits
         // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
         // session, so nothing may be sent from the confirm on: no save, no session start.
+        const increaseScale = screen.getByRole("button", { name: "Increase scale" });
         await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
         await user.click(screen.getByRole("button", { name: "Delete" }));
         const confirm = await screen.findByRole("button", { name: "Delete" });
-        fireEvent.click(screen.getByRole("button", { name: "Increase scale", hidden: true }));
+        // The released modal removes background controls from the accessibility tree.
+        // Keep the pre-modal reference: this deliberately injects an unsent state change,
+        // rather than claiming a person can activate an inert background control.
+        expect(increaseScale).toHaveAttribute("aria-hidden", "true");
+        fireEvent.click(increaseScale);
         const requestsBeforeConfirm = fetchMock.mock.calls.length;
         expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).not.toBeNull();
         fireEvent.click(confirm);

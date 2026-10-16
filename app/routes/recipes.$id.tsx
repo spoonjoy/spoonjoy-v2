@@ -23,16 +23,16 @@ import {
   handleRecipeDetailAction,
   loadRecipeDetail,
 } from "~/lib/recipe-detail.server";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { useToast } from "~/components/feedback/toast";
-import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Heading } from "~/components/ui/heading";
-import { Link } from "~/components/ui/link";
-import { Text } from "~/components/ui/text";
+import { Heading } from "~/components/heading";
+import { Link } from "~/components/navigation/app-link";
+import { Text } from "~/components/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
 import { ScaleSelector } from "~/components/recipe/ScaleSelector";
@@ -1164,8 +1164,7 @@ export default function RecipeDetail() {
                   />
                   <Button
                     type="button"
-                    plain
-                    className="text-[var(--sj-tomato)] hover:text-[var(--sj-tomato)]"
+                    variant="destructive"
                     onClick={() => setIsDeleteDialogOpen(true)}
                   >
                     Delete
@@ -1268,7 +1267,7 @@ export default function RecipeDetail() {
                 })}
               </div>
             ) : (
-              <Text className="py-8 text-center">
+              <Text align="center" className="py-8">
                 No cookbooks yet. Create your first one below!
               </Text>
             )}
@@ -1276,25 +1275,15 @@ export default function RecipeDetail() {
         </div>
       </OuroDialog>
 
-      <Dialog
+      <ConfirmDialog
         open={isDeleteDialogOpen}
-        onClose={setIsDeleteDialogOpen}
-        size="sm"
-        role="alertdialog"
-      >
-        <DialogTitle>{`Delete "${recipe.title}"?`}</DialogTitle>
-        <DialogDescription>
-          It will be removed from your kitchen and your cookbooks, and links to it will stop working. You can't undo this.
-        </DialogDescription>
-        <DialogActions>
-          <Button plain onClick={() => setIsDeleteDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={handleConfirmDelete}>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onOpenChange={setIsDeleteDialogOpen}
+        title={`Delete "${recipe.title}"?`}
+        description="It will be removed from your kitchen and your cookbooks, and links to it will stop working. You can't undo this."
+        confirmLabel="Delete"
+        tone="destructive"
+        onConfirm={handleConfirmDelete}
+      />
 
       {/* Steps Section */}
       <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
@@ -1339,7 +1328,7 @@ export default function RecipeDetail() {
         ) : null}
 
         <div className="mt-10 space-y-4 print:hidden" data-testid="recipe-cooks">
-          <Heading level={2} className="text-2xl font-semibold tracking-normal">
+          <Heading level={2} size="xl">
             Cooks
           </Heading>
           <SpoonsStrip
@@ -1471,16 +1460,15 @@ function CookModePanel({
             <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
               {pageLabel}
             </p>
-            <Heading
+            <h2
               id="cook-mode-heading"
-              level={2}
-              className="font-sj-display mt-5 max-w-4xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-6xl/15 lg:text-7xl/18"
+              className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] font-sj-display mt-5 max-w-4xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-6xl/15 lg:text-7xl/18"
             >
               {stepTitle}
-            </Heading>
-            <Text className="mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
+            </h2>
+            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
               {step.description}
-            </Text>
+            </p>
             <CookStepTimer stepNum={step.stepNum} controller={timers} />
           </article>
 

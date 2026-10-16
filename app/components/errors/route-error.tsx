@@ -1,7 +1,7 @@
 import { isRouteErrorResponse } from "react-router";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Button } from "~/components/ui/button";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 
 // The words for a route error: what happened, in plain language, by status.
 export function routeErrorCopy(error: unknown): { status: number; title: string; message: string } {

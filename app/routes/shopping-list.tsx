@@ -1,6 +1,6 @@
 import type { Route } from "./+types/shopping-list";
 import { formatAmount } from "~/lib/quantity";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "motion/react";
 import { LazyLayoutGroup } from "~/components/motion/lazy-motion";
 import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation } from "react-router";
@@ -14,19 +14,21 @@ import {
   type ShoppingListActionData,
 } from "~/lib/shopping-list-parser";
 import { Link as OuroLink } from "~/components/ouro/link/link";
-import { Text } from "~/components/ui/text";
-import { Button } from "~/components/ui/button";
+import { Text } from "~/components/text";
+import { Button } from "~/components/button";
 import { Plus } from "lucide-react";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/navigation/app-link";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";
 import { useWriteToken } from "~/hooks/use-write-token";
+import { SwipeActions } from "~/components/ouro/swipe-actions/swipe-actions";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 
 export { __internal__, parseShoppingItemFallback };
 
@@ -45,12 +47,6 @@ export async function action({ request, context }: Route.ActionArgs) {
   return handleShoppingListAction({ request, context });
 }
 
-const SWIPE_REVEAL_OFFSET = 104;
-const SWIPE_REVEAL_THRESHOLD = 56;
-const SWIPE_CONFIRM_THRESHOLD = 56;
-const SWIPE_DISMISS_THRESHOLD = 28;
-
-export type SwipeAction = "reveal" | "confirmDelete" | "dismiss" | "none";
 export type ShoppingListViewMode = "all" | "need" | "basket";
 
 const SHOPPING_CATEGORY_SORT_RANK: Record<string, number> = {
@@ -89,26 +85,6 @@ export function getShoppingSectionLabel(
   const previousLabel = previousItem ? previousItem.categoryLabel : null;
 
   return previousLabel === label ? null : label;
-}
-
-export function resolveSwipeAction(offsetX: number, isRevealed: boolean): SwipeAction {
-  if (isRevealed && offsetX <= -SWIPE_CONFIRM_THRESHOLD) {
-    return "confirmDelete";
-  }
-
-  if (!isRevealed && offsetX <= -SWIPE_REVEAL_THRESHOLD) {
-    return "reveal";
-  }
-
-  if (isRevealed && offsetX >= SWIPE_DISMISS_THRESHOLD) {
-    return "dismiss";
-  }
-
-  return "none";
-}
-
-export function shouldDeleteOnSwipe(offsetX: number, isRevealed = false) {
-  return resolveSwipeAction(offsetX, isRevealed) === "confirmDelete";
 }
 
 export type PendingShoppingItemChanges = {
@@ -155,7 +131,6 @@ export default function ShoppingList() {
   const actionData = useActionData<ShoppingListActionData>();
   const { shoppingList, recipes } = useLoaderData<typeof loader>();
   const [showClearDialog, setShowClearDialog] = useState(false);
-  const [revealedItemId, setRevealedItemId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState("all");
   const [viewMode, setViewMode] = useState<ShoppingListViewMode>("all");
   const submit = useSubmit();
@@ -163,6 +138,13 @@ export default function ShoppingList() {
   const location = useLocation();
   const addItemFormRef = useRef<HTMLFormElement>(null);
   const addItemInputRef = useRef<HTMLInputElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  type Removal = { id: string; name: string; locationKey: string };
+  const [removal, setRemoval] = useState<Removal | null>(null);
+  const [removalOpen, setRemovalOpen] = useState(false);
+  const removalAuthority = useRef<Removal | null>(null);
+  useEffect(() => () => { removalAuthority.current = null; }, []);
   // One add per submission of each form: a resubmit after a 503, or a double tap, adds once.
   const [addItemToken, renewAddItemToken] = useWriteToken();
   const [addRecipeToken, renewAddRecipeToken] = useWriteToken();
@@ -170,10 +152,6 @@ export default function ShoppingList() {
     () => pendingShoppingItemChanges(fetchers),
     [fetchers]
   );
-
-  useEffect(() => {
-    setRevealedItemId(null);
-  }, [shoppingList.items]);
 
   // A successful add clears the Item field (R-M3-3), so pressing Add again can't add the same
   // item twice. The field is uncontrolled, so reset() puts it back to its default, which is
@@ -219,7 +197,6 @@ export default function ShoppingList() {
 
   const checkedCount = displayItems.filter((item) => item.checked).length;
   const uncheckedCount = displayItems.length - checkedCount;
-  const displayOrderKey = displayItems.map((item) => item.id).join("|");
   const visibleItems = useMemo(() => {
     if (viewMode === "need") {
       return displayItems.filter((item) => !item.checked);
@@ -244,9 +221,14 @@ export default function ShoppingList() {
     ? visibleItems
     : visibleItems.filter((item) => item.categoryLabel === activeCategory);
 
-  useEffect(() => {
-    setRevealedItemId(null);
-  }, [displayOrderKey]);
+  // A hidden/deleted selection or a different Router entry has no remaining authority.
+  // Keep its descriptor for the released dialog's exit animation; never retarget it.
+  useLayoutEffect(() => {
+    if (removalOpen && (removal!.locationKey !== location.key || !filteredItems.some((item) => item.id === removal!.id))) {
+      removalAuthority.current = null;
+      setRemovalOpen(false);
+    }
+  }, [removalOpen, removal, location.key, filteredItems]);
 
   useEffect(() => {
     if (!categoryOptions.includes(activeCategory)) {
@@ -262,8 +244,6 @@ export default function ShoppingList() {
   // Each row has its own fetchers (one for checking, one for removing), so rapid taps on
   // different rows each reach the server instead of the later tap cancelling the earlier one.
   const toggleItem = (item: (typeof displayItems)[number]) => {
-    setRevealedItemId(null);
-
     submit(
       {
         intent: "toggleCheck",
@@ -275,8 +255,6 @@ export default function ShoppingList() {
   };
 
   const removeItem = (itemId: string) => {
-    setRevealedItemId(null);
-
     submit(
       {
         intent: "removeItem",
@@ -284,6 +262,31 @@ export default function ShoppingList() {
       },
       { method: "post", navigate: false, fetcherKey: `${SHOPPING_ITEM_FETCHER_PREFIX}remove-${itemId}` }
     );
+  };
+
+  const requestRemoval = (item: (typeof displayItems)[number]) => {
+    // All entry points capture the same surviving row control, including menu and touch.
+    // Base UI then restores cancellation focus to that control, not a disappearing menu item.
+    const row = Array.from(boardRef.current!.querySelectorAll<HTMLElement>("[data-shopping-item]"))
+      .find((element) => element.dataset.shoppingItem === item.id)!;
+    row.querySelector<HTMLButtonElement>("[data-ouro-swipe-actions-menu] button")!.focus();
+    const selected = { id: item.id, name: item.ingredientRef.name, locationKey: location.key };
+    removalAuthority.current = selected;
+    setRemoval(selected);
+    setRemovalOpen(true);
+  };
+
+  const closeRemoval = () => {
+    removalAuthority.current = null;
+    setRemovalOpen(false);
+  };
+
+  const confirmRemoval = (selected: Removal) => {
+    if (removalAuthority.current !== selected) return;
+    // useSubmit returns void. Consume authority synchronously rather than inventing a
+    // promise or allowing repeated clicks to start the existing mutation twice.
+    removalAuthority.current = null;
+    removeItem(selected.id);
   };
 
   return (
@@ -296,7 +299,7 @@ export default function ShoppingList() {
               {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
             </span>
           </div>
-          <h1 className="font-sj-display mt-7 text-5xl/12 font-extrabold text-[var(--sj-ink)]">
+          <h1 ref={headingRef} tabIndex={-1} className="font-sj-display mt-7 text-5xl/12 font-extrabold text-[var(--sj-ink)]">
             <span className="sr-only">Shopping list</span>
             <span aria-hidden="true">Shopping List</span>
           </h1>
@@ -404,7 +407,7 @@ export default function ShoppingList() {
         ) : (
           /* Item List */
           <LazyLayoutGroup id="shopping-list-items">
-            <div className="sj-list-ruled mt-6">
+            <div ref={boardRef} className="sj-list-ruled mt-6">
               <AnimatePresence initial={false}>
                 {filteredItems.map((item, index) => {
                   const previousItem = index > 0 ? filteredItems[index - 1] : null;
@@ -424,54 +427,21 @@ export default function ShoppingList() {
                       }}
                       className="space-y-1"
                       data-testid="shopping-list-motion-item"
+                      data-shopping-item={item.id}
                     >
                       {sectionLabel && (
                         <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
                           {sectionLabel}
                         </div>
                       )}
-                      <div className="relative overflow-hidden">
-                        {revealedItemId === item.id && (
-                          <div className="pointer-events-auto absolute inset-y-0 right-0 w-28 bg-[var(--sj-tomato)] text-[var(--sj-paper)]">
-                            <button
-                              type="button"
-                              onClick={() => removeItem(item.id)}
-                              className="font-sj-ui flex h-full w-full items-center justify-center text-xs font-semibold uppercase tracking-wide"
-                              aria-label={`Delete ${item.ingredientRef.name}`}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                        <m.div
-                          drag="x"
-                          animate={{
-                            x: revealedItemId === item.id ? -SWIPE_REVEAL_OFFSET : 0,
-                          }}
-                          dragConstraints={{ left: -168, right: 0 }}
-                          dragElastic={0}
-                          dragMomentum={false}
-                          dragDirectionLock
-                          onDragEnd={(_, info) => {
-                            const action = resolveSwipeAction(info.offset.x, revealedItemId === item.id);
-
-                            if (action === "confirmDelete") {
-                              removeItem(item.id);
-                              return;
-                            }
-
-                            if (action === "reveal") {
-                              setRevealedItemId(item.id);
-                              return;
-                            }
-
-                            if (action === "dismiss") {
-                              setRevealedItemId(null);
-                            }
-                          }}
-                          transition={{ type: "spring", stiffness: 520, damping: 42, mass: 0.5 }}
-                          className="relative z-10 bg-[var(--sj-page)]"
-                        >
+                      <SwipeActions
+                        label={item.ingredientRef.name}
+                        trailing={[{
+                          label: `Delete ${item.ingredientRef.name}`,
+                          tone: "destructive",
+                          onClick: () => requestRemoval(item),
+                        }]}
+                      >
                           <ChecklistRow
                             checked={item.checked}
                             name={item.ingredientRef.name}
@@ -481,7 +451,7 @@ export default function ShoppingList() {
                             action={(
                               <button
                                 type="button"
-                                onClick={() => removeItem(item.id)}
+                                onClick={() => requestRemoval(item)}
                                 className="sr-only"
                                 aria-label={`Remove ${item.ingredientRef.name}`}
                               >
@@ -489,8 +459,7 @@ export default function ShoppingList() {
                               </button>
                             )}
                           />
-                        </m.div>
-                      </div>
+                      </SwipeActions>
                     </m.div>
                   );
                 })}
@@ -498,6 +467,19 @@ export default function ShoppingList() {
             </div>
           </LazyLayoutGroup>
         )}
+
+      {removal && (
+        <ConfirmDialog
+          open={removalOpen}
+          onOpenChange={closeRemoval}
+          title={`Remove "${removal.name}"?`}
+          description="It will be removed from your shopping list. This cannot be undone."
+          confirmLabel="Remove"
+          tone="destructive"
+          finalFocus={headingRef}
+          onConfirm={() => confirmRemoval(removal)}
+        />
+      )}
 
       {/* Add Item Form */}
       <div id="add-item" className="border-b border-[var(--sj-border)] py-6">

@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 import { ChefHat } from "lucide-react";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/navigation/app-link";
 import { HERO_IMAGE_PROPS, LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
 export function CookbookPage({

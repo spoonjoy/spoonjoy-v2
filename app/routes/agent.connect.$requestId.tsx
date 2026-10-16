@@ -20,9 +20,9 @@ import {
   normalizeUserCode,
   typedCodeFor,
 } from "~/lib/agent-connection-route.server";
-import { Button } from "~/components/ui/button";
-import { Heading } from "~/components/ui/heading";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Heading } from "~/components/heading";
+import { Text } from "~/components/text";
 
 type Requester = {
   ip: string | null;
@@ -213,7 +213,7 @@ export default function AgentConnect() {
     <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
       <p className={LABEL}>Agent access</p>
       <Heading className="mt-3">{connectionTitle(connection.status)}</Heading>
-      <Text className="mt-5 text-lg/7">
+      <Text size="lg" className="mt-5 leading-7">
         {actionable
           ? `A client calling itself "${connection.agentName}" wants permission to use Spoonjoy with these exact scopes.`
           : connected

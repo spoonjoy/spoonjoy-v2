@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useLocation } from "react-router";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/navigation/app-link";
 
 /**
  * The switch at the top of the phone Recipes tab: your recipes, the ones you saved, and every
