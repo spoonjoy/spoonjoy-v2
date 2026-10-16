@@ -175,19 +175,28 @@ describe("Toaster", () => {
     try {
       const { root } = await render(<Toaster {...layoutProps("bottom-20")} />);
       const region = viewport()!;
-      const item = await show("Layout survives", { duration: 2400 });
+      // Control the countdown's Date/setTimeout clock, not animation frames or
+      // polling. Real host round trips may outlive a finite toast on busy WebKit.
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      await act(async () => { toast("Layout survives", { duration: 2400 }); });
+      const item = toastNamed("Layout survives")!;
+      expect(item).toBeDefined();
       const count = announced.count("Layout survives");
       expect(count).toBe(1);
-      await elapse(1400);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1400); });
       await act(async () => root.render(<Toaster {...layoutProps("bottom-24 w-80")} />));
       expect(viewport()).toBe(region);
       expect(toastNamed("Layout survives")).toBe(item);
       expect(getComputedStyle(region).bottom).toBe("96px");
       expect(announced.count("Layout survives")).toBe(count);
       expect(document.querySelectorAll('[data-ouro="toaster"]')).toHaveLength(1);
-      // Must expire on its original countdown, not a newly started 2400ms one.
-      await expect.poll(() => showing("Layout survives"), { timeout: 1800 }).toBe(false);
+      // Exact original deadline: neither an early close nor a reset is allowed.
+      await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+      expect(showing("Layout survives")).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(showing("Layout survives")).toBe(false);
     } finally {
+      vi.useRealTimers();
       announced.stop();
     }
   });
