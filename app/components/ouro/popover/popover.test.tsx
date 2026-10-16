@@ -103,7 +103,16 @@ describe("Popover", () => {
     ["right", "end"],
     ["left", "center"],
   ] as const)("sits on side %s, aligned %s", async (side, align) => {
-    const element = await openUncontrolled({ side, align });
+    const element = await openUncontrolled({ side, align, className: "h-[96px]" });
+    expect(element.getBoundingClientRect().height).toBe(96);
+    const shift = Number(import.meta.env.VITE_POPOVER_SHIFT ?? "0") / devicePixelRatio;
+    if (side === "right" && align === "end" && shift !== 0) {
+      const positioner = element.closest<HTMLElement>('[data-ouro="popover-positioner"]');
+      if (!positioner) throw new Error("Diagnostic positioner is missing");
+      const transform = new DOMMatrix(getComputedStyle(positioner).transform);
+      transform.m42 += shift;
+      positioner.style.transform = transform.toString();
+    }
     const box = element.getBoundingClientRect();
     const anchor = trigger().getBoundingClientRect();
     let diagnostic: string | undefined;
@@ -152,6 +161,8 @@ describe("Popover", () => {
       await nextFrame();
       samples.push(geometry());
       diagnostic = `POPOVER_GEOMETRY ${JSON.stringify({
+        shift,
+        fixtureHeight: 96,
         originalBox: box.toJSON(),
         originalAnchor: anchor.toJSON(),
         originalEndMatches: Math.round(box.bottom) === Math.round(anchor.bottom),
