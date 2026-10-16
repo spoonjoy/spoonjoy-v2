@@ -118,3 +118,31 @@ export const touchHostAudit = (async (ctx, action: "start" | "stop") => {
     }, action),
   })));
 }) satisfies BrowserCommand<[action: "start" | "stop"]>;
+
+export const touchHostPanAudit = (async (ctx, action: "start" | "stop") => {
+  return ctx.page.evaluate((action) => {
+    type ViewportAudit = { records: unknown[]; record: (event?: Event) => void };
+    const view = globalThis as typeof globalThis & { __ouroHostViewportAudit?: ViewportAudit };
+    const viewport = visualViewport;
+    if (!viewport) throw new Error("The native pan audit requires a visual viewport");
+    if (action === "start") {
+      if (view.__ouroHostViewportAudit) throw new Error("A previous native pan audit was not removed");
+      const records: unknown[] = [];
+      const record = (event?: Event) => records.push({
+        when: performance.now(), type: event?.type ?? "snapshot", trusted: event?.isTrusted,
+        left: viewport.pageLeft, top: viewport.pageTop, offsetLeft: viewport.offsetLeft, offsetTop: viewport.offsetTop,
+        width: viewport.width, height: viewport.height, scale: viewport.scale,
+      });
+      view.__ouroHostViewportAudit = { records, record };
+      for (const type of ["scroll", "scrollend", "resize"]) viewport.addEventListener(type, record);
+      record();
+      return { installed: true };
+    }
+    const audit = view.__ouroHostViewportAudit;
+    if (!audit) throw new Error("The native pan audit was not started");
+    audit.record();
+    for (const type of ["scroll", "scrollend", "resize"]) viewport.removeEventListener(type, audit.record);
+    delete view.__ouroHostViewportAudit;
+    return { records: audit.records };
+  }, action);
+}) satisfies BrowserCommand<[action: "start" | "stop"]>;

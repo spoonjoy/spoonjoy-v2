@@ -3,6 +3,7 @@
   "include": [
     "touch-host-probe.ts",
     "touch-host-proof.config.ts",
+    "touch-host-pan-setup.ts",
     "../test/ouro/touch-host.probe.touch.test.tsx",
     "../app/lib/ouro/testing/commands.touch.test.ts"
   ],

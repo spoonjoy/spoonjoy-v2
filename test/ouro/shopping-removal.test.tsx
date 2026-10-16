@@ -33,9 +33,9 @@ beforeEach(() => {
   focusTrace.length = 0;
   for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.addEventListener(type, trace, true);
 });
-afterEach(async ({ annotate }) => {
+afterEach(() => {
   for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.removeEventListener(type, trace, true);
-  await annotate(`KEYBOARD_FOCUS_DIAGNOSTIC ${JSON.stringify({ trace: focusTrace, final: snapshot(), writes: fixture?.writes })}`);
+  console.info(`KEYBOARD_FOCUS_DIAGNOSTIC ${JSON.stringify({ trace: focusTrace, final: snapshot(), writes: fixture?.writes })}`);
 });
 afterEach(async () => { await fixture?.dispose(); fixture = undefined; });
 

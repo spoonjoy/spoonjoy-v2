@@ -99,10 +99,10 @@ jobs:
       - name: Generate Prisma and build actual Storybook
         if: matrix.scope == 'full'
         run: pnpm prisma:generate && pnpm build-storybook
-      - name: Actual consumer whole browser suite and strict coverage
+      - name: Whole browser diagnostic with native viewport and keyboard traces; not qualification
         if: matrix.scope == 'full'
         run: |
-          node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run --config vitest.ouro.config.ts --coverage \
+          node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run --config .github/touch-host-proof.config.ts --coverage \
             --exclude test/ouro/touch-host.probe.touch.test.tsx \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
       - name: Repeat original keyboard assertions with passive event traces; diagnostic only

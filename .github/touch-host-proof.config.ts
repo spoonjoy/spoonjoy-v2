@@ -1,6 +1,6 @@
 import config from "../vitest.ouro.config";
 import { ouroTestProjects } from "../app/lib/ouro/testing/vitest";
-import { touchHostAudit, touchHostGeometry, touchHostWrongPoint, touchHostZoomGeometry } from "./touch-host-probe";
+import { touchHostAudit, touchHostGeometry, touchHostWrongPoint, touchHostZoomGeometry, touchHostPanAudit } from "./touch-host-probe";
 
 const mode = process.env.VITE_HOST_CONTROL;
 if (mode !== "default" && mode !== "roomy") throw new Error("VITE_HOST_CONTROL must be default or roomy");
@@ -22,7 +22,11 @@ for (const project of config.test?.projects ?? []) {
   if (browser && project.test?.name === "ouro-touch" && mode === "default") {
     browser.provider = defaultProvider;
   }
-  if (browser) browser.commands = { ...browser.commands, touchHostGeometry, touchHostWrongPoint, touchHostZoomGeometry, touchHostAudit };
+  if (browser) browser.commands = { ...browser.commands, touchHostGeometry, touchHostWrongPoint, touchHostZoomGeometry, touchHostAudit, touchHostPanAudit };
+  if (project.test?.name === "ouro-touch") {
+    const setup = project.test.setupFiles;
+    project.test.setupFiles = [...(Array.isArray(setup) ? setup : setup ? [setup] : []), "./.github/touch-host-pan-setup.ts"];
+  }
 }
 
 export default config;
