@@ -56,17 +56,28 @@ elif mode == "observe":
     before, body = block.split(stepper_line)
     body = body.removesuffix(ending)
     # Preserve all original operations/assertions and the pointer-up finally.
-    observed_body = body.replace(
+    settled_body = body
+    if "stepper.getAnimations()" not in body:
+        settled_body = body.replace(
+            "    const hovered = color();\n",
+            '    await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
+            '    const hovered = color();\n',
+        ).replace(
+            "    try {\n",
+            '    try {\n'
+            '      await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
+            '      expect(stepper.matches(":active")).toBe(true);\n',
+        )
+    else:
+        assert body.count("stepper.getAnimations()") == 2
+        assert body.count('expect(stepper.matches(":active")).toBe(true)') == 1
+    observed_body = settled_body.replace(
         "    const hovered = color();\n",
-        '    await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
         '    snapshot("after-hover");\n    const hovered = color();\n',
     ).replace(
-        '    try {\n      await expect.poll(color)',
-        '    try {\n'
-        '      await expect.poll(() => stepper.getAnimations().every(animation => animation.playState !== "running")).toBe(true);\n'
+        '      await expect.poll(color).not.toBe(hovered);',
         '      snapshot("after-down");\n'
-        '      expect(stepper.matches(":active")).toBe(true);\n'
-        '      await expect.poll(color)',
+        '      await expect.poll(color).not.toBe(hovered);',
     ).replace(
         '      await commands.pointerPress({ action: "up" });',
         '      snapshot("before-up");\n      await commands.pointerPress({ action: "up" });\n      snapshot("after-up");',
@@ -87,13 +98,14 @@ elif mode == "observe":
     for name in [
         "src/index.css", "package.json", "vitest.config.ts",
         "src/components/ouro/number-field/number-field.tsx",
+        "src/components/ouro/number-field/number-field-styles.ts",
         "src/lib/ouro/testing/commands.ts", "src/lib/ouro/testing/vitest.ts",
     ]:
         source = app / name
         assert source.is_file(), name
         manifest[name] = digest(source.read_bytes())
     (evidence / "binding.json").write_text(json.dumps({
-        "upstream": "0808121c27ef1fa6ee14d527fe9a521d0e5926c1",
+        "upstream": "4f7439c40e91166c598f180bd0ebefe633c4a30f",
         "originalTest": digest(original.encode()), "observedTest": digest(instrumented.encode()),
         "installedFiles": manifest,
     }, indent=2) + "\n")

@@ -15,14 +15,21 @@
       },
     });
     const relevantRules = () => {
-      const found: string[] = [];
-      const visit = (rules: CSSRuleList) => {
+      const found: unknown[] = [];
+      const visit = (rules: CSSRuleList, context: unknown[] = []) => {
         for (const rule of Array.from(rules)) {
           if (rule instanceof CSSStyleRule && (
             rule.selectorText.includes("color-mix") && rule.selectorText.includes("not-data-disabled")
             || rule.selectorText.includes("pointer-fine") && rule.selectorText.includes("hover") && rule.selectorText.includes("bg-accent")
-          )) found.push(rule.cssText);
-          else if (rule instanceof CSSGroupingRule) visit(rule.cssRules);
+          )) found.push({
+            selector: rule.selectorText, matches: stepper.matches(rule.selectorText),
+            declaration: rule.style.cssText, css: rule.cssText, context,
+          });
+          else if (rule instanceof CSSGroupingRule) visit(rule.cssRules, [...context, {
+            header: rule.cssText.slice(0, rule.cssText.indexOf("{")).trim(),
+            conditionMatches: rule instanceof CSSMediaRule ? matchMedia(rule.conditionText).matches
+              : rule instanceof CSSSupportsRule ? CSS.supports(rule.conditionText) : null,
+          }]);
         }
       };
       for (const sheet of Array.from(document.styleSheets)) visit(sheet.cssRules);
