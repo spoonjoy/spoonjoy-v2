@@ -218,8 +218,9 @@ test("the kit does not wait for a pointer-events: none iframe, which the touch p
   expect(performance.now() - started).toBeLessThan(1000);
 });
 
-test("on a page zoomed and panned by touch, the kit waits for the frame where the touch lands", async () => {
+test("on a page zoomed and panned by touch, the kit waits for the frame where the touch lands", async ({ annotate }) => {
   await commands.setPageZoom(2);
+  let primaryFailed = false;
   try {
     // At zoom 2 the page can't scroll, so a drag pans the visual viewport across it.
     await commands.touchDrag({ from: [300, 700], to: [50, 200], steps: 10 });
@@ -234,15 +235,36 @@ test("on a page zoomed and panned by touch, the kit waits for the frame where th
     };
     const [left, top] = await landed(0, 0);
     expect(await landed(100, 100)).toEqual([left + 100, top + 100]);
+    await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "after-pan", left, top, snapshot: await commands.touchHostZoomGeometry("html", { x: 170, y: 150 }) })}`);
     // Panned far enough that a hit test at the unpanned point would miss the frame.
     expect(Math.min(left, top)).toBeGreaterThan(150);
     const frame = await unwatchableFrame(Math.round(top) + 100);
     frame.style.left = `${Math.round(left) + 20}px`;
-    await expect(commands.touchStep({ type: "touchStart", x: 170, y: 150 })).rejects.toThrow(refused(170, 150));
+    frame.setAttribute("data-host-probe-zoom-frame", "");
+    await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "frame-created", left, top, snapshot: await commands.touchHostZoomGeometry("[data-host-probe-zoom-frame]", { x: 170, y: 150 }) })}`);
+    await commands.touchHostAudit("start");
+    try {
+      await expect(commands.touchStep({ type: "touchStart", x: 170, y: 150 })).rejects.toThrow(refused(170, 150));
+    } finally {
+      await annotate(`TOUCH_HOST_ZOOM_AUDIT ${JSON.stringify(await commands.touchHostAudit("stop"))}`);
+    }
     // Beside it, the touch reaches the page.
     expect(await tapAt(window, 10, 150)).toEqual(["touchstart", "touchend"]);
+  } catch (error) {
+    primaryFailed = true;
+    throw error;
   } finally {
-    await commands.resetPageZoom();
+    await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "before-reset", snapshot: await commands.touchHostZoomGeometry("html", { x: 170, y: 150 }) })}`);
+    try {
+      await commands.touchStep({ type: "touchEnd" });
+      await annotate("TOUCH_HOST_ZOOM_CLEANUP finger lifted in the original coordinate space");
+    } catch (error) {
+      await annotate(`TOUCH_HOST_ZOOM_CLEANUP_ERROR ${error instanceof Error ? error.message : String(error)}`);
+      if (!primaryFailed) throw error;
+    } finally {
+      await commands.resetPageZoom();
+      await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "after-reset", snapshot: await commands.touchHostZoomGeometry("html", { x: 170, y: 150 }) })}`);
+    }
   }
 });
 

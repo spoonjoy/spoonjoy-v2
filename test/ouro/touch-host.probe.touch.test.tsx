@@ -5,12 +5,14 @@ import { Item } from "~/components/ouro/item/item";
 import { SwipeActions } from "~/components/ouro/swipe-actions/swipe-actions";
 import { act } from "~/lib/ouro/testing/act";
 import { rotate } from "~/lib/ouro/testing/rotate";
-import type { touchHostGeometry, touchHostWrongPoint } from "../../.github/touch-host-probe";
+import type { touchHostAudit, touchHostGeometry, touchHostWrongPoint, touchHostZoomGeometry } from "../../.github/touch-host-probe";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
     touchHostGeometry: (selector: string) => ReturnType<typeof touchHostGeometry>;
     touchHostWrongPoint: () => ReturnType<typeof touchHostWrongPoint>;
+    touchHostZoomGeometry: (selector: string, point: { x: number; y: number }) => ReturnType<typeof touchHostZoomGeometry>;
+    touchHostAudit: (action: "start" | "stop") => ReturnType<typeof touchHostAudit>;
   }
 }
 

@@ -43,3 +43,78 @@ export const touchHostWrongPoint = (async (ctx) => {
   await ctx.page.touchscreen.tap(point.x, point.y);
   return point;
 }) satisfies BrowserCommand<[]>;
+
+export const touchHostZoomGeometry = (async (ctx, selector: string, point: { x: number; y: number }) => {
+  const geometry = await touchHostGeometry(ctx, selector);
+  const session = await ctx.page.context().newCDPSession(ctx.page);
+  let objectId: string | undefined;
+  try {
+    const metrics = await session.send("Page.getLayoutMetrics");
+    const query = {
+      x: Math.round(point.x + metrics.cssVisualViewport.pageX),
+      y: Math.round(point.y + metrics.cssVisualViewport.pageY),
+      ignorePointerEventsNone: false,
+    };
+    let hit: unknown;
+    try {
+      const { backendNodeId } = await session.send("DOM.getNodeForLocation", query);
+      const { object } = await session.send("DOM.resolveNode", { backendNodeId });
+      objectId = object.objectId;
+      const { result } = await session.send("Runtime.callFunctionOn", {
+        objectId,
+        returnByValue: true,
+        functionDeclaration: `function () {
+          const node = this.nodeType ? this : this.element;
+          const view = node && (node.ownerDocument || node).defaultView;
+          return {
+            node: node && node.nodeName,
+            where: view && view.location.href,
+            watched: Boolean(view && view.__ouroTouch),
+            rect: node && node.getBoundingClientRect ? node.getBoundingClientRect().toJSON() : null,
+            inner: view && { width: view.innerWidth, height: view.innerHeight }
+          };
+        }`,
+      });
+      hit = result.value;
+    } catch (error) {
+      hit = { error: error instanceof Error ? error.message : String(error) };
+    }
+    return { geometry, point, query, metrics, hit };
+  } finally {
+    try {
+      if (objectId) await session.send("Runtime.releaseObject", { objectId });
+    } finally {
+      await session.detach();
+    }
+  }
+}) satisfies BrowserCommand<[selector: string, point: { x: number; y: number }]>;
+
+export const touchHostAudit = (async (ctx, action: "start" | "stop") => {
+  return Promise.all(ctx.page.frames().map(async (frame) => ({
+    where: frame.url(),
+    value: await frame.evaluate((action) => {
+      type Receipt = { type: string; trusted: boolean; x: number; y: number; target: string | null };
+      type Audit = { records: Receipt[]; listener: (event: Event) => void };
+      const view = globalThis as typeof globalThis & { __ouroHostProbeAudit?: Audit };
+      if (action === "start") {
+        if (view.__ouroHostProbeAudit) throw new Error("A previous diagnostic audit was not removed");
+        const records: Receipt[] = [];
+        const listener = (event: Event) => {
+          const point = event.type === "touchstart" ? (event as TouchEvent).changedTouches[0]! : event as PointerEvent;
+          records.push({
+            type: event.type, trusted: event.isTrusted, x: point.clientX, y: point.clientY,
+            target: event.target instanceof Element ? event.target.tagName : null,
+          });
+        };
+        view.__ouroHostProbeAudit = { records, listener };
+        for (const name of ["pointerdown", "touchstart"]) addEventListener(name, listener, { capture: true, passive: true });
+        return { installed: true };
+      }
+      const audit = view.__ouroHostProbeAudit;
+      if (!audit) throw new Error("The diagnostic audit did not start in this frame");
+      for (const name of ["pointerdown", "touchstart"]) removeEventListener(name, audit.listener, { capture: true });
+      delete view.__ouroHostProbeAudit;
+      return { records: audit.records };
+    }, action),
+  })));
+}) satisfies BrowserCommand<[action: "start" | "stop"]>;
