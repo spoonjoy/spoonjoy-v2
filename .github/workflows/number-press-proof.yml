@@ -1,0 +1,53 @@
+name: Real installer NumberField native press diagnostic
+on:
+  push:
+    branches: [probe/ouro-number-press-20261016]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OURO_PRESET: nova
+      PUBLIC_SOURCE: 0808121c27ef1fa6ee14d527fe9a521d0e5926c1
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          repository: ourostack/ouro-ui
+          ref: ${{ env.PUBLIC_SOURCE }}
+          path: upstream-ui
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+      - run: corepack enable && corepack prepare pnpm@10.2.0 --activate
+      - run: pnpm --dir upstream-ui install --frozen-lockfile
+      - name: Bind real installer and add native-event observer
+        run: |
+          test "$(git -C upstream-ui rev-parse HEAD)" = "$PUBLIC_SOURCE"
+          python3 .github/number-press-proof.py prepare "$GITHUB_WORKSPACE/upstream-ui" "$RUNNER_TEMP/app" "$RUNNER_TEMP/press-evidence"
+          bash -n upstream-ui/scripts/install-test.sh
+      - name: Run full real installer followed by five isolated observations
+        working-directory: upstream-ui
+        run: |
+          scripts/install-test.sh ouro "$RUNNER_TEMP/app" "$PUBLIC_SOURCE" 2>&1 | tee "$RUNNER_TEMP/press-evidence/installer.log"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: real-installer-number-press-receipts
+          path: |
+            ${{ runner.temp }}/press-evidence/
+            ${{ runner.temp }}/app/.vitest/attachments/
+            ${{ runner.temp }}/app/src/components/ouro/number-field/__screenshots__/
+            ${{ runner.temp }}/app/src/index.css
+            ${{ runner.temp }}/app/package.json
+            ${{ runner.temp }}/app/vitest.config.ts
+          include-hidden-files: true
+          if-no-files-found: error

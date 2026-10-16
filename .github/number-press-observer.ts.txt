@@ -1,0 +1,63 @@
+    const receipts: unknown[] = [];
+    const identify = (target: EventTarget | null) => target instanceof Element
+      ? { tag: target.tagName, id: target.id, class: target.getAttribute("class"), label: target.getAttribute("aria-label") }
+      : { kind: String(target) };
+    const viewport = (host: Window) => ({
+      width: host.innerWidth, height: host.innerHeight,
+      visual: host.visualViewport && {
+        width: host.visualViewport.width, height: host.visualViewport.height,
+        offsetLeft: host.visualViewport.offsetLeft, offsetTop: host.visualViewport.offsetTop,
+        scale: host.visualViewport.scale,
+      },
+    });
+    const snapshot = (phase: string, event?: Event) => {
+      if (receipts.length >= 200) return;
+      const style = getComputedStyle(stepper);
+      const point = event instanceof MouseEvent ? { x: event.clientX, y: event.clientY } : null;
+      receipts.push({
+        phase, time: performance.now(),
+        event: event && {
+          type: event.type, trusted: event.isTrusted, target: identify(event.target),
+          containsTarget: event.target instanceof Node && stepper.contains(event.target),
+          point, buttons: event instanceof MouseEvent ? event.buttons : null,
+          button: event instanceof MouseEvent ? event.button : null,
+          pointerType: event instanceof PointerEvent ? event.pointerType : null,
+          hit: point && identify(document.elementFromPoint(point.x, point.y)),
+        },
+        active: stepper.matches(":active"), hover: stepper.matches(":hover"),
+        disabled: stepper.getAttribute("disabled"), dataDisabled: stepper.getAttribute("data-disabled"),
+        background: style.backgroundColor, transition: style.transitionDuration,
+        accent: style.getPropertyValue("--accent"), foreground: style.getPropertyValue("--foreground"),
+        animations: stepper.getAnimations().map(animation => ({
+          state: animation.playState, currentTime: String(animation.currentTime),
+        })),
+        rect: stepper.getBoundingClientRect().toJSON(),
+        frame: window.frameElement?.getBoundingClientRect().toJSON(),
+        viewport: viewport(window), parentViewport: viewport(window.parent),
+        focus: document.hasFocus(), visibility: document.visibilityState,
+        activeElement: identify(document.activeElement),
+        parentActiveElement: identify(window.parent.document.activeElement),
+        value: document.querySelector<HTMLInputElement>("input")?.value,
+      });
+    };
+    const events = ["pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "focus", "blur", "visibilitychange"];
+    const childListener = (event: Event) => snapshot("child-native", event);
+    const parentListener = (event: Event) => snapshot("parent-native", event);
+    for (const type of events) {
+      window.addEventListener(type, childListener, true);
+      window.parent.addEventListener(type, parentListener, true);
+    }
+    try {
+      snapshot("before-hover");
+__ORIGINAL_BODY__
+    } finally {
+      snapshot("observer-finally");
+      for (const type of events) {
+        window.removeEventListener(type, childListener, true);
+        window.parent.removeEventListener(type, parentListener, true);
+      }
+      await annotate("NumberField native press receipts", {
+        contentType: "application/json",
+        body: JSON.stringify(receipts, null, 2),
+      });
+    }
