@@ -120,6 +120,9 @@ it("native release reversal and native touchCancel cannot invoke destructive con
 it("vertical native input scrolls the real page and cancels the row recognizer", async ({ annotate }) => {
   await mount();
   const before = scrollY;
+  // The fixture must actually have forward scroll room; test-only Tailwind
+  // utilities are not compiled by this app's app/stories-only source scanner.
+  expect(document.scrollingElement!.scrollHeight - document.scrollingElement!.clientHeight).toBeGreaterThan(before);
   const box = await commands.shoppingInputBounds('[data-shopping-item="proof-1"] [data-ouro="swipe-actions"]');
   await annotate(`T21_NATIVE_SCROLL_BEFORE ${JSON.stringify({ before, box })}`);
   // Observe the actual target and delivery too, not just the driver's protocol

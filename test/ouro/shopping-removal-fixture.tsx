@@ -35,7 +35,7 @@ export async function shoppingRemovalFixture(direction: "ltr" | "rtl" = "ltr") {
   }], { initialEntries: ["/shopping-list"] });
   const root = createRoot(host);
   await act(async () => {
-    root.render(<OuroProvider linkComponent={OuroRouterLink}><RouterProvider router={router} /><div className="h-[1600px]" /></OuroProvider>);
+    root.render(<OuroProvider linkComponent={OuroRouterLink}><RouterProvider router={router} /><div style={{ height: 1600 }} /></OuroProvider>);
   });
   return {
     host, router, writes,
