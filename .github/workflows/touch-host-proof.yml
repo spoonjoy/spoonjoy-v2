@@ -1,0 +1,73 @@
+name: Isolated touch host geometry proof
+on:
+  push:
+    branches: [probe/ouro-touch-host-20261016]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        binding: [published, roomy-host]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+      - run: corepack enable && corepack prepare pnpm@10.28.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Record exact source and protected inputs
+        run: |
+          git rev-parse HEAD > touch-host-source.txt
+          git diff --exit-code 7f50e38bc1b838319bc67c11299e4a58e3e42b2b -- \
+            app/components/ouro app/lib/ouro vitest.ouro.config.ts package.json pnpm-lock.yaml
+      - name: Change only the supplied touch host viewport in the candidate
+        if: matrix.binding == 'roomy-host'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("app/lib/ouro/testing/vitest.ts")
+          source = path.read_text()
+          old = "contextOptions: { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } },"
+          assert source.count(old) == 1
+          path.write_text(source.replace(old, "contextOptions: { hasTouch: true, isMobile: true, viewport: page ?? { width: 390, height: 844 } },"))
+          PY
+      - name: Record binding and one-variable mutation
+        run: |
+          git diff -- app/lib/ouro/testing/vitest.ts > touch-host-provider.diff
+          node --input-type=module - <<'JS' > touch-host-projects.json
+          import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
+          const projects = ouroTestProjects({ css: "./app/styles/tailwind.css", page: { width: 1600, height: 1200 } });
+          console.log(JSON.stringify(projects.map(({ test }) => ({
+            name: test.name,
+            logical: test.browser.viewport,
+            context: test.browser.provider.options.contextOptions,
+          })), null, 2));
+          JS
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Run unchanged published SwipeActions touch tests and independent geometry witness
+        run: |
+          pnpm exec vitest run --config .github/touch-host-proof.config.ts --project ouro-touch \
+            app/components/ouro/swipe-actions/swipe-actions.touch.test.tsx \
+            test/ouro/touch-host.probe.touch.test.tsx \
+            --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: touch-host-${{ matrix.binding }}
+          path: |
+            touch-host-source.txt
+            touch-host-provider.diff
+            touch-host-projects.json
+            touch-host-tests.json
+            touch-host-native.log
+            .vitest/attachments/
+          if-no-files-found: error
