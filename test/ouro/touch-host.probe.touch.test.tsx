@@ -10,7 +10,7 @@ import type { touchHostGeometry, touchHostWrongPoint } from "../../.github/touch
 declare module "vitest/browser" {
   interface BrowserCommands {
     touchHostGeometry: (selector: string) => ReturnType<typeof touchHostGeometry>;
-    touchHostWrongPoint: () => Promise<void>;
+    touchHostWrongPoint: () => ReturnType<typeof touchHostWrongPoint>;
   }
 }
 
@@ -20,6 +20,7 @@ it("records native host geometry and trusted row input through a full orientatio
   const root = createRoot(host);
   let actions = 0;
   const pointers: Array<{ trusted: boolean; type: string; x: number; y: number }> = [];
+  const wrongPointers: typeof pointers = [];
   await act(async () => root.render(
     <div style={{ padding: 16 }}>
       <div data-host-probe-spacer="" style={{ height: 200 }} />
@@ -36,6 +37,9 @@ it("records native host geometry and trusted row input through a full orientatio
   row.setAttribute("data-host-probe-row", "");
   row.addEventListener("pointerdown", (event) => {
     pointers.push({ trusted: event.isTrusted, type: event.pointerType, x: event.clientX, y: event.clientY });
+  });
+  host.querySelector<HTMLElement>("[data-host-probe-spacer]")!.addEventListener("pointerdown", (event) => {
+    wrongPointers.push({ trusted: event.isTrusted, type: event.pointerType, x: event.clientX, y: event.clientY });
   });
   try {
     for (const [stage, width, height] of [
@@ -55,10 +59,14 @@ it("records native host geometry and trusted row input through a full orientatio
       expect(geometry.origin).toEqual({ x: 0, y: 0 });
 
       const before = pointers.length;
-      await commands.touchHostWrongPoint();
+      const wrongBefore = wrongPointers.length;
+      const wrong = await commands.touchHostWrongPoint();
+      expect(wrongPointers).toHaveLength(wrongBefore + 1);
+      expect(wrongPointers.at(-1)).toEqual({ trusted: true, type: "touch", ...wrong });
       expect(pointers).toHaveLength(before);
       expect(row.getAttribute("data-open")).toBeNull();
       expect(actions).toBe(0);
+      await annotate(`TOUCH_HOST_WRONG_POINT ${JSON.stringify({ stage, wrong, observed: wrongPointers.at(-1), actions, rowPointers: pointers.length })}`);
 
       const rect = row.getBoundingClientRect();
       const from: [number, number] = [rect.left + rect.width / 2, rect.top + rect.height / 2];

@@ -39,5 +39,7 @@ export const touchHostGeometry = (async (ctx, selector: string) => {
 export const touchHostWrongPoint = (async (ctx) => {
   const box = await ctx.iframe.locator("[data-host-probe-spacer]").boundingBox();
   if (!box) throw new Error("Touch host probe spacer is not visible");
-  await ctx.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await ctx.page.touchscreen.tap(point.x, point.y);
+  return point;
 }) satisfies BrowserCommand<[]>;
