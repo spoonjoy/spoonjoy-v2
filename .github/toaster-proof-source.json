@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "ourostack/ouro-ui",
-  "upstreamCommit": "0d1b8d2211ded975af1670aba15de55da7576cea",
+  "upstreamCommit": "625766e80149a549dff024b914363fb49f26ed5f",
   "normalization": "@/registry/ouro/components/ouro/ -> ~/components/ouro/; @/registry/ouro/lib/ouro/ -> ~/lib/ouro/; no other changes",
   "files": [
     {
