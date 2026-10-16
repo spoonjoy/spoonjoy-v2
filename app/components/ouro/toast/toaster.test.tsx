@@ -138,13 +138,15 @@ describe("Toaster", () => {
   async function checkDefaultGeometry(onMutated?: () => void) {
     const { root } = await render(<Toaster />);
     const region = viewport()!;
-    const oldSpacing = document.documentElement.style.getPropertyValue("--spacing");
+    const html = document.documentElement;
+    const oldDir = html.getAttribute("dir");
+    const oldSpacing = { value: html.style.getPropertyValue("--spacing"), priority: html.style.getPropertyPriority("--spacing") };
     try {
       for (const spacing of ["0.25rem", "0.3rem"]) {
-        document.documentElement.style.setProperty("--spacing", spacing);
+        html.style.setProperty("--spacing", spacing, oldSpacing.priority);
         const unit = spacing === "0.25rem" ? 4 : 4.8;
         for (const dir of ["ltr", "rtl"]) {
-          document.documentElement.dir = dir;
+          html.setAttribute("dir", dir);
           onMutated?.();
           for (const width of [414, 639, 640, 1024]) {
             await page.viewport(width, 896);
@@ -159,15 +161,19 @@ describe("Toaster", () => {
             const safeArea = document.createElement("div");
             safeArea.style.bottom = "max(1rem, env(safe-area-inset-bottom))";
             document.body.append(safeArea);
-            if (!desktop) expect(css.bottom).toBe(getComputedStyle(safeArea).bottom);
-            safeArea.remove();
+            try {
+              if (!desktop) expect(css.bottom).toBe(getComputedStyle(safeArea).bottom);
+            } finally {
+              safeArea.remove();
+            }
           }
         }
       }
     } finally {
-      document.documentElement.removeAttribute("dir");
-      if (oldSpacing) document.documentElement.style.setProperty("--spacing", oldSpacing);
-      else document.documentElement.style.removeProperty("--spacing");
+      if (oldDir === null) html.removeAttribute("dir");
+      else html.setAttribute("dir", oldDir);
+      if (oldSpacing.value) html.style.setProperty("--spacing", oldSpacing.value, oldSpacing.priority);
+      else html.style.removeProperty("--spacing");
     }
   }
 
@@ -209,11 +215,11 @@ describe("Toaster", () => {
   async function checkNamedGeometry(onMutated?: () => void) {
     const style = document.documentElement.style;
     const tokens = ["--spacing-4", "--spacing-6", "--spacing-90"];
-    const before = tokens.map((token) => style.getPropertyValue(token));
+    const before = tokens.map((token) => ({ value: style.getPropertyValue(token), priority: style.getPropertyPriority(token) }));
     try {
-      style.setProperty("--spacing-4", "18px");
-      style.setProperty("--spacing-6", "28px");
-      style.setProperty("--spacing-90", "400px");
+      style.setProperty("--spacing-4", "18px", before[0]!.priority);
+      style.setProperty("--spacing-6", "28px", before[1]!.priority);
+      style.setProperty("--spacing-90", "400px", before[2]!.priority);
       onMutated?.();
       await render(<Toaster />);
       await page.viewport(414, 896);
@@ -223,11 +229,12 @@ describe("Toaster", () => {
       await page.viewport(1024, 896);
       const rect = viewport()!.getBoundingClientRect();
       expect(rect.width).toBeCloseTo(400, 1);
-      expect(1024 - rect.right).toBeCloseTo(28, 1);
+      const rtl = getComputedStyle(viewport()!).direction === "rtl";
+      expect(rtl ? rect.left : 1024 - rect.right).toBeCloseTo(28, 1);
       expect(getComputedStyle(viewport()!).bottom).toBe("28px");
     } finally {
       tokens.forEach((token, index) => {
-        if (before[index]) style.setProperty(token, before[index]!);
+        if (before[index]!.value) style.setProperty(token, before[index]!.value, before[index]!.priority);
         else style.removeProperty(token);
       });
     }
