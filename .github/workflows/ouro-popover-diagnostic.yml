@@ -1,4 +1,4 @@
-name: Ouro Popover geometry diagnostic
+name: Ouro Popover consumer conformance proof
 on:
   push:
     branches: [probe/ouro-popover-alignment-20261015]
@@ -8,21 +8,13 @@ defaults:
   run:
     shell: bash
 jobs:
-  geometry:
+  conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - sample: baseline
-            shift: 0
-          - sample: up-one-physical-pixel
-            shift: -1
-          - sample: down-one-physical-pixel
-            shift: 1
-    env:
-      VITE_POPOVER_SHIFT: ${{ matrix.shift }}
+        project: [ouro-chromium, ouro-webkit, ouro-touch]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -36,30 +28,35 @@ jobs:
           corepack prepare pnpm@10.28.1 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm prisma:generate
-      - run: pnpm exec playwright install --with-deps webkit
-      - name: Record exact diagnostic source and unchanged runtime
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Record exact upstream test, tool versions and unchanged consumer runtime
         run: |
           git rev-parse HEAD > diagnostic-source.log
+          echo '08f32c208b16ae669c04eedbe30bae739411e6ce' > upstream-source.log
+          echo 'a5b05316ba7bb85790ac629d3f559ead62214ade07f59c5400f738ca97c854ea  app/components/ouro/popover/popover.test.tsx' | sha256sum --check
+          node -e 'const fs=require("node:fs"); const names=["vitest","@playwright/test","@base-ui/react"]; fs.writeFileSync("proof-tools.json", JSON.stringify(Object.fromEntries(names.map(name => [name, JSON.parse(fs.readFileSync(`node_modules/${name}/package.json`, "utf8")).version])), null, 2))'
           git diff b2d0ca73cb0a1165e967691363a07455bf085421 -- \
             app/components/ouro/popover/popover.tsx \
             app/components/ouro/popover/popover-parts.tsx \
             app/components/ouro/popover/popover-styles.ts \
             vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css > diagnostic-runtime.diff
           test ! -s diagnostic-runtime.diff
-      - name: Capture original assertion geometry; intentional diagnostic failure is not qualification
+      - name: Whole Popover browser suite with original bounds and exact upstream fixture
         run: |
           set -o pipefail
-          pnpm exec vitest run --config vitest.ouro.config.ts --project ouro-webkit \
-            app/components/ouro/popover/popover.test.tsx \
-            -t 'sits on side right, aligned end' \
-            --reporter=default --reporter=json --outputFile.json=popover-geometry.json 2>&1 | tee popover-geometry.log
+          node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run \
+            --config vitest.ouro.config.ts --project '${{ matrix.project }}' \
+            app/components/ouro/popover \
+            --reporter=default --reporter=json --outputFile.json=popover-conformance.json 2>&1 | tee popover-conformance.log
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: popover-geometry-${{ matrix.sample }}
+          name: popover-conformance-${{ matrix.project }}
           path: |
             diagnostic-source.log
+            upstream-source.log
             diagnostic-runtime.diff
-            popover-geometry.json
-            popover-geometry.log
+            proof-tools.json
+            popover-conformance.json
+            popover-conformance.log
           if-no-files-found: error
