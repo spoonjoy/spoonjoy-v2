@@ -135,7 +135,7 @@ describe("Toaster", () => {
     expect(warnings()).toEqual([]);
   });
 
-  it("preserves logical default geometry across sm, RTL and a nonstandard spacing scale", async () => {
+  async function checkDefaultGeometry(onMutated?: () => void) {
     const { root } = await render(<Toaster />);
     const region = viewport()!;
     const oldSpacing = document.documentElement.style.getPropertyValue("--spacing");
@@ -145,6 +145,7 @@ describe("Toaster", () => {
         const unit = spacing === "0.25rem" ? 4 : 4.8;
         for (const dir of ["ltr", "rtl"]) {
           document.documentElement.dir = dir;
+          onMutated?.();
           for (const width of [414, 639, 640, 1024]) {
             await page.viewport(width, 896);
             await act(async () => root.render(<Toaster />));
@@ -168,6 +169,10 @@ describe("Toaster", () => {
       if (oldSpacing) document.documentElement.style.setProperty("--spacing", oldSpacing);
       else document.documentElement.style.removeProperty("--spacing");
     }
+  }
+
+  it("preserves logical default geometry across sm, RTL and a nonstandard spacing scale", async () => {
+    await checkDefaultGeometry();
   });
 
   it("updates viewport layout without replacing or reannouncing a live toast or resetting its countdown", async () => {
@@ -201,7 +206,7 @@ describe("Toaster", () => {
     }
   });
 
-  it("keeps named spacing-scale values on the viewport as well as the universal spacing fallback", async () => {
+  async function checkNamedGeometry(onMutated?: () => void) {
     const style = document.documentElement.style;
     const tokens = ["--spacing-4", "--spacing-6", "--spacing-90"];
     const before = tokens.map((token) => style.getPropertyValue(token));
@@ -209,6 +214,7 @@ describe("Toaster", () => {
       style.setProperty("--spacing-4", "18px");
       style.setProperty("--spacing-6", "28px");
       style.setProperty("--spacing-90", "400px");
+      onMutated?.();
       await render(<Toaster />);
       await page.viewport(414, 896);
       expect(viewport()!.getBoundingClientRect().width).toBeCloseTo(378, 1);
@@ -224,6 +230,41 @@ describe("Toaster", () => {
         if (before[index]) style.setProperty(token, before[index]!);
         else style.removeProperty(token);
       });
+    }
+  }
+
+  it("keeps named spacing-scale values on the viewport as well as the universal spacing fallback", async () => {
+    await checkNamedGeometry();
+  });
+
+  const ambientCases = (["default", "named"] as const).flatMap((kind) =>
+    ([null, "", "rtl"] as const).flatMap((dir) =>
+      [false, true].map((fail) => ({ kind, dir, dirLabel: dir === null ? "absent" : dir === "" ? "empty" : dir, fail })),
+    ),
+  );
+  it.each(ambientCases)("preserves ambient state for $kind / $dirLabel / thrown=$fail", async ({ kind, dir, fail }) => {
+    const html = document.documentElement;
+    const ambientDir = html.getAttribute("dir");
+    const ambientCss = html.style.cssText;
+    const properties = kind === "default" ? ["--spacing"] : ["--spacing-4", "--spacing-6", "--spacing-90"];
+    try {
+      if (dir === null) html.removeAttribute("dir");
+      else html.setAttribute("dir", dir);
+      properties.forEach((property, index) => html.style.setProperty(property, kind === "default" ? "0.23rem" : `${19 + index}px`, "important"));
+      const expected = properties.map((property) => [html.style.getPropertyValue(property), html.style.getPropertyPriority(property)]);
+      const check = kind === "default" ? checkDefaultGeometry : checkNamedGeometry;
+      const failure = new Error("ambient-state control");
+      if (fail) await expect(check(() => { throw failure; })).rejects.toBe(failure);
+      else await check();
+      expect(html.hasAttribute("dir")).toBe(dir !== null);
+      expect(html.getAttribute("dir")).toBe(dir);
+      properties.forEach((property, index) => {
+        expect([html.style.getPropertyValue(property), html.style.getPropertyPriority(property)]).toEqual(expected[index]);
+      });
+    } finally {
+      if (ambientDir === null) html.removeAttribute("dir");
+      else html.setAttribute("dir", ambientDir);
+      html.style.cssText = ambientCss;
     }
   });
 

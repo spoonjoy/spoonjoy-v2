@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "ourostack/ouro-ui",
-  "upstreamCommit": "ab557a659529bcffe95db03d2f91bfce7c95497e",
+  "upstreamCommit": "002597b31c1efa5852f02a6c00824ae04c8116ff",
   "normalization": "@/registry/ouro/components/ouro/ -> ~/components/ouro/; @/registry/ouro/lib/ouro/ -> ~/lib/ouro/; no other changes",
   "files": [
     {
@@ -23,9 +23,9 @@
     },
     {
       "upstreamPath": "registry/ouro/components/ouro/toast/toaster.test.tsx",
-      "upstreamSha256": "c61a222bffddc055476c3545b45d6d9adcb44e26cd14a3a84534fa9d67e55548",
+      "upstreamSha256": "82a36e8e2e7ce7c1e6cebf40165d733e923b03a4c153b1cd66fcd012904d8d16",
       "proofPath": "app/components/ouro/toast/toaster.test.tsx",
-      "proofSha256": "3e01ecae058346491114021ccb807607e6e0433fcd449e09362f5150e0cbb374"
+      "proofSha256": "4b5793a90c4f4b1cb60a7695593cc97ec3aba023f7c2e83b7dc5bddd140f6dd4"
     },
     {
       "upstreamPath": "registry/ouro/components/ouro/toast/toaster.test-d.ts",
@@ -87,5 +87,12 @@
       "proofPath": "app/lib/ouro/use-drag.ts",
       "proofSha256": "74b3b9424c79e96c1c737ee5367930ca1cc369ef9f23572b29821dcc0563f5f2"
     }
-  ]
+  ],
+  "compilerControl": {
+    "upstreamPath": "scripts/source-rules.test.mjs",
+    "upstreamSha256": "948dc6e79bf6e00d1c28a0b22d831178baaa18f3c01703c38ec6dabbbe9f3b6c",
+    "proofPath": ".github/toaster-spacing-compiler.mjs",
+    "proofSha256": "df66523f1c8c66aa55590ede6f1e7d8c1275da952eff721e1403a5ba1ebaff6d",
+    "derivation": "Exact contiguous Toaster compiler test blocks before leadingComment; standalone existing-dependency imports; viewportClass import normalized to proof app"
+  }
 }
