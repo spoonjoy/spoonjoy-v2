@@ -23,7 +23,7 @@ function SuppressedPage({ suppressed }: { suppressed: boolean }) {
 
 // Regression mutation: missing dock-aware placement overlays the real navigation
 // at 390px and in the library-sm/app-lg mismatch band, intercepting its links.
-it.each([
+const scenarios = [
   { width: 390, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 5 },
   { width: 768, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 5 },
   { width: 1023, path: "/", authenticated: true, suppressed: false, direction: "ltr", dock: true, links: 5 },
@@ -37,7 +37,9 @@ it.each([
   { width: 768, path: "/oauth/authorize", authenticated: true, suppressed: false, direction: "ltr", dock: false, links: 0 },
   { width: 390, path: "/", authenticated: true, suppressed: true, direction: "ltr", dock: false, links: 0 },
   { width: 768, path: "/", authenticated: true, suppressed: true, direction: "ltr", dock: false, links: 0 },
-])("clears actual dock without unused clearance: $width $path auth=$authenticated suppressed=$suppressed $direction", async (scenario, { annotate }) => {
+] as const;
+for (const scenario of scenarios) {
+it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.path} auth=${scenario.authenticated} suppressed=${scenario.suppressed} ${scenario.direction}`, async ({ annotate }) => {
   await page.viewport(scenario.width, 844);
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const originalDirection = document.documentElement.dir;
@@ -81,6 +83,7 @@ it.each([
         centerHitInToast: Boolean(actual?.closest('[data-ouro="toast"]')),
       };
     });
+    }
     await annotate(`T11_M1_LAYOUT ${JSON.stringify({
       scenario,
       viewport: { width: innerWidth, height: innerHeight },
