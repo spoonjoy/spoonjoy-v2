@@ -121,15 +121,25 @@ it("vertical native input scrolls the real page and cancels the row recognizer",
   await mount();
   const before = scrollY;
   const box = await commands.shoppingInputBounds('[data-shopping-item="proof-1"] [data-ouro="swipe-actions"]');
-  // Native scrolling needs compositor-delivered moves, not three coalesced timed
-  // samples. Use the unchanged released sequential touchDrag driver, as its own
-  // passing vertical-scroll regression does; never substitute a product clock.
-  await act(async () => commands.touchDrag({
-    from: [box.x + box.width / 2, box.y + box.height / 2],
-    to: [box.x + box.width / 2 + 12, box.y + box.height / 2 - 160],
-    steps: 12,
-  }));
-  await annotate(`T21_NATIVE_SCROLL ${JSON.stringify({ before, after: scrollY, box })}`);
+  await annotate(`T21_NATIVE_SCROLL_BEFORE ${JSON.stringify({ before, box })}`);
+  // Observe the actual target and delivery too, not just the driver's protocol
+  // ACK. The compositor-paced path uses native time, never a product clock.
+  let native!: Awaited<ReturnType<typeof commands.nativeShoppingInput>>;
+  await act(async () => { native = await commands.nativeShoppingInput({
+    selector: '[data-shopping-item="proof-1"] [data-ouro="swipe-actions"]',
+    gestures: [{
+      sequential: true,
+      points: Array.from({ length: 13 }, (_, step) => [
+        .5 + (12 / box.width) * step / 12,
+        .5 - (160 / box.height) * step / 12, 0,
+      ] as const),
+    }],
+  }); });
+  await annotate(`T21_NATIVE_SCROLL ${JSON.stringify({
+    before, after: scrollY, box, native,
+    afterBounds: await commands.shoppingInputBounds('[data-shopping-item="proof-1"] [data-ouro="swipe-actions"]'),
+  })}`);
+  expect(native[0]!.events.some((event) => event.type === "pointerdown" && event.isTrusted && event.targetInRow)).toBe(true);
   await expect.poll(() => scrollY).toBeGreaterThan(before);
   expect(dialog()).toBeNull();
   expect(fixture!.writes).toEqual([]);

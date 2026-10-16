@@ -69,11 +69,15 @@ it("records actual landscape hit geometry before qualifying a visible row's 44px
   const box = await commands.shoppingInputBounds("#task21-landscape-native-row");
   const current = row.getBoundingClientRect();
   expect(row.contains(document.elementFromPoint(current.left + current.width / 2, current.top + current.height / 2))).toBe(true);
-  await act(async () => commands.touchDrag({
-    from: [box.x + box.width / 2, box.y + box.height / 2],
-    to: [box.x + box.width / 2 - 120, box.y + box.height / 2],
-    steps: 10, durationMs: 100,
-  }));
+  // The published watcher adds frame origins but does not account for Vitest 4's
+  // CSS-scaled phone iframe. Keep that published failing test untouched. This
+  // independent command observes real trusted delivery in the actual frame.
+  let native!: Awaited<ReturnType<typeof commands.nativeShoppingInput>>;
+  await act(async () => { native = await commands.nativeShoppingInput({
+      selector: "#task21-landscape-native-row",
+      gestures: [{ points: [[.5, .5, 0], [.47, .5, 25], [.43, .5, 50], [.5 - 120 / current.width, .5, 100]] }],
+    }); });
+  expect(native[0]!.events.some((event) => event.type === "pointerdown" && event.isTrusted && event.targetInRow)).toBe(true);
   await expect.poll(() => row.getAttribute("data-open")).toBe("trailing");
   await expect.poll(() => row.hasAttribute("data-ouro-settling")).toBe(false);
   for (const label of ["Delete", "Archive"]) {
@@ -84,5 +88,5 @@ it("records actual landscape hit geometry before qualifying a visible row's 44px
     expect(getComputedStyle(button).fontSize, label).toBe("16px");
   }
   expect(invoked).toBe(0);
-  await annotate(`T21_LANDSCAPE_VISIBLE_INPUT ${JSON.stringify({ box, open: row.getAttribute("data-open"), invoked })}`);
+  await annotate(`T21_LANDSCAPE_VISIBLE_INPUT ${JSON.stringify({ box, native, open: row.getAttribute("data-open"), invoked })}`);
 });

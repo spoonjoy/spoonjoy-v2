@@ -431,6 +431,15 @@ test.describe("Shopping list", () => {
     await page.getByRole("button", { name: "Clear all", exact: true }).click();
     const dialog = page.getByRole("alertdialog", { name: "Start fresh?" });
     await expect(dialog).toBeVisible();
+    // Visibility includes an entering translucent dialog. Axe must measure the
+    // real settled surface/ink, not a transient composite during its entrance.
+    // Observe actual browser animations; do not disable motion or add a delay.
+    await expect.poll(() => dialog.evaluate((element) =>
+      !element.hasAttribute("data-starting-style") &&
+      getComputedStyle(element).opacity === "1" &&
+      element.getAnimations({ subtree: true }).every((animation) =>
+        animation.playState === "finished" || animation.playState === "idle"),
+    )).toBe(true);
     await expectAccessible();
     await dialog.getByRole("button", { name: "Keep list", exact: true }).click();
     await expect(dialog).toBeHidden();
