@@ -1,4 +1,4 @@
-name: Ouro Popover consumer conformance proof
+name: Ouro Toaster prospective viewport proof
 on:
   push:
     branches: [probe/ouro-popover-alignment-20261015]
@@ -29,34 +29,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm prisma:generate
       - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Record exact upstream test, tool versions and unchanged consumer runtime
+      - name: Record unchanged old Toaster runtime, prospective tests and tool versions (RED)
         run: |
-          git rev-parse HEAD > diagnostic-source.log
-          echo '08f32c208b16ae669c04eedbe30bae739411e6ce' > upstream-source.log
-          echo 'a5b05316ba7bb85790ac629d3f559ead62214ade07f59c5400f738ca97c854ea  app/components/ouro/popover/popover.test.tsx' | sha256sum --check
-          node -e 'const fs=require("node:fs"); const names=["vitest","@playwright/test","@base-ui/react"]; fs.writeFileSync("proof-tools.json", JSON.stringify(Object.fromEntries(names.map(name => [name, JSON.parse(fs.readFileSync(`node_modules/${name}/package.json`, "utf8")).version])), null, 2))'
-          git diff b2d0ca73cb0a1165e967691363a07455bf085421 -- \
-            app/components/ouro/popover/popover.tsx \
-            app/components/ouro/popover/popover-parts.tsx \
-            app/components/ouro/popover/popover-styles.ts \
-            vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css > diagnostic-runtime.diff
-          test ! -s diagnostic-runtime.diff
-      - name: Whole Popover browser suite with original bounds and exact upstream fixture
+          git rev-parse HEAD
+          echo 'Unchanged upstream Toaster: 08f32c208b16ae669c04eedbe30bae739411e6ce'
+          sha256sum app/components/ouro/toast/* app/lib/ouro/toast.ts vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css
+          node -e 'const fs=require("node:fs"); for (const n of ["vitest","@playwright/test","@base-ui/react","tailwindcss","tailwind-merge","typescript"]) console.log(n, JSON.parse(fs.readFileSync(`node_modules/${n}/package.json`, "utf8")).version)'
+          git diff --exit-code 956e00db2e2a7778be605534ff9e45cce12cf343 -- app/components/ouro/toast/toaster.tsx app/components/ouro/toast/toaster-styles.ts vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css
+          git diff 956e00db2e2a7778be605534ff9e45cce12cf343 -- app/components/ouro/toast
+      - name: Prospective layout RED against unchanged runtime
         run: |
-          set -o pipefail
           node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run \
             --config vitest.ouro.config.ts --project '${{ matrix.project }}' \
-            app/components/ouro/popover \
-            --reporter=default --reporter=json --outputFile.json=popover-conformance.json 2>&1 | tee popover-conformance.log
+            app/components/ouro/toast/toaster.test.tsx \
+            --testNamePattern 'unprefixed app clearance' \
+            --reporter=default --reporter=json --outputFile.json=toaster-layout-red.json
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: popover-conformance-${{ matrix.project }}
+          name: toaster-layout-red-${{ matrix.project }}
           path: |
-            diagnostic-source.log
-            upstream-source.log
-            diagnostic-runtime.diff
-            proof-tools.json
-            popover-conformance.json
-            popover-conformance.log
+            toaster-layout-red.json
           if-no-files-found: error
