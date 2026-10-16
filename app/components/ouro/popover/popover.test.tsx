@@ -103,9 +103,12 @@ describe("Popover", () => {
     ["right", "end"],
     ["left", "center"],
   ] as const)("sits on side %s, aligned %s", async (side, align) => {
-    const element = await openUncontrolled({ side, align });
+    // Own the surface size: native pixel snapping can shift fractional content by half a pixel.
+    const element = await openUncontrolled({ side, align, className: "h-[96px]" });
     const box = element.getBoundingClientRect();
     const anchor = trigger().getBoundingClientRect();
+    expect(box.height).toBe(96);
+    expect(warn).not.toHaveBeenCalled();
     if (side === "top") expect(Math.round(anchor.top - box.bottom)).toBe(8);
     if (side === "right") expect(Math.round(box.left - anchor.right)).toBe(8);
     if (side === "left") expect(Math.round(anchor.left - box.right)).toBe(8);

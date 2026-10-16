@@ -14,13 +14,26 @@ const portalClass = "relative isolate z-[calc(var(--ouro-layer)+1)]";
 
 /**
  * The fixed region the toasts stack in: full width at the bottom of a phone, inside the
- * safe area, and 360px at the bottom end from `sm`.
+ * safe area, and spacing-scale 90 at the bottom end from `sm`. Each overridable
+ * property has one unprefixed utility, so app layout classes win at every width.
+ * Universal and named scales compile independently: an unavailable candidate
+ * is omitted, preserving the phone value at sm. Same-element [&] variants
+ * retain distinct candidates through cn: two for the universal path, one for
+ * the later named path. Both share the same variant group, so sm still wins
+ * over phone values. Neither path introduces a global spacing default.
  *
  * @internal
  */
 const viewportClass =
-  "fixed start-4 end-4 bottom-[max(1rem,env(safe-area-inset-bottom))] outline-none " +
-  "sm:start-auto sm:end-6 sm:bottom-6 sm:w-90";
+  "fixed outline-none " +
+  "start-(--ouro-toaster-start) end-(--ouro-toaster-end) bottom-(--ouro-toaster-bottom) w-(--ouro-toaster-width) " +
+  "[&]:[&]:[--ouro-toaster-start:var(--spacing-4,--spacing(4))] [&]:[--ouro-toaster-start:--theme(--spacing-4)] " +
+  "[&]:[&]:[--ouro-toaster-end:var(--spacing-4,--spacing(4))] [&]:[--ouro-toaster-end:--theme(--spacing-4)] " +
+  "[--ouro-toaster-bottom:max(1rem,env(safe-area-inset-bottom))] [--ouro-toaster-width:auto] " +
+  "sm:[&]:[--ouro-toaster-start:auto] " +
+  "sm:[&]:[&]:[--ouro-toaster-end:var(--spacing-6,--spacing(6))] sm:[&]:[--ouro-toaster-end:--theme(--spacing-6)] " +
+  "sm:[&]:[&]:[--ouro-toaster-bottom:var(--spacing-6,--spacing(6))] sm:[&]:[--ouro-toaster-bottom:--theme(--spacing-6)] " +
+  "sm:[&]:[&]:[--ouro-toaster-width:var(--spacing-90,--spacing(90))] sm:[&]:[--ouro-toaster-width:--theme(--spacing-90)]";
 
 /**
  * One toast. Collapsed, the newest is in front and the older ones peek out above it,

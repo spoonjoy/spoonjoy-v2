@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
@@ -110,6 +110,193 @@ afterEach(async () => {
 const warnings = () => warn.mock.calls.map((call: unknown[]) => String(call[0]));
 
 describe("Toaster", () => {
+  // Prospective cast lets the RED browser run reach unchanged pre-className runtime.
+  // toaster.test-d.ts independently checks the real public API without a cast.
+  const layoutProps = (className: string) => ({ className }) as unknown as ToasterProps;
+
+  it("lets unprefixed app clearance and width win on the actual viewport at phone and desktop widths", async () => {
+    const { root } = await render(<Toaster />);
+    for (const width of [414, 639, 640, 1024]) {
+      await page.viewport(width, 896);
+      for (const className of ["bottom-20", "w-80", "bottom-20 w-80"]) {
+        await act(async () => root.render(<Toaster {...layoutProps(className)} />));
+        const region = viewport()!;
+        const css = getComputedStyle(region);
+        const rect = region.getBoundingClientRect();
+        if (className.includes("bottom-20")) {
+          expect(css.bottom).toBe("80px");
+          expect(896 - rect.bottom).toBeCloseTo(80, 1);
+        }
+        if (className.includes("w-80")) expect(rect.width).toBeCloseTo(320, 1);
+        expect(region.className).toContain(className);
+        expect(region.parentElement!.className).not.toContain(className);
+      }
+    }
+    expect(warnings()).toEqual([]);
+  });
+
+  async function checkDefaultGeometry(onMutated?: () => void) {
+    const { root } = await render(<Toaster />);
+    const region = viewport()!;
+    const html = document.documentElement;
+    const oldDir = html.getAttribute("dir");
+    const oldSpacing = { value: html.style.getPropertyValue("--spacing"), priority: html.style.getPropertyPriority("--spacing") };
+    try {
+      for (const spacing of ["0.25rem", "0.3rem"]) {
+        html.style.setProperty("--spacing", spacing, oldSpacing.priority);
+        const unit = spacing === "0.25rem" ? 4 : 4.8;
+        for (const dir of ["ltr", "rtl"]) {
+          html.setAttribute("dir", dir);
+          onMutated?.();
+          for (const width of [414, 639, 640, 1024]) {
+            await page.viewport(width, 896);
+            await act(async () => root.render(<Toaster />));
+            const rect = region.getBoundingClientRect();
+            const css = getComputedStyle(region);
+            const desktop = width >= 640;
+            expect(parseFloat(css.bottom)).toBeCloseTo(desktop ? 6 * unit : 16, 1);
+            expect(rect.width).toBeCloseTo(desktop ? 90 * unit : width - 8 * unit, 1);
+            expect(dir === "rtl" && desktop ? rect.left : width - rect.right).toBeCloseTo(desktop ? 6 * unit : 4 * unit, 1);
+            // Phone bottom is max(1rem, env(safe-area-inset-bottom)), not spacing(4).
+            const safeArea = document.createElement("div");
+            safeArea.style.bottom = "max(1rem, env(safe-area-inset-bottom))";
+            document.body.append(safeArea);
+            try {
+              if (!desktop) expect(css.bottom).toBe(getComputedStyle(safeArea).bottom);
+            } finally {
+              safeArea.remove();
+            }
+          }
+        }
+      }
+    } finally {
+      if (oldDir === null) html.removeAttribute("dir");
+      else html.setAttribute("dir", oldDir);
+      if (oldSpacing.value) html.style.setProperty("--spacing", oldSpacing.value, oldSpacing.priority);
+      else html.style.removeProperty("--spacing");
+    }
+  }
+
+  it("preserves logical default geometry across sm, RTL and a nonstandard spacing scale", async () => {
+    await checkDefaultGeometry();
+  });
+
+  it("updates viewport layout without replacing or reannouncing a live toast or resetting its countdown", async () => {
+    const announced = watchAnnouncements();
+    try {
+      const { root } = await render(<Toaster {...layoutProps("bottom-20")} />);
+      const region = viewport()!;
+      // Control the countdown's Date/setTimeout clock, not animation frames or
+      // polling. Real host round trips may outlive a finite toast on busy WebKit.
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      await act(async () => { toast("Layout survives", { duration: 2400 }); });
+      const item = toastNamed("Layout survives")!;
+      expect(item).toBeDefined();
+      const count = announced.count("Layout survives");
+      expect(count).toBe(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1400); });
+      await act(async () => root.render(<Toaster {...layoutProps("bottom-24 w-80")} />));
+      expect(viewport()).toBe(region);
+      expect(toastNamed("Layout survives")).toBe(item);
+      expect(getComputedStyle(region).bottom).toBe("96px");
+      expect(announced.count("Layout survives")).toBe(count);
+      expect(document.querySelectorAll('[data-ouro="toaster"]')).toHaveLength(1);
+      // Exact original deadline: neither an early close nor a reset is allowed.
+      await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+      expect(showing("Layout survives")).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(showing("Layout survives")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      announced.stop();
+    }
+  });
+
+  async function checkNamedGeometry(onMutated?: () => void) {
+    const style = document.documentElement.style;
+    const tokens = ["--spacing-4", "--spacing-6", "--spacing-90"];
+    const before = tokens.map((token) => ({ value: style.getPropertyValue(token), priority: style.getPropertyPriority(token) }));
+    try {
+      style.setProperty("--spacing-4", "18px", before[0]!.priority);
+      style.setProperty("--spacing-6", "28px", before[1]!.priority);
+      style.setProperty("--spacing-90", "400px", before[2]!.priority);
+      onMutated?.();
+      await render(<Toaster />);
+      await page.viewport(414, 896);
+      expect(viewport()!.getBoundingClientRect().width).toBeCloseTo(378, 1);
+      expect(viewport()!.getBoundingClientRect().left).toBeCloseTo(18, 1);
+      expect(getComputedStyle(viewport()!).bottom).toBe("16px");
+      await page.viewport(1024, 896);
+      const rect = viewport()!.getBoundingClientRect();
+      expect(rect.width).toBeCloseTo(400, 1);
+      const rtl = getComputedStyle(viewport()!).direction === "rtl";
+      expect(rtl ? rect.left : 1024 - rect.right).toBeCloseTo(28, 1);
+      expect(getComputedStyle(viewport()!).bottom).toBe("28px");
+    } finally {
+      tokens.forEach((token, index) => {
+        if (before[index]!.value) style.setProperty(token, before[index]!.value, before[index]!.priority);
+        else style.removeProperty(token);
+      });
+    }
+  }
+
+  it("keeps named spacing-scale values on the viewport as well as the universal spacing fallback", async () => {
+    await checkNamedGeometry();
+  });
+
+  const ambientCases = (["default", "named"] as const).flatMap((kind) =>
+    ([null, "", "rtl"] as const).flatMap((dir) =>
+      [false, true].map((fail) => ({ kind, dir, dirLabel: dir === null ? "absent" : dir === "" ? "empty" : dir, fail })),
+    ),
+  );
+  it.each(ambientCases)("preserves ambient state for $kind / $dirLabel / thrown=$fail", async ({ kind, dir, fail }) => {
+    const html = document.documentElement;
+    const ambientDir = html.getAttribute("dir");
+    const ambientCss = html.style.cssText;
+    const properties = kind === "default" ? ["--spacing"] : ["--spacing-4", "--spacing-6", "--spacing-90"];
+    try {
+      if (dir === null) html.removeAttribute("dir");
+      else html.setAttribute("dir", dir);
+      properties.forEach((property, index) => html.style.setProperty(property, kind === "default" ? "0.23rem" : `${19 + index}px`, "important"));
+      const expected = properties.map((property) => [html.style.getPropertyValue(property), html.style.getPropertyPriority(property)]);
+      const check = kind === "default" ? checkDefaultGeometry : checkNamedGeometry;
+      const failure = new Error("ambient-state control");
+      if (fail) await expect(check(() => { throw failure; })).rejects.toBe(failure);
+      else await check();
+      expect(html.hasAttribute("dir")).toBe(dir !== null);
+      expect(html.getAttribute("dir")).toBe(dir);
+      properties.forEach((property, index) => {
+        expect([html.style.getPropertyValue(property), html.style.getPropertyPriority(property)]).toEqual(expected[index]);
+      });
+    } finally {
+      if (ambientDir === null) html.removeAttribute("dir");
+      else html.setAttribute("dir", ambientDir);
+      html.style.cssText = ambientCss;
+    }
+  });
+
+  it.each([
+    ["bg-red-500", "sets appearance", ":root { --popover"],
+    ["text-center", "aligns content", "Toaster owns toast-content alignment; use <Toaster /> without the alignment class"],
+  ])("warns once after hydration for %s without recommending a portal wrapper", async (className, problem, hint) => {
+    const props = layoutProps(className);
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(<Toaster {...props} />);
+    expect(host.innerHTML).toBe("");
+    expect(warnings()).toEqual([]);
+    document.body.append(host);
+    mounted.push(host);
+    let root!: Root;
+    await act(async () => { root = hydrateRoot(host, <Toaster {...props} />); });
+    roots.push(root);
+    expect(warnings()).toHaveLength(1);
+    expect(warnings()[0]).toContain(problem);
+    expect(warnings()[0]).toContain(hint);
+    expect(warnings()[0]).not.toContain("<div");
+    await act(async () => root.render(<Toaster {...props} />));
+    expect(warnings()).toHaveLength(1);
+  });
+
   it("renders an empty, polite Notifications region in a portal", async () => {
     const { host } = await render(<Toaster />);
     const region = viewport()!;

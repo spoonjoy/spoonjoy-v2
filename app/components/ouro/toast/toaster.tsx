@@ -3,6 +3,7 @@
 import { Toast } from "@base-ui/react/toast";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "~/lib/ouro/cn";
+import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { devWarn } from "~/lib/ouro/dev";
 import { rubberband, spring, type SpringHandle } from "~/lib/ouro/spring";
 import { connectToaster, type ToastRecord } from "~/lib/ouro/toast";
@@ -22,6 +23,15 @@ import {
 /** Props for {@link Toaster}. */
 export interface ToasterProps {
   /**
+   * Layout classes on the actual portaled toast viewport, not on each toast.
+   * For example, `bottom-[calc(5rem+max(1rem,env(safe-area-inset-bottom)))]`
+   * clears persistent bottom controls. A bottom override replaces the default
+   * safe-area expression; include the appropriate inset in your own clearance.
+   * Use statically written classes matching your app's visibility/breakpoints,
+   * which need not match the Toaster's `sm` breakpoint.
+   */
+  className?: string | undefined;
+  /**
    * The name screen readers give the region the toasts appear in. Translate it with the
    * rest of your interface.
    * @default "Notifications"
@@ -33,7 +43,7 @@ export interface ToasterProps {
    */
   closeLabel?: string | undefined;
 
-  /** Not a prop. Toasts show at the bottom: full width on phones, at the bottom end from `sm`. */
+  /** Not a prop. Toasts default to the bottom: full width on phones, at the bottom end from `sm`; className adjusts viewport layout. */
   position?: { 'Not a prop: toasts show at the bottom. Use <Toaster />': never };
   /** Not a prop. Each toast takes its own `tone`: `toast("Saved", { tone: "success" })`. */
   richColors?: { 'Use toast("Saved", { tone: "success" })': never };
@@ -47,7 +57,8 @@ export interface ToasterProps {
  * Shows the toasts you send with `toast("Saved")` from `@/lib/ouro/toast`: render it
  * once, at the root of your app, inside `OuroProvider` if you use one, or alone. Every
  * Ouro UI install has `toast`. Toasts stack at the
- * bottom of the screen, full width on phones; up to three show, and later ones wait their
+ * bottom of the screen, full width on phones by default; `className` adjusts viewport
+ * layout/clearance, not each toast's appearance. Up to three show, and later ones wait their
  * turn, a `destructive` toast ahead of the others. They pause while the pointer is over them or a toast has focus, F6 moves focus to
  * them, newest first, and a swipe down or sideways dismisses one: a toast follows the
  * finger, a quick flick is enough, and one let go short of that springs back. Each toast is read to
@@ -56,6 +67,15 @@ export interface ToasterProps {
  *
  * Render one Toaster. A second one warns in development and shows nothing until the
  * first unmounts, then takes over.
+ *
+ * The viewport is portaled to the body. A variable set only on an app-shell wrapper
+ * does not reach it: put app clearance variables on a real ancestor of the portal
+ * (such as `:root`) or declare them through the viewport's supplied classes.
+ * Do not construct arbitrary-value class names from runtime numbers. A width override
+ * changes the width, not the anchoring mode or centering. Bottom overrides replace
+ * the default phone safe-area expression; the app owns its clearance and safe area.
+ * Shared `--popover`, `--popover-foreground` and `--radius` theme tokens style the
+ * toast surface and also affect other components; a wrapper cannot style this portal.
  *
  * Use `Alert` instead for a message that stays on the page, and `Dialog` when the user
  * must answer before going on.
@@ -72,8 +92,18 @@ export interface ToasterProps {
  * toast("Recipe saved", { tone: "success" });
  */
 export function Toaster(props: ToasterProps): JSX.Element | null {
-  const { label = "Notifications", closeLabel = "Dismiss", position, richColors, theme, duration } = props;
+  const { className, label = "Notifications", closeLabel = "Dismiss", position, richColors, theme, duration } = props;
   const [active, setActive] = useState(false);
+  useAppearanceClassNameCheck(
+    "Toaster",
+    className,
+    process.env.NODE_ENV !== "production"
+      ? ":root { --popover: var(--background); --popover-foreground: var(--foreground); --radius: 0.5rem; } (shared theme tokens affect other components too)"
+      : /* istanbul ignore next @preserve -- production only */ "",
+    process.env.NODE_ENV !== "production"
+      ? "Toaster owns toast-content alignment; use <Toaster /> without the alignment class"
+      : /* istanbul ignore next @preserve -- production only */ "",
+  );
   useDevWarnings(
     "Toaster",
     process.env.NODE_ENV !== "production"
@@ -90,7 +120,7 @@ export function Toaster(props: ToasterProps): JSX.Element | null {
       <Connect onActive={setActive} />
       {active && (
         <Toast.Portal className={portalClass}>
-          <Toast.Viewport aria-label={label} data-ouro="toaster" className={viewportClass}>
+          <Toast.Viewport aria-label={label} data-ouro="toaster" className={cn(viewportClass, className)}>
             <ToastList closeLabel={closeLabel} />
           </Toast.Viewport>
         </Toast.Portal>

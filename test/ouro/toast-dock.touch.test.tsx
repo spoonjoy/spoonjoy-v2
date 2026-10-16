@@ -42,6 +42,8 @@ const scenarios = [
 for (const scenario of scenarios) {
 it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.path} auth=${scenario.authenticated} suppressed=${scenario.suppressed} ${scenario.direction}`, async ({ annotate }) => {
   await rotate(scenario.width, 844);
+  expect(innerWidth).toBe(scenario.width);
+  expect(innerHeight).toBe(844);
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const originalDirection = document.documentElement.dir;
   document.documentElement.dir = scenario.direction;
@@ -69,6 +71,7 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
       return Boolean(element && !element.hasAttribute("data-starting-style") && element.getAnimations().length === 0);
     }).toBe(true);
     const toastBox = toast()!.getBoundingClientRect();
+    expect(toast()!.checkVisibility()).toBe(true);
     const nav = document.querySelector<HTMLElement>('[data-testid="mobile-tab-bar"]');
     const navBox = nav?.getBoundingClientRect();
     const links = nav ? [...nav.querySelectorAll("a")] : [];
@@ -97,6 +100,9 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
       expect(navBox!.height).toBeGreaterThan(0);
       expect(links).toHaveLength(scenario.links);
       expect.soft(toastBox.bottom, "toast must clear the actual dock").toBeLessThanOrEqual(navBox!.top);
+      // Main's existing clearance leaves exactly 1.25rem beyond the 4rem dock.
+      // Measuring from the real nav retains its actual safe-area bottom margin.
+      expect.soft(navBox!.top - toastBox.bottom, "existing app clearance gap").toBe(20);
       for (const hit of hits) {
         expect.soft(hit.receivesCenterHit, `${hit.href} center must reach its link`).toBe(true);
         expect.soft(hit.centerHitInToast, `${hit.href} center must not hit toast`).toBe(false);

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { Toaster } from "~/components/ouro/toast/toaster";
+import { useMobileNavEligibility } from "~/components/navigation/mobile-nav";
 import { toast, type ToastAction } from "~/lib/ouro/toast";
 
 type ToastPayload = {
@@ -19,7 +20,11 @@ const ToastContext = createContext<ToastContextValue>({
 });
 
 /** Keeps Spoonjoy's single, three-second feedback slot; Ouro owns rendering and announcements. */
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({ children, isAuthenticated }: {
+  children: ReactNode;
+  /** Root-loader auth enables app dock layout; standalone feedback needs no Router. */
+  isAuthenticated?: boolean;
+}) {
   const committed = useRef(false);
   const currentId = useRef<string | undefined>(undefined);
   const dismissToast = useCallback(() => {
@@ -46,9 +51,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <Toaster />
+      {isAuthenticated === undefined
+        ? <Toaster />
+        : <DockAwareToaster isAuthenticated={isAuthenticated} />}
     </ToastContext.Provider>
   );
+}
+
+function DockAwareToaster({ isAuthenticated }: { isAuthenticated: boolean }) {
+  const isEligible = useMobileNavEligibility(isAuthenticated);
+  return <Toaster className={isEligible ? "sj-toast-above-dock" : undefined} />;
 }
 
 export function useToast() {

@@ -108,11 +108,18 @@ interface MobileNavProps {
   isAuthenticated?: boolean;
 }
 
-export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
+/** Auth/path/suppression eligibility; CSS still owns the screen/print breakpoint. */
+export function useMobileNavEligibility(isAuthenticated: boolean) {
   const { pathname } = useLocation();
   const { isSuppressed } = useDockContext();
+  return !isSuppressed && !shouldHideTabBar(pathname, isAuthenticated);
+}
 
-  if (isSuppressed || shouldHideTabBar(pathname, isAuthenticated)) {
+export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
+  const { pathname } = useLocation();
+  const isEligible = useMobileNavEligibility(isAuthenticated);
+
+  if (!isEligible) {
     return null;
   }
 

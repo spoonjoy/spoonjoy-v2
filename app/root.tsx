@@ -232,7 +232,7 @@ export default function App() {
 
   return (
     <DockContextProvider>
-      <ToastProvider>
+      <ToastProvider isAuthenticated={!!userId}>
         <RouteTransitionIndicator />
         <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
           {userId ? null : <PhoneBrandBar />}

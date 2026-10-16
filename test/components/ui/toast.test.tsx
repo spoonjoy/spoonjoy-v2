@@ -1,8 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, useState } from "react";
+import { MemoryRouter, useNavigate } from "react-router";
 import { ToastProvider, useToast } from "~/components/feedback/toast";
+import { DockContextProvider, useDockContext } from "~/components/navigation/dock-context";
+import { MobileNav } from "~/components/navigation/mobile-nav";
 
 type ShowToast = ReturnType<typeof useToast>["showToast"];
 
@@ -83,9 +86,63 @@ function DefaultToastContextControls() {
   );
 }
 
+function AppFeedbackFixture() {
+  const [isAuthenticated, setAuthenticated] = useState(true);
+  const { isSuppressed, setSuppressed } = useDockContext();
+  const navigate = useNavigate();
+  const feedbackProps = { isAuthenticated };
+  return (
+    <ToastProvider {...feedbackProps}>
+      <ToastTestButton message="Persistent app feedback" durationMs={0} />
+      <button onClick={() => navigate("/recipes/new")}>Open form</button>
+      <button onClick={() => navigate("/login")}>Open login</button>
+      <button onClick={() => setAuthenticated(false)}>Become signed out</button>
+      <button onClick={() => setSuppressed(!isSuppressed)}>Toggle dock suppression</button>
+      <MobileNav isAuthenticated={isAuthenticated} />
+    </ToastProvider>
+  );
+}
+
 describe("Toast", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("updates app layout with the real nav eligibility without replacing feedback or announcements", () => {
+    render(
+      <MemoryRouter>
+        <DockContextProvider><AppFeedbackFixture /></DockContextProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show toast" }));
+    const feedback = screen.getByText("Persistent app feedback");
+    const viewport = screen.getByRole("region", { name: "Notifications" });
+    const dockLayout = viewport.className;
+    expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open form" }));
+    expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+    // Unit scope checks React's layout ownership switch; actual pixel clearance
+    // and hit targets are asserted independently in CI's real-browser regression.
+    expect(viewport.className).not.toBe(dockLayout);
+    const defaultLayout = viewport.className;
+
+    fireEvent.click(screen.getByRole("button", { name: "Become signed out" }));
+    expect(screen.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeInTheDocument();
+    expect(viewport.className).toBe(dockLayout);
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle dock suppression" }));
+    expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+    expect(viewport.className).toBe(defaultLayout);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle dock suppression" }));
+    expect(viewport.className).toBe(dockLayout);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open login" }));
+    expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
+    expect(viewport.className).toBe(defaultLayout);
+    expect(screen.getByText("Persistent app feedback")).toBe(feedback);
+    expect(screen.getAllByRole("region", { name: "Notifications" })).toHaveLength(1);
+    expect(viewport).toHaveAttribute("aria-live", "polite");
   });
 
   it.each(["before", "after"] as const)(
