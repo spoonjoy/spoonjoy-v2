@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "ourostack/ouro-ui",
-  "upstreamCommit": "26e713fd8dd796fe75f1b191c1da86d8f867d037",
+  "upstreamCommit": "a8429ab4d1385693e84a49216f44031ad5857e82",
   "upstreamPath": "registry/ouro/lib/ouro/testing/vitest.ts",
   "consumerPath": "app/lib/ouro/testing/vitest.ts",
   "sha256": "86ce4715db30baaeb5b058542df9de0adfe0bd09fcb366d7570a8194f8c5b4e2",
@@ -13,6 +13,13 @@
     "upstreamSha256": "969a04f5612c72bde81b946320d8181bbf3bae54d8c816f20fd1b91955de5f65",
     "consumerSha256": "b704aa6f31ea3b0bdc0aac15b9d3707eb77e1f8d394fd835762a207499075f03",
     "normalization": "@/registry/ouro/lib/ouro/ -> ~/lib/ouro/"
+  },
+  "menu": {
+    "upstreamPath": "registry/ouro/components/ouro/menu/menu.tsx",
+    "consumerPath": "app/components/ouro/menu/menu.tsx",
+    "upstreamSha256": "1b9a76ab846b0f4bf2731432886e63a26978d1bd343312ec0f87c3ce4f8f466e",
+    "consumerSha256": "7ec32f0cf1a1cf6cf0b4f3614df6e7b90664e74663289baf00b1aba5148a117e",
+    "normalization": "@/registry/ouro/{components,lib}/ouro/ -> ~/{components,lib}/ouro/"
   },
   "menuTest": {
     "upstreamPath": "registry/ouro/components/ouro/menu/menu.test.tsx",

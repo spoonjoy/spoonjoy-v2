@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: [menu]
+        scope: [menu, full]
     env:
       VITE_HOST_CONTROL: ${{ matrix.scope == 'default' && 'default' || 'roomy' }}
     steps:
@@ -38,6 +38,7 @@ jobs:
           ], text=True).splitlines()
           assert paths == [
               "app/components/ouro/menu/menu.test.tsx",
+              "app/components/ouro/menu/menu.tsx",
               "app/lib/ouro/testing/commands.touch.test.ts",
               "app/lib/ouro/testing/vitest.ts",
           ], paths
@@ -80,6 +81,19 @@ jobs:
           assert normalized == Path(fixture["consumerPath"]).read_bytes()
           assert hashlib.sha256(normalized).hexdigest() == fixture["consumerSha256"]
           PY
+          curl --fail --silent --show-error \
+            "https://raw.githubusercontent.com/ourostack/ouro-ui/$sha/registry/ouro/components/ouro/menu/menu.tsx" \
+            -o "$RUNNER_TEMP/upstream-menu.tsx"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          fixture = json.loads(Path(".github/touch-host-source.json").read_text())["menu"]
+          upstream = Path(os.environ["RUNNER_TEMP"], "upstream-menu.tsx").read_bytes()
+          assert hashlib.sha256(upstream).hexdigest() == fixture["upstreamSha256"]
+          normalized = upstream.replace(b"@/registry/ouro/components/ouro/", b"~/components/ouro/").replace(b"@/registry/ouro/lib/ouro/", b"~/lib/ouro/")
+          assert normalized == Path(fixture["consumerPath"]).read_bytes()
+          assert hashlib.sha256(normalized).hexdigest() == fixture["consumerSha256"]
+          PY
       - name: Record binding and one-variable mutation
         run: |
           git diff 7f50e38bc1b838319bc67c11299e4a58e3e42b2b -- app/lib/ouro/testing/vitest.ts > touch-host-provider.diff
@@ -104,11 +118,11 @@ jobs:
           pnpm exec vitest run --config .github/touch-host-proof.config.ts --project ouro-touch \
             app/lib/ouro/testing/commands.touch.test.ts \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
-      - name: Public menu ownership regression against unchanged production code
+      - name: Complete public Menu ownership, dismissal and navigation checks
         if: matrix.scope == 'menu'
         run: |
           pnpm exec vitest run --config vitest.ouro.config.ts --project ouro-chromium --project ouro-webkit \
-            app/components/ouro/menu/menu.test.tsx --testNamePattern="leaves focus with the action destination when the menu finishes closing" \
+            app/components/ouro/menu/menu.test.tsx \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
       - name: Independent native geometry and wrong-target controls
         if: matrix.scope == 'roomy'
