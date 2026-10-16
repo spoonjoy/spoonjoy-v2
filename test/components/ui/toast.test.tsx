@@ -1,7 +1,22 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, afterEach } from "vitest";
+import { StrictMode, useEffect } from "react";
 import { ToastProvider, useToast } from "~/components/feedback/toast";
+
+type ShowToast = ReturnType<typeof useToast>["showToast"];
+
+function CaptureFeedback({ capture }: { capture: (show: ShowToast) => void }) {
+  const { showToast } = useToast();
+  useEffect(() => capture(showToast), [capture, showToast]);
+  return null;
+}
+
+function InitialFeedback() {
+  const { showToast } = useToast();
+  useEffect(() => showToast({ message: "Committed child feedback" }), [showToast]);
+  return null;
+}
 
 function ToastTestButton(props: {
   message: string;
@@ -72,6 +87,51 @@ describe("Toast", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
+
+  it.each(["before", "after"] as const)(
+    "revokes retained async feedback when the old provider unmounts, resolving %s a replacement mounts",
+    async (when) => {
+      let retained: ShowToast | undefined;
+      const old = render(
+        <ToastProvider>
+          <CaptureFeedback capture={(show) => { retained = show; }} />
+        </ToastProvider>
+      );
+      expect(retained).toBeTypeOf("function");
+      const publishFromOldProvider = retained!;
+      let finish!: () => void;
+      const completion = new Promise<void>((resolve) => { finish = resolve; })
+        .then(() => publishFromOldProvider({ message: "Stale operation finished" }));
+
+      old.unmount();
+      if (when === "before") {
+        await act(async () => { finish(); await completion; });
+      }
+      render(<ToastProvider><ToastControls /></ToastProvider>);
+      fireEvent.click(screen.getByRole("button", { name: "Show first" }));
+      if (when === "after") {
+        await act(async () => { finish(); await completion; });
+      }
+
+      expect(screen.queryByText("Stale operation finished")).not.toBeInTheDocument();
+      expect(screen.getByText("First toast")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss toast" }));
+      await waitFor(() => expect(screen.queryByText("First toast")).not.toBeInTheDocument());
+    }
+  );
+
+  it.each(["ordinary", "StrictMode"] as const)(
+    "accepts initial child-effect publication in a committed %s provider",
+    async (mode) => {
+      const provider = <ToastProvider><InitialFeedback /><ToastControls /></ToastProvider>;
+      render(mode === "StrictMode" ? <StrictMode>{provider}</StrictMode> : provider);
+      await waitFor(() => expect(screen.getAllByText("Committed child feedback")).toHaveLength(1));
+      expect(screen.getByRole("region", { name: "Notifications" })).toHaveAttribute("aria-live", "polite");
+      fireEvent.click(screen.getByRole("button", { name: "Show first" }));
+      await waitFor(() => expect(screen.queryByText("Committed child feedback")).not.toBeInTheDocument());
+      expect(screen.getByText("First toast")).toBeInTheDocument();
+    }
+  );
 
   it("offers an accessible dismiss control without a second app announcement", async () => {
     const user = userEvent.setup();
