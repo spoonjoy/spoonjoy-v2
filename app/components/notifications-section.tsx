@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
-import { useToast } from "~/components/ui/toast";
+import { useToast } from "~/components/feedback/toast";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Switch } from "~/components/ouro/switch/switch";
 import {

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub, findShownAlert, getShownAlert, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
-import { ToastProvider } from "~/components/ui/toast";
+import { ToastProvider } from "~/components/feedback/toast";
 import { data } from "react-router";
 import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 
@@ -442,7 +442,7 @@ describe("Recipes $id route — spoons + provenance", () => {
       expect(screen.queryByRole("heading", { name: /log a cook/i })).toBeNull();
     });
     expect(actionCalls).toBe(1);
-    expect(screen.getByRole("status")).toHaveTextContent("Cook logged.");
+    expect(screen.getByRole("dialog", { name: "Cook logged." })).toHaveTextContent("Cook logged.");
   });
 
   it("keeps the SpoonDialog open with the note and a retryable message when the cook could not be saved", async () => {
@@ -491,7 +491,7 @@ describe("Recipes $id route — spoons + provenance", () => {
 
     expect(await findShownAlert()).toHaveTextContent(D1_WRITE_UNAVAILABLE_MESSAGE);
     expect(screen.getByLabelText(/^note/i)).toHaveValue("saved once");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).toBeNull();
 
     // Trying again sends the same cook token, so the server logs it at most once.
     await waitFor(() => expect(screen.getByRole("button", { name: /^log cook$/i })).toBeEnabled());

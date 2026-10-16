@@ -1,0 +1,211 @@
+"use client";
+
+import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
+import { useCallback, useEffect, useRef, type JSX, type ReactElement, type ReactNode, type Ref } from "react";
+import { devWarn } from "~/lib/ouro/dev";
+import {
+  floatingAlign,
+  floatingMotionClass,
+  floatingPlacementWarnings,
+  floatingPortalClass,
+  floatingSide,
+  type FloatingAlign,
+  type FloatingSide,
+} from "~/lib/ouro/floating";
+import { lastInput } from "~/lib/ouro/last-input";
+import { useMergedRef } from "~/lib/ouro/refs";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+
+export type { FloatingAlign as TooltipAlign, FloatingSide as TooltipSide } from "~/lib/ouro/floating";
+
+/** Props for {@link Tooltip}. */
+export interface TooltipProps {
+  /**
+   * A short label for the trigger, a few words: "Add to cookbook". It shows on hover and
+   * keyboard focus, never on touch, and screen readers don't read it, so it must never
+   * hold anything the user needs.
+   */
+  content: ReactNode;
+  /**
+   * The trigger: one element that can take focus, usually a Button. It needs a name of
+   * its own; give an icon-only button `aria-label`.
+   */
+  children: ReactElement;
+  /** The side of the trigger the tooltip sits on; it flips when there is no room. @default "top" */
+  side?: FloatingSide | (string & { 'Use "top", "bottom", "left" or "right"': never }) | undefined;
+  /** How the tooltip lines up with the trigger along that side. @default "center" */
+  align?: FloatingAlign | (string & { 'Use "start", "center" or "end": left is "start", right is "end"': never }) | undefined;
+
+  /** Not a prop. The text is `content`: `<Tooltip content="Add to cookbook">`. */
+  title?: { 'Use <Tooltip content="...">': never };
+  /** Not a prop. Ouro UI sets the delay, and `OuroProvider` groups tooltips so neighbours open instantly. */
+  delayDuration?: { "Ouro UI sets the delay; wrap the app in <OuroProvider> to group tooltips": never };
+  /** Not a prop. Ouro UI sets the delay, and `OuroProvider` groups tooltips so neighbours open instantly. */
+  delay?: { "Ouro UI sets the delay; wrap the app in <OuroProvider> to group tooltips": never };
+  /** Not a prop. The child is the trigger: `<Tooltip content="…"><Button>…</Button></Tooltip>`. */
+  asChild?: { 'The child is the trigger: <Tooltip content="..."><Button>...</Button></Tooltip>': never };
+  /** Not a prop. Ouro UI splits placement into `side` and `align`: `<Tooltip side="bottom" align="start">`. */
+  placement?: { 'Use side="bottom" align="start"': never };
+}
+
+/** Content longer than this is more than a label. */
+const LABEL_LENGTH = 80;
+
+/** A link or control inside the content, which no one can reach: the tooltip closes when the pointer leaves the trigger for it. */
+const INTERACTIVE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/** The dev message for content that holds essential information. Development only. */
+function essential(detail: string): readonly [string, string] {
+  return [
+    `${detail}; a tooltip never opens on touch, so phone users never see it`,
+    'move essential information out of the tooltip, into the page or a <Popover title="…">',
+  ];
+}
+
+/**
+ * A short label that appears beside its trigger on hover and keyboard focus, for an
+ * icon button's purpose or a control's shortcut. It never opens on touch, and screen
+ * readers don't read it, so it only repeats or adds to what the page already says.
+ * Inside `OuroProvider`, tooltips share one delay: once one shows, its neighbours open
+ * instantly.
+ *
+ * Use `Popover` instead for anything the user needs or can act on (it opens on tap and
+ * holds controls), `HoverCard` for a preview of a link, and plain text on the page for
+ * essential information.
+ *
+ * It stacks above the page at `--ouro-layer`, a z-index of 50 by default (from
+ * ouro-base.css), like Dialog and Sheet.
+ *
+ * @group Overlays
+ * @see https://ourostack.github.io/ouro-ui/docs/tooltip
+ *
+ * On a button that opens a Popover, Dialog or Menu, put the Tooltip inside that
+ * component's `trigger`, never around the component: the Tooltip passes the trigger
+ * props it receives on to its child.
+ *
+ * @example
+ * <Tooltip content="Add to cookbook">
+ *   <Button aria-label="Save" variant="plain"><BookmarkIcon /></Button>
+ * </Tooltip>
+ * <Popover
+ *   title="Share recipe"
+ *   trigger={<Tooltip content="Share recipe"><Button aria-label="Share"><ShareIcon /></Button></Tooltip>}
+ * >
+ *   <TextField label="Link" defaultValue={url} readOnly />
+ * </Popover>
+ */
+export function Tooltip(props: TooltipProps): JSX.Element {
+  const {
+    content,
+    children,
+    side: sideProp,
+    align: alignProp,
+    // Guard props (hint types), dropped here so they never reach the DOM.
+    title,
+    delayDuration,
+    delay,
+    asChild,
+    placement,
+    // Props and a ref from a parent trigger, such as Popover's `trigger`, go on to the child.
+    ref,
+    ...forwarded
+  } = props as TooltipProps & { ref?: Ref<HTMLButtonElement> };
+
+  const side = floatingSide(sideProp, "top");
+  const align = floatingAlign(alignProp);
+  const key = useRef({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const mergedRef = useMergedRef(ref, triggerRef);
+
+  useDevWarnings(
+    "Tooltip",
+    process.env.NODE_ENV !== "production"
+      ? () => {
+          const timing = (name: string) =>
+            [
+              `${name} is not a prop; Ouro UI sets the delay, and OuroProvider groups tooltips`,
+              "<OuroProvider><App /></OuroProvider>",
+            ] as const;
+          return [
+            ...floatingPlacementWarnings("<Tooltip", sideProp, "top", alignProp, placement),
+            title !== undefined && ["title is not a prop; the text is content", '<Tooltip content="…">'],
+            delayDuration !== undefined && timing("delayDuration"),
+            delay !== undefined && timing("delay"),
+            asChild !== undefined && [
+              "asChild is not a prop; the child is the trigger",
+              '<Tooltip content="…"><Button>…</Button></Tooltip>',
+            ],
+            typeof content === "string" &&
+              content.length > LABEL_LENGTH &&
+              essential(`content is ${content.length} characters, more than a label`),
+          ];
+        }
+      : /* istanbul ignore next @preserve -- production only */ undefined,
+  );
+
+  // A trigger with no name of its own is unnamed for screen readers: the tooltip is not one.
+  useEffect(() => {
+    /* istanbul ignore else @preserve -- the else path exists only in production bundles */
+    if (process.env.NODE_ENV !== "production") {
+      const element = triggerRef.current;
+      if (!element) {
+        devWarn(
+          "Tooltip",
+          "the trigger never received the tooltip's ref, so the tooltip cannot open; the child must pass its props and ref to an element, and Popover and Dialog do not",
+          'put the Tooltip inside the trigger: trigger={<Tooltip content="…"><Button …/></Tooltip>}',
+          key.current,
+        );
+        return;
+      }
+      const named =
+        element.textContent!.trim() !== "" ||
+        element.hasAttribute("aria-label") ||
+        element.hasAttribute("aria-labelledby");
+      if (!named) {
+        devWarn(
+          "Tooltip",
+          "the trigger has no accessible name, and a tooltip is not one",
+          `<Button aria-label="${typeof content === "string" ? content : "…"}">`,
+          key.current,
+        );
+      }
+    }
+  });
+
+  // Links and controls in the content show up only once it renders.
+  const checkContent = useCallback((element: HTMLElement | null) => {
+    /* istanbul ignore else @preserve -- the else path exists only in production bundles */
+    if (process.env.NODE_ENV !== "production") {
+      if (element?.querySelector(INTERACTIVE)) {
+        const [problem, fix] = essential("content holds a link or control, which no one can reach");
+        devWarn("Tooltip", problem, fix, key.current);
+      }
+    }
+  }, []);
+
+  return (
+    <BaseTooltip.Root
+      onOpenChange={(next, details) => {
+        // Never after a touch: a tap that focuses the trigger would otherwise show it,
+        // and a phone has no way to hover it away.
+        if (next && lastInput() === "touch") details.cancel();
+      }}
+    >
+      <BaseTooltip.Trigger {...forwarded} render={children} ref={mergedRef} />
+      <BaseTooltip.Portal data-ouro="tooltip-portal" className={floatingPortalClass}>
+        <BaseTooltip.Positioner side={side} align={align} sideOffset={6} collisionPadding={8} data-ouro="tooltip-positioner">
+          <BaseTooltip.Popup
+            ref={checkContent}
+            data-ouro="tooltip"
+            className={
+              floatingMotionClass +
+              " box-border max-w-xs rounded-md bg-foreground px-2 py-1 text-xs leading-4 text-balance text-background [--ouro-floating-duration:var(--ouro-duration-fast)] data-instant:duration-0"
+            }
+          >
+            {content}
+          </BaseTooltip.Popup>
+        </BaseTooltip.Positioner>
+      </BaseTooltip.Portal>
+    </BaseTooltip.Root>
+  );
+}

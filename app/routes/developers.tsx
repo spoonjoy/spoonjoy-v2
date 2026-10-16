@@ -18,7 +18,7 @@ import { captureSafeClientEvent } from "~/lib/analytics";
 import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
+import { Badge } from "~/components/ouro/badge/badge";
 import { Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
@@ -491,8 +491,8 @@ export function loader(args?: { request?: Request; context?: { cloudflare?: { en
 }
 
 function MethodBadge({ method }: { method: string }) {
-  const color = method === "GET" ? "green" : method === "POST" ? "amber" : method === "PATCH" ? "blue" : "red";
-  return <Badge color={color}>{method}</Badge>;
+  const tone = method === "GET" ? "success" : method === "POST" ? "warning" : method === "PATCH" ? "secondary" : "destructive";
+  return <Badge tone={tone} variant="soft">{method}</Badge>;
 }
 
 function SectionShell({ title, children }: { title: string; children: ReactNode }) {
@@ -509,10 +509,10 @@ function SectionShell({ title, children }: { title: string; children: ReactNode 
 }
 
 function scopeTone(scope: string) {
-  if (scope.includes("write")) return "amber";
-  if (scope.includes("tokens")) return "red";
-  if (scope.includes("shopping")) return "green";
-  return "zinc";
+  if (scope.includes("write")) return "warning";
+  if (scope.includes("tokens")) return "destructive";
+  if (scope.includes("shopping")) return "success";
+  return "secondary";
 }
 
 export default function Developers() {
@@ -881,12 +881,12 @@ export default function Developers() {
                       <MethodBadge method={method} />
                       {requirement?.scopes.length ? (
                         requirement.scopes.map((scope: string) => (
-                          <Badge key={scope} color={scopeTone(scope) as "amber" | "green" | "red" | "zinc"}>
+                          <Badge key={scope} tone={scopeTone(scope)} variant="soft">
                             {scope}
                           </Badge>
                         ))
                       ) : (
-                        <Badge>Anonymous</Badge>
+                        <Badge variant="soft">Anonymous</Badge>
                       )}
                     </span>
                   ))}

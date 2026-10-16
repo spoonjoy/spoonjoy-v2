@@ -4,7 +4,7 @@ import { Button } from "~/components/ui/button";
 import { Link } from "~/components/ui/link";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
-import { Avatar } from "~/components/ui/avatar";
+import { Avatar } from "~/components/ouro/avatar/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { listImageProps } from "~/lib/image-loading";
@@ -55,9 +55,10 @@ export function KitchenHome({
         <header className="grid gap-6 border-b border-[var(--sj-border-strong)] pb-7 lg:grid-cols-[4.5rem_minmax(0,1fr)_auto] lg:items-end">
           <div className="lg:contents">
             <Avatar
+              name={kitchenUser.username}
               src={resolveChefAvatarUrl(kitchenUser.photoUrl)}
               alt={kitchenUser.username}
-              className="size-18 border border-[var(--sj-border-strong)] shadow-[var(--sj-shadow-soft)]"
+              size="2xl"
             />
             <div className="mt-5 lg:mt-0">
               <p className="font-sj-ui text-sm font-semibold tracking-[0.01em] text-[var(--sj-brass)]">@{kitchenUser.username}</p>

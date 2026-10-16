@@ -178,7 +178,7 @@ test.describe("Cookbooks", () => {
     const originalTitle = `Journey shelf ${suffix}`;
     const renamedTitle = `Renamed shelf ${suffix}`;
     const titleField = page.getByRole("textbox", { name: "Cookbook title", exact: true });
-    const renamedToast = page.getByTestId("toast-snackbar");
+    const renamedToast = page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "Cookbook renamed.", exact: true });
 
     // Typed before hydration on purpose: server-rendered inputs have lost typed text on a phone
     // before (milestone 1), and this proves the new-cookbook title keeps it.

@@ -33,6 +33,8 @@ export default defineConfig({
     ],
   },
   test: {
+    // Keep consumer integration measurements (test annotations) visible in CI's retained log.
+    reporters: ["verbose"],
     projects: ouroTestProjects({
       css: "./app/styles/tailwind.css",
       // Released test-kit option: Vitest 4 must not scale the test iframe.

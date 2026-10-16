@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Form, useActionData, useSubmit } from "react-router";
-import { Avatar } from "~/components/ui/avatar";
+import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/ui/button";
 import { Text } from "~/components/ui/text";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
@@ -65,9 +65,10 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
   return (
     <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
       <Avatar
+        name="Profile photo"
         src={currentPhotoUrl}
         alt="Profile photo"
-        className="size-28 border border-[var(--sj-border)] shadow-[var(--sj-shadow-soft)]"
+        size="3xl"
       />
       <div className="flex-1 space-y-4">
         <div className="flex flex-wrap gap-3">

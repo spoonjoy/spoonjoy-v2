@@ -11,7 +11,7 @@ import {
 import { captureSafeClientEvent, latencyBucket, responseStatusClass } from "~/lib/analytics";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { getUserId } from "~/lib/session.server";
-import { Badge } from "~/components/ui/badge";
+import { Badge } from "~/components/ouro/badge/badge";
 import { Button } from "~/components/ui/button";
 import { Code, Text } from "~/components/ui/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
@@ -479,17 +479,17 @@ export async function loader(args?: { request?: Request; context?: { cloudflare?
 }
 
 function methodColor(method: string) {
-  if (method === "GET") return "green";
-  if (method === "POST") return "amber";
-  if (method === "PATCH") return "blue";
-  return "red";
+  if (method === "GET") return "success";
+  if (method === "POST") return "warning";
+  if (method === "PATCH") return "secondary";
+  return "destructive";
 }
 
 function riskColor(risk: ApiV1PlaygroundOperation["risk"]) {
-  if (risk === "secret") return "red";
-  if (risk === "destructive") return "red";
-  if (risk === "mutating") return "amber";
-  return "green";
+  if (risk === "secret") return "destructive";
+  if (risk === "destructive") return "destructive";
+  if (risk === "mutating") return "warning";
+  return "success";
 }
 
 function authCopy(mode: PlaygroundAuthMode, isAuthenticated: boolean) {
@@ -1047,17 +1047,17 @@ export default function DeveloperPlayground() {
                 <p className="mt-2 break-words font-mono text-sm/6 text-[var(--sj-ink-soft)]">{selected.path}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge color={methodColor(selected.method) as "amber" | "blue" | "green" | "red"}>
+                <Badge tone={methodColor(selected.method)} variant="soft">
                   {selected.method}
                 </Badge>
-                <Badge color={selected.auth === "authenticated" ? "amber" : "zinc"}>
+                <Badge tone={selected.auth === "authenticated" ? "warning" : "secondary"} variant="soft">
                   {selected.auth === "authenticated" ? "Authenticated chef" : "Auth optional"}
                 </Badge>
-                <Badge color={riskColor(selected.risk) as "amber" | "green" | "red"}>
+                <Badge tone={riskColor(selected.risk)} variant="soft">
                   {selected.risk}
                 </Badge>
-                {selected.credentialModes.map((mode) => <Badge key={mode} color="zinc">{mode}</Badge>)}
-                {selected.scopes.map((scope) => <Badge key={scope} color="zinc">{scope}</Badge>)}
+                {selected.credentialModes.map((mode) => <Badge key={mode} variant="soft">{mode}</Badge>)}
+                {selected.scopes.map((scope) => <Badge key={scope} variant="soft">{scope}</Badge>)}
               </div>
             </div>
             <p className="mt-4 border-l-2 border-[var(--sj-brass)] pl-3 text-sm/6 text-[var(--sj-ink-soft)]">
@@ -1072,7 +1072,7 @@ export default function DeveloperPlayground() {
                     <p className="text-sm/6 text-[var(--sj-ink-soft)]">Grantable scopes for this flow</p>
                     <div className="flex flex-wrap gap-2">
                       {selected.grantableScopes.map((scope) => (
-                        <Badge key={scope} color="zinc">{scope}</Badge>
+                        <Badge key={scope} variant="soft">{scope}</Badge>
                       ))}
                     </div>
                   </div>
@@ -1082,7 +1082,7 @@ export default function DeveloperPlayground() {
                     <p className="text-sm/6 text-[var(--sj-ink-soft)]">Accepted OAuth alternatives</p>
                     <div className="flex flex-wrap gap-2">
                       {selected.acceptedOauthScopes.map((scopeSet) => (
-                        <Badge key={scopeSet.join(" ")} color="zinc">{scopeSet.join(" + ")}</Badge>
+                        <Badge key={scopeSet.join(" ")} variant="soft">{scopeSet.join(" + ")}</Badge>
                       ))}
                     </div>
                   </div>
@@ -1569,14 +1569,14 @@ export default function DeveloperPlayground() {
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">{operation.label}</span>
-                    <Badge color={methodColor(operation.method) as "amber" | "blue" | "green" | "red"}>
+                    <Badge tone={methodColor(operation.method)} variant="soft">
                       {operation.method}
                     </Badge>
                   </span>
                   <span className="break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">{operation.path}</span>
                   <span className="flex flex-wrap gap-2">
-                    <Badge color={riskColor(operation.risk) as "amber" | "green" | "red"}>{operation.risk}</Badge>
-                    {operation.credentialModes.map((mode) => <Badge key={mode} color="zinc">{mode}</Badge>)}
+                    <Badge tone={riskColor(operation.risk)} variant="soft">{operation.risk}</Badge>
+                    {operation.credentialModes.map((mode) => <Badge key={mode} variant="soft">{mode}</Badge>)}
                   </span>
                 </button>
               ))}

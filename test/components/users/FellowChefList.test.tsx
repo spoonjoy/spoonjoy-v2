@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { FellowChefList } from "~/components/users/FellowChefList";
@@ -27,6 +27,17 @@ function renderList(rows: FellowChefDisplayRow[], emptyStateText = "no rows yet"
 }
 
 describe("FellowChefList", () => {
+  beforeEach(() => {
+    // happy-dom does not fetch images. Model a cached successful image at the
+    // browser boundary; keep the real Avatar's loading and accessible-name logic.
+    vi.spyOn(window, "Image").mockImplementation(function () {
+      const image = document.createElement("img");
+      Object.defineProperty(image, "complete", { value: true });
+      Object.defineProperty(image, "naturalWidth", { value: 64 });
+      return image;
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
   it("renders empty state when rows is empty", () => {
     renderList([], "no chefs yet");
     expect(screen.getByText("no chefs yet")).toBeInTheDocument();
@@ -45,7 +56,7 @@ describe("FellowChefList", () => {
     const link = screen.getByRole("link", { name: /rowan/i });
     expect(link).toHaveAttribute("href", "/users/rowan");
     const img = screen.getByRole("img", { name: "rowan" });
-    expect(img).toHaveAttribute("src", "https://example.com/rowan.png");
+    expect(img.querySelector("img")).toHaveAttribute("src", "https://example.com/rowan.png");
     expect(screen.getByText("3 spoons · 1 fork · 2 saves")).toBeInTheDocument();
   });
 
@@ -92,7 +103,7 @@ describe("FellowChefList", () => {
       }),
     ]);
     const img = screen.getByRole("img", { name: "dakota" });
-    expect(img).toHaveAttribute("src", "/images/chef-rj.png");
+    expect(img.querySelector("img")).toHaveAttribute("src", "/images/chef-rj.png");
   });
 
   it("renders the server-frozen relative-time label", () => {

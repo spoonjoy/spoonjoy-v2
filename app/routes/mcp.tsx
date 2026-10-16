@@ -21,7 +21,7 @@ import {
   protectedResourceMetadataUrl,
   resolveIssuerOrigin,
 } from "~/lib/oauth-metadata.server";
-import { Badge } from "~/components/ui/badge";
+import { Badge } from "~/components/ouro/badge/badge";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 /**
@@ -242,9 +242,9 @@ export default function McpPage() {
         <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
           <div className="min-w-0 border-y border-[var(--sj-border-strong)] py-6">
             <div className="flex flex-wrap gap-2">
-              <Badge color="green">Owner-scoped</Badge>
-              <Badge color="amber">OAuth protected</Badge>
-              <Badge color="zinc">Streamable HTTP</Badge>
+              <Badge tone="success" variant="soft">Owner-scoped</Badge>
+              <Badge tone="warning" variant="soft">OAuth protected</Badge>
+              <Badge variant="soft">Streamable HTTP</Badge>
             </div>
             <h2 className="font-sj-display mt-5 max-w-3xl text-3xl/9 font-semibold text-[var(--sj-ink)]">
               The browser page is the guide. The protocol call is authenticated POST JSON-RPC.

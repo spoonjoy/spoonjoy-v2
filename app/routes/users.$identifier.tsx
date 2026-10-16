@@ -4,7 +4,7 @@ import { Form, redirect, useLoaderData } from "react-router";
 import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
-import { Avatar } from "~/components/ui/avatar";
+import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/ui/button";
 import { Heading, Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
@@ -225,10 +225,11 @@ export default function UserProfile() {
         <header className="sj-rule-block flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
             <Avatar
+              name={chefDisplayName(profile.username)}
               src={resolveChefAvatarUrl(profile.photoUrl)}
               alt={chefDisplayName(profile.username)}
               initials={profile.username.charAt(0).toUpperCase()}
-              className="size-18 border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink)] shadow-[var(--sj-shadow-soft)]"
+              size="2xl"
             />
             <div>
               <p className="sj-eyebrow">Chef profile</p>

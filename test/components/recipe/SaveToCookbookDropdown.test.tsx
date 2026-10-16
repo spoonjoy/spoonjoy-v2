@@ -13,6 +13,26 @@ const sampleCookbooks: Cookbook[] = [
 ]
 
 describe('SaveToCookbookDropdown', () => {
+  it('gives a phone user an explicit Close action without saving', async () => {
+    const original = window.matchMedia.bind(window)
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation(query => {
+      const result = original(query)
+      Object.defineProperty(result, 'matches', { value: false })
+      return result
+    })
+    const onSave = vi.fn()
+    try {
+      render(<SaveToCookbookDropdown cookbooks={sampleCookbooks} onSave={onSave} />)
+      await userEvent.click(screen.getByRole('button', { name: 'Save to cookbook' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Close', exact: true }))
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      expect(onSave).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Save to cookbook' })).toHaveFocus()
+    } finally {
+      media.mockRestore()
+    }
+  })
+
   describe('rendering', () => {
     it('treats a null cookbook collection defensively as empty', async () => {
       render(
