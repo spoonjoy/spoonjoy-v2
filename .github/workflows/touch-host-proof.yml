@@ -1,4 +1,4 @@
-name: Isolated zoom and pan boundary diagnostic
+name: Isolated touch host candidate qualification
 on:
   push:
     branches: [probe/ouro-touch-host-20261016]
@@ -10,7 +10,13 @@ defaults:
 jobs:
   native:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [default, roomy, full]
+    env:
+      VITE_HOST_CONTROL: ${{ matrix.scope == 'default' && 'default' || 'roomy' }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -45,14 +51,31 @@ jobs:
           import hashlib, json
           manifest = json.loads(Path(".github/touch-host-source.json").read_text())
           assert hashlib.sha256(Path(manifest["consumerPath"]).read_bytes()).hexdigest() == manifest["sha256"]
+          fixture = manifest["fixture"]
+          assert hashlib.sha256(Path(fixture["consumerPath"]).read_bytes()).hexdigest() == fixture["consumerSha256"]
+          PY
+          curl --fail --silent --show-error \
+            "https://raw.githubusercontent.com/ourostack/ouro-ui/$sha/registry/ouro/lib/ouro/testing/commands.touch.test.ts" \
+            -o "$RUNNER_TEMP/upstream-touch-fixture.ts"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          fixture = json.loads(Path(".github/touch-host-source.json").read_text())["fixture"]
+          upstream = Path(os.environ["RUNNER_TEMP"], "upstream-touch-fixture.ts").read_bytes()
+          assert hashlib.sha256(upstream).hexdigest() == fixture["upstreamSha256"]
+          normalized = upstream.replace(b"@/registry/ouro/lib/ouro/", b"~/lib/ouro/")
+          assert normalized == Path(fixture["consumerPath"]).read_bytes()
           PY
       - name: Record binding and one-variable mutation
         run: |
           git diff 7f50e38bc1b838319bc67c11299e4a58e3e42b2b -- app/lib/ouro/testing/vitest.ts > touch-host-provider.diff
-          git diff 7f50e38bc1b838319bc67c11299e4a58e3e42b2b -- app/lib/ouro/testing/commands.touch.test.ts > touch-host-zoom-instrumentation.diff
+          git diff 7f50e38bc1b838319bc67c11299e4a58e3e42b2b -- app/lib/ouro/testing/commands.touch.test.ts > touch-host-fixture.diff
           node --input-type=module - <<'JS' > touch-host-projects.json
           import { ouroTestProjects } from "./app/lib/ouro/testing/vitest.ts";
-          const projects = ouroTestProjects({ css: "./app/styles/tailwind.css", page: { width: 1600, height: 1200 } });
+          const projects = ouroTestProjects({
+            css: "./app/styles/tailwind.css",
+            ...(process.env.VITE_HOST_CONTROL === "roomy" ? { page: { width: 1600, height: 1200 } } : {}),
+          });
           console.log(JSON.stringify(projects.map(({ test }) => ({
             name: test.name,
             logical: test.browser.viewport,
@@ -60,23 +83,50 @@ jobs:
           })), null, 2));
           JS
       - run: pnpm exec tsc -p .github/touch-host-proof.tsconfig.json --pretty false
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: Diagnostic native SDK zoom boundaries; not qualification
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Native SDK controls under the selected host
+        if: matrix.scope != 'full'
         run: |
           pnpm exec vitest run --config .github/touch-host-proof.config.ts --project ouro-touch \
             app/lib/ouro/testing/commands.touch.test.ts \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
+      - name: Independent native geometry and wrong-target controls
+        if: matrix.scope == 'roomy'
+        run: |
+          pnpm exec vitest run --config .github/touch-host-proof.config.ts --project ouro-touch \
+            test/ouro/touch-host.probe.touch.test.tsx \
+            --reporter=verbose --reporter=json --outputFile=touch-host-geometry-tests.json 2>&1 | tee touch-host-geometry.log
+      - name: Generate Prisma and build actual Storybook
+        if: matrix.scope == 'full'
+        run: pnpm prisma:generate && pnpm build-storybook
+      - name: Actual consumer whole browser suite and strict coverage
+        if: matrix.scope == 'full'
+        run: |
+          node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run --config vitest.ouro.config.ts --coverage \
+            --exclude test/ouro/touch-host.probe.touch.test.tsx \
+            --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
+      - name: Actual component Playwright specs under unchanged warning policy
+        if: matrix.scope == 'full'
+        run: |
+          python3 -m http.server 6006 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
+          curl --fail --silent http://127.0.0.1:6006/iframe.html > /dev/null
+          OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro 2>&1 | tee touch-host-playwright.log
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: touch-host-zoom-diagnostic
+          name: touch-host-${{ matrix.scope }}-qualification
           path: |
             touch-host-source.txt
             touch-host-provider.diff
-            touch-host-zoom-instrumentation.diff
+            touch-host-fixture.diff
             touch-host-projects.json
             touch-host-tests.json
             touch-host-native.log
+            touch-host-geometry-tests.json
+            touch-host-geometry.log
             touch-host-playwright.log
             .github/touch-host-source.json
             coverage/

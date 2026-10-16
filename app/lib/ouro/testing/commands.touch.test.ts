@@ -218,9 +218,8 @@ test("the kit does not wait for a pointer-events: none iframe, which the touch p
   expect(performance.now() - started).toBeLessThan(1000);
 });
 
-test("on a page zoomed and panned by touch, the kit waits for the frame where the touch lands", async ({ annotate }) => {
+test("on a page zoomed and panned by touch, the kit waits for the frame where the touch lands", async () => {
   await commands.setPageZoom(2);
-  let primaryFailed = false;
   try {
     // At zoom 2 the page can't scroll, so a drag pans the visual viewport across it.
     await commands.touchDrag({ from: [300, 700], to: [50, 200], steps: 10 });
@@ -235,35 +234,67 @@ test("on a page zoomed and panned by touch, the kit waits for the frame where th
     };
     const [left, top] = await landed(0, 0);
     expect(await landed(100, 100)).toEqual([left + 100, top + 100]);
-    await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "after-pan", left, top, snapshot: await commands.touchHostZoomGeometry("html", { x: 170, y: 150 }) })}`);
     // Panned far enough that a hit test at the unpanned point would miss the frame.
     expect(Math.min(left, top)).toBeGreaterThan(150);
-    const frame = await unwatchableFrame(Math.round(top) + 100);
-    frame.style.left = `${Math.round(left) + 20}px`;
-    frame.setAttribute("data-host-probe-zoom-frame", "");
-    await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "frame-created", left, top, snapshot: await commands.touchHostZoomGeometry("[data-host-probe-zoom-frame]", { x: 170, y: 150 }) })}`);
-    await commands.touchHostAudit("start");
+    const clippedPoint = (frame: HTMLIFrameElement): [number, number] => {
+      const rect = frame.getBoundingClientRect();
+      const clipLeft = Math.max(rect.left, left);
+      const clipRight = Math.min(rect.right, innerWidth);
+      const clipTop = Math.max(rect.top, top);
+      const clipBottom = Math.min(rect.bottom, innerHeight);
+      expect(clipRight).toBeGreaterThan(clipLeft);
+      expect(clipBottom).toBeGreaterThan(clipTop);
+      const x = Math.floor((clipLeft + clipRight) / 2 - left);
+      const y = Math.floor((clipTop + clipBottom) / 2 - top);
+      expect(left + x).toBeGreaterThan(clipLeft);
+      expect(left + x).toBeLessThan(clipRight);
+      expect(top + y).toBeGreaterThan(clipTop);
+      expect(top + y).toBeLessThan(clipBottom);
+      expect(document.elementFromPoint(left + x, top + y)).toBe(frame);
+      expect(document.elementFromPoint(x, y)).not.toBe(frame);
+      return [x, y];
+    };
+    const positive = await frameAt(document.body, Math.round(top) + 20, {
+      srcdoc: "<body style='margin:0'><div style='height:100px'></div></body>",
+    });
+    positive.style.left = `${Math.round(left) + 20}px`;
+    const point = clippedPoint(positive);
+    const delivered: Array<{ type: string; trusted: boolean }> = [];
+    const record = (event: Event) => delivered.push({ type: event.type, trusted: event.isTrusted });
+    const target = positive.contentWindow!;
+    for (const type of ["touchstart", "touchend"]) target.addEventListener(type, record);
     try {
-      await expect(commands.touchStep({ type: "touchStart", x: 170, y: 150 })).rejects.toThrow(refused(170, 150));
+      expect(await tapAt(target, ...point)).toEqual(["touchstart", "touchend"]);
+      expect(delivered).toEqual([
+        { type: "touchstart", trusted: true },
+        { type: "touchend", trusted: true },
+      ]);
     } finally {
-      await annotate(`TOUCH_HOST_ZOOM_AUDIT ${JSON.stringify(await commands.touchHostAudit("stop"))}`);
+      for (const type of ["touchstart", "touchend"]) target.removeEventListener(type, record);
+      positive.remove();
+    }
+    const frame = await unwatchableFrame(Math.round(top) + 20);
+    frame.style.left = `${Math.round(left) + 20}px`;
+    const [x, y] = clippedPoint(frame);
+    expect([x, y]).toEqual(point);
+    delivered.length = 0;
+    const unwatchable = frame.contentWindow!;
+    for (const type of ["touchstart", "touchend"]) unwatchable.addEventListener(type, record);
+    try {
+      const started = performance.now();
+      await expect(commands.touchStep({ type: "touchStart", x, y })).rejects.toThrow(refused(x, y));
+      expect(performance.now() - started).toBeGreaterThanOrEqual(5000);
+      expect(delivered).toEqual([]);
+    } finally {
+      for (const type of ["touchstart", "touchend"]) unwatchable.removeEventListener(type, record);
     }
     // Beside it, the touch reaches the page.
-    expect(await tapAt(window, 10, 150)).toEqual(["touchstart", "touchend"]);
-  } catch (error) {
-    primaryFailed = true;
-    throw error;
+    expect(await tapAt(window, 10, y)).toEqual(["touchstart", "touchend"]);
   } finally {
-    await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "before-reset", snapshot: await commands.touchHostZoomGeometry("html", { x: 170, y: 150 }) })}`);
     try {
       await commands.touchStep({ type: "touchEnd" });
-      await annotate("TOUCH_HOST_ZOOM_CLEANUP finger lifted in the original coordinate space");
-    } catch (error) {
-      await annotate(`TOUCH_HOST_ZOOM_CLEANUP_ERROR ${error instanceof Error ? error.message : String(error)}`);
-      if (!primaryFailed) throw error;
     } finally {
       await commands.resetPageZoom();
-      await annotate(`TOUCH_HOST_ZOOM ${JSON.stringify({ stage: "after-reset", snapshot: await commands.touchHostZoomGeometry("html", { x: 170, y: 150 }) })}`);
     }
   }
 });
