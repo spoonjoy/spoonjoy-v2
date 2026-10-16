@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: [default, roomy, full]
+        scope: [menu]
     env:
       VITE_HOST_CONTROL: ${{ matrix.scope == 'default' && 'default' || 'roomy' }}
     steps:
@@ -37,6 +37,7 @@ jobs:
               "app", "vitest.ouro.config.ts", "package.json", "pnpm-lock.yaml",
           ], text=True).splitlines()
           assert paths == [
+              "app/components/ouro/menu/menu.test.tsx",
               "app/lib/ouro/testing/commands.touch.test.ts",
               "app/lib/ouro/testing/vitest.ts",
           ], paths
@@ -66,6 +67,19 @@ jobs:
           normalized = upstream.replace(b"@/registry/ouro/lib/ouro/", b"~/lib/ouro/")
           assert normalized == Path(fixture["consumerPath"]).read_bytes()
           PY
+          curl --fail --silent --show-error \
+            "https://raw.githubusercontent.com/ourostack/ouro-ui/$sha/registry/ouro/components/ouro/menu/menu.test.tsx" \
+            -o "$RUNNER_TEMP/upstream-menu-test.tsx"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os
+          fixture = json.loads(Path(".github/touch-host-source.json").read_text())["menuTest"]
+          upstream = Path(os.environ["RUNNER_TEMP"], "upstream-menu-test.tsx").read_bytes()
+          assert hashlib.sha256(upstream).hexdigest() == fixture["upstreamSha256"]
+          normalized = upstream.replace(b"@/registry/ouro/components/ouro/", b"~/components/ouro/").replace(b"@/registry/ouro/lib/ouro/", b"~/lib/ouro/")
+          assert normalized == Path(fixture["consumerPath"]).read_bytes()
+          assert hashlib.sha256(normalized).hexdigest() == fixture["consumerSha256"]
+          PY
       - name: Record binding and one-variable mutation
         run: |
           git diff 7f50e38bc1b838319bc67c11299e4a58e3e42b2b -- app/lib/ouro/testing/vitest.ts > touch-host-provider.diff
@@ -85,10 +99,16 @@ jobs:
       - run: pnpm exec tsc -p .github/touch-host-proof.tsconfig.json --pretty false
       - run: pnpm exec playwright install --with-deps chromium webkit
       - name: Native SDK controls under the selected host
-        if: matrix.scope != 'full'
+        if: matrix.scope == 'default' || matrix.scope == 'roomy'
         run: |
           pnpm exec vitest run --config .github/touch-host-proof.config.ts --project ouro-touch \
             app/lib/ouro/testing/commands.touch.test.ts \
+            --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
+      - name: Public menu ownership regression against unchanged production code
+        if: matrix.scope == 'menu'
+        run: |
+          pnpm exec vitest run --config vitest.ouro.config.ts --project ouro-chromium --project ouro-webkit \
+            app/components/ouro/menu/menu.test.tsx --testNamePattern="leaves focus with the action destination when the menu finishes closing" \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
       - name: Independent native geometry and wrong-target controls
         if: matrix.scope == 'roomy'

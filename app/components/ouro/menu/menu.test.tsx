@@ -132,6 +132,27 @@ describe("Menu dropdown", () => {
     await expect.poll(() => document.activeElement).toBe(trigger());
   });
 
+  it("leaves focus with the action destination when the menu finishes closing", async () => {
+    const destination = createRef<HTMLButtonElement>();
+    const content = (open: boolean) => (
+      <>
+        <Menu open={open} onOpenChange={() => {}} trigger={<Button>Actions</Button>}>
+          {basicItems}
+        </Menu>
+        <button ref={destination}>Next action</button>
+      </>
+    );
+    const { rerender } = await render(content(true));
+    await settled();
+    await expect.poll(() => menu()?.contains(document.activeElement)).toBe(true);
+    destination.current!.focus();
+    expect(document.activeElement).toBe(destination.current);
+    await rerender(content(false));
+    await expect.poll(menu).toBeNull();
+    await nextFrame();
+    expect(document.activeElement).toBe(destination.current);
+  });
+
   it("opens from the keyboard on its first item, moves with the arrows and closes on Escape", async () => {
     await render(<Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>);
     trigger().focus();
