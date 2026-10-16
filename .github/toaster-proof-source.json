@@ -1,0 +1,91 @@
+{
+  "upstreamRepository": "ourostack/ouro-ui",
+  "upstreamCommit": "e033a7424a25ca22636af3238ec6efc7241e70c2",
+  "normalization": "@/registry/ouro/components/ouro/ -> ~/components/ouro/; @/registry/ouro/lib/ouro/ -> ~/lib/ouro/; no other changes",
+  "files": [
+    {
+      "upstreamPath": "registry/ouro/components/ouro/toast/toaster-styles.ts",
+      "upstreamSha256": "8bbd082c86968043b6004375585296f7159b2a86845400338d4401635618e709",
+      "proofPath": "app/components/ouro/toast/toaster-styles.ts",
+      "proofSha256": "8bbd082c86968043b6004375585296f7159b2a86845400338d4401635618e709"
+    },
+    {
+      "upstreamPath": "registry/ouro/components/ouro/toast/toaster.tsx",
+      "upstreamSha256": "ad509549e458293fbe85087d0854105d3ec851cc531982baf90051980ebca3b2",
+      "proofPath": "app/components/ouro/toast/toaster.tsx",
+      "proofSha256": "c5d61028593bb3157c38d18a6f9ffba075ff57e5bd66622094243c7ba2e95167"
+    },
+    {
+      "upstreamPath": "registry/ouro/components/ouro/toast/toaster.touch.test.tsx",
+      "upstreamSha256": "d91c2fab7a208ca6d3138f69d67e07b5a42f427ded7c6f9e66ce52eaa2ff6d82",
+      "proofPath": "app/components/ouro/toast/toaster.touch.test.tsx",
+      "proofSha256": "02a7af47b82d4f967c52b42631632ae959748ee1208e42036123cbd82d1e6d7b"
+    },
+    {
+      "upstreamPath": "registry/ouro/components/ouro/toast/toaster.test.tsx",
+      "upstreamSha256": "d73020203f2ff211a1153bb08af5389933e2f28c9ac99237cf755488acbbf23e",
+      "proofPath": "app/components/ouro/toast/toaster.test.tsx",
+      "proofSha256": "ae3e83ba20a382dc9e43c500715b13b976efd54e1688f28cbcbfd9e58c3e8cdd"
+    },
+    {
+      "upstreamPath": "registry/ouro/components/ouro/toast/toaster.test-d.ts",
+      "upstreamSha256": "0eaf9dace4f7d1ef557bfefd4831cb8b41b05e7b8917408dad5d3e4cb11b6746",
+      "proofPath": "app/components/ouro/toast/toaster.test-d.ts",
+      "proofSha256": "1016d3e77837f76c12b4d65c890cf14c0122954a3bcf55ff7ffad1ac9fc447ca"
+    },
+    {
+      "upstreamPath": "registry/ouro/components/ouro/toast/toaster.stories.tsx",
+      "upstreamSha256": "0c082839183e8c6a26750d888ac713591a9f8d67fb302b27a229e73b66c0f27c",
+      "proofPath": "app/components/ouro/toast/toaster.stories.tsx",
+      "proofSha256": "88ff7b7aa7c5b0100629e0612c7721f1e55ceef1da9bc0daeb89a1ee75bee381"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/cn.ts",
+      "upstreamSha256": "083897395c56504e1f7862f396d0323298a8e8d49ac0e30761bac58f772309b4",
+      "proofPath": "app/lib/ouro/cn.ts",
+      "proofSha256": "083897395c56504e1f7862f396d0323298a8e8d49ac0e30761bac58f772309b4"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/dev.ts",
+      "upstreamSha256": "6f33ea3e8154f7faafb9eaad657a3bbb006ef6407b8b50c9c773c0f5eb9919d2",
+      "proofPath": "app/lib/ouro/dev.ts",
+      "proofSha256": "6f33ea3e8154f7faafb9eaad657a3bbb006ef6407b8b50c9c773c0f5eb9919d2"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/class-name-check.ts",
+      "upstreamSha256": "91207a92917671b342afc5d6f644def221e2a01756ec355cf3d509f3c7a378ec",
+      "proofPath": "app/lib/ouro/class-name-check.ts",
+      "proofSha256": "c561668a935d140e89d805f837801f9012246e0f7a49cee3b8be9a9c815b5cff"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/spring.ts",
+      "upstreamSha256": "a7b5993b57351aa222e277f9144717c1761cf51598feb02f3cbe9f3176ee2e5e",
+      "proofPath": "app/lib/ouro/spring.ts",
+      "proofSha256": "a7b5993b57351aa222e277f9144717c1761cf51598feb02f3cbe9f3176ee2e5e"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/toast.ts",
+      "upstreamSha256": "2c6e416861df0f8a3597222a255941a2de5e24045205943a7dd2fe3428263acd",
+      "proofPath": "app/lib/ouro/toast.ts",
+      "proofSha256": "fd73625fd7b77a21a948e75a622d440206c2ebb3c2030f848786cce37f0151eb"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/touch-target.tsx",
+      "upstreamSha256": "f55a6476373c078f08e9e335836ac354377531959cd08e50da66b87f3b59be77",
+      "proofPath": "app/lib/ouro/touch-target.tsx",
+      "proofSha256": "f55a6476373c078f08e9e335836ac354377531959cd08e50da66b87f3b59be77"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/use-dev-messages.ts",
+      "upstreamSha256": "7ad8f0e2955326a8a3d405d34fff3bc0e8030e42ddce8bb46451784818e16613",
+      "proofPath": "app/lib/ouro/use-dev-messages.ts",
+      "proofSha256": "a418e6adec06f2e3e18466a8c0a489da311d680eec0ac3e2f77216606360305b"
+    },
+    {
+      "upstreamPath": "registry/ouro/lib/ouro/use-drag.ts",
+      "upstreamSha256": "74b3b9424c79e96c1c737ee5367930ca1cc369ef9f23572b29821dcc0563f5f2",
+      "proofPath": "app/lib/ouro/use-drag.ts",
+      "proofSha256": "74b3b9424c79e96c1c737ee5367930ca1cc369ef9f23572b29821dcc0563f5f2"
+    }
+  ]
+}

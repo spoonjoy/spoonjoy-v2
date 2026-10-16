@@ -1,4 +1,4 @@
-name: Ouro Toaster prospective viewport proof
+name: Ouro Toaster exact-source conformance
 on:
   push:
     branches: [probe/ouro-popover-alignment-20261015]
@@ -11,10 +11,6 @@ jobs:
   conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [ouro-chromium, ouro-webkit, ouro-touch]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -29,25 +25,37 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm prisma:generate
       - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Record unchanged old Toaster runtime, prospective tests and tool versions (RED)
+      - name: Verify exact upstream candidate and unchanged consumer toolchain
         run: |
           git rev-parse HEAD
-          echo 'Unchanged upstream Toaster: 08f32c208b16ae669c04eedbe30bae739411e6ce'
-          sha256sum app/components/ouro/toast/* app/lib/ouro/toast.ts vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import crypto from "node:crypto";
+            const m = JSON.parse(fs.readFileSync(".github/toaster-proof-source.json", "utf8"));
+            console.log(JSON.stringify(m, null, 2));
+            for (const f of m.files) {
+              const hash = crypto.createHash("sha256").update(fs.readFileSync(f.proofPath)).digest("hex");
+              if (hash !== f.proofSha256) throw new Error(`Source mismatch: ${f.proofPath}`);
+            }'
+          sha256sum vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css
           node -e 'const fs=require("node:fs"); for (const n of ["vitest","@playwright/test","@base-ui/react","tailwindcss","tailwind-merge","typescript"]) console.log(n, JSON.parse(fs.readFileSync(`node_modules/${n}/package.json`, "utf8")).version)'
-          git diff --exit-code 956e00db2e2a7778be605534ff9e45cce12cf343 -- app/components/ouro/toast/toaster.tsx app/components/ouro/toast/toaster-styles.ts vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css
+          git diff --exit-code 956e00db2e2a7778be605534ff9e45cce12cf343 -- vitest.ouro.config.ts package.json pnpm-lock.yaml app/styles/tailwind.css
           git diff 956e00db2e2a7778be605534ff9e45cce12cf343 -- app/components/ouro/toast
-      - name: Prospective layout RED against unchanged runtime
+      - name: Whole Toaster browser and touch suites with full source coverage
         run: |
           node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run \
-            --config vitest.ouro.config.ts --project '${{ matrix.project }}' \
-            app/components/ouro/toast/toaster.test.tsx \
-            --testNamePattern 'unprefixed app clearance' \
-            --reporter=default --reporter=json --outputFile.json=toaster-layout-red.json
+            --config vitest.ouro.config.ts app/components/ouro/toast \
+            --coverage \
+            --coverage.include=app/components/ouro/toast/toaster.tsx \
+            --coverage.include=app/components/ouro/toast/toaster-styles.ts \
+            --coverage.include=app/lib/ouro/toast.ts \
+            --reporter=default --reporter=json --outputFile.json=toaster-conformance.json
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: toaster-layout-red-${{ matrix.project }}
+          name: toaster-exact-source-conformance
           path: |
-            toaster-layout-red.json
+            .github/toaster-proof-source.json
+            toaster-conformance.json
+            coverage/
           if-no-files-found: error

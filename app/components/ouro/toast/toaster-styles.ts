@@ -14,13 +14,18 @@ const portalClass = "relative isolate z-[calc(var(--ouro-layer)+1)]";
 
 /**
  * The fixed region the toasts stack in: full width at the bottom of a phone, inside the
- * safe area, and 360px at the bottom end from `sm`.
+ * safe area, and spacing-scale 90 at the bottom end from `sm`. Each overridable
+ * property has one unprefixed utility, so app layout classes win at every width.
  *
  * @internal
  */
 const viewportClass =
-  "fixed start-4 end-4 bottom-[max(1rem,env(safe-area-inset-bottom))] outline-none " +
-  "sm:start-auto sm:end-6 sm:bottom-6 sm:w-90";
+  "fixed outline-none " +
+  "start-(--ouro-toaster-start) end-(--ouro-toaster-end) bottom-(--ouro-toaster-bottom) w-(--ouro-toaster-width) " +
+  "[--ouro-toaster-start:calc(var(--spacing)*4)] [--ouro-toaster-end:calc(var(--spacing)*4)] " +
+  "[--ouro-toaster-bottom:max(1rem,env(safe-area-inset-bottom))] [--ouro-toaster-width:auto] " +
+  "sm:[--ouro-toaster-start:auto] sm:[--ouro-toaster-end:calc(var(--spacing)*6)] " +
+  "sm:[--ouro-toaster-bottom:calc(var(--spacing)*6)] sm:[--ouro-toaster-width:calc(var(--spacing)*90)]";
 
 /**
  * One toast. Collapsed, the newest is in front and the older ones peek out above it,

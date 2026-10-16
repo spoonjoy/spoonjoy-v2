@@ -6,7 +6,11 @@ import { toast, type ToastOptions } from "~/lib/ouro/toast";
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.
 
-// Toaster takes only its labels; Sonner's props are hint types.
+// Toaster takes its labels and a viewport layout class; Sonner's props are hint types.
+createElement(Toaster, { className: "bottom-20 w-80" });
+expectTypeOf<{ className: string | undefined }>().toExtend<ToasterProps>();
+expectTypeOf<{ style: { bottom: number } }>().not.toExtend<ToasterProps>();
+expectTypeOf<{ offset: number }>().not.toExtend<ToasterProps>();
 expectTypeOf<Record<string, never>>().toExtend<ToasterProps>();
 expectTypeOf<{ label: "Benachrichtigungen"; closeLabel: "Schließen" }>().toExtend<ToasterProps>();
 expectTypeOf<ComponentProps<typeof Toaster>>().toEqualTypeOf<ToasterProps>();
