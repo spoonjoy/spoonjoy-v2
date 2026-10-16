@@ -120,7 +120,27 @@ export const touchHostAudit = (async (ctx, action: "start" | "stop") => {
 }) satisfies BrowserCommand<[action: "start" | "stop"]>;
 
 export const touchHostPanAudit = (async (ctx, action: "start" | "stop") => {
-  return ctx.page.evaluate((action) => {
+  const touches = await ctx.iframe.locator("body").evaluate((_element, action) => {
+    type TouchAudit = { records: unknown[]; record: (event: TouchEvent) => void };
+    const view = globalThis as typeof globalThis & { __ouroHostPanTouches?: TouchAudit };
+    if (action === "start") {
+      if (view.__ouroHostPanTouches) throw new Error("A previous native pan touch audit was not removed");
+      const records: unknown[] = [];
+      const record = (event: TouchEvent) => records.push({
+        epoch: Date.now(), type: event.type, trusted: event.isTrusted,
+        points: Array.from(event.changedTouches).map((touch) => ({ x: touch.clientX, y: touch.clientY })),
+      });
+      view.__ouroHostPanTouches = { records, record };
+      for (const type of ["touchstart", "touchend"] as const) addEventListener(type, record, { capture: true, passive: true });
+      return { installed: true };
+    }
+    const audit = view.__ouroHostPanTouches;
+    if (!audit) throw new Error("The native pan touch audit was not started");
+    for (const type of ["touchstart", "touchend"] as const) removeEventListener(type, audit.record, true);
+    delete view.__ouroHostPanTouches;
+    return { records: audit.records };
+  }, action);
+  const result = await ctx.page.evaluate((action) => {
     type ViewportAudit = { records: unknown[]; record: (event?: Event) => void };
     const view = globalThis as typeof globalThis & { __ouroHostViewportAudit?: ViewportAudit };
     const viewport = visualViewport;
@@ -129,7 +149,7 @@ export const touchHostPanAudit = (async (ctx, action: "start" | "stop") => {
       if (view.__ouroHostViewportAudit) throw new Error("A previous native pan audit was not removed");
       const records: unknown[] = [];
       const record = (event?: Event) => records.push({
-        when: performance.now(), type: event?.type ?? "snapshot", trusted: event?.isTrusted,
+        when: performance.now(), epoch: Date.now(), type: event?.type ?? "snapshot", trusted: event?.isTrusted,
         left: viewport.pageLeft, top: viewport.pageTop, offsetLeft: viewport.offsetLeft, offsetTop: viewport.offsetTop,
         width: viewport.width, height: viewport.height, scale: viewport.scale,
       });
@@ -145,4 +165,6 @@ export const touchHostPanAudit = (async (ctx, action: "start" | "stop") => {
     delete view.__ouroHostViewportAudit;
     return { records: audit.records };
   }, action);
+  if (action === "stop") process.stdout.write(`NATIVE_PAN_DIAGNOSTIC ${JSON.stringify({ ...result, touches })}\n`);
+  return { ...result, touches };
 }) satisfies BrowserCommand<[action: "start" | "stop"]>;

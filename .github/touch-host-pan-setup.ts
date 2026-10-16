@@ -13,5 +13,5 @@ beforeEach(async ({ task }) => {
   if (task.name === subject) await commands.touchHostPanAudit("start");
 });
 afterEach(async ({ task }) => {
-  if (task.name === subject) console.info(`NATIVE_PAN_DIAGNOSTIC ${JSON.stringify(await commands.touchHostPanAudit("stop"))}`);
+  if (task.name === subject) await commands.touchHostPanAudit("stop");
 });

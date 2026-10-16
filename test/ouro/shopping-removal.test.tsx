@@ -35,11 +35,11 @@ beforeEach(() => {
 });
 afterEach(() => {
   for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.removeEventListener(type, trace, true);
-  console.info(`KEYBOARD_FOCUS_DIAGNOSTIC ${JSON.stringify({ trace: focusTrace, final: snapshot(), writes: fixture?.writes })}`);
 });
 afterEach(async () => { await fixture?.dispose(); fixture = undefined; });
 
 it("real menu-to-modal focus, Escape, retained Remove and explicit confirmation preserve the actual row contract", async ({ annotate }) => {
+  try {
   fixture = await shoppingRemovalFixture();
   await expect.poll(() => fixture!.row()).toBeTruthy();
   await userEvent.click(page.getByRole("button", { name: "Actions for lemons" }));
@@ -83,9 +83,13 @@ it("real menu-to-modal focus, Escape, retained Remove and explicit confirmation 
   await expect.poll(() => document.activeElement?.tagName).toBe("H1");
   expect(fixture.router.state.location.pathname).toBe("/shopping-list");
   await annotate(`T21_KEYBOARD_CONFIRM ${JSON.stringify({ writes: fixture.writes, focused: document.activeElement?.tagName })}`);
+  } finally {
+    await annotate(`KEYBOARD_FOCUS_DIAGNOSTIC ${JSON.stringify({ trace: focusTrace, final: snapshot(), writes: fixture?.writes })}`);
+  }
 });
 
 it("native keyboard opens the named action menu and confirms only after explicit activation", async ({ annotate }) => {
+  try {
   fixture = await shoppingRemovalFixture();
   await expect.poll(() => fixture!.row()).toBeTruthy();
   fixture.host.querySelector<HTMLButtonElement>('[aria-label="Actions for lemons"]')!.focus();
@@ -109,4 +113,7 @@ it("native keyboard opens the named action menu and confirms only after explicit
   await expect.poll(() => document.activeElement?.tagName).toBe("H1");
   expect(fixture.router.state.location.pathname).toBe("/shopping-list");
   await annotate(`T21_ALL_KEYBOARD_CONFIRM ${JSON.stringify({ writes: fixture.writes, focused: document.activeElement?.tagName })}`);
+  } finally {
+    await annotate(`KEYBOARD_FOCUS_DIAGNOSTIC ${JSON.stringify({ trace: focusTrace, final: snapshot(), writes: fixture?.writes })}`);
+  }
 });
