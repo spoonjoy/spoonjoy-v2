@@ -1,6 +1,6 @@
 {
   "upstreamRepository": "ourostack/ouro-ui",
-  "upstreamCommit": "a8429ab4d1385693e84a49216f44031ad5857e82",
+  "upstreamCommit": "0808121c27ef1fa6ee14d527fe9a521d0e5926c1",
   "upstreamPath": "registry/ouro/lib/ouro/testing/vitest.ts",
   "consumerPath": "app/lib/ouro/testing/vitest.ts",
   "sha256": "86ce4715db30baaeb5b058542df9de0adfe0bd09fcb366d7570a8194f8c5b4e2",

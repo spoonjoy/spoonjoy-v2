@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scope: [menu, full]
+        scope: [full, preload]
     env:
       VITE_HOST_CONTROL: ${{ matrix.scope == 'default' && 'default' || 'roomy' }}
     steps:
@@ -42,6 +42,11 @@ jobs:
               "app/lib/ouro/testing/commands.touch.test.ts",
               "app/lib/ouro/testing/vitest.ts",
           ], paths
+          pristine = subprocess.check_output([
+              "git", "diff", "--name-only", "7f50e38bc1b838319bc67c11299e4a58e3e42b2b", "--",
+              "test/ouro/shopping-removal.test.tsx", "e2e", "playwright.ouro.config.ts", "vitest.ouro.config.ts",
+          ], text=True).splitlines()
+          assert pristine == [], pristine
           PY
           sha=$(node -p 'require("./.github/touch-host-source.json").upstreamCommit')
           curl --fail --silent --show-error \
@@ -131,33 +136,28 @@ jobs:
             test/ouro/touch-host.probe.touch.test.tsx \
             --reporter=verbose --reporter=json --outputFile=touch-host-geometry-tests.json 2>&1 | tee touch-host-geometry.log
       - name: Generate Prisma and build actual Storybook
-        if: matrix.scope == 'full'
+        if: matrix.scope == 'full' || matrix.scope == 'preload'
         run: pnpm prisma:generate && pnpm build-storybook
-      - name: Whole browser diagnostic with native viewport and keyboard traces; not qualification
+      - name: Pristine actual consumer browser suite and strict coverage
         if: matrix.scope == 'full'
         run: |
-          node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run --config .github/touch-host-proof.config.ts --coverage \
+          node scripts/run-with-warning-policy.mjs -- pnpm exec vitest run --config vitest.ouro.config.ts --coverage \
             --exclude test/ouro/touch-host.probe.touch.test.tsx \
             --reporter=verbose --reporter=json --outputFile=touch-host-tests.json 2>&1 | tee touch-host-native.log
-      - name: Repeat original keyboard assertions with passive event traces; diagnostic only
-        if: always() && matrix.scope == 'full'
-        run: |
-          status=0
-          for attempt in $(seq 1 5); do
-            pnpm exec vitest run --config vitest.ouro.config.ts test/ouro/shopping-removal.test.tsx \
-              --reporter=verbose --reporter=json --outputFile="keyboard-$attempt.json" \
-              2>&1 | tee "keyboard-$attempt.log" || status=1
-          done
-          exit "$status"
-      - name: Actual component Playwright specs under unchanged warning policy
-        if: matrix.scope == 'full'
+      - name: Pristine component specs or isolated preload diagnostic; warning fixture unchanged
+        if: matrix.scope == 'full' || matrix.scope == 'preload'
         run: |
           python3 -m http.server 6006 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-server.log" 2>&1 &
           server=$!
           trap 'kill "$server"' EXIT
           for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
           curl --fail --silent http://127.0.0.1:6006/iframe.html > /dev/null
-          OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro 2>&1 | tee touch-host-playwright.log
+          if [ "${{ matrix.scope }}" = full ]; then
+            OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro 2>&1 | tee touch-host-playwright.log
+          else
+            OURO_E2E_URL=http://127.0.0.1:6006 pnpm exec playwright test -c .github/preload-proof.config.ts \
+              --repeat-each=10 --trace=retain-on-failure 2>&1 | tee preload-playwright.log
+          fi
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -172,6 +172,8 @@ jobs:
             touch-host-geometry-tests.json
             touch-host-geometry.log
             touch-host-playwright.log
+            preload-playwright.log
+            test-results/
             keyboard-*.json
             keyboard-*.log
             .github/touch-host-source.json
@@ -180,3 +182,4 @@ jobs:
             .vitest/attachments/
             test/ouro/__screenshots__/
           if-no-files-found: error
+          include-hidden-files: true
