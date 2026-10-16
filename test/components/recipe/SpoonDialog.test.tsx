@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { createTestRoutesStub } from "../../utils";
+import { createTestRoutesStub, findShownAlert, queryShownAlert } from "../../utils";
 import { SpoonDialog } from "../../../app/components/recipe/SpoonDialog";
 import { withTimeZone } from "../../helpers/timezone";
 
@@ -74,7 +74,7 @@ describe("SpoonDialog", () => {
     fireEvent.change(fileInput);
 
     expect(picker).toHaveTextContent(/no photo yet/i);
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(queryShownAlert()).toBeNull();
   });
 
   it("disables submit until at least one of {photo, note, nextTime} is non-empty", async () => {
@@ -105,10 +105,10 @@ describe("SpoonDialog", () => {
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, or webp/i);
+    expect(await findShownAlert()).toHaveTextContent(/jpg, png, or webp/i);
     await user.upload(fileInput, makeFile("cook.png", "image/png"));
     await waitFor(() => {
-      expect(screen.queryByRole("alert")).toBeNull();
+      expect(queryShownAlert()).toBeNull();
     });
     expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent("cook.png");
   });
@@ -151,7 +151,7 @@ describe("SpoonDialog", () => {
     const fileInput = (await screen.findByLabelText(/photo/i)) as HTMLInputElement;
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("a.svg", "image/svg+xml"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/jpg, png, or webp/i);
+    expect(await findShownAlert()).toHaveTextContent(/jpg, png, or webp/i);
   });
 
   it("rejects GIF photo files with an inline error", async () => {
@@ -160,7 +160,7 @@ describe("SpoonDialog", () => {
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(fileInput, makeFile("animated.gif", "image/gif"));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Photos must be JPG, PNG, or WebP.");
+    expect(await findShownAlert()).toHaveTextContent("Photos must be JPG, PNG, or WebP.");
     expect(screen.getByTestId("spoon-photo-picker")).toHaveTextContent(/no photo yet/i);
   });
 
@@ -172,7 +172,7 @@ describe("SpoonDialog", () => {
       fileInput,
       makeFile("big.png", "image/png", 6 * 1024 * 1024),
     );
-    expect(await screen.findByRole("alert")).toHaveTextContent(/5\s*mb/i);
+    expect(await findShownAlert()).toHaveTextContent(/5\s*mb/i);
   });
 
   it("submits a multipart form with intent=createSpoon and the entered fields", async () => {
@@ -332,7 +332,7 @@ describe("SpoonDialog", () => {
   });
 
   it("shows the server-error message when actionData.error is provided", async () => {
-    renderDialog({ errorMessage: "Server said no" });
+    renderDialog({ errors: { form: "Server said no" } });
     expect(await screen.findByText("Server said no")).toBeInTheDocument();
   });
 

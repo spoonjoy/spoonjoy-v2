@@ -1,3 +1,5 @@
+"use client";
+
 import { createContext, createElement, useContext, type AnchorHTMLAttributes, type ComponentType, type Ref } from "react";
 
 // The OuroProvider context and its hook, apart from the provider so ouro-provider.tsx

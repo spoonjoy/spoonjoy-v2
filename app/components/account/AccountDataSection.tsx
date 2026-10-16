@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { Form } from "react-router";
+import { useMemo, useState } from "react";
+import { Form as RouterForm } from "react-router";
 import { Download } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Field, Label } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
-import { Text, TextLink } from "~/components/ui/text";
+import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
+import { TextField } from "~/components/ouro/text-field/text-field";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 import { SettingsPanel } from "~/components/cookbook/page";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
@@ -17,6 +19,13 @@ export interface AccountDataSectionProps {
   defaultOpen?: boolean;
 }
 
+// Which field a failed deletion's message belongs on; any other failure is about the whole form.
+const DELETE_ERROR_FIELDS: Record<string, string> = {
+  confirmation_mismatch: "confirmUsername",
+  password_incorrect: "password",
+  password_required: "password",
+};
+
 // "Your data": download everything as JSON, or delete the account. Deleting asks for the username
 // typed back and, for an account with a password, that password; an account without one needs a
 // recent sign-in, so its form offers "Sign in again".
@@ -24,6 +33,12 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
   const [isDeleting, setIsDeleting] = useState(defaultOpen || Boolean(deleteError));
   const [typedUsername, setTypedUsername] = useState("");
   const needsFreshSignIn = deleteError?.error === "recent_sign_in_required";
+  const formErrors = useMemo<FormErrors | undefined>(() => {
+    if (!deleteError?.message) return bindFormErrors(deleteError);
+    // An account without a password has no password field to put the message on.
+    const field = DELETE_ERROR_FIELDS[deleteError.error ?? ""];
+    return bindFormErrors(deleteError, { [field && (field !== "password" || hasPassword) ? field : "form"]: deleteError.message });
+  }, [deleteError, hasPassword]);
 
   return (
     <div id="delete-account">
@@ -46,33 +61,29 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
             app and agent you connected. Recipes other cooks forked, saved or cooked stay up,
             credited to a “Deleted chef” placeholder; their forks stay theirs. This can't be undone, so download your data first if you want a copy.
           </Text>
-          <TextLink href="/privacy#deletion" className="text-sm">What gets deleted</TextLink>
+          <p className="m-0 text-sm/6">
+            <Link href="/privacy#deletion">What gets deleted</Link>
+          </p>
           {isDeleting ? (
-            <Form method="post" className="mt-4 space-y-4" onSubmit={clearCookProgressCache}>
+            <Form
+              method="post"
+              errors={formErrors}
+              render={<RouterForm />}
+              className="mt-4 gap-4"
+              onSubmit={clearCookProgressCache}
+            >
               <input type="hidden" name="intent" value="deleteAccount" />
-              <Field>
-                <Label>Type your username, {username}, to confirm</Label>
-                <Input
-                  type="text"
-                  name="confirmUsername"
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  value={typedUsername}
-                  onChange={(event) => setTypedUsername(event.target.value)}
-                  invalid={deleteError?.error === "confirmation_mismatch"}
-                />
-              </Field>
+              <TextField
+                label={`Type your username, ${username}, to confirm`}
+                name="confirmUsername"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={typedUsername}
+                onChange={(event) => setTypedUsername(event.target.value)}
+              />
               {hasPassword ? (
-                <Field>
-                  <Label>Current password</Label>
-                  <Input
-                    type="password"
-                    name="password"
-                    autoComplete="current-password"
-                    invalid={deleteError?.error === "password_incorrect" || deleteError?.error === "password_required"}
-                  />
-                </Field>
+                <TextField label="Current password" type="password" name="password" autoComplete="current-password" />
               ) : needsFreshSignIn ? null : (
                 // Neutral guidance before any attempt; a failed attempt's message replaces it.
                 <Text className="text-sm/6">
@@ -80,9 +91,6 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
                   been longer, sign in again first.
                 </Text>
               )}
-              {deleteError?.message ? (
-                <Text role="alert" className="text-sm text-[var(--sj-tomato)]">{deleteError.message}</Text>
-              ) : null}
               <div className="flex flex-wrap gap-3">
                 <Button type="submit" variant="destructive" disabled={typedUsername.trim() !== username}>
                   Delete my account
@@ -100,12 +108,12 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
             </div>
           )}
           {isDeleting && !hasPassword ? (
-            <Form method="post" className="mt-3">
+            <RouterForm method="post" className="mt-3">
               <input type="hidden" name="intent" value="reauthenticate" />
               <Button type="submit" plain>
                 Sign in again
               </Button>
-            </Form>
+            </RouterForm>
           ) : null}
         </div>
       </SettingsPanel>

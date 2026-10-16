@@ -4,12 +4,13 @@
 import { test, expect } from "./support/journey";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
+import { requiredLabel } from "./support/forms";
 
 test.describe("Shopping list New item on iPhone", () => {
   test.use({ storageState: scratchStorageStateForProject(3) });
 
   test("New item scrolls to the Item field and focuses it", async ({ page, expectAccessible }) => {
-    const itemField = page.getByLabel("Item", { exact: true });
+    const itemField = page.getByLabel(requiredLabel("Item"), { exact: true });
 
     await page.goto("/shopping-list");
     await waitForHydration(page);

@@ -2,7 +2,8 @@ import type { Route } from "./+types/privacy";
 import type { ReactNode } from "react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Subheading } from "~/components/ui/heading";
-import { Text, TextLink } from "~/components/ui/text";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
 
 const LAST_UPDATED = "October 9, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
@@ -106,7 +107,7 @@ export default function Privacy() {
             their steps and ingredients, your cookbooks, shopping list, and cooks, and links to
             your photos. The iPhone app offers the same download in its account screen.
           </Text>
-          <TextLink href="/account/settings#delete-account">Open account settings</TextLink>
+          <Link href="/account/settings#delete-account">Open account settings</Link>
         </Section>
 
         <Section id="deletion" title="Deleting your account">
@@ -164,7 +165,7 @@ export default function Privacy() {
         <Section title="Contact">
           <Text>
             Questions or requests? Email{" "}
-            <TextLink href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</TextLink>.
+            <Link href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</Link>.
           </Text>
         </Section>
       </div>

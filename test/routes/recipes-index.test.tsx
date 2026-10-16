@@ -228,6 +228,8 @@ describe("Recipes Index Route", () => {
     const box = screen.getByLabelText("Search recipes") as HTMLInputElement;
     expect(box.value).toBe("lemon");
     expect(box).toHaveAttribute("autocomplete", "off");
+    expect(box.closest("[data-ouro-input-group]")).toHaveAttribute("data-variant", "plain");
+    expect(box.closest("[data-ouro-input-group]")).toHaveAttribute("data-size", "lg");
 
     fireEvent.change(box, { target: { value: "tomato" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));

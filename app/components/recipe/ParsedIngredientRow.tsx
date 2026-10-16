@@ -1,7 +1,9 @@
 import clsx from 'clsx'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Input } from '~/components/ui/input'
+import { Field } from '~/components/ouro/field/field'
+import { FieldControl } from '~/components/ouro/field/field-parts'
+import { TextField } from '~/components/ouro/text-field/text-field'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 import { formatQuantity } from '~/lib/quantity'
 
@@ -163,72 +165,33 @@ export function ParsedIngredientRow({
       <li className="py-2" onKeyDown={handleKeyDown}>
         <div className="flex flex-col sm:flex-row sm:items-start gap-2">
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr] gap-2">
-            <div>
-              <label htmlFor="edit-quantity" className="sr-only">
-                Quantity
-              </label>
-              <Input
+            {/* Ouro UI's TextField has no number type, so the quantity is its Field and control. */}
+            <Field label="Quantity" hideLabel required error={showQuantityError || undefined}>
+              <FieldControl
                 ref={quantityInputRef}
                 type="number"
-                id="edit-quantity"
                 value={editQuantity}
                 onChange={(e) => setEditQuantity(e.target.value)}
                 step="any"
                 min="0.001"
-                required
-                aria-label="Quantity"
-                aria-invalid={showQuantityError ? 'true' : undefined}
-                aria-describedby={showQuantityError ? 'edit-quantity-error' : undefined}
-                invalid={!!showQuantityError}
               />
-              {showQuantityError && (
-                <p id="edit-quantity-error" className="mt-1 text-xs text-[var(--sj-tomato)]">
-                  {validationErrors.quantity}
-                </p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="edit-unit" className="sr-only">
-                Unit
-              </label>
-              <Input
-                type="text"
-                id="edit-unit"
-                value={editUnit}
-                onChange={(e) => setEditUnit(e.target.value)}
-                required
-                aria-label="Unit"
-                aria-invalid={showUnitError ? 'true' : undefined}
-                aria-describedby={showUnitError ? 'edit-unit-error' : undefined}
-                invalid={!!showUnitError}
-              />
-              {showUnitError && (
-                <p id="edit-unit-error" className="mt-1 text-xs text-[var(--sj-tomato)]">
-                  {validationErrors.unit}
-                </p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="edit-ingredient" className="sr-only">
-                Ingredient
-              </label>
-              <Input
-                type="text"
-                id="edit-ingredient"
-                value={editIngredientName}
-                onChange={(e) => setEditIngredientName(e.target.value)}
-                required
-                aria-label="Ingredient"
-                aria-invalid={showIngredientNameError ? 'true' : undefined}
-                aria-describedby={showIngredientNameError ? 'edit-ingredient-error' : undefined}
-                invalid={!!showIngredientNameError}
-              />
-              {showIngredientNameError && (
-                <p id="edit-ingredient-error" className="mt-1 text-xs text-[var(--sj-tomato)]">
-                  {validationErrors.ingredientName}
-                </p>
-              )}
-            </div>
+            </Field>
+            <TextField
+              label="Unit"
+              hideLabel
+              required
+              value={editUnit}
+              onChange={(e) => setEditUnit(e.target.value)}
+              error={showUnitError || undefined}
+            />
+            <TextField
+              label="Ingredient"
+              hideLabel
+              required
+              value={editIngredientName}
+              onChange={(e) => setEditIngredientName(e.target.value)}
+              error={showIngredientNameError || undefined}
+            />
           </div>
           <div className="flex gap-1 sm:pt-0.5">
             <button

@@ -56,13 +56,18 @@
   --warning-foreground: #ffffff;
   --ouro-spring-duration: 750ms;
   --ouro-ease-spring: linear(0, 0.0663, 0.2105, 0.3763, 0.5332, 0.6669, 0.7733, 0.8533, 0.9107, 0.9499, 0.9754, 0.9911, 1, 1.0044, 1.0061, 1.0062, 1.0055, 1.0045, 1.0035, 1.0026, 1.0018, 1.0012, 1.0008, 1, 1);
-  --ouro-duration-fast: 100ms;
+  --ouro-duration-fast: 150ms;
   --ouro-duration-base: 200ms;
-  --ouro-duration-slow: 400ms;
+  --ouro-duration-slow: 300ms;
   --ouro-press-scale: 0.97;
   --ouro-backdrop-color: #18181b;
   --ouro-backdrop-max: 0.4;
   --ouro-layer: 50;
+  --ouro-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ouro-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ouro-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ouro-duration-press: 160ms;
+  --ouro-duration-sheet: 500ms;
 }
 
 .dark {
@@ -138,6 +143,7 @@
   --success: var(--sj-herb);
   --success-foreground: var(--sj-paper);
   --border: var(--sj-border);
+  --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
 }
@@ -146,7 +152,7 @@
    with the phone tab bar (z-50). Raising it to Catalyst's dialog layer (z-60) puts them above the tab
    bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. This is
    Spoonjoy's own unlayered :root rule after the Ouro tokens, as Ouro UI's README asks; the
-   --ouro-layer: 50 line above is ouro-base's and every shadcn add resets it. */
+   --ouro-layer: 50 line above is ouro-base's; v0.8 component adds leave this file alone. */
 :root {
   --ouro-layer: 60;
 }
@@ -789,14 +795,20 @@ body:has(#cook) .sj-mobile-surface {
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
+  --color-input: var(--input);
   --color-ring: var(--ring);
   --color-destructive-foreground: var(--destructive-foreground);
   /* Ouro UI's corner radii follow --radius (the control radius), as in a shadcn theme. Spoonjoy's own
-     UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes. */
+     UI uses none of these (test/components/ui/design-system-hygiene.test.ts), so only Ouro changes.
+     --radius-md is what Ouro's text fields and selects use: 2px under the control radius, as shadcn
+     has it, which is --sj-radius-small, the corner Spoonjoy's fields have always had. */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -811,8 +823,24 @@ body:has(#cook) .sj-mobile-surface {
     opacity: 0.4;
     }
   }
+  @keyframes ouro-progress {
+  from {
+    translate: -100% 0;
+    }
+  to {
+    translate: 300% 0;
+    }
+  }
+  @keyframes ouro-shimmer {
+  from {
+    background-position: 100% 0;
+    }
+  to {
+    background-position: -100% 0;
+    }
+  }
 }
 
 @utility press {
-    transition: scale var(--ouro-spring-duration) var(--ouro-ease-spring), background-color var(--ouro-duration-fast) ease-out, border-color var(--ouro-duration-fast) ease-out, color var(--ouro-duration-fast) ease-out, opacity var(--ouro-duration-fast) ease-out;
+    transition: scale var(--ouro-duration-press) var(--ouro-ease-out), background-color var(--ouro-duration-fast) ease, border-color var(--ouro-duration-fast) ease, color var(--ouro-duration-fast) ease, opacity var(--ouro-duration-fast) ease;
 }

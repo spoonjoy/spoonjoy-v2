@@ -1,4 +1,4 @@
-export { sheetSides, sideWarning, iosBackdrop, footerClass, sheetHint };
+export { sheetSides, sideWarning, iosBackdrop, footerClass, sheetHint, registerSheetProperties };
 export type { SheetSide };
 
 // Shared class strings, value lists and dev-message helpers for Sheet, its parts and
@@ -66,4 +66,24 @@ function sheetHint(open: string, close: string) {
     if (/^(text|font)-/.test(token)) return `${open}<div className="${token}">…</div>${close}`;
     return ":root { --popover: …; } .dark { --popover: …; }";
   };
+}
+
+/**
+ * Registers the variables a drag rewrites on the sheet every frame as not inherited, so
+ * the sheet's content is not restyled on each of those frames. Nothing inside a sheet
+ * reads them. It does nothing where they are registered already (a second copy of this
+ * module) and where there is no `CSS.registerProperty`: on the server and in a browser
+ * without it, where the variables inherit as before.
+ *
+ * @internal
+ */
+function registerSheetProperties(): void {
+  const lengths = ["--ouro-sheet-x", "--ouro-sheet-y", "--ouro-sheet-grab"];
+  try {
+    for (const name of lengths) CSS.registerProperty({ name, syntax: "<length>", inherits: false, initialValue: "0px" });
+    // A transform function, which no syntax but the universal one can hold with `var()` in it.
+    CSS.registerProperty({ name: "--ouro-sheet-transform", syntax: "*", inherits: false });
+  } catch {
+    // Registered already, or nothing to register with.
+  }
 }

@@ -2,7 +2,11 @@ import type { Locator, Page } from "@playwright/test";
 
 /**
  * Opens one Storybook story on its own, by story id (for example
- * `"overlays-sheet--playground"`), and waits for it to render. The Storybook comes from
+ * `"overlays-sheet--playground"`), and waits for it to render and for the app's web fonts
+ * to load, so text no longer changes width under a spec that measures. A font first used by
+ * content that appears later (an opened menu, a heavier weight) loads later: before measuring
+ * such content, wait again with `await page.evaluate(() => document.fonts.ready.then(() => {}))`.
+ * The Storybook comes from
  * the `OURO_E2E_URL` environment variable, default `http://localhost:6006`: the
  * Storybook that shows the Ouro UI stories installed in this app, compiled with the
  * app's own Tailwind and theme.
@@ -12,6 +16,11 @@ export async function openStory(page: Page, id: string): Promise<void> {
   const url = new URL(`iframe.html?id=${id}&viewMode=story`, base.endsWith("/") ? base : `${base}/`);
   await page.goto(url.href);
   await page.locator("#storybook-root > *").first().waitFor();
+  // A font starts loading when a layout first uses it, so lay the story out before asking.
+  await page.evaluate(() => {
+    document.body.getBoundingClientRect();
+    return document.fonts.ready.then(() => undefined);
+  });
 }
 
 /** Waits for an element's transitions (opening, springing back) to finish, then returns its box. */
@@ -35,4 +44,16 @@ export async function slowDrag(page: Page, x: number, fromY: number, toY: number
     await page.waitForTimeout(durationMs / steps);
   }
   await page.mouse.up();
+}
+
+/**
+ * Presses Tab, or Shift+Tab with `{ shift: true }`, so that focus moves to the next tab stop
+ * in every browser. WebKit on a Mac follows the system's "Keyboard navigation" setting: with
+ * it off, the default, Tab skips buttons, links and every control that is not a text field.
+ * Option+Tab is WebKit's key for "every control, whatever the setting", so this presses that
+ * there and plain Tab everywhere else. Use it instead of `page.keyboard.press("Tab")`.
+ */
+export async function pressTab(page: Page, { shift = false }: { shift?: boolean } = {}): Promise<void> {
+  const webkitOnMac = process.platform === "darwin" && page.context().browser()?.browserType().name() === "webkit";
+  await page.keyboard.press(`${shift ? "Shift+" : ""}${webkitOnMac ? "Alt+" : ""}Tab`);
 }

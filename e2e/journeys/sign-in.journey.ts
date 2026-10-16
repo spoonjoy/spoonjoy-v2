@@ -2,6 +2,7 @@ import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole 
 import { persona } from "./support/personas";
 import { signInThroughForm } from "./support/sign-in";
 import { Secret, fillSecret } from "./support/secret";
+import { requiredLabel } from "./support/forms";
 
 test.describe("Sign-in", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -11,7 +12,7 @@ test.describe("Sign-in", () => {
     await page.goto("/login");
     await expectAccessible();
     await page.getByLabel("Username or email").fill(chef.username);
-    await fillSecret(page.getByLabel("Password"), chef.password);
+    await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), chef.password);
     await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
     await expectAccessible();
@@ -26,7 +27,7 @@ test.describe("Sign-in", () => {
     const chef = persona("chef");
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(chef.email.toUpperCase());
-    await fillSecret(page.getByLabel("Password"), chef.password);
+    await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), chef.password);
     await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(/\/recipes(?:[?#].*)?$/);
   });
@@ -45,7 +46,7 @@ test.describe("Sign-in", () => {
     });
     await page.goto("/login");
     await page.getByLabel("Username or email").fill(persona("friend").username);
-    await fillSecret(page.getByLabel("Password"), new Secret("definitely-not-the-password"));
+    await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), new Secret("definitely-not-the-password"));
     await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page.getByText("Invalid username, email, or password")).toBeVisible();
     await expect(page).toHaveURL(/\/login/);

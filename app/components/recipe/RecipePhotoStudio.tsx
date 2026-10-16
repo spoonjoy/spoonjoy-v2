@@ -2,10 +2,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Form, useNavigation, useSubmit } from "react-router";
 import { ChevronDown, ImagePlus, Loader2, Sparkles } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { Checkbox, CheckboxField } from "~/components/ui/checkbox";
-import { Description, Field, Label } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
-import { Textarea } from "~/components/ui/textarea";
+import { Checkbox } from "~/components/ouro/checkbox/checkbox";
+import { Field } from "~/components/ouro/field/field";
+import { FieldControl } from "~/components/ouro/field/field-parts";
+import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { useActionWriteToken } from "~/hooks/use-write-token";
 import { localDateTimeToIso } from "~/lib/cooked-at";
 import {
@@ -49,10 +50,6 @@ export function RecipePhotoStudio({
   const photoHintId = useId();
   const photoStatusId = useId();
   const photoErrorId = useId();
-  const noteId = useId();
-  const nextTimeId = useId();
-  const cookedAtId = useId();
-  const promptAdditionId = useId();
   const submitInFlightRef = useRef(false);
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -209,10 +206,13 @@ export function RecipePhotoStudio({
         <input type="hidden" name="intent" value="createFirstPhotoCover" />
         <input type="hidden" name="coverToken" value={coverToken} />
         <input type="hidden" name="activateWhenReady" value="true" />
-        <Field>
-          <Label htmlFor={photoId}>Recipe photo</Label>
+        {/* The photo picker is Spoonjoy's own control (a tile with a preview), so its label and
+            error are plain elements, styled like Ouro UI's field label. */}
+        <div className="grid gap-2">
+          <label htmlFor={photoId} className="justify-self-start font-sj-ui text-sm/5 font-medium text-[var(--sj-ink)] select-none">
+            Recipe photo
+          </label>
           <label
-            data-slot="control"
             data-testid="recipe-photo-picker"
             className="group flex min-h-28 cursor-pointer items-center gap-4 border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"
           >
@@ -251,35 +251,35 @@ export function RecipePhotoStudio({
             </span>
           </label>
           {photoError ? (
-            <p id={photoErrorId} role="alert" className="mt-1 text-sm text-[var(--sj-tomato)]">
+            <p id={photoErrorId} role="alert" className="m-0 text-sm/5 text-[var(--sj-tomato)]">
               {photoError}
             </p>
           ) : null}
-        </Field>
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <CheckboxField className="border-y border-[var(--sj-border)] py-3 sm:border">
+          <div className="border-y border-[var(--sj-border)] py-3 sm:border">
             <Checkbox
+              label="Also log this as a cook"
+              description="Keeps the photo as you took it, with your cook note."
               name="postAsSpoon"
               value="true"
               checked={postAsSpoon}
-              onChange={setPostAsSpoon}
+              onCheckedChange={setPostAsSpoon}
               disabled={isPosting}
             />
-            <Label>Also log this as a cook</Label>
-            <Description>Keeps the photo as you took it, with your cook note.</Description>
-          </CheckboxField>
-          <CheckboxField className="border-y border-[var(--sj-border)] py-3 sm:border">
+          </div>
+          <div className="border-y border-[var(--sj-border)] py-3 sm:border">
             <Checkbox
+              label="Make a styled cover"
+              description="Makes a polished cover from your photo."
               name="generateEditorial"
               value="true"
               checked={generateEditorial}
-              onChange={setGenerateEditorial}
+              onCheckedChange={setGenerateEditorial}
               disabled={isPosting}
             />
-            <Label>Make a styled cover</Label>
-            <Description>Makes a polished cover from your photo.</Description>
-          </CheckboxField>
+          </div>
         </div>
 
         {postAsSpoon ? (
@@ -300,54 +300,37 @@ export function RecipePhotoStudio({
             </Button>
             {showSpoonDetails ? (
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field className="sm:col-span-2">
-                  <Label htmlFor={noteId}>Note</Label>
-                  <Textarea
-                    id={noteId}
-                    name="note"
-                    rows={3}
-                    placeholder="How did it go?"
-                    disabled={isPosting}
-                  />
-                </Field>
-                <Field>
-                  <Label htmlFor={nextTimeId}>Next time</Label>
-                  <Input
-                    id={nextTimeId}
-                    name="nextTime"
-                    type="text"
-                    placeholder="What would you change?"
-                    disabled={isPosting}
-                  />
-                </Field>
-                <Field>
-                  <Label htmlFor={cookedAtId}>Cooked at</Label>
-                  <Input
-                    id={cookedAtId}
-                    name="cookedAt"
-                    type="datetime-local"
-                    disabled={isPosting}
-                  />
+                <TextArea
+                  label="Note"
+                  name="note"
+                  rows={3}
+                  placeholder="How did it go?"
+                  disabled={isPosting}
+                  className="sm:col-span-2"
+                />
+                <TextField
+                  label="Next time"
+                  name="nextTime"
+                  placeholder="What would you change?"
+                  disabled={isPosting}
+                />
+                {/* Ouro UI's TextField has no date-and-time type, so this is its Field and control. */}
+                <Field label="Cooked at" name="cookedAt" disabled={isPosting}>
+                  <FieldControl type="datetime-local" />
                 </Field>
               </div>
             ) : null}
           </div>
         ) : null}
 
-        <Field>
-          <Label htmlFor={promptAdditionId}>Editorial direction</Label>
-          <Description>
-            Optional: say what should change while keeping the food recognizable.
-          </Description>
-          <Input
-            id={promptAdditionId}
-            name="promptAddition"
-            type="text"
-            maxLength={240}
-            placeholder="Brighter light, cleaner table, keep the plating"
-            disabled={isPosting || !generateEditorial}
-          />
-        </Field>
+        <TextField
+          label="Editorial direction"
+          description="Optional: say what should change while keeping the food recognizable."
+          name="promptAddition"
+          maxLength={240}
+          placeholder="Brighter light, cleaner table, keep the plating"
+          disabled={isPosting || !generateEditorial}
+        />
 
         <div className="flex flex-wrap justify-end gap-3 border-t border-[var(--sj-border)] pt-4">
           <Button type="submit" disabled={!canSubmit} aria-busy={isPosting ? "true" : undefined}>

@@ -1,7 +1,8 @@
 import { RefreshCw } from 'lucide-react'
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button } from '~/components/ui/button'
-import { Textarea } from '~/components/ui/textarea'
+import { Alert } from '~/components/ouro/alert/alert'
+import { TextArea } from '~/components/ouro/text-field/text-area'
 import { useIngredientParser } from '~/hooks/useIngredientParser'
 import type { ParsedIngredient } from '~/lib/ingredient-parse.server'
 
@@ -74,11 +75,6 @@ export function IngredientParseInput({
   disabled = false,
   defaultValue = '',
 }: IngredientParseInputProps) {
-  const id = useId()
-  const labelId = `${id}-label`
-  const descriptionId = `${id}-description`
-  const errorId = `${id}-error`
-
   const parser = useIngredientParser({ recipeId, stepId })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const prevParsedIngredients = useRef<ParsedIngredient[] | null>(null)
@@ -125,12 +121,6 @@ export function IngredientParseInput({
   // Get actionable error info
   const errorInfo = hasError ? getActionableErrorMessage(parser.error!) : null
 
-  // Build aria-describedby based on current state
-  const describedByIds = [descriptionId]
-  if (hasError) {
-    describedByIds.push(errorId)
-  }
-
   const handleTryAgain = () => {
     parser.parse()
   }
@@ -141,25 +131,16 @@ export function IngredientParseInput({
 
   return (
     <div aria-busy={parser.isLoading}>
-      <label id={labelId} htmlFor={id} className="font-sj-ui mb-2 block text-sm font-bold">
-        Ingredient text
-      </label>
-      <Textarea
+      <TextArea
         ref={textareaRef}
-        id={id}
+        label="Ingredient text"
+        description="AI will parse your ingredients automatically after you stop typing."
         rows={5}
         defaultValue={defaultValue}
         onChange={handleChange}
         disabled={isDisabled}
         placeholder="Enter ingredients (e.g., 2 cups flour, 1/2 tsp salt)"
-        aria-labelledby={labelId}
-        aria-describedby={describedByIds.join(' ')}
-        invalid={hasError}
-        resizable
       />
-      <p id={descriptionId} className="mt-2 text-sm text-[var(--sj-ink-soft)]">
-        AI will parse your ingredients automatically after you stop typing.
-      </p>
       {parser.isLoading && (
         <div
           data-testid="loading-indicator"
@@ -190,42 +171,42 @@ export function IngredientParseInput({
           Parsing ingredients...
         </div>
       )}
-      {hasError && errorInfo && (
-        <div
-          id={errorId}
-          role="alert"
-          className="mt-3 rounded-[var(--sj-radius-surface)] border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] p-3"
-        >
-          <p className="mb-2 text-sm text-[var(--sj-tomato)]">
-            {errorInfo.message}
-          </p>
-          <div className="flex gap-2">
-            {errorInfo.isRetryable && parser.text.trim() && (
-              <Button
-                type="button"
-                plain
-                onClick={handleTryAgain}
-                disabled={parser.isLoading}
-                data-testid="try-again-button"
-                aria-label="Try parsing ingredients again"
-              >
-                <RefreshCw data-slot="icon" aria-hidden="true" />
-                Try again
-              </Button>
-            )}
-            {onSwitchToManual && (
-              <Button
-                type="button"
-                plain
-                onClick={handleSwitchToManual}
-                data-testid="switch-to-manual-button"
-                aria-label="Switch to manual ingredient entry"
-              >
-                Add manually
-              </Button>
-            )}
-          </div>
-        </div>
+      {/* The parser failing is not a mistake in the text, so it is an alert with the ways on from
+          it, not the field's error. */}
+      {errorInfo && (
+        <Alert
+          tone="destructive"
+          title={errorInfo.message}
+          className="mt-3"
+          action={
+            <>
+              {errorInfo.isRetryable && parser.text.trim() && (
+                <Button
+                  type="button"
+                  plain
+                  onClick={handleTryAgain}
+                  disabled={parser.isLoading}
+                  data-testid="try-again-button"
+                  aria-label="Try parsing ingredients again"
+                >
+                  <RefreshCw data-slot="icon" aria-hidden="true" />
+                  Try again
+                </Button>
+              )}
+              {onSwitchToManual && (
+                <Button
+                  type="button"
+                  plain
+                  onClick={handleSwitchToManual}
+                  data-testid="switch-to-manual-button"
+                  aria-label="Switch to manual ingredient entry"
+                >
+                  Add manually
+                </Button>
+              )}
+            </>
+          }
+        />
       )}
     </div>
   )

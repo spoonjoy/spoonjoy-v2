@@ -16,11 +16,13 @@
  * - Character limits on inputs
  */
 
-import { useState, useEffect, useId, useRef } from 'react'
+import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { Button } from '~/components/ui/button'
-import { Fieldset, Field, Label, ErrorMessage } from '~/components/ui/fieldset'
-import { Input } from '~/components/ui/input'
-import { Textarea } from '~/components/ui/textarea'
+import { Fieldset } from '~/components/ouro/field/fieldset'
+import { Form } from '~/components/ouro/form/form'
+import { TextArea } from '~/components/ouro/text-field/text-area'
+import { TextField } from '~/components/ouro/text-field/text-field'
+import { useFormErrors } from '~/hooks/use-form-errors'
 import { StepList } from './StepList'
 import { RecipeImageUpload } from './RecipeImageUpload'
 import { Loader2 } from 'lucide-react'
@@ -49,6 +51,8 @@ export interface RecipeBuilderProps {
   disabled?: boolean
   loading?: boolean
   saveRequestSignal?: number
+  /** The actual response accepted by this builder's own save form; absent for SSR display. */
+  answer?: object
   errors?: {
     title?: string
     description?: string
@@ -60,6 +64,13 @@ export interface RecipeBuilderProps {
   showSteps?: boolean
 }
 
+// The fields of the recipe details form. The image and steps errors show beside their own controls.
+const DETAIL_FIELDS = ['title', 'description', 'servings'] as const
+
+// The details are saved by the Save button below, through the page's own form, so Enter in a
+// field submits nothing, as before.
+const ignoreSubmit = (event: FormEvent<HTMLFormElement>) => event.preventDefault()
+
 export function RecipeBuilder({
   recipe,
   onSave,
@@ -68,12 +79,10 @@ export function RecipeBuilder({
   loading = false,
   saveRequestSignal = 0,
   errors,
+  answer,
   showSteps = true,
 }: RecipeBuilderProps) {
-  // Generate unique IDs for aria-describedby
-  const titleErrorId = useId()
-  const descriptionErrorId = useId()
-  const servingsErrorId = useId()
+  const detailErrors = useFormErrors(errors, DETAIL_FIELDS, answer)
 
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading
@@ -182,16 +191,6 @@ export function RecipeBuilder({
 
   return (
     <div className="space-y-8">
-      {/* General error alert */}
-      {errors?.general && (
-        <div
-          role="alert"
-          className="border-y border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_10%,var(--sj-panel-solid))] py-4 text-sm text-[var(--sj-tomato)]"
-        >
-          {errors.general}
-        </div>
-      )}
-
       {/* Recipe details section */}
       <fieldset
         aria-label="Recipe details"
@@ -207,59 +206,39 @@ export function RecipeBuilder({
             Capture the name, story, serving cue, and photo someone will need when they cook this later.
           </p>
         </div>
-        <Fieldset>
-          <Field>
-            <Label>Title</Label>
-            <Input
-              ref={titleRef}
-              type="text"
-              defaultValue={recipe?.title ?? ''}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Chocolate Chip Cookies"
-              maxLength={TITLE_MAX_LENGTH}
-              required
-              disabled={isDisabled}
-              data-invalid={errors?.title ? true : undefined}
-              aria-invalid={errors?.title ? true : undefined}
-              aria-describedby={errors?.title ? titleErrorId : undefined}
-            />
-            {errors?.title && <ErrorMessage id={titleErrorId}>{errors.title}</ErrorMessage>}
-          </Field>
-
-          <Field>
-            <Label>Description</Label>
-            <Textarea
-              ref={descriptionRef}
-              defaultValue={recipe?.description ?? ''}
-              placeholder="Recipe description"
-              rows={3}
-              maxLength={DESCRIPTION_MAX_LENGTH}
-              disabled={isDisabled}
-              data-invalid={errors?.description ? true : undefined}
-              aria-invalid={errors?.description ? true : undefined}
-              aria-describedby={errors?.description ? descriptionErrorId : undefined}
-            />
-            {errors?.description && <ErrorMessage id={descriptionErrorId}>{errors.description}</ErrorMessage>}
-          </Field>
-
-          <Field>
-            <Label>Servings</Label>
-            <Input
-              ref={servingsRef}
-              type="text"
-              defaultValue={recipe?.servings ?? ''}
-              placeholder="e.g., 4 servings"
-              maxLength={SERVINGS_MAX_LENGTH}
-              disabled={isDisabled}
-              data-invalid={errors?.servings ? true : undefined}
-              aria-invalid={errors?.servings ? true : undefined}
-              aria-describedby={errors?.servings ? servingsErrorId : undefined}
-            />
-            {errors?.servings && <ErrorMessage id={servingsErrorId}>{errors.servings}</ErrorMessage>}
-          </Field>
-
-          <Field>
-            <Label>Recipe image</Label>
+        {/* The save's messages land on the fields by name; "general" shows at the top. */}
+        <Form errors={detailErrors} onSubmit={ignoreSubmit}>
+          <TextField
+            ref={titleRef}
+            label="Title"
+            name="title"
+            defaultValue={recipe?.title ?? ''}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g., Chocolate Chip Cookies"
+            maxLength={TITLE_MAX_LENGTH}
+            required
+            disabled={isDisabled}
+          />
+          <TextArea
+            ref={descriptionRef}
+            label="Description"
+            name="description"
+            defaultValue={recipe?.description ?? ''}
+            placeholder="Recipe description"
+            rows={3}
+            maxLength={DESCRIPTION_MAX_LENGTH}
+            disabled={isDisabled}
+          />
+          <TextField
+            ref={servingsRef}
+            label="Servings"
+            name="servings"
+            defaultValue={recipe?.servings ?? ''}
+            placeholder="e.g., 4 servings"
+            maxLength={SERVINGS_MAX_LENGTH}
+            disabled={isDisabled}
+          />
+          <Fieldset legend="Recipe image">
             <RecipeImageUpload
               coverImageUrl={displayImageUrl}
               onFileSelect={handleImageSelect}
@@ -269,8 +248,8 @@ export function RecipeBuilder({
               loadingLabel={imageUploadStatus}
               error={errors?.image}
             />
-          </Field>
-        </Fieldset>
+          </Fieldset>
+        </Form>
       </fieldset>
 
       {showSteps && (

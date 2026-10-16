@@ -1,4 +1,4 @@
-import { createRef, StrictMode, useState, type ReactNode } from "react";
+import { createRef, StrictMode, useState, type ReactElement, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,7 @@ import {
   DialogFooter,
   DialogPopup,
   DialogPortal,
+  AlertDialogRoot,
   DialogRoot,
   DialogTitle,
   DialogTrigger,
@@ -188,6 +189,19 @@ describe("Dialog server rendering", () => {
     expect(error).not.toHaveBeenCalled();
   });
 
+  it("renders a trigger that a Server Component passed as a lazy wrapper", () => {
+    // What React's Flight client hands a client component for an element prop
+    // (https://github.com/facebook/react/issues/32392): no `type` and no `props`.
+    const fromServer = { $$typeof: Symbol.for("react.lazy"), _payload: <Button>o</Button>, _init: (payload: unknown) => payload } as unknown as ReactElement;
+    const html = renderToString(
+      <Dialog title="t" trigger={fromServer}>
+        x
+      </Dialog>,
+    );
+    expect(html).toContain(">o<");
+    expect(html).toContain('aria-haspopup="dialog"');
+  });
+
   it.each([
     ["uncontrolled", () => <Dialog title="t" trigger={<Button>o</Button>}>x</Dialog>],
     ["closed and controlled", () => <Dialog title="t" open={false} onOpenChange={() => {}}>x</Dialog>],
@@ -281,6 +295,22 @@ describe("trigger", () => {
     // An open would be committed by now: the click is handled and React has flushed.
     await act(async () => {});
     expect(popup()).toBeNull();
+  });
+
+  it("opens from a trigger that a Server Component handed over as a lazy wrapper", async () => {
+    const onClick = vi.fn();
+    // What React's server-component client passes while the trigger's module is loading.
+    const wrapper = { $$typeof: Symbol.for("react.lazy"), _payload: null, _init: () => <Button onClick={onClick}>Edit</Button> } as unknown as ReactElement;
+    await render(
+      <Dialog title="Edit recipe" trigger={wrapper}>
+        Body
+      </Dialog>,
+    );
+    expect(trigger().textContent).toBe("Edit");
+    expect(trigger().getAttribute("aria-haspopup")).toBe("dialog");
+    await userEvent.click(trigger());
+    expect(onClick).toHaveBeenCalledOnce();
+    await expect.poll(() => popup()).not.toBeNull();
   });
 });
 
@@ -476,10 +506,13 @@ describe("motion", () => {
     const index = style.transitionProperty.split(", ").indexOf(property);
     return index === -1
       ? undefined
-      : { duration: style.transitionDuration.split(", ")[index], easing: style.transitionTimingFunction.split(", ")[index] };
+      : {
+          duration: style.transitionDuration.split(", ")[index],
+          easing: style.transitionTimingFunction.split(/,\s(?![^(]*\))/)[index],
+        };
   };
 
-  it("scales from 0.96 with the theme spring and fades, entering and leaving", async () => {
+  it("scales from 0.96 on the ease-out token and fades, entering in 300ms and leaving in 200ms", async () => {
     await render(
       <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>
         Body
@@ -509,9 +542,19 @@ describe("motion", () => {
     await userEvent.click(trigger());
     await settled();
     const element = dialogPopup()!;
-    expect(transitionOf(element, "transform")!.easing).toMatch(/^linear\(/);
-    expect(transitionOf(element, "transform")!.duration).toBe("0.75s");
-    expect(transitionOf(element, "opacity")).toBeDefined();
+    const easeOut = "cubic-bezier(0.23, 1, 0.32, 1)";
+    expect(transitionOf(element, "transform")).toEqual({ duration: "0.3s", easing: easeOut });
+    expect(transitionOf(element, "opacity")).toEqual({ duration: "0.3s", easing: easeOut });
+    expect(transitionOf(backdrop()!, "opacity")).toEqual({ duration: "0.3s", easing: easeOut });
+    element.setAttribute("data-ending-style", "");
+    backdrop()!.setAttribute("data-ending-style", "");
+    for (const leaving of [element, backdrop()!]) {
+      const style = getComputedStyle(leaving);
+      expect(style.transitionDuration).toBe("0.2s");
+      expect(style.transitionTimingFunction.split(/,\s(?![^(]*\))/)[0]).toBe(easeOut);
+    }
+    element.removeAttribute("data-ending-style");
+    backdrop()!.removeAttribute("data-ending-style");
     await userEvent.keyboard("{Escape}");
     await expect.poll(() => popup()).toBeNull();
     observer.disconnect();
@@ -522,6 +565,14 @@ describe("motion", () => {
     expect(start.opacity).toBe("0");
     expect(scale(end.transform)).toBeCloseTo(0.96, 3);
     expect(end.opacity).toBe("0");
+  });
+
+  it("stays centred: the dialog scales about its own middle, not its trigger", async () => {
+    const element = await openUncontrolled();
+    const box = element.getBoundingClientRect();
+    const [x, y] = getComputedStyle(element).transformOrigin.split(" ").map(parseFloat);
+    expect(x).toBeCloseTo(box.width / 2, 0);
+    expect(y).toBeCloseTo(box.height / 2, 0);
   });
 
   it("fades the backdrop in to --ouro-backdrop-max", async () => {
@@ -539,6 +590,45 @@ describe("motion", () => {
     expect(getComputedStyle(element).transform).toBe("none");
     expect(getComputedStyle(element).opacity).toBe("0");
     element.removeAttribute("data-ending-style");
+  });
+});
+
+describe("Dialog close button press", () => {
+  /** The close button's scale once the press transition has finished. (The tint is proven in dialog.touch.test.tsx, where hover cannot give the same colour.) */
+  async function pressed() {
+    const close = document.querySelector<HTMLElement>("[data-ouro-dialog-close]")!;
+    await commands.pointerPress({ selector: "[data-ouro-dialog-close]", action: "down" });
+    try {
+      let last = "";
+      await expect
+        .poll(
+          () => {
+            const now = getComputedStyle(close).scale;
+            const still = now === last && close.getAnimations().length === 0;
+            last = now;
+            return still;
+          },
+          { interval: 50 },
+        )
+        .toBe(true);
+      return { scale: last, transition: getComputedStyle(close).transitionDuration };
+    } finally {
+      await commands.pointerPress({ selector: "[data-ouro-dialog-close]", action: "up" });
+    }
+  }
+
+  it("shrinks to the press scale on pointer-down, in the press duration", async () => {
+    await openUncontrolled();
+    const result = await pressed();
+    expect(result.scale).toBe("0.97");
+    expect(result.transition.split(", ")[0]).toBe("0.16s");
+  });
+
+  it("does not scale under reduced motion", async () => {
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    await openUncontrolled();
+    const result = await pressed();
+    expect(result.scale).toBe("none");
   });
 });
 
@@ -659,6 +749,21 @@ describe("Dialog parts", () => {
     expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
       '[ouro-ui] DialogPopup: size="xl" is not a size; use "sm", "md", "lg". Fix: <DialogPopup size="md">.',
     ]);
+  });
+
+  it("AlertDialogRoot, the root ConfirmDialog uses, opens the same parts as an alert dialog", async () => {
+    await render(
+      <AlertDialogRoot open>
+        <DialogPortal>
+          <DialogViewport>
+            <DialogPopup>
+              <DialogTitle>Delete the recipe?</DialogTitle>
+            </DialogPopup>
+          </DialogViewport>
+        </DialogPortal>
+      </AlertDialogRoot>,
+    );
+    await expect.element(page.getByRole("alertdialog", { name: "Delete the recipe?" })).toBeVisible();
   });
 
   it("compose into a working dialog", async () => {

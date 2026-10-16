@@ -1,7 +1,6 @@
 import { Form } from "react-router";
 import { Button } from "~/components/ui/button";
-import { Field, Label } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { useActionWriteToken } from "~/hooks/use-write-token";
 import { normalizeRequiredCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
 
@@ -134,16 +133,12 @@ export function RecipeCoverHistory({
         <input type="hidden" name="intent" value="generateRecipeCoverPlaceholder" />
         <input type="hidden" name="coverToken" value={coverToken} />
         <input type="hidden" name="activateWhenReady" value="true" />
-        <Field>
-          <Label htmlFor="recipe-cover-placeholder-direction">Placeholder direction</Label>
-          <Input
-            id="recipe-cover-placeholder-direction"
-            name="promptAddition"
-            type="text"
-            maxLength={240}
-            placeholder="Bright window light, golden edges, linen backdrop"
-          />
-        </Field>
+        <TextField
+          label="Placeholder direction"
+          name="promptAddition"
+          maxLength={240}
+          placeholder="Bright window light, golden edges, linen backdrop"
+        />
         <Button type="submit" plain>
           Generate placeholder cover
         </Button>
@@ -271,16 +266,12 @@ export function RecipeCoverHistory({
                         <input type="hidden" name="coverToken" value={coverToken} />
                         <input type="hidden" name="coverId" value={cover.id} />
                         <input type="hidden" name="activateWhenReady" value="true" />
-                        <Field>
-                          <Label htmlFor={`recipe-cover-regenerate-${cover.id}`}>Regeneration direction</Label>
-                          <Input
-                            id={`recipe-cover-regenerate-${cover.id}`}
-                            name="promptAddition"
-                            type="text"
-                            maxLength={240}
-                            placeholder="What should change?"
-                          />
-                        </Field>
+                        <TextField
+                          label="Regeneration direction"
+                          name="promptAddition"
+                          maxLength={240}
+                          placeholder="What should change?"
+                        />
                         <Button type="submit" plain>
                           Regenerate with direction
                         </Button>
@@ -371,16 +362,12 @@ export function RecipeCoverHistory({
                     <input type="hidden" name="coverToken" value={coverToken} />
                     <input type="hidden" name="spoonId" value={spoon.id} />
                     <input type="hidden" name="activateWhenReady" value="true" />
-                    <Field>
-                      <Label htmlFor={`recipe-cover-spoon-direction-${spoon.id}`}>Spoon photo direction for {spoon.chef.username}</Label>
-                      <Input
-                        id={`recipe-cover-spoon-direction-${spoon.id}`}
-                        name="promptAddition"
-                        type="text"
-                        maxLength={240}
-                        placeholder="Editorial direction"
-                      />
-                    </Field>
+                    <TextField
+                      label={`Spoon photo direction for ${spoon.chef.username}`}
+                      name="promptAddition"
+                      maxLength={240}
+                      placeholder="Editorial direction"
+                    />
                     <Button
                       type="submit"
                       plain

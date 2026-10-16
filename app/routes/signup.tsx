@@ -1,6 +1,5 @@
 import type { Route } from "./+types/signup";
-import { useEffect, useRef } from "react";
-import { Form, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists } from "~/lib/auth.server";
 import { D1_WRITE_UNAVAILABLE_MESSAGE, d1UnavailableHeaders, isD1Unavailable } from "~/lib/d1-write-retry.server";
@@ -14,11 +13,12 @@ import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.serve
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
-import { Field, Label, Description, ErrorMessage } from "~/components/ui/fieldset";
-import { Input } from "~/components/ui/input";
+import { Form } from "~/components/ouro/form/form";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/ui/button";
-import { Text, TextLink } from "~/components/ui/text";
-import { ValidationError } from "~/components/ui/validation-error";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
+import { useFormErrors } from "~/hooks/use-form-errors";
 
 interface ActionData {
   errors?: {
@@ -158,14 +158,7 @@ export default function Signup() {
   const oauthProviders = loaderData?.oauthProviders ?? [];
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? undefined;
-  const formRef = useRef<HTMLFormElement>(null);
-  const errors = actionData?.errors;
-
-  // The browser no longer checks the fields (noValidate), so it no longer moves focus to the
-  // first bad one either. Do that here each time the server answers with errors.
-  useEffect(() => {
-    formRef.current?.querySelector<HTMLInputElement>('[aria-invalid="true"]')?.focus();
-  }, [errors]);
+  const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
 
   return (
     <AuthLayout
@@ -179,10 +172,6 @@ export default function Signup() {
         {/* OAuth error messages */}
         <OAuthError error={loaderData?.oauthError} className="mt-4" />
 
-        {/* istanbul ignore next -- @preserve */ actionData?.errors?.general && (
-          <ValidationError error={actionData.errors.general} className="mt-4" />
-        )}
-
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
@@ -190,81 +179,51 @@ export default function Signup() {
           </>
         )}
 
-        {/* noValidate: the action checks every rule and answers with the messages below. Left to
-            the browser, required/minLength would stop the submit with a native bubble instead, so
-            a short username or password never showed the app's own message. */}
-        <Form ref={formRef} method="post" noValidate className={oauthProviders.length > 0 ? "space-y-6" : "mt-8 space-y-6"}>
-          <Field>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              type="email"
-              id="email"
-              name="email"
-              defaultValue={actionData?.values?.email}
-              autoComplete="email"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-              invalid={!!actionData?.errors?.email}
-            />
-            {actionData?.errors?.email && (
-              <ErrorMessage>{actionData.errors.email}</ErrorMessage>
-            )}
-          </Field>
-
-          <Field>
-            <Label htmlFor="username">Username</Label>
-            <Input
-              type="text"
-              id="username"
-              name="username"
-              defaultValue={actionData?.values?.username}
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-              minLength={3}
-              invalid={!!actionData?.errors?.username}
-            />
-            <Description>{USERNAME_HINT}</Description>
-            {actionData?.errors?.username && (
-              <ErrorMessage>{actionData.errors.username}</ErrorMessage>
-            )}
-          </Field>
-
-          <Field>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              type="password"
-              id="password"
-              name="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              invalid={!!actionData?.errors?.password}
-            />
-            <Description>At least 8 characters.</Description>
-            {actionData?.errors?.password && (
-              <ErrorMessage>{actionData.errors.password}</ErrorMessage>
-            )}
-          </Field>
-
-          <Field>
-            <Label htmlFor="confirmPassword">Confirm password</Label>
-            <Input
-              type="password"
-              id="confirmPassword"
-              name="confirmPassword"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              invalid={!!actionData?.errors?.confirmPassword}
-            />
-            {actionData?.errors?.confirmPassword && (
-              <ErrorMessage>{actionData.errors.confirmPassword}</ErrorMessage>
-            )}
-          </Field>
+        {/* The action answers with its own messages: each lands on the field with that name, and
+            focus moves to the first field with one. The fields carry no minLength, so a short
+            username or password reaches the action and shows the app's message, not the browser's.
+            An empty field or a malformed email is stopped in the browser, with its message under
+            the field. */}
+        <Form
+          method="post"
+          errors={formErrors}
+          render={<RouterForm />}
+          className={oauthProviders.length > 0 ? "gap-6" : "mt-8 gap-6"}
+        >
+          <TextField
+            label="Email"
+            type="email"
+            name="email"
+            defaultValue={actionData?.values?.email}
+            autoComplete="email"
+            required
+          />
+          <TextField
+            label="Username"
+            name="username"
+            defaultValue={actionData?.values?.username}
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            description={USERNAME_HINT}
+          />
+          <TextField
+            label="Password"
+            type="password"
+            name="password"
+            autoComplete="new-password"
+            required
+            description="At least 8 characters."
+          />
+          <TextField
+            label="Confirm password"
+            type="password"
+            name="confirmPassword"
+            autoComplete="new-password"
+            required
+          />
 
           <Button type="submit" className="w-full">
             Sign up
@@ -273,7 +232,7 @@ export default function Signup() {
 
         <Text className="mt-6 text-center">
           Already have an account?{" "}
-          <TextLink href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}>Log in</TextLink>
+          <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}>Log in</Link>
         </Text>
       </div>
     </AuthLayout>

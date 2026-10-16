@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { Link } from "react-router";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, requiredLabel } from "../utils";
 
 vi.mock("motion/react", () => {
   const MotionDiv = ({
@@ -123,7 +123,7 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const field = await screen.findByLabelText("Item");
+    const field = await screen.findByLabelText(requiredLabel("Item"));
     fireEvent.change(field, { target: { value: "2 lemons" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
@@ -153,7 +153,7 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const field = await screen.findByLabelText("Item");
+    const field = await screen.findByLabelText(requiredLabel("Item"));
     fireEvent.change(field, { target: { value: "salt" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
@@ -180,9 +180,9 @@ describe("shopping list: the Item field clears after a successful add (R-M3-3, b
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const field = await screen.findByLabelText("Item");
+    const field = await screen.findByLabelText(requiredLabel("Item"));
     fireEvent.change(field, { target: { value: "3 carrots" } });
-    fireEvent.change(screen.getByLabelText("Recipe"), { target: { value: "recipe-1" } });
+    fireEvent.change(screen.getByLabelText(requiredLabel("Recipe")), { target: { value: "recipe-1" } });
     fireEvent.click(screen.getByRole("button", { name: "Add ingredients" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Add ingredients" })).toBeEnabled());
@@ -314,7 +314,7 @@ describe("shopping list: the dock's Add focuses the Item field", () => {
 
     render(<Stub initialEntries={["/shopping-list#add-item"]} />);
 
-    await waitFor(() => expect(screen.getByLabelText("Item")).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText(requiredLabel("Item"))).toHaveFocus());
   });
 
   it("focuses the Item field each time the dock's Add link is followed, and not before", async () => {
@@ -328,7 +328,7 @@ describe("shopping list: the dock's Add focuses the Item field", () => {
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const field = await screen.findByLabelText("Item");
+    const field = await screen.findByLabelText(requiredLabel("Item"));
     expect(field).not.toHaveFocus();
 
     fireEvent.click(screen.getByRole("link", { name: "Dock Add" }));

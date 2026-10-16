@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub, createTestUser } from "../utils";
+import { createTestRoutesStub, createTestUser, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/login";
 import Login from "~/routes/login";
@@ -387,7 +387,7 @@ describe("Login Route", () => {
       const Stub = createTestRoutesStub([{ path: "/login", Component: Login, loader: () => ({ oauthProviders: [] }) }]);
       render(<Stub initialEntries={["/login?redirectTo=%2Frecipes%2Fabc"]} />);
 
-      expect(await screen.findByLabelText("Password")).toHaveAttribute("autocomplete", "current-password");
+      expect(await screen.findByLabelText(requiredLabel("Password"))).toHaveAttribute("autocomplete", "current-password");
       expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup?redirectTo=%2Frecipes%2Fabc");
     });
   });
@@ -405,8 +405,8 @@ describe("Login Route", () => {
       render(<Stub initialEntries={["/login"]} />);
 
       expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Username or email")).toBeInTheDocument();
-      expect(screen.getByLabelText("Password")).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Username or email"))).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Password"))).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
       expect(screen.getByText("Don't have an account?")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup");
@@ -423,7 +423,7 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      const identifierInput = await screen.findByLabelText("Username or email");
+      const identifierInput = await screen.findByLabelText(requiredLabel("Username or email"));
       expect(identifierInput).toHaveAttribute("type", "text");
       expect(identifierInput).toHaveAttribute("name", "identifier");
       expect(identifierInput).toHaveAttribute("autocomplete", "username webauthn");
@@ -443,7 +443,7 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      const identifierInput = await screen.findByLabelText("Username or email");
+      const identifierInput = await screen.findByLabelText(requiredLabel("Username or email"));
       const user = userEvent.setup();
       await user.type(identifierInput, "chef@example.com");
       expect(identifierInput).toHaveValue("chef@example.com");
@@ -466,7 +466,7 @@ describe("Login Route", () => {
         render(<Stub initialEntries={["/login?redirectTo=/cookbooks"]} />);
 
         const passkeyButton = await screen.findByRole("button", { name: "Sign in with a passkey" });
-        (screen.getByLabelText("Username or email") as HTMLInputElement).value = "keychain_chef";
+        (screen.getByLabelText(requiredLabel("Username or email")) as HTMLInputElement).value = "keychain_chef";
         await userEvent.setup().click(passkeyButton);
 
         expect(authenticatePasskey).toHaveBeenCalledWith("keychain_chef", "/cookbooks");
@@ -488,7 +488,7 @@ describe("Login Route", () => {
 
       render(<Stub initialEntries={["/login"]} />);
 
-      const passwordInput = await screen.findByLabelText("Password");
+      const passwordInput = await screen.findByLabelText(requiredLabel("Password"));
       expect(passwordInput).toHaveAttribute("type", "password");
       expect(passwordInput).toHaveAttribute("name", "password");
       expect(passwordInput).toHaveAttribute("required");
@@ -713,8 +713,8 @@ describe("Login Route", () => {
       });
     });
 
-    describe("Catalyst component structure", () => {
-      it("should use Catalyst Heading for page title", async () => {
+    describe("component structure", () => {
+      it("should use a level-one heading for the page title", async () => {
         const Stub = createTestRoutesStub([
           {
             path: "/login",
@@ -730,7 +730,7 @@ describe("Login Route", () => {
         expect(heading).toHaveTextContent("Log in");
       });
 
-      it("should use Catalyst Input components for form fields", async () => {
+      it("should leave inline styles off the form fields", async () => {
         const Stub = createTestRoutesStub([
           {
             path: "/login",
@@ -750,7 +750,7 @@ describe("Login Route", () => {
         });
       });
 
-      it("should use Catalyst Button for submit", async () => {
+      it("should leave inline styles off the buttons", async () => {
         const Stub = createTestRoutesStub([
           {
             path: "/login",
@@ -783,8 +783,8 @@ describe("Login Route", () => {
 
         await screen.findByRole("heading", { name: "Log in" });
 
-        expect(screen.getByLabelText("Username or email")).toBeInTheDocument();
-        expect(screen.getByLabelText("Password")).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Username or email"))).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Password"))).toBeInTheDocument();
       });
 
       it("should display the general error returned by the action", async () => {
@@ -800,11 +800,12 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        await user.type(await screen.findByLabelText("Username or email"), "chef_test");
-        await user.type(screen.getByLabelText("Password"), "wrong-password");
+        await user.type(await screen.findByLabelText(requiredLabel("Username or email")), "chef_test");
+        await user.type(screen.getByLabelText(requiredLabel("Password")), "wrong-password");
         await user.click(screen.getByRole("button", { name: "Log in" }));
 
-        expect(await screen.findByText("Invalid username, email, or password")).toBeInTheDocument();
+        // A message about the whole form shows in the alert at the top of the form.
+        expect(await screen.findByRole("alert")).toHaveTextContent("Invalid username, email, or password");
       });
 
       it("should display the identifier field error returned by the action", async () => {
@@ -820,13 +821,16 @@ describe("Login Route", () => {
 
         render(<Stub initialEntries={["/login"]} />);
 
-        const identifierInput = await screen.findByLabelText("Username or email");
+        const identifierInput = await screen.findByLabelText(requiredLabel("Username or email"));
         await user.type(identifierInput, "  ");
-        await user.type(screen.getByLabelText("Password"), "some-password");
+        await user.type(screen.getByLabelText(requiredLabel("Password")), "some-password");
         await user.click(screen.getByRole("button", { name: "Log in" }));
 
         expect(await screen.findByText("Enter your username or email")).toBeInTheDocument();
-        expect(identifierInput).toHaveAttribute("data-invalid");
+        expect(identifierInput).toHaveAttribute("aria-invalid", "true");
+        expect(identifierInput).toHaveAccessibleDescription("Enter your username or email");
+        // Ouro UI's Form moves focus to the first field the action rejected.
+        await waitFor(() => expect(identifierInput).toHaveFocus());
       });
     });
   });

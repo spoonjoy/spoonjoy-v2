@@ -1,7 +1,8 @@
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, findShownAlert, getShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/recipes.$id.steps.$stepId.edit";
 import EditStep from "~/routes/recipes.$id.steps.$stepId.edit";
@@ -2788,7 +2789,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
       );
 
       // Verify the general error is displayed via ValidationError (has role="alert")
-      const alert = await screen.findByRole("alert");
+      const alert = await findShownAlert();
       expect(alert).toHaveTextContent("Failed to update step. Please try again.");
     });
 
@@ -2835,7 +2836,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
       // Verify the stepTitle input has invalid attribute set (HeadlessUI boolean attr)
       const stepTitleInput = await screen.findByLabelText(/Step Title/i);
-      expect(stepTitleInput).toHaveAttribute("data-invalid");
       expect(stepTitleInput).toHaveAttribute("aria-invalid", "true");
       expect(stepTitleInput).toHaveAccessibleDescription("Step title must be 200 characters or less");
     });
@@ -2883,7 +2883,6 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
       // Verify the description textarea has invalid attribute set (HeadlessUI boolean attr)
       const descriptionTextarea = await screen.findByLabelText(/Description/i);
-      expect(descriptionTextarea).toHaveAttribute("data-invalid");
       expect(descriptionTextarea).toHaveAttribute("aria-invalid", "true");
       expect(descriptionTextarea).toHaveAccessibleDescription("Step description is required");
 
@@ -2994,7 +2993,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Update" }));
 
-        expect(await screen.findByRole("alert")).toHaveTextContent(
+        expect(await findShownAlert()).toHaveTextContent(
           "Add at least 1 ingredient or 1 step output use before saving this step."
         );
       });
@@ -3116,7 +3115,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await screen.findByRole("heading", { name: /Edit Step/i });
 
         // Click to open the listbox
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
         await act(async () => {
           fireEvent.click(listboxButton);
         });
@@ -3160,16 +3159,12 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         await screen.findByRole("heading", { name: /Edit Step/i });
 
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
-        await act(async () => {
-          fireEvent.click(listboxButton);
-        });
-        await act(async () => {
-          fireEvent.click(screen.getByText("Step 1: Prep the ingredients"));
-        });
-        await act(async () => {
-          fireEvent.click(screen.getByText("Step 2: Mix the batter"));
-        });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
+        // The picker stays open while choosing several steps.
+        const user = userEvent.setup();
+        await user.click(listboxButton);
+        await user.click(await screen.findByRole("option", { name: "Step 1: Prep the ingredients" }));
+        await user.click(screen.getByRole("option", { name: "Step 2: Mix the batter" }));
 
         const hiddenInputs = document.querySelectorAll('input[name="usesSteps"]');
         expect(hiddenInputs).toHaveLength(2);
@@ -3210,7 +3205,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await screen.findByRole("heading", { name: /Edit Step/i });
 
         // Click to open the listbox
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
         await act(async () => {
           fireEvent.click(listboxButton);
         });
@@ -3260,7 +3255,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await screen.findByRole("heading", { name: /Edit Step/i });
 
         // The listbox button should show the selected step
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
         expect(listboxButton).toHaveTextContent("Step 1: First step");
       });
 
@@ -3308,7 +3303,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await screen.findByRole("heading", { name: /Edit Step/i });
 
         // The listbox button should show both selected steps
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
         expect(listboxButton).toHaveTextContent("Step 1: First step");
         expect(listboxButton).toHaveTextContent("Step 2: Second step");
       });
@@ -3449,8 +3444,10 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         await waitFor(() => {
           const errorElement = screen.getByText("Can only reference previous steps");
           expect(errorElement).toBeInTheDocument();
-          // Error should have the correct error styling (red text)
-          expect(errorElement).toHaveClass("text-[var(--sj-tomato)]");
+          // The message belongs to the picker: it sits under it and describes it.
+          expect(screen.getByRole("combobox", { name: /Uses output from/i })).toHaveAccessibleDescription(
+            "Can only reference previous steps",
+          );
         });
       });
     });
@@ -3539,7 +3536,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
         );
 
         // ValidationError renders with role="alert"
-        const alert = await screen.findByRole("alert");
+        const alert = await findShownAlert();
         expect(alert).toHaveTextContent("Cannot delete Step 1 because it is used by Step 2");
       });
 
@@ -3778,7 +3775,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
 
         // Wait for error to appear
         await waitFor(() => {
-          expect(screen.getByRole("alert")).toBeInTheDocument();
+          expect(getShownAlert()).toBeInTheDocument();
         }, { timeout: 3000 });
 
         // Click the "Add Manually" button in the error alert
@@ -4018,7 +4015,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
           fireEvent.change(screen.getByLabelText("Ingredient"), { target: { value: "rice" } });
           fireEvent.click(screen.getByRole("button", { name: "Add ingredient" }));
 
-          expect(await screen.findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent(
+          expect(await findShownAlert({ timeout: 3000 })).toHaveTextContent(
             "This ingredient is already in the recipe"
           );
         } finally {

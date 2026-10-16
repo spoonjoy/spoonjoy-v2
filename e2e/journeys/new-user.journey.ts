@@ -5,9 +5,10 @@
 // journey allowed to use /signup for that reason (see AGENTS.md's Validation section). That
 // submit still counts as one attempt against QA's auth rate limit (see personas.setup.ts).
 import { test, expect } from "./support/journey";
-import { createDisposableJourneyUser } from "./support/secret";
+import { createDisposableJourneyUser, fillSecret } from "./support/secret";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
+import { requiredLabel } from "./support/forms";
 
 test.describe("New user", () => {
   test.describe("with an empty shopping list", () => {
@@ -40,14 +41,18 @@ test.describe("New user", () => {
       });
       // A unique address in the disposable codex-e2e namespace, so the email is valid and not
       // taken and the username is the only field the action rejects.
-      const email = createDisposableJourneyUser().email;
+      // The password is filled in too: an empty required field would be stopped in the browser,
+      // before the app's own message about the username.
+      const { email, password } = createDisposableJourneyUser();
       await page.goto("/signup");
       // Submit through the app, so the answer comes back without a page load and focus is
       // moved by the page, not by a fresh document.
       await waitForHydration(page);
-      const username = page.getByLabel("Username", { exact: true });
-      await page.getByLabel("Email", { exact: true }).fill(email);
+      const username = page.getByLabel(requiredLabel("Username"), { exact: true });
+      await page.getByLabel(requiredLabel("Email"), { exact: true }).fill(email);
       await username.fill("ab");
+      await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), password);
+      await fillSecret(page.getByLabel(requiredLabel("Confirm password"), { exact: true }), password);
       await page.getByRole("button", { name: "Sign up", exact: true }).click();
 
       await expect(page.getByText("Username must be at least 3 characters", { exact: true })).toBeVisible();
@@ -55,7 +60,7 @@ test.describe("New user", () => {
       await expect(username).toHaveAttribute("aria-invalid", "true");
       await expect(username).toBeFocused();
       await expect(username).toHaveValue("ab");
-      await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
+      await expect(page.getByLabel(requiredLabel("Email"), { exact: true })).toHaveValue(email);
       await expectAccessible();
 
       // No account and no session: a signed-in page still sends this browser to the login page.

@@ -100,7 +100,18 @@ test.describe("Cookbooks", () => {
     });
     await saveDialog.getByRole("textbox", { name: "Create new cookbook", exact: true }).fill(title);
     await saveDialog.getByRole("button", { name: "Create & Save", exact: true }).click();
-    await expect(saveDialog.getByRole("alert")).toHaveText("You already have a cookbook with this title");
+    await expect(saveDialog.getByText("You already have a cookbook with this title", { exact: true })).toBeVisible();
+    await expect(cookbookToggle).toHaveAttribute("aria-pressed", "false");
+    const createTitle = saveDialog.getByRole("textbox", { name: "Create new cookbook", exact: true });
+    await createTitle.fill(`${title} changed`);
+    await expect(createTitle).not.toHaveAttribute("aria-invalid", "true");
+    await createTitle.fill(title);
+    expectConsoleError(/Failed to load resource: the server responded with a status of 400/, {
+      url: /\/recipes\/qa-kitchen-recipe-salmon\.data$/,
+    });
+    await saveDialog.getByRole("button", { name: "Create & Save", exact: true }).click();
+    await expect(createTitle).toHaveAccessibleDescription("You already have a cookbook with this title");
+    await expect(createTitle).toBeFocused();
     await expect(cookbookToggle).toHaveAttribute("aria-pressed", "false");
 
     // The toggle flips optimistically, so wait for the save itself before leaving the page.
@@ -197,9 +208,17 @@ test.describe("Cookbooks", () => {
     });
     await titleField.fill("   ");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Title is required" })).toBeVisible();
+    await expect(page.getByText("Title is required", { exact: true })).toBeVisible();
     await expect(titleField).toBeVisible();
     await expectAccessible();
+    await titleField.fill("  ");
+    await expect(titleField).not.toHaveAttribute("aria-invalid", "true");
+    expectConsoleError(/Failed to load resource: the server responded with a status of 400/, {
+      url: /\/cookbooks\/[^/]+\.data$/,
+    });
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(titleField).toHaveAccessibleDescription("Title is required");
+    await expect(titleField).toBeFocused();
 
     // A good title closes the editor with a short confirmation (R-M3-3) and brings the tab bar back.
     await titleField.fill(renamedTitle);

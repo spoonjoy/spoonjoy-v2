@@ -42,7 +42,7 @@ function getRegion(): HTMLElement {
  * The region lives outside every component, so it never changes a control's
  * accessible name and never sits inside an `aria-busy` subtree.
  *
- * Internal; not exported from the package.
+ * Internal: Ouro UI components use it; apps don't need to.
  *
  * @example
  * useEffect(() => { if (loading) announce("Saving recipe"); }, [loading]);

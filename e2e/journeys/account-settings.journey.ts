@@ -25,6 +25,7 @@ import type { Locator, Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchForProject, scratchStorageStateForProject } from "./support/personas";
 import { Secret, fillSecret } from "./support/secret";
+import { requiredLabel } from "./support/forms";
 
 const SCRATCH_INDEX = 5;
 const SETTINGS = "/account/settings";
@@ -104,7 +105,7 @@ test.describe("Account settings", () => {
     // --- A recipe of the chef's own, for the chef link and the avatar on a recipe page.
     await page.goto("/recipes/new");
     await waitForHydration(page);
-    await page.getByLabel("Title", { exact: true }).fill(recipeTitle);
+    await page.getByLabel(requiredLabel("Title"), { exact: true }).fill(recipeTitle);
     await page.getByRole("button", { name: "Create recipe", exact: true }).click();
     await expect(page).toHaveURL(RECIPE_URL);
     const recipePath = new URL(page.url()).pathname;
@@ -149,6 +150,13 @@ test.describe("Account settings", () => {
     await userInfo(page).getByRole("button", { name: "Save", exact: true }).click();
     await expect(userInfo(page).getByText("Enter your current password to confirm it's you.", { exact: true })).toBeVisible();
     await expect(userInfo(page).getByLabel("Current password", { exact: true })).toHaveAttribute("aria-invalid", "true");
+    const proofPassword = userInfo(page).getByLabel("Current password", { exact: true });
+    await fillSecret(proofPassword, Secret.generate());
+    await proofPassword.clear();
+    await expect(proofPassword).not.toHaveAttribute("aria-invalid", "true");
+    await userInfo(page).getByRole("button", { name: "Save", exact: true }).click();
+    await expect(proofPassword).toHaveAccessibleDescription("Needed only to change your email. Enter your current password to confirm it's you.");
+    await expect(proofPassword).toBeFocused();
     await testInfo.attach("email-change-needs-password", { body: await userInfo(page).screenshot(), contentType: "image/png" });
 
     await verifyAfterReload(async () => {
@@ -258,8 +266,8 @@ test.describe("Account settings", () => {
 
     // --- Sign in with the new username and the new password; it goes back to the settings page.
     await waitForHydration(page);
-    await page.getByLabel("Username or email", { exact: true }).fill(newName);
-    await fillSecret(page.getByLabel("Password", { exact: true }), newPassword);
+    await page.getByLabel(requiredLabel("Username or email"), { exact: true }).fill(newName);
+    await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), newPassword);
     await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
     await expect(page).toHaveURL(pathUrl(SETTINGS));
     await expect(userInfo(page)).toContainText(newName);

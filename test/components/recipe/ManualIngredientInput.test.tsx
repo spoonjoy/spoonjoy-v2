@@ -58,6 +58,7 @@ describe('ManualIngredientInput', () => {
       for (const input of Array.from(outer.querySelectorAll('input'))) {
         expect(input).not.toHaveAttribute('name')
         expect(input).not.toHaveAttribute('required')
+        expect(input).toHaveAttribute('aria-required', 'true')
       }
 
       await userEvent.type(screen.getByLabelText(/quantity/i), '2')
@@ -123,27 +124,29 @@ describe('ManualIngredientInput', () => {
   })
 
   describe('validation', () => {
-    it('requires quantity field', () => {
+    // aria-required describes the local add operation; only native required could
+    // block the surrounding form. toBeRequired also includes aria-required.
+    it('leaves the quantity field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const quantityInput = screen.getByLabelText(/quantity/i)
-      // Required for adding, announced without native validation (see the surrounding-form test).
+      expect(quantityInput).not.toHaveAttribute('required')
       expect(quantityInput).toHaveAttribute('aria-required', 'true')
     })
 
-    it('requires unit field', () => {
+    it('leaves the unit field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const unitInput = screen.getByLabelText(/unit/i)
-      // Required for adding, announced without native validation (see the surrounding-form test).
+      expect(unitInput).not.toHaveAttribute('required')
       expect(unitInput).toHaveAttribute('aria-required', 'true')
     })
 
-    it('requires ingredient name field', () => {
+    it('leaves the ingredient name field unrequired so it cannot block a surrounding form', () => {
       render(<ManualIngredientInput onAdd={vi.fn()} />)
 
       const ingredientInput = screen.getByLabelText('Ingredient')
-      // Required for adding, announced without native validation (see the surrounding-form test).
+      expect(ingredientInput).not.toHaveAttribute('required')
       expect(ingredientInput).toHaveAttribute('aria-required', 'true')
     })
 

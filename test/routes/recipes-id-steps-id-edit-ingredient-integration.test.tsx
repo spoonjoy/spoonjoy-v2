@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createTestRoutesStub } from '../utils'
+import { createTestRoutesStub, getShownAlert, queryShownAlert } from '../utils'
 import { db } from '~/lib/db.server'
 import { createUser } from '~/lib/auth.server'
 import { cleanupDatabase } from '../helpers/cleanup'
@@ -544,7 +544,7 @@ describe('Step Edit Ingredient Integration', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByRole('alert')).toBeInTheDocument()
+          expect(getShownAlert()).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -561,7 +561,7 @@ describe('Step Edit Ingredient Integration', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByRole('alert')).toBeInTheDocument()
+          expect(getShownAlert()).toBeInTheDocument()
         },
         { timeout: 3000 }
       )
@@ -572,7 +572,7 @@ describe('Step Edit Ingredient Integration', () => {
 
       await waitFor(
         () => {
-          expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+          expect(queryShownAlert()).not.toBeInTheDocument()
         },
         { timeout: 3000 }
       )

@@ -272,16 +272,21 @@ describe("HTML5 validation attributes", () => {
       expect(quantityInput).toHaveAttribute("max", String(QUANTITY_MAX));
     });
 
-    it("quantity field has required attribute", async () => {
+    // The add-ingredient fields also sit inside the Add Step page's form, where a required field
+    // would block saving the step. aria-required now describes the local add operation
+    // without a native required constraint (toBeRequired combines both attributes).
+    it("quantity field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const quantityInput = await screen.findByLabelText(/Quantity/);
-      expect(quantityInput).toBeRequired();
+      expect(quantityInput).not.toHaveAttribute("required");
+      expect(quantityInput).toHaveAttribute("aria-required", "true");
     });
 
-    it("unitName field has required attribute", async () => {
+    it("unitName field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const unitNameInput = await screen.findByLabelText(/Unit/);
-      expect(unitNameInput).toBeRequired();
+      expect(unitNameInput).not.toHaveAttribute("required");
+      expect(unitNameInput).toHaveAttribute("aria-required", "true");
     });
 
     it("unitName field has maxLength attribute", async () => {
@@ -290,10 +295,11 @@ describe("HTML5 validation attributes", () => {
       expect(unitNameInput).toHaveAttribute("maxLength", String(UNIT_NAME_MAX_LENGTH));
     });
 
-    it("ingredientName field has required attribute", async () => {
+    it("ingredientName field does not block the page's form", async () => {
       await renderEditStepWithIngredientForm();
       const ingredientNameInput = await screen.findByLabelText(/Ingredient/);
-      expect(ingredientNameInput).toBeRequired();
+      expect(ingredientNameInput).not.toHaveAttribute("required");
+      expect(ingredientNameInput).toHaveAttribute("aria-required", "true");
     });
 
     it("ingredientName field has maxLength attribute", async () => {

@@ -1,3 +1,5 @@
+"use client";
+
 import { Button as BaseButton } from "@base-ui/react/button";
 import { useEffect, useRef } from "react";
 import type {
@@ -14,9 +16,9 @@ import { announce } from "~/lib/ouro/announce";
 import { fontFor, radiusFor, sizeFor, toneFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { RouterLink } from "~/lib/ouro/router-link";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
-import { useOuro } from "~/lib/ouro/use-ouro";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { toneWarning } from "~/lib/ouro/tones";
 
 /** An icon component, such as one from `lucide-react` or `@heroicons/react`. */
@@ -141,16 +143,16 @@ export type ButtonProps = ButtonLinkProps | ButtonButtonProps;
 
 // Class strings are literal so the app's Tailwind finds them when it compiles.
 const base =
-  "press relative m-0 box-border inline-flex shrink-0 items-center justify-center align-middle " +
+  "press relative box-border inline-flex shrink-0 items-center justify-center align-middle " +
   "rounded-lg border border-solid font-medium whitespace-nowrap " +
   "no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   // A state layer in the text color: a light wash on hover, a deeper one while pressed.
   "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:bg-current " +
-  "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-out " +
-  "not-data-disabled:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
+  "before:opacity-0 before:transition-opacity before:duration-(--ouro-duration-fast) before:ease-[ease] " +
+  "not-data-disabled:not-active:pointer-fine:hover:before:opacity-8 not-data-disabled:active:before:opacity-14 " +
   // Press feedback: scale only when motion is allowed and the button is enabled.
-  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) active:duration-(--ouro-duration-fast) active:ease-out " +
+  "motion-safe:not-data-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress";
 
 // Height and padding step down to desktop density at the `sm` breakpoint through two
@@ -182,11 +184,11 @@ const looks = {
     warning: "border-transparent bg-warning text-warning-foreground",
   },
   soft: {
-    primary: "border-transparent bg-primary/10 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]",
-    secondary: "border-transparent bg-secondary/50 text-secondary-foreground",
-    destructive: "border-transparent bg-destructive/10 text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))]",
-    success: "border-transparent bg-success/10 text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))]",
-    warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))]",
+    primary: "border-transparent bg-primary/10 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] contrast-more:border-current",
+    secondary: "border-transparent bg-secondary/50 text-secondary-foreground contrast-more:border-current",
+    destructive: "border-transparent bg-destructive/10 text-[color-mix(in_oklab,var(--destructive)_80%,var(--foreground))] contrast-more:border-current",
+    success: "border-transparent bg-success/10 text-[color-mix(in_oklab,var(--success)_80%,var(--foreground))] contrast-more:border-current",
+    warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:border-current",
   },
   outline: {
     primary: "border-primary/45 bg-transparent text-primary",
@@ -207,9 +209,6 @@ const looks = {
 const iconClass = "size-[1.25em] shrink-0";
 
 const buttonTypes = ["button", "submit", "reset"] as const;
-
-/** Absolute URLs (`https:`, `mailto:`, protocol-relative) skip the router link. */
-const EXTERNAL = /^([a-z][a-z\d+.-]*:|\/\/)/i;
 
 function buttonHint(token: string): string {
   const size = sizeFor(token, ["sm", "sm", "md", "lg", "lg", "lg", "lg"]);
@@ -246,7 +245,7 @@ function Spinner(): JSX.Element {
   return (
     <span
       aria-hidden="true"
-      className="absolute inset-0 flex items-center justify-center transition-opacity duration-(--ouro-duration-base) ease-out starting:opacity-0"
+      className="absolute inset-0 flex items-center justify-center transition-opacity duration-(--ouro-duration-base) ease-(--ouro-ease-out) starting:opacity-0"
     >
       <svg
         data-ouro-spinner=""
@@ -263,14 +262,6 @@ function Spinner(): JSX.Element {
 
 const preventDefault = (event: MouseEvent) => event.preventDefault();
 
-/** `rel` with `noopener` and `noreferrer` added once each, keeping the caller's tokens. */
-function safeRel(rel: string | undefined): string {
-  const tokens = new Set((rel ?? "").split(/\s+/).filter(Boolean));
-  tokens.add("noopener");
-  tokens.add("noreferrer");
-  return [...tokens].join(" ");
-}
-
 /**
  * A button, or a link styled as one. The obvious name for any action: pressing
  * it gives physical feedback, it has a 44px touch target on phones, and `loading`
@@ -279,6 +270,7 @@ function safeRel(rel: string | undefined): string {
  * Use `href` to navigate (it renders a link); use `type="submit"` in a form.
  * Use `Text` with an `<a>` instead when a link sits inside running text.
  *
+ * @group Actions
  * @see https://ourostack.github.io/ouro-ui/docs/button
  *
  * @example
@@ -306,7 +298,6 @@ export function Button(props: ButtonProps): JSX.Element {
     rightIcon,
     ...rest
   } = props;
-  const { linkComponent: LinkComponent } = useOuro();
   // A tone, variant or size that is not one of Ouro UI's (a type error) warns and renders the default.
   const tone = Object.hasOwn(looks.solid, toneProp) ? (toneProp as keyof typeof looks.solid) : "primary";
   const variant = Object.hasOwn(looks, variantProp) ? (variantProp as keyof typeof looks) : "solid";
@@ -367,7 +358,7 @@ export function Button(props: ButtonProps): JSX.Element {
       <span
         data-ouro-label=""
         className={cn(
-          "relative inline-flex items-center gap-[inherit] transition-opacity duration-(--ouro-duration-fast) ease-out",
+          "relative inline-flex items-center gap-[inherit] transition-opacity duration-(--ouro-duration-fast) ease-(--ouro-ease-out)",
           loading && "opacity-0",
         )}
       >
@@ -381,27 +372,23 @@ export function Button(props: ButtonProps): JSX.Element {
 
   if (rest.href !== undefined) {
     // `type` and `disabled` are typed `never` on links; drop them if they arrive anyway.
-    const { href, target, rel, onClick, ref, type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<
-      ButtonLinkProps,
-      keyof ButtonBaseProps
-    >;
-    const external = EXTERNAL.test(href);
-    const linkProps = {
-      ...anchorProps,
-      href,
-      target,
-      rel: external && target === "_blank" ? safeRel(rel) : rel,
-      onClick: loading ? preventDefault : onClick,
-      onAuxClick: loading ? preventDefault : anchorProps.onAuxClick,
-      ...(ref ? { ref } : {}),
-      className: classes,
-      "data-ouro": "button",
-      "data-loading": loading ? "" : undefined,
-      "data-disabled": loading ? "" : undefined,
-      "aria-busy": loading || undefined,
-      "aria-disabled": loading || undefined,
-    };
-    return external ? <a {...linkProps}>{content}</a> : <LinkComponent {...linkProps}>{content}</LinkComponent>;
+    const { onClick, type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<ButtonLinkProps, keyof ButtonBaseProps>;
+    return (
+      <RouterLink
+        {...anchorProps}
+        onClick={loading ? preventDefault : onClick}
+        onAuxClick={loading ? preventDefault : anchorProps.onAuxClick}
+        className={classes}
+        data-ouro="button"
+        data-variant={variant}
+        data-loading={loading ? "" : undefined}
+        data-disabled={loading ? "" : undefined}
+        aria-busy={loading || anchorProps["aria-busy"]}
+        aria-disabled={loading || anchorProps["aria-disabled"]}
+      >
+        {content}
+      </RouterLink>
+    );
   }
 
   const { ref, disabled, type: typeProp = "button", ...buttonProps } = rest as Omit<ButtonButtonProps, keyof ButtonBaseProps>;
@@ -416,8 +403,9 @@ export function Button(props: ButtonProps): JSX.Element {
       focusableWhenDisabled={Boolean(loading && !disabled)}
       className={classes}
       data-ouro="button"
+      data-variant={variant}
       data-loading={loading ? "" : undefined}
-      aria-busy={loading || undefined}
+      aria-busy={loading || buttonProps["aria-busy"]}
     >
       {content}
     </BaseButton>

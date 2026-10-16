@@ -1,5 +1,4 @@
-// Spoonjoy: the local fixture fails a spec on any browser warning or error (e2e/fixtures.ts).
-import { expect, test } from "../fixtures";
+import { expect, test } from "../ouro-fixtures";
 import { openStory, settledBox, slowDrag } from "./story";
 
 test.use({ viewport: { width: 390, height: 844 } });

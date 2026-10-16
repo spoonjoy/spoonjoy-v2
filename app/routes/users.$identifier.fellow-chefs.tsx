@@ -2,7 +2,7 @@ import type { Route } from "./+types/users.$identifier.fellow-chefs";
 import { redirect, useLoaderData } from "react-router";
 import { Subheading } from "~/components/ui/heading";
 import { Text } from "~/components/ui/text";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/ouro/link/link";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import {
@@ -148,7 +148,7 @@ export default function FellowChefsPage() {
             aria-label="Pagination"
           >
             {hasPrev ? (
-              <Link href={`${basePath}?page=${page - 1}`} className="sj-link">
+              <Link href={`${basePath}?page=${page - 1}`}>
                 ← Previous
               </Link>
             ) : (
@@ -158,7 +158,7 @@ export default function FellowChefsPage() {
               Page {page} of {totalPages}
             </Text>
             {hasNext ? (
-              <Link href={`${basePath}?page=${page + 1}`} className="sj-link">
+              <Link href={`${basePath}?page=${page + 1}`}>
                 Next →
               </Link>
             ) : (

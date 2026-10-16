@@ -244,7 +244,7 @@ describe('IngredientParseInput', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
 
-    it('marks textarea as invalid when error present', async () => {
+    it('leaves the textarea valid when the parser fails, since the text is not what is wrong', async () => {
       const actionHandler = vi.fn().mockResolvedValue({
         errors: { parse: 'Parse failed' },
       })
@@ -259,11 +259,9 @@ describe('IngredientParseInput', () => {
       })
       vi.useRealTimers()
 
-      await waitFor(() => {
-        // HeadlessUI uses data-invalid attribute instead of aria-invalid for styling
-        const textarea = screen.getByRole('textbox')
-        expect(textarea).toHaveAttribute('data-invalid')
-      })
+      // The failure shows as an alert with the ways on from it, not as the field's error.
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+      expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid')
     })
 
     it('displays error message with alert role for screen readers', async () => {

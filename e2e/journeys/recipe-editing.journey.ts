@@ -10,6 +10,7 @@ import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
+import { requiredLabel } from "./support/forms";
 
 // A 1×1 PNG: enough to be a real photo file for the import form.
 const RECIPE_CARD_PNG = Buffer.from(
@@ -32,6 +33,11 @@ function editPageStep(page: Page, stepNum: number) {
 
 function ingredient(page: Page, name: string) {
   return page.getByRole("checkbox", { name, exact: true });
+}
+
+// Establish the initial synced state before checking deletion and its cache cleanup.
+async function expectCookProgressSynced(page: Page) {
+  await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
 }
 
 async function openMaintenance(page: Page) {
@@ -58,7 +64,7 @@ test.describe("Recipe create and edit", () => {
     // --- Build the recipe. The title is typed straight after the server markup arrives, before
     // hydration, so a controlled field that hydration resets would lose it (milestone 1's bug).
     await page.goto("/recipes/new", { waitUntil: "commit" });
-    const titleField = page.getByLabel("Title", { exact: true });
+    const titleField = page.getByLabel(requiredLabel("Title"), { exact: true });
     await titleField.fill(title);
     await waitForHydration(page);
     await page.getByLabel("Description", { exact: true }).fill("Crisp outside, soft inside.");
@@ -133,13 +139,13 @@ test.describe("Recipe create and edit", () => {
     await waitForHydration(page);
     await expect(page.getByRole("heading", { level: 1, name: "Add Step", exact: true })).toBeVisible();
     // Typing elsewhere moves focus, which re-renders the fields after hydration.
-    await page.getByRole("textbox", { name: "Description *" }).fill("Drizzle with honey");
+    await page.getByRole("textbox", { name: "Description", exact: true }).fill("Drizzle with honey");
     await expect(ingredientText).toHaveValue("2 tbsp honey");
     const parsed = await parseResponse;
     expect(new URL(parsed.url()).pathname).toBe(`${recipePath}/steps/new.data`);
     expect(parsed.status()).toBe(200);
     // Parsed, or a message that AI parsing is unavailable with the manual path; never "Page not found".
-    await expect(page.getByRole("heading", { name: /^Ingredients \(\d+\)$/ }).or(page.getByRole("alert"))).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Ingredients \(\d+\)$/ }).or(page.getByRole("alert").filter({ hasText: /\S/ }))).toBeVisible();
     await expect(page.getByRole("heading", { level: 1, name: "Add Step", exact: true })).toBeVisible();
     await expectAccessible();
 
@@ -204,7 +210,7 @@ test.describe("Recipe create and edit", () => {
 
     // --- Delete the recipe.
     await waitForHydration(page);
-    await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+    await expectCookProgressSynced(page);
     const cachedProgressKeys = await page.evaluate((path) => Object.keys(localStorage).filter((key) =>
       key.startsWith("spoonjoy-cook-progress:") && key.endsWith(`:${path.split("/").at(-1)}`)), recipePath);
     expect(cachedProgressKeys).toHaveLength(1);
@@ -238,7 +244,7 @@ test.describe("Recipe create and edit", () => {
 
     await page.goto("/recipes/new");
     await waitForHydration(page);
-    await page.getByLabel("Title", { exact: true }).fill(title);
+    await page.getByLabel(requiredLabel("Title"), { exact: true }).fill(title);
     await page.getByRole("button", { name: "Add step", exact: true }).click();
     const card = page.getByRole("article", { name: "Step 1", exact: true });
     await card.getByLabel("Instructions").fill("Boil the pasta in salted water");
@@ -261,6 +267,7 @@ test.describe("Recipe create and edit", () => {
 
     // --- Delete the recipe.
     await waitForHydration(page);
+    await expectCookProgressSynced(page);
     await (await openMaintenance(page)).getByRole("button", { name: "Delete", exact: true }).click();
     const deleteRecipeDialog = page.getByRole("alertdialog", { name: /^Delete ".+"\?$/ });
     await deleteRecipeDialog.getByRole("button", { name: "Delete", exact: true }).click();
@@ -279,27 +286,36 @@ test.describe("Recipe create and edit", () => {
     const importHeading = page.getByRole("heading", { name: "Start from a recipe you already have." });
     await expect(importHeading).toBeVisible();
     await expect(page.getByRole("button", { name: "From a link", exact: true })).toHaveAttribute("aria-pressed", "true");
+    // The answer shows under the field it is about, as that field's error.
+    const importAnswer = page.getByText("Importing isn't switched on here yet. You can still write the recipe below.", { exact: true });
 
-    await page.getByLabel("Recipe link", { exact: true }).fill("https://example.com/recipes/weeknight-soup");
+    await page.getByLabel(requiredLabel("Recipe link"), { exact: true }).fill("https://example.com/recipes/weeknight-soup");
     await page.getByRole("button", { name: "Import recipe", exact: true }).click();
-    await expect(page.getByRole("alert")).toHaveText("Importing isn't switched on here yet. You can still write the recipe below.");
+    await expect(importAnswer).toBeVisible();
     await expect(page).toHaveURL(pathUrl("/recipes/new"));
+    const linkField = page.getByLabel(requiredLabel("Recipe link"), { exact: true });
+    await linkField.fill("https://example.com/recipes/another-soup");
+    await expect(linkField).not.toHaveAttribute("aria-invalid", "true");
+    await page.getByRole("button", { name: "Import recipe", exact: true }).click();
+    await expect(importAnswer).toBeVisible();
+    await expect(linkField).toHaveAttribute("aria-invalid", "true");
+    await expect(linkField).toBeFocused();
 
     await page.getByRole("button", { name: "Paste text", exact: true }).click();
-    await expect(page.getByLabel("Recipe text", { exact: true })).toBeVisible();
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByLabel(requiredLabel("Recipe text"), { exact: true })).toBeVisible();
+    await expect(importAnswer).toHaveCount(0);
     await expectAccessible();
 
     // A photo reaches the server: one that went missing on the way would be answered with
     // "Choose a photo of the recipe." instead.
     await page.getByRole("button", { name: "From a photo", exact: true }).click();
-    await page.getByLabel("Recipe photo", { exact: true }).setInputFiles({
+    await page.getByLabel(requiredLabel("Recipe photo"), { exact: true }).setInputFiles({
       name: "recipe-card.png",
       mimeType: "image/png",
       buffer: RECIPE_CARD_PNG,
     });
     await page.getByRole("button", { name: "Import recipe", exact: true }).click();
-    await expect(page.getByRole("alert")).toHaveText("Importing isn't switched on here yet. You can still write the recipe below.");
+    await expect(importAnswer).toBeVisible();
     await expect(page.getByRole("button", { name: "From a photo", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page).toHaveURL(pathUrl("/recipes/new"));
     await expectAccessible();

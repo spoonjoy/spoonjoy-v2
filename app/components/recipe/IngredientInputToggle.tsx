@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Description, Label } from '~/components/ui/fieldset'
-import { Switch, SwitchField } from '~/components/ui/switch'
+import { Switch } from '~/components/ouro/switch/switch'
 
 export type IngredientInputMode = 'ai' | 'manual'
 
@@ -98,15 +97,12 @@ export function IngredientInputToggle({
   )
 
   return (
-    <SwitchField>
-      <Label>AI Parse</Label>
-      <Description>Use AI to parse ingredients from text</Description>
-      <Switch
-        checked={effectiveMode === 'ai'}
-        onChange={handleChange}
-        disabled={disabled}
-
-      />
-    </SwitchField>
+    <Switch
+      label="AI Parse"
+      description="Use AI to parse ingredients from text"
+      checked={effectiveMode === 'ai'}
+      onCheckedChange={handleChange}
+      disabled={disabled}
+    />
   )
 }

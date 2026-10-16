@@ -45,6 +45,12 @@ import "./warning-policy";
 import { vi, beforeAll, expect } from "vitest";
 import React from "react";
 
+// happy-dom does not compile the app's Tailwind stylesheet. Supply its installed base
+// token here; CI's Ouro browser projects load the actual stylesheet and check the theme.
+beforeAll(() => {
+  if (typeof document !== "undefined") document.documentElement.style.setProperty("--ouro-layer", "50");
+});
+
 // Mock Motion's Reorder components to render children directly in tests
 // This is needed because Reorder.Group and Reorder.Item have complex animation
 // logic that doesn't work well with happy-dom

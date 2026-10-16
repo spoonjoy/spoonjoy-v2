@@ -1,3 +1,5 @@
+"use client";
+
 import {
   cloneElement,
   useRef,
@@ -12,9 +14,11 @@ import {
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { checkOpenMode } from "~/lib/ouro/open-mode";
 import { useMergedRef } from "~/lib/ouro/refs";
+import { serverElement } from "~/lib/ouro/server-element";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { useDevWarnings } from "~/lib/ouro/use-dev-warnings";
-import { useMediaQuery } from "~/lib/ouro/use-media-query";
+import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { lastInput } from "~/lib/ouro/last-input";
+import { useSheetPresentation } from "~/lib/ouro/use-sheet-presentation";
 import { sheetHint } from "~/components/ouro/sheet/sheet-styles";
 import { SheetFrame } from "~/components/ouro/sheet/sheet";
 import {
@@ -56,7 +60,9 @@ export interface DialogBaseProps {
   /**
    * `auto` renders a centered dialog from the `sm` breakpoint (640px) up and a
    * bottom sheet you can drag away below it. The server renders the dialog form
-   * and corrects it on hydration; nothing shows until it opens, so nothing shifts.
+   * and corrects it on hydration. A dialog that is closed at load shows nothing until
+   * it opens, so nothing shifts; one that is open at load (a route such as `?edit=1`)
+   * shows as the centered dialog on a phone until hydration swaps it to the sheet.
    * @default "auto"
    */
   presentation?: DialogPresentation | (string & { 'Use "auto", "dialog" or "sheet"': never }) | undefined;
@@ -131,29 +137,11 @@ type TriggerProps = {
  */
 const closeClass =
   "absolute top-3 end-3 box-border inline-flex size-8 items-center justify-center m-0 p-0 border-0 rounded-lg " +
-  "bg-transparent text-muted-foreground cursor-pointer [-webkit-tap-highlight-color:transparent] " +
-  "[transition:background-color_var(--ouro-duration-fast)_ease-out,color_var(--ouro-duration-fast)_ease-out] " +
-  "hover:bg-accent hover:text-accent-foreground " +
+  "press bg-transparent text-muted-foreground cursor-pointer [-webkit-tap-highlight-color:transparent] " +
+  "not-disabled:pointer-fine:hover:bg-accent not-disabled:pointer-fine:hover:text-accent-foreground " +
+  "not-disabled:active:bg-accent not-disabled:active:text-accent-foreground motion-safe:not-disabled:active:scale-(--ouro-press-scale) " +
+  "disabled:cursor-not-allowed disabled:opacity-50 " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid [&>svg]:size-4";
-
-/**
- * How the user last interacted with the page: the pointer type of the last
- * `pointerdown` on the document ("mouse", "touch" or "pen"), or "keyboard" after a
- * later key press. A controlled Dialog reads it when it opens, because the app's own
- * button opened it and Dialog never saw that press.
- */
-let lastInput = "";
-
-/** Starts recording {@link lastInput}, in the capture phase so nothing can stop it. */
-function trackLastInput(): void {
-  document.addEventListener("pointerdown", (event) => (lastInput = event.pointerType), true);
-  document.addEventListener("keydown", () => (lastInput = "keyboard"), true);
-}
-
-// From module load, not from the first Dialog's mount: an app that mounts its Dialog on
-// the tap that opens it (`{editing && <Dialog open … />}`) must still see that tap.
-/* istanbul ignore else @preserve -- the else path is server rendering, which has no document */
-if (typeof document !== "undefined") trackLastInput();
 
 /** The close button's icon: a 16px cross in the text color. */
 function CloseIcon(): JSX.Element {
@@ -182,6 +170,7 @@ function CloseIcon(): JSX.Element {
  * without a name so VoiceOver's cursor stays trapped. Exclude them:
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
+ * @group Overlays
  * @see https://ourostack.github.io/ouro-ui/docs/dialog
  *
  * @example
@@ -264,6 +253,66 @@ export function Dialog(props: DialogProps): JSX.Element {
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
 
+  return (
+    <DialogFrame
+      title={title}
+      hideTitle={hideTitle}
+      closeLabel={closeLabel}
+      description={description}
+      presentation={presentation}
+      size={size}
+      footer={footer}
+      className={className}
+      trigger={trigger}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      {children}
+    </DialogFrame>
+  );
+}
+
+/** Props for {@link DialogFrame}: a Dialog's props after its checks, with `trigger` and `open` allowed together. */
+export interface DialogFrameProps {
+  title: string;
+  hideTitle?: boolean | undefined;
+  closeLabel: string;
+  description?: ReactNode;
+  presentation: DialogPresentation;
+  size: DialogSize;
+  footer?: ReactNode;
+  children: ReactNode;
+  className?: string | undefined;
+  /** The opening element. May come with `open`, when a pattern such as `EditSheet` owns the state. */
+  trigger?: ReactElement | undefined;
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+  /** Disables the close button, as `EditSheet` does while a save is pending. */
+  closeDisabled?: boolean | undefined;
+}
+
+/**
+ * The dialog's markup and behavior, without prop checks: `Dialog` renders it after its own
+ * checks, and `EditSheet` renders it with a trigger and its own open state, so it can close
+ * the dialog when a save succeeds and still return focus to the trigger.
+ *
+ * @internal Shared with `EditSheet`; apps use `Dialog`.
+ */
+export function DialogFrame({
+  title,
+  hideTitle,
+  closeLabel,
+  description,
+  presentation,
+  size,
+  footer,
+  children,
+  className,
+  trigger,
+  open,
+  onOpenChange,
+  closeDisabled,
+}: DialogFrameProps): JSX.Element {
   // The Dialog owns the open state even with a trigger, so the dialog stays open
   // when a resize across 640px swaps the centered dialog for the sheet.
   const [ownOpen, setOwnOpen] = useState(false);
@@ -281,11 +330,13 @@ export function Dialog(props: DialogProps): JSX.Element {
   // software keyboard); the cloned trigger records it here instead.
   const [lastPointer, setLastPointer] = useState<string>();
   const [tapOpened, setTapOpened] = useState(false);
-  const triggerProps = (trigger?.props ?? {}) as TriggerProps;
+  // A Server Component's trigger can arrive as a lazy wrapper; resolve it before cloning.
+  const triggerElement = serverElement(trigger);
+  const triggerProps = (triggerElement?.props ?? {}) as TriggerProps;
   const mergedTriggerRef = useMergedRef(triggerProps.ref, triggerRef);
   const triggerNode =
     trigger !== undefined &&
-    cloneElement(trigger as ReactElement<TriggerProps>, {
+    cloneElement(triggerElement as ReactElement<TriggerProps>, {
       ref: mergedTriggerRef,
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         triggerProps.onPointerDown?.(event);
@@ -305,62 +356,61 @@ export function Dialog(props: DialogProps): JSX.Element {
   // Focus returns to the trigger on close, in either presentation.
   const finalFocus = trigger !== undefined ? { finalFocus: triggerRef } : {};
   // The centered dialog focuses itself after a touch or pen open, and the first
-  // control otherwise, as Base UI does with its own trigger. A controlled dialog
+  // control otherwise, as Base UI does with its own trigger. A dialog without a trigger
   // decides when it opens, from the last press on the page. (The sheet always
   // focuses itself, like a plain Sheet.)
-  const initialFocus = controlled
-    ? { initialFocus: () => (lastInput === "touch" || lastInput === "pen" ? popupRef.current : true) }
+  const initialFocus = trigger === undefined
+    ? { initialFocus: () => (lastInput() === "touch" || lastInput() === "pen" ? popupRef.current : true) }
     : tapOpened
       ? { initialFocus: popupRef }
       : {};
 
   // The server and hydration render the dialog form; the client corrects it after.
-  const wide = useMediaQuery("(min-width: 640px)", true);
-  const presented =
-    presentation === "sheet" || (presentation === "auto" && !wide) ? (
-      <SheetFrame
-        title={title}
-        hideTitle={hideTitle}
-        closeLabel={closeLabel}
-        description={description}
-        side="bottom"
-        className={className}
-        open={isOpenNow}
-        onOpenChange={setOpen}
-        footer={footer}
-        presentation="sheet"
-        {...finalFocus}
-      >
-        {children}
-      </SheetFrame>
-    ) : (
-      <DialogRoot open={isOpenNow} onOpenChange={(next) => setOpen(next)}>
-        <DialogPortal>
-          <DialogBackdrop />
-          <DialogViewport>
-            <DialogPopupUnchecked
-              ref={popupRef}
-              className={className}
-              size={size}
-              {...finalFocus}
-              {...initialFocus}
-            >
-              {/* Always rendered: with a hidden title it still keeps the body clear of the close button. */}
-              <div data-ouro-dialog-header="" className="box-border grid min-h-13 shrink-0 gap-1 pt-5 pr-13 pb-2 pl-5">
-                <DialogTitle visuallyHidden={hideTitle}>{title}</DialogTitle>
-                {description !== undefined && <DialogDescription>{description}</DialogDescription>}
-              </div>
-              <DialogContent>{children}</DialogContent>
-              {footer !== undefined && <DialogFooter>{footer}</DialogFooter>}
-              <DialogClose data-ouro-dialog-close="" aria-label={closeLabel} className={closeClass}>
-                <TouchTarget />
-                <CloseIcon />
-              </DialogClose>
-            </DialogPopupUnchecked>
-          </DialogViewport>
-        </DialogPortal>
-      </DialogRoot>
-    );
+  const presented = useSheetPresentation(presentation) ? (
+    <SheetFrame
+      title={title}
+      hideTitle={hideTitle}
+      closeLabel={closeLabel}
+      description={description}
+      side="bottom"
+      className={className}
+      open={isOpenNow}
+      onOpenChange={setOpen}
+      footer={footer}
+      presentation="sheet"
+      closeDisabled={closeDisabled}
+      {...finalFocus}
+    >
+      {children}
+    </SheetFrame>
+  ) : (
+    <DialogRoot open={isOpenNow} onOpenChange={(next) => setOpen(next)}>
+      <DialogPortal>
+        <DialogBackdrop />
+        <DialogViewport>
+          <DialogPopupUnchecked
+            ref={popupRef}
+            className={className}
+            size={size}
+            {...finalFocus}
+            {...initialFocus}
+          >
+            {/* Always rendered: with a hidden title it still keeps the body clear of the close button. */}
+            <div data-ouro-dialog-header="" className="box-border grid min-h-13 shrink-0 gap-1 pt-5 pr-13 pb-2 pl-5">
+              <DialogTitle visuallyHidden={hideTitle}>{title}</DialogTitle>
+              {description !== undefined && <DialogDescription>{description}</DialogDescription>}
+            </div>
+            <DialogContent>{children}</DialogContent>
+            {footer !== undefined && <DialogFooter>{footer}</DialogFooter>}
+            <DialogClose data-ouro-dialog-close="" aria-label={closeLabel} disabled={closeDisabled} className={closeClass}>
+              <TouchTarget />
+              <CloseIcon />
+            </DialogClose>
+          </DialogPopupUnchecked>
+        </DialogViewport>
+      </DialogPortal>
+    </DialogRoot>
+  );
 
   return (
     <>

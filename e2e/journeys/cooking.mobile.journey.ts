@@ -5,6 +5,7 @@
 import { test, expect } from "./support/journey";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { createDisposableJourneyUser, fillSecret } from "./support/secret";
+import { requiredLabel } from "./support/forms";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
 
@@ -20,10 +21,10 @@ test.describe("Recipe list action on iPhone", () => {
     // Sign up as the throwaway user.
     await page.goto("/signup");
     await waitForHydration(page);
-    await page.getByLabel("Email", { exact: true }).fill(user.email);
-    await page.getByLabel("Username", { exact: true }).fill(user.username);
-    await fillSecret(page.getByLabel("Password", { exact: true }), user.password);
-    await fillSecret(page.getByLabel("Confirm password", { exact: true }), user.password);
+    await page.getByLabel(requiredLabel("Email"), { exact: true }).fill(user.email);
+    await page.getByLabel(requiredLabel("Username"), { exact: true }).fill(user.username);
+    await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), user.password);
+    await fillSecret(page.getByLabel(requiredLabel("Confirm password"), { exact: true }), user.password);
     await page.getByRole("button", { name: "Sign up", exact: true }).click();
     // A new account with nowhere to return to lands in its own Kitchen (product audit 2026-10-09,
     // finding 11: it used to land in the public recipe box).

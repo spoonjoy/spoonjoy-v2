@@ -27,10 +27,10 @@ import { Button } from "~/components/ui/button";
 import { useToast } from "~/components/ui/toast";
 import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
-import { Field, Label } from "~/components/ui/fieldset";
+import { Form } from "~/components/ouro/form/form";
+import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ui/heading";
-import { Input } from "~/components/ui/input";
-import { ValidationError } from "~/components/ui/validation-error";
 import { Link } from "~/components/ui/link";
 import { Text } from "~/components/ui/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
@@ -685,14 +685,22 @@ export default function RecipeDetail() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSpoonDialogOpen, setIsSpoonDialogOpen] = useState(false);
   // A cook the server could not save shows its message in the open dialog, which keeps the input.
-  const [spoonError, setSpoonError] = useState<string | null>(null);
+  // Keep the response itself: a display projection must never manufacture acceptance.
+  const [spoonAnswer, setSpoonAnswer] = useState<{ error?: unknown }>();
+  const spoonErrors = useFormMessage(typeof spoonAnswer?.error === "string" ? spoonAnswer.error : undefined, spoonAnswer);
   const openSpoonDialog = useCallback(() => {
-    setSpoonError(null);
+    setSpoonAnswer(undefined);
     setIsSpoonDialogOpen(true);
   }, []);
   const [showOwnerTools, setShowOwnerTools] = useState(false);
   const [newCookbookTitle, setNewCookbookTitle] = useState("");
-  const [createCookbookError, setCreateCookbookError] = useState<string | null>(null);
+  // The create's error belongs on the cookbook name field.
+  const [createCookbookAnswer, setCreateCookbookAnswer] = useState<{ error?: unknown }>();
+  const createCookbookErrors = useFormErrors(
+    typeof createCookbookAnswer?.error === "string" ? { title: createCookbookAnswer.error } : undefined,
+    undefined,
+    createCookbookAnswer,
+  );
 
   useEffect(() => {
     const loggedSpoonId = actionData?.success && actionData.intent === "createSpoon"
@@ -710,7 +718,7 @@ export default function RecipeDetail() {
 
   useEffect(() => {
     if (actionData?.intent === "createSpoon" && typeof actionData.error === "string") {
-      setSpoonError(actionData.error);
+      setSpoonAnswer(actionData);
     }
   }, [actionData]);
 
@@ -720,7 +728,7 @@ export default function RecipeDetail() {
       return;
     }
 
-    setCreateCookbookError(null);
+    setCreateCookbookAnswer(undefined);
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
 
@@ -969,7 +977,7 @@ export default function RecipeDetail() {
   useEffect(() => {
     const result = createCookbookFetcher.data as { intent?: unknown; error?: unknown } | undefined;
     if (result?.intent === "createCookbookAndSave" && typeof result.error === "string") {
-      setCreateCookbookError(result.error);
+      setCreateCookbookAnswer(result);
     }
   }, [createCookbookFetcher.data]);
 
@@ -1183,7 +1191,7 @@ export default function RecipeDetail() {
         actionUrl={`/recipes/${recipe.id}`}
         isOriginCookCandidate={isOriginCookCandidate}
         coverPromptMode={coverPromptMode}
-        errorMessage={spoonError}
+        errors={spoonErrors}
       />
 
       {/* Save to Cookbook: Ouro UI's Dialog, a bottom sheet on phones and centred from 640px up. It
@@ -1195,9 +1203,11 @@ export default function RecipeDetail() {
         onOpenChange={setIsSaveModalOpen}
         footer={
           <div className="w-full" data-testid="save-modal-footer">
-            <createCookbookFetcher.Form
+            <Form
               method="post"
-              className="space-y-3"
+              errors={createCookbookErrors}
+              render={<createCookbookFetcher.Form />}
+              className="gap-3"
               onSubmit={(event) => {
                 const title = newCookbookTitle.trim();
                 if (!title) {
@@ -1209,23 +1219,17 @@ export default function RecipeDetail() {
               }}
             >
               <input type="hidden" name="intent" value="createCookbookAndSave" />
-              <Field>
-                <Label htmlFor="new-cookbook-input">Create new cookbook</Label>
-                <Input
-                  id="new-cookbook-input"
-                  name="title"
-                  type="text"
-                  placeholder="Cookbook name"
-                  value={newCookbookTitle}
-                  onChange={(event) => {
-                    setNewCookbookTitle(event.target.value);
-                    setCreateCookbookError(null);
-                  }}
-                  invalid={createCookbookError ? true : undefined}
-                  data-testid="new-cookbook-input"
-                />
-              </Field>
-              <ValidationError error={createCookbookError} />
+              <TextField
+                label="Create new cookbook"
+                name="title"
+                placeholder="Cookbook name"
+                value={newCookbookTitle}
+                onChange={(event) => {
+                  setNewCookbookTitle(event.target.value);
+                  setCreateCookbookAnswer(undefined);
+                }}
+                data-testid="new-cookbook-input"
+              />
               <Button
                 type="submit"
                 disabled={newCookbookTitle.trim().length === 0 || createCookbookFetcher.state !== "idle"}
@@ -1233,7 +1237,7 @@ export default function RecipeDetail() {
               >
                 Create & Save
               </Button>
-            </createCookbookFetcher.Form>
+            </Form>
           </div>
         }
       >

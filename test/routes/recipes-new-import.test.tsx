@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -123,7 +123,7 @@ describe("RecipeImportPanel", () => {
     const cardHeading = screen.getByRole("heading", { name: "Give the dish a home." });
     expect(importHeading.compareDocumentPosition(cardHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "From a link" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Recipe link")).toHaveAttribute("type", "url");
+    expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("type", "url");
   });
 
   it("switches to pasting the recipe, pointing paper recipes at the photo option", async () => {
@@ -131,8 +131,8 @@ describe("RecipeImportPanel", () => {
     renderPanel(() => null);
     await user.click(await screen.findByRole("button", { name: "Paste text" }));
     expect(screen.getByRole("button", { name: "Paste text" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByLabelText("Recipe link")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Recipe text").tagName).toBe("TEXTAREA");
+    expect(screen.queryByLabelText(requiredLabel("Recipe link"))).not.toBeInTheDocument();
+    expect(screen.getByLabelText(requiredLabel("Recipe text")).tagName).toBe("TEXTAREA");
     expect(screen.getByText("Paste the title, ingredients and steps. Have it on paper? Choose From a photo instead.")).toBeInTheDocument();
   });
 
@@ -152,7 +152,7 @@ describe("RecipeImportPanel", () => {
     });
     await user.click(await screen.findByRole("button", { name: "From a photo" }));
     expect(screen.getByRole("button", { name: "From a photo" })).toHaveAttribute("aria-pressed", "true");
-    const field = screen.getByLabelText("Recipe photo");
+    const field = screen.getByLabelText(requiredLabel("Recipe photo"));
     expect(field).toHaveAttribute("type", "file");
     expect(field).toHaveAttribute("accept", "image/jpeg,image/png,image/webp,image/gif");
     expect(field).toBeRequired();
@@ -160,9 +160,9 @@ describe("RecipeImportPanel", () => {
 
     await user.upload(field, new File([new Uint8Array([1, 2, 3])], "card.jpg", { type: "image/jpeg" }));
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("We couldn't read a recipe in that photo.");
-    expect(screen.getByLabelText("Recipe photo")).toHaveAttribute("aria-invalid", "true");
+    // The answer shows under the field it is about, as that field's error.
+    expect(await screen.findByText("We couldn't read a recipe in that photo.")).toBeInTheDocument();
+    expect(screen.getByLabelText(requiredLabel("Recipe photo"))).toHaveAttribute("aria-invalid", "true");
     expect(posts[0].kind).toBe("photo");
     expect(posts[0].importId).toMatch(/^[0-9a-f-]{36}$/);
     expect(submittedPhotos[0]).toBe("card.jpg");
@@ -172,7 +172,7 @@ describe("RecipeImportPanel", () => {
     expect(posts[1].importId).toBe(posts[0].importId);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Import recipe" })).toBeEnabled());
-    await user.upload(screen.getByLabelText("Recipe photo"), new File([new Uint8Array([4, 5])], "page.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText(requiredLabel("Recipe photo")), new File([new Uint8Array([4, 5])], "page.png", { type: "image/png" }));
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     await waitFor(() => expect(posts).toHaveLength(3));
     expect(posts[2].importId).not.toBe(posts[0].importId);
@@ -187,7 +187,7 @@ describe("RecipeImportPanel", () => {
       posts.push(Object.fromEntries([...formData.entries()].map(([k, v]) => [k, String(v)])));
       return { importResult: { kind: "link", message: "That site took too long to answer." } };
     });
-    const field = await screen.findByLabelText("Recipe link");
+    const field = await screen.findByLabelText(requiredLabel("Recipe link"));
     await user.type(field, "https://example.com/soup");
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     expect(await screen.findByText("That site took too long to answer.")).toBeInTheDocument();
@@ -197,10 +197,10 @@ describe("RecipeImportPanel", () => {
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     await waitFor(() => expect(posts).toHaveLength(2));
     expect(posts[1].importId).toBe(posts[0].importId);
-    await waitFor(() => expect(screen.getByLabelText("Recipe link")).toBeEnabled());
+    await waitFor(() => expect(screen.getByLabelText(requiredLabel("Recipe link"))).toBeEnabled());
 
-    await user.clear(screen.getByLabelText("Recipe link"));
-    await user.type(screen.getByLabelText("Recipe link"), "https://example.com/stew");
+    await user.clear(screen.getByLabelText(requiredLabel("Recipe link")));
+    await user.type(screen.getByLabelText(requiredLabel("Recipe link")), "https://example.com/stew");
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     await waitFor(() => expect(posts).toHaveLength(3));
     expect(posts[2].importId).not.toBe(posts[0].importId);
@@ -211,15 +211,33 @@ describe("RecipeImportPanel", () => {
     renderPanel(() => ({
       importResult: { kind: "link", message: "You already brought this one in as “Soup”.", existingRecipe: { id: "r-soup", title: "Soup" } },
     }));
-    await user.type(await screen.findByLabelText("Recipe link"), "https://example.com/soup");
+    await user.type(await screen.findByLabelText(requiredLabel("Recipe link")), "https://example.com/soup");
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("You already brought this one in as “Soup”. Open it");
-    expect(within(alert).getByRole("link", { name: "Open it" })).toHaveAttribute("href", "/recipes/r-soup");
-    expect(screen.getByLabelText("Recipe link")).toHaveAttribute("aria-invalid", "true");
+    expect(await screen.findByText("You already brought this one in as “Soup”.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open it" })).toHaveAttribute("href", "/recipes/r-soup");
+    expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAccessibleDescription("Any recipe page, or a YouTube or TikTok video with the recipe in its description. You already brought this one in as “Soup”. Open it");
 
     await user.click(screen.getByRole("button", { name: "Paste text" }));
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("You already brought this one in as “Soup”.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open it" })).not.toBeInTheDocument();
+  });
+
+  it("leaves focus on the tab when the cook comes back to a kind whose answer is already shown", async () => {
+    const user = userEvent.setup();
+    renderPanel(() => ({ importResult: { kind: "link", message: "That site took too long to answer." } }));
+    await user.type(await screen.findByLabelText(requiredLabel("Recipe link")), "https://example.com/soup");
+    await user.click(screen.getByRole("button", { name: "Import recipe" }));
+    expect(await screen.findByText("That site took too long to answer.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Paste text" }));
+    const linkTab = screen.getByRole("button", { name: "From a link" });
+    await user.click(linkTab);
+
+    // The answer is back under the link field, and it is not treated as a new one.
+    expect(screen.getByText("That site took too long to answer.")).toBeInTheDocument();
+    expect(screen.getByLabelText(requiredLabel("Recipe link"))).toHaveAttribute("aria-invalid", "true");
+    expect(linkTab).toHaveFocus();
   });
 
   it("shows that it is reading while the import runs", async () => {
@@ -227,7 +245,7 @@ describe("RecipeImportPanel", () => {
     let finish: (value: unknown) => void = () => undefined;
     renderPanel(() => new Promise((resolve) => { finish = resolve; }));
     await user.click(await screen.findByRole("button", { name: "Paste text" }));
-    await user.type(screen.getByLabelText("Recipe text"), "Toast");
+    await user.type(screen.getByLabelText(requiredLabel("Recipe text")), "Toast");
     await user.click(screen.getByRole("button", { name: "Import recipe" }));
     const busy = await screen.findByRole("button", { name: "Reading the recipe…" });
     expect(busy).toBeDisabled();
@@ -242,8 +260,8 @@ describe("RecipeImportPanel", () => {
       { path: "/", Component: () => <RecipeImportPanel result={{ kind: "text", message: "Paste the recipe: its title, ingredients and steps." }} /> },
     ]);
     render(<Stub initialEntries={["/"]} />);
-    expect(await screen.findByLabelText("Recipe text")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("alert")).toHaveTextContent("Paste the recipe: its title, ingredients and steps.");
+    expect(await screen.findByLabelText(requiredLabel("Recipe text"))).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Paste the recipe: its title, ingredients and steps.")).toBeInTheDocument();
   });
 });
 

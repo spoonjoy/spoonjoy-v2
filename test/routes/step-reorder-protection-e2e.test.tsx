@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, waitFor } from "@testing-library/react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, getShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { action as newRecipeAction } from "~/routes/recipes.new";
 import { action as newStepAction } from "~/routes/recipes.$id.steps.new";
@@ -558,7 +558,7 @@ describe("E2E: Step Reorder Protection", () => {
 
       // Wait for error message to appear with role="alert"
       await waitFor(() => {
-        const errorElement = screen.getByRole("alert");
+        const errorElement = getShownAlert();
         expect(errorElement).toHaveTextContent(
           "Cannot move Step 1 to position 2 because Step 2 uses its output"
         );
@@ -608,7 +608,7 @@ describe("E2E: Step Reorder Protection", () => {
 
       // Wait for error message to appear
       await waitFor(() => {
-        const errorElement = screen.getByRole("alert");
+        const errorElement = getShownAlert();
         expect(errorElement).toHaveTextContent(
           "Cannot move Step 2 to position 1 because it uses output from Step 1"
         );

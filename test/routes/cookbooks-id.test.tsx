@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/cookbooks.$id";
 import CookbookDetail from "~/routes/cookbooks.$id";
@@ -1902,16 +1902,43 @@ describe("Cookbooks $id Route", () => {
         fireEvent.change(input, { target: { value: "Taken Title" } });
         fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-        expect(await screen.findByRole("alert")).toHaveTextContent("You already have a cookbook with this title");
-        expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAttribute("aria-invalid", "true");
+        // The message shows under the title field, which is marked invalid and described by it.
+        expect(await screen.findByText("You already have a cookbook with this title")).toBeInTheDocument();
+        const rejected = screen.getByRole("textbox", { name: "Cookbook title" });
+        expect(rejected).toHaveAttribute("aria-invalid", "true");
+        expect(rejected).toHaveAccessibleDescription("You already have a cookbook with this title");
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Edit title" }));
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).not.toHaveAttribute("aria-invalid");
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
+      });
+
+      it("shows the error again when a second rename is refused for the same reason", async () => {
+        let attempts = 0;
+        renderRenameStub(() => {
+          attempts += 1;
+          return routerData({ error: "You already have a cookbook with this title", intent: "updateTitle" }, { status: 400 });
+        });
+
+        const input = await openTitleEditor();
+        fireEvent.change(input, { target: { value: "Taken Title" } });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        expect(await screen.findByText("You already have a cookbook with this title")).toBeInTheDocument();
+
+        // Changing the field drops its message; the next refusal must bring it back.
+        fireEvent.change(input, { target: { value: "Another Taken Title" } });
+        await waitFor(() => {
+          expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        await waitFor(() => expect(attempts).toBe(2));
+        expect(await screen.findByText("You already have a cookbook with this title")).toBeInTheDocument();
+        expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAttribute("aria-invalid", "true");
       });
 
       it("keeps the editor open with the new title when the database was briefly unavailable", async () => {
@@ -1926,7 +1953,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.change(input, { target: { value: "Renamed Title" } });
         fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-        expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        expect(await screen.findByText(/Spoonjoy couldn't save that just now\./)).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -1962,7 +1989,7 @@ describe("Cookbooks $id Route", () => {
           expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         });
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(queryShownAlert()).toBeNull();
       });
     });
   });

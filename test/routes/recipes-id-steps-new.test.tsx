@@ -1,7 +1,8 @@
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, findShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta, shouldRevalidate } from "~/routes/recipes.$id.steps.new";
 import { useRevalidator } from "react-router";
@@ -1531,7 +1532,7 @@ describe("Recipes $id Steps New Route", () => {
         await screen.findByRole("heading", { name: /Add Step/i });
         const loadsBeforeParse = loads.count;
         fireEvent.change(screen.getByLabelText("Ingredient text"), { target: { value: "2 tbsp honey" } });
-        expect(await screen.findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent("AI parsing is unavailable");
+        expect(await findShownAlert({ timeout: 3000 })).toHaveTextContent("AI parsing is unavailable");
         await act(async () => {
           await new Promise((resolve) => setTimeout(resolve, 50));
         });
@@ -1742,7 +1743,7 @@ describe("Recipes $id Steps New Route", () => {
         await screen.findByRole("heading", { name: /Add Step/i });
 
         // Click to open the listbox
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
         await act(async () => {
           fireEvent.click(listboxButton);
         });
@@ -1779,16 +1780,12 @@ describe("Recipes $id Steps New Route", () => {
 
         await screen.findByRole("heading", { name: /Add Step/i });
 
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
-        await act(async () => {
-          fireEvent.click(listboxButton);
-        });
-        await act(async () => {
-          fireEvent.click(screen.getByText("Step 1: Prep the ingredients"));
-        });
-        await act(async () => {
-          fireEvent.click(screen.getByText("Step 2: Mix the batter"));
-        });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
+        // The picker stays open while choosing several steps.
+        const user = userEvent.setup();
+        await user.click(listboxButton);
+        await user.click(await screen.findByRole("option", { name: "Step 1: Prep the ingredients" }));
+        await user.click(screen.getByRole("option", { name: "Step 2: Mix the batter" }));
 
         const hiddenInputs = document.querySelectorAll('input[name="usesSteps"]');
         expect(hiddenInputs).toHaveLength(2);
@@ -1822,7 +1819,7 @@ describe("Recipes $id Steps New Route", () => {
         await screen.findByRole("heading", { name: /Add Step/i });
 
         // Click to open the listbox
-        const listboxButton = screen.getByRole("button", { name: /Select previous steps/i });
+        const listboxButton = screen.getByRole("combobox", { name: /Uses output from/i });
         await act(async () => {
           fireEvent.click(listboxButton);
         });

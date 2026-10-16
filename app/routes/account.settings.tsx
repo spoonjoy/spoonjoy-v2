@@ -1,5 +1,5 @@
 import type { Route } from "./+types/account.settings";
-import { useLoaderData, useActionData, useRevalidator, Form } from "react-router";
+import { useLoaderData, useActionData, useRevalidator, useFetcher, Form as RouterForm } from "react-router";
 import { useState, useEffect } from "react";
 import {
   handleAccountSettingsAction,
@@ -11,9 +11,10 @@ import {
 import { LogOut } from "lucide-react";
 import { Text } from "~/components/ui/text";
 import { Button } from "~/components/ui/button";
-import { Field, Label, ErrorMessage, Description } from "~/components/ui/fieldset";
-import { Checkbox, CheckboxField } from "~/components/ui/checkbox";
-import { Input } from "~/components/ui/input";
+import { Checkbox } from "~/components/ouro/checkbox/checkbox";
+import { Form } from "~/components/ouro/form/form";
+import { TextField } from "~/components/ouro/text-field/text-field";
+import { useFormErrors, useIntentAnswer } from "~/hooks/use-form-errors";
 import { OAuthError } from "~/components/ui/oauth";
 import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
@@ -54,15 +55,37 @@ function formatPasskeyDate(iso: string): string {
   });
 }
 
+// The action answers every form on the page with one fieldErrors object. Each form takes the
+// errors for its own fields.
+const USER_INFO_FIELDS = ["email", "username", "currentPassword"] as const;
+const NEW_PASSWORD_FIELDS = ["newPassword"] as const;
+const USER_INFO_INTENTS = ["updateUserInfo"] as const;
+const DELETE_INTENTS = ["deleteAccount"] as const;
+
 export default function AccountSettings() {
   const { user, oauthError, notifications } = useLoaderData<AccountSettingsLoaderData>();
   const actionData = useActionData<AccountSettingsActionResult>();
+  const [initialActionData] = useState(actionData);
+  const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
+  const passwordFetcher = useFetcher<AccountSettingsActionResult>();
+  const [passwordBaseline, setPasswordBaseline] = useState(initialActionData);
+  const passwordAnswer = passwordFetcher.data;
+  const passwordData = passwordAnswer ?? passwordBaseline;
+  const deleteAnswer = useIntentAnswer(actionData, DELETE_INTENTS);
+  const userInfoErrors = useFormErrors((userInfoAnswer ?? initialActionData)?.fieldErrors, USER_INFO_FIELDS, userInfoAnswer);
+  const newPasswordErrors = useFormErrors({
+    ...passwordData?.fieldErrors,
+    general: passwordData?.success === false && !passwordData.fieldErrors ? passwordData.message : undefined,
+  }, NEW_PASSWORD_FIELDS, passwordAnswer);
   const revalidator = useRevalidator();
   const [isEditing, setIsEditing] = useState(false);
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
   const [removingPasskeyId, setRemovingPasskeyId] = useState<string | null>(null);
   const [renamingPasskeyId, setRenamingPasskeyId] = useState<string | null>(null);
-  const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">("idle");
+  const [passwordFormState, setPasswordFormState] = useState<"idle" | "change" | "set" | "removeConfirm">(
+    // Initial progressive-post errors are display only, never client acceptance authority.
+    initialActionData?.fieldErrors?.newPassword ? (user.hasPassword ? "change" : "set") : "idle",
+  );
   const [isConfirmingSignOutEverywhere, setIsConfirmingSignOutEverywhere] = useState(false);
   const apiCredentials = user.apiCredentials ?? [];
   const oauthConnections = user.oauthConnections ?? [];
@@ -73,17 +96,26 @@ export default function AccountSettings() {
     if (actionData?.fieldErrors?.email || actionData?.fieldErrors?.username || actionData?.fieldErrors?.currentPassword) {
       setIsEditing(true);
     }
-    if (actionData?.fieldErrors?.newPassword) {
-      // Determine which password form to open based on user state
-      setPasswordFormState(user.hasPassword ? "change" : "set");
-    }
     if (actionData?.success && actionData.intent === "updateUserInfo") {
       setIsEditing(false);
     }
-    if (actionData?.success && (actionData.intent === "changePassword" || actionData.intent === "setPassword")) {
-      setPasswordFormState("idle");
-    }
   }, [actionData, user.hasPassword]);
+
+  useEffect(() => {
+    if (passwordAnswer?.success) setPasswordFormState("idle");
+  }, [passwordAnswer]);
+
+  const openPasswordForm = (mode: "change" | "set") => {
+    passwordFetcher.reset();
+    setPasswordBaseline(undefined);
+    setPasswordFormState(mode);
+  };
+  const cancelPasswordForm = () => {
+    // Router owns cancellation and drops the response; no submit counter or guessed receipt.
+    passwordFetcher.reset();
+    setPasswordBaseline(undefined);
+    setPasswordFormState("idle");
+  };
 
   const linkedProviders = new Set(user.oauthAccounts.map((a) => a.provider));
 
@@ -110,12 +142,12 @@ export default function AccountSettings() {
         action={(
           // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
           // so it works before the page hydrates and the next page loads fresh.
-          <Form method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
+          <RouterForm method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
             <Button type="submit" plain>
               <LogOut data-slot="icon" className="size-4" />
               Log out
             </Button>
-          </Form>
+          </RouterForm>
         )}
       >
         <Text className="mt-4 max-w-2xl text-base/7">
@@ -153,48 +185,20 @@ export default function AccountSettings() {
       >
         <Text>The email and username attached to your kitchen.</Text>
         {isEditing ? (
-          <Form method="post" className="mt-4 space-y-4">
+          <Form method="post" errors={userInfoErrors} render={<RouterForm />} className="mt-4 gap-4">
             <input type="hidden" name="intent" value="updateUserInfo" />
-            <Field>
-              <Label>Email</Label>
-              <Input
-                type="email"
-                name="email"
-                defaultValue={user.email}
-                invalid={!!actionData?.fieldErrors?.email}
-              />
-              {actionData?.fieldErrors?.email && (
-                <ErrorMessage>{actionData.fieldErrors.email}</ErrorMessage>
-              )}
-            </Field>
-            <Field>
-              <Label>Username</Label>
-              <Input
-                type="text"
-                name="username"
-                defaultValue={user.username}
-                invalid={!!actionData?.fieldErrors?.username}
-              />
-              {actionData?.fieldErrors?.username && (
-                <ErrorMessage>{actionData.fieldErrors.username}</ErrorMessage>
-              )}
-            </Field>
+            <TextField label="Email" type="email" name="email" defaultValue={user.email} />
+            <TextField label="Username" name="username" defaultValue={user.username} />
             {/* Changing the email needs proof it's the owner: the password, or for an account
                 without one, a recent sign-in. A username-only save needs neither. */}
             {user.hasPassword ? (
-              <Field>
-                <Label>Current password</Label>
-                <Description>Needed only to change your email.</Description>
-                <Input
-                  type="password"
-                  name="currentPassword"
-                  autoComplete="current-password"
-                  invalid={!!actionData?.fieldErrors?.currentPassword}
-                />
-                {actionData?.fieldErrors?.currentPassword && (
-                  <ErrorMessage>{actionData.fieldErrors.currentPassword}</ErrorMessage>
-                )}
-              </Field>
+              <TextField
+                label="Current password"
+                description="Needed only to change your email."
+                type="password"
+                name="currentPassword"
+                autoComplete="current-password"
+              />
             ) : (
               <Text className="text-sm/6">
                 To change your email, you need to have signed in within the last 10 minutes. If it has been longer,
@@ -212,13 +216,13 @@ export default function AccountSettings() {
           </Form>
         ) : null}
         {isEditing && !user.hasPassword ? (
-          <Form method="post" className="mt-3">
+          <RouterForm method="post" className="mt-3">
             <input type="hidden" name="intent" value="reauthenticate" />
             <input type="hidden" name="for" value="email" />
             <Button type="submit" plain>
               Sign in again
             </Button>
-          </Form>
+          </RouterForm>
         ) : null}
         {!isEditing && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -285,7 +289,7 @@ export default function AccountSettings() {
                   isShowingUnlinkConfirm ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <Text className="text-sm">Are you sure?</Text>
-                      <Form method="post" className="inline">
+                      <RouterForm method="post" className="inline">
                         <input type="hidden" name="intent" value="unlinkOAuth" />
                         <input type="hidden" name="provider" value={provider} />
                         <Button
@@ -295,7 +299,7 @@ export default function AccountSettings() {
                         >
                           Confirm
                         </Button>
-                      </Form>
+                      </RouterForm>
                       <Button
                         type="button"
                         plain
@@ -316,7 +320,7 @@ export default function AccountSettings() {
                     </Button>
                   )
                 ) : (
-                  <Form method="post">
+                  <RouterForm method="post">
                     <input type="hidden" name="intent" value="linkOAuth" />
                     <input type="hidden" name="provider" value={provider} />
                     <Button
@@ -326,7 +330,7 @@ export default function AccountSettings() {
                     >
                       Link
                     </Button>
-                  </Form>
+                  </RouterForm>
                 )}
               </div>
             );
@@ -362,13 +366,13 @@ export default function AccountSettings() {
                         {credential.expiresAt ? ` · Expires ${formatPasskeyDate(credential.expiresAt)}` : ""}
                       </Text>
                     </div>
-                    <Form method="post">
+                    <RouterForm method="post">
                       <input type="hidden" name="intent" value="revokeApiCredential" />
                       <input type="hidden" name="credentialId" value={credential.id} />
                       <Button type="submit" variant="destructive" aria-label={`Revoke ${credential.name}`}>
                         Revoke
                       </Button>
-                    </Form>
+                    </RouterForm>
                   </div>
                 ))}
               </div>
@@ -400,7 +404,7 @@ export default function AccountSettings() {
                           Connected {formatPasskeyDate(connection.createdAt)} · {connection.refreshTokenCount} refresh token{connection.refreshTokenCount === 1 ? "" : "s"} · {connection.accessTokenCount} live access token{connection.accessTokenCount === 1 ? "" : "s"}
                         </Text>
                       </div>
-                      <Form method="post">
+                      <RouterForm method="post">
                         <input type="hidden" name="intent" value="disconnectOAuthClient" />
                         <input type="hidden" name="clientId" value={connection.clientId} />
                         <input type="hidden" name="issuer" value={connection.issuer} />
@@ -411,7 +415,7 @@ export default function AccountSettings() {
                         <Button type="submit" variant="destructive" aria-label={`Disconnect ${appName} from ${connection.issuer}`}>
                           Disconnect
                         </Button>
-                      </Form>
+                      </RouterForm>
                     </div>
                   );
                 })}
@@ -448,26 +452,23 @@ export default function AccountSettings() {
                   className="flex flex-col gap-3 border-b border-[var(--sj-border)] py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   {isRenaming ? (
-                    <Form method="post" className="flex w-full flex-col gap-3 sm:flex-row sm:items-end">
+                    <RouterForm method="post" className="flex w-full flex-col gap-3 sm:flex-row sm:items-end">
                       <input type="hidden" name="intent" value="renamePasskey" />
                       <input type="hidden" name="credentialId" value={passkey.id} />
-                      <Field className="flex-1">
-                        <Label htmlFor={`passkey-name-${passkey.id}`}>Passkey name</Label>
-                        <Input
-                          id={`passkey-name-${passkey.id}`}
-                          name="name"
-                          type="text"
-                          defaultValue={passkey.name ?? ""}
-                          placeholder="e.g. MacBook Touch ID"
-                        />
-                      </Field>
+                      <TextField
+                        label="Passkey name"
+                        name="name"
+                        defaultValue={passkey.name ?? ""}
+                        placeholder="e.g. MacBook Touch ID"
+                        className="flex-1"
+                      />
                       <div className="flex flex-wrap gap-2">
                         <Button type="submit">Save</Button>
                         <Button type="button" plain onClick={() => setRenamingPasskeyId(null)}>
                           Cancel
                         </Button>
                       </div>
-                    </Form>
+                    </RouterForm>
                   ) : (
                     <>
                       <div>
@@ -479,7 +480,7 @@ export default function AccountSettings() {
                       {isConfirming ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <Text className="text-sm">Are you sure?</Text>
-                          <Form method="post" className="inline">
+                          <RouterForm method="post" className="inline">
                             <input type="hidden" name="intent" value="removePasskey" />
                             <input type="hidden" name="credentialId" value={passkey.id} />
                             <Button
@@ -489,7 +490,7 @@ export default function AccountSettings() {
                             >
                               Confirm
                             </Button>
-                          </Form>
+                          </RouterForm>
                           <Button type="button" plain onClick={() => setRemovingPasskeyId(null)}>
                             Cancel
                           </Button>
@@ -531,55 +532,36 @@ export default function AccountSettings() {
       {/* Password Section */}
       <SettingsPanel testId="password-section" title="Password">
         <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
+        {passwordAnswer?.success && passwordAnswer.message ? (
+          <div role="status" className="mt-4 text-sm text-[var(--sj-herb)]">{passwordAnswer.message}</div>
+        ) : null}
         <div className="mt-4">
           {user.hasPassword ? (
             passwordFormState === "change" ? (
-              <Form method="post" className="space-y-4">
+              <Form method="post" errors={newPasswordErrors} render={<passwordFetcher.Form />} className="gap-4">
                 <input type="hidden" name="intent" value="changePassword" />
-                <Field>
-                  <Label>Current password</Label>
-                  <Input
-                    type="password"
-                    name="currentPassword"
-                    autoComplete="current-password"
-                  />
-                </Field>
-                <Field>
-                  <Label>New password</Label>
-                  <Input
-                    type="password"
-                    name="newPassword"
-                    autoComplete="new-password"
-                    invalid={!!actionData?.fieldErrors?.newPassword}
-                  />
-                  {actionData?.fieldErrors?.newPassword && (
-                    <ErrorMessage>{actionData.fieldErrors.newPassword}</ErrorMessage>
-                  )}
-                  <Text className="mt-1 text-xs">
-                    Must be at least 8 characters
-                  </Text>
-                </Field>
-                <Field>
-                  <Label>Confirm password</Label>
-                  <Input
-                    type="password"
-                    name="confirmPassword"
-                    autoComplete="new-password"
-                  />
-                </Field>
+                <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
+                <TextField
+                  label="New password"
+                  description="Must be at least 8 characters"
+                  type="password"
+                  name="newPassword"
+                  autoComplete="new-password"
+                />
+                <TextField label="Confirm password" type="password" name="confirmPassword" autoComplete="new-password" />
                 <input type="hidden" name="connectionsChoice" value="1" />
-                <CheckboxField>
-                  <Checkbox name="revokeConnections" value="1" defaultChecked />
-                  <Label>Also sign out other devices and disconnect apps, agents and API tokens</Label>
-                  <Description>
-                    Recommended if someone else may know your old password. You stay signed in here.
-                  </Description>
-                </CheckboxField>
+                <Checkbox
+                  label="Also sign out other devices and disconnect apps, agents and API tokens"
+                  description="Recommended if someone else may know your old password. You stay signed in here."
+                  name="revokeConnections"
+                  value="1"
+                  defaultChecked
+                />
                 <div className="flex flex-wrap gap-3">
-                  <Button type="submit">
+                  <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Change password
                   </Button>
-                  <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
+                  <Button type="button" plain onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
@@ -587,16 +569,9 @@ export default function AccountSettings() {
             ) : passwordFormState === "removeConfirm" ? (
               <div className="space-y-4">
                 <Text>Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
-                <Form method="post" className="space-y-4">
+                <RouterForm method="post" className="grid gap-4">
                   <input type="hidden" name="intent" value="removePassword" />
-                  <Field>
-                    <Label>Current password</Label>
-                    <Input
-                      type="password"
-                      name="currentPassword"
-                      autoComplete="current-password"
-                    />
-                  </Field>
+                  <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" variant="destructive">
                       Confirm
@@ -605,11 +580,11 @@ export default function AccountSettings() {
                       Cancel
                     </Button>
                   </div>
-                </Form>
+                </RouterForm>
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
-                <Button type="button" plain onClick={() => setPasswordFormState("change")}>
+                <Button type="button" plain onClick={() => openPasswordForm("change")}>
                   Change password
                 </Button>
                 {canRemovePassword && (
@@ -621,36 +596,21 @@ export default function AccountSettings() {
             )
           ) : (
             passwordFormState === "set" ? (
-              <Form method="post" className="space-y-4">
+              <Form method="post" errors={newPasswordErrors} render={<passwordFetcher.Form />} className="gap-4">
                 <input type="hidden" name="intent" value="setPassword" />
-                <Field>
-                  <Label>New password</Label>
-                  <Input
-                    type="password"
-                    name="newPassword"
-                    autoComplete="new-password"
-                    invalid={!!actionData?.fieldErrors?.newPassword}
-                  />
-                  {actionData?.fieldErrors?.newPassword && (
-                    <ErrorMessage>{actionData.fieldErrors.newPassword}</ErrorMessage>
-                  )}
-                  <Text className="mt-1 text-xs">
-                    Must be at least 8 characters
-                  </Text>
-                </Field>
-                <Field>
-                  <Label>Confirm password</Label>
-                  <Input
-                    type="password"
-                    name="confirmPassword"
-                    autoComplete="new-password"
-                  />
-                </Field>
+                <TextField
+                  label="New password"
+                  description="Must be at least 8 characters"
+                  type="password"
+                  name="newPassword"
+                  autoComplete="new-password"
+                />
+                <TextField label="Confirm password" type="password" name="confirmPassword" autoComplete="new-password" />
                 <div className="flex flex-wrap gap-3">
-                  <Button type="submit">
+                  <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Set password
                   </Button>
-                  <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
+                  <Button type="button" plain onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
@@ -660,7 +620,7 @@ export default function AccountSettings() {
                 <Text className="mb-4">
                   You don't have a password set. Set one to enable email/password login.
                 </Text>
-                <Button type="button" plain onClick={() => setPasswordFormState("set")}>
+                <Button type="button" plain onClick={() => openPasswordForm("set")}>
                   Set password
                 </Button>
               </div>
@@ -677,12 +637,12 @@ export default function AccountSettings() {
           {isConfirmingSignOutEverywhere ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Text className="text-sm">Are you sure?</Text>
-              <Form method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
+              <RouterForm method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
                 <input type="hidden" name="intent" value="signOutEverywhere" />
                 <Button type="submit" variant="destructive" aria-label="Confirm sign out everywhere">
                   Confirm
                 </Button>
-              </Form>
+              </RouterForm>
               <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(false)}>
                 Cancel
               </Button>
@@ -703,11 +663,9 @@ export default function AccountSettings() {
       />
 
       <AccountDataSection
-        // A new failed attempt re-opens the form with its error.
-        key={actionData?.intent === "deleteAccount" ? `delete-${actionData.error}-${actionData.message}` : "account-data"}
         username={user.username}
         hasPassword={user.hasPassword}
-        deleteError={actionData?.intent === "deleteAccount" ? actionData : null}
+        deleteError={deleteAnswer}
       />
       </div>
     </CookbookPage>

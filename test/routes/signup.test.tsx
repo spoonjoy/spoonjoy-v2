@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub, createTestUser } from "../utils";
+import { createTestRoutesStub, createTestUser, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/signup";
 import Signup from "~/routes/signup";
@@ -569,13 +569,13 @@ describe("Signup Route", () => {
       const Stub = createTestRoutesStub([{ path: "/signup", Component: Signup, loader: () => ({ oauthProviders: [] }) }]);
       render(<Stub initialEntries={["/signup?redirectTo=%2Frecipes%2Fabc"]} />);
 
-      const username = await screen.findByLabelText("Username");
+      const username = await screen.findByLabelText(requiredLabel("Username"));
       expect(username).toHaveAccessibleDescription("3 to 50 letters, numbers, periods, underscores or hyphens.");
-      expect(screen.getByLabelText("Password")).toHaveAccessibleDescription("At least 8 characters.");
-      expect(screen.getByLabelText("Email")).toHaveAttribute("autocomplete", "email");
+      expect(screen.getByLabelText(requiredLabel("Password"))).toHaveAccessibleDescription("At least 8 characters.");
+      expect(screen.getByLabelText(requiredLabel("Email"))).toHaveAttribute("autocomplete", "email");
       expect(username).toHaveAttribute("autocomplete", "username");
-      expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "new-password");
-      expect(screen.getByLabelText("Confirm password")).toHaveAttribute("autocomplete", "new-password");
+      expect(screen.getByLabelText(requiredLabel("Password"))).toHaveAttribute("autocomplete", "new-password");
+      expect(screen.getByLabelText(requiredLabel("Confirm password"))).toHaveAttribute("autocomplete", "new-password");
       // Switching to log in keeps the way back.
       expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login?redirectTo=%2Frecipes%2Fabc");
     });
@@ -629,10 +629,10 @@ describe("Signup Route", () => {
       render(<Stub initialEntries={["/signup"]} />);
 
       expect(await screen.findByRole("heading", { name: "Sign up" })).toBeInTheDocument();
-      expect(screen.getByLabelText(/Email/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Username/)).toBeInTheDocument();
-      expect(screen.getByLabelText("Password")).toBeInTheDocument();
-      expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Email"))).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Username"))).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Password"))).toBeInTheDocument();
+      expect(screen.getByLabelText(requiredLabel("Confirm password"))).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Sign up" })).toBeInTheDocument();
       // Sign-up uses its own marketing voice, not the /login "Kitchen sign-in" copy.
       expect(screen.getByText("New kitchen")).toBeInTheDocument();
@@ -650,32 +650,33 @@ describe("Signup Route", () => {
 
       render(<Stub initialEntries={["/signup"]} />);
 
-      const emailInput = await screen.findByLabelText(/Email/);
+      const emailInput = await screen.findByLabelText(requiredLabel("Email"));
       expect(emailInput).toHaveAttribute("type", "email");
       expect(emailInput).toHaveAttribute("name", "email");
       expect(emailInput).toBeRequired();
 
-      const usernameInput = screen.getByLabelText(/Username/);
+      const usernameInput = screen.getByLabelText(requiredLabel("Username"));
       expect(usernameInput).toHaveAttribute("type", "text");
       expect(usernameInput).toHaveAttribute("name", "username");
       expect(usernameInput).toBeRequired();
-      expect(usernameInput).toHaveAttribute("minLength", "3");
+      // No minLength: a short username reaches the action, which answers with the app's message.
+      expect(usernameInput).not.toHaveAttribute("minLength");
 
-      const passwordInput = screen.getByLabelText("Password");
+      const passwordInput = screen.getByLabelText(requiredLabel("Password"));
       expect(passwordInput).toHaveAttribute("type", "password");
       expect(passwordInput).toHaveAttribute("name", "password");
       expect(passwordInput).toBeRequired();
-      expect(passwordInput).toHaveAttribute("minLength", "8");
+      expect(passwordInput).not.toHaveAttribute("minLength");
 
-      const confirmPasswordInput = screen.getByLabelText("Confirm password");
+      const confirmPasswordInput = screen.getByLabelText(requiredLabel("Confirm password"));
       expect(confirmPasswordInput).toHaveAttribute("type", "password");
       expect(confirmPasswordInput).toHaveAttribute("name", "confirmPassword");
       expect(confirmPasswordInput).toBeRequired();
     });
 
     it("sends a short username, a short password or a mismatched confirmation to the server and shows its messages", async () => {
-      // The browser's own checks (required, minlength) would stop the submit with a native
-      // bubble that never shows the app's messages; the form leaves every rule to the action.
+      // The fields carry no minlength, so the browser lets a short username or password through
+      // and the action's own messages show under the fields.
       const user = userEvent.setup();
       let submissions = 0;
       const Stub = createTestRoutesStub([
@@ -701,9 +702,10 @@ describe("Signup Route", () => {
       const form = (await screen.findByRole("button", { name: "Sign up" })).closest("form");
       expect(form).toHaveAttribute("novalidate");
 
-      await user.type(screen.getByLabelText("Email"), "new-cook@example.com");
-      await user.type(screen.getByLabelText("Username"), "ab");
-      await user.type(screen.getByLabelText("Password"), "short");
+      await user.type(screen.getByLabelText(requiredLabel("Email")), "new-cook@example.com");
+      await user.type(screen.getByLabelText(requiredLabel("Username")), "ab");
+      await user.type(screen.getByLabelText(requiredLabel("Password")), "short");
+      await user.type(screen.getByLabelText(requiredLabel("Confirm password")), "other");
       await user.click(screen.getByRole("button", { name: "Sign up" }));
 
       expect(await screen.findByText("Username must be at least 3 characters")).toBeInTheDocument();
@@ -711,23 +713,49 @@ describe("Signup Route", () => {
       expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
       expect(submissions).toBe(1);
       // Screen readers get the same message: each field is marked invalid and described by it.
-      expect(screen.getByLabelText("Username")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText(requiredLabel("Username"))).toHaveAttribute("aria-invalid", "true");
       // The rule shown up front stays in the description, followed by what went wrong.
-      expect(screen.getByLabelText("Username")).toHaveAccessibleDescription(
+      expect(screen.getByLabelText(requiredLabel("Username"))).toHaveAccessibleDescription(
         "3 to 50 letters, numbers, periods, underscores or hyphens. Username must be at least 3 characters",
       );
-      expect(screen.getByLabelText("Password")).toHaveAttribute("aria-invalid", "true");
-      expect(screen.getByLabelText("Password")).toHaveAccessibleDescription(
+      expect(screen.getByLabelText(requiredLabel("Password"))).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText(requiredLabel("Password"))).toHaveAccessibleDescription(
         "At least 8 characters. Password must be at least 8 characters",
       );
-      expect(screen.getByLabelText("Confirm password")).toHaveAttribute("aria-invalid", "true");
-      expect(screen.getByLabelText("Confirm password")).toHaveAccessibleDescription("Passwords do not match");
-      expect(screen.getByLabelText("Email")).not.toHaveAttribute("aria-invalid");
+      expect(screen.getByLabelText(requiredLabel("Confirm password"))).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText(requiredLabel("Confirm password"))).toHaveAccessibleDescription("Passwords do not match");
+      expect(screen.getByLabelText(requiredLabel("Email"))).not.toHaveAttribute("aria-invalid");
       // The fields keep what was typed, so the user corrects them instead of starting over.
-      expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
-      expect(screen.getByLabelText("Username")).toHaveValue("ab");
-      // Focus moves to the first field the server rejected, as the browser's own check did.
-      expect(screen.getByLabelText("Username")).toHaveFocus();
+      expect(screen.getByLabelText(requiredLabel("Email"))).toHaveValue("new-cook@example.com");
+      expect(screen.getByLabelText(requiredLabel("Username"))).toHaveValue("ab");
+      // Focus moves to the first field the server rejected, as the browser's own check does.
+      await waitFor(() => expect(screen.getByLabelText(requiredLabel("Username"))).toHaveFocus());
+    });
+
+    it("stops an empty required field in the browser, with the message under the field", async () => {
+      const user = userEvent.setup();
+      let submissions = 0;
+      const Stub = createTestRoutesStub([
+        {
+          path: "/signup",
+          Component: Signup,
+          loader: () => ({ oauthProviders: [] }),
+          action: () => {
+            submissions += 1;
+            return null;
+          },
+        },
+      ]);
+
+      render(<Stub initialEntries={["/signup"]} />);
+
+      await user.type(await screen.findByLabelText(requiredLabel("Email")), "new-cook@example.com");
+      await user.click(screen.getByRole("button", { name: "Sign up" }));
+
+      const username = screen.getByLabelText(requiredLabel("Username"));
+      await waitFor(() => expect(username).toHaveAttribute("aria-invalid", "true"));
+      expect(username).toHaveFocus();
+      expect(submissions).toBe(0);
     });
 
     it("marks a rejected email and moves focus to it, ahead of the other fields", async () => {
@@ -742,21 +770,24 @@ describe("Signup Route", () => {
               email: "Valid email is required",
               username: "Username must be at least 3 characters",
             },
-            values: { email: "not-an-email", username: "ab" },
+            values: { email: "cook@nowhere", username: "ab" },
           }),
         },
       ]);
 
       render(<Stub initialEntries={["/signup"]} />);
 
-      await user.type(await screen.findByLabelText("Email"), "not-an-email");
-      await user.type(screen.getByLabelText("Username"), "ab");
+      // An address the browser accepts and the action rejects.
+      await user.type(await screen.findByLabelText(requiredLabel("Email")), "cook@nowhere");
+      await user.type(screen.getByLabelText(requiredLabel("Username")), "ab");
+      await user.type(screen.getByLabelText(requiredLabel("Password")), "Valid-Test-Password-42!");
+      await user.type(screen.getByLabelText(requiredLabel("Confirm password")), "Valid-Test-Password-42!");
       await user.click(screen.getByRole("button", { name: "Sign up" }));
 
       expect(await screen.findByText("Valid email is required")).toBeInTheDocument();
-      expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
-      expect(screen.getByLabelText("Email")).toHaveAccessibleDescription("Valid email is required");
-      expect(screen.getByLabelText("Email")).toHaveFocus();
+      expect(screen.getByLabelText(requiredLabel("Email"))).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText(requiredLabel("Email"))).toHaveAccessibleDescription("Valid email is required");
+      await waitFor(() => expect(screen.getByLabelText(requiredLabel("Email"))).toHaveFocus());
     });
 
     it("fills in the email and username the server sent back after a full-page submit", async () => {
@@ -787,10 +818,12 @@ describe("Signup Route", () => {
       );
 
       expect(await screen.findByText("Username must be at least 3 characters")).toBeInTheDocument();
-      expect(screen.getByLabelText("Email")).toHaveValue("new-cook@example.com");
-      expect(screen.getByLabelText("Username")).toHaveValue("ab");
-      expect(screen.getByLabelText("Password")).toHaveValue("");
-      expect(screen.getByLabelText("Username")).toHaveFocus();
+      expect(screen.getByLabelText(requiredLabel("Email"))).toHaveValue("new-cook@example.com");
+      expect(screen.getByLabelText(requiredLabel("Username"))).toHaveValue("ab");
+      expect(screen.getByLabelText(requiredLabel("Password"))).toHaveValue("");
+      // A page that loads with errors leaves focus where the browser put it; Ouro UI's Form moves
+      // focus only when an answer arrives on a page already open.
+      expect(screen.getByLabelText(requiredLabel("Username"))).not.toHaveFocus();
     });
 
     it("should have login link", async () => {
@@ -1009,8 +1042,8 @@ describe("Signup Route", () => {
       });
     });
 
-    describe("Catalyst component structure", () => {
-      it("should use Catalyst Heading for page title", async () => {
+    describe("component structure", () => {
+      it("should use a level-one heading for the page title", async () => {
         const Stub = createTestRoutesStub([
           {
             path: "/signup",
@@ -1026,7 +1059,7 @@ describe("Signup Route", () => {
         expect(heading).toHaveTextContent("Sign up");
       });
 
-      it("should use Catalyst Input components for form fields", async () => {
+      it("should leave inline styles off the form fields", async () => {
         const Stub = createTestRoutesStub([
           {
             path: "/signup",
@@ -1046,7 +1079,7 @@ describe("Signup Route", () => {
         });
       });
 
-      it("should use Catalyst Button for submit", async () => {
+      it("should leave inline styles off the buttons", async () => {
         const Stub = createTestRoutesStub([
           {
             path: "/signup",
@@ -1079,10 +1112,10 @@ describe("Signup Route", () => {
 
         await screen.findByRole("heading", { name: "Sign up" });
 
-        expect(screen.getByLabelText("Email")).toBeInTheDocument();
-        expect(screen.getByLabelText("Username")).toBeInTheDocument();
-        expect(screen.getByLabelText("Password")).toBeInTheDocument();
-        expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Email"))).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Username"))).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Password"))).toBeInTheDocument();
+        expect(screen.getByLabelText(requiredLabel("Confirm password"))).toBeInTheDocument();
       });
     });
   });

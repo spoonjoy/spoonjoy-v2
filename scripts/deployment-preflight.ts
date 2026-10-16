@@ -573,11 +573,11 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
     ),
     commandStepSignature(
-      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install-deps --dry-run chromium`,
       `${WARNING_GATE_COMMAND_PREFIX}sudo apt-get update`,
       `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_MAN_DB_PRESEED_COMMAND}`,
       `${WARNING_GATE_COMMAND_PREFIX}sudo touch /var/lib/man-db/auto-update`,
       `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_INSTALL_COMMAND}`,
+      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install-deps --dry-run chromium`,
       `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install chromium`,
     ),
     commandStepSignature("pnpm run verify:clean:migrations"),

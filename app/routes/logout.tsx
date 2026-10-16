@@ -1,12 +1,14 @@
 import type { Route } from "./+types/logout";
-import { Form, data, redirect, useActionData } from "react-router";
+import { Form as RouterForm, data, redirect, useActionData } from "react-router";
 import { destroyUserSession, getUserId } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { AuthLayout } from "~/components/ui/auth-layout";
 import { Heading } from "~/components/ui/heading";
 import { Button } from "~/components/ui/button";
-import { Text, TextLink } from "~/components/ui/text";
-import { ValidationError } from "~/components/ui/validation-error";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ui/text";
+import { Form } from "~/components/ouro/form/form";
+import { useFormMessage } from "~/hooks/use-form-errors";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export function meta({}: Route.MetaArgs) {
@@ -49,6 +51,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 export default function Logout() {
   const actionData = useActionData<{ error?: string }>();
+  const formErrors = useFormMessage(actionData?.error, actionData);
   return (
     <AuthLayout
       eyebrow="Signing out"
@@ -57,15 +60,14 @@ export default function Logout() {
     >
       <div className="w-full max-w-sm">
         <Heading>Log out of Spoonjoy?</Heading>
-        {actionData?.error && <ValidationError error={actionData.error} className="mt-4" />}
         <Text className="mt-4">This signs you out in this browser only.</Text>
-        <Form method="post" className="mt-6" onSubmit={clearCookProgressCache}>
+        <Form method="post" errors={formErrors} render={<RouterForm />} className="mt-6" onSubmit={clearCookProgressCache}>
           <Button type="submit" className="w-full">
             Log out
           </Button>
         </Form>
         <Text className="mt-6 text-center">
-          <TextLink href="/">Stay signed in</TextLink>
+          <Link href="/">Stay signed in</Link>
         </Text>
       </div>
     </AuthLayout>

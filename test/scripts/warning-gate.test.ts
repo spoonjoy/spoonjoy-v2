@@ -52,6 +52,15 @@ describe("warning gate", () => {
     expect(findUnexpectedWarnings("warning-gate.ts  |   59.09 |    62.06 |")).toEqual([]);
     expect(findUnexpectedWarnings("PASS scripts: scripts/warning-gate.ts, scripts/production-readiness.ts")).toEqual([]);
     expect(findUnexpectedWarnings("warnings-summary.log")).toEqual([]);
+    // A row of Vite's built-file table whose chunk is named after a module called use-dev-warnings.
+    expect(findUnexpectedWarnings("build/client/assets/use-dev-warnings-DRRKi67r.js                          27.77 kB │ gzip:  8.72 kB")).toEqual([]);
+    expect(findUnexpectedWarnings("build/server/assets/use-dev-warnings-DRRKi67r.js  27.77 kB")).toEqual([]);
+    expect(findUnexpectedWarnings("build/client/assets/app-DRRKi67r.js  27.77 kB │ gzip:  8.72 kB warning: chunk is large")).toEqual([
+      "build/client/assets/app-DRRKi67r.js  27.77 kB │ gzip:  8.72 kB warning: chunk is large",
+    ]);
+    expect(findUnexpectedWarnings("build/client/assets/warning: something 27.77 kB")).toEqual([
+      "build/client/assets/warning: something 27.77 kB",
+    ]);
     expect(findUnexpectedWarnings("2 warnings")).toEqual(["2 warnings"]);
     expect(findUnexpectedWarnings("Found 2 warnings")).toEqual(["Found 2 warnings"]);
     expect(findUnexpectedWarnings("Found 2 warnings.")).toEqual(["Found 2 warnings."]);

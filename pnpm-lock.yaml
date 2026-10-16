@@ -150,8 +150,8 @@ importers:
         specifier: 2.2.0
         version: 2.2.0
       '@playwright/test':
-        specifier: ^1.58.1
-        version: 1.58.1
+        specifier: 1.64.0
+        version: 1.64.0
       '@prisma/adapter-better-sqlite3':
         specifier: 6.19.2
         version: 6.19.2
@@ -208,7 +208,7 @@ importers:
         version: 5.1.2(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
       '@vitest/browser-playwright':
         specifier: 4.1.11
-        version: 4.1.11(playwright@1.58.1)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
+        version: 4.1.11(playwright@1.64.0)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
       '@vitest/coverage-istanbul':
         specifier: 4.1.11
         version: 4.1.11(vitest@4.1.11)
@@ -240,8 +240,8 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
       playwright:
-        specifier: ^1.58.1
-        version: 1.58.1
+        specifier: 1.64.0
+        version: 1.64.0
       postcss:
         specifier: ^8.5.23
         version: 8.5.23
@@ -1118,9 +1118,9 @@ packages:
     resolution: {integrity: sha512-C2Xj8FZ0uHWeCXXqX5B4/gVFQmtSkiuOolzAgutjTfseNOHT3pUjljDZsTSxXFGgio54bCzVFqmEOUrIVk8RDA==}
     engines: {node: '>=20.0.0'}
 
-  '@playwright/test@1.58.1':
-    resolution: {integrity: sha512-6LdVIUERWxQMmUSSQi0I53GgCBYgM2RpGngCPY7hSeju+VrKjq3lvs7HpJoPbDiY5QM5EYRtRX5fvrinnMAz3w==}
-    engines: {node: '>=18'}
+  '@playwright/test@1.64.0':
+    resolution: {integrity: sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==}
+    engines: {node: '>=20'}
     hasBin: true
 
   '@polka/url@1.0.0-next.29':
@@ -2179,11 +2179,6 @@ packages:
       react-dom:
         optional: true
 
-  fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
-    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
-    os: [darwin]
-
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -2586,14 +2581,14 @@ packages:
   pkg-types@2.3.0:
     resolution: {integrity: sha512-SIqCzDRg0s9npO5XQ3tNZioRY1uK06lA41ynBC1YmFTmnY6FjUjVt6s4LoADmwoig1qqD0oK8h1p/8mlMx8Oig==}
 
-  playwright-core@1.58.1:
-    resolution: {integrity: sha512-bcWzOaTxcW+VOOGBCQgnaKToLJ65d6AqfLVKEWvexyS3AS6rbXl+xdpYRMGSRBClPvyj44njOWoxjNdL/H9UNg==}
-    engines: {node: '>=18'}
+  playwright-core@1.64.0:
+    resolution: {integrity: sha512-T9r+MZkTECl2+oUcZ26YgZzTrYidTsIhYYkJix+6iDOymOb1FB2RLLSOxRGnZGv5DStt+aduIVbt+E8WygXYpg==}
+    engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.58.1:
-    resolution: {integrity: sha512-+2uTZHxSCcxjvGc5C891LrS1/NlxglGxzrC4seZiVjcYVQfUa87wBL6rTDqzGjuoWNjnBzRqKmF6zRYGMvQUaQ==}
-    engines: {node: '>=18'}
+  playwright@1.64.0:
+    resolution: {integrity: sha512-kVzTnYFYEyQ9RGzBjNCd2+yEqWmVbxl3AHPynv3qQ6JTjv4a+kwRcnqQwIpuP3NnrnIrE/Q6wWAIAvMfIE2/Yg==}
+    engines: {node: '>=20'}
     hasBin: true
 
   pngjs@7.0.0:
@@ -3930,9 +3925,9 @@ snapshots:
       tslib: 2.8.1
       tsyringe: 4.10.0
 
-  '@playwright/test@1.58.1':
+  '@playwright/test@1.64.0':
     dependencies:
-      playwright: 1.58.1
+      playwright: 1.64.0
 
   '@polka/url@1.0.0-next.29': {}
 
@@ -4274,7 +4269,7 @@ snapshots:
       storybook: 10.2.10(@testing-library/dom@10.4.1)(prettier@3.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     optionalDependencies:
       '@vitest/browser': 4.1.11(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
-      '@vitest/browser-playwright': 4.1.11(playwright@1.58.1)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
+      '@vitest/browser-playwright': 4.1.11(playwright@1.64.0)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
       '@vitest/runner': 4.1.11
       vitest: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-istanbul@4.1.11)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(happy-dom@20.8.9)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -4547,11 +4542,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/browser-playwright@4.1.11(playwright@1.58.1)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)':
+  '@vitest/browser-playwright@4.1.11(playwright@1.64.0)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)':
     dependencies:
       '@vitest/browser': 4.1.11(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
       '@vitest/mocker': 4.1.11(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
-      playwright: 1.58.1
+      playwright: 1.64.0
       tinyrainbow: 3.1.0
       vitest: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-istanbul@4.1.11)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(happy-dom@20.8.9)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -4991,9 +4986,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  fsevents@2.3.2:
-    optional: true
-
   fsevents@2.3.3:
     optional: true
 
@@ -5346,13 +5338,11 @@ snapshots:
       exsolve: 1.0.8
       pathe: 2.0.3
 
-  playwright-core@1.58.1: {}
+  playwright-core@1.64.0: {}
 
-  playwright@1.58.1:
+  playwright@1.64.0:
     dependencies:
-      playwright-core: 1.58.1
-    optionalDependencies:
-      fsevents: 2.3.2
+      playwright-core: 1.64.0
 
   pngjs@7.0.0: {}
 
@@ -5788,7 +5778,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
       '@types/node': 22.19.21
-      '@vitest/browser-playwright': 4.1.11(playwright@1.58.1)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
+      '@vitest/browser-playwright': 4.1.11(playwright@1.64.0)(vite@7.3.5(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.11)
       '@vitest/coverage-istanbul': 4.1.11(vitest@4.1.11)
       '@vitest/coverage-v8': 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
       '@vitest/ui': 4.1.11(vitest@4.1.11)

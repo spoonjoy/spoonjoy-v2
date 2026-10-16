@@ -1,12 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form as RouterForm, useNavigation } from "react-router";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
-import { Field, Label } from "../ui/fieldset";
-import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
-import { Checkbox, CheckboxField } from "../ui/checkbox";
+import { Checkbox } from "~/components/ouro/checkbox/checkbox";
+import { Field } from "~/components/ouro/field/field";
+import { FieldControl } from "~/components/ouro/field/field-parts";
+import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import {
   FOOD_IMAGE_ACCEPT,
   FOOD_IMAGE_SIZE_MESSAGE,
@@ -35,7 +37,8 @@ export interface SpoonDialogProps {
   actionUrl: string;
   isOriginCookCandidate: boolean;
   coverPromptMode?: "none" | "first-photo" | "optional-update";
-  errorMessage?: string | null;
+  /** Messages bound to this dialog's actual accepted response with formErrors. */
+  errors?: FormErrors;
 }
 
 export function SpoonDialog({
@@ -44,15 +47,12 @@ export function SpoonDialog({
   actionUrl,
   isOriginCookCandidate,
   coverPromptMode = "none",
-  errorMessage,
+  errors: formErrors,
 }: SpoonDialogProps) {
-  const noteId = useId();
-  const nextTimeId = useId();
   const photoId = useId();
   const photoHintId = useId();
   const photoStatusId = useId();
   const photoErrorId = useId();
-  const cookedAtId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const submitInFlightRef = useRef(false);
   const navigation = useNavigation();
@@ -147,7 +147,9 @@ export function SpoonDialog({
           method="post"
           action={actionUrl}
           encType="multipart/form-data"
-          className="space-y-4"
+          errors={formErrors}
+          render={<RouterForm />}
+          className="gap-4"
           onSubmit={handleSubmit}
         >
           <input type="hidden" name="intent" value="createSpoon" />
@@ -160,15 +162,13 @@ export function SpoonDialog({
               Add a photo to create the recipe cover
             </p>
           ) : null}
-          {errorMessage ? (
-            <p role="alert" className="text-sm text-[var(--sj-tomato)]">
-              {errorMessage}
-            </p>
-          ) : null}
-          <Field>
-            <Label htmlFor={photoId}>Photo</Label>
+          {/* The photo picker is Spoonjoy's own control (a tile), so its label and error are plain
+              elements, styled like Ouro UI's field label. */}
+          <div className="grid gap-2">
+            <label htmlFor={photoId} className="justify-self-start font-sj-ui text-sm/5 font-medium text-[var(--sj-ink)] select-none">
+              Photo
+            </label>
             <label
-              data-slot="control"
               data-testid="spoon-photo-picker"
               className="group flex min-h-24 cursor-pointer items-center gap-4 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"
             >
@@ -199,55 +199,45 @@ export function SpoonDialog({
               </span>
             </label>
             {photoError ? (
-              <p id={photoErrorId} role="alert" className="mt-1 text-sm text-[var(--sj-tomato)]">
+              <p id={photoErrorId} role="alert" className="m-0 text-sm/5 text-[var(--sj-tomato)]">
                 {photoError}
               </p>
             ) : null}
-          </Field>
+          </div>
           {showCoverOptIn ? (
-            <CheckboxField>
-              <Checkbox
-                name="useAsRecipeCover"
-                value="true"
-                checked={useAsRecipeCover}
-                onChange={setUseAsRecipeCover}
-                disabled={isPosting}
-              />
-              <Label>Use this photo as recipe cover</Label>
-            </CheckboxField>
+            <Checkbox
+              label="Use this photo as recipe cover"
+              name="useAsRecipeCover"
+              value="true"
+              checked={useAsRecipeCover}
+              onCheckedChange={setUseAsRecipeCover}
+              disabled={isPosting}
+            />
           ) : null}
-          <Field>
-            <Label htmlFor={noteId}>Note</Label>
-            <Textarea
-              id={noteId}
-              name="note"
-              rows={3}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="How did it go?"
-              disabled={isPosting}
-            />
-          </Field>
-          <Field>
-            <Label htmlFor={nextTimeId}>Next time</Label>
-            <Input
-              id={nextTimeId}
-              name="nextTime"
-              type="text"
-              value={nextTime}
-              onChange={(event) => setNextTime(event.target.value)}
-              placeholder="What would you change?"
-              disabled={isPosting}
-            />
-          </Field>
-          <Field>
-            <Label htmlFor={cookedAtId}>Cooked at</Label>
-            <Input
-              id={cookedAtId}
+          <TextArea
+            label="Note"
+            name="note"
+            rows={3}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="How did it go?"
+            disabled={isPosting}
+          />
+          <TextField
+            label="Next time"
+            name="nextTime"
+            value={nextTime}
+            onChange={(event) => setNextTime(event.target.value)}
+            placeholder="What would you change?"
+            disabled={isPosting}
+          />
+          {/* Ouro UI's TextField has no date-and-time type, so this is its Field and control. The
+              field has no name: the hidden cookedAt input above carries the instant. */}
+          <Field label="Cooked at" disabled={isPosting}>
+            <FieldControl
               type="datetime-local"
               value={cookedAt}
               onChange={(event) => setCookedAt(event.target.value)}
-              disabled={isPosting}
             />
           </Field>
           {isPosting ? (

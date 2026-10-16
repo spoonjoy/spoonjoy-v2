@@ -1,9 +1,10 @@
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { useState } from "react";
-import { commands, page } from "vitest/browser";
+import { commands } from "vitest/browser";
 import { act } from "~/lib/ouro/testing/act";
 import { Dialog } from "~/components/ouro/dialog/dialog";
+import { rotate } from "~/lib/ouro/testing/rotate";
 
 // Runs in the `touch` project: Chromium as a phone with a coarse pointer. In a file of its
 // own, so no Dialog has mounted on the page before the tap: the module state is fresh.
@@ -13,7 +14,7 @@ const nodes: Element[] = [];
 afterEach(async () => {
   await act(() => root?.unmount());
   for (const node of nodes.splice(0)) node.remove();
-  await page.viewport(390, 844);
+  await rotate(390, 844);
 });
 
 /** The app mounts the Dialog only when it opens: `{editing && <Dialog open … />}`. */
@@ -37,7 +38,7 @@ function MountOnOpen() {
 
 describe("Dialog mounted by the tap that opens it", () => {
   it("focuses the centered popup, not its first input, when no Dialog was on the page before the tap", async () => {
-    await page.viewport(844, 390);
+    await rotate(844, 390);
     const host = document.createElement("div");
     document.body.append(host);
     nodes.push(host);

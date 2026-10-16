@@ -8,14 +8,6 @@ const APP_AND_STORY_FILES = [
   "stories",
 ];
 
-const FORM_PRIMITIVES = [
-  "app/components/ui/checkbox.tsx",
-  "app/components/ui/combobox.tsx",
-  "app/components/ui/listbox.tsx",
-  "app/components/ui/select.tsx",
-  "app/components/ui/textarea.tsx",
-];
-
 function readSourceFile(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), "utf-8");
 }
@@ -40,13 +32,41 @@ function listTextFiles(dirs: string[]): string[] {
 }
 
 describe("Spoonjoy UI design-system hygiene", () => {
-  it.each(FORM_PRIMITIVES)("%s uses Spoonjoy radius tokens, not stale Catalyst radius math", (filePath) => {
-    const content = readSourceFile(filePath);
+  it("uses one text link, Ouro UI's, outside Catalyst's own files", () => {
+    // Catalyst's TextLink (app/components/ui/text.tsx) looks different: tomato and semibold where
+    // Ouro UI's Link is the primary colour at normal weight.
+    const offenders = listTextFiles(APP_AND_STORY_FILES)
+      .filter((file) => !file.startsWith("app/components/ui/") && !file.startsWith("app/components/ouro/"))
+      .filter((file) => /\bTextLink\b/.test(readSourceFile(file)));
 
-    expect(content).not.toContain("calc(var(--radius-lg)-1px)");
-    expect(content).not.toContain("rounded-lg");
-    expect(content).not.toContain("rounded-xl");
-    expect(content).toContain("var(--sj-radius-small)");
+    expect(offenders).toEqual([]);
+  });
+
+  it("spaces an Ouro UI field from its siblings with a gap, not a margin", () => {
+    // Stopgap for the Ouro UI defect "a field's root sets m-0, which beats the margin space-y and
+    // space-x put on children": the field touches what follows it. Remove with the fix (v0.8.0).
+    const field = /^<(TextField|TextArea|Field|Select|Fieldset)\b/;
+    const indentOf = (line: string) => line.length - line.trimStart().length;
+    const offenders: string[] = [];
+
+    for (const file of listTextFiles(APP_AND_STORY_FILES)) {
+      if (file.startsWith("app/components/ouro/")) continue;
+      const lines = readSourceFile(file).split("\n");
+      lines.forEach((line, index) => {
+        if (!/className=.*\bspace-[xy]-\d/.test(line)) return;
+        // The element's direct children are the lines one step deeper, up to its closing tag.
+        for (let next = index + 1; next < lines.length; next += 1) {
+          const child = lines[next];
+          if (child.trim() === "") continue;
+          if (indentOf(child) <= indentOf(line)) break;
+          if (indentOf(child) === indentOf(line) + 2 && field.test(child.trim())) {
+            offenders.push(`${file}:${next + 1}`);
+          }
+        }
+      });
+    }
+
+    expect(offenders).toEqual([]);
   });
 
   it("keeps button chrome flat enough to avoid doubled-button artifacts", () => {

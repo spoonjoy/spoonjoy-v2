@@ -22,6 +22,37 @@ async function findSourceFiles(rootDir: string): Promise<string[]> {
 }
 
 describe("build output hygiene", () => {
+  it("suppresses Rollup's notices about the client directive only for Ouro UI's copied-in files", () => {
+    const ouroFile = path.join(process.cwd(), "app/components/ouro/form/form.tsx");
+    const ouroLib = path.join(process.cwd(), "app/lib/ouro/ouro-provider.tsx");
+    const ownFile = path.join(process.cwd(), "app/components/recipe/RecipeBuilder.tsx");
+    const directive = {
+      code: "MODULE_LEVEL_DIRECTIVE",
+      message: 'Module level directives cause errors when bundled, "use client" in "app/components/ouro/form/form.tsx" was ignored.',
+    };
+    const sourcemap = {
+      code: "SOURCEMAP_ERROR",
+      message: "Error when using sourcemap for reporting an error: Can't resolve original location of error.",
+      loc: { line: 1, column: 0 },
+    };
+
+    expect(shouldLogRollupBuildMessage("warn", { ...directive, id: ouroFile })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", { ...sourcemap, id: ouroFile })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", { ...sourcemap, id: ouroLib })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", { ...sourcemap, id: ouroFile.replaceAll("/", "\\") })).toBe(false);
+
+    // Spoonjoy's own files, other directives, other lines and other levels still report.
+    expect(shouldLogRollupBuildMessage("warn", { ...directive, id: ownFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { ...sourcemap, id: ownFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { ...directive })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { code: "MODULE_LEVEL_DIRECTIVE", id: ouroFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { ...directive, message: directive.message.replace("use client", "use server"), id: ouroFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { ...sourcemap, loc: { line: 40, column: 2 }, id: ouroFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { code: "SOURCEMAP_ERROR", id: ouroFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("warn", { code: "CIRCULAR_DEPENDENCY", id: ouroFile })).toBe(true);
+    expect(shouldLogRollupBuildMessage("info", { ...directive, id: ouroFile })).toBe(true);
+  });
+
   it("suppresses only Rollup empty-bundle diagnostics from route modules", () => {
     expect(shouldLogRollupBuildMessage("warn", {
       code: "EMPTY_BUNDLE",
@@ -109,7 +140,16 @@ describe("build output hygiene", () => {
   });
 
   it("keeps inert client directives out of local app source", async () => {
-    const sourceFiles = await findSourceFiles(path.join(process.cwd(), "app"));
+    // Stopgap for the Ouro UI defect "shadcn's installer does not strip Ouro UI's `"use client";`
+    // line for an app that is not on React Server Components": every copied-in Ouro UI file
+    // keeps the line, so only Spoonjoy's own source is held to this. The build's notices about
+    // those files are filtered by scripts/build-output-hygiene.ts, under the same defect. Remove
+    // both only when a pinned CLI install actually strips them. v0.8.0 installed via
+    // shadcn 4.21.1 and 4.21.4 still retains these directives in this React Router app.
+    const ouroDirs = ["app/components/ouro", "app/lib/ouro"].map((dir) => path.join(process.cwd(), dir) + path.sep);
+    const sourceFiles = (await findSourceFiles(path.join(process.cwd(), "app"))).filter(
+      (filePath) => !ouroDirs.some((dir) => filePath.startsWith(dir)),
+    );
     const filesWithClientDirective: string[] = [];
 
     await Promise.all(

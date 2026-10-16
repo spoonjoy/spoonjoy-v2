@@ -1,4 +1,5 @@
 import { faker } from "@faker-js/faker";
+import { waitFor } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
 
 type StubRouteObject = Parameters<typeof createRoutesStub>[0][number];
@@ -117,4 +118,38 @@ export async function getOrCreateIngredientRef(db: any, name: string) {
   }
 
   return ingredientRef;
+}
+
+/**
+ * Required markers are CSS decoration in Ouro v0.8, not part of the label text.
+ */
+export function requiredLabel(label: string) {
+  return label;
+}
+
+/**
+ * The alerts that say something. An accepted form refusal and standalone alerts can
+ * coexist; callers can scope this to the form or dialog they are checking.
+ */
+export function shownAlerts(container: HTMLElement = document.body): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>('[role="alert"]')).filter(
+    (alert) => alert.textContent !== "",
+  );
+}
+
+/** The one alert that says something; throws when there is none or more than one. */
+export function getShownAlert(container?: HTMLElement): HTMLElement {
+  const alerts = shownAlerts(container);
+  if (alerts.length !== 1) throw new Error(`Expected one alert with a message, found ${alerts.length}.`);
+  return alerts[0];
+}
+
+/** Waits for the one alert that says something. */
+export function findShownAlert(options: { container?: HTMLElement; timeout?: number } = {}): Promise<HTMLElement> {
+  return waitFor(() => getShownAlert(options.container), { timeout: options.timeout });
+}
+
+/** The one alert that says something, or null when no alert does. */
+export function queryShownAlert(container?: HTMLElement): HTMLElement | null {
+  return shownAlerts(container)[0] ?? null;
 }
