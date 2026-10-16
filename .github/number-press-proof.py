@@ -20,14 +20,17 @@ if mode == "prepare":
     assert original.count(anchor) == 1
     hook = f"""
 python3 "{helper / 'number-press-proof.py'}" observe "$root" "$app" "{evidence}"
+export NATIVE_PRESS_EVIDENCE="{evidence}"
 set +e
-npx vitest run --reporter=verbose --reporter=json --outputFile="{evidence}/full-tests.json"
+NATIVE_PRESS_PHASE=full npx vitest run --reporter=verbose --reporter=json \\
+  --reporter="{helper / 'number-press-reporter.mjs'}" --outputFile="{evidence}/full-tests.json"
 full_status=$?
 printf '%s\\n' "$full_status" > "{evidence}/full-status.txt"
-for iteration in 1 2 3 4 5; do
-  npx vitest run src/components/ouro/number-field/number-field.test.tsx \\
+for iteration in $(seq 1 50); do
+  NATIVE_PRESS_PHASE="target-$iteration" npx vitest run src/components/ouro/number-field/number-field.test.tsx \\
     -t "shows a pressed color that differs from the hover color" \\
-    --reporter=verbose --reporter=json --outputFile="{evidence}/target-$iteration.json"
+    --reporter=verbose --reporter=json --reporter="{helper / 'number-press-reporter.mjs'}" \\
+    --outputFile="{evidence}/target-$iteration.json"
   printf '%s\\n' "$?" > "{evidence}/target-$iteration-status.txt"
 done
 set -e
