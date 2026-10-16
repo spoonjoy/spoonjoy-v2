@@ -222,9 +222,45 @@ test("on a page zoomed and panned by touch, the kit waits for the frame where th
   await commands.setPageZoom(2);
   try {
     // At zoom 2 the page can't scroll, so a drag pans the visual viewport across it.
-    await commands.touchDrag({ from: [300, 700], to: [50, 200], steps: 10 });
+    const runner = window.top!;
+    const viewport = runner.visualViewport!;
+    let finger: number | undefined;
+    let lifted = false;
+    let settled = false;
+    const panEvents: string[] = [];
+    const started = (event: TouchEvent) => {
+      if (event.isTrusted && finger === undefined) {
+        finger = event.changedTouches[0]!.identifier;
+        panEvents.push("touchstart");
+      }
+    };
+    const ended = (event: TouchEvent) => {
+      if (event.isTrusted && !lifted && Array.from(event.changedTouches).some((touch) => touch.identifier === finger)) {
+        lifted = true;
+        panEvents.push("touchend");
+      }
+    };
+    const scrolled = (event: Event) => {
+      if (event.isTrusted && lifted && !settled) {
+        settled = true;
+        panEvents.push("scrollend");
+      }
+    };
+    addEventListener("touchstart", started, true);
+    addEventListener("touchend", ended, true);
+    viewport.addEventListener("scrollend", scrolled);
+    try {
+      await commands.touchDrag({ from: [300, 700], to: [50, 200], steps: 10, durationMs: 2000 });
+      await expect.poll(() => settled).toBe(true);
+      expect(panEvents).toEqual(["touchstart", "touchend", "scrollend"]);
+    } finally {
+      removeEventListener("touchstart", started, true);
+      removeEventListener("touchend", ended, true);
+      viewport.removeEventListener("scrollend", scrolled);
+    }
     /** Where a touch at (x, y) lands on this page. */
     const landed = async (x: number, y: number) => {
+      expect(runner.document.elementFromPoint(viewport.offsetLeft + x, viewport.offsetTop + y)).toBe(window.frameElement);
       const point = new Promise<[number, number]>((resolve) =>
         addEventListener("touchstart", (event) => resolve([event.touches[0]!.clientX, event.touches[0]!.clientY]), { once: true }),
       );

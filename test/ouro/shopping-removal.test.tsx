@@ -8,6 +8,10 @@ vi.mock("~/lib/shopping-list.server", () => ({
 }));
 let fixture: Awaited<ReturnType<typeof shoppingRemovalFixture>> | undefined;
 const focusTrace: unknown[] = [];
+const recordTrace = (entry: unknown) => {
+  focusTrace.push(entry);
+  if (focusTrace.length > 200) focusTrace.shift();
+};
 const describe = (element: Element | null) => element && ({
   tag: element.tagName, role: element.getAttribute("role"), text: element.textContent?.slice(0, 100),
   label: element.getAttribute("aria-label"), connected: element.isConnected,
@@ -20,12 +24,12 @@ const snapshot = () => ({
   menus: Array.from(document.querySelectorAll('[role="menu"], [role="menuitem"]')).map(describe),
 });
 const trace = (event: Event) => {
-  focusTrace.push({
+  recordTrace({
     when: performance.now(), type: event.type, key: event instanceof KeyboardEvent ? event.key : undefined,
     trusted: event.isTrusted, target: describe(event.target instanceof Element ? event.target : null),
     ...snapshot(),
   });
-  queueMicrotask(() => focusTrace.push({
+  queueMicrotask(() => recordTrace({
     when: performance.now(), after: event.type, prevented: event.defaultPrevented, ...snapshot(),
   }));
 };
@@ -33,6 +37,31 @@ beforeEach(() => {
   focusTrace.length = 0;
   for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.addEventListener(type, trace, true);
 });
+
+it("diagnostic repeated real keyboard menu-to-confirm cancellation preserves focus and performs no mutation", async ({ annotate }) => {
+  fixture = await shoppingRemovalFixture();
+  let cycle = 0;
+  try {
+    await expect.poll(() => fixture!.row()).toBeTruthy();
+    fixture.host.querySelector<HTMLButtonElement>('[aria-label="Actions for lemons"]')!.focus();
+    for (; cycle < 40; cycle++) {
+      recordTrace({ cycle, type: "cycle-start", when: performance.now() });
+      await userEvent.keyboard("{Enter}");
+      await expect.poll(() => document.activeElement?.getAttribute("role")).toBe("menuitem");
+      expect(document.activeElement?.textContent).toBe("Delete lemons");
+      await userEvent.keyboard("{Enter}");
+      await expect.poll(() => document.querySelector('[role="alertdialog"]')).toBeTruthy();
+      await expect.poll(() => document.activeElement?.textContent).toBe("Cancel");
+      expect(fixture.writes).toEqual([]);
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => document.querySelector('[role="alertdialog"]')).toBeNull();
+      await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("Actions for lemons");
+      expect(fixture.writes).toEqual([]);
+    }
+  } finally {
+    await annotate(`KEYBOARD_FOCUS_STRESS ${JSON.stringify({ cycle, trace: focusTrace, final: snapshot(), writes: fixture.writes })}`);
+  }
+}, 60_000);
 afterEach(() => {
   for (const type of ["keydown", "keyup", "click", "focusin", "focusout"]) document.removeEventListener(type, trace, true);
 });
