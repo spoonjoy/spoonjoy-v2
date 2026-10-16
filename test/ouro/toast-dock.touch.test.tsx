@@ -6,6 +6,7 @@ import { ToastProvider, useToast } from "~/components/feedback/toast";
 import { DockContextProvider, useDockSuppressed } from "~/components/navigation/dock-context";
 import { MobileNav } from "~/components/navigation/mobile-nav";
 import { act } from "~/lib/ouro/testing/act";
+import { rotate } from "~/lib/ouro/testing/rotate";
 
 function FeedbackTrigger() {
   const { showToast } = useToast();
@@ -40,7 +41,7 @@ const scenarios = [
 ] as const;
 for (const scenario of scenarios) {
 it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.path} auth=${scenario.authenticated} suppressed=${scenario.suppressed} ${scenario.direction}`, async ({ annotate }) => {
-  await page.viewport(scenario.width, 844);
+  await rotate(scenario.width, 844);
   expect(matchMedia("(pointer: coarse)").matches).toBe(true);
   const originalDirection = document.documentElement.dir;
   document.documentElement.dir = scenario.direction;
@@ -83,7 +84,6 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
         centerHitInToast: Boolean(actual?.closest('[data-ouro="toast"]')),
       };
     });
-    }
     await annotate(`T11_M1_LAYOUT ${JSON.stringify({
       scenario,
       viewport: { width: innerWidth, height: innerHeight },
@@ -119,5 +119,7 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
     await act(async () => root.unmount());
     host.remove();
     document.documentElement.dir = originalDirection;
+    await rotate(390, 844);
   }
 });
+}
