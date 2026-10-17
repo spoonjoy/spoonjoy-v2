@@ -38,6 +38,27 @@ jobs:
           printf '%s\n' "$result" > "$RUNNER_TEMP/ui-teardown-exit.txt"
           grep -q 'UI_TEARDOWN_START {' "$RUNNER_TEMP/ui-teardown.log" || exit 3
           exit "$result"
+      - name: Require non-vacuous pending-entrance cancellation
+        if: always()
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from "node:fs";
+          import assert from "node:assert/strict";
+          const log = readFileSync(`${process.env.RUNNER_TEMP}/ui-teardown.log`, "utf8").replace(/\x1b\[[0-9;]*m/g, "");
+          const records = (marker) => [...log.matchAll(new RegExp(`${marker} (\\{"[^\\n]*)`, "g"))].map((match) => JSON.parse(match[1]));
+          const before = records("UI_TEARDOWN_START");
+          const after = records("UI_TEARDOWN_UNMOUNTED");
+          const pending = before.filter((record) => record.starting.length > 0);
+          assert.equal(before.length, 123);
+          assert.equal(after.length, before.length);
+          assert.ok(pending.length > 0, "No pending entrance observed; cancellation control is inconclusive");
+          assert.ok(after.every((record) => record.mounted === 0 && record.starting.length === 0));
+          assert.deepEqual(after.map((record) => record.test), before.map((record) => record.test));
+          assert.equal(records("UI_TEARDOWN_DIAGNOSTIC").length, 0);
+          assert.ok(!log.includes("not wrapped in act"));
+          assert.match(log, /Tests\s+2 failed \| 11433 passed \(11435\)/);
+          console.log("UI_TEARDOWN_CANCELLATION_PROOF", JSON.stringify({ tests: before.length, pending: pending.length, unmountedBeforeResourceCleanup: after.length, diagnostics: 0, expectedPrivateProbePolicyFailures: 2 }));
+          JS
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
