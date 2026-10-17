@@ -7,7 +7,7 @@ permissions:
 jobs:
   boundary:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       PRISMA_HIDE_UPDATE_MESSAGE: "1"
     steps:
@@ -28,10 +28,11 @@ jobs:
       - run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
       # Vitest's unchanged collector enforces console diagnostics. The outer text
       # gate is not used for this private phase/caller JSON observation.
-      - name: Exercise instrumented cookbook refusals as in the failed native coverage gate
+      - name: Preserve full native coverage workload while recording cookbook teardown phases
         run: |
           set +e
-          pnpm exec vitest run test/routes/cookbooks-id.test.tsx --testNamePattern="keeps the editor open with the new title when the database was briefly unavailable" --coverage --reporter=verbose > "$RUNNER_TEMP/ui-teardown.log" 2>&1
+          pnpm run api:playground:generate
+          pnpm exec vitest run --coverage > "$RUNNER_TEMP/ui-teardown.log" 2>&1
           result=$?
           cat "$RUNNER_TEMP/ui-teardown.log"
           printf '%s\n' "$result" > "$RUNNER_TEMP/ui-teardown-exit.txt"
