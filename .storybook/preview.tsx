@@ -1,7 +1,6 @@
 import type { Preview } from '@storybook/react-vite'
 import { withThemeByClassName } from '@storybook/addon-themes'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import './font-faces.css'
 import '../app/styles/tailwind.css'
 
 type RouterParameters = {

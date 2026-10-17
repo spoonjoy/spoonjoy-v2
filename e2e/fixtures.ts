@@ -42,6 +42,7 @@ export const test = base.extend<{ warningDiagnostics: BrowserWarningDiagnostics 
         if (response.status() >= 400 || selected(response.request().resourceType(), response.url())) records.push({
           at: Date.now(), event: "response", url: response.url(), status: response.status(),
           type: response.request().resourceType(),
+          accessControlAllowOrigin: response.headers()["access-control-allow-origin"] ?? null,
         });
       });
       const observePage = (page: import("@playwright/test").Page) => {
@@ -81,10 +82,25 @@ export const test = base.extend<{ warningDiagnostics: BrowserWarningDiagnostics 
         await runBrowserDiagnosticFixture(context, use);
       } finally {
         await Promise.all(consoleReads);
+        const styleSheets = await Promise.all(context.pages().map(async (page) => ({
+          url: page.url(),
+          result: await page.evaluate(() => [...document.styleSheets]
+            .filter((sheet) => sheet.href?.startsWith("https://fonts.googleapis.com/"))
+            .map((sheet) => {
+              try {
+                return {
+                  href: sheet.href, rules: sheet.cssRules.length,
+                  crossOrigin: (sheet.ownerNode as HTMLLinkElement).crossOrigin,
+                };
+              } catch (error) {
+                return { href: sheet.href, error: String(error) };
+              }
+            })).catch((error: unknown) => ({ evaluationError: String(error) })),
+        })));
         const directory = join(process.env.RUNNER_TEMP!, "axe-network");
         await mkdir(directory, { recursive: true });
         await writeFile(join(directory, `test-${randomUUID()}.json`),
-          JSON.stringify({ test: info.titlePath, repeatEachIndex: info.repeatEachIndex, records }, null, 2));
+          JSON.stringify({ test: info.titlePath, repeatEachIndex: info.repeatEachIndex, records, styleSheets }, null, 2));
       }
     },
     { auto: true },

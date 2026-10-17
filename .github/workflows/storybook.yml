@@ -45,7 +45,7 @@ jobs:
         run: pnpm prisma:generate
       
       - name: 📚 Build Storybook
-        run: node .github/capture-font-css.mjs && pnpm build-storybook
+        run: pnpm build-storybook
 
       # Ouro UI (app/components/ouro, installed from its shadcn registry) ships its own tests. They
       # run here, beside the Storybook they use, on every pull request, merge-queue run and push to
