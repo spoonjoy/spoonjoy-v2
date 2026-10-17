@@ -1,11 +1,11 @@
-name: Task21 real v0.8.4 CLI and strict consumer proof
+name: Task24 real v1.0.1 CLI and strict consumer proof
 on:
   push:
-    branches: [ouro/retire-catalyst-20261016]
+    branches: [ouro/adopt-v1-20261017]
 permissions:
   contents: read
 concurrency:
-  group: task21-v084-${{ github.ref }}
+  group: task24-v101-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   binding:
@@ -49,8 +49,8 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: task21-v084-real-cli-${{ github.run_id }}
-          path: ${{ runner.temp }}/task21-v084-cli/
+          name: task24-v101-real-cli-${{ github.run_id }}
+          path: ${{ runner.temp }}/task24-v101-cli/
           if-no-files-found: error
   strict:
     needs: binding
@@ -84,8 +84,8 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: task21-v084-strict-${{ github.run_id }}
+          name: task24-v101-strict-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/task21-v084-strict/
+            ${{ runner.temp }}/task24-v101-strict/
             coverage/coverage-final.json
           if-no-files-found: error
