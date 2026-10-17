@@ -6,9 +6,7 @@ export const B2_OBSERVER = `
   if (action === "expect" && expected.type === "touchend") {
     const rows = [...document.querySelectorAll('[data-ouro="swipe-actions"]')];
     const row = rows[1];
-    const box = row && row.getBoundingClientRect();
-    if (box && Math.abs(expected.x - (box.left + box.width / 2 + 12)) < 1 &&
-        Math.abs(expected.y - (box.top + box.height / 2 - 140)) < 1) {
+    if (rows.length === 3 && row.textContent.includes("Short ribs")) {
       if (view.__b2Native) view.__b2Native.remove();
       const label = (node) => node && node.nodeType === 1 ? {
         tag: node.tagName, id: node.id, ouro: node.getAttribute("data-ouro"),
@@ -38,9 +36,8 @@ export const B2_OBSERVER = `
           transform: getComputedStyle(row.querySelector("[data-ouro-swipe-actions-track]")).transform };
       };
       const from = [expected.x - 12, expected.y + 200];
-      const hit = document.elementFromPoint(...from);
-      const data = { from, to: [expected.x, expected.y], hit: label(hit), hitInRow: row.contains(hit),
-        initial: metrics(), events: [], snapshots: [] };
+      const data = { from, to: [expected.x, expected.y],
+        installedAt: performance.now(), events: [], snapshots: [] };
       const types = ["pointerdown", "pointermove", "pointerup", "pointercancel",
         "touchstart", "touchmove", "touchend", "touchcancel", "scroll"];
       const listener = (event) => {
@@ -53,6 +50,13 @@ export const B2_OBSERVER = `
           scroll: [scrollX, scrollY] };
         data.events.push(entry);
         queueMicrotask(() => { entry.prevented = event.defaultPrevented; });
+        if (event.type === "touchstart") {
+          const touch = event.changedTouches[0];
+          const hit = document.elementFromPoint(touch.clientX, touch.clientY);
+          data.hit = label(hit);
+          data.hitInRow = row.contains(hit);
+          data.targetRow = label(event.target.closest('[data-ouro="swipe-actions"]'));
+        }
         if (event.type === "touchstart" || event.type === "touchend" || event.type === "touchcancel")
           data.snapshots.push({ type: event.type, ...metrics() });
       };

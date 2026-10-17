@@ -135,7 +135,7 @@ function noMenu() {
 const hits = (target: Element, x: number, y: number) => target.contains(document.elementFromPoint(x, y));
 
 describe("SwipeActions on a phone", () => {
-  it("lets a vertical swipe that starts on a row scroll the page", async () => {
+  it.each(Array.from({ length: 12 }, (_, index) => index + 1))("native observation %i: lets a vertical swipe that starts on a row scroll the page", async () => {
     const { rows } = await renderList();
     const row = rows[1]!;
     expect(getComputedStyle(row).touchAction).toBe("pan-y");
