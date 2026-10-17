@@ -1,6 +1,7 @@
 import type {} from "@vitest/browser-playwright";
 import type { CDPSession, Frame, Page } from "playwright";
 import type { BrowserCommand } from "vitest/node";
+import { B2_OBSERVER, saveB2 } from "../../../../.github/b2-native-observer.ts";
 
 export interface EmulateMediaOptions {
   reducedMotion?: "reduce" | "no-preference";
@@ -107,6 +108,7 @@ const TOUCH_HANDLED_TIMEOUT_MS = 5000;
  */
 const TOUCH_WATCH = `(action, expected) => {
   const view = window;
+  ${B2_OBSERVER}
   let state = view.__ouroTouch;
   if (action === "inspect") return { href: view.location.href, readyState: view.document.readyState, watching: Boolean(state && state.document === view.document) };
   // A frame that navigated keeps its window but loses the listeners: watch its new document afresh.
@@ -522,28 +524,48 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
     cdpSessions.set(page, session);
   }
   const start = Date.now() / 1000;
-  const touch = (type: "touchStart" | "touchMove" | "touchEnd", [x, y]: [number, number], t: number) =>
-    session.send("Input.dispatchTouchEvent", {
+  const probe = steps === 12 && to[0] - from[0] === 12 && to[1] - from[1] === -200;
+  const packets: unknown[] = [];
+  const touch = (type: "touchStart" | "touchMove" | "touchEnd", [x, y]: [number, number], t: number) => {
+    const payload = {
       type,
       touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
       ...(durationMs === undefined ? {} : { timestamp: start + (durationMs * t) / 1000 }),
-    });
-  await releaseFinger("touchDrag", page, session);
-  await sendTouch("touchDrag", page, session, { type: "touchEnd", x: to[0], y: to[1] }, { point: { x: from[0], y: from[1] } }, async () => {
-    const deliveries: Promise<unknown>[] = [];
-    const send = async (type: "touchStart" | "touchMove" | "touchEnd", point: [number, number], t: number) => {
-      const delivery = touch(type, point, t);
-      if (durationMs === undefined) await delivery;
-      else deliveries.push(delivery);
+  };
+    const packet = { payload, sentAt: performance.now(), acknowledgedAt: 0 };
+    if (probe) packets.push(packet);
+    const delivery = session.send("Input.dispatchTouchEvent", payload);
+    return probe ? delivery.then((result) => { packet.acknowledgedAt = performance.now(); return result; }) : delivery;
     };
-    await send("touchStart", from, 0);
-    for (let step = 1; step <= steps; step++) {
-      const t = step / steps;
-      await send("touchMove", [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t], t);
+  await releaseFinger("touchDrag", page, session);
+  try {
+    await sendTouch("touchDrag", page, session, { type: "touchEnd", x: to[0], y: to[1] }, { point: { x: from[0], y: from[1] } }, async () => {
+      const deliveries: Promise<unknown>[] = [];
+      const send = async (type: "touchStart" | "touchMove" | "touchEnd", point: [number, number], t: number) => {
+        const delivery = touch(type, point, t);
+        if (durationMs === undefined) await delivery;
+        else deliveries.push(delivery);
+      };
+      await send("touchStart", from, 0);
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        await send("touchMove", [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t], t);
+      }
+      await send("touchEnd", to, 1);
+      await Promise.all(deliveries);
+    });
+  } finally {
+    if (probe) {
+      const frames = await Promise.all(page.frames().map(async (frame) => ({
+        url: frame.url(),
+        observation: await frame.evaluate(`(() => {
+          const observer = window.__b2Native;
+          return observer ? { ...observer.data, after: observer.metrics() } : null;
+        })()`).catch((error: unknown) => ({ error: String(error) })),
+      })));
+      await saveB2({ from, to, steps, durationMs: durationMs ?? null, packets, frames });
     }
-    await send("touchEnd", to, 1);
-    await Promise.all(deliveries);
-  });
+  }
 };
 
 export interface PointerPressOptions {
