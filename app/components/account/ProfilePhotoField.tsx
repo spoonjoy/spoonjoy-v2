@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import { Form, useActionData, useSubmit } from "react-router";
 import { Avatar } from "~/components/ouro/avatar/avatar";
-import { Button } from "~/components/ui/button";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { ProfilePhotoCropper } from "~/components/account/ProfilePhotoCropper";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
@@ -92,8 +92,8 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
             </Form>
           )}
         </div>
-        {errorMessage && <Text className="text-sm text-[var(--sj-tomato)]">{errorMessage}</Text>}
-        <Text className="text-sm">JPG, PNG, GIF, or WebP. 5 MB max.</Text>
+        {errorMessage && <Text size="sm" tone="destructive">{errorMessage}</Text>}
+        <Text size="sm">JPG, PNG, GIF, or WebP. 5 MB max.</Text>
       </div>
 
       {cropFile && <ProfilePhotoCropper file={cropFile} onConfirm={handleConfirm} onCancel={handleCancel} />}

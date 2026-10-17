@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useState } from 'react'
 import { BookX, Eraser, LogOut, Trash2 } from 'lucide-react'
 import { ConfirmationDialog } from '../app/components/confirmation-dialog'
-import { Button } from '../app/components/ui/button'
+import { Button } from '../app/components/button'
 
 const meta: Meta<typeof ConfirmationDialog> = {
   title: 'Components/ConfirmationDialog',

@@ -23,6 +23,10 @@ describe("StepOutputUseDisplay", () => {
       render(<StepOutputUseDisplay usingSteps={usingSteps} />);
 
       expect(screen.getByText("Using outputs from")).toBeInTheDocument();
+      // This editorial metadata heading was 14px, muted and uppercase at the
+      // delivered base. Released Heading's minimum is 16px; do not round it up.
+      expect(screen.getByRole("heading", { level: 4, name: "Using outputs from" }))
+        .toHaveClass("font-sj-display", "text-sm", "text-[var(--sj-ink-soft)]", "uppercase");
     });
 
     it("should render step output with title when stepTitle is present", () => {

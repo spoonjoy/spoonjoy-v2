@@ -8,9 +8,9 @@ import {
   normalizeUserCode,
   rememberTypedCode,
 } from "~/lib/agent-connection-route.server";
-import { Button } from "~/components/ui/button";
-import { Heading } from "~/components/ui/heading";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Heading } from "~/components/heading";
+import { Text } from "~/components/text";
 
 type LookupData = {
   code: string;
@@ -72,7 +72,7 @@ export default function AgentConnectLookup() {
         Agent access
       </p>
       <Heading className="mt-3">Enter Connection Code</Heading>
-      <Text className="mt-5 text-lg/7">
+      <Text size="lg" className="mt-5 leading-7">
         Enter the short Spoonjoy code shown by your device, CLI, or agent. You will sign in before approving access.
       </Text>
       <Form method="post" className="mt-8 grid gap-4">

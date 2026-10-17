@@ -1,4 +1,3 @@
-import { Text } from '../ui/text'
 import { IngredientList, type Ingredient } from './IngredientList'
 import type { StepReference } from './StepOutputUseCallout'
 
@@ -99,9 +98,9 @@ export function StepCard({
           </div>
         )}
 
-        <Text className="m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg">
+        <p className="text-base/6 text-[var(--sj-ink-soft)] m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg">
           {description}
-        </Text>
+        </p>
       </div>
     </article>
   )

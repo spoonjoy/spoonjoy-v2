@@ -2,7 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
-import { LocalDate } from "~/components/ui/local-date";
+import { LocalDate } from "~/components/local-date";
 import { withTimeZone } from "../../helpers/timezone";
 
 // Server-renders `ui` in the Worker's timezone (UTC), then hydrates that markup in `timeZone`, as a

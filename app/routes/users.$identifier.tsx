@@ -5,9 +5,9 @@ import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Avatar } from "~/components/ouro/avatar/avatar";
-import { Button } from "~/components/ui/button";
-import { Heading, Subheading } from "~/components/ui/heading";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Subheading } from "~/components/heading";
+import { Text } from "~/components/text";
 import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
@@ -16,9 +16,9 @@ import { absoluteUrlFromRequest } from "~/lib/og-image.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
-import { ShowMore, useAppendingList, useFocusFirstNew } from "~/components/ui/show-more";
+import { useAppendingList } from "~/hooks/use-appending-list";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { LocalDate } from "~/components/ui/local-date";
+import { LocalDate } from "~/components/local-date";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
@@ -217,7 +217,6 @@ export default function UserProfile() {
     noun: "recipes",
   });
   const recipes = list.items;
-  const firstNewRef = useFocusFirstNew<HTMLAnchorElement>(list.firstNewIndex);
 
   return (
     <CookbookPage>
@@ -233,10 +232,10 @@ export default function UserProfile() {
             />
             <div>
               <p className="sj-eyebrow">Chef profile</p>
-              <Heading level={1} className="mt-2 text-5xl/12 tracking-normal">
+              <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 text-5xl/12 tracking-normal">
                 {chefDisplayName(profile.username)}
-              </Heading>
-              <Text className="mt-1 text-sm">
+              </h1>
+              <Text size="sm" className="mt-1">
                 Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <p className="m-0 mt-2 text-sm">
@@ -281,20 +280,18 @@ export default function UserProfile() {
                 chefName: profile.username,
               }))}
               totalCount={recipeCount}
-              firstNew={{ index: list.firstNewIndex, ref: firstNewRef }}
+              loadMore={{
+                hasMore: Boolean(list.nextCursor),
+                loading: list.loading,
+                onShowMore: list.showMore,
+                href: list.nextCursor ? profileRecipesHref(profile.username, list.nextCursor) : undefined,
+              }}
               emptyTitle={after ? "That's every recipe" : isOwner ? "No recipes yet" : "No public recipes yet"}
               emptyMessage={after
                 ? `You've reached ${chefDisplayName(profile.username)}'s oldest recipe.`
                 : isOwner ? "Create your first recipe to start your kitchen." : `${chefDisplayName(profile.username)} has not shared any recipes yet.`}
               emptyCtaHref={isOwner && !after ? "/recipes/new" : null}
             />
-            {recipes.length > 0 ? (
-              <ShowMore
-                list={list}
-                href={list.nextCursor ? profileRecipesHref(profile.username, list.nextCursor) : null}
-                label="Show more recipes"
-              />
-            ) : null}
           </section>
 
           {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a
@@ -304,8 +301,8 @@ export default function UserProfile() {
               region instead of dropping to a plain <div>. */}
           <section aria-labelledby="chef-cookbooks-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <Subheading id="chef-cookbooks-heading" level={2} className="text-2xl/8">Cookbooks</Subheading>
-              <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</Text>
+              <Subheading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Subheading>
+              <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</p>
             </div>
 
             {cookbooks.length === 0 ? (

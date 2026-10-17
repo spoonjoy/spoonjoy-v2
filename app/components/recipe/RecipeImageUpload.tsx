@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Upload, X, ImageIcon, Loader2 } from 'lucide-react'
-import { Button } from '~/components/ui/button'
+import { Button } from '~/components/button'
 import {
   FOOD_IMAGE_ACCEPT,
   FOOD_IMAGE_TYPE_MESSAGE,

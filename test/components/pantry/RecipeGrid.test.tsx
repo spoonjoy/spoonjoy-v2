@@ -31,6 +31,22 @@ function renderWithRouter(ui: React.ReactElement) {
 }
 
 describe('RecipeGrid', () => {
+  it('keeps recipe content and total count while growing the list through its next-page link', () => {
+    const load = vi.fn()
+    renderWithRouter(<RecipeGrid recipes={recipes} totalCount={55} loadMore={{
+      hasMore: true, loading: false, href: '/users/ari?after=r-2', onShowMore: load,
+    }} />)
+    expect(screen.getByText('55 total')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Lemon Pasta/ })).toHaveAttribute('href', '/recipes/r-1')
+    // ShowMore adds list wrappers; the actual app row must still own its rule,
+    // rather than relying on the old direct-child selector that no longer reaches it.
+    expect(screen.getByRole('link', { name: /Lemon Pasta/ }).closest('article'))
+      .toHaveClass('border-b', 'border-[var(--sj-border)]')
+    const next = screen.getByRole('link', { name: 'Show more recipes' })
+    expect(next).toHaveAttribute('href', '/users/ari?after=r-2')
+    fireEvent.click(next)
+    expect(load).toHaveBeenCalledTimes(1)
+  })
   it('renders recipe cards with titles and links', () => {
     renderWithRouter(<RecipeGrid recipes={recipes} />)
 

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Form, useNavigation, useSubmit } from "react-router";
 import { ChevronDown, ImagePlus, Loader2, Sparkles } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";

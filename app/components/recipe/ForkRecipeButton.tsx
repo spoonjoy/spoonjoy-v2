@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
-import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
-import { Button } from "../ui/button";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Button } from "../button";
 
 export interface ForkRecipeButtonProps {
   recipeId: string;
@@ -73,17 +73,8 @@ export function ForkRecipeButton({
           {triggerLabel}
         </Button>
       )}
-      <Dialog open={isOpen} onClose={setIsOpen} size="md">
-        <DialogTitle>{dialogTitle}</DialogTitle>
-        <DialogBody>
-          {dialogBody}
-          {failure ? (
-            <p role="alert" className="mt-3 text-sm text-[var(--sj-tomato)]">
-              {failure}
-            </p>
-          ) : null}
-        </DialogBody>
-        <DialogActions>
+      <Dialog open={isOpen} onOpenChange={setIsOpen} size="md" title={dialogTitle}
+        footer={<>
           <Button plain type="button" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
@@ -91,7 +82,15 @@ export function ForkRecipeButton({
             <input type="hidden" name="forkToken" value={forkToken} />
             <Button type="submit" disabled={fetcher.state !== "idle"}>{submitLabel}</Button>
           </fetcher.Form>
-        </DialogActions>
+        </>}>
+        <div>
+          {dialogBody}
+          {failure ? (
+            <p role="alert" className="mt-3 text-sm text-[var(--sj-tomato)]">
+              {failure}
+            </p>
+          ) : null}
+        </div>
       </Dialog>
     </>
   );

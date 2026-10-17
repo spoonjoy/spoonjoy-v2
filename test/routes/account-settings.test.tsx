@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -39,6 +39,8 @@ describe("Account Settings Route", () => {
   });
 
   afterEach(async () => {
+    // Cancel mounted component frames before asynchronous database teardown yields.
+    cleanup();
     await cleanupDatabase();
   });
 

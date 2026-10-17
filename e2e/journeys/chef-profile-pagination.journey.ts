@@ -52,7 +52,7 @@ test.describe("Chef profile paging", () => {
     expect(buttonBox!.y).toBeGreaterThan(lastRowBox!.y + lastRowBox!.height - 1);
     expect(recentCooksBox!.y).toBeGreaterThan(buttonBox!.y + buttonBox!.height);
     await expectAccessible();
-    await centre(page, '[data-testid="show-more"]');
+    await centre(page, '[data-ouro-show-more-toggle]');
     await capture(page, testInfo, "a-first-page-end");
     await capture(page, testInfo, "a-first-page-full", true);
 
@@ -60,13 +60,13 @@ test.describe("Chef profile paging", () => {
     await expect(rows).toHaveCount(PAGE_SIZE * 2);
     // Focus moves to the first appended recipe, and the change is announced.
     await expect(rows.nth(PAGE_SIZE).getByRole("link").first()).toBeFocused();
-    await expect(page.getByTestId("show-more-status")).toHaveText(`Showing ${PAGE_SIZE * 2} recipes`);
+    await expect(page.locator("[data-ouro-show-more-status]")).toHaveText(`Showing ${PAGE_SIZE * 2} recipes`);
     await expect(showMore).toBeVisible();
     // Appending stays on the profile URL, so Back leaves the profile rather than undoing a page.
     await expect(page).toHaveURL(new RegExp(`${PAGER}$`));
     await rows.nth(PAGE_SIZE).evaluate((element) => element.scrollIntoView({ block: "center" }));
     await capture(page, testInfo, "b-after-one-click-appended");
-    await centre(page, '[data-testid="show-more"]');
+    await centre(page, '[data-ouro-show-more-toggle]');
     await capture(page, testInfo, "b-after-one-click-button");
 
     await showMore.click();
@@ -106,7 +106,7 @@ test.describe("Chef profile paging", () => {
     await page.goto(PAGER);
     await waitForHydration(page);
     await expect(page.getByRole("main").getByRole("link", { name: "Show more recipes", exact: true })).toBeVisible();
-    await centre(page, '[data-testid="show-more"]');
+    await centre(page, '[data-ouro-show-more-toggle]');
     await capture(page, testInfo, "d-dark-first-page-end");
     await expectAccessible();
   });

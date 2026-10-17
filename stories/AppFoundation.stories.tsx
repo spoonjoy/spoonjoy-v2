@@ -2,13 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Plus, ShoppingCart, Trash2, UtensilsCrossed } from 'lucide-react'
 import { Avatar } from '../app/components/ouro/avatar/avatar'
 import { Badge } from '../app/components/ouro/badge/badge'
-import { Button } from '../app/components/ui/button'
+import { Button } from '../app/components/button'
 import { Fieldset } from '../app/components/ouro/field/fieldset'
 import { TextArea } from '../app/components/ouro/text-field/text-area'
 import { TextField } from '../app/components/ouro/text-field/text-field'
-import { Heading, Subheading } from '../app/components/ui/heading'
+import { Heading, Subheading } from '../app/components/heading'
 import { Link } from '../app/components/ouro/link/link'
-import { Text } from '../app/components/ui/text'
+import { Text } from '../app/components/text'
 
 const meta: Meta = {
   title: 'App/Foundation',

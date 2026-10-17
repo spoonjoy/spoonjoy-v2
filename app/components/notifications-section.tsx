@@ -1,16 +1,10 @@
 import { useEffect, useState } from "react";
-import { Text } from "~/components/ui/text";
-import { Button } from "~/components/ui/button";
+import { Text } from "~/components/text";
+import { Button } from "~/components/button";
 import { useToast } from "~/components/feedback/toast";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Switch } from "~/components/ouro/switch/switch";
-import {
-  Dialog,
-  DialogActions,
-  DialogBody,
-  DialogDescription,
-  DialogTitle,
-} from "~/components/ui/dialog";
+import { Dialog } from "~/components/ouro/dialog/dialog";
 import {
   isPushSupported,
   isIosNonStandalone,
@@ -174,18 +168,17 @@ export function NotificationsSection({
         ))}
       </Fieldset>
 
-      <Dialog open={iosDialogOpen} onClose={setIosDialogOpen}>
-        <DialogTitle>Add Spoonjoy to your Home Screen first</DialogTitle>
-        <DialogDescription>
-          Tap Share → Add to Home Screen, then open Spoonjoy from your Home Screen and try again.
-        </DialogDescription>
-        <DialogBody />
-        <DialogActions>
+      <Dialog
+        open={iosDialogOpen}
+        onOpenChange={setIosDialogOpen}
+        title="Add Spoonjoy to your Home Screen first"
+        description="Tap Share → Add to Home Screen, then open Spoonjoy from your Home Screen and try again."
+        footer={(
           <Button type="button" onClick={() => setIosDialogOpen(false)}>
             Got it
           </Button>
-        </DialogActions>
-      </Dialog>
+        )}
+      >{null}</Dialog>
     </SettingsPanel>
   );
 }

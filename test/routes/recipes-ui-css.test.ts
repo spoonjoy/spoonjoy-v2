@@ -7,7 +7,7 @@ import { resolve } from "path";
  *
  * These tests verify that all recipe CRUD components:
  * 1. Use Tailwind CSS classes instead of inline styles
- * 2. Use UI components from app/components/ui/ instead of raw HTML elements
+ * 2. Use released UI and app-owned integration, never retired Catalyst imports
  *
  * Tests are expected to FAIL initially (TDD approach).
  * After migration (Unit 2.9b), all tests should pass.
@@ -55,13 +55,15 @@ function countInlineStyles(content: string): number {
 }
 
 /**
- * Checks if file imports from app/components/ui/
+ * Checks the real released/app integration paths after complete Catalyst retirement.
  */
 function hasUIComponentImports(content: string): boolean {
-  // Check for imports from ~/components/ui/ or @/
   return (
-    content.includes('from "~/components/ui/') ||
-    content.includes("from '~/components/ui/") ||
+    content.includes('from "~/components/ouro/') ||
+    content.includes("from '~/components/ouro/") ||
+    content.includes('from "~/components/button"') ||
+    content.includes('from "~/components/text"') ||
+    content.includes('from "~/components/recipe/') ||
     content.includes('from "@/') ||
     content.includes("from '@/")
   );
@@ -131,13 +133,13 @@ describe("Recipe Routes UI/CSS Compliance", () => {
 
   describe("Uses UI Components", () => {
     it.each(RECIPE_ROUTE_FILES_WITH_UI)(
-      "%s should import from app/components/ui/",
+      "%s should import released UI or its app-owned integration",
       (filePath) => {
         const content = readSourceFile(filePath);
 
         expect(
           hasUIComponentImports(content),
-          `${filePath} should import UI components from ~/components/ui/ or @/`
+          `${filePath} should import released UI or app-owned integration`
         ).toBe(true);
       }
     );
@@ -152,7 +154,7 @@ describe("Recipe Routes UI/CSS Compliance", () => {
         expect(
           usesRawButtonElements(content),
           `${filePath} uses raw <button> elements. ` +
-          `Should use Button component from app/components/ui/button.tsx`
+          `Should use released Button through app/components/button.tsx`
         ).toBe(false);
       }
     );
@@ -295,8 +297,8 @@ describe("Individual Route Detailed Checks", () => {
     it("should use Heading component for h1/h2", () => {
       const content = readSourceFile(filePath);
       expect(
-        content.includes('from "~/components/ui/heading"') ||
-        content.includes("from '~/components/ui/heading'") ||
+        content.includes('from "~/components/heading"') ||
+        content.includes("from '~/components/heading'") ||
         content.includes("Heading"),
         "Should use Heading component for headings"
       ).toBe(true);
@@ -305,8 +307,8 @@ describe("Individual Route Detailed Checks", () => {
     it("should use Text component for paragraphs", () => {
       const content = readSourceFile(filePath);
       expect(
-        content.includes('from "~/components/ui/text"') ||
-        content.includes("from '~/components/ui/text'") ||
+        content.includes('from "~/components/text"') ||
+        content.includes("from '~/components/text'") ||
         content.includes("Text"),
         "Should use Text component for text content"
       ).toBe(true);

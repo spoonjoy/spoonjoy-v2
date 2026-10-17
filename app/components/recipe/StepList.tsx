@@ -13,9 +13,9 @@
 import { Reorder, useDragControls } from 'motion/react'
 import { GripVertical, Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { Button } from '~/components/ui/button'
+import { Button } from '~/components/button'
 import { Link } from '~/components/ouro/link/link'
-import { Dialog, DialogActions, DialogDescription, DialogTitle } from '~/components/ui/dialog'
+import { ConfirmDialog } from '~/components/ouro/dialog/confirm-dialog'
 import { StepEditorCard, type StepData } from './StepEditorCard'
 
 export interface StepListProps {
@@ -292,26 +292,15 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
       )}
 
       {/* Confirmation dialog for step removal */}
-      <Dialog open={stepToRemove !== null} onClose={cancelRemove} role="alertdialog">
-        <DialogTitle>Remove step</DialogTitle>
-        <DialogDescription>
-          Are you sure you want to remove this step? This action cannot be undone.
-        </DialogDescription>
-        <DialogActions>
-          <Button
-            plain
-            onClick={cancelRemove}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={confirmRemove}
-          >
-            Confirm
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={stepToRemove !== null}
+        onOpenChange={cancelRemove}
+        title="Remove step"
+        description="Are you sure you want to remove this step? This action cannot be undone."
+        confirmLabel="Confirm"
+        tone="destructive"
+        onConfirm={confirmRemove}
+      />
     </div>
   )
 }

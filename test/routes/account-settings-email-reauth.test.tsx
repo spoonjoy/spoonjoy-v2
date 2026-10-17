@@ -5,7 +5,7 @@
 // save needs no proof.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -70,6 +70,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  cleanup();
   await cleanupDatabase();
 });
 
@@ -211,7 +212,11 @@ describe("Account settings - email change form", () => {
     await user.type(within(section).getByLabelText("Current password"), "nope");
     await user.click(within(section).getByRole("button", { name: "Save" }));
 
-    expect(await within(section).findByText("That password isn't right.")).toBeInTheDocument();
+    const error = await within(section).findByText("That password isn't right.");
+    // FieldError's text precedes its real-frame entrance completion.
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(error).toBeInTheDocument();
+    expect(error).not.toHaveAttribute("data-starting-style");
     expect(within(section).getByLabelText("Current password")).toHaveAttribute("aria-invalid", "true");
     expect(posted).toEqual([{ intent: "updateUserInfo", email: "new@example.com", username: "ada", currentPassword: "nope" }]);
     // The error shows by the field, not in the page banner.
@@ -236,7 +241,10 @@ describe("Account settings - email change form", () => {
     expect(within(section).getByText(/To change your email, you need to have signed in within the last 10 minutes/)).toBeInTheDocument();
 
     await user.click(within(section).getByRole("button", { name: "Save" }));
-    expect(await within(section).findByText(EMAIL_CHANGE_RECENT_SIGN_IN_MESSAGE)).toBeInTheDocument();
+    const error = await within(section).findByText(EMAIL_CHANGE_RECENT_SIGN_IN_MESSAGE);
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(error).toBeInTheDocument();
+    expect(error).not.toHaveAttribute("data-starting-style");
 
     await user.click(within(section).getByRole("button", { name: "Sign in again" }));
     expect(posted.map((f) => f.intent)).toEqual(["updateUserInfo", "reauthenticate"]);

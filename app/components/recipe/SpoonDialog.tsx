@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Form as RouterForm, useNavigation } from "react-router";
 import { ImagePlus, Loader2 } from "lucide-react";
-import { Dialog, DialogActions, DialogBody, DialogTitle } from "../ui/dialog";
-import { Button } from "../ui/button";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Button } from "../button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
@@ -139,9 +139,7 @@ export function SpoonDialog({
   }
 
   return (
-    <Dialog open={isOpen} onClose={dialogOnClose} size="md">
-      <DialogTitle>Log a cook</DialogTitle>
-      <DialogBody className="mt-4">
+    <Dialog open={isOpen} onOpenChange={dialogOnClose} size="md" title="Log a cook">
         <Form
           ref={formRef}
           method="post"
@@ -250,7 +248,7 @@ export function SpoonDialog({
               {submitStatus}
             </p>
           ) : null}
-          <DialogActions>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
             <Button plain type="button" onClick={onClose} disabled={isPosting}>
               Cancel
             </Button>
@@ -260,9 +258,8 @@ export function SpoonDialog({
               ) : null}
               {isPosting ? submitStatus : "Log cook"}
             </Button>
-          </DialogActions>
+          </div>
         </Form>
-      </DialogBody>
     </Dialog>
   );
 }

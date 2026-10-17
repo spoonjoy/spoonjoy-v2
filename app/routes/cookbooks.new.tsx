@@ -3,11 +3,11 @@ import { Form as RouterForm, redirect, data, useActionData } from "react-router"
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
 import {
@@ -140,7 +140,7 @@ export default function NewCookbook() {
     <CookbookPage>
       <div className="mx-auto max-w-3xl">
         <CookbookHeader eyebrow="New cookbook" title="Make a collection worth coming back to.">
-          <Text className="mt-4 max-w-2xl text-base/7">
+          <Text className="mt-4 max-w-2xl leading-7">
             Start with a clear title. Add recipes next and let the cover become a living collage.
           </Text>
           <Link

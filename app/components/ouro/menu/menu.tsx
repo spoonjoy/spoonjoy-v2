@@ -6,14 +6,12 @@ import { Menubar } from "@base-ui/react/menubar";
 import {
   createContext,
   useContext,
-  useRef,
   useState,
   type HTMLAttributes,
   type JSX,
   type ReactElement,
   type MouseEvent,
   type ReactNode,
-  type RefObject,
   type TouchEvent,
 } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
@@ -308,7 +306,6 @@ function MenuSurface({
   align,
   className,
   children,
-  finalFocus,
   closeLabel,
 }: {
   sheet: boolean;
@@ -317,7 +314,6 @@ function MenuSurface({
   align?: FloatingAlign | undefined;
   className?: string | undefined;
   children: ReactNode;
-  finalFocus?: RefObject<HTMLElement | null> | undefined;
   /** Set for a top-level menu: its phone sheet ends with a Close item. */
   closeLabel?: string | undefined;
 }): JSX.Element {
@@ -337,7 +333,6 @@ function MenuSurface({
           data-ouro="menu"
           data-ouro-presentation={sheet ? "sheet" : "menu"}
           className={cn(sheet ? menuSheetPopupClass : menuPopupClass, sheet ? undefined : className)}
-          {...(finalFocus ? { finalFocus } : {})}
         >
           <MenuContext.Provider value={{ sheet }}>{children}</MenuContext.Provider>
           {sheet && closeLabel !== undefined && (
@@ -458,7 +453,6 @@ export function Menu(props: MenuProps): JSX.Element {
   // A dropdown (and a menubar's menu) is a bottom sheet on a phone; a context menu opens at
   // the pointer, where the finger is, at every width.
   const sheet = useSheetPresentation(context ? "menu" : "auto");
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const body = items !== undefined ? renderEntries(items) : children;
   const control = open !== undefined ? { open, onOpenChange: (next: boolean) => onOpenChange!(next) } : onOpenChange ? { onOpenChange: (next: boolean) => onOpenChange(next) } : {};
 
@@ -484,14 +478,13 @@ export function Menu(props: MenuProps): JSX.Element {
   return (
     <BaseMenu.Root {...control}>
       {label !== undefined ? (
-        <BaseMenu.Trigger ref={triggerRef} className={menuBarTriggerClass}>
+        <BaseMenu.Trigger className={menuBarTriggerClass}>
           {label}
         </BaseMenu.Trigger>
       ) : (
-        <BaseMenu.Trigger render={trigger} ref={triggerRef} />
+        <BaseMenu.Trigger render={trigger} />
       )}
-      {/* Safari does not focus a button on click, so name where focus goes back. */}
-      <MenuSurface sheet={sheet} context={false} side={side} align={align} className={className} finalFocus={triggerRef} closeLabel={closeLabel}>
+      <MenuSurface sheet={sheet} context={false} side={side} align={align} className={className} closeLabel={closeLabel}>
         {body}
       </MenuSurface>
     </BaseMenu.Root>

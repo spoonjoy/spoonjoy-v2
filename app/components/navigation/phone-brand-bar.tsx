@@ -1,6 +1,6 @@
 import { Link as RouterLink } from "react-router";
-import { Button } from "~/components/ui/button";
-import { SpoonjoyLogo } from "~/components/ui/spoonjoy-logo";
+import { Button } from "~/components/button";
+import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
 
 // A slim wordmark bar for signed-out visitors on a phone (below the desktop top bar's breakpoint).
 // Someone arriving from a shared recipe link sees whose site this is and how to join, which the tab

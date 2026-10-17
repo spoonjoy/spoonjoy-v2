@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { loader, meta } from "~/routes/saved-recipes";
@@ -25,6 +25,7 @@ describe("Saved Recipes drawer route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

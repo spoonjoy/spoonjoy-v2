@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useRef, type FormEvent } from 'react'
-import { Button } from '~/components/ui/button'
+import { Button } from '~/components/button'
 import { Fieldset } from '~/components/ouro/field/fieldset'
 import { Form } from '~/components/ouro/form/form'
 import { TextArea } from '~/components/ouro/text-field/text-area'

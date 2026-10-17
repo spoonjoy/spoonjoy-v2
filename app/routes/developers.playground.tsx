@@ -12,8 +12,8 @@ import { captureSafeClientEvent, latencyBucket, responseStatusClass } from "~/li
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { getUserId } from "~/lib/session.server";
 import { Badge } from "~/components/ouro/badge/badge";
-import { Button } from "~/components/ui/button";
-import { Code, Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
@@ -983,7 +983,7 @@ export default function DeveloperPlayground() {
           Docs
         </Button>
       )}>
-        <Text className="text-lg/8">
+        <Text size="lg" className="leading-8">
           Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for
           private, scoped, and mutating calls.
         </Text>
@@ -1399,7 +1399,7 @@ export default function DeveloperPlayground() {
 
             <div className="mt-5 grid gap-3">
               <p className="break-words font-mono text-sm/6 text-[var(--sj-ink)]">
-                <Code>{path}</Code>
+                <code className="rounded-sm border border-[var(--sj-border)] bg-[var(--sj-flour)] px-0.5 text-sm font-medium text-[var(--sj-ink)] sm:text-[0.8125rem]">{path}</code>
               </p>
               <div className="flex flex-wrap gap-2">
                 <CopyButton value={path} label="Copy path" />

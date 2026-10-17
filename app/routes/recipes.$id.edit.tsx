@@ -42,8 +42,8 @@ import {
   touchNativeSyncCookbooksForRecipeOperation,
   touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
-import { Button } from "~/components/ui/button";
-import { Dialog, DialogActions, DialogDescription, DialogTitle } from "~/components/ui/dialog";
+import { Button } from "~/components/button";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { useEffect, useRef, useState } from "react";
 
 interface ActionData {
@@ -750,20 +750,15 @@ export default function EditRecipe() {
           )}
         </section>
 
-        <Dialog open={stepToDelete !== null} onClose={() => setStepToDelete(null)} role="alertdialog">
-          <DialogTitle>Delete step</DialogTitle>
-          <DialogDescription>
-            Delete step {stepToDelete?.stepNum}? This cannot be undone.
-          </DialogDescription>
-          <DialogActions>
-            <Button plain onClick={() => setStepToDelete(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteStep}>
-              Confirm
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <ConfirmDialog
+          open={stepToDelete !== null}
+          onOpenChange={() => setStepToDelete(null)}
+          title="Delete step"
+          description={`Delete step ${stepToDelete?.stepNum}? This cannot be undone.`}
+          confirmLabel="Confirm"
+          tone="destructive"
+          onConfirm={handleDeleteStep}
+        />
       </div>
     </CookbookPage>
   );

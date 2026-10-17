@@ -148,6 +148,33 @@
   --radius: var(--sj-radius-control);
 }
 
+/* Spoonjoy's primary action palette is not its brass text-link palette. Bind the
+   released solid Button to our already contrast-qualified action tokens without
+   changing Ouro's source or the inherited root provider. Its generic disabled
+   opacity would reintroduce the recorded dark-label contrast regression: this
+   app-owned state keeps the existing independently checked disabled colours. */
+[data-sj-action] {
+  font-family: var(--font-sj-ui);
+  font-weight: 600;
+}
+[data-sj-action="primary"] {
+  --primary: var(--sj-action);
+  --primary-foreground: var(--sj-on-action);
+}
+[data-sj-action="primary"]:active:not([data-disabled]) {
+  --primary: var(--sj-action-hover);
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-sj-action="primary"]:hover:not([data-disabled]) {
+    --primary: var(--sj-action-hover);
+  }
+}
+[data-sj-action="primary"][data-disabled] {
+  --primary: var(--sj-action-disabled);
+  --primary-foreground: var(--sj-on-action-disabled);
+  opacity: 1;
+}
+
 /* Ouro UI's dialogs and sheets stack at --ouro-layer (50 by default, from ouro-base above), which ties
    with the phone tab bar (z-50). Raising it to Catalyst's dialog layer (z-60) puts them above the tab
    bar, the install card and the desktop top bar, and keeps toasts (z-80) above them. This is

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useNavigate } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -17,6 +17,7 @@ describe("Recipes Index Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 
@@ -423,9 +424,10 @@ describe("Recipes Index Route", () => {
     fireEvent.click(showMore);
 
     const third = await screen.findByRole("link", { name: "Third Soup" });
+    expect(third).toHaveClass("border-b", "border-[var(--sj-border)]");
     expect(screen.getByRole("link", { name: "First Soup" })).toBeInTheDocument();
     await waitFor(() => expect(third).toHaveFocus());
-    expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 3 recipes");
+    expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 3 recipes");
     expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
     expect(screen.getByText("3 recipes")).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(3);

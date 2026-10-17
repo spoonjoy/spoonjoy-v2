@@ -1,18 +1,19 @@
 /**
  * ConfirmationDialog - A reusable confirmation dialog component
  *
- * Wraps Catalyst Dialog with a standard confirmation pattern.
+ * Maps Spoonjoy's confirmation contract to the released confirmation primitive.
  * Use this instead of window.confirm() for a consistent, accessible,
  * and visually polished experience.
  */
 
-import { Dialog, DialogTitle, DialogDescription, DialogActions } from "~/components/ui/dialog";
-import { Button } from "~/components/ui/button";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Button } from "~/components/button";
 
 export interface ConfirmationDialogProps {
   /** Whether the dialog is open */
   open: boolean;
-  /** Called when the dialog should close (cancel, escape, click outside) */
+  /** Called on Cancel/Escape; destructive confirmations do not dismiss on outside press. */
   onClose: () => void;
   /** Called when the user confirms the action */
   onConfirm: () => void;
@@ -38,21 +39,22 @@ export function ConfirmationDialog({
   cancelLabel = "Cancel",
   destructive = false,
 }: ConfirmationDialogProps) {
+  const accessibleTitle = title || confirmLabel;
+  if (!destructive) {
+    return <Dialog open={open} onOpenChange={onClose} title={accessibleTitle} description={description}
+      footer={<><Button plain onClick={onClose}>{cancelLabel}</Button><Button onClick={onConfirm}>{confirmLabel}</Button></>}
+    >{null}</Dialog>;
+  }
   return (
-    <Dialog open={open} onClose={onClose} size="sm" role={destructive ? "alertdialog" : "dialog"}>
-      <DialogTitle>{title}</DialogTitle>
-      <DialogDescription>{description}</DialogDescription>
-      <DialogActions>
-        <Button plain onClick={onClose}>
-          {cancelLabel}
-        </Button>
-        <Button
-          variant={destructive ? "destructive" : "default"}
-          onClick={onConfirm}
-        >
-          {confirmLabel}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onClose}
+      title={accessibleTitle}
+      description={description}
+      confirmLabel={confirmLabel}
+      cancelLabel={cancelLabel}
+      tone="destructive"
+      onConfirm={onConfirm}
+    />
   );
 }

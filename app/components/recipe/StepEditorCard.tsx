@@ -14,7 +14,7 @@
 
 import { ArrowDown, ArrowUp, Save, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '~/components/ui/button'
+import { Button } from '~/components/button'
 import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextArea } from '~/components/ouro/text-field/text-area'

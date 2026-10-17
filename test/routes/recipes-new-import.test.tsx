@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub, requiredLabel } from "../utils";
@@ -47,6 +47,7 @@ describe("New Recipe import action", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     vi.restoreAllMocks();
     await cleanupDatabase();
   });
@@ -287,6 +288,7 @@ describe("Edit Recipe after an import", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

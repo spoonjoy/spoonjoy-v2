@@ -13,8 +13,8 @@
 
 import { useEffect, useState } from "react";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Button } from "~/components/ui/button";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 import {
   browserSupportsPasskeys,
   registerPasskey,
@@ -42,7 +42,7 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
   if (support === "unknown") return null;
   if (support === "unsupported") {
     return (
-      <Text className="text-sm text-[var(--sj-ink-muted)]">
+      <Text size="sm" tone="default">
         This browser doesn't support passkeys.
       </Text>
     );
@@ -63,7 +63,7 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-3 [--success:var(--sj-pesto,#4a7c59)]">
       <TextField
         label="Name (optional)"
         name="passkey-name"
@@ -75,12 +75,12 @@ export function AddPasskeyButton({ supportsPasskeys, onAdded }: AddPasskeyButton
         {status === "pending" ? "Waiting for passkey…" : "Add a passkey"}
       </Button>
       {status === "added" && (
-        <Text className="text-sm text-[var(--sj-pesto,#4a7c59)]" role="status">
+        <Text size="sm" tone="success" role="status">
           Passkey added. You can now sign in with it.
         </Text>
       )}
       {error && (
-        <Text className="text-sm text-[var(--sj-tomato)]" role="alert">
+        <Text size="sm" tone="destructive" role="alert">
           {error}
         </Text>
       )}

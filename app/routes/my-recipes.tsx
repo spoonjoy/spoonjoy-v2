@@ -1,10 +1,10 @@
 import type { Route } from "./+types/my-recipes";
-import { Form, useLoaderData } from "react-router";
+import { Form, useLoaderData, useLocation } from "react-router";
 import { Plus, Search } from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { Link } from "~/components/ui/link";
-import { Pagination, PaginationNext, PaginationPrevious } from "~/components/ui/pagination";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Link } from "~/components/navigation/app-link";
+import { Pagination } from "~/components/ouro/pagination/pagination";
+import { Text } from "~/components/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
 import {
   normalizeMyRecipesPage,
@@ -88,6 +88,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function MyRecipes() {
   const { query, recipes, page, hasPreviousPage, hasNextPage } = useLoaderData<typeof loader>();
+  const { pathname } = useLocation();
 
   return (
     <CookbookPage>
@@ -133,10 +134,18 @@ export default function MyRecipes() {
       )}
 
       {(hasPreviousPage || hasNextPage) ? (
-        <Pagination className="mt-6" aria-label="My recipes pagination">
-          <PaginationPrevious href={hasPreviousPage ? myRecipesPageHref(query, page - 1) : null} />
-          <PaginationNext href={hasNextPage ? myRecipesPageHref(query, page + 1) : null} />
-        </Pagination>
+        <Pagination
+          className="mt-6"
+          label="My recipes pagination"
+          page={page}
+          hasNextPage={hasNextPage}
+          href={(target) => {
+            const queryHref = myRecipesPageHref(query, target);
+            return queryHref === "." ? pathname : `${pathname}${queryHref}`;
+          }}
+          previousLabel="Previous page"
+          nextLabel="Next page"
+        />
       ) : null}
     </CookbookPage>
   );

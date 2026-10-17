@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { fn } from 'storybook/test'
 import { RecipeGrid } from '../../app/components/pantry/RecipeGrid'
-import { ShowMore } from '../../app/components/ui/show-more'
 
 const recipes = [
   {
@@ -85,20 +84,13 @@ export const EmptyWithoutCallToAction: Story = {
 }
 
 // A chef profile shows its newest recipes first and grows with "Show more", the same
-// pattern as the public recipe list (ShowMore from ~/components/ui/show-more).
+// pattern as the public recipe list (the released ShowMore load mode).
 export const WithShowMore: Story = {
   args: {
     recipes,
     totalCount: 55,
   },
-  render: (args) => (
-    <>
-      <RecipeGrid {...args} />
-      <ShowMore
-        list={{ nextCursor: 'r-3', loading: false, showMore: () => {}, announcement: '' }}
-        href="/users/ari?after=r-3"
-        label="Show more recipes"
-      />
-    </>
-  ),
+  render: (args) => <RecipeGrid {...args} loadMore={{
+    hasMore: true, loading: false, onShowMore: () => {}, href: '/users/ari?after=r-3',
+  }} />,
 }

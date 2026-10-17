@@ -46,18 +46,36 @@ test.describe("Primary button in dark mode", () => {
     await capture(page, testInfo, "login-rest");
     await expectAccessible();
 
-    // Hover lightens the amber, so the dark label keeps its contrast.
+    // Released Button highlights mouse hover on a fine-hover pointer, not sticky
+    // emulated hover on a coarse touch screen. Both retain the qualified label.
+    const fineHover = await page.evaluate(() => matchMedia("(hover: hover) and (pointer: fine)").matches);
     await logIn.hover();
-    await expect(logIn).toHaveCSS("background-color", HOVER);
+    await expect(logIn).toHaveCSS("background-color", fineHover ? HOVER : REST);
     await expect(logIn).toHaveCSS("color", LABEL);
+    testInfo.annotations.push({ type: "pointer capability", description: JSON.stringify({ fineHover }) });
     await capture(page, testInfo, "login-hover");
+
+    // Press is a real native state on either input capability; keep its exact
+    // lighter fill and readable label. Release outside, without submitting.
+    await page.mouse.down();
+    try {
+      await expect(logIn).toHaveCSS("background-color", HOVER);
+      await expect(logIn).toHaveCSS("color", LABEL);
+      await capture(page, testInfo, "login-pressed");
+    } finally {
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+    }
 
     // Keyboard focus keeps the rest colours and adds the brass ring outside the button.
     await page.mouse.move(0, 0);
     await page.keyboard.press("Tab");
     await logIn.focus();
-    await expect(logIn).toHaveAttribute("data-focus", "");
+    await expect(logIn).toBeFocused();
+    expect(await logIn.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
     await expect(logIn).toHaveCSS("outline-style", "solid");
+    await expect(logIn).toHaveCSS("outline-width", "2px");
+    await expect(logIn).toHaveCSS("outline-offset", "2px");
     await expect(logIn).toHaveCSS("background-color", REST);
     await capture(page, testInfo, "login-focus");
 

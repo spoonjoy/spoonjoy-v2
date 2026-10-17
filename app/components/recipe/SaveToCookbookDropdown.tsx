@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Bookmark, Plus } from 'lucide-react'
-import { Button } from '../ui/button'
+import { Button } from '../button'
 import {
   Menu,
   MenuItem,
@@ -122,7 +122,8 @@ export function SaveToCookbookDropdown({
           />
           <div className="flex gap-2 mt-2">
             <Button
-              className="text-xs px-2 py-1"
+              size="sm"
+              className="px-2 py-1"
               onClick={handleCreateSubmit}
               disabled={!newCookbookTitle.trim()}
             >
@@ -130,7 +131,8 @@ export function SaveToCookbookDropdown({
             </Button>
             <Button
               plain
-              className="text-xs px-2 py-1"
+              size="sm"
+              className="px-2 py-1"
               onClick={handleCreateCancel}
             >
               Cancel

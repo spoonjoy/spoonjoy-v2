@@ -248,9 +248,10 @@ describe("shopping list: rapid taps on different rows never undo each other (bug
   });
 
   it("removes two rows tapped back to back, on the server and on screen", async () => {
+    const gate = deferred();
     const server = shoppingListServer(
       [serverItem("item-1", "apples"), serverItem("item-2", "bananas")],
-      () => new Promise((resolve) => setTimeout(resolve, 10)),
+      () => gate.promise,
     );
     const Stub = createTestRoutesStub([
       { path: "/shopping-list", Component: ShoppingList, loader: server.loader, action: server.action },
@@ -260,7 +261,13 @@ describe("shopping list: rapid taps on different rows never undo each other (bug
 
     await screen.findByText("apples");
     fireEvent.click(screen.getByRole("button", { name: "Remove apples" }));
+    expect(server.state.writes).toEqual([]);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Remove bananas" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(server.state.writes).toEqual([]);
+    await act(async () => { gate.resolve(); });
 
     await waitFor(() => expect(server.state.writes).toHaveLength(2));
     expect(server.state.items.map((item) => item.deleted)).toEqual([true, true]);

@@ -3,7 +3,7 @@ import type { ElementType } from "react";
 import { useLocation } from "react-router";
 import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingBag } from "lucide-react";
 import { useDockContext } from "./dock-context";
-import { Link } from "~/components/ui/link";
+import { Link } from "~/components/navigation/app-link";
 
 /**
  * The phone tab bar. It is navigation only, and it is the same on every page: a row of equal

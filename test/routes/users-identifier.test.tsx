@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { withTimeZone } from "../helpers/timezone";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -38,6 +38,7 @@ describe("Users $identifier Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 
@@ -465,7 +466,7 @@ describe("Users $identifier Route", () => {
       const added = await screen.findByRole("link", { name: /\bPlain Rice\b/ });
       expect(screen.getByRole("link", { name: /\bMiso Soup\b/ })).toBeInTheDocument();
       await waitFor(() => expect(added).toHaveFocus());
-      expect(screen.getByTestId("show-more-status")).toHaveTextContent("Showing 2 recipes");
+      expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 2 recipes");
       expect(screen.queryByRole("link", { name: "Show more recipes" })).not.toBeInTheDocument();
     });
 

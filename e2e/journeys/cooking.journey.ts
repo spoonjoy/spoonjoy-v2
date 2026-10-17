@@ -268,6 +268,15 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toContainText("Step 2 of 3");
       await expect(riceTimer).toContainText("Step 1 · Cook the rice");
       await expect(riceTimer).toContainText("14:");
+      // Previous has just changed from disabled to enabled. Measure its actual
+      // settled enabled ink, not the released opacity transition in between.
+      const previous = panel.getByRole("button", { name: "Previous step", exact: true });
+      await expect(previous).toBeEnabled();
+      await expect.poll(() => previous.evaluate((element) =>
+        getComputedStyle(element).opacity === "1" &&
+        element.getAnimations({ subtree: true }).every((animation) =>
+          animation.playState === "finished" || animation.playState === "idle"),
+      )).toBe(true);
       await expectAccessible();
       expect((await onStepTwo).activeStepId).toBe(`${LEMON_RICE_ID}-step-2`);
 

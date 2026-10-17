@@ -5,7 +5,7 @@ import {
   THEME_SWITCHING_ATTRIBUTE,
   ThemeProvider,
   useTheme,
-} from '~/components/ui/theme-provider'
+} from '~/components/theme-provider'
 
 // Helper to temporarily remove window for SSR tests
 const removeWindow = () => {

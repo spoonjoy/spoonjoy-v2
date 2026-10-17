@@ -2,14 +2,14 @@ import type { Route } from "./+types/chefs";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Users } from "lucide-react";
-import { Link } from "~/components/ui/link";
-import { Text } from "~/components/ui/text";
+import { Link } from "~/components/navigation/app-link";
+import { Text } from "~/components/text";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
 import { chefActivity, chefRef } from "~/lib/chef-activity.server";
 import { requireUserId } from "~/lib/session.server";
-import { LocalDate } from "~/components/ui/local-date";
+import { LocalDate } from "~/components/local-date";
 
 export function meta({}: Route.MetaArgs) {
   return [

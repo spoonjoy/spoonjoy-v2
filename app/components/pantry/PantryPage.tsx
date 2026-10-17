@@ -1,6 +1,6 @@
-import { Button } from '../ui/button'
-import { Heading, Subheading } from '../ui/heading'
-import { Text } from '../ui/text'
+import { Button } from '../button'
+import { Subheading } from '../heading'
+import { Text } from '../text'
 import { CookbookHeader, CookbookPage } from '~/components/cookbook/page'
 import { BioCard, type BioCardProps } from './BioCard'
 import { RecipeGrid, type PantryRecipeCard } from './RecipeGrid'
@@ -32,7 +32,7 @@ export function PantryPage({
         </aside>
 
         <section className="lg:col-span-8">
-          <Subheading level={2} className="mb-4 text-2xl/8">
+          <Subheading level={2} size="xl" className="mb-4">
             Pantry Recipes
           </Subheading>
           <RecipeGrid recipes={recipes} />

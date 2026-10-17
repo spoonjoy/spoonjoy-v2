@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { createTestRoutesStub } from "../utils";
 import OAuthAuthorize, { action, headers as authorizeHeaders, loader, meta } from "~/routes/oauth.authorize";
 import type { AuthorizeView } from "~/lib/oauth-routes.server";
@@ -48,7 +48,7 @@ describe("oauth.authorize route", () => {
     getOAuthClientCalls.mockClear();
     await cleanupDatabase();
   });
-  afterEach(async () => { await cleanupDatabase(); });
+  afterEach(async () => { cleanup(); await cleanupDatabase(); });
 
   it("falls back to a generic authorize title when there is no view yet", () => {
     expect(meta({ data: undefined } as any)).toEqual([

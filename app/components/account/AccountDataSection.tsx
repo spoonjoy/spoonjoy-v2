@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { Form as RouterForm } from "react-router";
 import { Download } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
 import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { SettingsPanel } from "~/components/cookbook/page";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
@@ -55,8 +55,8 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
         </div>
 
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="delete-account">
-          <Text className="font-medium text-[var(--sj-ink)]">Delete account</Text>
-          <Text className="mt-1 text-sm/6">
+          <Text tone="default">Delete account</Text>
+          <Text size="sm" className="mt-1">
             Permanently deletes your account, recipes, cookbooks, shopping list, cooks and photos, and signs out every
             app and agent you connected. Recipes other cooks forked, saved or cooked stay up,
             credited to a “Deleted chef” placeholder; their forks stay theirs. This can't be undone, so download your data first if you want a copy.
@@ -86,7 +86,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
                 <TextField label="Current password" type="password" name="password" autoComplete="current-password" />
               ) : needsFreshSignIn ? null : (
                 // Neutral guidance before any attempt; a failed attempt's message replaces it.
-                <Text className="text-sm/6">
+                <Text size="sm">
                   Your account has no password, so you need to have signed in within the last 10 minutes. If it has
                   been longer, sign in again first.
                 </Text>

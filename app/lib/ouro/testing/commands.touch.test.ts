@@ -222,9 +222,45 @@ test("on a page zoomed and panned by touch, the kit waits for the frame where th
   await commands.setPageZoom(2);
   try {
     // At zoom 2 the page can't scroll, so a drag pans the visual viewport across it.
-    await commands.touchDrag({ from: [300, 700], to: [50, 200], steps: 10 });
+    const runner = window.top!;
+    const viewport = runner.visualViewport!;
+    let finger: number | undefined;
+    let lifted = false;
+    let settled = false;
+    const panEvents: string[] = [];
+    const started = (event: TouchEvent) => {
+      if (event.isTrusted && finger === undefined) {
+        finger = event.changedTouches[0]!.identifier;
+        panEvents.push("touchstart");
+      }
+    };
+    const ended = (event: TouchEvent) => {
+      if (event.isTrusted && !lifted && Array.from(event.changedTouches).some((touch) => touch.identifier === finger)) {
+        lifted = true;
+        panEvents.push("touchend");
+      }
+    };
+    const scrolled = (event: Event) => {
+      if (event.isTrusted && lifted && !settled) {
+        settled = true;
+        panEvents.push("scrollend");
+      }
+    };
+    addEventListener("touchstart", started, true);
+    addEventListener("touchend", ended, true);
+    viewport.addEventListener("scrollend", scrolled);
+    try {
+      await commands.touchDrag({ from: [300, 700], to: [50, 200], steps: 10, durationMs: 2000 });
+      await expect.poll(() => settled).toBe(true);
+      expect(panEvents).toEqual(["touchstart", "touchend", "scrollend"]);
+    } finally {
+      removeEventListener("touchstart", started, true);
+      removeEventListener("touchend", ended, true);
+      viewport.removeEventListener("scrollend", scrolled);
+    }
     /** Where a touch at (x, y) lands on this page. */
     const landed = async (x: number, y: number) => {
+      expect(runner.document.elementFromPoint(viewport.offsetLeft + x, viewport.offsetTop + y)).toBe(window.frameElement);
       const point = new Promise<[number, number]>((resolve) =>
         addEventListener("touchstart", (event) => resolve([event.touches[0]!.clientX, event.touches[0]!.clientY]), { once: true }),
       );
@@ -236,13 +272,66 @@ test("on a page zoomed and panned by touch, the kit waits for the frame where th
     expect(await landed(100, 100)).toEqual([left + 100, top + 100]);
     // Panned far enough that a hit test at the unpanned point would miss the frame.
     expect(Math.min(left, top)).toBeGreaterThan(150);
-    const frame = await unwatchableFrame(Math.round(top) + 100);
+    const clippedPoint = (frame: HTMLIFrameElement): [number, number] => {
+      const rect = frame.getBoundingClientRect();
+      const clipLeft = Math.max(rect.left, left);
+      const clipRight = Math.min(rect.right, innerWidth);
+      const clipTop = Math.max(rect.top, top);
+      const clipBottom = Math.min(rect.bottom, innerHeight);
+      expect(clipRight).toBeGreaterThan(clipLeft);
+      expect(clipBottom).toBeGreaterThan(clipTop);
+      const x = Math.floor((clipLeft + clipRight) / 2 - left);
+      const y = Math.floor((clipTop + clipBottom) / 2 - top);
+      expect(left + x).toBeGreaterThan(clipLeft);
+      expect(left + x).toBeLessThan(clipRight);
+      expect(top + y).toBeGreaterThan(clipTop);
+      expect(top + y).toBeLessThan(clipBottom);
+      expect(document.elementFromPoint(left + x, top + y)).toBe(frame);
+      expect(document.elementFromPoint(x, y)).not.toBe(frame);
+      return [x, y];
+    };
+    const positive = await frameAt(document.body, Math.round(top) + 20, {
+      srcdoc: "<body style='margin:0'><div style='height:100px'></div></body>",
+    });
+    positive.style.left = `${Math.round(left) + 20}px`;
+    const point = clippedPoint(positive);
+    const delivered: Array<{ type: string; trusted: boolean }> = [];
+    const record = (event: Event) => delivered.push({ type: event.type, trusted: event.isTrusted });
+    const target = positive.contentWindow!;
+    for (const type of ["touchstart", "touchend"]) target.addEventListener(type, record);
+    try {
+      expect(await tapAt(target, ...point)).toEqual(["touchstart", "touchend"]);
+      expect(delivered).toEqual([
+        { type: "touchstart", trusted: true },
+        { type: "touchend", trusted: true },
+      ]);
+    } finally {
+      for (const type of ["touchstart", "touchend"]) target.removeEventListener(type, record);
+      positive.remove();
+    }
+    const frame = await unwatchableFrame(Math.round(top) + 20);
     frame.style.left = `${Math.round(left) + 20}px`;
-    await expect(commands.touchStep({ type: "touchStart", x: 170, y: 150 })).rejects.toThrow(refused(170, 150));
+    const [x, y] = clippedPoint(frame);
+    expect([x, y]).toEqual(point);
+    delivered.length = 0;
+    const unwatchable = frame.contentWindow!;
+    for (const type of ["touchstart", "touchend"]) unwatchable.addEventListener(type, record);
+    try {
+      const started = performance.now();
+      await expect(commands.touchStep({ type: "touchStart", x, y })).rejects.toThrow(refused(x, y));
+      expect(performance.now() - started).toBeGreaterThanOrEqual(5000);
+      expect(delivered).toEqual([]);
+    } finally {
+      for (const type of ["touchstart", "touchend"]) unwatchable.removeEventListener(type, record);
+    }
     // Beside it, the touch reaches the page.
-    expect(await tapAt(window, 10, 150)).toEqual(["touchstart", "touchend"]);
+    expect(await tapAt(window, 10, y)).toEqual(["touchstart", "touchend"]);
   } finally {
-    await commands.resetPageZoom();
+    try {
+      await commands.touchStep({ type: "touchEnd" });
+    } finally {
+      await commands.resetPageZoom();
+    }
   }
 });
 

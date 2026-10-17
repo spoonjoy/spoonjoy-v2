@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
-import { OAuthButtonGroup } from "~/components/ui/oauth";
+import { OAuthButtonGroup } from "~/components/oauth";
 
 function renderOAuth(ui: ReactNode) {
   return render(<MemoryRouter>{ui}</MemoryRouter>);

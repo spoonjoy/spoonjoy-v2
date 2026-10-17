@@ -27,9 +27,9 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { Heading } from "~/components/ui/heading";
-import { Button } from "~/components/ui/button";
-import { Text } from "~/components/ui/text";
+import { Heading } from "~/components/heading";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 
@@ -308,7 +308,7 @@ export default function OAuthAuthorize() {
         </Text>
       </div>
       <Heading className="mt-3">Connect {appName} to Spoonjoy</Heading>
-      <Text className="mt-4 text-base/7">
+      <Text className="mt-4 leading-7">
         {appName} wants access to your Spoonjoy kitchen.
       </Text>
 

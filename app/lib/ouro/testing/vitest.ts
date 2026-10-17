@@ -17,11 +17,14 @@ export interface OuroTestOptions {
   /** Browsers for the main projects. Default: Chromium and WebKit. */
   browsers?: Array<"chromium" | "webkit">;
   /**
-   * The size of the Playwright page the browser projects run in. Set it on Vitest 4:
+   * The size of the Playwright host page for every project. Set it on Vitest 4:
    * `page: { width: 1600, height: 1200 }`. Vitest 4 scales the test frame down when the
    * page is smaller than the viewport a test asks for (the tests ask for up to 1280x844),
    * which moves real-mouse drags off their targets and makes sizes fractional; a larger page
-   * keeps the frame at its true size. Vitest 5 needs none. The phone project keeps 390x844.
+   * keeps the frame at its true size, including a phone frame rotated to landscape.
+   * Vitest 5 needs none. The touch test frame still starts at 390x844 with mobile/touch
+   * input; this option changes its host's outer window, screen size and orientation,
+   * not the test frame's logical viewport. These host metrics do not measure a physical phone.
    */
   page?: { width: number; height: number };
 }
@@ -90,7 +93,7 @@ export function ouroTestProjects({
           enabled: true,
           headless: true,
           provider: playwright({
-            contextOptions: { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } },
+            contextOptions: { hasTouch: true, isMobile: true, viewport: page ?? { width: 390, height: 844 } },
           }),
           instances: [{ browser: "chromium" as const }],
           viewport: { width: 390, height: 844 },

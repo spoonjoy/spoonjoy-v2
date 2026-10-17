@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { Heading, Subheading } from '~/components/ui/heading'
+import { Heading, Subheading } from '~/components/heading'
 
 describe('Heading components', () => {
   describe('Heading', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { createTestRoutesStub, requiredLabel } from "../utils";
@@ -50,7 +50,7 @@ vi.mock("motion/react", () => {
   };
 });
 
-import ShoppingList, { action, resolveSwipeAction, shouldDeleteOnSwipe } from "~/routes/shopping-list";
+import ShoppingList, { action } from "~/routes/shopping-list";
 import { getOrCreateUnit, getOrCreateIngredientRef, createTestUser } from "../utils";
 import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -66,6 +66,7 @@ describe("Shopping List Routes", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 
@@ -881,6 +882,7 @@ describe("Shopping List Routes", () => {
       expect(await screen.findByText("garlic")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Remove garlic" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Remove onion" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Actions for garlic" })).toBeInTheDocument();
     });
 
     it("should not render per-item category badge chips", async () => {
@@ -950,7 +952,12 @@ describe("Shopping List Routes", () => {
           path: "/shopping-list",
           Component: ShoppingList,
           loader: () => mockData,
-          action: async () => ({ success: true }),
+          action: async ({ request }: { request: Request }) => {
+            const answer = Object.fromEntries(await request.formData());
+            expect(answer).toEqual({ intent: "removeItem", itemId: "item-1" });
+            mockData.shoppingList.items = mockData.shoppingList.items.filter((item) => item.id !== answer.itemId);
+            return { success: true };
+          },
         },
       ]);
 
@@ -963,13 +970,16 @@ describe("Shopping List Routes", () => {
         expect(screen.getByRole("button", { name: "Protein" })).toHaveClass("bg-[var(--sj-ink)]");
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" })); });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove" })); });
 
       await waitFor(() => {
         expect(screen.queryByRole("button", { name: "Protein" })).not.toBeInTheDocument();
         expect(screen.getByRole("button", { name: "all" })).toHaveClass("bg-[var(--sj-ink)]");
         expect(screen.getByText("milk")).toBeInTheDocument();
       });
+      await waitFor(() => expect(screen.getByRole("heading", { name: "Shopping list" })).toHaveFocus());
     });
 
     it("should have Kitchen link", async () => {
@@ -995,11 +1005,10 @@ describe("Shopping List Routes", () => {
     });
   });
 
-  describe("Catalyst component structure", () => {
-    it("should NOT have inline styles in component source (verified by grep)", async () => {
-      // This test verifies that the component JSX doesn't use style={{}} 
-      // Some Catalyst/Headless UI components may add style attributes at runtime
-      // for positioning or animations, which is acceptable.
+  describe("released component integration", () => {
+    it("keeps app-authored heading and paragraph markup free of inline styles", async () => {
+      // Installed primitives may add runtime positioning/animation styles.
+      // App headings and copy must still use the declarative app theme.
       
       const mockData = {
         shoppingList: {
@@ -1031,7 +1040,7 @@ describe("Shopping List Routes", () => {
       await screen.findByText("Shopping list");
 
       // Verify no user-defined inline styles by checking specific elements
-      // Catalyst components may add their own style attributes for functionality
+      // Installed primitives may add their own functional style attributes.
       const headings = container.querySelectorAll('h1, h2, h3');
       headings.forEach((heading) => {
         expect(heading).not.toHaveAttribute("style");
@@ -1042,12 +1051,10 @@ describe("Shopping List Routes", () => {
         expect(p).not.toHaveAttribute("style");
       });
 
-      // Note: Some framework-internal style attributes from Headless UI 
-      // are acceptable (for animations, positioning, etc.)
-      // The key requirement is that no user-defined inline styles exist in JSX
+      // The source-wide no-inline-style rule is separately checked in recipes-ui-css.
     });
 
-    it("should use Catalyst Heading for page title", async () => {
+    it("retains a semantic level-one page title", async () => {
       const mockData = {
         shoppingList: {
           id: "list-1",
@@ -1075,7 +1082,7 @@ describe("Shopping List Routes", () => {
       expect(heading).toHaveTextContent("Shopping list");
     });
 
-    it("should use Catalyst Button for actions", async () => {
+    it("keeps action button markup free of app-authored inline styles", async () => {
       const mockData = {
         shoppingList: {
           id: "list-1",
@@ -1104,7 +1111,7 @@ describe("Shopping List Routes", () => {
       });
     });
 
-    it("should use Catalyst Input for form fields", async () => {
+    it("keeps form field markup free of app-authored inline styles", async () => {
       const mockData = {
         shoppingList: {
           id: "list-1",
@@ -1258,18 +1265,4 @@ describe("Shopping List Routes", () => {
     });
   });
 
-  describe("swipe delete behavior", () => {
-    it("should only delete on a second left swipe from revealed state", () => {
-      expect(resolveSwipeAction(-80, false)).toBe("reveal");
-      expect(resolveSwipeAction(-120, true)).toBe("confirmDelete");
-      expect(shouldDeleteOnSwipe(-120, true)).toBe(true);
-    });
-
-    it("should dismiss or no-op for short and right swipes", () => {
-      expect(resolveSwipeAction(40, true)).toBe("dismiss");
-      expect(resolveSwipeAction(-20, false)).toBe("none");
-      expect(shouldDeleteOnSwipe(120, true)).toBe(false);
-      expect(shouldDeleteOnSwipe(-120, false)).toBe(false);
-    });
-  });
 });

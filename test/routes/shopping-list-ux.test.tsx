@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Outlet, useNavigate, useRevalidator } from "react-router";
 import React from "react";
 import { createTestRoutesStub, requiredLabel } from "../utils";
 
@@ -52,14 +54,7 @@ vi.mock("motion/react", () => {
 import ShoppingList, {
   getShoppingSectionLabel,
   orderShoppingItemsForMarket,
-  resolveSwipeAction,
-  shouldDeleteOnSwipe,
 } from "~/routes/shopping-list";
-
-function swipeRow(row: Element, offsetX: number) {
-  row.setAttribute("data-drag-offset-x", String(offsetX));
-  fireEvent.pointerUp(row);
-}
 
 describe("shopping list UX updates", () => {
   const singleItemData = {
@@ -79,6 +74,69 @@ describe("shopping list UX updates", () => {
     },
     recipes: [],
   };
+
+  it("returns Escape cancellation to the surviving row action without submitting", async () => {
+    let writes = 0;
+    const Stub = createTestRoutesStub([{ path: "/shopping-list", Component: ShoppingList,
+      loader: () => singleItemData, action: () => { writes++; return { success: true }; },
+    }]);
+    render(<Stub initialEntries={["/shopping-list"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove chicken thigh" }));
+    const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus());
+    await userEvent.setup().keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Actions for chicken thigh" })).toHaveFocus());
+    expect(writes).toBe(0);
+    expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toHaveAttribute("aria-checked", "false");
+  });
+
+  it.each(["disappearance", "new Router entry"] as const)("invalidates a selected item on %s without a stale removal", async (change) => {
+    let items = [...singleItemData.shoppingList.items];
+    let refresh!: ReturnType<typeof useRevalidator>["revalidate"];
+    let navigate!: ReturnType<typeof useNavigate>;
+    let writes = 0;
+    function Shell() {
+      refresh = useRevalidator().revalidate;
+      navigate = useNavigate();
+      return <Outlet />;
+    }
+    const Stub = createTestRoutesStub([{ path: "/", Component: Shell, children: [{
+      path: "shopping-list", Component: ShoppingList,
+      loader: () => ({ ...singleItemData, shoppingList: { ...singleItemData.shoppingList, items } }),
+      action: () => { writes++; return { success: true }; },
+    }] }]);
+    render(<Stub initialEntries={["/shopping-list"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove chicken thigh" }));
+    const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
+    const oldConfirm = within(dialog).getByRole("button", { name: "Remove" });
+    await act(async () => {
+      if (change === "disappearance") { items = []; await refresh(); }
+      else await navigate("/shopping-list?changed=1");
+    });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    fireEvent.click(oldConfirm);
+    expect(writes).toBe(0);
+  });
+
+  it("allows another explicit attempt after a failed confirmed mutation revalidates the same item", async () => {
+    const writes: string[] = [];
+    const Stub = createTestRoutesStub([{ path: "/shopping-list", Component: ShoppingList,
+      loader: () => singleItemData,
+      action: async ({ request }: { request: Request }) => {
+        writes.push(String((await request.formData()).get("itemId")));
+        return { error: "Could not remove item" };
+      },
+    }]);
+    render(<Stub initialEntries={["/shopping-list"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Remove chicken thigh" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toBeInTheDocument());
+    expect(writes).toEqual(["item-1"]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(writes).toEqual(["item-1", "item-1"]));
+  });
 
   it("orders the market list by aisle without jumping checked items out of their category", () => {
     const ordered = orderShoppingItemsForMarket([
@@ -471,16 +529,6 @@ describe("shopping list UX updates", () => {
     ]);
   });
 
-  it("resolves swipe actions for reveal, confirm, dismiss, and no-op states", () => {
-    expect(resolveSwipeAction(-80, false)).toBe("reveal");
-    expect(resolveSwipeAction(-120, true)).toBe("confirmDelete");
-    expect(resolveSwipeAction(40, true)).toBe("dismiss");
-    expect(resolveSwipeAction(-30, false)).toBe("none");
-    expect(shouldDeleteOnSwipe(-120, true)).toBe(true);
-    expect(shouldDeleteOnSwipe(-120, false)).toBe(false);
-    expect(shouldDeleteOnSwipe(-120)).toBe(false);
-  });
-
   it("renders the parse review panel from action data after a failed add", async () => {
     const Stub = createTestRoutesStub([
       {
@@ -510,49 +558,41 @@ describe("shopping list UX updates", () => {
     expect(screen.getByDisplayValue("apples")).toBeInTheDocument();
   });
 
-  it("requires two actions to delete and allows row-tap or right-swipe cancel", async () => {
+  it("offers the same delete operation through the keyboard actions menu exactly once", async () => {
+    let items = [...singleItemData.shoppingList.items];
+    const writes: Array<Record<string, FormDataEntryValue>> = [];
     const Stub = createTestRoutesStub([
       {
         path: "/shopping-list",
         Component: ShoppingList,
-        loader: () => singleItemData,
-        action: async () => ({ success: true }),
+        loader: () => ({ ...singleItemData, shoppingList: { ...singleItemData.shoppingList, items } }),
+        action: async ({ request }: { request: Request }) => {
+          writes.push(Object.fromEntries(await request.formData()));
+          items = [];
+          return { success: true };
+        },
       },
     ]);
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const itemLabel = await screen.findByText("chicken thigh");
-    const row = itemLabel.closest("[data-motion-x]");
-    expect(row).toBeInTheDocument();
+    await screen.findByText("chicken thigh");
     expect(screen.getByRole("button", { name: "Remove chicken thigh" })).toBeInTheDocument();
-
-    swipeRow(row!, -80);
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "-104"));
-    expect(screen.getByRole("button", { name: "Delete chicken thigh" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toBeInTheDocument();
-
-    swipeRow(row!, -30);
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "-104"));
-
-    fireEvent.click(screen.getByRole("checkbox", { name: "chicken thigh" }));
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "0"));
-    expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toBeInTheDocument();
-
-    swipeRow(row!, -80);
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "-104"));
-    swipeRow(row!, 40);
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "0"));
-
-    swipeRow(row!, -80);
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "-104"));
-    swipeRow(row!, -120);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for chicken thigh" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete chicken thigh" }));
+    const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
+    expect(writes).toEqual([]);
+    expect(screen.getByRole("checkbox", { name: "chicken thigh", hidden: true })).toBeInTheDocument();
+    const confirm = within(dialog).getByRole("button", { name: "Remove" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
     await waitFor(() => {
       expect(screen.queryByText("chicken thigh")).not.toBeInTheDocument();
     });
+    expect(writes).toEqual([{ intent: "removeItem", itemId: "item-1" }]);
   });
 
-  it("deletes a revealed row when the delete button is clicked", async () => {
+  it("keeps the non-gesture delete route after migrating the row", async () => {
     const mutableData = {
       shoppingList: {
         ...singleItemData.shoppingList,
@@ -575,20 +615,17 @@ describe("shopping list UX updates", () => {
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const itemLabel = await screen.findByText("chicken thigh");
-    const row = itemLabel.closest("[data-motion-x]");
-    expect(row).toBeInTheDocument();
-
-    swipeRow(row!, -80);
-    await waitFor(() => expect(row).toHaveAttribute("data-motion-x", "-104"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete chicken thigh" }));
+    await screen.findByText("chicken thigh");
+    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
 
     await waitFor(() => {
       expect(screen.queryByText("chicken thigh")).not.toBeInTheDocument();
     });
   });
 
-  it("deletes a row when the accessible remove button is clicked", async () => {
+  it("does not remove or submit when accessible removal is cancelled then reopened", async () => {
+    let writes = 0;
     const mutableData = {
       shoppingList: {
         ...singleItemData.shoppingList,
@@ -603,6 +640,7 @@ describe("shopping list UX updates", () => {
         Component: ShoppingList,
         loader: () => mutableData,
         action: async () => {
+          writes += 1;
           mutableData.shoppingList.items = [];
           return { success: true };
         },
@@ -613,10 +651,16 @@ describe("shopping list UX updates", () => {
 
     expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
-
-    await waitFor(() => {
-      expect(screen.queryByText("chicken thigh")).not.toBeInTheDocument();
-    });
+    const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
+    expect(writes).toBe(0);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toBeInTheDocument();
+    expect(writes).toBe(0);
+    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(screen.queryByText("chicken thigh")).not.toBeInTheDocument());
+    expect(writes).toBe(1);
   });
 
   it("submits clearAll after the confirmation dialog is confirmed", async () => {
@@ -680,7 +724,7 @@ describe("shopping list UX updates", () => {
     });
   });
 
-  it("uses ruled receipt rows and closes all reveals without jumping checked rows", async () => {
+  it("keeps ruled receipt rows in place when an item is checked", async () => {
     const Stub = createTestRoutesStub([
       {
         path: "/shopping-list",
@@ -722,19 +766,8 @@ describe("shopping list UX updates", () => {
     for (const listItem of screen.getAllByTestId("shopping-list-motion-item")) {
       expect(listItem).toHaveAttribute("data-layout", "position");
     }
-    const seamContainer = container.querySelector(".relative.overflow-hidden");
-    const rowShell = container.querySelector(".relative.z-10.bg-\\[var\\(--sj-page\\)\\]");
-    expect(seamContainer).toBeInTheDocument();
-    expect(rowShell).toBeInTheDocument();
-
-    const bananasLabel = await screen.findByText("bananas");
-    const bananasRow = bananasLabel.closest("[data-motion-x]");
-    expect(bananasRow).toBeInTheDocument();
-
-    swipeRow(bananasRow!, -80);
-    await waitFor(() => expect(bananasRow).toHaveAttribute("data-motion-x", "-104"));
-
-    const applesRow = screen.getByText("apples").closest("[data-motion-x]");
+    expect(container.querySelectorAll('[data-ouro="swipe-actions"]')).toHaveLength(2);
+    const applesRow = screen.getByText("apples").closest('[data-ouro="swipe-actions"]');
     const applesCheck = within(applesRow!).getByRole("checkbox", { name: "apples" });
     fireEvent.click(applesCheck);
 
@@ -744,6 +777,5 @@ describe("shopping list UX updates", () => {
         "bananas",
       ]);
     });
-    await waitFor(() => expect(bananasRow).toHaveAttribute("data-motion-x", "0"));
   });
 });

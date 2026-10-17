@@ -17,8 +17,8 @@
  */
 
 import { useEffect, useState, type RefObject } from "react";
-import { Button } from "~/components/ui/button";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Text } from "~/components/text";
 import {
   authenticatePasskey,
   browserSupportsPasskeys,
@@ -85,7 +85,7 @@ export function PasskeySignInButton({
         {status === "pending" ? "Waiting for passkey…" : "Sign in with a passkey"}
       </Button>
       {error && (
-        <Text className="text-sm text-[var(--sj-tomato)]" role="alert">
+        <Text size="sm" tone="destructive" role="alert">
           {error}
         </Text>
       )}

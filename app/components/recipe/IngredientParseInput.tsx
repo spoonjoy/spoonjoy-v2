@@ -1,6 +1,6 @@
 import { RefreshCw } from 'lucide-react'
 import { useEffect, useRef } from 'react'
-import { Button } from '~/components/ui/button'
+import { Button } from '~/components/button'
 import { Alert } from '~/components/ouro/alert/alert'
 import { TextArea } from '~/components/ouro/text-field/text-area'
 import { useIngredientParser } from '~/hooks/useIngredientParser'

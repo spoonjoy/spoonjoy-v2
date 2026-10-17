@@ -1,5 +1,5 @@
 import { Form } from "react-router";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { useActionWriteToken } from "~/hooks/use-write-token";
 import { normalizeRequiredCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";

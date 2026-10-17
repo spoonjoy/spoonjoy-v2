@@ -1,7 +1,6 @@
 import type { Route } from "./+types/users.$identifier.kitchen-visitors";
 import { redirect, useLoaderData } from "react-router";
-import { Subheading } from "~/components/ui/heading";
-import { Text } from "~/components/ui/text";
+import { Subheading } from "~/components/heading";
 import { Link } from "~/components/ouro/link/link";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
@@ -133,7 +132,7 @@ export default function KitchenVisitorsPage() {
     <CookbookPage>
       <section className="mx-auto max-w-3xl">
         <CookbookHeader eyebrow="Chef profile" title="Kitchen visitors">
-        <Subheading level={2} className="text-base/6">
+        <Subheading level={2} size="sm" className="leading-6">
           {viewerIsOwner
             ? "Chefs who've engaged with your recipes"
             : `Chefs who've engaged with ${profileUsername}'s recipes`}
@@ -156,9 +155,9 @@ export default function KitchenVisitorsPage() {
             ) : (
               <span />
             )}
-            <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">
               Page {page} of {totalPages}
-            </Text>
+            </p>
             {hasNext ? (
               <Link href={`${basePath}?page=${page + 1}`}>
                 Next →

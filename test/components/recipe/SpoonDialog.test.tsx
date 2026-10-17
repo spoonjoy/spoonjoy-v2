@@ -33,6 +33,28 @@ describe("SpoonDialog", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps the real form and submit owner when the released dialog presents as a phone sheet", async () => {
+    const original = window.matchMedia.bind(window);
+    const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => {
+      const result = original(query);
+      if (query === "(min-width: 640px)") Object.defineProperty(result, "matches", { value: false });
+      return result;
+    });
+    try {
+      renderDialog();
+      const dialog = await screen.findByRole("dialog", { name: "Log a cook" });
+      expect(dialog).toHaveAttribute("data-ouro-presentation", "sheet");
+      const note = screen.getByLabelText(/note/i) as HTMLTextAreaElement;
+      await userEvent.type(note, "Keep this actual cook note");
+      const submit = screen.getByRole("button", { name: "Log cook", exact: true }) as HTMLButtonElement;
+      expect(submit).not.toBeDisabled();
+      expect(submit.form).toBe(note.form);
+      expect(note.form).not.toBeNull();
+    } finally {
+      media.mockRestore();
+    }
+  });
+
   it("renders fields for photo, note, nextTime, cookedAt", async () => {
     renderDialog();
     expect(await screen.findByLabelText(/note/i)).toBeInTheDocument();

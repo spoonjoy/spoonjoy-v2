@@ -21,6 +21,9 @@ describe('BioCard', () => {
 
     expect(screen.getByRole('heading', { name: 'Chef Rowan' })).toBeInTheDocument()
     expect(screen.getByText('Home cook sharing weeknight comfort food.')).toBeInTheDocument()
+    // Retain the small branded metadata heading, not Heading's nearest 16px size.
+    expect(screen.getByRole('heading', { level: 3, name: 'Kitchen Snapshot' }))
+      .toHaveClass('font-sj-display', 'text-sm')
   })
 
   it('renders profile link when profileHref is provided', () => {

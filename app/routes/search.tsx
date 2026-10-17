@@ -2,10 +2,10 @@ import type { Route } from "./+types/search";
 import { useId } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { Heading, Subheading } from "~/components/ui/heading";
-import { Link } from "~/components/ui/link";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
+import { Subheading } from "~/components/heading";
+import { Link } from "~/components/navigation/app-link";
+import { Text } from "~/components/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -134,11 +134,11 @@ function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: 
             <CoverProvenanceBadge label={coverProvenanceLabel} />
           </span>
         </div>
-        <Subheading id={`${id}-title`} level={2} className="mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]">
+        <h2 id={`${id}-title`} className="font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]">
           {result.title}
-        </Subheading>
-        <Text id={`${id}-subtitle`} className="mt-1 text-sm">{result.subtitle}</Text>
-        <Text id={`${id}-snippet`} className="mt-3 line-clamp-2 text-sm/6">{result.snippet}</Text>
+        </h2>
+        <Text id={`${id}-subtitle`} size="sm" className="mt-1">{result.subtitle}</Text>
+        <Text id={`${id}-snippet`} size="sm" className="mt-3 line-clamp-2 leading-6">{result.snippet}</Text>
       </div>
     </Link>
   );
@@ -166,9 +166,9 @@ export default function Search() {
               <SearchIcon className="size-3.5" aria-hidden="true" />
               Kitchen index
             </div>
-            <Heading level={1} className="mt-3 text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.05]">
+            <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-3 text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.05]">
               Find the thing you meant to cook.
-            </Heading>
+            </h1>
             <Form method="get" role="search" className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <input type="hidden" name="scope" value={scope} />
               <label className="sr-only" htmlFor="search-query">Search terms</label>
@@ -228,8 +228,8 @@ export default function Search() {
               has no such top-level restriction, and it's the correct role for this: an in-page
               menu of links that switch the search scope. */}
           <nav aria-label="Search scope" className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
-            <Subheading level={2} className="text-xl/7">{SCOPE_LABELS[scope]}</Subheading>
-            <Text className="mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</Text>
+            <Subheading level={2} size="lg">{SCOPE_LABELS[scope]}</Subheading>
+            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</p>
             <div className="mt-5 grid gap-0">
               {SEARCH_SCOPES.map((searchScope) => {
                 const params = new URLSearchParams();
@@ -252,17 +252,17 @@ export default function Search() {
                 );
               })}
             </div>
-            <Text className="font-sj-ui mt-5 hidden text-xs/5 uppercase tracking-[0.14em] sm:block">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui mt-5 hidden text-xs/5 uppercase tracking-[0.14em] sm:block">
               Shopping List results are private to your signed-in kitchen.
-            </Text>
+            </p>
           </nav>
 
           {/* <section>, not <main>: root.tsx already renders the page's only <main>. */}
           <section aria-label="Search results">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <Subheading level={2} className="text-2xl/8">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
-                <Text className="mt-1 text-sm">{resultCountLabel(results.length)}</Text>
+                <Subheading level={2} size="xl">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
+                <Text size="sm" className="mt-1">{resultCountLabel(results.length)}</Text>
               </div>
             </div>
 
@@ -274,7 +274,7 @@ export default function Search() {
 
             {!hasQuery ? (
               <div className="mb-4 border-y border-dashed border-[var(--sj-border-strong)] py-4">
-                <Text className="text-sm/6">
+                <Text size="sm" className="leading-6">
                   Try searching by ingredient, step wording, cookbook theme, chef username, or shopping list category.
                 </Text>
               </div>

@@ -9,9 +9,7 @@ import {
   type KitchenUserWhere,
 } from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
-import { Button } from "~/components/ui/button";
-import { Heading } from "~/components/ui/heading";
-import { Text } from "~/components/ui/text";
+import { Button } from "~/components/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
@@ -161,12 +159,12 @@ export default function Index() {
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo-muted)]">
               The Recipe App
             </p>
-            <Heading level={1} className="mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
+            <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
               Your food should look as good as it tastes.
-            </Heading>
-            <Text className="mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]">
+            </h1>
+            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]">
               Spoonjoy is a photo-first kitchen for the recipes you actually cook, the notes you learn by doing, and the cookbooks that grow out of real meals.
-            </Text>
+            </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/signup">Start Your Kitchen</Button>
               <Button href="/login" plain>Log in</Button>

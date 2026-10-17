@@ -17,9 +17,9 @@ import { API_V1_ERROR_STATUS, API_V1_RESOURCES, API_V1_SCOPE_REQUIREMENTS } from
 import { captureSafeClientEvent } from "~/lib/analytics";
 import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 const DEVELOPER_SCOPES = [
@@ -553,7 +553,7 @@ export default function Developers() {
           </Button>
         </div>
       )}>
-        <Text className="text-lg/8">
+        <Text size="lg" className="leading-8">
           Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private
           shopping-list state, recipe-cover management, token management, or delegated access.
         </Text>

@@ -1,247 +1,70 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { Dialog, DialogTitle, DialogDescription, DialogBody, DialogActions } from '~/components/ui/dialog'
-import { Button } from '~/components/ui/button'
+import { useState } from "react";
+import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Form, useActionData } from "react-router";
+import { Dialog } from "~/components/ouro/dialog/dialog";
+import { Button } from "~/components/button";
+import { createTestRoutesStub } from "../../utils";
 
-describe('Dialog', () => {
-  describe('Dialog component', () => {
-    it('renders children when open', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogTitle>Test Dialog</DialogTitle>
-        </Dialog>
-      )
-      await waitFor(() => {
-        expect(screen.getByText('Test Dialog')).toBeInTheDocument()
-      })
-    })
-
-    it('does not render children when closed', () => {
-      render(
-        <Dialog open={false} onClose={() => {}}>
-          <DialogTitle>Hidden Dialog</DialogTitle>
-        </Dialog>
-      )
-      expect(screen.queryByText('Hidden Dialog')).not.toBeInTheDocument()
-    })
-
-    it('applies custom className', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}} className="custom-dialog">
-          <DialogTitle>Styled Dialog</DialogTitle>
-        </Dialog>
-      )
-      await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument()
-      })
-    })
-
-    it('opens the panel in place, so its buttons never move under a tap', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogTitle>Steady Dialog</DialogTitle>
-        </Dialog>
-      )
-
-      await waitFor(() => {
-        expect(document.querySelector('[data-slot="dialog-panel"]')).toBeTruthy()
-      })
-      const classes = document.querySelector('[data-slot="dialog-panel"]')!.className.split(/\s+/)
-      // Entering only fades: no closed-state offset or scale that also applies while entering.
-      expect(classes.filter((name) => /translate|scale/.test(name) && !name.includes('data-leave:'))).toEqual([])
-      expect(classes).toContain('data-closed:opacity-0')
-      // Leaving may still slide away; nothing can be tapped by then.
-      expect(classes).toContain('data-leave:data-closed:translate-y-8')
-      expect(classes).toContain('sm:data-leave:data-closed:scale-95')
-    })
-
-    it('keeps the accessible dialog wrapper sized to the viewport', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogTitle>Visible Dialog Wrapper</DialogTitle>
-        </Dialog>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByRole('dialog')).toHaveClass('fixed', 'inset-0', 'z-[60]')
-      })
-    })
-
-    it('renders with different size variants', async () => {
-      const sizes = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl'] as const
-      for (const size of sizes) {
-        const { unmount } = render(
-          <Dialog open={true} onClose={() => {}} size={size}>
-            <DialogTitle>{size} Dialog</DialogTitle>
-          </Dialog>
-        )
-        await waitFor(() => {
-          expect(screen.getByText(`${size} Dialog`)).toBeInTheDocument()
-        })
-        unmount()
-      }
-    })
-  })
-
-  describe('DialogTitle', () => {
-    it('renders title text', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogTitle>My Title</DialogTitle>
-        </Dialog>
-      )
-      await waitFor(() => {
-        expect(screen.getByText('My Title')).toBeInTheDocument()
-      })
-    })
-
-    it('applies custom className', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogTitle className="custom-title">Custom Title</DialogTitle>
-        </Dialog>
-      )
-      await waitFor(() => {
-        const title = screen.getByText('Custom Title')
-        expect(title.className).toContain('custom-title')
-      })
-    })
-  })
-
-  describe('DialogDescription', () => {
-    it('renders description text', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogDescription>This is a description</DialogDescription>
-        </Dialog>
-      )
-      await waitFor(() => {
-        expect(screen.getByText('This is a description')).toBeInTheDocument()
-      })
-    })
-
-    it('applies custom className', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogDescription className="custom-desc">Description</DialogDescription>
-        </Dialog>
-      )
-      await waitFor(() => {
-        const desc = screen.getByText('Description')
-        expect(desc.className).toContain('custom-desc')
-      })
-    })
-  })
-
-  describe('DialogBody', () => {
-    it('renders body content', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogBody>Body content here</DialogBody>
-        </Dialog>
-      )
-      await waitFor(() => {
-        expect(screen.getByText('Body content here')).toBeInTheDocument()
-      })
-    })
-
-    it('applies custom className', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogBody className="custom-body">Body</DialogBody>
-        </Dialog>
-      )
-      await waitFor(() => {
-        const body = screen.getByText('Body')
-        expect(body.className).toContain('custom-body')
-      })
-    })
-
-    it('applies default mt-6 class', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogBody>Body</DialogBody>
-        </Dialog>
-      )
-      await waitFor(() => {
-        const body = screen.getByText('Body')
-        expect(body.className).toContain('mt-6')
-      })
-    })
-  })
-
-  describe('DialogActions', () => {
-    it('renders action buttons', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogActions>
-            <Button>Cancel</Button>
-            <Button>Confirm</Button>
-          </DialogActions>
-        </Dialog>
-      )
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
-      })
-    })
-
-    it('applies custom className', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogActions className="custom-actions" data-testid="dialog-actions">
-            <Button>Action</Button>
-          </DialogActions>
-        </Dialog>
-      )
-      await waitFor(() => {
-        const actions = screen.getByTestId('dialog-actions')
-        expect(actions.className).toContain('custom-actions')
-      })
-    })
-
-    it('applies default flex layout classes', async () => {
-      render(
-        <Dialog open={true} onClose={() => {}}>
-          <DialogActions data-testid="dialog-actions">
-            <Button>Action</Button>
-          </DialogActions>
-        </Dialog>
-      )
-      await waitFor(() => {
-        const actions = screen.getByTestId('dialog-actions')
-        expect(actions.className).toContain('mt-8')
-        expect(actions.className).toContain('flex')
-      })
-    })
-  })
-
-  describe('Full dialog composition', () => {
-    it('renders a complete dialog with all components', async () => {
-      const onClose = vi.fn()
-      render(
-        <Dialog open={true} onClose={onClose}>
-          <DialogTitle>Edit Profile</DialogTitle>
-          <DialogDescription>Make changes to your profile here.</DialogDescription>
-          <DialogBody>
-            <p>Profile form fields would go here.</p>
-          </DialogBody>
-          <DialogActions>
-            <Button plain onClick={onClose}>
-              Cancel
-            </Button>
-            <Button>Save Changes</Button>
-          </DialogActions>
-        </Dialog>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText('Edit Profile')).toBeInTheDocument()
-        expect(screen.getByText('Make changes to your profile here.')).toBeInTheDocument()
-        expect(screen.getByText('Profile form fields would go here.')).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Save Changes' })).toBeInTheDocument()
-      })
-    })
-  })
-})
+describe("released rich Dialog with Spoonjoy actions and real Router forms", () => {
+  const writes: Array<Record<string, FormDataEntryValue>> = [];
+  function Page() {
+    const [open, setOpen] = useState(false);
+    const answer = useActionData() as { saved?: boolean } | undefined;
+    return <>
+      <Button onClick={() => setOpen(true)}>Edit</Button>
+      <p role="status">{answer?.saved ? "Saved answer" : "No answer"}</p>
+      <Dialog open={open} onOpenChange={setOpen} title="Edit recipe" description="Update your recipe.">
+        <Form method="post">
+          <label htmlFor="recipe-name">Recipe name</label>
+          <input id="recipe-name" name="title" defaultValue="Rice" />
+          <Button type="submit">Save recipe</Button>
+          <Button plain onClick={() => setOpen(false)}>Cancel edit</Button>
+        </Form>
+      </Dialog>
+    </>;
+  }
+  function setup() {
+    writes.length = 0;
+    const Stub = createTestRoutesStub([{
+      path: "/", Component: Page,
+      action: async ({ request }: { request: Request }) => {
+        writes.push(Object.fromEntries(await request.formData()));
+        return { saved: true };
+      },
+    }]);
+    return render(<Stub initialEntries={["/"]} />);
+  }
+  it("keeps the real title, description, control label and submit protocol", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit recipe" });
+    expect(dialog).toHaveAccessibleDescription("Update your recipe.");
+    expect(within(dialog).getByLabelText("Recipe name")).toHaveValue("Rice");
+    expect(writes).toEqual([]);
+    fireEvent.change(within(dialog).getByLabelText("Recipe name"), { target: { value: "Beans" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save recipe" }));
+    await screen.findByText("Saved answer");
+    expect(writes).toEqual([{ title: "Beans" }]);
+  });
+  it("cancels and reopens without submitting a form or losing its name", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel edit" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(writes).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(await screen.findByRole("dialog", { name: "Edit recipe" })).toBeInTheDocument();
+    expect(writes).toEqual([]);
+  });
+  it("closes on actual keyboard Escape without mutating the Router action", async () => {
+    setup();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await screen.findByRole("dialog", { name: "Edit recipe" });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(writes).toEqual([]);
+  });
+});

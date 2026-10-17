@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import {
   PWA_INSTALL_DISMISSED_STORAGE_KEY,
   parseDismissedAt,

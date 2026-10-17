@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/cookbooks.$id";
@@ -114,6 +114,7 @@ describe("Cookbooks $id Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
     await cleanupDatabase();
   });

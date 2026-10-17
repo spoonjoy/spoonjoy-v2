@@ -2,11 +2,11 @@ import type { Route } from "./+types/recipes._index";
 import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
-import { Button } from "~/components/ui/button";
-import { Heading, Subheading } from "~/components/ui/heading";
-import { Link } from "~/components/ui/link";
+import { Button } from "~/components/button";
+import { Subheading } from "~/components/heading";
+import { Link } from "~/components/navigation/app-link";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
@@ -20,7 +20,8 @@ import {
 } from "~/lib/collection-reads.server";
 import { formatServingsLabel } from "~/lib/quantity";
 import { RecipesSectionNav } from "~/components/navigation";
-import { ShowMore, useAppendingList, useFocusFirstNew } from "~/components/ui/show-more";
+import { ShowMore } from "~/components/ouro/collapsible/show-more";
+import { useAppendingList } from "~/hooks/use-appending-list";
 import { listImageProps, type ImageLoadingProps } from "~/lib/image-loading";
 
 const PUBLIC_RECIPE_LIMIT = 48;
@@ -82,7 +83,6 @@ export default function RecipesIndex() {
     noun: "recipes",
   });
   const recipes = list.items;
-  const firstNewRef = useFocusFirstNew<HTMLAnchorElement>(list.firstNewIndex);
   const searchInputRef = useUrlSyncedInput(query);
 
   return (
@@ -94,14 +94,14 @@ export default function RecipesIndex() {
           <div className="grid gap-5 sm:gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-end">
             <div>
               <p className="sj-eyebrow">Public recipe box</p>
-              <Heading level={1} className="mt-3 max-w-4xl text-4xl/10 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.04]">
+              <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-3 max-w-4xl text-4xl/10 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.04]">
                 Recipes worth opening.
-              </Heading>
-              <Text className="mt-3 max-w-2xl text-base/7 sm:mt-5 sm:text-lg/8">
+              </h1>
+              <p className="text-base/6 text-[var(--sj-ink-soft)] mt-3 max-w-2xl text-base/7 sm:mt-5 sm:text-lg/8">
                 {isAuthenticated
                   ? "Every public Spoonjoy recipe, to cook, fork, save or shop from."
                   : "Every public Spoonjoy recipe, free to read. Sign up to cook, save and shop from them."}
-              </Text>
+              </p>
             </div>
 
             <div className="border-t border-[var(--sj-border)] pt-4 sm:pt-5 lg:border-t-0">
@@ -147,35 +147,36 @@ export default function RecipesIndex() {
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="sj-eyebrow">{hasQuery ? "Matches" : after ? "Older recipes" : "Recently cooked and saved"}</p>
-              <Subheading level={2} className="mt-1 text-3xl/9">
+              <Subheading level={2} size="2xl" className="mt-1 leading-9">
                 {hasQuery ? `Recipes for "${query}"` : "All public recipes"}
               </Subheading>
             </div>
-            <Text className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em]">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs font-semibold uppercase tracking-[0.16em]">
               {list.nextCursor ? `${recipes.length} shown` : `${recipes.length} ${recipes.length === 1 ? "recipe" : "recipes"}`}
-            </Text>
+            </p>
           </div>
 
           {recipes.length > 0 ? (
-            <ol className="border-y border-[var(--sj-border-strong)]">
-              {recipes.map((recipe, index) => (
-                <li key={recipe.id} className="border-b border-[var(--sj-border)] last:border-b-0">
+            <div className="border-t border-[var(--sj-border)]">
+              <ShowMore
+                ordered
+                items={recipes.map((recipe, index) => (
                   <RecipeRow
+                    key={recipe.id}
                     recipe={recipe}
                     ordinal={index + 1}
                     imageProps={listImageProps(index)}
-                    linkRef={index === list.firstNewIndex ? firstNewRef : undefined}
                   />
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          {recipes.length > 0 ? (
-            <ShowMore
-              list={list}
-              href={list.nextCursor ? publicRecipesPageHref(list.nextCursor) : null}
-              label="Show more recipes"
-            />
+                ))}
+                hasMore={Boolean(list.nextCursor)}
+                loading={list.loading}
+                onShowMore={list.showMore}
+                href={list.nextCursor ? publicRecipesPageHref(list.nextCursor) : undefined}
+                showMoreLabel="Show more recipes"
+                loadedLabel={(count) => `Showing ${count} recipes`}
+                noMoreLabel={`Showing ${recipes.length} recipes`}
+              />
+            </div>
           ) : (
             <RuledEmptyState
               title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
@@ -220,7 +221,7 @@ function RecipeRow({
     <Link
       ref={linkRef}
       href={`/recipes/${recipe.id}`}
-      className="group grid min-h-28 grid-cols-[2.5rem_5.25rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_7rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
+      className="group grid min-h-28 grid-cols-[2.5rem_5.25rem_minmax(0,1fr)] gap-4 border-b border-[var(--sj-border)] py-5 no-underline sm:grid-cols-[3rem_7rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
       aria-label={recipe.title}
     >
       <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">

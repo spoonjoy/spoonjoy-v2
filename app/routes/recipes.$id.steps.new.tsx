@@ -3,14 +3,14 @@ import { redirect, data, useActionData, useLoaderData, useNavigate, useFetcher }
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/button";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text, Strong } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistRow } from "~/components/shopping/checklist-row";

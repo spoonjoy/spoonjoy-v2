@@ -1,13 +1,13 @@
-import type React from 'react'
 import { Bookmark, Share2, UtensilsCrossed } from 'lucide-react'
-import { Subheading } from '../ui/heading'
-import { Link } from '../ui/link'
-import { Text } from '../ui/text'
-import { Button } from '../ui/button'
+import { Subheading } from '../heading'
+import { Link } from '../navigation/app-link'
+import { Text } from '../text'
+import { Button } from '../button'
 import { RuledEmptyState } from '~/components/cookbook/page'
 import { formatServingsLabel } from '~/lib/quantity'
 import { CoverProvenanceBadge } from '~/components/recipe/CoverProvenanceBadge'
 import { listImageProps } from '~/lib/image-loading'
+import { ShowMore, type ShowMoreLoadProps } from '~/components/ouro/collapsible/show-more'
 
 export interface PantryRecipeCard {
   id: string
@@ -26,24 +26,23 @@ export interface RecipeGridProps {
   recipes: PantryRecipeCard[]
   /** Recipes across every page when the grid shows part of a longer list. */
   totalCount?: number
-  /** Focus target for the first card a "Show more" added (see useFocusFirstNew). */
-  firstNew?: { index: number | null; ref: React.Ref<HTMLAnchorElement> }
   emptyTitle?: string
   emptyMessage?: string
   emptyCtaHref?: string | null
   onShare?: (recipeId: string) => void
   onSave?: (recipeId: string) => void
+  loadMore?: Pick<ShowMoreLoadProps, 'hasMore' | 'loading' | 'href' | 'onShowMore'>
 }
 
 export function RecipeGrid({
   recipes,
   totalCount = recipes.length,
-  firstNew,
   emptyTitle = 'No recipes yet',
   emptyMessage = 'Start by creating your first recipe for this pantry.',
   emptyCtaHref = '/recipes/new',
   onShare,
   onSave,
+  loadMore,
 }: RecipeGridProps) {
   if (recipes.length === 0) {
     return (
@@ -60,15 +59,7 @@ export function RecipeGrid({
     )
   }
 
-  return (
-    <section>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <Subheading level={2} className="text-2xl/8">Recipes</Subheading>
-        <Text className="font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</Text>
-      </div>
-
-      <div className="sj-list-ruled">
-        {recipes.map((recipe, index) => {
+  const rows = recipes.map((recipe, index) => {
           const href = recipe.href ?? `/recipes/${recipe.id}`
           const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined
           const hasQuickActions = Boolean(onShare || onSave)
@@ -77,11 +68,10 @@ export function RecipeGrid({
           return (
             <article
               key={recipe.id}
-              className="group relative"
+              className="group relative border-b border-[var(--sj-border)]"
             >
               <Link
                 href={href}
-                ref={firstNew && index === firstNew.index ? firstNew.ref : undefined}
                 className="grid gap-4 py-5 no-underline sm:grid-cols-[7rem_minmax(0,1fr)] sm:pr-24"
               >
                 <span className="sj-photo-tile block aspect-[4/3] overflow-hidden sm:aspect-square">
@@ -144,7 +134,24 @@ export function RecipeGrid({
               ) : null}
             </article>
           )
-        })}
+        })
+
+  return (
+    <section>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Subheading level={2} size="xl">Recipes</Subheading>
+        <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</p>
+      </div>
+      <div className={loadMore ? "border-t border-[var(--sj-border)]" : "sj-list-ruled"}>
+        {loadMore ? (
+          <ShowMore
+            {...loadMore}
+            items={rows}
+            showMoreLabel="Show more recipes"
+            loadedLabel={(count) => `Showing ${count} recipes`}
+            noMoreLabel={`Showing ${recipes.length} recipes`}
+          />
+        ) : rows}
       </div>
     </section>
   )

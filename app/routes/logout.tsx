@@ -2,11 +2,10 @@ import type { Route } from "./+types/logout";
 import { Form as RouterForm, data, redirect, useActionData } from "react-router";
 import { destroyUserSession, getUserId } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { AuthLayout } from "~/components/ui/auth-layout";
-import { Heading } from "~/components/ui/heading";
-import { Button } from "~/components/ui/button";
+import { AuthPage } from "~/components/auth/auth-page";
+import { Button } from "~/components/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/ui/text";
+import { Text } from "~/components/text";
 import { Form } from "~/components/ouro/form/form";
 import { useFormMessage } from "~/hooks/use-form-errors";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
@@ -53,23 +52,23 @@ export default function Logout() {
   const actionData = useActionData<{ error?: string }>();
   const formErrors = useFormMessage(actionData?.error, actionData);
   return (
-    <AuthLayout
+    <AuthPage
+      formTitle="Log out of Spoonjoy?"
       eyebrow="Signing out"
       title="Your recipes will be here when you're back."
       description="Sign in again on any device to pick up where you left off."
     >
       <div className="w-full max-w-sm">
-        <Heading>Log out of Spoonjoy?</Heading>
         <Text className="mt-4">This signs you out in this browser only.</Text>
         <Form method="post" errors={formErrors} render={<RouterForm />} className="mt-6" onSubmit={clearCookProgressCache}>
           <Button type="submit" className="w-full">
             Log out
           </Button>
         </Form>
-        <Text className="mt-6 text-center">
+        <Text align="center" className="mt-6">
           <Link href="/">Stay signed in</Link>
         </Text>
       </div>
-    </AuthLayout>
+    </AuthPage>
   );
 }
