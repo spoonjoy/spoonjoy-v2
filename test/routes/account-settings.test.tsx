@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -39,7 +39,30 @@ describe("Account Settings Route", () => {
   });
 
   afterEach(async () => {
-    await cleanupDatabase();
+    let phase = "before-database-cleanup";
+    const originalError = console.error;
+    console.error = (...args) => {
+      console.log("FIELD_LIFECYCLE_DIAGNOSTIC", JSON.stringify({
+        phase,
+        stack: new Error("diagnostic call site").stack,
+      }));
+      originalError(...args);
+    };
+    try {
+      console.log("FIELD_LIFECYCLE_START", JSON.stringify({
+        test: expect.getState().currentTestName,
+        cleanupFirst: process.env.FIELD_CLEANUP_FIRST === "1",
+        starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
+      }));
+      if (process.env.FIELD_CLEANUP_FIRST === "1") cleanup();
+      phase = "database-cleanup";
+      await cleanupDatabase();
+      phase = "after-database-cleanup-real-frame";
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      console.log("FIELD_LIFECYCLE_END", JSON.stringify({ phase }));
+    } finally {
+      console.error = originalError;
+    }
   });
 
   describe("loader", () => {
