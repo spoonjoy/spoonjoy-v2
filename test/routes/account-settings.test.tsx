@@ -5228,7 +5228,7 @@ describe("Account Settings Route", () => {
         }));
       });
 
-      it("should display username field error when editing user info with validation error", async () => {
+      it.each(Array.from({ length: 24 }, (_, index) => index))("should display username field error when editing user info with validation error (passive sample %i)", async () => {
         const user = userEvent.setup();
         const mockData = {
           user: {

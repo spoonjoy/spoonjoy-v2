@@ -28,15 +28,13 @@ jobs:
       - run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
       # Keep the unchanged Vitest warning collector; the outer text gate would reject
       # diagnostic JSON that quotes an existing test name containing "warning".
-      - name: Run original affected-test selection with passive lifecycle instrumentation
+      - name: Repeat unchanged username interactions with passive lifecycle instrumentation
         run: |
           set +e
-          pnpm run api:playground:generate
-          SPOONJOY_CHANGED_SINCE=ca829f3cbfeb4efa49c84828c4f2d271a24bcd78 node scripts/test-changed.mjs > "$RUNNER_TEMP/field-lifecycle.log" 2>&1
+          pnpm exec vitest run test/routes/account-settings.test.tsx --testNamePattern="field error display in forms" --reporter=verbose > "$RUNNER_TEMP/field-lifecycle.log" 2>&1
           result=$?
           cat "$RUNNER_TEMP/field-lifecycle.log"
           printf '%s\n' "$result" > "$RUNNER_TEMP/field-lifecycle-exit.txt"
-          grep -q '281 test file(s) are affected' "$RUNNER_TEMP/field-lifecycle.log" || exit 2
           grep -q 'FIELD_ASSERTION_COMPLETE' "$RUNNER_TEMP/field-lifecycle.log" || exit 3
           exit "$result"
       - if: always()
