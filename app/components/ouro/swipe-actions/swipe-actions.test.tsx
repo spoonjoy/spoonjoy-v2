@@ -91,6 +91,8 @@ const width = (element: HTMLElement, side: "leading" | "trailing") => hundredths
 
 /** The time the next dispatched event carries, in ms. */
 let clock = 1000;
+/** This fixture's touch is distinct from the native mouse it interleaves. */
+const syntheticPointerId = 1001;
 /** Lets `ms` pass before the next event: 16 is a finger still moving, 300 one that has rested. */
 const wait = (ms: number) => {
   clock += ms;
@@ -101,7 +103,7 @@ async function pointer(target: EventTarget, type: string, x: number, y: number, 
   await act(async () => {
     // While the pointer is down its button is held, as a real one's is.
     const buttons = type === "pointerdown" || type === "pointermove" ? 1 : 0;
-    const event = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: "touch", isPrimary: true, buttons, clientX: x, clientY: y, ...init });
+    const event = new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: syntheticPointerId, pointerType: "touch", isPrimary: true, buttons, clientX: x, clientY: y, ...init });
     Object.defineProperty(event, "timeStamp", { value: clock });
     target.dispatchEvent(event);
   });
@@ -442,7 +444,7 @@ describe("SwipeActions", () => {
     await pointer(window, "pointermove", 194, 20);
     expect(capture).not.toHaveBeenCalled();
     await pointer(window, "pointermove", 180, 20);
-    expect(capture.mock.calls).toEqual([[1]]);
+    expect(capture.mock.calls).toEqual([[syntheticPointerId]]);
     await pointer(window, "pointermove", 160, 20);
     expect(capture).toHaveBeenCalledTimes(1);
     wait(300);
@@ -576,11 +578,23 @@ describe("SwipeActions", () => {
 
   it("follows one finger: other pointers neither start nor steer the swipe", async () => {
     const element = await render(row());
+    await userEvent.hover(page.getByRole("button", { name: "Actions for Short ribs" }));
     await pointer(content(element), "pointerdown", 200, 20, { isPrimary: false, pointerId: 7 });
     await pointer(window, "pointermove", 80, 20, { pointerId: 7 });
     expect(element.hasAttribute("data-dragging")).toBe(false);
 
     await pointer(content(element), "pointerdown", 200, 20);
+    let nativeMouseMoved = false;
+    const hearMouse = (event: PointerEvent) => {
+      if (event.isTrusted && event.pointerType === "mouse" && event.buttons === 0) nativeMouseMoved = true;
+    };
+    window.addEventListener("pointermove", hearMouse);
+    try {
+      await userEvent.hover(page.getByRole("link", { name: "Short ribs" }));
+    } finally {
+      window.removeEventListener("pointermove", hearMouse);
+    }
+    expect(nativeMouseMoved).toBe(true);
     // A second press during the gesture does not restart it.
     await pointer(content(element), "pointerdown", 400, 20, { pointerId: 2, isPrimary: false });
     await pointer(window, "pointermove", 20, 20, { pointerId: 2 });
@@ -802,22 +816,32 @@ describe("SwipeActions", () => {
     expect(document.activeElement).toBe(menuButton(element));
   });
 
-  it("closes on Escape only, and keeps that Escape from the page", async () => {
+  it.each(["actions button", "page body"] as const)("closes on Escape only, and keeps that Escape from the page (%s focus)", async (focus) => {
     const element = await render(row());
+    const keyboardTarget = focus === "actions button" ? menuButton(element) : document.body;
+    if (focus === "actions button") keyboardTarget.focus({ preventScroll: true });
+    // Activate the frame before opening even when Escape belongs to the whole page.
+    else await userEvent.keyboard("{Escape}");
+    expect(document.activeElement).toBe(keyboardTarget);
     const keys: string[] = [];
     const listener = (event: KeyboardEvent) => keys.push(event.key);
     document.addEventListener("keydown", listener);
-    await swipe(element, -120);
-    await userEvent.keyboard("a");
-    expect(element.getAttribute("data-open")).toBe("trailing");
-    await userEvent.keyboard("{Escape}");
-    await act(async () => {});
-    expect(element.hasAttribute("data-open")).toBe(false);
-    await expect.poll(() => offset(element)).toBe(0);
-    // Closed, Escape is the page's again.
-    await userEvent.keyboard("{Escape}");
-    document.removeEventListener("keydown", listener);
-    expect(keys).toEqual(["a", "Escape"]);
+    try {
+      await swipe(element, -120);
+      expect(element.getAttribute("data-open")).toBe("trailing");
+      expect(document.activeElement).toBe(keyboardTarget);
+      await userEvent.keyboard("a");
+      expect(element.getAttribute("data-open")).toBe("trailing");
+      await userEvent.keyboard("{Escape}");
+      await act(async () => {});
+      expect(element.hasAttribute("data-open")).toBe(false);
+      await expect.poll(() => offset(element)).toBe(0);
+      // Closed, Escape is the page's again.
+      await userEvent.keyboard("{Escape}");
+      expect(keys).toEqual(["a", "Escape"]);
+    } finally {
+      document.removeEventListener("keydown", listener);
+    }
   });
 
   it("closes on a press or a scroll outside the row, not on one inside it", async () => {
