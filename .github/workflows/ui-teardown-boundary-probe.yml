@@ -28,10 +28,10 @@ jobs:
       - run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
       # Vitest's unchanged collector enforces console diagnostics. The outer text
       # gate is not used for this private phase/caller JSON observation.
-      - name: Exercise unchanged cookbook refusal interactions with phase recording
+      - name: Exercise instrumented cookbook refusals as in the failed native coverage gate
         run: |
           set +e
-          pnpm exec vitest run test/routes/cookbooks-id.test.tsx --testNamePattern="keeps the editor open with the new title when the database was briefly unavailable" --reporter=verbose > "$RUNNER_TEMP/ui-teardown.log" 2>&1
+          pnpm exec vitest run test/routes/cookbooks-id.test.tsx --testNamePattern="keeps the editor open with the new title when the database was briefly unavailable" --coverage --reporter=verbose > "$RUNNER_TEMP/ui-teardown.log" 2>&1
           result=$?
           cat "$RUNNER_TEMP/ui-teardown.log"
           printf '%s\n' "$result" > "$RUNNER_TEMP/ui-teardown-exit.txt"
