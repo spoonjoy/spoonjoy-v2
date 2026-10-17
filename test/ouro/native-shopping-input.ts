@@ -33,8 +33,6 @@ export interface ShoppingInputObservation {
   settlingAfter: boolean;
   openBefore: string | null;
   openAfter: string | null;
-  transitions: Array<{ at: number; settling: boolean; open: string | null }>;
-  driverTimeline: Array<{ gesture: number; phase: string; at: number }>;
 }
 declare global {
   interface Window {
@@ -42,8 +40,6 @@ declare global {
       events: NativeTouchEvent[];
       types: string[];
       listener: (event: Event) => void;
-      transitions: Array<{ at: number; settling: boolean; open: string | null }>;
-      observer: MutationObserver;
     };
   }
 }
@@ -53,9 +49,17 @@ const nativeEndTimes = new WeakMap<object, number>();
  * Resolve the real Playwright frame/box; never invent an iframe or dock offset.
  * Only input timestamps are controlled, just as in the released touchDrag command.
  * No DOM pointer dispatch, product timer, spring or animation state is substituted.
+ * Consecutive timed gestures queue together; observation round trips must not
+ * consume the spring that the next actual native press is meant to interrupt.
  */
 export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ page }, input) => {
   if (page.context().browser()?.browserType().name() !== "chromium") throw new Error("Native shopping touch input requires Chromium");
+  if (input.gestures.length === 0 || input.gestures.some((gesture) => gesture.points.length < 2)) {
+    throw new Error("At least one gesture with two native touch points is required");
+  }
+  if (input.gestures.length > 1 && input.gestures.some((gesture) => gesture.sequential)) {
+    throw new Error("Compositor-paced scrolling must use its own native input command");
+  }
   const frame = (await Promise.all(page.frames().map(async (candidate) =>
     (await candidate.locator(input.selector).count()) ? candidate : null,
   ))).find((candidate) => candidate !== null);
@@ -63,18 +67,11 @@ export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ pag
   const session = await page.context().newCDPSession(page);
   let previousEnd = nativeEndTimes.get(page) ?? 0;
   const observations: ShoppingInputObservation[] = [];
-  const driverTimeline: ShoppingInputObservation["driverTimeline"] = [];
   try {
     await frame.evaluate((selector) => {
       const events: NativeTouchEvent[] = [];
       const row = document.querySelector(selector)!;
       const swipe = (row.matches('[data-ouro="swipe-actions"]') ? row : row.querySelector('[data-ouro="swipe-actions"]'))!;
-      const transitions: ShoppingInputObservation["transitions"] = [];
-      const observer = new MutationObserver(() => transitions.push({
-        at: performance.timeOrigin + performance.now(),
-        settling: swipe.hasAttribute("data-ouro-settling"), open: swipe.getAttribute("data-open"),
-      }));
-      observer.observe(swipe, { attributes: true, attributeFilter: ["data-ouro-settling", "data-open", "data-dragging"] });
       const types = ["touchstart", "touchmove", "touchend", "touchcancel", "pointerdown", "pointermove", "pointerup", "pointercancel", "click"];
       const listener = (event: Event) => {
         const observed = {
@@ -91,28 +88,18 @@ export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ pag
         events.push(observed);
         queueMicrotask(() => { observed.defaultPrevented = event.defaultPrevented; });
       };
-      window.__sjTask21NativeTouch = { events, types, listener, transitions, observer };
+      window.__sjTask21NativeTouch = { events, types, listener };
       for (const type of types) window.addEventListener(type, listener, { capture: true, passive: true });
     }, input.selector);
-    for (const [index, gesture] of input.gestures.entries()) {
-      const mark = (phase: string) => driverTimeline.push({ gesture: index, phase, at: Date.now() });
-      mark("bounds-start");
-      const box = await frame.locator(input.selector).boundingBox();
-      mark("bounds-end");
-      if (!box || gesture.points.length < 2) throw new Error("A visible row and at least two native touch points are required");
+    const box = await frame.locator(input.selector).boundingBox();
+    if (!box) throw new Error("A visible row is required for native touch input");
+    const send: Promise<unknown>[] = [];
+    for (const gesture of input.gestures) {
       // Several queued native gestures must not run backwards in event time when
       // the previous path's explicit duration exceeds the host round-trip time.
       const start = Math.max(Date.now() / 1000, previousEnd + .001);
       previousEnd = start + (gesture.points[gesture.points.length - 1]![2] + 1) / 1000;
       nativeEndTimes.set(page, previousEnd);
-      const at = await frame.evaluate(() => window.__sjTask21NativeTouch!.events.length);
-      const settlingBefore = await frame.locator(input.selector).evaluate((row) =>
-        (row.matches('[data-ouro="swipe-actions"]') ? row : row.querySelector('[data-ouro="swipe-actions"]'))!.hasAttribute("data-ouro-settling"));
-      const openBefore = await frame.locator(input.selector).evaluate((row) =>
-        (row.matches('[data-ouro="swipe-actions"]') ? row : row.querySelector('[data-ouro="swipe-actions"]'))!.getAttribute("data-open"));
-      mark("before-state-read");
-      const send: Promise<unknown>[] = [];
-      mark("dispatch-start");
       for (const [index, [x, y, ms]] of gesture.points.entries()) {
         const delivery = session.send("Input.dispatchTouchEvent", {
           type: index === 0 ? "touchStart" : "touchMove",
@@ -127,39 +114,35 @@ export const nativeShoppingInput: BrowserCommand<[ShoppingInput]> = async ({ pag
         touchPoints: [],
         ...(gesture.sequential ? {} : { timestamp: previousEnd }),
       }));
-      await Promise.all(send);
-      mark("dispatch-acks-finished");
-      const terminal = gesture.cancel ? "touchcancel" : "touchend";
-      // A protocol acknowledgement alone is not proof the app received native input.
-      // Observe the actual frame's terminal event under the existing test timeout.
-      const handled = await frame.waitForFunction(({ at, terminal }) =>
-        window.__sjTask21NativeTouch!.events.slice(at).some((event) => event.type === terminal), { at, terminal });
-      await handled.dispose();
-      mark("terminal-handled");
-      // Observe a real presentation frame before the next actual gesture can grab it.
-      await frame.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-      mark("presentation-frame");
-      const settlingAfter = await frame.locator(input.selector).evaluate((row) =>
-        (row.matches('[data-ouro="swipe-actions"]') ? row : row.querySelector('[data-ouro="swipe-actions"]'))!.hasAttribute("data-ouro-settling"));
-      const openAfter = await frame.locator(input.selector).evaluate((row) =>
-        (row.matches('[data-ouro="swipe-actions"]') ? row : row.querySelector('[data-ouro="swipe-actions"]'))!.getAttribute("data-open"));
-      mark("after-state-read");
-      observations.push({
-        terminal, settlingBefore, settlingAfter, openBefore, openAfter,
-        events: await frame.evaluate((at) => window.__sjTask21NativeTouch!.events.slice(at), at),
-        transitions: [],
-        driverTimeline,
-      });
-      mark("events-read");
     }
-    const transitions = await frame.evaluate(() => window.__sjTask21NativeTouch!.transitions);
-    for (const observation of observations) observation.transitions = transitions;
+    await Promise.all(send);
+    // Protocol ACKs alone do not prove the actual frame handled every gesture.
+    const handled = await frame.waitForFunction((count) =>
+      window.__sjTask21NativeTouch!.events.filter((event) =>
+        event.type === "touchend" || event.type === "touchcancel").length >= count, input.gestures.length);
+    await handled.dispose();
+    await frame.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    const events = await frame.evaluate(() => window.__sjTask21NativeTouch!.events);
+    const starts = events.flatMap((event, index) => event.type === "pointerdown" && event.pointerType === "touch" ? [index] : []);
+    if (starts.length !== input.gestures.length) throw new Error("Native input did not deliver one touch pointerdown per gesture");
+    for (const [index, gesture] of input.gestures.entries()) {
+      const segment = events.slice(starts[index]!, starts[index + 1] ?? events.length);
+      const down = segment[0]!;
+      const terminal = gesture.cancel ? "touchcancel" : "touchend";
+      const endings = segment.filter((event) => event.type === "touchend" || event.type === "touchcancel");
+      if (endings.length !== 1 || endings[0]!.type !== terminal) throw new Error(`Native gesture ${index} did not deliver its expected ${terminal}`);
+      const end = endings[0]!;
+      observations.push({
+        terminal, events: segment,
+        settlingBefore: down.settling, settlingAfter: end.settling,
+        openBefore: down.open, openAfter: end.open,
+      });
+    }
   } finally {
     try {
       await frame.evaluate(() => {
         const observer = window.__sjTask21NativeTouch;
         if (observer) for (const type of observer.types) window.removeEventListener(type, observer.listener, true);
-        observer?.observer.disconnect();
         delete window.__sjTask21NativeTouch;
       });
     } finally {

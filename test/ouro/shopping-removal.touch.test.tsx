@@ -168,10 +168,16 @@ for (let attempt = 1; attempt <= 12; attempt++) it(`native interruption ${attemp
   }); });
   await annotate(`T21_NATIVE_INTERRUPTION_PROBE ${JSON.stringify({ attempt, observed })}`);
   expect(observed).toHaveLength(2);
+  for (const observation of observed) {
+    expect(observation.events.every((event) => event.isTrusted)).toBe(true);
+    expect(observation.events.some((event) => event.type === "pointerdown" && event.pointerType === "touch" && event.targetInRow)).toBe(true);
+    expect(observation.events.some((event) => event.type === "touchend")).toBe(true);
+  }
   expect(observed[0]!.settlingAfter).toBe(true);
   expect(observed[1]!.settlingBefore).toBe(true);
   await expect.poll(() => fixture!.row().querySelector('[data-ouro="swipe-actions"]')?.hasAttribute("data-ouro-settling")).toBe(false);
   expect(new DOMMatrix(getComputedStyle(track()).transform).m41).toBe(0);
+  expect(checkbox().getAttribute("aria-checked")).toBe("false");
   expect(dialog()).toBeNull();
   expect(fixture!.writes).toEqual([]);
 });
