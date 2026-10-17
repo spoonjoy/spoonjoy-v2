@@ -87,6 +87,8 @@ describe("Cookbooks $id Route", () => {
   let testUserId: string;
   let otherUserId: string;
   let cookbookId: string;
+  let diagnosticPhase = "before-test";
+  let restoreDiagnosticConsole = () => {};
 
   beforeEach(async () => {
     vi.mocked(shareContent).mockClear();
@@ -111,11 +113,35 @@ describe("Cookbooks $id Route", () => {
       },
     });
     cookbookId = cookbook.id;
+    diagnosticPhase = "test-body";
+    const originalError = console.error;
+    console.error = (...args) => {
+      console.log("UI_TEARDOWN_DIAGNOSTIC", JSON.stringify({
+        test: expect.getState().currentTestName,
+        phase: diagnosticPhase,
+        mounted: document.body.childElementCount,
+        starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
+        stack: new Error("diagnostic call site").stack,
+      }));
+      originalError(...args);
+    };
+    restoreDiagnosticConsole = () => { console.error = originalError; };
   });
 
   afterEach(async () => {
-    await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
-    await cleanupDatabase();
+    console.log("UI_TEARDOWN_START", JSON.stringify({
+      test: expect.getState().currentTestName,
+      mounted: document.body.childElementCount,
+      starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
+    }));
+    try {
+      diagnosticPhase = "trigger-cleanup-before-database-helper";
+      await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
+      diagnosticPhase = "database-cleanup";
+      await cleanupDatabase();
+    } finally {
+      restoreDiagnosticConsole();
+    }
   });
 
   describe("loader", () => {
@@ -1941,7 +1967,7 @@ describe("Cookbooks $id Route", () => {
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAttribute("aria-invalid", "true");
       });
 
-      it("keeps the editor open with the new title when the database was briefly unavailable", async () => {
+      it.each(Array.from({ length: 64 }, (_, index) => index))("keeps the editor open with the new title when the database was briefly unavailable (passive sample %i)", async () => {
         renderRenameStub(() =>
           routerData(
             { intent: "updateTitle", error: "Spoonjoy couldn't save that just now. Please try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },

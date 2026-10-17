@@ -1,0 +1,47 @@
+name: UI teardown boundary diagnostic
+on:
+  push:
+    branches: [probe/ui-teardown-boundaries-20261017]
+permissions:
+  contents: read
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "22"
+      - run: corepack enable && corepack prepare pnpm@10.28.1 --activate
+      - name: Restore only after actual missing CI tool
+        run: |
+          if [ ! -x node_modules/.bin/vitest ]; then
+            printf '%s\n' 'Fresh CI checkout has no Vitest executable; restoring authoritative frozen dependencies.'
+            pnpm install --frozen-lockfile
+          fi
+      - run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
+      # Vitest's unchanged collector enforces console diagnostics. The outer text
+      # gate is not used for this private phase/caller JSON observation.
+      - name: Exercise unchanged cookbook refusal interactions with phase recording
+        run: |
+          set +e
+          pnpm exec vitest run test/routes/cookbooks-id.test.tsx --testNamePattern="keeps the editor open with the new title when the database was briefly unavailable" --reporter=verbose > "$RUNNER_TEMP/ui-teardown.log" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/ui-teardown.log"
+          printf '%s\n' "$result" > "$RUNNER_TEMP/ui-teardown-exit.txt"
+          grep -q 'UI_TEARDOWN_START {' "$RUNNER_TEMP/ui-teardown.log" || exit 3
+          exit "$result"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ui-teardown-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/ui-teardown.log
+            ${{ runner.temp }}/ui-teardown-exit.txt
+          if-no-files-found: error
