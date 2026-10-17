@@ -156,7 +156,7 @@ it("reading-direction RTL and reduced motion preserve the same confirmation/canc
   expect(getComputedStyle(fixture!.row()).direction).toBe("rtl");
 });
 
-it("a real second gesture interrupts a settling reveal without toggling or invoking an action", async () => {
+it("a real second gesture interrupts a settling reveal without toggling or invoking an action", async ({ annotate }) => {
   await mount();
   let observed!: Awaited<ReturnType<typeof commands.nativeShoppingInput>>;
   await act(async () => { observed = await commands.nativeShoppingInput({
@@ -166,11 +166,20 @@ it("a real second gesture interrupts a settling reveal without toggling or invok
       { points: [[.45, .5, 0], [.6, .5, 30], [.8, .5, 60]] },
     ],
   }); });
+  await annotate(`T21_NATIVE_INTERRUPTION ${JSON.stringify(observed)}`);
   expect(observed).toHaveLength(2);
+  for (const observation of observed) {
+    expect(observation.events.every((event) => event.isTrusted)).toBe(true);
+    expect(observation.events.some((event) => event.type === "pointerdown" && event.pointerType === "touch" && event.targetInRow)).toBe(true);
+    expect(observation.events.some((event) => event.type === "touchend")).toBe(true);
+  }
   expect(observed[0]!.settlingAfter).toBe(true);
   expect(observed[1]!.settlingBefore).toBe(true);
+  expect(observed[0]!.events.find((event) => event.type === "touchend")?.settling).toBe(true);
+  expect(observed[1]!.events.find((event) => event.type === "pointerdown")?.settling).toBe(true);
   await expect.poll(() => fixture!.row().querySelector('[data-ouro="swipe-actions"]')?.hasAttribute("data-ouro-settling")).toBe(false);
   expect(new DOMMatrix(getComputedStyle(track()).transform).m41).toBe(0);
+  expect(checkbox().getAttribute("aria-checked")).toBe("false");
   expect(dialog()).toBeNull();
   expect(fixture!.writes).toEqual([]);
 });
