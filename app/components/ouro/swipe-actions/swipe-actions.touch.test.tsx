@@ -136,21 +136,30 @@ const hits = (target: Element, x: number, y: number) => target.contains(document
 
 describe("SwipeActions on a phone", () => {
   it.each([
-    { stage: "original", durationMs: undefined },
-    { stage: "delayed-start-ack", durationMs: undefined },
-    { stage: "timed-delayed-start-ack", durationMs: 200 },
+    { stage: "timed-measured-row", durationMs: 200 },
+    { stage: "timed-measured-row-delayed-start-ack", durationMs: 200 },
   ])("native observation $stage: lets a vertical swipe that starts on a row scroll the page", async ({ durationMs }) => {
     const { rows } = await renderList();
     const row = rows[1]!;
     expect(getComputedStyle(row).touchAction).toBe("pan-y");
     let prevented = false;
+    let startedOnRow = false;
+    const start = (event: PointerEvent) => {
+      startedOnRow = event.isTrusted && event.pointerType === "touch" && row.contains(event.target as Node);
+    };
     const listener = (event: TouchEvent) => {
       if (event.defaultPrevented) prevented = true;
     };
+    addEventListener("pointerdown", start, true);
     addEventListener("touchmove", listener);
-    cleanups.push(() => removeEventListener("touchmove", listener));
+    cleanups.push(() => {
+      removeEventListener("pointerdown", start, true);
+      removeEventListener("touchmove", listener);
+    });
     const [x, y] = middle(row);
-    await commands.touchDrag({ from: [x, y + 60], to: [x + 12, y - 140], steps: 12, durationMs });
+    await commands.touchDrag({ from: [x, y], to: [x + 12, y - 200], steps: 12, durationMs });
+    expect(startedOnRow).toBe(true);
+    noMenu();
     await expect.poll(() => document.scrollingElement!.scrollTop).toBeGreaterThan(50);
     expect(prevented).toBe(false);
     expect(row.hasAttribute("data-open")).toBe(false);

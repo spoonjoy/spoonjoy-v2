@@ -58,6 +58,12 @@ jobs:
       - name: 🧪 Ouro UI browser tests and coverage
         run: pnpm run verify:clean:test:ouro
 
+      - name: 🎭 Ouro UI specs against the built Storybook
+        run: |
+          python3 -m http.server 6006 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-server.log" 2>&1 &
+          for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
+          OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro
+
       - name: Retain B2 native observations
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -65,12 +71,6 @@ jobs:
           name: b2-native-observations
           path: ${{ runner.temp }}/b2-native
           if-no-files-found: error
-
-      - name: 🎭 Ouro UI specs against the built Storybook
-        run: |
-          python3 -m http.server 6006 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-server.log" 2>&1 &
-          for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
-          OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro
 
       - name: Prepare Cloudflare Pages deploy directory
         if: github.ref == 'refs/heads/main'
