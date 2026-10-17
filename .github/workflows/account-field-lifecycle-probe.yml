@@ -36,6 +36,7 @@ jobs:
           cat "$RUNNER_TEMP/field-lifecycle.log"
           printf '%s\n' "$result" > "$RUNNER_TEMP/field-lifecycle-exit.txt"
           grep -q 'FIELD_ASSERTION_COMPLETE' "$RUNNER_TEMP/field-lifecycle.log" || exit 3
+          grep -q '"starting":\["This username is already taken"\]' "$RUNNER_TEMP/field-lifecycle.log" || exit 4
           exit "$result"
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
