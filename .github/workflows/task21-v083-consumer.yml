@@ -1,0 +1,92 @@
+name: Task21 real v0.8.3 CLI and strict consumer proof
+on:
+  push:
+    branches: [ouro/retire-catalyst-20261016]
+permissions:
+  contents: read
+concurrency:
+  group: task21-v083-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  binding:
+    runs-on: ubuntu-latest
+    outputs:
+      upgrade: ${{ steps.classify.outputs.upgrade }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "22"
+      - id: classify
+        run: node .github/task21-v083-cli.mjs classify
+  real-cli:
+    needs: binding
+    if: needs.binding.outputs.upgrade == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "22"
+      - run: corepack enable && corepack prepare pnpm@10.28.1 --activate
+      - name: Restore only after actual missing CI tool
+        run: |
+          if [ ! -x node_modules/.bin/vitest ]; then
+            printf '%s\n' 'Fresh CI checkout has no Vitest executable; restoring authoritative frozen dependencies.'
+            pnpm install --frozen-lockfile
+          fi
+      - name: Execute real normal pinned CLI and bind its generated diff
+        run: node .github/task21-v083-cli.mjs upgrade
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: task21-v083-real-cli-${{ github.run_id }}
+          path: ${{ runner.temp }}/task21-v083-cli/
+          if-no-files-found: error
+  strict:
+    needs: binding
+    if: needs.binding.outputs.upgrade == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+      VITEST_DB_WORKERS: "2"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "22"
+      - run: corepack enable && corepack prepare pnpm@10.28.1 --activate
+      - name: Restore only after actual missing CI tool
+        run: |
+          if [ ! -x node_modules/.bin/vitest ]; then
+            printf '%s\n' 'Fresh CI checkout has no Vitest executable; restoring authoritative frozen dependencies.'
+            pnpm install --frozen-lockfile
+          fi
+      - run: node .github/task21-v083-cli.mjs binding
+      - name: Prepare unit-only Prisma template
+        run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
+      - run: pnpm run verify:clean:typecheck
+      - run: pnpm run check:journeys
+      - name: Full standard strict units and all four 100% coverage metrics
+        run: pnpm run verify:clean:test:coverage
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: task21-v083-strict-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/task21-v083-strict/
+            coverage/coverage-final.json
+          if-no-files-found: error
