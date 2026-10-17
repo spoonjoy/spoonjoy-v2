@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { expectConsoleError } from "../warning-policy";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { data } from "react-router";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub, requiredLabel } from "../utils";
 import { db } from "~/lib/db.server";
@@ -101,6 +101,7 @@ describe("Recipes $id Edit Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

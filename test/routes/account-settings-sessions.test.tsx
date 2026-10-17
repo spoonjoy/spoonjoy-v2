@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -76,6 +76,7 @@ describe("Account settings - revocable sessions", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

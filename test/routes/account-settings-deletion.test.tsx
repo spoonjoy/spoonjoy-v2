@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, act, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
 import userEvent from "@testing-library/user-event";
@@ -72,6 +72,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  cleanup();
   d1.close();
   await cleanupDatabase();
 });

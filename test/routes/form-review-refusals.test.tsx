@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Form as RouterForm, data } from "react-router";
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
@@ -38,7 +38,10 @@ describe("account password accepted answers", () => {
       notifications: { pushSubscribed: false },
     };
   });
-  afterEach(cleanupDatabase);
+  afterEach(async () => {
+    cleanup();
+    await cleanupDatabase();
+  });
 
   async function configure(hasPassword: boolean) {
     loaderData.user.hasPassword = hasPassword;

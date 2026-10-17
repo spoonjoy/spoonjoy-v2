@@ -111,6 +111,7 @@ describe("agent connect route", () => {
   });
 
   afterEach(async () => {
+    cleanupDom();
     await cleanupDatabase();
   });
 

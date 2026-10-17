@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { createTestRoutesStub, requiredLabel } from "../utils";
@@ -66,6 +66,7 @@ describe("Shopping List Routes", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

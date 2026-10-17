@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useNavigate } from "react-router";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
@@ -30,6 +30,7 @@ describe("Search Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

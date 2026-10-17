@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { db } from "~/lib/db.server";
 import { createTestRoutesStub } from "../utils";
 import { cleanupDatabase } from "../helpers/cleanup";
@@ -28,6 +28,7 @@ describe("Chefs drawer route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

@@ -5,7 +5,7 @@
 // save needs no proof.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { act, render, screen, within } from "@testing-library/react";
+import { cleanup, act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -70,6 +70,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  cleanup();
   await cleanupDatabase();
 });
 

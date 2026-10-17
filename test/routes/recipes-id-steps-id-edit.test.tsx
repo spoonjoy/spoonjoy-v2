@@ -1,7 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { createTestRoutesStub, findShownAlert, getShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/recipes.$id.steps.$stepId.edit";
@@ -78,6 +78,7 @@ describe("Recipes $id Steps $stepId Edit Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { cleanupDatabase } from "../helpers/cleanup";
 import {
   INGREDIENT_LOOKUP_BATCH_SIZE,
@@ -30,6 +30,7 @@ describe("My Recipes drawer route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

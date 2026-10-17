@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { createTestRoutesStub, findShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
 import { action as newRecipeAction } from "~/routes/recipes.new";
@@ -51,6 +51,7 @@ describe("E2E: Step Deletion Protection", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createTestRoutesStub, getShownAlert, queryShownAlert } from '../utils'
 import { db } from '~/lib/db.server'
@@ -77,6 +77,7 @@ describe('Step Edit Ingredient Integration', () => {
   })
 
   afterEach(async () => {
+    cleanup()
     await cleanupDatabase()
     localStorageMock.clear()
   })

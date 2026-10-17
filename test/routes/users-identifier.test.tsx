@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { withTimeZone } from "../helpers/timezone";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
@@ -38,6 +38,7 @@ describe("Users $identifier Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 

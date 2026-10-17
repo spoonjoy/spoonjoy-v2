@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { data as routerData, Outlet, redirect, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
@@ -150,6 +150,7 @@ describe("Recipes $id Route", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     window.history.replaceState(null, "", "/");
     await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${CUTOVER_TRIGGER_NAME}"`);
     await cleanupDatabase();

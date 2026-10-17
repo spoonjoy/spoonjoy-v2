@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Request as UndiciRequest } from "undici";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -66,6 +66,7 @@ describe("Users $identifier route — recent spoons section", () => {
   });
 
   afterEach(async () => {
+    cleanup();
     await cleanupDatabase();
   });
 
