@@ -7,14 +7,9 @@ permissions:
 jobs:
   lifecycle:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        cleanup-first: ["0", "1"]
+    timeout-minutes: 35
     env:
       PRISMA_HIDE_UPDATE_MESSAGE: "1"
-      FIELD_CLEANUP_FIRST: ${{ matrix.cleanup-first }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -30,25 +25,18 @@ jobs:
             pnpm install --frozen-lockfile
           fi
       - run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
-      - name: Run unchanged field-error assertions with teardown instrumentation
+      - name: Run original affected-test selection with passive lifecycle instrumentation
         run: |
           set +e
-          pnpm exec vitest run test/routes/account-settings.test.tsx --testNamePattern="field error display in forms" --reporter=verbose > "$RUNNER_TEMP/field-lifecycle.log" 2>&1
+          SPOONJOY_CHANGED_SINCE=ca829f3cbfeb4efa49c84828c4f2d271a24bcd78 pnpm run verify:clean:test:changed > "$RUNNER_TEMP/field-lifecycle.log" 2>&1
           result=$?
           cat "$RUNNER_TEMP/field-lifecycle.log"
           printf '%s\n' "$result" > "$RUNNER_TEMP/field-lifecycle-exit.txt"
-          if [ "$FIELD_CLEANUP_FIRST" = "0" ]; then
-            test "$result" -ne 0
-            grep -q 'FIELD_LIFECYCLE_DIAGNOSTIC' "$RUNNER_TEMP/field-lifecycle.log"
-            grep -q 'useTransitionStatus' "$RUNNER_TEMP/field-lifecycle.log"
-          else
-            test "$result" -eq 0
-            ! grep -q 'FIELD_LIFECYCLE_DIAGNOSTIC' "$RUNNER_TEMP/field-lifecycle.log"
-          fi
+          exit "$result"
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: field-lifecycle-${{ matrix.cleanup-first }}-${{ github.run_id }}
+          name: field-lifecycle-passive-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/field-lifecycle.log
             ${{ runner.temp }}/field-lifecycle-exit.txt

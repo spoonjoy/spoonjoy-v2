@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -22,6 +22,8 @@ describe("Account Settings Route", () => {
   let testUserId: string;
   let testUserEmail: string;
   let testUsername: string;
+  let diagnosticPhase = "before-test";
+  let restoreDiagnosticConsole = () => {};
 
   it("returns the account settings document title", () => {
     expect(meta({} as any)).toEqual([
@@ -36,32 +38,33 @@ describe("Account Settings Route", () => {
     testUsername = faker.internet.username() + "_" + faker.string.alphanumeric(8);
     const user = await createUser(db, testUserEmail, testUsername, "testPassword123");
     testUserId = user.id;
-  });
-
-  afterEach(async () => {
-    let phase = "before-database-cleanup";
+    diagnosticPhase = "test-body";
     const originalError = console.error;
     console.error = (...args) => {
       console.log("FIELD_LIFECYCLE_DIAGNOSTIC", JSON.stringify({
-        phase,
+        test: expect.getState().currentTestName,
+        phase: diagnosticPhase,
+        mounted: document.body.childElementCount,
+        starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
         stack: new Error("diagnostic call site").stack,
       }));
       originalError(...args);
     };
+    restoreDiagnosticConsole = () => { console.error = originalError; };
+  });
+
+  afterEach(async () => {
+    diagnosticPhase = "before-database-cleanup";
     try {
       console.log("FIELD_LIFECYCLE_START", JSON.stringify({
         test: expect.getState().currentTestName,
-        cleanupFirst: process.env.FIELD_CLEANUP_FIRST === "1",
+        mounted: document.body.childElementCount,
         starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
       }));
-      if (process.env.FIELD_CLEANUP_FIRST === "1") cleanup();
-      phase = "database-cleanup";
+      diagnosticPhase = "database-cleanup";
       await cleanupDatabase();
-      phase = "after-database-cleanup-real-frame";
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      console.log("FIELD_LIFECYCLE_END", JSON.stringify({ phase }));
     } finally {
-      console.error = originalError;
+      restoreDiagnosticConsole();
     }
   });
 
@@ -5216,7 +5219,13 @@ describe("Account Settings Route", () => {
         await user.click(saveButton);
 
         // Error should be displayed inline for email field
+        diagnosticPhase = "email-find-error";
         expect(await screen.findByText(/this email is already taken/i)).toBeInTheDocument();
+        diagnosticPhase = "email-assertion-complete";
+        console.log("FIELD_ASSERTION_COMPLETE", JSON.stringify({
+          phase: diagnosticPhase,
+          starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
+        }));
       });
 
       it("should display username field error when editing user info with validation error", async () => {
@@ -5267,7 +5276,13 @@ describe("Account Settings Route", () => {
         await user.click(saveButton);
 
         // Error should be displayed inline for username field
+        diagnosticPhase = "username-find-error";
         expect(await screen.findByText(/this username is already taken/i)).toBeInTheDocument();
+        diagnosticPhase = "username-assertion-complete";
+        console.log("FIELD_ASSERTION_COMPLETE", JSON.stringify({
+          phase: diagnosticPhase,
+          starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
+        }));
       });
 
       it("should display newPassword field error in change password form", async () => {
