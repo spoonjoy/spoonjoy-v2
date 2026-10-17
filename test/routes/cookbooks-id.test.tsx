@@ -1973,7 +1973,7 @@ describe("Cookbooks $id Route", () => {
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveAttribute("aria-invalid", "true");
       });
 
-      it.each(Array.from({ length: 64 }, (_, index) => index))("keeps the editor open with the new title when the database was briefly unavailable (passive sample %i)", async () => {
+      it.each(Array.from({ length: 512 }, (_, index) => index))("keeps the editor open with the new title when the database was briefly unavailable (passive sample %i)", async () => {
         renderRenameStub(() =>
           routerData(
             { intent: "updateTitle", error: "Spoonjoy couldn't save that just now. Please try again in a moment.", errorCode: "temporarily_unavailable", retryable: true },

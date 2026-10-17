@@ -49,14 +49,14 @@ jobs:
           const before = records("UI_TEARDOWN_START");
           const after = records("UI_TEARDOWN_UNMOUNTED");
           const pending = before.filter((record) => record.starting.length > 0);
-          assert.equal(before.length, 123);
+          assert.equal(before.length, 571);
           assert.equal(after.length, before.length);
           assert.ok(pending.length > 0, "No pending entrance observed; cancellation control is inconclusive");
           assert.ok(after.every((record) => record.mounted === 0 && record.starting.length === 0));
           assert.deepEqual(after.map((record) => record.test), before.map((record) => record.test));
           assert.equal(records("UI_TEARDOWN_DIAGNOSTIC").length, 0);
           assert.ok(!log.includes("not wrapped in act"));
-          assert.match(log, /Tests\s+2 failed \| 11433 passed \(11435\)/);
+          assert.match(log, /Tests\s+2 failed \| 11881 passed \(11883\)/);
           console.log("UI_TEARDOWN_CANCELLATION_PROOF", JSON.stringify({ tests: before.length, pending: pending.length, unmountedBeforeResourceCleanup: after.length, diagnostics: 0, expectedPrivateProbePolicyFailures: 2 }));
           JS
       - if: always()
