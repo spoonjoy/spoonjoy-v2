@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
@@ -61,6 +61,8 @@ describe("Account Settings Route", () => {
         mounted: document.body.childElementCount,
         starting: [...document.querySelectorAll("[data-starting-style]")].map((node) => node.textContent),
       }));
+      cleanup();
+      console.log("FIELD_UI_CLEANUP", JSON.stringify({ mounted: document.body.childElementCount }));
       diagnosticPhase = "database-cleanup";
       await cleanupDatabase();
     } finally {
