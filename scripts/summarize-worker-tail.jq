@@ -170,7 +170,7 @@ def collapse_segment:
 def path_pattern: request_path | split("/") | map(if . == "" then . else collapse_segment end) | join("/");
 
 # Nearest-rank percentile over the numeric values present; null when there are none.
-def percentile($p): if length == 0 then null else sort | .[((length - 1) * $p | floor)] end;
+def percentile($p): if length == 0 then null else sort | .[((length * $p | ceil) - 1)] end;
 
 def timing($field): [.[] | .[$field] | select(type == "number")]
   | { p50: percentile(0.5), p95: percentile(0.95), max: (if length == 0 then null else max end) };
