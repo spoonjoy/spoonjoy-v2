@@ -289,8 +289,8 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath[0]).toEqual({
       path: "/recipes/:id.data",
       count: 5,
-      wallTime: { p50: 300, p95: 400, max: 3840 },
-      cpuTime: { p50: 22, p95: 23, max: 27 },
+      wallTime: { p50: 300, p95: 3840, max: 3840 },
+      cpuTime: { p50: 22, p95: 27, max: 27 },
     });
     const paths = summary.byPath.map((entry: { path: string }) => entry.path);
     expect(paths).toEqual(expect.arrayContaining([
@@ -331,10 +331,41 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.budget).toEqual({
       cpuTimeP95Ms: 10,
       overBudget: [
-        { path: "/recipes/:id.data", count: 3, cpuTime: { p50: 43, p95: 43, max: 87 } },
-        { path: "/search.data", count: 4, cpuTime: { p50: 9, p95: 12, max: 40 } },
+        { path: "/recipes/:id.data", count: 3, cpuTime: { p50: 43, p95: 87, max: 87 } },
+        { path: "/search.data", count: 4, cpuTime: { p50: 9, p95: 40, max: 40 } },
       ],
     });
+  });
+
+  it.each([
+    { count: 1, p50: 1, p95: 1 },
+    { count: 2, p50: 1, p95: 2 },
+    { count: 3, p50: 2, p95: 3 },
+    { count: 5, p50: 3, p95: 5 },
+    { count: 20, p50: 10, p95: 19 },
+    { count: 21, p50: 11, p95: 20 },
+  ])("uses nearest rank for $count numeric timing samples", ({ count, p50, p95 }) => {
+    const events: TailEvent[] = Array.from({ length: count }, (_, index) => ({
+      outcome: "ok",
+      cpuTime: count - index,
+      wallTime: count - index,
+      event: { request: { url: "https://qa.example/health", method: "GET" }, response: { status: 200 } },
+    }));
+    events.push({
+      outcome: "ok",
+      cpuTime: null,
+      wallTime: "unknown",
+      event: { request: { url: "https://qa.example/health", method: "GET" }, response: { status: 200 } },
+    });
+
+    const { summary } = summarize(events);
+
+    expect(summary.byPath).toEqual([{
+      path: "/health",
+      count: count + 1,
+      cpuTime: { p50, p95, max: count },
+      wallTime: { p50, p95, max: count },
+    }]);
   });
 
   it("lists every 5xx response, including ones the Worker returned normally, so an app-level 500 is on record", () => {
