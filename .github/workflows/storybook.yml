@@ -62,7 +62,15 @@ jobs:
         run: |
           python3 -m http.server 6006 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-server.log" 2>&1 &
           for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
-          OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro
+          OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro e2e/ouro/pagination.spec.ts --project=webkit --repeat-each=12
+
+      - name: Retain Axe preload network observations
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: axe-preload-network-observations
+          path: ${{ runner.temp }}/axe-network
+          if-no-files-found: error
 
       - name: Prepare Cloudflare Pages deploy directory
         if: github.ref == 'refs/heads/main'
