@@ -513,6 +513,7 @@ export interface TouchDragOptions {
  * about 10 seconds to throw, and two failing touches can outlast Vitest's default 15 second
  * test timeout in browser mode, which then reports the timeout instead of the kit's message.
  */
+let b2GestureSequence = 0;
 export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from, to, steps, durationMs }) => {
   const { page } = ctx;
   if (ctx.provider.name !== "playwright" || page.context().browser()?.browserType().name() !== "chromium") {
@@ -525,6 +526,7 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
   }
   const start = Date.now() / 1000;
   const probe = steps === 12 && to[0] - from[0] === 12 && to[1] - from[1] === -200;
+  const simulatedAckDelayMs = probe && ++b2GestureSequence > 1 ? 700 : 0;
   const packets: unknown[] = [];
   const touch = (type: "touchStart" | "touchMove" | "touchEnd", [x, y]: [number, number], t: number) => {
     const payload = {
@@ -532,10 +534,15 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
       touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
       ...(durationMs === undefined ? {} : { timestamp: start + (durationMs * t) / 1000 }),
   };
-    const packet = { payload, sentAt: performance.now(), acknowledgedAt: 0 };
+    const packet = { payload, sentAt: performance.now(), acknowledgedAt: 0, deliveredAt: 0 };
     if (probe) packets.push(packet);
     const delivery = session.send("Input.dispatchTouchEvent", payload);
-    return probe ? delivery.then((result) => { packet.acknowledgedAt = performance.now(); return result; }) : delivery;
+    return probe ? delivery.then(async (result) => {
+      packet.acknowledgedAt = performance.now();
+      if (type === "touchStart" && simulatedAckDelayMs) await new Promise((resolve) => setTimeout(resolve, simulatedAckDelayMs));
+      packet.deliveredAt = performance.now();
+      return result;
+    }) : delivery;
     };
   await releaseFinger("touchDrag", page, session);
   try {
@@ -560,10 +567,11 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
         url: frame.url(),
         observation: await frame.evaluate(`(() => {
           const observer = window.__b2Native;
-          return observer ? { ...observer.data, after: observer.metrics() } : null;
+          return observer ? { ...observer.data, after: observer.metrics(),
+            menus: [...document.querySelectorAll('[role="menu"]')].map(menu => menu.textContent) } : null;
         })()`).catch((error: unknown) => ({ error: String(error) })),
       })));
-      await saveB2({ from, to, steps, durationMs: durationMs ?? null, packets, frames });
+      await saveB2({ from, to, steps, durationMs: durationMs ?? null, simulatedAckDelayMs, packets, frames });
     }
   }
 };

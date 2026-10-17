@@ -38,7 +38,7 @@ export const B2_OBSERVER = `
       const from = [expected.x - 12, expected.y + 200];
       const data = { from, to: [expected.x, expected.y],
         installedAt: performance.now(), events: [], snapshots: [] };
-      const types = ["pointerdown", "pointermove", "pointerup", "pointercancel",
+      const types = ["pointerdown", "pointermove", "pointerup", "pointercancel", "contextmenu",
         "touchstart", "touchmove", "touchend", "touchcancel", "scroll"];
       const listener = (event) => {
         if (data.events.length >= 160) return;
@@ -51,13 +51,9 @@ export const B2_OBSERVER = `
         data.events.push(entry);
         queueMicrotask(() => { entry.prevented = event.defaultPrevented; });
         if (event.type === "touchstart") {
-          const touch = event.changedTouches[0];
-          const hit = document.elementFromPoint(touch.clientX, touch.clientY);
-          data.hit = label(hit);
-          data.hitInRow = row.contains(hit);
           data.targetRow = label(event.target.closest('[data-ouro="swipe-actions"]'));
         }
-        if (event.type === "touchstart" || event.type === "touchend" || event.type === "touchcancel")
+        if (event.type === "touchend" || event.type === "touchcancel")
           data.snapshots.push({ type: event.type, ...metrics() });
       };
       for (const type of types) view.addEventListener(type, listener, { capture: true, passive: true });

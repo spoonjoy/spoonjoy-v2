@@ -135,7 +135,11 @@ function noMenu() {
 const hits = (target: Element, x: number, y: number) => target.contains(document.elementFromPoint(x, y));
 
 describe("SwipeActions on a phone", () => {
-  it.each(Array.from({ length: 12 }, (_, index) => index + 1))("native observation %i: lets a vertical swipe that starts on a row scroll the page", async () => {
+  it.each([
+    { stage: "original", durationMs: undefined },
+    { stage: "delayed-start-ack", durationMs: undefined },
+    { stage: "timed-delayed-start-ack", durationMs: 200 },
+  ])("native observation $stage: lets a vertical swipe that starts on a row scroll the page", async ({ durationMs }) => {
     const { rows } = await renderList();
     const row = rows[1]!;
     expect(getComputedStyle(row).touchAction).toBe("pan-y");
@@ -146,7 +150,7 @@ describe("SwipeActions on a phone", () => {
     addEventListener("touchmove", listener);
     cleanups.push(() => removeEventListener("touchmove", listener));
     const [x, y] = middle(row);
-    await commands.touchDrag({ from: [x, y + 60], to: [x + 12, y - 140], steps: 12 });
+    await commands.touchDrag({ from: [x, y + 60], to: [x + 12, y - 140], steps: 12, durationMs });
     await expect.poll(() => document.scrollingElement!.scrollTop).toBeGreaterThan(50);
     expect(prevented).toBe(false);
     expect(row.hasAttribute("data-open")).toBe(false);
