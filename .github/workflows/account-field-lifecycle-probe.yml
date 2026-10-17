@@ -1,4 +1,4 @@
-name: Account field lifecycle paired diagnostic
+name: Account field lifecycle diagnostic
 on:
   push:
     branches: [probe/account-field-lifecycle-20261017]
@@ -26,10 +26,13 @@ jobs:
             pnpm install --frozen-lockfile
           fi
       - run: DATABASE_URL=file:./test.db pnpm exec prisma db push --skip-generate
+      # Keep the unchanged Vitest warning collector; the outer text gate would reject
+      # diagnostic JSON that quotes an existing test name containing "warning".
       - name: Run original affected-test selection with passive lifecycle instrumentation
         run: |
           set +e
-          SPOONJOY_CHANGED_SINCE=ca829f3cbfeb4efa49c84828c4f2d271a24bcd78 pnpm run verify:clean:test:changed > "$RUNNER_TEMP/field-lifecycle.log" 2>&1
+          pnpm run api:playground:generate
+          SPOONJOY_CHANGED_SINCE=ca829f3cbfeb4efa49c84828c4f2d271a24bcd78 node scripts/test-changed.mjs > "$RUNNER_TEMP/field-lifecycle.log" 2>&1
           result=$?
           cat "$RUNNER_TEMP/field-lifecycle.log"
           printf '%s\n' "$result" > "$RUNNER_TEMP/field-lifecycle-exit.txt"
