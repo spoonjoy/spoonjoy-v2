@@ -156,7 +156,7 @@ it("reading-direction RTL and reduced motion preserve the same confirmation/canc
   expect(getComputedStyle(fixture!.row()).direction).toBe("rtl");
 });
 
-it("a real second gesture interrupts a settling reveal without toggling or invoking an action", async () => {
+for (let attempt = 1; attempt <= 12; attempt++) it(`native interruption ${attempt}: a real second gesture interrupts a settling reveal without toggling or invoking an action`, async ({ annotate }) => {
   await mount();
   let observed!: Awaited<ReturnType<typeof commands.nativeShoppingInput>>;
   await act(async () => { observed = await commands.nativeShoppingInput({
@@ -166,6 +166,7 @@ it("a real second gesture interrupts a settling reveal without toggling or invok
       { points: [[.45, .5, 0], [.6, .5, 30], [.8, .5, 60]] },
     ],
   }); });
+  await annotate(`T21_NATIVE_INTERRUPTION_PROBE ${JSON.stringify({ attempt, observed })}`);
   expect(observed).toHaveLength(2);
   expect(observed[0]!.settlingAfter).toBe(true);
   expect(observed[1]!.settlingBefore).toBe(true);
