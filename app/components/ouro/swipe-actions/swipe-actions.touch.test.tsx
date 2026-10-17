@@ -140,13 +140,24 @@ describe("SwipeActions on a phone", () => {
     const row = rows[1]!;
     expect(getComputedStyle(row).touchAction).toBe("pan-y");
     let prevented = false;
+    let startedOnRow = false;
+    const start = (event: PointerEvent) => {
+      startedOnRow = event.isTrusted && event.pointerType === "touch" && row.contains(event.target as Node);
+    };
     const listener = (event: TouchEvent) => {
       if (event.defaultPrevented) prevented = true;
     };
+    addEventListener("pointerdown", start, true);
     addEventListener("touchmove", listener);
-    cleanups.push(() => removeEventListener("touchmove", listener));
+    cleanups.push(() => {
+      removeEventListener("pointerdown", start, true);
+      removeEventListener("touchmove", listener);
+    });
     const [x, y] = middle(row);
-    await commands.touchDrag({ from: [x, y + 60], to: [x + 12, y - 140], steps: 12 });
+    // A serial protocol round trip must not turn the start of this swipe into a long press.
+    await commands.touchDrag({ from: [x, y], to: [x + 12, y - 200], steps: 12, durationMs: 200 });
+    expect(startedOnRow).toBe(true);
+    noMenu();
     await expect.poll(() => document.scrollingElement!.scrollTop).toBeGreaterThan(50);
     expect(prevented).toBe(false);
     expect(row.hasAttribute("data-open")).toBe(false);
