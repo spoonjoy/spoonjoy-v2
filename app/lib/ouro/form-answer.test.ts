@@ -23,11 +23,14 @@ describe("formErrors answer value", () => {
     list.push("Later.");
     messages.email = ["Replacement."];
     expect(value.email).toEqual(["Taken.", node]);
-    expect((value.email as unknown[])[1]).toBe(node);
+    expect((value.email as readonly unknown[])[1]).toBe(node);
     expect(Object.isFrozen(value)).toBe(true);
     expect(Object.isFrozen(value.email)).toBe(true);
     expect(Object.isFrozen(messages)).toBe(false);
     expect(Object.isFrozen(list)).toBe(false);
+    expect(() => {
+      if (Array.isArray(value.email)) value.email.push("Guard bypass.");
+    }).toThrow(TypeError);
   });
 
   it("enumerates and serializes only selected messages, never a cyclic private answer or its getter", () => {

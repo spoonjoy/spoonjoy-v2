@@ -12,7 +12,7 @@ import {
   useField,
   useFieldOwner,
   useFormErrors,
-  type ErrorMessages,
+  type ReadonlyErrorMessages,
 } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { FieldDescription, FieldError, FieldLabel } from "~/components/ouro/field/field-parts";
@@ -40,7 +40,7 @@ export interface FieldProps {
    * An empty string or array means valid. It only
    * shows: it never blocks the next submit of the form around it.
    */
-  error?: ErrorMessages | undefined;
+  error?: ReadonlyErrorMessages | undefined;
   /** The control must be filled: it gets `required` and `aria-required`, and the label a marker. */
   required?: boolean | undefined;
   /** Disables the control and fades the field. */

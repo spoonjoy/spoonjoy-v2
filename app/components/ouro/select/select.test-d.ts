@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Select, type SelectProps } from "~/components/ouro/select/select";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<SelectProps["error"]>>();
 import { SelectGroup, SelectItem } from "~/components/ouro/select/select-parts";
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`

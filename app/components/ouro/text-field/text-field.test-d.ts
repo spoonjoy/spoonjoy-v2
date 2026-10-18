@@ -1,6 +1,9 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { TextField, type TextFieldProps } from "~/components/ouro/text-field/text-field";
+import { formErrors } from "~/lib/ouro/form-answer";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<TextFieldProps["error"]>>();
+createElement(TextField, { label: "Email", error: formErrors({}, { email: ["Taken."] }).email ?? undefined });
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.

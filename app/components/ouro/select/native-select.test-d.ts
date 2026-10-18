@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { NativeSelect, type NativeSelectProps } from "~/components/ouro/select/native-select";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<NativeSelectProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.

@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Switch, type SwitchProps } from "~/components/ouro/switch/switch";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<SwitchProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.

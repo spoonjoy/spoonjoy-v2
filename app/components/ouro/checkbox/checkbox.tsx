@@ -6,7 +6,7 @@ import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
 import { TouchTarget } from "~/lib/ouro/touch-target";
-import { FieldOwnerContext, useField, type ErrorMessages } from "~/lib/ouro/use-field";
+import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { boxClass, dashClass, indicatorClass, tickClass } from "~/components/ouro/checkbox/checkbox-styles";
 
@@ -26,7 +26,7 @@ export interface CheckboxProps {
    * gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid. In a `CheckboxGroup`, pass it
    * to the group.
    */
-  error?: ErrorMessages | undefined;
+  error?: ReadonlyErrorMessages | undefined;
   /**
    * The box must be checked to submit the form (accepting terms): it gets `required` and
    * `aria-required`, and the label a marker. In a `CheckboxGroup`, pass it to the group.
