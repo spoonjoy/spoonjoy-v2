@@ -15,10 +15,12 @@ import {
   isCliEntry,
   isControlStateClass,
   isScannedFile,
+  isThirdPartyControlModule,
   listSourceFiles,
   main,
   runCliIfEntry,
   serializeBaseline,
+  THIRD_PARTY_CONTROL_PACKAGES,
 } from "../../scripts/hx-source-rules.mjs";
 import { expectConsoleError } from "../warning-policy";
 
@@ -43,6 +45,7 @@ describe("findOffendersInSource: each category", () => {
       "plain-element-handler",
       "data-ouro-attr",
       "control-state-style",
+      "third-party-control",
     ]);
   });
 
@@ -256,6 +259,153 @@ describe("findOffendersInSource: each category", () => {
         }`;
       expect(scan(source)).toEqual([]);
     });
+  });
+});
+
+describe("third-party-control", () => {
+  it("keeps the library list in one constant", () => {
+    expect(THIRD_PARTY_CONTROL_PACKAGES).toEqual([
+      "@headlessui/react",
+      "@radix-ui/*",
+      "@base-ui-components/*",
+      "@base-ui/*",
+      "react-aria-components",
+      "react-aria",
+      "@ariakit/*",
+      "@mui/*",
+      "@chakra-ui/*",
+      "vaul",
+      "cmdk",
+      "sonner",
+    ]);
+  });
+
+  it.each([
+    "@headlessui/react",
+    "@radix-ui/react-dialog",
+    "@base-ui-components/react",
+    "@base-ui/react/button",
+    "react-aria-components",
+    "react-aria",
+    "react-aria/i18n",
+    "@ariakit/react",
+    "@mui/material/Button",
+    "@chakra-ui/react",
+    "vaul",
+    "cmdk",
+    "sonner",
+  ])("treats %s as a UI-control library", (specifier) => {
+    expect(isThirdPartyControlModule(specifier)).toBe(true);
+  });
+
+  it.each([
+    "@headlessui/vue",
+    "@radix-ui",
+    "@muix/grid",
+    "react-aria-extras",
+    "sonnerish",
+    "react-router",
+    "lucide-react",
+    "~/components/ouro/button/button",
+  ])("does not treat %s as a UI-control library", (specifier) => {
+    expect(isThirdPartyControlModule(specifier)).toBe(false);
+  });
+
+  it("finds a named import, tagged with its package and imported name", () => {
+    const source = `
+      import { Dialog, DialogPanel } from "@headlessui/react";
+      export function Sheet() { return <Dialog><DialogPanel aria-label="Sheet" /></Dialog>; }`;
+    expect(scan(source)).toEqual([
+      {
+        category: "third-party-control",
+        fingerprint: "app/routes/fixture.tsx::Sheet::third-party-control::@headlessui/react.Dialog::",
+        file: "app/routes/fixture.tsx",
+        line: 3,
+      },
+      {
+        category: "third-party-control",
+        fingerprint: "app/routes/fixture.tsx::Sheet::third-party-control::@headlessui/react.DialogPanel::aria-label=Sheet",
+        file: "app/routes/fixture.tsx",
+        line: 3,
+      },
+    ]);
+  });
+
+  it("finds a namespace import, by its members", () => {
+    const source = `
+      import * as Headless from "@headlessui/react";
+      import * as Dialog from "@radix-ui/react-dialog";
+      export function Menu() {
+        return <>
+          <Headless.Button type="button" />
+          <Headless.Menu.Items />
+          <Dialog.Root />
+          <Headless />
+        </>;
+      }`;
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::Menu::third-party-control::@headlessui/react.Button::type=button",
+      "app/routes/fixture.tsx::Menu::third-party-control::@headlessui/react.Menu.Items::",
+      "app/routes/fixture.tsx::Menu::third-party-control::@radix-ui/react-dialog.Root::",
+    ]);
+  });
+
+  it("finds aliased imports: renamed, default, and same-file aliases", () => {
+    const source = `
+      import { Drawer as Sheet } from "vaul";
+      import Toaster from "sonner";
+      import { Menu } from "@base-ui/react/menu";
+      import * as Aria from "react-aria-components";
+      const Trigger = Menu.Trigger;
+      const Again = Trigger;
+      const Field = Aria . TextField;
+      const Loop = Cycle;
+      const Cycle = Loop;
+      const Plain = Other.Thing;
+      export function Panel() {
+        return <>
+          <Sheet.Content />
+          <Toaster />
+          <Again />
+          <Field name="title" />
+          <Loop />
+          <Plain />
+        </>;
+      }`;
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::Panel::third-party-control::vaul.Drawer.Content::",
+      "app/routes/fixture.tsx::Panel::third-party-control::sonner.default::",
+      "app/routes/fixture.tsx::Panel::third-party-control::@base-ui/react/menu.Menu.Trigger::",
+      "app/routes/fixture.tsx::Panel::third-party-control::react-aria-components.TextField::name=title",
+    ]);
+  });
+
+  it("does not count type-only imports, hooks or HX components", () => {
+    const source = `
+      import type { Button } from "@headlessui/react";
+      import type * as Radix from "@radix-ui/react-dialog";
+      import { type Menu, useClose } from "@headlessui/react";
+      import "@radix-ui/themes/styles.css";
+      import { Button as HxButton } from "~/components/ouro/button/button";
+      import { Checkbox } from "~/components/ouro/checkbox/checkbox";
+      export function Actions() {
+        const close = useClose();
+        return <>
+          <Button />
+          <Menu />
+          <Radix.Root />
+          <HxButton type="button" onClick={close}>Save</HxButton>
+          <Checkbox name="done" />
+        </>;
+      }`;
+    expect(scan(source)).toEqual([]);
+  });
+
+  it("counts a third-party control alongside its other offences", () => {
+    const source = `
+      import * as Headless from "@headlessui/react";
+      export function Theme() { return <Headless.MenuItems className="focus:outline-none" />; }`;
+    expect(categories(source)).toEqual(["third-party-control", "control-state-style"]);
   });
 });
 

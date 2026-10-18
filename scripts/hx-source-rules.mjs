@@ -14,6 +14,10 @@
 // - contenteditable, positive-tabindex, interactive-role (any element, HX calls included).
 // - plain-element-handler: click, key, pointer or touch handlers on a non-control intrinsic element.
 // - data-ouro-attr: any data-ouro* attribute app code writes (JSX, props objects, setAttribute).
+// - third-party-control: a JSX element from a UI-control library other than HX
+//   (THIRD_PARTY_CONTROL_PACKAGES), by named, default or namespace import or a same-file alias of
+//   one; app code reaches those libraries only through HX. Type-only imports and hooks are not
+//   elements, so they never count.
 // - control-state-style: class utilities for focus, press, selection, open/close or gesture state
 //   (focus:, active:, aria-pressed:, data-[state=open]:, group-data-[checked]: ...) in a className,
 //   followed through same-file constants and helpers; and stylesheet rules (or @apply) whose
@@ -44,6 +48,25 @@ export const CATEGORIES = [
   "plain-element-handler",
   "data-ouro-attr",
   "control-state-style",
+  "third-party-control",
+];
+
+// UI-control libraries other than HX. A trailing `/*` is a whole npm scope; any other entry is the
+// package and its subpaths. HX itself builds on Base UI, but only inside its installed paths,
+// which this rule does not scan.
+export const THIRD_PARTY_CONTROL_PACKAGES = [
+  "@headlessui/react",
+  "@radix-ui/*",
+  "@base-ui-components/*",
+  "@base-ui/*",
+  "react-aria-components",
+  "react-aria",
+  "@ariakit/*",
+  "@mui/*",
+  "@chakra-ui/*",
+  "vaul",
+  "cmdk",
+  "sonner",
 ];
 
 export const BASELINE_PATH = "test/scripts/hx-source-rules.baseline.json";
@@ -113,6 +136,14 @@ const STATE_SELECTOR = new RegExp(
   `:(?:focus(?:-visible|-within)?|active|checked|indeterminate|open)(?![\\w-])|\\[(?:aria-(?:checked|pressed|expanded|selected|current)|data-${STATE_NAME}|open)(?![\\w-])`,
 );
 const SJ_HOOK = /\.sj-|\[data-sj-/;
+
+export function isThirdPartyControlModule(specifier) {
+  return THIRD_PARTY_CONTROL_PACKAGES.some((entry) =>
+    entry.endsWith("/*")
+      ? specifier.startsWith(entry.slice(0, -1))
+      : specifier === entry || specifier.startsWith(`${entry}/`),
+  );
+}
 
 export function isScannedFile(file) {
   return SCANNED.some((pattern) => pattern.test(file)) && !EXCLUDED.some((pattern) => pattern.test(file));
@@ -263,8 +294,37 @@ function scanScript(file, source) {
   // React Router's anchors by local name (`Link as RouterLink`) and namespace (`Router.Link`).
   const routerAnchors = new Map();
   const routerNamespaces = new Set();
+  // Third-party control imports: named or default bindings (local name -> package and imported
+  // name), namespaces (local name -> package), and same-file aliases (`const Trigger = Menu.Button`).
+  const thirdPartyBindings = new Map();
+  const thirdPartyNamespaces = new Map();
+  const aliases = new Map();
   const declarations = new Map();
   const index = (node) => {
+    if (
+      ts.isImportDeclaration(node) &&
+      isThirdPartyControlModule(node.moduleSpecifier.text) &&
+      node.importClause &&
+      !node.importClause.isTypeOnly
+    ) {
+      const module = node.moduleSpecifier.text;
+      const { name, namedBindings } = node.importClause;
+      if (name) thirdPartyBindings.set(name.text, { module, imported: "default" });
+      if (namedBindings && ts.isNamespaceImport(namedBindings)) thirdPartyNamespaces.set(namedBindings.name.text, module);
+      for (const element of namedBindings && ts.isNamedImports(namedBindings) ? namedBindings.elements : []) {
+        if (!element.isTypeOnly) {
+          thirdPartyBindings.set(element.name.text, { module, imported: (element.propertyName ?? element.name).text });
+        }
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      (ts.isIdentifier(node.initializer) || ts.isPropertyAccessExpression(node.initializer))
+    ) {
+      aliases.set(node.name.text, node.initializer.getText().replace(/\s+/g, ""));
+    }
     if (ts.isImportDeclaration(node) && ROUTER_MODULES.has(node.moduleSpecifier.text)) {
       const bindings = node.importClause?.namedBindings;
       if (bindings && ts.isNamespaceImport(bindings)) routerNamespaces.add(bindings.name.text);
@@ -287,6 +347,17 @@ function scanScript(file, source) {
     return routerNamespaces.has(namespace) && ROUTER_ANCHORS.has(member) ? member : undefined;
   };
 
+  const thirdPartyTagOf = (tagName, seen = new Set()) => {
+    const [head, ...members] = tagName.split(".");
+    const binding = thirdPartyBindings.get(head);
+    if (binding) return `${binding.module}.${[binding.imported, ...members].join(".")}`;
+    const namespace = thirdPartyNamespaces.get(head);
+    if (namespace) return members.length > 0 ? `${namespace}.${members.join(".")}` : undefined;
+    if (!aliases.has(head) || seen.has(head)) return undefined;
+    seen.add(head);
+    return thirdPartyTagOf([aliases.get(head), ...members].join("."), seen);
+  };
+
   const checkElement = (element) => {
     const tag = element.tagName.getText();
     const intrinsic = /^[a-z][\w-]*$/.test(tag);
@@ -305,6 +376,8 @@ function scanScript(file, source) {
 
     if (rawCategory) add(rawCategory, element, tag, props);
     if (routerAnchor) add("raw-anchor", element, `react-router.${routerAnchor}`, props);
+    const thirdPartyTag = thirdPartyTagOf(tag);
+    if (thirdPartyTag) add("third-party-control", element, thirdPartyTag, props);
     if (intrinsic && !rawCategory && [...attributes.keys()].some((name) => HANDLER.test(name))) {
       add("plain-element-handler", element, tag, props);
     }
