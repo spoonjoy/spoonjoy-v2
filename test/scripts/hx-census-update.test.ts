@@ -51,6 +51,37 @@ describe("identity", () => {
     expect(normalizeName(undefined)).toBe("");
   });
 
+  it("replaces relative times and calendar dates, which depend on the run, with placeholders", () => {
+    for (const phrase of [
+      "2 minutes ago",
+      "1 minute ago",
+      "5 seconds ago",
+      "3 hours ago",
+      "1 day ago",
+      "2 weeks ago",
+      "4 months ago",
+      "1 year ago",
+      "12 min ago",
+      "1 hr ago",
+      "2 mo ago",
+      "3 yr ago",
+      "less than a minute ago",
+      "about an hour ago",
+      "just now",
+      "Just now",
+      "yesterday",
+    ]) {
+      expect(normalizeName(`qa_kitchen_friend 1 spoon · 1 save ${phrase}`), phrase).toBe("qa_kitchen_friend 1 spoon · 1 save <relative time>");
+    }
+    expect(normalizeName("Latest activity Oct 18, 2026")).toBe("Latest activity <date>");
+    expect(normalizeName("Latest activity September 3, 2025 and Jun 2026")).toBe("Latest activity <date> and <date>");
+    expect(normalizeName("Sept. 30, 2026")).toBe("<date>");
+    expect(normalizeName("Mayonnaise 2026 · 30 minutes · 4 servings · ago")).toBe("Mayonnaise 2026 · 30 minutes · 4 servings · ago");
+    expect(controlIdentity({ role: "link", name: "qa_kitchen_friend\n2 minutes ago", landmark: { role: "main" } })).toBe(
+      'link "qa_kitchen_friend <relative time>" [-/-] in main',
+    );
+  });
+
   it("makes a marker one token, and '-' when it is absent or blank", () => {
     expect(normalizeMarker(null)).toBe("-");
     expect(normalizeMarker(undefined)).toBe("-");

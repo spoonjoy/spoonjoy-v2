@@ -30,6 +30,7 @@ const coverageInclude = [
   "scripts/hx-census.mjs",
   "scripts/hx-census-update.mjs",
   "scripts/hx-census-merge.mjs",
+  "scripts/hx-census-compare.mjs",
   "scripts/sanitize-journey-traces.mjs",
   "scripts/count-cloudflare-requests.mjs",
   "scripts/qa-run-scope.mjs",

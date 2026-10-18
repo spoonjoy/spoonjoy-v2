@@ -320,7 +320,9 @@ export const census: Journey[] = [
   { id: "shopping-list-newbie", enrolled: false, persona: "newbie", path: "/shopping-list", states: [DEFAULT] },
 
   // Search and people.
-  { id: "search", enrolled: false, persona: "chef", path: "/search", states: [DEFAULT] },
+  // An empty search browses the 30 most recent things, which include this run's scratch users
+  // (codex_e2e_s_<run token>_<n>); a query that matches nothing measures the page without them.
+  { id: "search-no-results", enrolled: false, persona: "chef", path: "/search?q=hxcensusnomatch", states: [DEFAULT] },
   { id: "search-results", enrolled: false, persona: "chef", path: "/search?q=lemon", states: [DEFAULT] },
   { id: "chefs", enrolled: false, persona: "signed-out", path: "/chefs", states: [DEFAULT] },
   { id: "chef-profile", enrolled: false, persona: "signed-out", path: CHEF_PROFILE, states: [DEFAULT] },

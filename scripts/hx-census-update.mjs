@@ -84,6 +84,28 @@ export async function runCommand(file, args) {
 }
 
 /**
+ * The path of a run's merged census: a run id (that is not also a file) is downloaded with
+ * `gh run download` into its own directory under .hx-census-download/; anything else is a path.
+ * @param {string} source
+ * @param {{
+ *   exists: (file: string) => boolean,
+ *   mkdir: (directory: string) => void,
+ *   run: (file: string, args: string[]) => Promise<void>,
+ *   now: () => number,
+ *   io: { log: (message: string) => void },
+ * }} deps
+ * @returns {Promise<string>}
+ */
+export async function resolveCensusSource(source, { exists, mkdir, run, now, io }) {
+  if (!/^\d+$/.test(source) || exists(source)) return source;
+  const directory = path.join(DOWNLOAD_DIRECTORY, `${source}-${now()}`);
+  mkdir(directory);
+  io.log(`Downloading ${ARTIFACT_NAME} from run ${source}…`);
+  await run("gh", ["run", "download", source, "--name", ARTIFACT_NAME, "--dir", directory]);
+  return path.join(directory, ACTUAL_FILE);
+}
+
+/**
  * @param {string[]} [argv]
  * @param {{
  *   readFile?: (file: string) => string,
@@ -112,14 +134,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
 
   try {
     const { source, allowRegression, baseline: baselinePath } = parseUpdateArgs(argv);
-    let actualPath = source;
-    if (/^\d+$/.test(source) && !exists(source)) {
-      const directory = path.join(DOWNLOAD_DIRECTORY, `${source}-${now()}`);
-      mkdir(directory);
-      io.log(`Downloading ${ARTIFACT_NAME} from run ${source}…`);
-      await run("gh", ["run", "download", source, "--name", ARTIFACT_NAME, "--dir", directory]);
-      actualPath = path.join(directory, ACTUAL_FILE);
-    }
+    const actualPath = await resolveCensusSource(source, { exists, mkdir, run, now, io });
     const actual = JSON.parse(readFile(actualPath));
     const previous = exists(baselinePath) ? JSON.parse(readFile(baselinePath)) : {};
     const { baseline, regressions } = updateBaseline({ previous, actual, allowRegression });

@@ -25,13 +25,28 @@ export const UNMARKED = "-";
 const WORKER_FILE_PATTERN = /^hx-census-actual\.(.+)\.(\d+)\.json$/;
 const IDENTITY_PATTERN = /^(\S+) ("(?:[^"\\]|\\.)*") \[([^\s/\]]+)\/([^\s/\]]+)\] in (.+)$/;
 
+export const RELATIVE_TIME = "<relative time>";
+export const CALENDAR_DATE = "<date>";
+
+const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+const UNIT = "(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?|mins?|hrs?|mos?|yrs?)";
+// A relative time ("2 minutes ago", "1 hr ago", "less than a minute ago", "just now", "yesterday")
+// and a calendar date ("Jun 1, 2026", "Jun 2026") depend on when the run happened, not on the page.
+const RELATIVE_TIME_PATTERN = new RegExp(`\\b(?:(?:less than |about |over |almost )?(?:\\d+|an?|one) ${UNIT} ago|just now|yesterday)\\b`, "gi");
+const CALENDAR_DATE_PATTERN = new RegExp(`\\b${MONTH} (?:\\d{1,2}, )?\\d{4}\\b`, "g");
+
 /**
- * Collapses every run of whitespace to one space and trims. Case and punctuation are kept.
+ * Collapses every run of whitespace to one space and trims. Case and punctuation are kept, but a
+ * relative time or a calendar date becomes a placeholder, so a name never depends on the run's date.
  * @param {unknown} text
  * @returns {string}
  */
 export function normalizeName(text) {
-  return String(text ?? "").replace(/\s+/g, " ").trim();
+  return String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(RELATIVE_TIME_PATTERN, RELATIVE_TIME)
+    .replace(CALENDAR_DATE_PATTERN, CALENDAR_DATE);
 }
 
 /**
@@ -451,6 +466,40 @@ export function summarizeChanges(previous, next) {
     else {
       const diff = formatDiff(diffMultisets(before.get(key), after.get(key)));
       if (diff.length > 0) lines.push(`  changed    ${key}`, ...diff.map((line) => `  ${line}`));
+    }
+  }
+  return lines;
+}
+
+/**
+ * Every (project, journey, state) whose multiset differs between two runs' censuses, or that only
+ * one of them recorded. Two runs of the same commit must record identical censuses; any line here
+ * is nondeterminism to remove before the census is baselined.
+ * @param {Record<string, any>} a
+ * @param {Record<string, any>} b
+ * @param {{ a: string, b: string }} labels
+ * @returns {string[]}
+ */
+export function compareCensuses(a, b, labels) {
+  const states = (census) => {
+    const result = new Map();
+    for (const [project, journeys] of Object.entries(census)) {
+      if (project.startsWith("$")) continue;
+      for (const [journeyId, byState] of Object.entries(journeys)) {
+        for (const [stateId, multiset] of Object.entries(byState)) result.set(`${project} / ${journeyId} / ${stateId}`, multiset);
+      }
+    }
+    return result;
+  };
+  const left = states(a);
+  const right = states(b);
+  const lines = [];
+  for (const key of [...new Set([...left.keys(), ...right.keys()])].sort(compareStrings)) {
+    if (!right.has(key)) lines.push(`  only in ${labels.a}: ${key}`);
+    else if (!left.has(key)) lines.push(`  only in ${labels.b}: ${key}`);
+    else {
+      const diff = formatDiff(diffMultisets(left.get(key), right.get(key)));
+      if (diff.length > 0) lines.push(`  differs    ${key} (${labels.a} → ${labels.b})`, ...diff.map((line) => `  ${line}`));
     }
   }
   return lines;
