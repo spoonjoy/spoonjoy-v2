@@ -236,8 +236,11 @@ export const census: Journey[] = [
       {
         id: "add-ingredient-open",
         action: async (page) => {
-          await page.getByRole("button", { name: "+ Add ingredient" }).click();
-          await expect(page.getByRole("button", { name: "Add ingredient", exact: true })).toBeVisible();
+          // The form opens in AI mode (a fresh context has no stored mode preference): the "AI Parse"
+          // switch is on and the ingredient text box shows. Manual mode's "Add ingredient" is not.
+          await page.getByRole("button", { name: "+ Add ingredient", exact: true }).click();
+          await expect(page.getByRole("switch", { name: "AI Parse" })).toBeChecked();
+          await expect(page.getByRole("textbox", { name: "Ingredient text" })).toBeVisible();
         },
       },
       {
