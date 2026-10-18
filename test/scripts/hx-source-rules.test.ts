@@ -823,6 +823,51 @@ describe("the ratchet against real changes", () => {
     ]);
   });
 
+  const usedComponents = {
+    "app/components/navigation/app-link.tsx": `export function Link({ href }) { return <a href={href} />; }`,
+    "app/components/recipe/SpoonDialog.tsx": `export function SpoonDialog() { return <button type="button" />; }`,
+    "app/components/nice.tsx": `import { Link } from "./navigation/app-link";\nexport function NiceLink({ href }) { return <Link href={href} />; }`,
+  };
+
+  it("a call site removed in one component does not pay for one added in another (KitchenHome)", () => {
+    const kitchen = (cover: string, row: string) => ({
+      ...usedComponents,
+      "app/components/cookbook/KitchenHome.tsx": [
+        `import { Link } from "~/components/navigation/app-link";`,
+        `import { SpoonDialog } from "~/components/recipe/SpoonDialog";`,
+        `export function CookbookCover() { return ${cover}; }`,
+        `export function RecipeIndexRow() { return ${row}; }`,
+      ].join("\n"),
+    });
+    expect(rise(kitchen(`<Link href="/c" />`, `<p />`), kitchen(`<p />`, `<SpoonDialog />`))).toEqual({
+      regressions: [
+        {
+          fingerprint:
+            "app/components/cookbook/KitchenHome.tsx::RecipeIndexRow::uses-hand-rolled-control::app/components/recipe/SpoonDialog#SpoonDialog::",
+          count: 1,
+          at: ["app/components/cookbook/KitchenHome.tsx:4"],
+        },
+      ],
+      moves: [],
+    });
+  });
+
+  it("swapping the component used at the same call site is neutral (Link to NiceLink in place)", () => {
+    const page = (tag: string) => ({
+      ...usedComponents,
+      "app/routes/page.tsx": `import { Link } from "~/components/navigation/app-link";\nimport { NiceLink } from "~/components/nice";\nexport function Page() { return <${tag} href="/x" />; }`,
+    });
+    expect(rise(page("Link"), page("NiceLink"))).toEqual({
+      regressions: [],
+      moves: [
+        {
+          from: "app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+          to: "app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/nice#NiceLink::",
+        },
+      ],
+    });
+  });
+
   it("counts every hop of a wrapper chain, and terminates on a cycle", () => {
     const files = {
       "app/components/raw.tsx": `export function Raw() { return <button />; }`,

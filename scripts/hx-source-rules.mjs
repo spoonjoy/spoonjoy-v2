@@ -860,11 +860,11 @@ export function compareWithBaseline(offenders, baseline) {
 }
 
 // What a fingerprint keeps when code moves: its category, its tag (without the defining file's
-// path; for a call site, any offending app component) and its props with non-literal values
-// blanked. Pairing also needs the same file or the same component (see findRegressions).
-function moveKey(fingerprint) {
+// path, so a call site keeps the name of the component it uses) and its props with non-literal
+// values blanked. `sameCallSite` also blanks a call site's component, for a swap in place.
+function moveKey(fingerprint, { sameCallSite = false } = {}) {
   const parts = fingerprint.split("::");
-  const tag = parts[2] === "uses-hand-rolled-control" ? "" : parts.slice(3, -1).join("::").replace(/^app\/[^#]*#/, "#");
+  const tag = sameCallSite ? "" : parts.slice(3, -1).join("::").replace(/^app\/[^#]*#/, "#");
   let depth = 0;
   let props = "";
   for (const char of parts.at(-1)) {
@@ -880,30 +880,35 @@ function moveKey(fingerprint) {
  * The fingerprints the scan has more of than `baseline` counts, after pairing each added
  * fingerprint one-to-one with a removed one of the same category, tag and literal props that is
  * in the same file (a renamed component) or the same component (a moved file): a move, which is
- * neutral. A fix elsewhere never pays for a new control.
+ * neutral. A call site that swaps the component it uses (`<Link>` to `<NiceLink>`) pairs only in
+ * the same file and the same component. A fix elsewhere never pays for a new control.
  */
 export function findRegressions(offenders, baseline) {
   const { added, removed } = compareWithBaseline(offenders, baseline);
-  const place = (fingerprint) => {
+  const units = removed.flatMap(({ fingerprint, count }) => {
     const [file, component] = fingerprint.split("::");
-    return { fingerprint, file, component };
-  };
-  const pool = new Map();
-  for (const { fingerprint, count } of removed) {
     const key = moveKey(fingerprint);
-    pool.set(key, [...(pool.get(key) ?? []), ...Array(count).fill(place(fingerprint))]);
-  }
+    const swapKey = moveKey(fingerprint, { sameCallSite: true });
+    return Array.from({ length: count }, () => ({ fingerprint, file, component, key, swapKey, used: false }));
+  });
   const regressions = [];
   const moves = [];
   for (const entry of added) {
-    const { file, component } = place(entry.fingerprint);
-    const candidates = pool.get(moveKey(entry.fingerprint)) ?? [];
+    const [file, component, category] = entry.fingerprint.split("::");
+    const key = moveKey(entry.fingerprint);
+    const swapKey = moveKey(entry.fingerprint, { sameCallSite: true });
+    const open = (predicate) => units.find((unit) => !unit.used && predicate(unit));
     let count = entry.count;
     for (; count > 0; count -= 1) {
-      const sameFile = candidates.findIndex((candidate) => candidate.file === file);
-      const index = sameFile === -1 ? candidates.findIndex((candidate) => candidate.component === component) : sameFile;
-      if (index === -1) break;
-      moves.push({ from: candidates.splice(index, 1)[0].fingerprint, to: entry.fingerprint });
+      const match =
+        open((unit) => unit.key === key && unit.file === file) ??
+        open((unit) => unit.key === key && unit.component === component) ??
+        (category === "uses-hand-rolled-control"
+          ? open((unit) => unit.swapKey === swapKey && unit.file === file && unit.component === component)
+          : undefined);
+      if (!match) break;
+      match.used = true;
+      moves.push({ from: match.fingerprint, to: entry.fingerprint });
     }
     if (count > 0) regressions.push({ ...entry, count });
   }
