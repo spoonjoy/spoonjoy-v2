@@ -1,310 +1,4 @@
 {
-  "allowedRegressions": [
-    {
-      "fingerprint": "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::uses-hand-rolled-control::app/components/account/ProfilePhotoCropper#ProfilePhotoCropper::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cook/RecipeCookView.tsx::CookModePanel::uses-hand-rolled-control::app/components/recipe/ScaleSelector#ScaleSelector::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cook/RecipeCookView.tsx::RecipeCookView::uses-hand-rolled-control::app/components/recipe/StepsSectionHeading#StepsSectionHeading::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cookbook/KitchenHome.tsx::CookbookCover::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cookbook/KitchenHome.tsx::RecipeIndex::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cookbook/KitchenHome.tsx::RecipeIndexRow::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cookbook/page.tsx::FoodHero::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/cookbook/page.tsx::ObjectRow::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::app/components/navigation/app-link#Link::aria-label=Search",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::uses-hand-rolled-control::app/components/navigation/app-link#Link::aria-label=Search",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/navigation/recipes-section-nav.tsx::RecipesSectionNav::control-state-style::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/navigation/recipes-section-nav.tsx::RecipesSectionNav::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/pantry/BioCard.tsx::BioCard::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/pantry/CookbookCard.tsx::CookbookCard::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/pantry/PantryPage.tsx::PantryPage::uses-hand-rolled-control::app/components/pantry/RecipeGrid#RecipeGrid::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/pantry/RecipeGrid.tsx::RecipeGrid::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/IngredientList.tsx::IngredientList::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={formatStepReferenceName(ref)}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/IngredientList.tsx::IngredientRow::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={ingredient.name}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/ParsedIngredientList.tsx::ParsedIngredientList::uses-hand-rolled-control::app/components/recipe/ParsedIngredientRow#ParsedIngredientRow::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/RecipeImageUpload#RecipeImageUpload::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/StepList#StepList::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/RecipeHeader.tsx::RecipeHeader::uses-hand-rolled-control::app/components/navigation/app-link#Link::aria-label={chefName}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/RecipeHeader.tsx::RecipeHeader::uses-hand-rolled-control::app/components/recipe/CookSyncStatusLine#CookSyncStatusLine::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/RecipeHeader.tsx::RecipeHeader::uses-hand-rolled-control::app/components/recipe/ScaleSelector#ScaleSelector::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/StepEditorCard.tsx::StepEditorCard::uses-hand-rolled-control::app/components/recipe/ManualIngredientInput#ManualIngredientInput::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/StepList.tsx::StepReorderItem::plain-element-handler::li::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/recipe/StepOutputUseCallout.tsx::StepOutputUseCallout::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={name}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/theme-toggle.tsx::ThemeDropdown::control-state-style::@headlessui/react.MenuButton::aria-label=Toggle theme",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/theme-toggle.tsx::ThemeDropdown::control-state-style::@headlessui/react.MenuItems::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/theme-toggle.tsx::ThemeToggle::control-state-style::@headlessui/react.Button::aria-label={`Switch theme to ${nextTheme} mode`}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/components/users/FellowChefList.tsx::FellowChefList::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/root.tsx::App::uses-hand-rolled-control::app/components/navigation/mobile-nav#MobileNav::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/root.tsx::App::uses-hand-rolled-control::app/components/navigation/phone-brand-bar#PhoneBrandBar::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/root.tsx::App::uses-hand-rolled-control::app/components/pwa/InstallPromptCard#InstallPromptCard::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/root.tsx::AppNavbar::uses-hand-rolled-control::app/components/theme-toggle#ThemeToggle::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/root.tsx::Layout::uses-hand-rolled-control::app/components/navigation/skip-link#SkipLink::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/root.tsx::LoginMenu::control-state-style::@headlessui/react.MenuItems::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/_index.tsx::Index::uses-hand-rolled-control::app/components/cookbook/KitchenHome#KitchenHome::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/account.settings.tsx::AccountSettings::uses-hand-rolled-control::app/components/account/ProfilePhotoField#ProfilePhotoField::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/chefs.tsx::ChefList::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/cookbooks.$id.tsx::CookbookDetail::uses-hand-rolled-control::app/components/navigation/app-link#Link::aria-label={item.recipe.title}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/cookbooks._index.tsx::CookbooksIndexRedirect::uses-hand-rolled-control::app/routes/my-recipes#DrawerSearch::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/login.tsx::Login::uses-hand-rolled-control::app/components/auth/auth-page#AuthPage::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/logout.tsx::Logout::uses-hand-rolled-control::app/components/auth/auth-page#AuthPage::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/my-recipes.tsx::DrawerSearch::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/my-recipes.tsx::MyRecipes::uses-hand-rolled-control::app/components/navigation/recipes-section-nav#RecipesSectionNav::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/oauth.callback.tsx::OAuthCallback::uses-hand-rolled-control::app/components/auth/auth-page#AuthPage::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.steps.$stepId.edit.tsx::EditStep::uses-hand-rolled-control::app/components/recipe/ManualIngredientInput#ManualIngredientInput::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.steps.$stepId.edit.tsx::EditStep::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={ingredient.ingredientRef.name}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.steps.new.tsx::NewStep::uses-hand-rolled-control::app/components/recipe/ManualIngredientInput#ManualIngredientInput::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.steps.new.tsx::NewStep::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={ingredient.ingredientName}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::ErrorBoundary::uses-hand-rolled-control::app/components/recipe/RecipeNotFound#RecipeNotFound::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::control-state-style::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::control-state-style::app/components/recipe/ForkRecipeButton#ForkRecipeButton::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/cook/RecipeCookView#RecipeCookView::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/ForkRecipeButton#ForkRecipeButton::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipePhotoStudio#RecipePhotoStudio::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipeProvenance#RecipeProvenance::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/SpoonDialog#SpoonDialog::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/SpoonsStrip#SpoonsStrip::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes._index.tsx::RecipeRow::uses-hand-rolled-control::app/components/navigation/app-link#Link::aria-label={recipe.title}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes._index.tsx::RecipesIndex::uses-hand-rolled-control::app/components/navigation/recipes-section-nav#RecipesSectionNav::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeImportPanel#RecipeImportPanel::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/saved-recipes.tsx::SavedRecipes::uses-hand-rolled-control::app/components/navigation/recipes-section-nav#RecipesSectionNav::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/saved-recipes.tsx::SavedRecipes::uses-hand-rolled-control::app/routes/my-recipes#DrawerSearch::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/search.tsx::ResultCard::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/search.tsx::Search::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/shopping-list.tsx::ShoppingList::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/shopping-list.tsx::ShoppingList::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={item.ingredientRef.name}",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/signup.tsx::Signup::uses-hand-rolled-control::app/components/auth/auth-page#AuthPage::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/pantry/CookbookCard#CookbookCard::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/pantry/RecipeGrid#RecipeGrid::",
-      "reason": "measure call sites and motion elements"
-    },
-    {
-      "fingerprint": "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/recipe/SpoonsStrip#SpoonsStrip::",
-      "reason": "measure call sites and motion elements"
-    }
-  ],
   "offenders": {
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
@@ -315,7 +9,9 @@
     "app/components/cook/RecipeCookView.tsx::CookModePanel::control-state-style::button::type=button,aria-label={`Step ${index + 1}${index === activeStepIndex ? \" current\" : \"\"}`}": 1,
     "app/components/cook/RecipeCookView.tsx::CookModePanel::raw-button::button::type=button": 1,
     "app/components/cook/RecipeCookView.tsx::CookModePanel::raw-button::button::type=button,aria-label={`Step ${index + 1}${index === activeStepIndex ? \" current\" : \"\"}`}": 1,
+    "app/components/cook/RecipeCookView.tsx::CookModePanel::uses-hand-rolled-control::app/components/recipe/IngredientList#IngredientList::": 1,
     "app/components/cook/RecipeCookView.tsx::CookModePanel::uses-hand-rolled-control::app/components/recipe/ScaleSelector#ScaleSelector::": 1,
+    "app/components/cook/RecipeCookView.tsx::RecipeCookView::uses-hand-rolled-control::app/components/recipe/StepCard#StepCard::": 1,
     "app/components/cook/RecipeCookView.tsx::RecipeCookView::uses-hand-rolled-control::app/components/recipe/StepsSectionHeading#StepsSectionHeading::": 1,
     "app/components/cookbook/KitchenHome.tsx::CookbookCover::control-state-style::button::type=button,aria-label={`Share ${cookbook.title}`}": 1,
     "app/components/cookbook/KitchenHome.tsx::CookbookCover::raw-button::button::type=button,aria-label={`Share ${cookbook.title}`}": 1,
@@ -339,6 +35,7 @@
     "app/components/pantry/BioCard.tsx::BioCard::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 1,
     "app/components/pantry/CookbookCard.tsx::CookbookCard::raw-button::button::type=button,aria-label={`Share ${title}`}": 1,
     "app/components/pantry/CookbookCard.tsx::CookbookCard::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 2,
+    "app/components/pantry/PantryPage.tsx::PantryPage::uses-hand-rolled-control::app/components/pantry/BioCard#BioCard::": 1,
     "app/components/pantry/PantryPage.tsx::PantryPage::uses-hand-rolled-control::app/components/pantry/RecipeGrid#RecipeGrid::": 1,
     "app/components/pantry/RecipeGrid.tsx::RecipeGrid::raw-button::button::type=button,aria-label={`Save ${recipe.title}`}": 1,
     "app/components/pantry/RecipeGrid.tsx::RecipeGrid::raw-button::button::type=button,aria-label={`Share ${recipe.title}`}": 1,
@@ -385,6 +82,7 @@
     "app/components/recipe/SpoonsStrip.tsx::CompactSpoonList::raw-anchor::react-router.Link::": 1,
     "app/components/recipe/SpoonsStrip.tsx::NoteBlock::raw-button::button::type=button": 1,
     "app/components/recipe/SpoonsStrip.tsx::SpoonsStrip::raw-anchor::react-router.Link::": 1,
+    "app/components/recipe/StepCard.tsx::StepCard::uses-hand-rolled-control::app/components/recipe/IngredientList#IngredientList::": 1,
     "app/components/recipe/StepDependencySelector.tsx::StepDependencySelector::control-state-style::button::type=button,role=combobox": 1,
     "app/components/recipe/StepDependencySelector.tsx::StepDependencySelector::control-state-style::div::role=listbox": 1,
     "app/components/recipe/StepDependencySelector.tsx::StepDependencySelector::interactive-role::button::type=button,role=combobox": 1,
@@ -395,9 +93,11 @@
     "app/components/recipe/StepDependencySelector.tsx::StepDependencySelector::raw-button::button::type=button,aria-label={`Remove step ${stepNum}`}": 1,
     "app/components/recipe/StepDependencySelector.tsx::StepDependencySelector::raw-button::button::type=button,role=combobox": 1,
     "app/components/recipe/StepEditorCard.tsx::StepEditorCard::uses-hand-rolled-control::app/components/recipe/ManualIngredientInput#ManualIngredientInput::": 1,
+    "app/components/recipe/StepEditorCard.tsx::StepEditorCard::uses-hand-rolled-control::app/components/recipe/ParsedIngredientList#ParsedIngredientList::": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::control-state-style::button::type=button,aria-label=Drag to reorder": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::plain-element-handler::li::": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::raw-button::button::type=button,aria-label=Drag to reorder": 1,
+    "app/components/recipe/StepList.tsx::StepReorderItem::uses-hand-rolled-control::app/components/recipe/StepEditorCard#StepEditorCard::": 1,
     "app/components/recipe/StepOutputUseCallout.tsx::StepOutputUseCallout::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={name}": 1,
     "app/components/recipe/StepsSectionHeading.tsx::StepsSectionHeading::control-state-style::button::type=button": 1,
     "app/components/recipe/StepsSectionHeading.tsx::StepsSectionHeading::raw-button::button::type=button": 1,
@@ -435,6 +135,7 @@
     "app/routes/cookbooks.$id.tsx::CookbookDetail::control-state-style::button::type=button": 1,
     "app/routes/cookbooks.$id.tsx::CookbookDetail::raw-button::button::type=button": 1,
     "app/routes/cookbooks.$id.tsx::CookbookDetail::uses-hand-rolled-control::app/components/navigation/app-link#Link::aria-label={item.recipe.title}": 1,
+    "app/routes/cookbooks._index.tsx::CookbooksIndexRedirect::uses-hand-rolled-control::app/components/cookbook/page#ObjectRow::": 1,
     "app/routes/cookbooks._index.tsx::CookbooksIndexRedirect::uses-hand-rolled-control::app/routes/my-recipes#DrawerSearch::": 1,
     "app/routes/developers.playground.tsx::CopyButton::raw-button::button::type=button": 1,
     "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::h2::": 1,
@@ -466,6 +167,7 @@
     "app/routes/mcp.tsx::McpPage::raw-anchor::a::": 2,
     "app/routes/my-recipes.tsx::DrawerSearch::raw-input::input::type=search,name=q": 1,
     "app/routes/my-recipes.tsx::DrawerSearch::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 1,
+    "app/routes/my-recipes.tsx::MyRecipes::uses-hand-rolled-control::app/components/cookbook/page#ObjectRow::": 1,
     "app/routes/my-recipes.tsx::MyRecipes::uses-hand-rolled-control::app/components/navigation/recipes-section-nav#RecipesSectionNav::": 1,
     "app/routes/oauth.authorize.tsx::OAuthAuthorize::details-summary::details::": 1,
     "app/routes/oauth.authorize.tsx::OAuthAuthorize::details-summary::summary::": 1,
@@ -473,9 +175,12 @@
     "app/routes/recipes.$id.edit.tsx::EditRecipe::raw-button::button::type=submit": 1,
     "app/routes/recipes.$id.edit.tsx::EditRecipe::raw-input::input::type=file,name=image": 1,
     "app/routes/recipes.$id.edit.tsx::EditRecipe::raw-textarea::textarea::name=description": 1,
+    "app/routes/recipes.$id.edit.tsx::EditRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
     "app/routes/recipes.$id.steps.$stepId.edit.tsx::EditStep::uses-hand-rolled-control::app/components/recipe/ManualIngredientInput#ManualIngredientInput::": 1,
+    "app/routes/recipes.$id.steps.$stepId.edit.tsx::EditStep::uses-hand-rolled-control::app/components/recipe/ParsedIngredientList#ParsedIngredientList::": 1,
     "app/routes/recipes.$id.steps.$stepId.edit.tsx::EditStep::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={ingredient.ingredientRef.name}": 1,
     "app/routes/recipes.$id.steps.new.tsx::NewStep::uses-hand-rolled-control::app/components/recipe/ManualIngredientInput#ManualIngredientInput::": 1,
+    "app/routes/recipes.$id.steps.new.tsx::NewStep::uses-hand-rolled-control::app/components/recipe/ParsedIngredientList#ParsedIngredientList::": 1,
     "app/routes/recipes.$id.steps.new.tsx::NewStep::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={ingredient.ingredientName}": 1,
     "app/routes/recipes.$id.tsx::ErrorBoundary::uses-hand-rolled-control::app/components/recipe/RecipeNotFound#RecipeNotFound::": 1,
     "app/routes/recipes.$id.tsx::RecipeDetail::control-state-style::app/components/navigation/app-link#Link::": 5,
@@ -486,6 +191,7 @@
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/cook/RecipeCookView#RecipeCookView::": 2,
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 5,
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/ForkRecipeButton#ForkRecipeButton::": 2,
+    "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipeHeader#RecipeHeader::": 1,
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipePhotoStudio#RecipePhotoStudio::": 1,
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipeProvenance#RecipeProvenance::": 1,
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/SpoonDialog#SpoonDialog::": 1,
@@ -494,7 +200,9 @@
     "app/routes/recipes._index.tsx::RecipesIndex::uses-hand-rolled-control::app/components/navigation/recipes-section-nav#RecipesSectionNav::": 1,
     "app/routes/recipes.new.tsx::NewRecipe::raw-input::input::type=file,name=image": 1,
     "app/routes/recipes.new.tsx::NewRecipe::raw-textarea::textarea::name=description": 1,
+    "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
     "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeImportPanel#RecipeImportPanel::": 1,
+    "app/routes/saved-recipes.tsx::SavedRecipes::uses-hand-rolled-control::app/components/cookbook/page#ObjectRow::": 1,
     "app/routes/saved-recipes.tsx::SavedRecipes::uses-hand-rolled-control::app/components/navigation/recipes-section-nav#RecipesSectionNav::": 1,
     "app/routes/saved-recipes.tsx::SavedRecipes::uses-hand-rolled-control::app/routes/my-recipes#DrawerSearch::": 1,
     "app/routes/search.tsx::ResultCard::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 1,
@@ -505,6 +213,8 @@
     "app/routes/shopping-list.tsx::ShoppingList::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 1,
     "app/routes/shopping-list.tsx::ShoppingList::uses-hand-rolled-control::app/components/shopping/checklist-row#ChecklistRow::name={item.ingredientRef.name}": 1,
     "app/routes/signup.tsx::Signup::uses-hand-rolled-control::app/components/auth/auth-page#AuthPage::": 1,
+    "app/routes/users.$identifier.fellow-chefs.tsx::FellowChefsPage::uses-hand-rolled-control::app/components/users/FellowChefList#FellowChefList::": 1,
+    "app/routes/users.$identifier.kitchen-visitors.tsx::KitchenVisitorsPage::uses-hand-rolled-control::app/components/users/FellowChefList#FellowChefList::": 1,
     "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/pantry/CookbookCard#CookbookCard::": 1,
     "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/pantry/RecipeGrid#RecipeGrid::": 1,
     "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/recipe/SpoonsStrip#SpoonsStrip::": 1,

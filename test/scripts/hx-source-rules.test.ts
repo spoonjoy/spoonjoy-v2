@@ -427,6 +427,11 @@ describe("motion elements", () => {
       import * as Whole from "motion/react";
       import { motion } from "framer-motion";
       import { m as icon } from "lucide-react";
+      const MotionButton = motion.create("button");
+      const Old = M("a");
+      const NotMotion = other.create("button");
+      const Created = m.create(Thing);
+      const Named = M.create.call(null, "button");
       export function Moving({ go }) {
         return <>
           <m.button type="button" />
@@ -447,6 +452,11 @@ describe("motion elements", () => {
           <Reorder.Item value={1} />
           <Reorder.Item as="div" value={2} />
           <Reorder.Other />
+          <MotionButton whileTap={{}} />
+          <Old />
+          <NotMotion />
+          <Created />
+          <Named />
         </>;
       }`;
     expect(fingerprints(source)).toEqual([
@@ -459,6 +469,8 @@ describe("motion elements", () => {
       "app/routes/fixture.tsx::Moving::plain-element-handler::div::",
       "app/routes/fixture.tsx::Moving::plain-element-handler::li::",
       "app/routes/fixture.tsx::Moving::plain-element-handler::div::",
+      "app/routes/fixture.tsx::Moving::raw-button::button::",
+      "app/routes/fixture.tsx::Moving::raw-anchor::a::",
     ]);
   });
 });
@@ -537,6 +549,8 @@ describe("call sites", () => {
       `export * from "./safe";`,
       `export * from "@radix-ui/react-dialog";`,
       `export * as everything from "./safe";`,
+      `export * as Dialog from "@radix-ui/react-dialog";`,
+      `export * as Raws from "./app-link";`,
       `export type { Hidden } from "./safe";`,
       `export { type Hidden2, Safe as SafeAgain } from "./safe";`,
     ].join("\n"),
@@ -548,7 +562,7 @@ describe("call sites", () => {
       `import { Popover } from "@headlessui/react";`,
       `import { Link as Imported } from "./navigation/app-link";`,
       `import * as Ns from "./navigation/app-link";`,
-      `export { Popover, Imported, Ns };`,
+      `export { Popover, Imported, Ns, Tabs };`,
       `export default function Fancy() { return <Inner />; }`,
       `function Inner() { return <button />; }`,
       `export const Plain = () => <p />, Count = 1, { destructured } = {};`,
@@ -563,9 +577,9 @@ describe("call sites", () => {
     "app/components/cycle-b.ts": `export * from "./cycle-a";`,
     "app/routes/page.tsx": [
       `import { Link } from "~/components/navigation/app-link";`,
-      `import { AppLink, Safe, Trigger, SafeAgain } from "~/components/navigation";`,
+      `import { AppLink, Safe, Trigger, SafeAgain, Dialog, Raws, everything } from "~/components/navigation";`,
       `import * as Nav from "../components/navigation/app-link";`,
-      `import Fancy, { DialogRoot, TabList, Popover, Plain, Legacy, SearchField, Imported, Ns } from "#dialog";`,
+      `import Fancy, { DialogRoot, TabList, Popover, Plain, Legacy, SearchField, Imported, Ns, Tabs } from "#dialog";`,
       `import Thing from "~/components/def";`,
       `import Anon from "~/components/anon";`,
       `import AnonFn from "~/components/anon-fn";`,
@@ -598,6 +612,10 @@ describe("call sites", () => {
       `    <Button className="focus:ring" />`,
       `    <Form className="focus:ring" />`,
       `    <Missing className="focus:ring" />`,
+      `    <Dialog.Root />`,
+      `    <Raws.Link />`,
+      `    <Tabs.Trigger />`,
+      `    <Dialog /><everything.Safe /><everything.Nope />`,
       `  </>;`,
       `}`,
     ].join("\n"),
@@ -628,6 +646,9 @@ describe("call sites", () => {
       "34 app/routes/page.tsx::Page::control-state-style::app/components/ouro/button/button#Button::",
       "35 app/routes/page.tsx::Page::control-state-style::react-router.Form::",
       "36 app/routes/page.tsx::Page::control-state-style::app/routes/missing#Missing::",
+      "37 app/routes/page.tsx::Page::third-party-control::@radix-ui/react-dialog.Root::",
+      "38 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "39 app/routes/page.tsx::Page::third-party-control::@radix-ui/react-tabs.Trigger::",
     ]);
   });
 
@@ -718,19 +739,40 @@ describe("findRegressions: moves are neutral", () => {
     expect(result.moves).toHaveLength(2);
   });
 
+  it("pairs only within the same file or the same component", () => {
+    const result = findRegressions(
+      [
+        at("app/b.tsx::Q::raw-button::button::"),
+        at("app/a.tsx::Renamed::raw-anchor::a::"),
+        at("app/z.tsx::Kept::raw-input::input::"),
+        at("app/r.tsx::P::uses-hand-rolled-control::app/components/b#Other::"),
+      ],
+      {
+        "app/a.tsx::P::raw-button::button::": 1,
+        "app/a.tsx::P::raw-anchor::a::": 1,
+        "app/y.tsx::Kept::raw-input::input::": 1,
+        "app/r.tsx::P::uses-hand-rolled-control::app/components/a#Link::": 1,
+      },
+    );
+    expect(result.regressions.map((regression: { fingerprint: string }) => regression.fingerprint)).toEqual([
+      "app/b.tsx::Q::raw-button::button::",
+    ]);
+    expect(result.moves).toHaveLength(3);
+  });
+
   it("still counts a move plus an extra copy, a new tag, a new category and a plain rise", () => {
     const result = findRegressions(
       [
         at("app/b.tsx::P::raw-button::button::", 3),
         at("app/b.tsx::P::raw-button::button::", 7),
-        at("app/r.tsx::P::uses-hand-rolled-control::app/components/link#Other::"),
+        at("app/r.tsx::P::third-party-control::@headlessui/react.Popover::"),
         at("app/a.tsx::P::raw-anchor::a::"),
         at("app/c.tsx::P::raw-input::input::"),
         at("app/c.tsx::P::raw-input::input::", 2),
       ],
       {
         "app/a.tsx::P::raw-button::button::": 1,
-        "app/r.tsx::P::uses-hand-rolled-control::app/components/link#Link::": 1,
+        "app/r.tsx::P::third-party-control::@radix-ui/react-dialog.Root::": 1,
         "app/c.tsx::P::raw-input::input::": 1,
       },
     );
@@ -738,13 +780,103 @@ describe("findRegressions: moves are neutral", () => {
       { fingerprint: "app/a.tsx::P::raw-anchor::a::", count: 1, at: ["app/a.tsx:1"] },
       { fingerprint: "app/b.tsx::P::raw-button::button::", count: 1, at: ["app/b.tsx:3", "app/b.tsx:7"] },
       { fingerprint: "app/c.tsx::P::raw-input::input::", count: 1, at: ["app/c.tsx:1", "app/c.tsx:2"] },
-      {
-        fingerprint: "app/r.tsx::P::uses-hand-rolled-control::app/components/link#Other::",
-        count: 1,
-        at: ["app/r.tsx:1"],
-      },
+      { fingerprint: "app/r.tsx::P::third-party-control::@headlessui/react.Popover::", count: 1, at: ["app/r.tsx:1"] },
     ]);
     expect(result.moves).toEqual([{ from: "app/a.tsx::P::raw-button::button::", to: "app/b.tsx::P::raw-button::button::" }]);
+  });
+});
+
+describe("the ratchet against real changes", () => {
+  const rise = (before: Record<string, string>, after: Record<string, string>) =>
+    findRegressions(scanFiles(after), countFingerprints(scanFiles(before)));
+
+  it("a fix in one component does not pay for a new control in another (the trade)", () => {
+    const before = {
+      "app/components/recipe/CookSyncStatusLine.tsx": `export function CookSyncStatusLine() { return <button type="button" />; }`,
+      "app/routes/shopping-list.tsx": `export default function ShoppingList() { return <p />; }`,
+    };
+    const after = {
+      "app/components/recipe/CookSyncStatusLine.tsx": `export function CookSyncStatusLine() { return <p />; }`,
+      "app/routes/shopping-list.tsx": `export default function ShoppingList() { return <button type="button" />; }`,
+    };
+    expect(rise(before, after)).toEqual({
+      regressions: [
+        {
+          fingerprint: "app/routes/shopping-list.tsx::ShoppingList::raw-button::button::type=button",
+          count: 1,
+          at: ["app/routes/shopping-list.tsx:1"],
+        },
+      ],
+      moves: [],
+    });
+  });
+
+  it("a wrapper does not launder a control (NiceLink)", () => {
+    const before = { "app/routes/page.tsx": `export function Page() { return <a href="/x">X</a>; }` };
+    const after = {
+      "app/components/nice.tsx": `export function NiceLink({ href }) { return <a href={href} />; }`,
+      "app/routes/page.tsx": `import { NiceLink } from "~/components/nice";\nexport function Page() { return <NiceLink href="/x" />; }`,
+    };
+    expect(rise(before, after).regressions.map((regression: { fingerprint: string }) => regression.fingerprint)).toEqual([
+      "app/components/nice.tsx::NiceLink::raw-anchor::a::",
+      "app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/nice#NiceLink::",
+    ]);
+  });
+
+  it("counts every hop of a wrapper chain, and terminates on a cycle", () => {
+    const files = {
+      "app/components/raw.tsx": `export function Raw() { return <button />; }`,
+      "app/components/nice.tsx": `import { Raw } from "./raw";\nexport function Nice() { return <Raw />; }`,
+      "app/components/r1.tsx": `import { Nice } from "./nice";\nexport function R1() { return <Nice />; }`,
+      "app/routes/page.tsx": `import { R1 } from "~/components/r1";\nexport function Page() { return <R1 />; }`,
+      "app/components/a.tsx": `import { B } from "./b";\nexport function A() { return <B />; }`,
+      "app/components/b.tsx": `import { A } from "./a";\nexport function B() { return <><A /><button /></>; }`,
+      "app/components/c.tsx": `import { D } from "./d";\nexport function C() { return <D />; }`,
+      "app/components/d.tsx": `import { C } from "./c";\nexport function D() { return <C />; }`,
+    };
+    expect(scanFiles(files).map((offender: Offender) => offender.fingerprint)).toEqual([
+      "app/components/a.tsx::A::uses-hand-rolled-control::app/components/b#B::",
+      "app/components/b.tsx::B::raw-button::button::",
+      "app/components/b.tsx::B::uses-hand-rolled-control::app/components/a#A::",
+      "app/components/nice.tsx::Nice::uses-hand-rolled-control::app/components/raw#Raw::",
+      "app/components/r1.tsx::R1::uses-hand-rolled-control::app/components/nice#Nice::",
+      "app/components/raw.tsx::Raw::raw-button::button::",
+      "app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/r1#R1::",
+    ]);
+  });
+
+  const panelAt = (file: string, name: string) => ({
+    [file]: `export function ${name}() { return <button type="button" />; }`,
+    "app/routes/page.tsx": `import { ${name} } from "~/${file.slice(4, -4)}";\nexport function Page() { return <${name} />; }`,
+  });
+
+  it("a moved file is neutral", () => {
+    expect(rise(panelAt("app/components/old/panel.tsx", "Panel"), panelAt("app/components/new/panel.tsx", "Panel"))).toEqual({
+      regressions: [],
+      moves: [
+        {
+          from: "app/components/old/panel.tsx::Panel::raw-button::button::type=button",
+          to: "app/components/new/panel.tsx::Panel::raw-button::button::type=button",
+        },
+        {
+          from: "app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/old/panel#Panel::",
+          to: "app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/new/panel#Panel::",
+        },
+      ],
+    });
+  });
+
+  it("a renamed component is neutral", () => {
+    const result = rise(panelAt("app/components/panel.tsx", "Panel"), panelAt("app/components/panel.tsx", "Board"));
+    expect(result.regressions).toEqual([]);
+    expect(result.moves).toHaveLength(2);
+  });
+
+  it("a moved and renamed component needs a reason", () => {
+    const result = rise(panelAt("app/components/old/panel.tsx", "Panel"), panelAt("app/components/new/board.tsx", "Board"));
+    expect(result.regressions.map((regression: { fingerprint: string }) => regression.fingerprint)).toEqual([
+      "app/components/new/board.tsx::Board::raw-button::button::type=button",
+    ]);
   });
 });
 
@@ -1086,15 +1218,15 @@ describe("the baseline", () => {
   it("serializes allowed regressions, sorted, ahead of the offenders", () => {
     expect(
       serializeBaseline([offender("a")], [
-        { fingerprint: "b", reason: "second" },
-        { fingerprint: "a", reason: "first" },
+        { fingerprint: "b", count: 2, reason: "second" },
+        { fingerprint: "a", count: 1, reason: "first" },
       ]),
     ).toBe(
       `${JSON.stringify(
         {
           allowedRegressions: [
-            { fingerprint: "a", reason: "first" },
-            { fingerprint: "b", reason: "second" },
+            { fingerprint: "a", count: 1, reason: "first" },
+            { fingerprint: "b", count: 2, reason: "second" },
           ],
           offenders: { a: 1 },
         },
@@ -1165,7 +1297,8 @@ describe("main", () => {
     const gitShow = vi.fn((_root: string, _ref: string, _file: string): string | undefined => undefined);
     return { deps: { root: "/repo", readFile, readdir, writeFile, io, exit, gitShow }, writeFile, io, exit, gitShow };
   };
-  const baselineOf = (offenders: Record<string, number>, allowedRegressions?: Array<{ fingerprint: string; reason: string }>) =>
+  type Entry = { fingerprint: string; count?: number; reason?: string };
+  const baselineOf = (offenders: Record<string, number>, allowedRegressions?: Entry[]) =>
     `${JSON.stringify(allowedRegressions ? { allowedRegressions, offenders } : { offenders }, null, 2)}\n`;
   const A = "app/routes/a.tsx::A::raw-button::button::type=button";
   const B = "app/routes/b.tsx::B::raw-anchor::a::";
@@ -1235,7 +1368,7 @@ describe("main", () => {
   it("writes a larger baseline only with a stated reason", () => {
     const { deps, io, exit, writeFile } = setup(undefined);
     main(["--write-baseline", "--allow-regression", "first baseline"], deps);
-    expect(writeFile).toHaveBeenCalledWith(baselineFile, baselineOf({ [A]: 1 }, [{ fingerprint: A, reason: "first baseline" }]));
+    expect(writeFile).toHaveBeenCalledWith(baselineFile, baselineOf({ [A]: 1 }, [{ fingerprint: A, count: 1, reason: "first baseline" }]));
     expect(io.log).toHaveBeenCalledWith(
       `hx-source-rules: wrote ${BASELINE_PATH} with 1 hand-rolled control(s), 0 move(s) and 1 allowed regression(s).`,
     );
@@ -1244,7 +1377,7 @@ describe("main", () => {
 
   it("writes a moved file without a reason, and drops allowed regressions an earlier pull request recorded", () => {
     const moved = { "/repo/app/routes/a.tsx": `export const A = 1;`, "/repo/app/routes/c.tsx": `export function A() { return <button type="button" />; }` };
-    const { deps, io, writeFile } = setup(baselineOf({ [A]: 1 }, [{ fingerprint: A, reason: "older pull request" }]), moved);
+    const { deps, io, writeFile } = setup(baselineOf({ [A]: 1 }, [{ fingerprint: A, count: 1, reason: "older pull request" }]), moved);
     main(["--write-baseline"], deps);
     expect(writeFile).toHaveBeenCalledWith(baselineFile, baselineOf({ "app/routes/c.tsx::A::raw-button::button::type=button": 1 }));
     expect(io.log).toHaveBeenCalledWith(
@@ -1254,22 +1387,59 @@ describe("main", () => {
 
   it("writes against a base ref, keeping this pull request's earlier reasons", () => {
     const extra = { "/repo/app/routes/b.tsx": `const B = () => <a href="/" />;` };
-    const { deps, writeFile, gitShow, exit } = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, reason: "earlier in this PR" }]), extra);
+    const { deps, writeFile, gitShow, exit } = setup(
+      baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, count: 1, reason: "earlier in this PR" }]),
+      extra,
+    );
     gitShow.mockReturnValue(baselineOf({ [A]: 1 }));
     main(["--write-baseline", "--base", "origin/main"], deps);
     expect(gitShow).toHaveBeenCalledWith("/repo", "origin/main", BASELINE_PATH);
     expect(writeFile).toHaveBeenCalledWith(
       baselineFile,
-      baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, reason: "earlier in this PR" }]),
+      baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, count: 1, reason: "earlier in this PR" }]),
     );
     expect(exit).not.toHaveBeenCalled();
   });
 
-  it("writes against the committed baseline when the base ref has none", () => {
-    const { deps, writeFile, gitShow } = setup(matching);
-    gitShow.mockReturnValue(undefined);
-    main(["--write-baseline", "--base", "origin/main"], deps);
-    expect(writeFile).toHaveBeenCalledWith(baselineFile, matching);
+  it("does not reuse an earlier reason for a larger rise, or one already on the base", () => {
+    const extra = {
+      "/repo/app/routes/b.tsx": `const B = () => <><a href="/" /><a href="/" /></>;`,
+    };
+    const larger = setup(baselineOf({ [A]: 1, [B]: 2 }, [{ fingerprint: B, count: 1, reason: "earlier in this PR" }]), extra);
+    larger.gitShow.mockReturnValue(baselineOf({ [A]: 1 }));
+    main(["--write-baseline", "--base", "origin/main"], larger.deps);
+    expect(larger.writeFile).not.toHaveBeenCalled();
+    expect(larger.exit).toHaveBeenCalledWith(1);
+
+    const entry = { fingerprint: B, count: 2, reason: "spent on main" };
+    const spent = setup(baselineOf({ [A]: 1, [B]: 2 }, [entry]), extra);
+    spent.gitShow.mockReturnValue(baselineOf({ [A]: 1 }, [entry]));
+    main(["--write-baseline", "--base", "origin/main"], spent.deps);
+    expect(spent.writeFile).not.toHaveBeenCalled();
+    expect(spent.exit).toHaveBeenCalledWith(1);
+
+    const renewed = setup(baselineOf({ [A]: 1, [B]: 2 }, [entry]), extra);
+    renewed.gitShow.mockReturnValue(baselineOf({ [A]: 1 }, [entry]));
+    main(["--write-baseline", "--base", "origin/main", "--allow-regression", "a new reason"], renewed.deps);
+    expect(renewed.writeFile).toHaveBeenCalledWith(
+      baselineFile,
+      baselineOf({ [A]: 1, [B]: 2 }, [{ fingerprint: B, count: 2, reason: "a new reason" }]),
+    );
+  });
+
+  it("records no allowed regressions when the base ref has no baseline, but still wants a reason to rise", () => {
+    const extra = { "/repo/app/routes/b.tsx": `const B = () => <a href="/" />;` };
+    const refused = setup(baselineOf({ [A]: 1 }, [{ fingerprint: A, count: 1, reason: "old" }]), extra);
+    main(["--write-baseline", "--base", "origin/main"], refused.deps);
+    expect(refused.writeFile).not.toHaveBeenCalled();
+    expect(refused.exit).toHaveBeenCalledWith(1);
+
+    const { deps, writeFile, io } = setup(baselineOf({ [A]: 1 }, [{ fingerprint: A, count: 1, reason: "old" }]), extra);
+    main(["--write-baseline", "--base", "origin/main", "--allow-regression", "measure"], deps);
+    expect(writeFile).toHaveBeenCalledWith(baselineFile, baselineOf({ [A]: 1, [B]: 1 }));
+    expect(io.log).toHaveBeenCalledWith(
+      `hx-source-rules: wrote ${BASELINE_PATH} with 2 hand-rolled control(s), 0 move(s) and 0 allowed regression(s); origin/main has no baseline, so nothing is recorded to ratchet against.`,
+    );
   });
 
   it("refuses to write a rise against the base ref without a reason", () => {
@@ -1302,19 +1472,52 @@ describe("main", () => {
       expect(exit).toHaveBeenCalledWith(1);
     });
 
-    it("passes a rise the new baseline allows with a reason, and not one with an empty reason", () => {
-      const allowed = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, reason: "measured" }]), extra);
+    it("passes a rise the new baseline allows with a reason and count, and not an empty reason or a smaller count", () => {
+      const allowed = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, count: 1, reason: "measured" }]), extra);
       allowed.gitShow.mockReturnValue(matching);
       main(["--base", "abc123"], allowed.deps);
       expect(allowed.exit).not.toHaveBeenCalled();
       expect(allowed.io.log).toHaveBeenCalledWith("hx-source-rules: ratchet against abc123: 1 allowed regression(s), 0 move(s).");
 
-      for (const entry of [{ fingerprint: B, reason: " " }, { fingerprint: B }]) {
-        const empty = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry as { fingerprint: string; reason: string }]), extra);
+      for (const entry of [{ fingerprint: B, count: 1, reason: " " }, { fingerprint: B, count: 1 }]) {
+        const empty = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry]), extra);
         empty.gitShow.mockReturnValue(matching);
         main(["--base", "abc123"], empty.deps);
         expect(empty.exit).toHaveBeenCalledWith(1);
       }
+
+      for (const entry of [{ fingerprint: B, count: 0, reason: "too small" }, { fingerprint: B, reason: "no count" }]) {
+        const small = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry]), extra);
+        small.gitShow.mockReturnValue(matching);
+        main(["--base", "abc123"], small.deps);
+        expect(small.io.error).toHaveBeenCalledWith(
+          `Regression against abc123: ${B} (+1) at app/routes/b.tsx:1, but its allowed regression permits ${entry.count ?? 0}. Use an Ouro HX component instead, or record why: pnpm hx:source-rules --write-baseline --base abc123 --allow-regression "<reason>"`,
+        );
+        expect(small.exit).toHaveBeenCalledWith(1);
+      }
+    });
+
+    it("does not honour, and fails, an allowed regression already on the base", () => {
+      const entry = { fingerprint: B, count: 1, reason: "spent" };
+      const { deps, io, exit, gitShow } = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry]), extra);
+      gitShow.mockReturnValue(baselineOf({ [A]: 1 }, [entry]));
+      main(["--base", "abc123"], deps);
+      expect(io.error).toHaveBeenCalledWith(
+        `Stale allowed regression: ${B} ("spent") is already in abc123's baseline. Rewrite the baseline: pnpm hx:source-rules --write-baseline --base abc123`,
+      );
+      expect(io.error).toHaveBeenCalledWith(expect.stringContaining(`Regression against abc123: ${B} (+1)`));
+      expect(exit).toHaveBeenCalledWith(1);
+
+      const sameBaseline = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry]), extra);
+      sameBaseline.gitShow.mockReturnValue(baselineOf({ [A]: 1, [B]: 1 }, [entry]));
+      main(["--base", "abc123"], sameBaseline.deps);
+      expect(sameBaseline.io.error).toHaveBeenCalledWith(expect.stringContaining("Stale allowed regression"));
+      expect(sameBaseline.exit).toHaveBeenCalledWith(1);
+
+      const other = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ ...entry, reason: "this pull request" }]), extra);
+      other.gitShow.mockReturnValue(baselineOf({ [A]: 1 }, [entry]));
+      main(["--base", "abc123"], other.deps);
+      expect(other.exit).not.toHaveBeenCalled();
     });
 
     it("skips the ratchet when the base has no baseline yet", () => {

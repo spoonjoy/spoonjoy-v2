@@ -23,13 +23,16 @@
 //   followed through same-file constants and helpers; and stylesheet rules (or @apply) whose
 //   selector puts that state on a .sj-* class or a [data-sj-*] hook. Hover-only decoration and
 //   page motion are not control state.
-// - uses-hand-rolled-control: a JSX use of an imported app component that contains an offender
-//   (directly or through a component in its own file), counted at the call site. Imports resolve
-//   through tsconfig paths, barrels and re-exports; a re-exported third-party control counts as
-//   third-party-control where it is used.
+// - uses-hand-rolled-control: a JSX use of an imported app component that is offending, counted at
+//   the call site. A component is offending when an offender sits inside it, or it renders an
+//   offending component (same file or imported), to a fixed point across modules: a wrapper
+//   (`NiceLink` around a raw `<a>`) and every wrapper of it count where they are used. Imports
+//   resolve through tsconfig paths, barrels, re-exports and namespace re-exports (`export * as`);
+//   a re-exported third-party control counts as third-party-control where it is used.
 //
-// An element is what it renders: Motion's `<m.button>`, `createElement("button")`, a string-typed
-// tag (`const Tag = "button"`) and an `as="button"` prop are buttons. Tags are resolved in every
+// An element is what it renders: Motion's `<m.button>` and `motion.create("button")`,
+// `createElement("button")`, a string-typed tag (`const Tag = "button"`) and an `as="button"` prop
+// are buttons. Tags are resolved in every
 // category (`@headlessui/react.Button`, `app/components/navigation/app-link#Link`).
 //
 // Each offender has a fingerprint, `file::component::category::tag::stable props` (props are
@@ -37,9 +40,16 @@
 // file changes it. test/scripts/hx-source-rules.baseline.json holds the fingerprint counts; the
 // scan must equal it exactly. `pnpm hx:source-rules` checks; with `--base <ref>` it also ratchets:
 // no fingerprint may rise against that ref's baseline unless the new baseline lists it under
-// `allowedRegressions` with a reason. A move (same category, tag and literal props; different
-// file, component or expression text), paired one-to-one, is neutral. `--write-baseline` rewrites
-// the file, refusing a rise unless `--allow-regression <reason>` records why.
+// `allowedRegressions` with a reason and the count it permits, and that entry is not already on
+// the base (an entry is spent by the pull request that adds it; a copy left on the base fails as
+// stale). A move is neutral: an added and a removed fingerprint with the same category, tag and
+// literal props, in the same file (a renamed component) or the same component (a moved file),
+// paired one-to-one. `--write-baseline` rewrites the file, refusing a rise unless
+// `--allow-regression <reason>` records why; when the base has no baseline it records nothing.
+//
+// Known gaps: members of an imported app component (`<Menu.Item>` from an app module) are not
+// counted at call sites, and Motion through a namespace import of motion/react
+// (`<Motion.motion.div>`) is not treated as the element it renders.
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -341,6 +351,9 @@ function indexScript(file, source) {
     if (ts.isExportDeclaration(node) && !node.isTypeOnly) {
       const specifier = node.moduleSpecifier?.text;
       if (!node.exportClause) stars.push(specifier);
+      if (node.exportClause && ts.isNamespaceExport(node.exportClause)) {
+        exports.set(node.exportClause.name.text, { specifier, namespace: true });
+      }
       for (const element of node.exportClause && ts.isNamedExports(node.exportClause) ? node.exportClause.elements : []) {
         const local = (element.propertyName ?? element.name).text;
         if (!element.isTypeOnly) exports.set(element.name.text, specifier ? { specifier, imported: local } : { local });
@@ -403,6 +416,8 @@ function createResolver(modules, paths) {
     const base = moduleBase(from, specifier);
     return base && [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`, `${base}/index.ts`].find((file) => modules.has(file));
   };
+  const namespaceOf = (from, specifier) =>
+    isThirdPartyControlModule(specifier) ? { thirdPartyNamespace: specifier } : { namespace: resolveModule(from, specifier) };
   const fromSpecifier = (from, specifier, name, seen) => {
     if (isThirdPartyControlModule(specifier)) return { thirdParty: `${specifier}.${name}` };
     const target = resolveModule(from, specifier);
@@ -413,7 +428,7 @@ function createResolver(modules, paths) {
     const thirdParty = module.localThirdParty(local);
     if (thirdParty) return { thirdParty };
     const binding = module.imports.get(local);
-    if (binding?.namespace) return { namespace: resolveModule(file, binding.specifier) };
+    if (binding?.namespace) return namespaceOf(file, binding.specifier);
     if (binding) return fromSpecifier(file, binding.specifier, binding.imported, seen);
     return { file, local };
   };
@@ -423,6 +438,7 @@ function createResolver(modules, paths) {
     seen.add(key);
     const module = modules.get(file);
     const entry = module.exports.get(name);
+    if (entry?.namespace) return namespaceOf(file, entry.specifier);
     if (entry?.specifier) return fromSpecifier(file, entry.specifier, entry.imported, seen);
     if (entry) return resolveLocal(file, entry.local, seen);
     for (const specifier of module.stars) {
@@ -435,16 +451,20 @@ function createResolver(modules, paths) {
   };
 
   // An imported tag: `{ thirdParty }`, `{ definition: { file, local }, rest, display }`, or just a
-  // display name built from the import when its module is not scanned (HX, packages).
+  // display name built from the import when its module is not scanned (HX, packages). Namespaces,
+  // imported or re-exported (`export * as Dialog from "@radix-ui/react-dialog"`), resolve by member.
   const resolveImport = (file, head, members) => {
     const binding = modules.get(file).imports.get(head);
     let definition = binding.namespace
-      ? { namespace: resolveModule(file, binding.specifier) }
+      ? namespaceOf(file, binding.specifier)
       : fromSpecifier(file, binding.specifier, binding.imported, new Set());
     let rest = members;
     while (definition?.namespace && rest.length > 0) {
       definition = resolveExport(definition.namespace, rest[0], new Set());
       rest = rest.slice(1);
+    }
+    if (definition?.thirdPartyNamespace && rest.length > 0) {
+      return { thirdParty: [definition.thirdPartyNamespace, ...rest].join(".") };
     }
     if (definition?.thirdParty) return { thirdParty: [definition.thirdParty, ...rest].join(".") };
     if (definition?.file) {
@@ -564,6 +584,18 @@ function scanScript(module, resolver) {
     return binding.imported === "Reorder" ? "reorder" : undefined;
   };
 
+  // `const X = motion.create("button")` (or the older `motion("button")`) renders a button.
+  const motionCreatedTags = (node) => {
+    if (!node || !ts.isCallExpression(node)) return [];
+    const callee = node.expression;
+    const name = ts.isIdentifier(callee)
+      ? callee.text
+      : ts.isPropertyAccessExpression(callee) && callee.name.text === "create" && ts.isIdentifier(callee.expression)
+        ? callee.expression.text
+        : undefined;
+    return name !== undefined && motionKindOf(name) === "element" ? intrinsicCandidates(node.arguments[0]) : [];
+  };
+
   // What a tag renders: intrinsic elements (literal, motion's, or a string-typed variable), a
   // React Router anchor, a third-party control, or a component reference.
   const describe = (tagText, asInitializer, literalIntrinsic) => {
@@ -585,13 +617,15 @@ function scanScript(module, resolver) {
     }
     const dynamic = members.length === 0 ? intrinsicCandidates(declarations.get(head) ?? bindingDefaults.get(head)) : [];
     if (dynamic.length > 0) return description({ tags: dynamic, display: dynamic.join("|") });
+    const created = members.length === 0 ? motionCreatedTags(declarations.get(head)) : [];
+    if (created.length > 0) return description({ tags: created, motion: true, display: created.join("|") });
     return description({ ref: { head, members }, display: resolver.displayOf(file, head, members) ?? resolved, asTags });
   };
 
   const checkControl = (node, control, attributes) => {
     const props = stableProps(attributes);
     if (control.ref && imports.has(control.ref.head)) {
-      uses.push({ ...control.ref, component: componentName(node), line: lineOf(node), props });
+      uses.push({ ...control.ref, component: componentName(node), owners: ownersOf(node), line: lineOf(node), props });
     } else if (control.ref) {
       renders.push({ owners: ownersOf(node), head: control.ref.head });
     }
@@ -677,41 +711,42 @@ function analyzeScripts(entries, paths) {
   const modules = new Map(entries.map(({ file, source }) => [file, indexScript(file, source)]));
   const resolver = createResolver(modules, paths);
   const scans = [...modules.values()].map((module) => scanScript(module, resolver));
-  for (const scan of scans) {
-    const offending = new Set(scan.ownerHits);
-    for (let grew = true; grew; ) {
-      grew = false;
-      for (const { owners, head } of scan.renders) {
-        if (offending.has(head) && owners.some((owner) => !offending.has(owner))) {
-          for (const owner of owners) offending.add(owner);
-          grew = true;
-        }
+  for (const scan of scans) scan.module.offending = new Set(scan.ownerHits);
+  const calls = scans.flatMap(({ module, uses }) =>
+    uses.map((use) => ({ module, use, resolved: resolver.resolveImport(module.file, use.head, use.members) })),
+  );
+  const categoryOf = ({ resolved }) => {
+    if (resolved?.thirdParty) return "third-party-control";
+    const definition = resolved?.definition;
+    const offending = definition && resolved.rest.length === 0 && modules.get(definition.file).offending.has(definition.local);
+    return offending ? "uses-hand-rolled-control" : undefined;
+  };
+  const mark = (offending, owners) => {
+    const fresh = owners.filter((owner) => !offending.has(owner));
+    for (const owner of fresh) offending.add(owner);
+    return fresh.length > 0;
+  };
+  // To a fixed point across modules: a component that renders an offending component (from its own
+  // file or an import) is offending too, so its callers count. Sets only grow, so cycles end.
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const { module, renders } of scans) {
+      for (const { owners, head } of renders) {
+        if (module.offending.has(head)) grew = mark(module.offending, owners) || grew;
       }
     }
-    scan.module.offending = offending;
+    for (const call of calls) {
+      if (categoryOf(call)) grew = mark(call.module.offending, call.use.owners) || grew;
+    }
   }
-  return scans.flatMap(({ module, offenders, uses }) => {
-    const callSites = [];
-    for (const use of uses) {
-      const resolved = resolver.resolveImport(module.file, use.head, use.members);
-      const owner = resolved?.definition && resolved.rest.length === 0 ? modules.get(resolved.definition.file) : undefined;
-      const category = resolved?.thirdParty
-        ? "third-party-control"
-        : owner?.offending.has(resolved.definition.local)
-          ? "uses-hand-rolled-control"
-          : undefined;
-      if (category) {
-        const tag = resolved.thirdParty ?? resolved.display;
-        callSites.push({
-          category,
-          fingerprint: [module.file, use.component, category, tag, use.props].join("::"),
-          file: module.file,
-          line: use.line,
-        });
-      }
-    }
-    return [...offenders, ...callSites];
+  const callSites = calls.flatMap((call) => {
+    const category = categoryOf(call);
+    if (!category) return [];
+    const { module, use, resolved } = call;
+    const tag = resolved.thirdParty ?? resolved.display;
+    return [{ category, fingerprint: [module.file, use.component, category, tag, use.props].join("::"), file: module.file, line: use.line }];
   });
+  return [...scans.flatMap(({ offenders }) => offenders), ...callSites];
 }
 
 function scanStylesheet(file, source) {
@@ -825,10 +860,11 @@ export function compareWithBaseline(offenders, baseline) {
 }
 
 // What a fingerprint keeps when code moves: its category, its tag (without the defining file's
-// path) and its props with non-literal values blanked. File, component and expression text may change.
+// path; for a call site, any offending app component) and its props with non-literal values
+// blanked. Pairing also needs the same file or the same component (see findRegressions).
 function moveKey(fingerprint) {
   const parts = fingerprint.split("::");
-  const tag = parts.slice(3, -1).join("::").replace(/^app\/[^#]*#/, "#");
+  const tag = parts[2] === "uses-hand-rolled-control" ? "" : parts.slice(3, -1).join("::").replace(/^app\/[^#]*#/, "#");
   let depth = 0;
   let props = "";
   for (const char of parts.at(-1)) {
@@ -842,22 +878,33 @@ function moveKey(fingerprint) {
 
 /**
  * The fingerprints the scan has more of than `baseline` counts, after pairing each added
- * fingerprint one-to-one with a removed one that differs only by file, component or non-literal
- * props (a move, which is neutral).
+ * fingerprint one-to-one with a removed one of the same category, tag and literal props that is
+ * in the same file (a renamed component) or the same component (a moved file): a move, which is
+ * neutral. A fix elsewhere never pays for a new control.
  */
 export function findRegressions(offenders, baseline) {
   const { added, removed } = compareWithBaseline(offenders, baseline);
+  const place = (fingerprint) => {
+    const [file, component] = fingerprint.split("::");
+    return { fingerprint, file, component };
+  };
   const pool = new Map();
   for (const { fingerprint, count } of removed) {
     const key = moveKey(fingerprint);
-    pool.set(key, [...(pool.get(key) ?? []), ...Array(count).fill(fingerprint)]);
+    pool.set(key, [...(pool.get(key) ?? []), ...Array(count).fill(place(fingerprint))]);
   }
   const regressions = [];
   const moves = [];
   for (const entry of added) {
+    const { file, component } = place(entry.fingerprint);
     const candidates = pool.get(moveKey(entry.fingerprint)) ?? [];
     let count = entry.count;
-    for (; count > 0 && candidates.length > 0; count -= 1) moves.push({ from: candidates.shift(), to: entry.fingerprint });
+    for (; count > 0; count -= 1) {
+      const sameFile = candidates.findIndex((candidate) => candidate.file === file);
+      const index = sameFile === -1 ? candidates.findIndex((candidate) => candidate.component === component) : sameFile;
+      if (index === -1) break;
+      moves.push({ from: candidates.splice(index, 1)[0].fingerprint, to: entry.fingerprint });
+    }
     if (count > 0) regressions.push({ ...entry, count });
   }
   return { regressions, moves };
@@ -929,6 +976,7 @@ function readBaseline(file, readFile) {
 }
 
 const hasReason = (reason) => typeof reason === "string" && reason.trim() !== "";
+const entryKey = ({ fingerprint, reason }) => `${fingerprint}\u0000${reason}`;
 
 export function main(argv, deps) {
   const { root, io, exit, readFile, readdir, writeFile, gitShow } = {
@@ -953,15 +1001,22 @@ export function main(argv, deps) {
   const base = baseText === undefined ? undefined : parseBaseline(baseText);
 
   if (options.write) {
-    // Against the base ref's baseline when there is one (so this pull request's earlier reasons
-    // stay), else the committed one (so a previous pull request's allowed regressions drop).
+    // Against the base ref's baseline when there is one, keeping this pull request's earlier
+    // reasons (entries not already on the base, for a rise no larger than they allowed). Otherwise
+    // against the committed baseline, dropping every earlier entry. An entry is one pull request's.
     const { regressions, moves } = findRegressions(offenders, (base ?? committed).offenders);
-    const earlier = new Map(committed.allowedRegressions.map(({ fingerprint, reason }) => [fingerprint, reason]));
-    const allowed = regressions.map(({ fingerprint }) => ({
-      fingerprint,
-      reason: [earlier.get(fingerprint), options.reason].find(hasReason),
-    }));
-    const unexplained = regressions.filter((_, index) => allowed[index].reason === undefined);
+    const spent = new Set((base?.allowedRegressions ?? []).map(entryKey));
+    const earlier = new Map(
+      (base ? committed.allowedRegressions : [])
+        .filter((entry) => !spent.has(entryKey(entry)))
+        .map((entry) => [entry.fingerprint, entry]),
+    );
+    const allowed = regressions.map(({ fingerprint, count }) => {
+      const prior = earlier.get(fingerprint);
+      const reason = prior?.count >= count && hasReason(prior.reason) ? prior.reason : options.reason;
+      return { fingerprint, count, reason };
+    });
+    const unexplained = regressions.filter((_, index) => !hasReason(allowed[index].reason));
     if (unexplained.length > 0) {
       for (const line of formatComparison({ added: unexplained, removed: [] })) io.error(line);
       io.error(
@@ -970,9 +1025,12 @@ export function main(argv, deps) {
       exit(1);
       return;
     }
-    writeFile(baselineFile, serializeBaseline(offenders, allowed));
+    // With no baseline at the base ref nothing ratchets, so nothing is recorded.
+    const recorded = options.base !== undefined && !base ? [] : allowed;
+    const unrecorded = recorded === allowed ? "" : `; ${options.base} has no baseline, so nothing is recorded to ratchet against`;
+    writeFile(baselineFile, serializeBaseline(offenders, recorded));
     io.log(
-      `hx-source-rules: wrote ${BASELINE_PATH} with ${offenders.length} hand-rolled control(s), ${moves.length} move(s) and ${allowed.length} allowed regression(s).`,
+      `hx-source-rules: wrote ${BASELINE_PATH} with ${offenders.length} hand-rolled control(s), ${moves.length} move(s) and ${recorded.length} allowed regression(s)${unrecorded}.`,
     );
     return;
   }
@@ -984,18 +1042,31 @@ export function main(argv, deps) {
   }
   if (base) {
     const { regressions, moves } = findRegressions(offenders, base.offenders);
-    const reasons = new Set(
-      committed.allowedRegressions.filter(({ reason }) => hasReason(reason)).map(({ fingerprint }) => fingerprint),
-    );
-    const unexplained = regressions.filter(({ fingerprint }) => !reasons.has(fingerprint));
-    for (const { fingerprint, count, at } of unexplained) {
+    // An entry already on the base was spent by an earlier pull request: it is never honoured again.
+    const spent = new Set(base.allowedRegressions.map(entryKey));
+    for (const entry of committed.allowedRegressions.filter((candidate) => spent.has(entryKey(candidate)))) {
       lines.push(
-        `Regression against ${options.base}: ${fingerprint} (+${count}) at ${at.join(", ")}. Use an Ouro HX component instead, or record why: ${UPDATE_COMMAND} --base ${options.base} --allow-regression "<reason>"`,
+        `Stale allowed regression: ${entry.fingerprint} ("${entry.reason}") is already in ${options.base}'s baseline. Rewrite the baseline: ${UPDATE_COMMAND} --base ${options.base}`,
       );
     }
-    notes.push(
-      `hx-source-rules: ratchet against ${options.base}: ${regressions.length - unexplained.length} allowed regression(s), ${moves.length} move(s).`,
+    const fresh = new Map(
+      committed.allowedRegressions
+        .filter((entry) => !spent.has(entryKey(entry)) && hasReason(entry.reason))
+        .map((entry) => [entry.fingerprint, entry]),
     );
+    let allowedCount = 0;
+    for (const { fingerprint, count, at } of regressions) {
+      const entry = fresh.get(fingerprint);
+      if (entry?.count >= count) {
+        allowedCount += 1;
+        continue;
+      }
+      const permits = entry ? `, but its allowed regression permits ${entry.count ?? 0}` : "";
+      lines.push(
+        `Regression against ${options.base}: ${fingerprint} (+${count}) at ${at.join(", ")}${permits}. Use an Ouro HX component instead, or record why: ${UPDATE_COMMAND} --base ${options.base} --allow-regression "<reason>"`,
+      );
+    }
+    notes.push(`hx-source-rules: ratchet against ${options.base}: ${allowedCount} allowed regression(s), ${moves.length} move(s).`);
   }
   for (const line of lines) io.error(line);
   if (lines.length > 0) {
