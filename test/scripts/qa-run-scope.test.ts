@@ -889,6 +889,61 @@ describe("deploy", () => {
     expect(log).toHaveBeenLastCalledWith("Deployed\nwarning\n");
   });
 
+  const internalAuthServerError = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
+    stdout: "",
+    stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts) failed.\n  Internal authentication error: internal server error [code: 10500]\n",
+  });
+
+  it("bounds retries of the same run's deploy after the observed internal server response", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(internalAuthServerError)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(2);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 1));
+    expect(exec.mock.calls).toEqual([
+      ["pnpm", ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE], { maxBuffer: 64 * 1024 * 1024 }],
+      ["pnpm", ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE], { maxBuffer: 64 * 1024 * 1024 }],
+    ]);
+    expect(log).toHaveBeenCalledWith(internalAuthServerError.stderr);
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare reported an internal authentication server error (code 10500) while deploying ${IDENTITY.workerName}; deploying again in 5 s.`);
+    expect(log).toHaveBeenLastCalledWith("Deployed\n");
+  });
+
+  it("preserves an exhausted internal server error instead of reporting a successful deploy", async () => {
+    const exec = vi.fn().mockRejectedValue(internalAuthServerError);
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).rejects.toBe(internalAuthServerError);
+    expect(exec).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS);
+    expect(log.mock.calls.filter(([line]) => line === internalAuthServerError.stderr)).toHaveLength(DEPLOY_RETRY_DELAYS_MS.length + 1);
+  });
+
+  it.each([
+    "Authentication error [code: 10000]",
+    "Internal authentication error: internal server error [code: 10000]",
+    "Authentication error [code: 10500]",
+    "Internal authentication error: permission denied [code: 10500]",
+    "Internal authentication error: internal server error [code: 10501]",
+    "Forbidden [code: 10001]",
+    "Build failed",
+  ])("does not retry a nonmatching response: %s", async (stderr) => {
+    const error = Object.assign(new Error("deploy failed"), { stderr });
+    const exec = vi.fn().mockRejectedValue(error);
+    const sleep = vi.fn();
+    const log = vi.fn();
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).rejects.toBe(error);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(stderr);
+  });
+
   it("gives up after the last retry, and never retries any other failure", async () => {
     const always = vi.fn().mockRejectedValue(notFound);
     const sleep = vi.fn(async () => {});
