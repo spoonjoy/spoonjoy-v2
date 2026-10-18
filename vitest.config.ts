@@ -26,6 +26,7 @@ const coverageInclude = [
   "scripts/run-with-warning-policy.mjs",
   "scripts/e2e-run-cleanup.mjs",
   "scripts/check-journey-rules.mjs",
+  "scripts/hx-source-rules.mjs",
   "scripts/sanitize-journey-traces.mjs",
   "scripts/count-cloudflare-requests.mjs",
   "scripts/qa-run-scope.mjs",

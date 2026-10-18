@@ -470,6 +470,10 @@ function commandStepSignature(...commands: string[]): string {
 const CI_CHANGED_TESTS_COMMAND =
   'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed';
 
+// The HX source rule (scripts/hx-source-rules.mjs) runs in both unit lanes: vitest --changed skips
+// its test when only the app code it scans changes.
+const CI_HX_SOURCE_RULES_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run hx:source-rules`;
+
 const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
   ["advisory", [
     actionStepSignature(PINNED_CHECKOUT_ACTION),
@@ -521,6 +525,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
+    commandStepSignature(CI_HX_SOURCE_RULES_COMMAND),
     commandStepSignature("pnpm run verify:clean:test:coverage"),
     commandStepSignature("pnpm run verify:clean:test:mcp-sdk-python"),
     commandStepSignature("pnpm run verify:clean:build"),
@@ -543,6 +548,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
+    commandStepSignature(CI_HX_SOURCE_RULES_COMMAND),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"`),
     commandStepSignature(CI_CHANGED_TESTS_COMMAND),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
