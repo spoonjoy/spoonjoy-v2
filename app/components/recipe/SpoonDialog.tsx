@@ -6,7 +6,7 @@ import { Button } from "../button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
-import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { Form, type ReadonlyFormErrors } from "~/components/ouro/form/form";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import {
@@ -38,7 +38,7 @@ export interface SpoonDialogProps {
   isOriginCookCandidate: boolean;
   coverPromptMode?: "none" | "first-photo" | "optional-update";
   /** Messages bound to this dialog's actual accepted response with formErrors. */
-  errors?: FormErrors;
+  errors?: ReadonlyFormErrors;
 }
 
 export function SpoonDialog({

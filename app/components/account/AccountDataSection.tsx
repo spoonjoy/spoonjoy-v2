@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Form as RouterForm } from "react-router";
 import { Download } from "lucide-react";
 import { Button } from "~/components/button";
-import { Form, type FormErrors } from "~/components/ouro/form/form";
+import { Form } from "~/components/ouro/form/form";
 import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Link } from "~/components/ouro/link/link";
@@ -33,7 +33,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
   const [isDeleting, setIsDeleting] = useState(defaultOpen || Boolean(deleteError));
   const [typedUsername, setTypedUsername] = useState("");
   const needsFreshSignIn = deleteError?.error === "recent_sign_in_required";
-  const formErrors = useMemo<FormErrors | undefined>(() => {
+  const formErrors = useMemo(() => {
     if (!deleteError?.message) return bindFormErrors(deleteError);
     // An account without a password has no password field to put the message on.
     const field = DELETE_ERROR_FIELDS[deleteError.error ?? ""];
