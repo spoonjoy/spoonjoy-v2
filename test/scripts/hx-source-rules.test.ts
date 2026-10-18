@@ -11,12 +11,14 @@ import {
   defaultExit,
   findOffenders,
   findOffendersInSource,
+  findRegressions,
   formatComparison,
   isCliEntry,
   isControlStateClass,
   isScannedFile,
   isThirdPartyControlModule,
   listSourceFiles,
+  loadPaths,
   main,
   runCliIfEntry,
   serializeBaseline,
@@ -27,11 +29,14 @@ import { expectConsoleError } from "../warning-policy";
 type Offender = { category: string; fingerprint: string; file: string; line: number };
 
 const scan = (source: string, file = "app/routes/fixture.tsx"): Offender[] => findOffendersInSource(file, source);
+const PATHS = { "~/*": ["./app/*"], "#dialog": ["./app/components/dialog"] };
+const scanFiles = (files: Record<string, string>) =>
+  findOffenders(Object.keys(files), { root: "/repo", readFile: (file: string) => files[path.relative("/repo", file)], paths: PATHS });
 const categories = (source: string, file?: string) => scan(source, file).map((offender) => offender.category);
 const fingerprints = (source: string, file?: string) => scan(source, file).map((offender) => offender.fingerprint);
 
 describe("findOffendersInSource: each category", () => {
-  it("lists the twelve categories", () => {
+  it("lists the categories", () => {
     expect(CATEGORIES).toEqual([
       "raw-button",
       "raw-anchor",
@@ -46,6 +51,7 @@ describe("findOffendersInSource: each category", () => {
       "data-ouro-attr",
       "control-state-style",
       "third-party-control",
+      "uses-hand-rolled-control",
     ]);
   });
 
@@ -405,7 +411,340 @@ describe("third-party-control", () => {
     const source = `
       import * as Headless from "@headlessui/react";
       export function Theme() { return <Headless.MenuItems className="focus:outline-none" />; }`;
-    expect(categories(source)).toEqual(["third-party-control", "control-state-style"]);
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::Theme::third-party-control::@headlessui/react.MenuItems::",
+      "app/routes/fixture.tsx::Theme::control-state-style::@headlessui/react.MenuItems::",
+    ]);
+  });
+});
+
+describe("motion elements", () => {
+  it("treats motion's element components as the intrinsic element they render", () => {
+    const source = `
+      import { m, motion as M, Reorder, AnimatePresence } from "motion/react";
+      import type { motion as TypeOnly } from "motion/react";
+      import * as mm from "motion/react-m";
+      import * as Whole from "motion/react";
+      import { motion } from "framer-motion";
+      import { m as icon } from "lucide-react";
+      export function Moving({ go }) {
+        return <>
+          <m.button type="button" />
+          <M.a href="/" />
+          <motion.div onClick={go} />
+          <mm.li whileTap={{ scale: 0.9 }} />
+          <m.div drag="x" />
+          <m.span onPanStart={go} />
+          <m.div whileFocus={{}} onTapStart={go} />
+          <m.div whileHover={{ scale: 1.02 }} layout />
+          <div whileTap={{}} />
+          <icon.div onClick={go} />
+          <Whole.div onClick={go} />
+          <AnimatePresence />
+          <AnimatePresence.Child onClick={go} />
+          <m.Custom onClick={go} />
+          <Reorder.Group values={[]} onReorder={go} />
+          <Reorder.Item value={1} />
+          <Reorder.Item as="div" value={2} />
+          <Reorder.Other />
+        </>;
+      }`;
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::Moving::raw-button::button::type=button",
+      "app/routes/fixture.tsx::Moving::raw-anchor::a::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::div::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::li::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::div::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::span::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::div::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::li::",
+      "app/routes/fixture.tsx::Moving::plain-element-handler::div::",
+    ]);
+  });
+});
+
+describe("string tags", () => {
+  it("resolves string-typed dynamic tags, as props and createElement calls", () => {
+    const source = `
+      import React, { createElement } from "react";
+      const Tag = "button";
+      const Heading = "h2";
+      export function Dynamic({ href, as: As = "a", go, x }) {
+        const Wrapper = href ? "a" : "div";
+        const select = document.createElement("select");
+        return <>
+          <Tag type="submit" />
+          <Wrapper onClick={go} />
+          <As />
+          <Heading tabIndex={2} />
+          {createElement("button", { type: "button", onClick: go })}
+          {React.createElement("div", { onKeyDown: go, role: "button", [x]: 1, ...x })}
+          {createElement(Tag, null)}
+          {createElement("input", { type: "hidden", name: "id" })}
+          {createElement("span", { "data-ouro": "x" })}
+          {createElement(Component, {})}
+          {createElement()}
+          {createElement(\`b\${x}\`)}
+          <Card as="button" onClick={go} />
+          <Card as={href ? "a" : undefined} />
+          <Card as={("select")} />
+          <Card as={"textarea" as const} />
+          <Card as={"details" satisfies string} />
+          <Card as={(x ?? "summary")!} />
+          <Card as={x || "button"} />
+          <Card as={x && "button"} />
+          <Card as={} />
+          <Card as="section" />
+        </>;
+      }`;
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::Dynamic::raw-select::select::",
+      "app/routes/fixture.tsx::Dynamic::raw-button::button::type=submit",
+      "app/routes/fixture.tsx::Dynamic::raw-anchor::a::",
+      "app/routes/fixture.tsx::Dynamic::plain-element-handler::div::",
+      "app/routes/fixture.tsx::Dynamic::raw-anchor::a::",
+      "app/routes/fixture.tsx::Dynamic::positive-tabindex::h2::",
+      "app/routes/fixture.tsx::Dynamic::raw-button::button::type=button",
+      "app/routes/fixture.tsx::Dynamic::plain-element-handler::div::role=button",
+      "app/routes/fixture.tsx::Dynamic::interactive-role::div::role=button",
+      "app/routes/fixture.tsx::Dynamic::raw-button::button::",
+      "app/routes/fixture.tsx::Dynamic::data-ouro-attr::span[data-ouro]::",
+      "app/routes/fixture.tsx::Dynamic::raw-button::button::",
+      "app/routes/fixture.tsx::Dynamic::raw-anchor::a::",
+      "app/routes/fixture.tsx::Dynamic::raw-select::select::",
+      "app/routes/fixture.tsx::Dynamic::raw-textarea::textarea::",
+      "app/routes/fixture.tsx::Dynamic::details-summary::details::",
+      "app/routes/fixture.tsx::Dynamic::details-summary::summary::",
+      "app/routes/fixture.tsx::Dynamic::raw-button::button::",
+    ]);
+  });
+
+  it("records createElement props the way JSX props are recorded", () => {
+    const source = `function Made({ label, disabled }) {
+      return createElement("button", { "aria-label": label, disabled, name: "go" });
+    }`;
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::Made::raw-button::button::name=go,aria-label={label}",
+    ]);
+  });
+});
+
+describe("call sites", () => {
+  const files = {
+    "app/components/navigation/app-link.tsx": `export function Link({ href }) { return <a href={href} />; }`,
+    "app/components/navigation/index.ts": [
+      `export { Link as AppLink } from "./app-link";`,
+      `export * from "./safe";`,
+      `export * from "@radix-ui/react-dialog";`,
+      `export * as everything from "./safe";`,
+      `export type { Hidden } from "./safe";`,
+      `export { type Hidden2, Safe as SafeAgain } from "./safe";`,
+    ].join("\n"),
+    "app/components/navigation/safe.tsx": `export function Safe() { return <p />; }`,
+    "app/components/dialog.tsx": [
+      `export { Root as DialogRoot } from "@radix-ui/react-dialog";`,
+      `import * as Tabs from "@radix-ui/react-tabs";`,
+      `export const TabList = Tabs.List;`,
+      `import { Popover } from "@headlessui/react";`,
+      `import { Link as Imported } from "./navigation/app-link";`,
+      `import * as Ns from "./navigation/app-link";`,
+      `export { Popover, Imported, Ns };`,
+      `export default function Fancy() { return <Inner />; }`,
+      `function Inner() { return <button />; }`,
+      `export const Plain = () => <p />, Count = 1, { destructured } = {};`,
+      `export class Legacy { render() { return <select />; } }`,
+      `function Field() { return <input name="q" />; }`,
+      `export { Field as SearchField };`,
+    ].join("\n"),
+    "app/components/def.tsx": `function Thing() { return <textarea />; }\nexport default Thing;`,
+    "app/components/anon.tsx": `export default () => <button />;`,
+    "app/components/anon-fn.tsx": `export default function () { return <details />; }`,
+    "app/components/cycle-a.ts": `export * from "./cycle-b";`,
+    "app/components/cycle-b.ts": `export * from "./cycle-a";`,
+    "app/routes/page.tsx": [
+      `import { Link } from "~/components/navigation/app-link";`,
+      `import { AppLink, Safe, Trigger, SafeAgain } from "~/components/navigation";`,
+      `import * as Nav from "../components/navigation/app-link";`,
+      `import Fancy, { DialogRoot, TabList, Popover, Plain, Legacy, SearchField, Imported, Ns } from "#dialog";`,
+      `import Thing from "~/components/def";`,
+      `import Anon from "~/components/anon";`,
+      `import AnonFn from "~/components/anon-fn";`,
+      `import { Nothing } from "~/components/cycle-a";`,
+      `import { Button } from "~/components/ouro/button/button";`,
+      `import { Missing } from "./missing";`,
+      `import { Form } from "react-router";`,
+      `const Alias = Link;`,
+      `export function Page() {`,
+      `  return <>`,
+      `    <Link href="/a" />`,
+      `    <Link href="/b" />`,
+      `    <AppLink href="/c" />`,
+      `    <Nav.Link href="/d" />`,
+      `    <Alias href="/e" />`,
+      `    <Link className="focus:ring" href="/f" />`,
+      `    <Safe /><SafeAgain /><Plain /><Nav /><Link.Sub /><Nothing /><Missing />`,
+      `    <Trigger />`,
+      `    <Fancy />`,
+      `    <DialogRoot />`,
+      `    <TabList />`,
+      `    <Popover />`,
+      `    <Legacy />`,
+      `    <SearchField />`,
+      `    <Imported />`,
+      `    <Ns.Link />`,
+      `    <Thing />`,
+      `    <Anon />`,
+      `    <AnonFn />`,
+      `    <Button className="focus:ring" />`,
+      `    <Form className="focus:ring" />`,
+      `    <Missing className="focus:ring" />`,
+      `  </>;`,
+      `}`,
+    ].join("\n"),
+  };
+
+  it("counts each use of an app component that hand-rolls a control, and re-exported third-party controls", () => {
+    const page = scanFiles(files).filter((offender: Offender) => offender.file === "app/routes/page.tsx");
+    expect(page.map((offender: Offender) => `${offender.line} ${offender.fingerprint}`)).toEqual([
+      "15 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "16 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "17 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "18 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "19 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "20 app/routes/page.tsx::Page::control-state-style::app/components/navigation/app-link#Link::",
+      "20 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "22 app/routes/page.tsx::Page::third-party-control::@radix-ui/react-dialog.Trigger::",
+      "23 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/dialog#Fancy::",
+      "24 app/routes/page.tsx::Page::third-party-control::@radix-ui/react-dialog.Root::",
+      "25 app/routes/page.tsx::Page::third-party-control::@radix-ui/react-tabs.List::",
+      "26 app/routes/page.tsx::Page::third-party-control::@headlessui/react.Popover::",
+      "27 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/dialog#Legacy::",
+      "28 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/dialog#Field::",
+      "29 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "30 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/navigation/app-link#Link::",
+      "31 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/def#Thing::",
+      "32 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/anon#default::",
+      "33 app/routes/page.tsx::Page::uses-hand-rolled-control::app/components/anon-fn#default::",
+      "34 app/routes/page.tsx::Page::control-state-style::app/components/ouro/button/button#Button::",
+      "35 app/routes/page.tsx::Page::control-state-style::react-router.Form::",
+      "36 app/routes/page.tsx::Page::control-state-style::app/routes/missing#Missing::",
+    ]);
+  });
+
+  it("does not count uses inside the defining module, or across files a second time", () => {
+    const dialog = scanFiles(files).filter((offender: Offender) => offender.file === "app/components/dialog.tsx");
+    expect(dialog.map((offender: Offender) => offender.category)).toEqual(["raw-button", "raw-select", "raw-input"]);
+  });
+
+  it("scans one file without resolving its imports", () => {
+    const source = `import { Link } from "~/components/navigation/app-link";\nexport const A = () => <Link className="focus:ring" />;`;
+    expect(fingerprints(source)).toEqual([
+      "app/routes/fixture.tsx::A::control-state-style::~/components/navigation/app-link.Link::",
+    ]);
+  });
+
+  it("loads tsconfig paths, tolerating a missing or path-less tsconfig", () => {
+    const read = (text: string) => () => text;
+    expect(loadPaths("/repo", read(`{ "compilerOptions": { "paths": { "~/*": ["./app/*"] } } }`))).toEqual({ "~/*": ["./app/*"] });
+    expect(loadPaths("/repo", read(`{ // comment\n "compilerOptions": {} }`))).toEqual({});
+    expect(loadPaths("/repo", read(`{}`))).toEqual({});
+    expect(loadPaths("/repo", read(`not json`))).toEqual({});
+    const missing = () => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    };
+    expect(loadPaths("/repo", missing)).toEqual({});
+    const broken = () => {
+      throw new Error("EACCES");
+    };
+    expect(() => loadPaths("/repo", broken)).toThrow("EACCES");
+    expect(loadPaths(process.cwd())).toMatchObject({ "~/*": ["./app/*"] });
+  });
+});
+
+describe("findRegressions: moves are neutral", () => {
+  const at = (fingerprint: string, line = 1): Offender => ({
+    category: fingerprint.split("::")[2],
+    fingerprint,
+    file: fingerprint.split("::")[0],
+    line,
+  });
+
+  it("pairs a moved file", () => {
+    const result = findRegressions([at("app/components/cook/View.tsx::Panel::raw-button::button::type=button")], {
+      "app/routes/recipes.$id.tsx::Panel::raw-button::button::type=button": 1,
+    });
+    expect(result).toEqual({
+      regressions: [],
+      moves: [
+        {
+          from: "app/routes/recipes.$id.tsx::Panel::raw-button::button::type=button",
+          to: "app/components/cook/View.tsx::Panel::raw-button::button::type=button",
+        },
+      ],
+    });
+  });
+
+  it("pairs a renamed component and changed non-literal props, but not changed literal props", () => {
+    const result = findRegressions(
+      [
+        at("app/a.tsx::NewName::raw-button::button::type=button"),
+        at("app/a.tsx::A::raw-button::button::aria-label={props.label},type={kind}"),
+        at("app/a.tsx::A::raw-button::button::aria-label=Store"),
+      ],
+      {
+        "app/a.tsx::OldName::raw-button::button::type=button": 1,
+        "app/a.tsx::A::raw-button::button::aria-label={label},type={fn(a, { b })}": 1,
+        "app/a.tsx::A::raw-button::button::aria-label=Save": 1,
+      },
+    );
+    expect(result.moves).toHaveLength(2);
+    expect(result.regressions).toEqual([
+      { fingerprint: "app/a.tsx::A::raw-button::button::aria-label=Store", count: 1, at: ["app/a.tsx:1"] },
+    ]);
+  });
+
+  it("pairs a moved definition at its call sites and a moved stylesheet", () => {
+    const result = findRegressions(
+      [
+        at("app/r.tsx::P::uses-hand-rolled-control::app/components/new/link#Link::"),
+        at("app/styles/b.css::(stylesheet)::control-state-style::.sj-x[data-current]::after::"),
+      ],
+      {
+        "app/r.tsx::P::uses-hand-rolled-control::app/components/old/link#Link::": 1,
+        "app/styles/a.css::(stylesheet)::control-state-style::.sj-x[data-current]::after::": 1,
+      },
+    );
+    expect(result.regressions).toEqual([]);
+    expect(result.moves).toHaveLength(2);
+  });
+
+  it("still counts a move plus an extra copy, a new tag, a new category and a plain rise", () => {
+    const result = findRegressions(
+      [
+        at("app/b.tsx::P::raw-button::button::", 3),
+        at("app/b.tsx::P::raw-button::button::", 7),
+        at("app/r.tsx::P::uses-hand-rolled-control::app/components/link#Other::"),
+        at("app/a.tsx::P::raw-anchor::a::"),
+        at("app/c.tsx::P::raw-input::input::"),
+        at("app/c.tsx::P::raw-input::input::", 2),
+      ],
+      {
+        "app/a.tsx::P::raw-button::button::": 1,
+        "app/r.tsx::P::uses-hand-rolled-control::app/components/link#Link::": 1,
+        "app/c.tsx::P::raw-input::input::": 1,
+      },
+    );
+    expect(result.regressions).toEqual([
+      { fingerprint: "app/a.tsx::P::raw-anchor::a::", count: 1, at: ["app/a.tsx:1"] },
+      { fingerprint: "app/b.tsx::P::raw-button::button::", count: 1, at: ["app/b.tsx:3", "app/b.tsx:7"] },
+      { fingerprint: "app/c.tsx::P::raw-input::input::", count: 1, at: ["app/c.tsx:1", "app/c.tsx:2"] },
+      {
+        fingerprint: "app/r.tsx::P::uses-hand-rolled-control::app/components/link#Other::",
+        count: 1,
+        at: ["app/r.tsx:1"],
+      },
+    ]);
+    expect(result.moves).toEqual([{ from: "app/a.tsx::P::raw-button::button::", to: "app/b.tsx::P::raw-button::button::" }]);
   });
 });
 
@@ -744,6 +1083,27 @@ describe("the baseline", () => {
     );
   });
 
+  it("serializes allowed regressions, sorted, ahead of the offenders", () => {
+    expect(
+      serializeBaseline([offender("a")], [
+        { fingerprint: "b", reason: "second" },
+        { fingerprint: "a", reason: "first" },
+      ]),
+    ).toBe(
+      `${JSON.stringify(
+        {
+          allowedRegressions: [
+            { fingerprint: "a", reason: "first" },
+            { fingerprint: "b", reason: "second" },
+          ],
+          offenders: { a: 1 },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
   it("matches when the scan equals the baseline", () => {
     const comparison = compareWithBaseline([offender("a"), offender("a")], { a: 2 });
     expect(comparison).toEqual({ added: [], removed: [] });
@@ -777,9 +1137,12 @@ describe("the baseline", () => {
   it("holds the repository to test/scripts/hx-source-rules.baseline.json exactly", () => {
     const offenders = findOffenders(listSourceFiles(process.cwd()));
     const text = readFileSync(BASELINE_PATH, "utf8");
-    const baseline = JSON.parse(text) as { offenders: Record<string, number> };
+    const baseline = JSON.parse(text) as {
+      offenders: Record<string, number>;
+      allowedRegressions?: Array<{ fingerprint: string; reason: string }>;
+    };
     expect(formatComparison(compareWithBaseline(offenders, baseline.offenders))).toEqual([]);
-    expect(text).toBe(serializeBaseline(offenders));
+    expect(text).toBe(serializeBaseline(offenders, baseline.allowedRegressions));
   });
 });
 
@@ -799,8 +1162,13 @@ describe("main", () => {
     const writeFile = vi.fn();
     const io = { log: vi.fn(), error: vi.fn() };
     const exit = vi.fn();
-    return { deps: { root: "/repo", readFile, readdir, writeFile, io, exit }, writeFile, io, exit };
+    const gitShow = vi.fn((_root: string, _ref: string, _file: string): string | undefined => undefined);
+    return { deps: { root: "/repo", readFile, readdir, writeFile, io, exit, gitShow }, writeFile, io, exit, gitShow };
   };
+  const baselineOf = (offenders: Record<string, number>, allowedRegressions?: Array<{ fingerprint: string; reason: string }>) =>
+    `${JSON.stringify(allowedRegressions ? { allowedRegressions, offenders } : { offenders }, null, 2)}\n`;
+  const A = "app/routes/a.tsx::A::raw-button::button::type=button";
+  const B = "app/routes/b.tsx::B::raw-anchor::a::";
   const matching = `${JSON.stringify({ offenders: { "app/routes/a.tsx::A::raw-button::button::type=button": 1 } }, null, 2)}\n`;
 
   it("passes when the scan equals the baseline", () => {
@@ -837,6 +1205,7 @@ describe("main", () => {
     const { deps } = setup(matching);
     const readFile = vi.fn((file: string) => {
       if (file === baselineFile) throw new Error("EACCES");
+      if (!(file in files)) throw Object.assign(new Error(`ENOENT: ${file}`), { code: "ENOENT" });
       return files[file];
     });
     expect(() => main([], { ...deps, readFile })).toThrow("EACCES");
@@ -846,7 +1215,9 @@ describe("main", () => {
     const { deps, io, exit, writeFile } = setup(matching, { "/repo/app/routes/a.tsx": `export const A = 1;` });
     main(["--write-baseline"], deps);
     expect(writeFile).toHaveBeenCalledWith(baselineFile, `${JSON.stringify({ offenders: {} }, null, 2)}\n`);
-    expect(io.log).toHaveBeenCalledWith(`hx-source-rules: wrote ${BASELINE_PATH} with 0 hand-rolled control(s).`);
+    expect(io.log).toHaveBeenCalledWith(
+      `hx-source-rules: wrote ${BASELINE_PATH} with 0 hand-rolled control(s), 0 move(s) and 0 allowed regression(s).`,
+    );
     expect(exit).not.toHaveBeenCalled();
   });
 
@@ -864,19 +1235,116 @@ describe("main", () => {
   it("writes a larger baseline only with a stated reason", () => {
     const { deps, io, exit, writeFile } = setup(undefined);
     main(["--write-baseline", "--allow-regression", "first baseline"], deps);
-    expect(writeFile).toHaveBeenCalledWith(baselineFile, matching);
+    expect(writeFile).toHaveBeenCalledWith(baselineFile, baselineOf({ [A]: 1 }, [{ fingerprint: A, reason: "first baseline" }]));
     expect(io.log).toHaveBeenCalledWith(
-      `hx-source-rules: wrote ${BASELINE_PATH} with 1 hand-rolled control(s); regression allowed: first baseline.`,
+      `hx-source-rules: wrote ${BASELINE_PATH} with 1 hand-rolled control(s), 0 move(s) and 1 allowed regression(s).`,
     );
     expect(exit).not.toHaveBeenCalled();
   });
 
-  it("rejects --allow-regression without a reason, and unknown arguments", () => {
-    for (const argv of [["--write-baseline", "--allow-regression"], ["--write-baseline", "--allow-regression", "--x"], ["--nope"]]) {
+  it("writes a moved file without a reason, and drops allowed regressions an earlier pull request recorded", () => {
+    const moved = { "/repo/app/routes/a.tsx": `export const A = 1;`, "/repo/app/routes/c.tsx": `export function A() { return <button type="button" />; }` };
+    const { deps, io, writeFile } = setup(baselineOf({ [A]: 1 }, [{ fingerprint: A, reason: "older pull request" }]), moved);
+    main(["--write-baseline"], deps);
+    expect(writeFile).toHaveBeenCalledWith(baselineFile, baselineOf({ "app/routes/c.tsx::A::raw-button::button::type=button": 1 }));
+    expect(io.log).toHaveBeenCalledWith(
+      `hx-source-rules: wrote ${BASELINE_PATH} with 1 hand-rolled control(s), 1 move(s) and 0 allowed regression(s).`,
+    );
+  });
+
+  it("writes against a base ref, keeping this pull request's earlier reasons", () => {
+    const extra = { "/repo/app/routes/b.tsx": `const B = () => <a href="/" />;` };
+    const { deps, writeFile, gitShow, exit } = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, reason: "earlier in this PR" }]), extra);
+    gitShow.mockReturnValue(baselineOf({ [A]: 1 }));
+    main(["--write-baseline", "--base", "origin/main"], deps);
+    expect(gitShow).toHaveBeenCalledWith("/repo", "origin/main", BASELINE_PATH);
+    expect(writeFile).toHaveBeenCalledWith(
+      baselineFile,
+      baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, reason: "earlier in this PR" }]),
+    );
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it("writes against the committed baseline when the base ref has none", () => {
+    const { deps, writeFile, gitShow } = setup(matching);
+    gitShow.mockReturnValue(undefined);
+    main(["--write-baseline", "--base", "origin/main"], deps);
+    expect(writeFile).toHaveBeenCalledWith(baselineFile, matching);
+  });
+
+  it("refuses to write a rise against the base ref without a reason", () => {
+    const extra = { "/repo/app/routes/b.tsx": `const B = () => <a href="/" />;` };
+    const { deps, writeFile, gitShow, exit } = setup(baselineOf({ [A]: 1, [B]: 1 }), extra);
+    gitShow.mockReturnValue(baselineOf({ [A]: 1 }));
+    main(["--write-baseline", "--base", "origin/main"], deps);
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  describe("--base: the ratchet", () => {
+    const extra = { "/repo/app/routes/b.tsx": `const B = () => <a href="/" />;` };
+
+    it("passes with no rise against the base, counting moves", () => {
+      const { deps, io, exit, gitShow } = setup(matching);
+      gitShow.mockReturnValue(baselineOf({ "app/routes/old.tsx::A::raw-button::button::type=button": 1 }));
+      main(["--base", "abc123"], deps);
+      expect(io.log).toHaveBeenCalledWith("hx-source-rules: ratchet against abc123: 0 allowed regression(s), 1 move(s).");
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    it("fails a rise the new baseline does not allow, with the command to record why", () => {
+      const { deps, io, exit, gitShow } = setup(baselineOf({ [A]: 1, [B]: 1 }), extra);
+      gitShow.mockReturnValue(matching);
+      main(["--base", "abc123"], deps);
+      expect(io.error).toHaveBeenCalledWith(
+        `Regression against abc123: ${B} (+1) at app/routes/b.tsx:1. Use an Ouro HX component instead, or record why: pnpm hx:source-rules --write-baseline --base abc123 --allow-regression "<reason>"`,
+      );
+      expect(exit).toHaveBeenCalledWith(1);
+    });
+
+    it("passes a rise the new baseline allows with a reason, and not one with an empty reason", () => {
+      const allowed = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ fingerprint: B, reason: "measured" }]), extra);
+      allowed.gitShow.mockReturnValue(matching);
+      main(["--base", "abc123"], allowed.deps);
+      expect(allowed.exit).not.toHaveBeenCalled();
+      expect(allowed.io.log).toHaveBeenCalledWith("hx-source-rules: ratchet against abc123: 1 allowed regression(s), 0 move(s).");
+
+      for (const entry of [{ fingerprint: B, reason: " " }, { fingerprint: B }]) {
+        const empty = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry as { fingerprint: string; reason: string }]), extra);
+        empty.gitShow.mockReturnValue(matching);
+        main(["--base", "abc123"], empty.deps);
+        expect(empty.exit).toHaveBeenCalledWith(1);
+      }
+    });
+
+    it("skips the ratchet when the base has no baseline yet", () => {
+      const { deps, io, exit } = setup(matching);
+      main(["--base", "abc123"], deps);
+      expect(io.log).toHaveBeenCalledWith("hx-source-rules: abc123 has no baseline; nothing to ratchet against.");
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    it("still requires the scan to equal the committed baseline", () => {
+      const { deps, io, exit, gitShow } = setup(matching, extra);
+      gitShow.mockReturnValue(baselineOf({ [A]: 1, [B]: 1 }));
+      main(["--base", "abc123"], deps);
+      expect(io.error).toHaveBeenCalledWith(expect.stringContaining("New hand-rolled control"));
+      expect(exit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  it("rejects --allow-regression or --base without a value, and unknown arguments", () => {
+    for (const argv of [
+      ["--write-baseline", "--allow-regression"],
+      ["--write-baseline", "--allow-regression", "--x"],
+      ["--base"],
+      ["--base", "--write-baseline"],
+      ["--nope"],
+    ]) {
       const { deps, io, exit, writeFile } = setup(matching);
       main(argv, deps);
       expect(io.error).toHaveBeenCalledWith(
-        "Usage: hx-source-rules.mjs [--write-baseline [--allow-regression <reason>]]",
+        "Usage: hx-source-rules.mjs [--base <ref>] [--write-baseline [--allow-regression <reason>]]",
       );
       expect(exit).toHaveBeenCalledWith(1);
       expect(writeFile).not.toHaveBeenCalled();
@@ -904,6 +1372,14 @@ describe("defaults", () => {
     main([], { io });
     expect(io.error).not.toHaveBeenCalled();
     expect(io.log).toHaveBeenCalledWith(expect.stringMatching(/^hx-source-rules: \d+ file\(s\), \d+ hand-rolled control\(s\), all in the baseline\.$/));
+  });
+
+  it("reads a baseline from git: present, missing at the ref, or an unknown ref", () => {
+    expect(defaultDeps.gitShow(process.cwd(), "HEAD", BASELINE_PATH)).toContain('"offenders"');
+    expect(defaultDeps.gitShow(process.cwd(), "HEAD", "test/scripts/no-such-baseline.json")).toBeUndefined();
+    expect(() => defaultDeps.gitShow(process.cwd(), "refs/heads/no-such-ref-for-hx-source-rules", BASELINE_PATH)).toThrow(
+      "hx-source-rules: unknown base ref refs/heads/no-such-ref-for-hx-source-rules",
+    );
   });
 
   it("defaultExit sets the process exit code", () => {
