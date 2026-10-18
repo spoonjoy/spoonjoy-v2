@@ -333,12 +333,9 @@ describe("/developers/playground", () => {
     expect(playgroundPath(recipeDetail, { id: "" })).toBe("/api/v1/recipes/REPLACE_id");
   });
 
-  it("builds SSR-safe spec URLs and response outcome classes", () => {
-    const originalWindow = globalThis.window;
-    vi.stubGlobal("window", undefined);
-    expect(absoluteSpecUrl("/api/v1/openapi.sdk.json")).toBe("https://spoonjoy.app/api/v1/openapi.sdk.json");
-    vi.stubGlobal("window", originalWindow);
-    expect(absoluteSpecUrl("/api/v1/openapi.sdk.json")).toBe("http://localhost:3000/api/v1/openapi.sdk.json");
+  it("builds spec URLs from the served origin and response outcome classes", () => {
+    expect(absoluteSpecUrl("/api/v1/openapi.sdk.json", "https://spoonjoy.app")).toBe("https://spoonjoy.app/api/v1/openapi.sdk.json");
+    expect(absoluteSpecUrl("/api/v1/openapi.sdk.json", "http://localhost:3000")).toBe("http://localhost:3000/api/v1/openapi.sdk.json");
 
     expect(playgroundOutcomeForStatus(0)).toBe("network_error");
     expect(playgroundOutcomeForStatus(302)).toBe("success");
@@ -612,6 +609,7 @@ describe("/developers/playground", () => {
     let routeData: PlaygroundLoaderData = {
       manifest: API_V1_PLAYGROUND_MANIFEST,
       canonicalUrl: "https://spoonjoy.app/api/playground",
+      requestOrigin: "http://localhost:3000",
       ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
       viewer: { isAuthenticated: false },
     };
@@ -708,6 +706,7 @@ describe("/developers/playground", () => {
     await renderPlayground({
       manifest: manifestWithoutDefaultRecipe,
       canonicalUrl: "https://spoonjoy.app/api/playground",
+      requestOrigin: "http://localhost:3000",
       ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
       viewer: { isAuthenticated: false },
     } as PlaygroundLoaderData);
@@ -834,6 +833,7 @@ describe("/developers/playground", () => {
     await renderPlayground({
       manifest: optionalMultipartManifest,
       canonicalUrl: "https://spoonjoy.app/api/playground",
+      requestOrigin: "http://localhost:3000",
       ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
       viewer: { isAuthenticated: false },
     } as PlaygroundLoaderData);
@@ -882,6 +882,7 @@ describe("/developers/playground", () => {
     await renderPlayground({
       manifest: textOnlyMultipartManifest,
       canonicalUrl: "https://spoonjoy.app/api/playground",
+      requestOrigin: "http://localhost:3000",
       ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
       viewer: { isAuthenticated: false },
     } as PlaygroundLoaderData);
@@ -1198,7 +1199,7 @@ describe("/developers/playground", () => {
     await renderPlayground();
 
     fireEvent.click(await screen.findByRole("button", { name: "Copy import URL" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("http://localhost:3000/api/v1/openapi.json"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://spoonjoy.app/api/v1/openapi.json"));
     expect(await screen.findByText("Copied Copy import URL")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
@@ -1337,6 +1338,7 @@ describe("/developers/playground", () => {
     await renderPlayground({
       manifest: manifestWithoutToken,
       canonicalUrl: "https://spoonjoy.app/api/playground",
+      requestOrigin: "http://localhost:3000",
       ogImageUrl: "https://spoonjoy.app/og/pages/api-playground.png",
       viewer: { isAuthenticated: false },
     } as PlaygroundLoaderData);
