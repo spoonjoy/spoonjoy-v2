@@ -2,14 +2,16 @@
 // node scripts/hx-census-merge.mjs <directory> <output> [--project <name>]...
 //
 // The Journeys workflow's merge step: each Playwright worker of the census journey writes
-// <directory>/hx-census-actual.<project>.<worker>.json; this merges them, deterministically, into
-// <output> (hx-census-actual.json, uploaded as the run's `hx-census-actual` artifact for
-// `pnpm census:update <run-id>`). It fails, writing nothing, when a file is not a census, a
-// journey/state is recorded twice, or a project (iphone-webkit and desktop-chrome unless --project
-// names others) recorded nothing.
+// <directory>/hx-census-actual.<project>.<worker>.json, and the journey writes the states it should
+// cover, from its census list, to <directory>/hx-census-expected.json; this merges the worker files,
+// deterministically, into <output> (hx-census-actual.json, with the expected set under `$expected`,
+// uploaded as the run's `hx-census-actual` artifact for `pnpm census:update <run-id>`). It fails,
+// writing nothing, when the expected set is missing, a file is not a census, a journey/state is
+// recorded twice, or any project (iphone-webkit and desktop-chrome unless --project names others)
+// does not record exactly the expected set.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { CENSUS_PROJECTS, mergeActuals, parseWorkerFileName, stringifyCensus } from "./hx-census.mjs";
+import { CENSUS_PROJECTS, EXPECTED_FILE, mergeActuals, parseWorkerFileName, stringifyCensus, validateExpected } from "./hx-census.mjs";
 import { listDirectory, readText, writeText } from "./hx-census-update.mjs";
 
 const USAGE = "Usage: node scripts/hx-census-merge.mjs <directory> <output> [--project <name>]...";
@@ -61,6 +63,22 @@ export function main(argv = process.argv.slice(2), deps = {}) {
 
   try {
     const { directory, output, projects } = parseMergeArgs(argv);
+    const expectedFile = path.join(directory, EXPECTED_FILE);
+    let expectedText;
+    try {
+      expectedText = readFile(expectedFile);
+    } catch (error) {
+      throw new Error(
+        `HX census merge failed: ${expectedFile} could not be read (${error instanceof Error ? error.message : String(error)}): the census journey writes it when it starts, so the census did not run.`,
+      );
+    }
+    let expectedData;
+    try {
+      expectedData = JSON.parse(expectedText);
+    } catch (error) {
+      throw new Error(`${expectedFile} is not JSON: ${/** @type {SyntaxError} */ (error).message}`);
+    }
+    const expected = validateExpected(expectedData, expectedFile);
     const files = readdir(directory)
       .filter((name) => parseWorkerFileName(name) !== null)
       .map((name) => {
@@ -73,7 +91,7 @@ export function main(argv = process.argv.slice(2), deps = {}) {
         }
         return { file, data };
       });
-    const merged = mergeActuals(files, projects);
+    const merged = mergeActuals(files, expected, projects);
     writeFile(output, stringifyCensus(merged));
     io.log(`Merged ${files.length} census file(s) from ${directory} into ${output}.`);
   } catch (error) {

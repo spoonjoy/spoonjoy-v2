@@ -13,7 +13,7 @@
 // Actions only open things: they never submit, save or confirm, so the personas' data is never
 // changed (scripts/check-journey-rules.mjs requires every page another journey visits to have a
 // journey here).
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Locator, Page } from "@playwright/test";
@@ -21,6 +21,9 @@ import { KITCHEN } from "../../../scripts/seed-qa-kitchen.mjs";
 import {
   checkCensusState,
   controlIdentity,
+  EXPECTED_FILE,
+  expectedFromJourneys,
+  stringifyCensus,
   toMultiset,
   workerFileName,
   type RawControl,
@@ -559,6 +562,22 @@ function readBaseline(): Record<string, unknown> {
 /** The installed HX items' names (app/components/ouro/<item>), the only valid markers. */
 export function installedItems(): string[] {
   return readdirSync(OURO_COMPONENTS, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+}
+
+/**
+ * Writes the states this run must record (every state of every journey in `census`) to
+ * hx-census-expected.json beside the worker files, so the merge fails when any is missing. Every
+ * worker writes the same content; each writes a file of its own and renames it into place, so a
+ * reader never sees half of one.
+ */
+export function recordExpectedCensus(worker: number): string {
+  const directory = censusResultsDirectory();
+  mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, EXPECTED_FILE);
+  const partial = `${file}.${process.pid}.${worker}.partial`;
+  writeFileSync(partial, stringifyCensus(expectedFromJourneys(census)));
+  renameSync(partial, file);
+  return file;
 }
 
 const recorded: Record<string, Record<string, Record<string, Array<{ identity: string; count: number }>>>> = {};

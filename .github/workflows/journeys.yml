@@ -288,8 +288,10 @@ jobs:
             exit "$census"
           fi
 
-      # Each census worker wrote hx-census/hx-census-actual.<project>.<worker>.json; merge them into
-      # one hx-census-actual.json, failing on a missing project or a journey/state recorded twice,
+      # Each census worker wrote hx-census/hx-census-actual.<project>.<worker>.json, and the census
+      # wrote the states it must cover to hx-census/hx-census-expected.json; merge them into one
+      # hx-census-actual.json, failing on a journey/state recorded twice or on any project that does
+      # not record exactly the expected states,
       # and upload it on every run, pass or fail, for `pnpm census:update <run-id>` (AGENTS.md,
       # "The HX census"). It holds only control roles, accessible names and HX markers of the
       # personas' pages: no password, cookie or typed value, so it needs none of the report's gates.

@@ -12,13 +12,15 @@
 // Never a DOM position. A state's census is the exact multiset of its visible controls' identities:
 // `[{ identity, count }]`, sorted by identity. A census file (a worker's actual, the merged actual, or
 // the baseline) is `{ [project]: { [journeyId]: { [stateId]: Multiset } } }`; keys starting with "$"
-// are metadata (the baseline's `$allowedRegressions`), never projects.
+// are metadata (the merged actual's `$expected`, the baseline's `$allowedRegressions`), never projects.
 
 /** The device projects every census run must record (playwright.journeys.config.ts). */
 export const CENSUS_PROJECTS = Object.freeze(["iphone-webkit", "desktop-chrome"]);
 
 export const BASELINE_PATH = "e2e/journeys/hx-census.baseline.json";
 export const ACTUAL_FILE = "hx-census-actual.json";
+/** The expected set the census journey writes beside its worker files: `{ [journeyId]: [stateId, ...] }`. */
+export const EXPECTED_FILE = "hx-census-expected.json";
 export const ARTIFACT_NAME = "hx-census-actual";
 export const UNMARKED = "-";
 
@@ -307,7 +309,7 @@ export function stringifyCensus(value) {
 }
 
 /**
- * Throws unless the census records every expected project.
+ * Throws unless the census records every expected project, each with at least one journey.
  * @param {Record<string, unknown>} census
  * @param {readonly string[]} projects
  * @param {string} label
@@ -317,6 +319,80 @@ export function requireProjects(census, projects, label) {
   if (missing.length > 0) {
     throw new Error(`${label} is missing project(s) ${missing.join(", ")}: every census run records ${projects.join(" and ")}.`);
   }
+  const empty = projects.filter((project) => Object.keys(/** @type {object} */ (census[project])).length === 0);
+  if (empty.length > 0) {
+    throw new Error(`${label} records nothing for project(s) ${empty.join(", ")}: every census run records every state of every journey.`);
+  }
+}
+
+/**
+ * Throws, naming every problem, unless `data` is the census's expected set: `{ [journeyId]: [stateId, ...] }`,
+ * every journey with at least one state, no state listed twice.
+ * @param {unknown} data
+ * @param {string} label
+ * @returns {Record<string, string[]>}
+ */
+export function validateExpected(data, label) {
+  if (!isPlainObject(data) || Object.keys(data).length === 0) {
+    throw new Error(`${label}: the expected set is a non-empty JSON object of journeys, each listing its states.`);
+  }
+  const problems = [];
+  for (const [journeyId, states] of Object.entries(data)) {
+    if (!Array.isArray(states) || states.length === 0 || !states.every((state) => typeof state === "string" && state !== "")) {
+      problems.push(`${journeyId}: expected a non-empty array of state ids`);
+    } else if (new Set(states).size !== states.length) {
+      problems.push(`${journeyId}: a state is listed twice`);
+    }
+  }
+  if (problems.length > 0) throw new Error([`${label} is not a valid expected set:`, ...problems.map((problem) => `  ${problem}`)].join("\n"));
+  return /** @type {any} */ (data);
+}
+
+/**
+ * The census's expected set from its journey list (support/hx-census.ts), sorted. Throws on a
+ * journey or a journey's state listed twice, since its recordings would collide.
+ * @param {ReadonlyArray<{ id: string, states: ReadonlyArray<{ id: string }> }>} journeys
+ * @returns {Record<string, string[]>}
+ */
+export function expectedFromJourneys(journeys) {
+  const expected = {};
+  for (const journey of journeys) {
+    if (Object.hasOwn(expected, journey.id)) throw new Error(`HX census: journey ${journey.id} is listed twice.`);
+    expected[journey.id] = journey.states.map((state) => state.id);
+  }
+  return sortExpected(validateExpected(expected, "the census list"));
+}
+
+function sortExpected(expected) {
+  return Object.fromEntries(Object.keys(expected).sort(compareStrings).map((journeyId) => [journeyId, [...expected[journeyId]].sort(compareStrings)]));
+}
+
+/**
+ * Everything a census fails to cover: a project that recorded nothing, each expected
+ * (project, journey, state) not recorded, and each recorded one the expected set does not list.
+ * @param {Record<string, any>} census
+ * @param {Record<string, string[]>} expected
+ * @param {readonly string[]} projects
+ * @returns {string[]}
+ */
+export function coverageProblems(census, expected, projects) {
+  const problems = [];
+  const missingProjects = projects.filter((project) => !isPlainObject(census[project]) || Object.keys(census[project]).length === 0);
+  if (missingProjects.length > 0) problems.push(`no census recorded for project(s) ${missingProjects.join(", ")}`);
+  for (const project of projects.filter((name) => !missingProjects.includes(name))) {
+    const recorded = census[project];
+    for (const journeyId of Object.keys(expected).sort(compareStrings)) {
+      for (const stateId of [...expected[journeyId]].sort(compareStrings)) {
+        if (!Array.isArray(recorded[journeyId]?.[stateId])) problems.push(`${project} / ${journeyId} / ${stateId} was not recorded`);
+      }
+    }
+    for (const journeyId of Object.keys(recorded).sort(compareStrings)) {
+      for (const stateId of Object.keys(recorded[journeyId]).sort(compareStrings)) {
+        if (!expected[journeyId]?.includes(stateId)) problems.push(`${project} / ${journeyId} / ${stateId} is recorded but not in the census list`);
+      }
+    }
+  }
+  return problems;
 }
 
 /**
@@ -338,11 +414,14 @@ export function workerFileName(project, worker) {
 
 /**
  * Merges the per-worker census files into one, deterministically (sorted, whatever order the files
- * come in). Fails on a file that is not a census, a journey/state recorded twice, or a missing project.
+ * come in), carrying the expected set under `$expected`. Fails on a file that is not a census, a
+ * journey/state recorded twice, or a census that does not cover the expected set on every project
+ * (a project that recorded nothing, a state not recorded, a state the census list does not have).
  * @param {Array<{ file: string, data: unknown }>} files
+ * @param {Record<string, string[]>} expected
  * @param {readonly string[]} [projects]
  */
-export function mergeActuals(files, projects = CENSUS_PROJECTS) {
+export function mergeActuals(files, expected, projects = CENSUS_PROJECTS) {
   const merged = {};
   const recordedIn = new Map();
   const problems = [];
@@ -365,71 +444,131 @@ export function mergeActuals(files, projects = CENSUS_PROJECTS) {
       }
     }
   }
-  const missing = projects.filter((project) => !merged[project]);
-  if (missing.length > 0) problems.push(`no census recorded for project(s) ${missing.join(", ")}`);
+  problems.push(...coverageProblems(merged, expected, projects));
   if (problems.length > 0) throw new Error(["HX census merge failed:", ...problems.map((problem) => `  ${problem}`)].join("\n"));
-  return sortCensus(merged);
+  return { $expected: sortExpected(expected), ...sortCensus(merged) };
+}
+
+function stateEntries(census) {
+  const entries = [];
+  for (const [project, journeys] of Object.entries(census)) {
+    if (project.startsWith("$")) continue;
+    for (const [journey, states] of Object.entries(journeys)) {
+      for (const [state, multiset] of Object.entries(states)) entries.push({ project, journey, state, multiset });
+    }
+  }
+  return entries.sort((a, b) => compareStrings(`${a.project}\0${a.journey}\0${a.state}`, `${b.project}\0${b.journey}\0${b.state}`));
 }
 
 /**
- * Unmarked controls per project and journey: the sum of counts over every state.
+ * Unmarked controls per project, journey and state.
  * @param {Record<string, any>} census
- * @returns {Record<string, Record<string, number>>}
+ * @returns {Record<string, Record<string, Record<string, number>>>}
  */
 export function unmarkedCounts(census) {
   const counts = {};
-  for (const [project, journeys] of Object.entries(census)) {
-    if (project.startsWith("$")) continue;
-    counts[project] = {};
-    for (const [journeyId, states] of Object.entries(journeys)) {
-      counts[project][journeyId] = Object.values(states)
-        .flat()
-        .filter(({ identity }) => parseIdentity(identity).control === UNMARKED)
-        .reduce((total, { count }) => total + count, 0);
-    }
+  for (const { project, journey, state, multiset } of stateEntries(census)) {
+    ((counts[project] ??= {})[journey] ??= {})[state] = multiset
+      .filter(({ identity }) => parseIdentity(identity).control === UNMARKED)
+      .reduce((total, { count }) => total + count, 0);
   }
   return counts;
 }
 
 /**
- * Journeys (per project) whose unmarked count rose from the previous baseline. A journey the previous
- * baseline does not have is new measurement, not a regression.
+ * States (per project) whose unmarked count rose from the previous baseline. Each state is its own
+ * ratchet, so a fall in one state never pays for a rise in another. A state (or journey) the
+ * previous baseline does not have is new measurement, not a regression.
  * @param {Record<string, any>} previous
  * @param {Record<string, any>} next
- * @returns {Array<{ project: string, journey: string, from: number, to: number }>}
+ * @returns {Array<{ project: string, journey: string, state: string, from: number, to: number }>}
  */
 export function findRegressions(previous, next) {
   const before = unmarkedCounts(previous);
   const after = unmarkedCounts(next);
   const regressions = [];
-  for (const project of Object.keys(after).sort(compareStrings)) {
-    for (const journey of Object.keys(after[project]).sort(compareStrings)) {
-      const from = before[project]?.[journey];
-      const to = after[project][journey];
-      if (from !== undefined && to > from) regressions.push({ project, journey, from, to });
-    }
+  for (const { project, journey, state } of stateEntries(next)) {
+    const from = before[project]?.[journey]?.[state];
+    const to = after[project][journey][state];
+    if (from !== undefined && to > from) regressions.push({ project, journey, state, from, to });
   }
   return regressions;
 }
 
 /**
- * The new baseline from a merged actual. Refuses one that raises a journey's unmarked count unless
- * `allowRegression` gives a reason, which is then recorded under `$allowedRegressions` (dropped
- * again by the next update that raises nothing).
- * @param {{ previous: Record<string, any>, actual: Record<string, any>, allowRegression?: string, projects?: readonly string[] }} options
+ * Every (project, journey, state) the previous baseline has and the next one does not.
+ * @param {Record<string, any>} previous
+ * @param {Record<string, any>} next
+ * @returns {Array<{ project: string, journey: string, state: string }>}
  */
-export function updateBaseline({ previous, actual, allowRegression, projects = CENSUS_PROJECTS }) {
+export function findDrops(previous, next) {
+  return stateEntries(previous)
+    .filter(({ project, journey, state }) => !Array.isArray(next[project]?.[journey]?.[state]))
+    .map(({ project, journey, state }) => ({ project, journey, state }));
+}
+
+/**
+ * Whether a `--remove` value names a dropped state: `<journey>` names every state of the journey on
+ * every project, `<project>/<journey>/<state>` names one.
+ * @param {string} removal
+ * @param {{ project: string, journey: string, state: string }} drop
+ */
+export function removalNames(removal, drop) {
+  const parts = removal.split("/");
+  if (parts.length === 1) return parts[0] === drop.journey;
+  return parts.length === 3 && parts[0] === drop.project && parts[1] === drop.journey && parts[2] === drop.state;
+}
+
+const stateLabel = ({ project, journey, state }) => `${project} / ${journey} / ${state}`;
+
+/**
+ * The new baseline from a merged actual, which must cover its expected set (`$expected`) on every
+ * project. Refuses one that drops a project/journey/state the previous baseline has unless a
+ * `remove` entry names it (a renamed journey or state is a drop plus a new one), a `remove` entry
+ * that names nothing dropped, and one that raises a state's unmarked count unless `allowRegression`
+ * gives a reason, which is then recorded under `$allowedRegressions` (dropped again by the next
+ * update that raises nothing).
+ * @param {{ previous: Record<string, any>, actual: Record<string, any>, allowRegression?: string, remove?: readonly string[], projects?: readonly string[] }} options
+ */
+export function updateBaseline({ previous, actual, allowRegression, remove = [], projects = CENSUS_PROJECTS }) {
   validateCensus(previous, "the current baseline");
   validateCensus(actual, "the run's actual census");
   requireProjects(actual, projects, "the run's actual census");
+  if (actual.$expected === undefined) {
+    throw new Error("the run's actual census has no $expected set: use the merged hx-census-actual.json a Journeys run uploads.");
+  }
+  const expected = validateExpected(actual.$expected, "the run's actual census's $expected");
+  const uncovered = coverageProblems(actual, expected, projects);
+  if (uncovered.length > 0) {
+    throw new Error(["HX census: the run's actual census does not cover the census list:", ...uncovered.map((problem) => `  ${problem}`)].join("\n"));
+  }
   const census = sortCensus(actual);
+
+  const drops = findDrops(previous, census);
+  const unnamed = drops.filter((drop) => !remove.some((removal) => removalNames(removal, drop)));
+  const unused = remove.filter((removal) => !drops.some((drop) => removalNames(removal, drop)));
+  if (unnamed.length > 0 || unused.length > 0) {
+    throw new Error(
+      [
+        ...(unnamed.length > 0
+          ? [
+              "HX census: this run drops states the baseline has:",
+              ...unnamed.map((drop) => `  ${stateLabel(drop)}`),
+              "If they are meant to go (a renamed journey or state is a drop plus a new one), name each with --remove <project/journey/state>, or a whole journey with --remove <journey>.",
+            ]
+          : []),
+        ...unused.map((removal) => `HX census: --remove ${removal} names nothing this run drops.`),
+      ].join("\n"),
+    );
+  }
+
   const regressions = findRegressions(previous, census);
   const reason = normalizeName(allowRegression);
   if (regressions.length > 0 && !reason) {
     throw new Error(
       [
-        "HX census: unmarked controls may only fall. This run raises:",
-        ...regressions.map(({ project, journey, from, to }) => `  ${project} / ${journey}: ${from} → ${to} unmarked`),
+        "HX census: unmarked controls may only fall, state by state. This run raises:",
+        ...regressions.map((regression) => `  ${stateLabel(regression)}: ${regression.from} → ${regression.to} unmarked`),
         'Use HX components instead, or record why with --allow-regression "<reason>" (review treats it as a finding).',
       ].join("\n"),
     );
@@ -437,7 +576,7 @@ export function updateBaseline({ previous, actual, allowRegression, projects = C
   const baseline = regressions.length > 0
     ? { $allowedRegressions: regressions.map((regression) => ({ ...regression, reason })), ...census }
     : census;
-  return { baseline, regressions };
+  return { baseline, regressions, removed: drops };
 }
 
 /**

@@ -7,8 +7,12 @@ import {
   BASELINE_PATH,
   CENSUS_PROJECTS,
   checkCensusState,
+  coverageProblems,
   controlIdentity,
   diffMultisets,
+  EXPECTED_FILE,
+  expectedFromJourneys,
+  findDrops,
   findRegressions,
   formatDiff,
   identityContext,
@@ -17,6 +21,7 @@ import {
   normalizeName,
   parseIdentity,
   parseWorkerFileName,
+  removalNames,
   requireProjects,
   sortCensus,
   stringifyCensus,
@@ -25,6 +30,7 @@ import {
   unmarkedCounts,
   updateBaseline,
   validateCensus,
+  validateExpected,
   workerFileName,
 } from "../../scripts/hx-census.mjs";
 import * as update from "../../scripts/hx-census-update.mjs";
@@ -38,6 +44,14 @@ const LINK = 'link "Recipes" [link/-] in navigation "Spoonjoy navigation"';
 
 function census(journeys: Record<string, Record<string, Array<{ identity: string; count: number }>>>, projects = CENSUS_PROJECTS) {
   return Object.fromEntries(projects.map((project) => [project, journeys]));
+}
+
+type Journeys = Record<string, Record<string, Array<{ identity: string; count: number }>>>;
+
+/** A merged actual: the census on every project, carrying the expected set its journeys cover. */
+function merged(journeys: Journeys) {
+  const expected = Object.fromEntries(Object.entries(journeys).map(([journey, states]) => [journey, Object.keys(states).sort()]));
+  return { $expected: expected, ...census(journeys) };
 }
 
 function io() {
@@ -267,7 +281,53 @@ describe("census files", () => {
     expect(() => requireProjects({ "iphone-webkit": {} }, CENSUS_PROJECTS, "actual")).toThrow(
       "actual is missing project(s) desktop-chrome: every census run records iphone-webkit and desktop-chrome.",
     );
-    expect(() => requireProjects(census({}), CENSUS_PROJECTS, "actual")).not.toThrow();
+    expect(() => requireProjects({ "iphone-webkit": {}, "desktop-chrome": { home: { default: [] } } }, CENSUS_PROJECTS, "actual")).toThrow(
+      "actual records nothing for project(s) iphone-webkit: every census run records every state of every journey.",
+    );
+    expect(() => requireProjects(census({ home: { default: [] } }), CENSUS_PROJECTS, "actual")).not.toThrow();
+  });
+
+  it("validates the expected set and builds it from the census list", () => {
+    expect(validateExpected({ home: ["default"] }, "e")).toEqual({ home: ["default"] });
+    expect(() => validateExpected([], "e")).toThrow("e: the expected set is a non-empty JSON object of journeys, each listing its states.");
+    expect(() => validateExpected({}, "e")).toThrow("e: the expected set is a non-empty JSON object");
+    expect(() => validateExpected({ a: [], b: "default", c: [""], d: [1], e: ["x", "x"] }, "e")).toThrow(
+      [
+        "e is not a valid expected set:",
+        "  a: expected a non-empty array of state ids",
+        "  b: expected a non-empty array of state ids",
+        "  c: expected a non-empty array of state ids",
+        "  d: expected a non-empty array of state ids",
+        "  e: a state is listed twice",
+      ].join("\n"),
+    );
+    expect(JSON.stringify(expectedFromJourneys([
+      { id: "recipe", states: [{ id: "default" }, { id: "cook-mode" }] },
+      { id: "home", states: [{ id: "default" }] },
+    ]))).toBe(JSON.stringify({ home: ["default"], recipe: ["cook-mode", "default"] }));
+    expect(() => expectedFromJourneys([{ id: "home", states: [{ id: "default" }] }, { id: "home", states: [{ id: "x" }] }])).toThrow(
+      "HX census: journey home is listed twice.",
+    );
+    expect(() => expectedFromJourneys([{ id: "home", states: [{ id: "default" }, { id: "default" }] }])).toThrow("home: a state is listed twice");
+    expect(() => expectedFromJourneys([{ id: "home", states: [] }])).toThrow("home: expected a non-empty array of state ids");
+  });
+
+  it("names every state a census fails to cover, and every state it records that the list lacks", () => {
+    const expected = { home: ["default", "menu"], recipe: ["default"] };
+    expect(coverageProblems(merged({ home: { default: [], menu: [] }, recipe: { default: [] } }), expected, CENSUS_PROJECTS)).toEqual([]);
+    expect(
+      coverageProblems(
+        { "iphone-webkit": {}, "desktop-chrome": { home: { default: [], stale: [] }, old: { default: [] } } },
+        expected,
+        [...CENSUS_PROJECTS, "tablet"],
+      ),
+    ).toEqual([
+      "no census recorded for project(s) iphone-webkit, tablet",
+      "desktop-chrome / home / menu was not recorded",
+      "desktop-chrome / recipe / default was not recorded",
+      "desktop-chrome / home / stale is recorded but not in the census list",
+      "desktop-chrome / old / default is recorded but not in the census list",
+    ]);
   });
 
   it("names worker files by project and worker index", () => {
@@ -289,9 +349,12 @@ describe("mergeActuals", () => {
       { file: "w/hx-census-actual.desktop-chrome.2.json", data: desktop("home", "default") },
       { file: "w/hx-census-actual.iphone-webkit.3.json", data: phone("recipe", "default") },
     ];
-    const merged = mergeActuals(files);
-    expect(stringifyCensus(merged)).toBe(stringifyCensus(mergeActuals([...files].reverse())));
-    expect(merged).toEqual({
+    const expected = { recipe: ["save-dialog", "default"], home: ["default"] };
+    const result = mergeActuals(files, expected, ["iphone-webkit"]);
+    expect(stringifyCensus(result)).toBe(stringifyCensus(mergeActuals([...files].reverse(), expected, ["iphone-webkit"])));
+    expect(JSON.stringify(Object.keys(result))).toBe(JSON.stringify(["$expected", "desktop-chrome", "iphone-webkit"]));
+    expect(result).toEqual({
+      $expected: { home: ["default"], recipe: ["default", "save-dialog"] },
       "desktop-chrome": { home: { default: [{ identity: CLOSE, count: 1 }] } },
       "iphone-webkit": {
         home: { default: [{ identity: SAVE, count: 1 }] },
@@ -300,55 +363,98 @@ describe("mergeActuals", () => {
     });
   });
 
+  const home = { home: ["default"] };
+
   it("fails on a journey/state recorded twice and on a missing project", () => {
     expect(() =>
-      mergeActuals([
-        { file: "a.json", data: phone("home", "default") },
-        { file: "b.json", data: phone("home", "default", CLOSE) },
-      ]),
+      mergeActuals(
+        [
+          { file: "a.json", data: phone("home", "default") },
+          { file: "b.json", data: phone("home", "default", CLOSE) },
+        ],
+        home,
+      ),
     ).toThrow(
       "HX census merge failed:\n  iphone-webkit / home / default is recorded twice (a.json and b.json)\n  no census recorded for project(s) desktop-chrome",
     );
-    expect(() => mergeActuals([], ["solo"])).toThrow("no census recorded for project(s) solo");
+    expect(() => mergeActuals([], home, ["solo"])).toThrow("no census recorded for project(s) solo");
     // The same file listed twice records each of its states twice.
-    expect(() => mergeActuals([{ file: "a.json", data: phone("home", "default") }, { file: "a.json", data: phone("home", "default") }], ["iphone-webkit"]))
+    expect(() => mergeActuals([{ file: "a.json", data: phone("home", "default") }, { file: "a.json", data: phone("home", "default") }], home, ["iphone-webkit"]))
       .toThrow("iphone-webkit / home / default is recorded twice (a.json and a.json)");
   });
 
+  it("fails on a project recorded as {} and on a state of the census list that went unrecorded", () => {
+    expect(() =>
+      mergeActuals([{ file: "a.json", data: { "iphone-webkit": {} } }, { file: "b.json", data: desktop("home", "default") }], home),
+    ).toThrow("HX census merge failed:\n  no census recorded for project(s) iphone-webkit");
+    expect(() =>
+      mergeActuals(
+        [{ file: "a.json", data: phone("home", "default") }, { file: "b.json", data: desktop("home", "default") }],
+        { home: ["default", "menu"] },
+      ),
+    ).toThrow("HX census merge failed:\n  iphone-webkit / home / menu was not recorded\n  desktop-chrome / home / menu was not recorded");
+  });
+
   it("fails on a file that is not a census", () => {
-    expect(() => mergeActuals([{ file: "bad.json", data: [] }])).toThrow("bad.json: a census file is a JSON object of projects.");
+    expect(() => mergeActuals([{ file: "bad.json", data: [] }], home)).toThrow("bad.json: a census file is a JSON object of projects.");
   });
 });
 
 describe("the unmarked ratchet", () => {
   const one = (identities: Record<string, number>) => Object.entries(identities).map(([identity, count]) => ({ identity, count }));
 
-  it("counts unmarked controls per project and journey across its states", () => {
+  it("counts unmarked controls per project, journey and state", () => {
     expect(unmarkedCounts({
       $allowedRegressions: [],
       "iphone-webkit": { recipe: { default: one({ [SAVE]: 2, [SAVE_MARKED]: 1 }), dialog: one({ [CLOSE]: 1 }) }, home: { default: [] } },
-    })).toEqual({ "iphone-webkit": { recipe: 3, home: 0 } });
+    })).toEqual({ "iphone-webkit": { recipe: { default: 2, dialog: 1 }, home: { default: 0 } } });
   });
 
-  it("finds a journey whose unmarked count rose, and treats a new journey as measurement", () => {
+  it("finds a state whose unmarked count rose, and treats a new state or journey as measurement", () => {
     const previous = { p: { recipe: { default: one({ [SAVE]: 1 }) }, home: { default: one({ [SAVE]: 2 }) } } };
-    const next = { p: { recipe: { default: one({ [SAVE]: 1 }), dialog: one({ [CLOSE]: 1 }) }, home: { default: one({ [SAVE]: 1 }) }, search: { default: one({ [SAVE]: 9 }) } }, q: { home: { default: one({ [SAVE]: 1 }) } } };
-    expect(findRegressions(previous, next)).toEqual([{ project: "p", journey: "recipe", from: 1, to: 2 }]);
+    const next = {
+      p: { recipe: { default: one({ [SAVE]: 2 }), dialog: one({ [CLOSE]: 1 }) }, home: { default: one({ [SAVE]: 1 }) }, search: { default: one({ [SAVE]: 9 }) } },
+      q: { home: { default: one({ [SAVE]: 1 }) } },
+    };
+    expect(findRegressions(previous, next)).toEqual([{ project: "p", journey: "recipe", state: "default", from: 1, to: 2 }]);
+  });
+
+  it("refuses a rise in one state even when another state of the journey falls by as much", () => {
+    const previous = census({ recipe: { default: one({ [SAVE]: 1 }), dialog: one({ [CLOSE]: 2 }) } });
+    const actual = merged({ recipe: { default: one({ [SAVE]: 2 }), dialog: one({ [CLOSE]: 1 }) } });
+    expect(() => updateBaseline({ previous, actual })).toThrow(
+      [
+        "HX census: unmarked controls may only fall, state by state. This run raises:",
+        "  desktop-chrome / recipe / default: 1 → 2 unmarked",
+        "  iphone-webkit / recipe / default: 1 → 2 unmarked",
+        'Use HX components instead, or record why with --allow-regression "<reason>" (review treats it as a finding).',
+      ].join("\n"),
+    );
+  });
+
+  it("accepts a new state in a journey the baseline has as measurement", () => {
+    const previous = census({ recipe: { default: one({ [SAVE]: 1 }) } });
+    const actual = merged({ recipe: { default: one({ [SAVE]: 1 }), "new-dialog": one({ [CLOSE]: 4 }) } });
+    const { baseline, regressions, removed } = updateBaseline({ previous, actual });
+    expect(regressions).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(baseline).toEqual(sortCensus(actual));
+    expect(baseline).not.toHaveProperty("$expected");
   });
 
   it("writes the first baseline from an empty one", () => {
-    const actual = census({ home: { default: one({ [SAVE]: 3 }) } });
-    expect(updateBaseline({ previous: {}, actual })).toEqual({ baseline: sortCensus(actual), regressions: [] });
+    const actual = merged({ home: { default: one({ [SAVE]: 3 }) } });
+    expect(updateBaseline({ previous: {}, actual })).toEqual({ baseline: sortCensus(actual), regressions: [], removed: [] });
   });
 
-  it("refuses a baseline that raises a journey's unmarked count without --allow-regression", () => {
+  it("refuses a baseline that raises a state's unmarked count without --allow-regression", () => {
     const previous = census({ home: { default: one({ [SAVE]: 1 }) } });
-    const actual = census({ home: { default: one({ [SAVE]: 2 }) } });
+    const actual = merged({ home: { default: one({ [SAVE]: 2 }) } });
     expect(() => updateBaseline({ previous, actual })).toThrow(
       [
-        "HX census: unmarked controls may only fall. This run raises:",
-        "  desktop-chrome / home: 1 → 2 unmarked",
-        "  iphone-webkit / home: 1 → 2 unmarked",
+        "HX census: unmarked controls may only fall, state by state. This run raises:",
+        "  desktop-chrome / home / default: 1 → 2 unmarked",
+        "  iphone-webkit / home / default: 1 → 2 unmarked",
         'Use HX components instead, or record why with --allow-regression "<reason>" (review treats it as a finding).',
       ].join("\n"),
     );
@@ -357,13 +463,13 @@ describe("the unmarked ratchet", () => {
 
   it("records an allowed regression with its reason, and drops it on the next update that raises nothing", () => {
     const previous = census({ home: { default: one({ [SAVE]: 1 }) } });
-    const actual = census({ home: { default: one({ [SAVE]: 2 }) } });
+    const actual = merged({ home: { default: one({ [SAVE]: 2 }) } });
     const { baseline, regressions } = updateBaseline({ previous, actual, allowRegression: " new search row " });
     expect(regressions).toHaveLength(2);
     expect(Object.keys(baseline)[0]).toBe("$allowedRegressions");
     expect(baseline.$allowedRegressions).toEqual([
-      { project: "desktop-chrome", journey: "home", from: 1, to: 2, reason: "new search row" },
-      { project: "iphone-webkit", journey: "home", from: 1, to: 2, reason: "new search row" },
+      { project: "desktop-chrome", journey: "home", state: "default", from: 1, to: 2, reason: "new search row" },
+      { project: "iphone-webkit", journey: "home", state: "default", from: 1, to: 2, reason: "new search row" },
     ]);
     const again = updateBaseline({ previous: baseline, actual, allowRegression: "ignored" });
     expect(again.regressions).toEqual([]);
@@ -372,14 +478,79 @@ describe("the unmarked ratchet", () => {
 
   it("lets marked controls rise and unmarked ones fall", () => {
     const previous = census({ home: { default: one({ [SAVE]: 2 }) } });
-    const actual = census({ home: { default: one({ [SAVE]: 1, [SAVE_MARKED]: 5 }) } });
+    const actual = merged({ home: { default: one({ [SAVE]: 1, [SAVE_MARKED]: 5 }) } });
     expect(updateBaseline({ previous, actual }).regressions).toEqual([]);
   });
 
-  it("refuses an actual missing a project or with a bad shape", () => {
-    expect(() => updateBaseline({ previous: {}, actual: { "iphone-webkit": {} } })).toThrow("missing project(s) desktop-chrome");
-    expect(() => updateBaseline({ previous: [] as never, actual: census({}) })).toThrow("the current baseline: a census file");
-    expect(() => updateBaseline({ previous: {}, actual: census({}), projects: ["x"] })).toThrow("missing project(s) x");
+  it("names a dropped state by its journey or by project/journey/state", () => {
+    const drop = { project: "iphone-webkit", journey: "recipe", state: "dialog" };
+    expect(removalNames("recipe", drop)).toBe(true);
+    expect(removalNames("home", drop)).toBe(false);
+    expect(removalNames("iphone-webkit/recipe/dialog", drop)).toBe(true);
+    expect(removalNames("desktop-chrome/recipe/dialog", drop)).toBe(false);
+    expect(removalNames("iphone-webkit/home/dialog", drop)).toBe(false);
+    expect(removalNames("iphone-webkit/recipe/default", drop)).toBe(false);
+    expect(removalNames("recipe/dialog", drop)).toBe(false);
+    expect(findDrops(
+      { $allowedRegressions: [], p: { recipe: { default: [], dialog: [] }, gone: { default: [] } } },
+      { p: { recipe: { default: [] } } },
+    )).toEqual([{ project: "p", journey: "gone", state: "default" }, { project: "p", journey: "recipe", state: "dialog" }]);
+  });
+
+  it("treats a renamed journey as a drop and a new journey, refused until --remove names the old one", () => {
+    const previous = census({ search: { default: one({ [SAVE]: 3 }) } });
+    const actual = merged({ "search-no-results": { default: one({ [SAVE]: 1 }) } });
+    expect(() => updateBaseline({ previous, actual })).toThrow(
+      [
+        "HX census: this run drops states the baseline has:",
+        "  desktop-chrome / search / default",
+        "  iphone-webkit / search / default",
+        "If they are meant to go (a renamed journey or state is a drop plus a new one), name each with --remove <project/journey/state>, or a whole journey with --remove <journey>.",
+      ].join("\n"),
+    );
+    const { baseline, removed } = updateBaseline({ previous, actual, remove: ["search"] });
+    expect(baseline).toEqual(sortCensus(actual));
+    expect(removed).toEqual([
+      { project: "desktop-chrome", journey: "search", state: "default" },
+      { project: "iphone-webkit", journey: "search", state: "default" },
+    ]);
+  });
+
+  it("refuses a dropped state until --remove names it on every project, and a --remove that names nothing dropped", () => {
+    const previous = census({ recipe: { default: one({ [SAVE]: 1 }), dialog: one({ [CLOSE]: 1 }) } });
+    const actual = merged({ recipe: { default: one({ [SAVE]: 1 }) } });
+    expect(() => updateBaseline({ previous, actual, remove: ["iphone-webkit/recipe/dialog"] })).toThrow(
+      "HX census: this run drops states the baseline has:\n  desktop-chrome / recipe / dialog\n",
+    );
+    expect(
+      updateBaseline({ previous, actual, remove: ["iphone-webkit/recipe/dialog", "desktop-chrome/recipe/dialog"] }).baseline,
+    ).toEqual(sortCensus(actual));
+    expect(() => updateBaseline({ previous, actual, remove: ["recipe", "home", "iphone-webkit/recipe/default"] })).toThrow(
+      "HX census: --remove home names nothing this run drops.\nHX census: --remove iphone-webkit/recipe/default names nothing this run drops.",
+    );
+  });
+
+  it("refuses an actual that records a project as {}, misses a project or a listed state, has no expected set, or has a bad shape", () => {
+    const covered = merged({ home: { default: [] } });
+    expect(() => updateBaseline({ previous: {}, actual: { ...covered, "iphone-webkit": {} } })).toThrow(
+      "the run's actual census records nothing for project(s) iphone-webkit",
+    );
+    expect(() => updateBaseline({ previous: {}, actual: { $expected: { home: ["default"] }, "iphone-webkit": { home: { default: [] } } } })).toThrow(
+      "missing project(s) desktop-chrome",
+    );
+    expect(() => updateBaseline({ previous: {}, actual: { ...covered, $expected: { home: ["default", "menu"] } } })).toThrow(
+      [
+        "HX census: the run's actual census does not cover the census list:",
+        "  iphone-webkit / home / menu was not recorded",
+        "  desktop-chrome / home / menu was not recorded",
+      ].join("\n"),
+    );
+    expect(() => updateBaseline({ previous: {}, actual: census({ home: { default: [] } }) })).toThrow(
+      "the run's actual census has no $expected set: use the merged hx-census-actual.json a Journeys run uploads.",
+    );
+    expect(() => updateBaseline({ previous: {}, actual: { ...covered, $expected: {} } })).toThrow("the run's actual census's $expected: the expected set");
+    expect(() => updateBaseline({ previous: [] as never, actual: covered })).toThrow("the current baseline: a census file");
+    expect(() => updateBaseline({ previous: {}, actual: covered, projects: ["x"] })).toThrow("missing project(s) x");
   });
 
   it("summarizes new, dropped and changed states", () => {
@@ -395,7 +566,7 @@ describe("the unmarked ratchet", () => {
 });
 
 describe("pnpm census:update", () => {
-  const actual = census({ home: { default: [{ identity: SAVE, count: 1 }] } });
+  const actual = merged({ home: { default: [{ identity: SAVE, count: 1 }] } });
 
   function files(entries: Record<string, unknown>) {
     const written: Record<string, string> = {};
@@ -413,12 +584,16 @@ describe("pnpm census:update", () => {
   }
 
   it("parses its arguments", () => {
-    expect(update.parseUpdateArgs(["123"])).toEqual({ source: "123", allowRegression: undefined, baseline: BASELINE_PATH });
-    expect(update.parseUpdateArgs(["--allow-regression", "why", "a.json", "--baseline", "b.json"])).toEqual({
+    expect(update.parseUpdateArgs(["123"])).toEqual({ source: "123", allowRegression: undefined, remove: [], baseline: BASELINE_PATH });
+    expect(update.parseUpdateArgs(["--allow-regression", "why", "a.json", "--remove", "search", "--baseline", "b.json", "--remove", "iphone-webkit/home/menu"])).toEqual({
       source: "a.json",
       allowRegression: "why",
+      remove: ["search", "iphone-webkit/home/menu"],
       baseline: "b.json",
     });
+    expect(() => update.parseUpdateArgs(["1", "--remove"])).toThrow("--remove needs a value.");
+    expect(() => update.parseUpdateArgs(["1", "--remove", "home/menu"])).toThrow("--remove takes <journey> or <project/journey/state>, not home/menu.");
+    expect(() => update.parseUpdateArgs(["1", "--remove", "iphone-webkit//menu"])).toThrow("--remove takes <journey> or <project/journey/state>, not iphone-webkit//menu.");
     expect(() => update.parseUpdateArgs([])).toThrow("Usage: pnpm census:update");
     expect(() => update.parseUpdateArgs(["1", "--allow-regression"])).toThrow("--allow-regression needs a value.");
     expect(() => update.parseUpdateArgs(["1", "--baseline", "--x"])).toThrow("--baseline needs a value.");
@@ -440,7 +615,7 @@ describe("pnpm census:update", () => {
     expect(fs.written[BASELINE_PATH]).toBe(stringifyCensus(sortCensus(actual)));
     expect(out.log).toHaveBeenCalledWith(`Wrote ${BASELINE_PATH} from ${downloaded}.`);
     expect(out.log).toHaveBeenCalledWith(expect.stringContaining("new state  desktop-chrome / home / default"));
-    expect(out.log).toHaveBeenCalledWith("Unmarked controls per journey:\n  desktop-chrome / home: 1\n  iphone-webkit / home: 1");
+    expect(out.log).toHaveBeenCalledWith("Unmarked controls per state:\n  desktop-chrome / home / default: 1\n  iphone-webkit / home / default: 1");
     expect(exit).not.toHaveBeenCalled();
   });
 
@@ -460,7 +635,7 @@ describe("pnpm census:update", () => {
     const exit = vi.fn();
     await update.main(["actual.json"], { ...fs, io: out, exit });
     expect(exit).toHaveBeenCalledWith(1);
-    expect(out.error).toHaveBeenCalledWith(expect.stringContaining("desktop-chrome / home: 0 → 1 unmarked"));
+    expect(out.error).toHaveBeenCalledWith(expect.stringContaining("desktop-chrome / home / default: 0 → 1 unmarked"));
     expect(fs.writeFile).not.toHaveBeenCalled();
 
     const accepted = io();
@@ -468,11 +643,29 @@ describe("pnpm census:update", () => {
     expect(JSON.parse(fs.written[BASELINE_PATH]).$allowedRegressions[0]).toEqual({
       project: "desktop-chrome",
       journey: "home",
+      state: "default",
       from: 0,
       to: 1,
       reason: "measuring a new row",
     });
-    expect(accepted.log).toHaveBeenCalledWith("Allowed regression (measuring a new row): iphone-webkit / home 0 → 1 unmarked.");
+    expect(accepted.log).toHaveBeenCalledWith("Allowed regression (measuring a new row): iphone-webkit / home / default 0 → 1 unmarked.");
+  });
+
+  it("refuses to drop a baselined journey, writing nothing, and drops it when --remove names it", async () => {
+    const previous = census({ search: { default: [{ identity: SAVE, count: 1 }] } });
+    const fs = files({ "actual.json": actual, [BASELINE_PATH]: previous });
+    const out = io();
+    const exit = vi.fn();
+    await update.main(["actual.json"], { ...fs, io: out, exit });
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(out.error).toHaveBeenCalledWith(expect.stringContaining("HX census: this run drops states the baseline has:\n  desktop-chrome / search / default"));
+    expect(fs.writeFile).not.toHaveBeenCalled();
+
+    const removed = io();
+    await update.main(["actual.json", "--remove", "search"], { ...fs, io: removed, exit: vi.fn() });
+    expect(fs.written[BASELINE_PATH]).toBe(stringifyCensus(sortCensus(actual)));
+    expect(removed.log).toHaveBeenCalledWith("Removed (--remove): desktop-chrome / search / default.");
+    expect(removed.log).toHaveBeenCalledWith("Removed (--remove): iphone-webkit / search / default.");
   });
 
   it("reports a non-Error failure", async () => {
@@ -508,7 +701,9 @@ describe("pnpm census:update", () => {
   });
 
   it("sets the exit code and prints to the console by default", async () => {
-    expectConsoleError('Usage: pnpm census:update <run-id | path to hx-census-actual.json> [--allow-regression "<reason>"] [--baseline <path>]');
+    expectConsoleError(
+      'Usage: pnpm census:update <run-id | path to hx-census-actual.json> [--allow-regression "<reason>"] [--remove <journey | project/journey/state>]... [--baseline <path>]',
+    );
     const originalArgv = process.argv;
     process.argv = ["node", "hx-census-update.mjs"];
     try {
@@ -545,22 +740,25 @@ describe("hx-census-merge", () => {
     expect(() => merge.parseMergeArgs(["d", "o", "--all"])).toThrow("Unknown option --all.");
   });
 
-  it("merges the worker files, ignoring every other file, and writes the merged census", () => {
+  const expected = { home: ["default"] };
+
+  it("merges the worker files, ignoring every other file, and writes the merged census with its expected set", () => {
     const contents: Record<string, unknown> = {
       "hx-census/hx-census-actual.iphone-webkit.0.json": phone,
       "hx-census/hx-census-actual.desktop-chrome.1.json": desktop,
+      [`hx-census/${EXPECTED_FILE}`]: expected,
     };
     const writeFile = vi.fn();
     const out = io();
     const exit = vi.fn();
     merge.main(["hx-census", "hx-census-actual.json"], {
-      readdir: () => ["notes.txt", "hx-census-actual.desktop-chrome.1.json", "hx-census-actual.iphone-webkit.0.json"],
+      readdir: () => ["notes.txt", EXPECTED_FILE, `${EXPECTED_FILE}.12.0.partial`, "hx-census-actual.desktop-chrome.1.json", "hx-census-actual.iphone-webkit.0.json"],
       readFile: (file) => JSON.stringify(contents[file]),
       writeFile,
       io: out,
       exit,
     });
-    expect(writeFile).toHaveBeenCalledWith("hx-census-actual.json", stringifyCensus({ ...desktop, ...phone }));
+    expect(writeFile).toHaveBeenCalledWith("hx-census-actual.json", stringifyCensus({ $expected: expected, ...desktop, ...phone }));
     expect(out.log).toHaveBeenCalledWith("Merged 2 census file(s) from hx-census into hx-census-actual.json.");
     expect(exit).not.toHaveBeenCalled();
   });
@@ -571,7 +769,7 @@ describe("hx-census-merge", () => {
     const exit = vi.fn();
     merge.main(["d", "o.json"], {
       readdir: () => ["hx-census-actual.iphone-webkit.0.json", "hx-census-actual.iphone-webkit.1.json"],
-      readFile: () => JSON.stringify(phone),
+      readFile: (file) => JSON.stringify(file.endsWith(EXPECTED_FILE) ? expected : phone),
       writeFile,
       io: out,
       exit,
@@ -582,13 +780,20 @@ describe("hx-census-merge", () => {
     expect(exit).toHaveBeenCalledWith(1);
 
     const broken = io();
-    merge.main(["d", "o.json"], { readdir: () => ["hx-census-actual.iphone-webkit.0.json"], readFile: () => "{", writeFile, io: broken, exit });
+    merge.main(["d", "o.json"], {
+      readdir: () => ["hx-census-actual.iphone-webkit.0.json"],
+      readFile: (file) => (file.endsWith(EXPECTED_FILE) ? JSON.stringify(expected) : "{"),
+      writeFile,
+      io: broken,
+      exit,
+    });
     expect(broken.error).toHaveBeenCalledWith(expect.stringMatching(/^d\/hx-census-actual\.iphone-webkit\.0\.json is not JSON: /));
 
     const thrown = io();
     merge.main(["d", "o.json"], {
       readdir: () => ["hx-census-actual.iphone-webkit.0.json"],
-      readFile: () => {
+      readFile: (file) => {
+        if (file.endsWith(EXPECTED_FILE)) return JSON.stringify(expected);
         throw "gone";
       },
       writeFile,
@@ -599,9 +804,51 @@ describe("hx-census-merge", () => {
     expect(writeFile).not.toHaveBeenCalled();
   });
 
+  it("fails, writing nothing, without a valid expected set or when a listed state went unrecorded", () => {
+    const writeFile = vi.fn();
+    const exit = vi.fn();
+    const readdir = () => ["hx-census-actual.iphone-webkit.0.json", "hx-census-actual.desktop-chrome.0.json"];
+    const census = (expectedText: string | Error | string[]) => (file: string) => {
+      if (!file.endsWith(EXPECTED_FILE)) return JSON.stringify(file.includes("iphone") ? phone : desktop);
+      if (expectedText instanceof Error) throw expectedText;
+      if (Array.isArray(expectedText)) throw expectedText[0];
+      return expectedText;
+    };
+
+    const missing = io();
+    merge.main(["d", "o.json"], { readdir, readFile: census(new Error("ENOENT: no such file")), writeFile, io: missing, exit });
+    expect(missing.error).toHaveBeenCalledWith(
+      `HX census merge failed: d/${EXPECTED_FILE} could not be read (ENOENT: no such file): the census journey writes it when it starts, so the census did not run.`,
+    );
+
+    const thrown = io();
+    merge.main(["d", "o.json"], { readdir, readFile: census(["EACCES"]), writeFile, io: thrown, exit });
+    expect(thrown.error).toHaveBeenCalledWith(expect.stringContaining("could not be read (EACCES)"));
+
+    const notJson = io();
+    merge.main(["d", "o.json"], { readdir, readFile: census("{"), writeFile, io: notJson, exit });
+    expect(notJson.error).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^d/${EXPECTED_FILE.replace(/\./g, "\\.")} is not JSON: `)));
+
+    const invalid = io();
+    merge.main(["d", "o.json"], { readdir, readFile: census("{}"), writeFile, io: invalid, exit });
+    expect(invalid.error).toHaveBeenCalledWith(`d/${EXPECTED_FILE}: the expected set is a non-empty JSON object of journeys, each listing its states.`);
+
+    const uncovered = io();
+    merge.main(["d", "o.json"], { readdir, readFile: census(JSON.stringify({ home: ["default", "menu"] })), writeFile, io: uncovered, exit });
+    expect(uncovered.error).toHaveBeenCalledWith(
+      "HX census merge failed:\n  iphone-webkit / home / menu was not recorded\n  desktop-chrome / home / menu was not recorded",
+    );
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledTimes(5);
+  });
+
   it("treats a missing directory as no census, and uses the console and exit code by default", () => {
-    expectConsoleError("HX census merge failed:\n  no census recorded for project(s) iphone-webkit, desktop-chrome");
-    merge.main([join(update.DOWNLOAD_DIRECTORY, "no-such-directory"), "o.json"]);
+    const directory = join(update.DOWNLOAD_DIRECTORY, "no-such-directory");
+    const expectedFile = join(directory, EXPECTED_FILE);
+    expectConsoleError(
+      `HX census merge failed: ${expectedFile} could not be read (ENOENT: no such file or directory, open '${expectedFile}'): the census journey writes it when it starts, so the census did not run.`,
+    );
+    merge.main([directory, "o.json"]);
     expect(process.exitCode).toBe(1);
     process.exitCode = 0;
   });
@@ -616,6 +863,7 @@ describe("hx-census-merge", () => {
       readdir: () => {
         throw "EACCES";
       },
+      readFile: () => JSON.stringify(expected),
       io: thrown,
       exit: vi.fn(),
     });

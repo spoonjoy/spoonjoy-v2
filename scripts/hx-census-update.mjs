@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// pnpm census:update <run-id | path> [--allow-regression "<reason>"] [--baseline <path>]
+// pnpm census:update <run-id | path> [--allow-regression "<reason>"] [--remove <journey | project/journey/state>]... [--baseline <path>]
 //
 // Rewrites e2e/journeys/hx-census.baseline.json from a Journeys run's merged census: given a run id,
 // it downloads that run's `hx-census-actual` artifact with `gh run download` (into
-// .hx-census-download/, which git ignores); given a path, it reads that file. The census must record
-// both device projects. A journey's unmarked count may only fall: a rise is refused unless
+// .hx-census-download/, which git ignores); given a path, it reads that file. The census must cover
+// its expected set (`$expected`, every state of the census list) on both device projects. It refuses
+// to drop a project/journey/state the baseline has unless --remove names it (a renamed journey is a
+// drop plus a new journey). Each state's unmarked count may only fall: a rise is refused unless
 // --allow-regression gives a reason, which the baseline then records under `$allowedRegressions`
 // (review treats it as a finding). See AGENTS.md, "The HX census".
 import { execFile } from "node:child_process";
@@ -23,24 +25,31 @@ import {
 } from "./hx-census.mjs";
 
 export const DOWNLOAD_DIRECTORY = ".hx-census-download";
-const USAGE = 'Usage: pnpm census:update <run-id | path to hx-census-actual.json> [--allow-regression "<reason>"] [--baseline <path>]';
+const USAGE =
+  'Usage: pnpm census:update <run-id | path to hx-census-actual.json> [--allow-regression "<reason>"] [--remove <journey | project/journey/state>]... [--baseline <path>]';
 
 /**
  * @param {string[]} argv
- * @returns {{ source: string, allowRegression?: string, baseline: string }}
+ * @returns {{ source: string, allowRegression?: string, remove: string[], baseline: string }}
  */
 export function parseUpdateArgs(argv) {
   const args = [...argv];
   let source;
   let allowRegression;
+  const remove = [];
   let baseline = BASELINE_PATH;
   while (args.length > 0) {
     const arg = args.shift();
-    if (arg === "--allow-regression" || arg === "--baseline") {
+    if (arg === "--allow-regression" || arg === "--baseline" || arg === "--remove") {
       const value = args.shift();
       if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a value.\n${USAGE}`);
       if (arg === "--baseline") baseline = value;
-      else allowRegression = value;
+      else if (arg === "--remove") {
+        if (![1, 3].includes(value.split("/").length) || value.split("/").some((part) => part === "")) {
+          throw new Error(`--remove takes <journey> or <project/journey/state>, not ${value}.\n${USAGE}`);
+        }
+        remove.push(value);
+      } else allowRegression = value;
     } else if (arg.startsWith("--")) {
       throw new Error(`Unknown option ${arg}.\n${USAGE}`);
     } else if (source === undefined) {
@@ -51,7 +60,7 @@ export function parseUpdateArgs(argv) {
   }
   if (source === undefined) throw new Error(USAGE);
   if (allowRegression !== undefined && allowRegression.trim() === "") throw new Error(`--allow-regression needs a reason.\n${USAGE}`);
-  return { source, allowRegression, baseline };
+  return { source, allowRegression, remove, baseline };
 }
 
 const execFileAsync = promisify(execFile);
@@ -133,11 +142,11 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
   } = deps;
 
   try {
-    const { source, allowRegression, baseline: baselinePath } = parseUpdateArgs(argv);
+    const { source, allowRegression, remove, baseline: baselinePath } = parseUpdateArgs(argv);
     const actualPath = await resolveCensusSource(source, { exists, mkdir, run, now, io });
     const actual = JSON.parse(readFile(actualPath));
     const previous = exists(baselinePath) ? JSON.parse(readFile(baselinePath)) : {};
-    const { baseline, regressions } = updateBaseline({ previous, actual, allowRegression });
+    const { baseline, regressions, removed } = updateBaseline({ previous, actual, allowRegression, remove });
     writeFile(baselinePath, stringifyCensus(baseline));
 
     const changes = summarizeChanges(previous, baseline);
@@ -146,14 +155,19 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
     const counts = unmarkedCounts(baseline);
     io.log(
       [
-        "Unmarked controls per journey:",
+        "Unmarked controls per state:",
         ...Object.entries(counts).flatMap(([project, journeys]) =>
-          Object.entries(journeys).map(([journey, count]) => `  ${project} / ${journey}: ${count}`),
+          Object.entries(journeys).flatMap(([journey, states]) =>
+            Object.entries(states).map(([state, count]) => `  ${project} / ${journey} / ${state}: ${count}`),
+          ),
         ),
       ].join("\n"),
     );
-    for (const { project, journey, from, to } of regressions) {
-      io.log(`Allowed regression (${allowRegression}): ${project} / ${journey} ${from} → ${to} unmarked.`);
+    for (const { project, journey, state } of removed) {
+      io.log(`Removed (--remove): ${project} / ${journey} / ${state}.`);
+    }
+    for (const { project, journey, state, from, to } of regressions) {
+      io.log(`Allowed regression (${allowRegression}): ${project} / ${journey} / ${state} ${from} → ${to} unmarked.`);
     }
   } catch (error) {
     io.error(error instanceof Error ? error.message : String(error));
