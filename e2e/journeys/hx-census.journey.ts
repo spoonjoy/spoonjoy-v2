@@ -26,6 +26,9 @@ for (const journey of census) {
         });
         expect(response?.status(), `${journey.path} answers ${status}`).toBe(status);
         await waitForHydration(page);
+        // A redirect (a signed-out visit to a signed-in page, say) would measure some other page.
+        const landed = new URL(page.url());
+        expect(`${landed.pathname}${landed.search}`, `${journey.path} does not redirect`).toBe(journey.path);
         await state.action?.(page);
 
         const actual = await collectCensus(page);

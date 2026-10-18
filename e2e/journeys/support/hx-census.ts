@@ -55,6 +55,7 @@ export interface Journey {
   /** Enrolled journeys fail on any control without a data-ouro-control marker. */
   enrolled: boolean;
   persona: CensusPersona;
+  /** Where the journey's page is, path and query; the page must not redirect anywhere else. */
   path: string;
   /** The document's HTTP status; 200 unless the page is a "not found" page. */
   status?: number;
@@ -324,7 +325,8 @@ export const census: Journey[] = [
   // (codex_e2e_s_<run token>_<n>); a query that matches nothing measures the page without them.
   { id: "search-no-results", enrolled: false, persona: "chef", path: "/search?q=hxcensusnomatch", states: [DEFAULT] },
   { id: "search-results", enrolled: false, persona: "chef", path: "/search?q=lemon", states: [DEFAULT] },
-  { id: "chefs", enrolled: false, persona: "signed-out", path: "/chefs", states: [DEFAULT] },
+  // /chefs is the signed-in chef's own page (signed out it redirects to sign-in).
+  { id: "chefs", enrolled: false, persona: "chef", path: "/chefs", states: [DEFAULT] },
   { id: "chef-profile", enrolled: false, persona: "signed-out", path: CHEF_PROFILE, states: [DEFAULT] },
   { id: "chef-profile-own", enrolled: false, persona: "chef", path: CHEF_PROFILE, states: [DEFAULT] },
   { id: "fellow-chefs", enrolled: false, persona: "signed-out", path: `${CHEF_PROFILE}/fellow-chefs`, states: [DEFAULT] },
