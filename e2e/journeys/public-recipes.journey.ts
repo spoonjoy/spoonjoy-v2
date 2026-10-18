@@ -3,6 +3,7 @@
 // holds many unrelated recipes from other journeys and legacy data, well past one page, so "Show
 // more" is there; nothing asserts counts or positions beyond that.
 import { test, expect } from "./support/journey";
+import { expectNoHydrationErrors } from "./support/hydration";
 import { seededRecipeLink, waitForHydration, waitForServiceWorker } from "./support/navigation";
 import { PAGER_OLDEST_RECIPE } from "../../scripts/seed-qa-kitchen.mjs";
 
@@ -19,6 +20,7 @@ test.describe("Public recipes", () => {
     await page.goto("/recipes");
     await waitForHydration(page);
     await expect(page.getByRole("heading", { name: "All public recipes", exact: true })).toBeVisible();
+    await expectNoHydrationErrors(page);
     // Without JavaScript it is a link to the page after a cursor.
     await expect(showMore).toHaveAttribute("href", /^\/recipes\?after=[A-Za-z0-9_-]+$/);
     const firstPage = await rows.count();
@@ -56,5 +58,11 @@ test.describe("Public recipes", () => {
     }
 
     await expect(oldest).toBeVisible();
+
+    // The recipe itself, server-rendered for a signed-out visitor, hydrates without a mismatch.
+    await page.goto(`/recipes/${PAGER_OLDEST_RECIPE.id}`);
+    await waitForHydration(page);
+    await expect(page.getByRole("heading", { level: 1, name: PAGER_OLDEST_RECIPE.title, exact: true })).toBeVisible();
+    await expectNoHydrationErrors(page);
   });
 });

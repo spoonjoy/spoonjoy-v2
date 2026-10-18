@@ -3,6 +3,7 @@
 // scale control, the cook's tick boxes and the cooks log (product audit 2026-10-09, finding 14). It
 // prints the seeded Lemon Herb Rice and changes nothing.
 import { test, expect } from "./support/journey";
+import { expectNoHydrationErrors } from "./support/hydration";
 import { waitForHydration } from "./support/navigation";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
@@ -11,6 +12,7 @@ test.describe("Printing a recipe", () => {
   test("the printed page is the recipe, without the screen controls", async ({ page }, testInfo) => {
     await page.goto(LEMON_RICE);
     await waitForHydration(page);
+    await expectNoHydrationErrors(page);
     await page.emulateMedia({ media: "print" });
 
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();

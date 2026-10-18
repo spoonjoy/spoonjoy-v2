@@ -73,6 +73,20 @@ describe("useCookTimers", () => {
     expect(window.localStorage.getItem(cookTimersStorageKey("r1"))).toBeNull();
   });
 
+  it("keeps timers in memory only when persist is off, ignoring stored ones", () => {
+    window.localStorage.setItem(cookTimersStorageKey("r1"), JSON.stringify({ 2: { status: "running", durationSeconds: 300, endsAt: 1_300_000 } }));
+    const { result, unmount } = renderHook(() => useCookTimers("r1", steps, { alarmFactory: fakeAlarm, persist: false }));
+    expect(result.current.active).toEqual([]);
+
+    act(() => result.current.start(1));
+    expect(result.current.active.map((entry) => entry.stepNum)).toEqual([1]);
+    expect(JSON.parse(window.localStorage.getItem(cookTimersStorageKey("r1")) ?? "{}")).not.toHaveProperty("1");
+
+    unmount();
+    const reloaded = renderHook(() => useCookTimers("r1", steps, { alarmFactory: fakeAlarm, persist: false }));
+    expect(reloaded.result.current.active).toEqual([]);
+  });
+
   it("does not start a step that has no duration or does not exist", () => {
     const alarm = fakeAlarm();
     const { result } = renderHook(() => useCookTimers("r1", steps, { alarmFactory: () => alarm }));

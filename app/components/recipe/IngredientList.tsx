@@ -26,7 +26,7 @@ export interface IngredientListProps {
   /** Scale factor for quantities (default: 1) */
   scaleFactor?: number
   /** Set of checked ingredient IDs */
-  checkedIds?: Set<string>
+  checkedIds?: ReadonlySet<string>
   /** Callback when an ingredient is toggled */
   onToggle?: (id: string) => void
   /** Whether to show checkboxes (default: true) */
@@ -34,7 +34,7 @@ export interface IngredientListProps {
   /** Optional step output uses to render at the top of the list */
   stepOutputUses?: StepReference[]
   /** Set of checked step output IDs */
-  checkedStepOutputIds?: Set<string>
+  checkedStepOutputIds?: ReadonlySet<string>
   /** Callback when a step output is toggled */
   onStepOutputToggle?: (id: string) => void
 }

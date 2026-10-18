@@ -1,0 +1,199 @@
+{
+  "recipe": {
+    "id": "fixture-lemon-rice",
+    "title": "Lemon Herb Rice",
+    "description": "Bright, fluffy rice.",
+    "servings": "4",
+    "chefId": "cmve6vmz60001mvnx5i0bat2y",
+    "deletedAt": null,
+    "activeCoverId": null,
+    "activeCoverVariant": null,
+    "coverMode": "auto",
+    "sourceRecipeId": null,
+    "sourceUrl": null,
+    "createdAt": "2026-10-18T18:59:02.805Z",
+    "updatedAt": "2026-10-18T18:59:02.805Z",
+    "chef": {
+      "id": "cmve6vmz60001mvnx5i0bat2y",
+      "username": "fixture_chef",
+      "photoUrl": null
+    },
+    "sourceRecipe": null,
+    "steps": [
+      {
+        "id": "cmve6vmzg0006m1t7kfmb837q",
+        "recipeId": "fixture-lemon-rice",
+        "stepNum": 1,
+        "stepTitle": "Rinse the rice",
+        "description": "Rinse until the water runs clear.",
+        "duration": null,
+        "updatedAt": "2026-10-18T18:59:02.813Z",
+        "ingredients": [
+          {
+            "id": "cmve6vmzj000cm1t7nz6qhzzs",
+            "recipeId": "fixture-lemon-rice",
+            "stepNum": 1,
+            "quantity": 2,
+            "unitId": "cmve6vmzb0000m1t7ab5cnm2i",
+            "ingredientRefId": "cmve6vmze0002m1t7mcj8kw1z",
+            "updatedAt": "2026-10-18T18:59:02.816Z",
+            "unit": {
+              "id": "cmve6vmzb0000m1t7ab5cnm2i",
+              "name": "cup",
+              "updatedAt": "2026-10-18T18:59:02.807Z"
+            },
+            "ingredientRef": {
+              "id": "cmve6vmze0002m1t7mcj8kw1z",
+              "name": "jasmine rice",
+              "updatedAt": "2026-10-18T18:59:02.810Z"
+            }
+          }
+        ],
+        "usingSteps": []
+      },
+      {
+        "id": "cmve6vmzh0008m1t7zhwsd6w5",
+        "recipeId": "fixture-lemon-rice",
+        "stepNum": 2,
+        "stepTitle": "Simmer",
+        "description": "Cover and simmer gently.",
+        "duration": 15,
+        "updatedAt": "2026-10-18T18:59:02.814Z",
+        "ingredients": [
+          {
+            "id": "cmve6vmzk000em1t7jgfv5e7l",
+            "recipeId": "fixture-lemon-rice",
+            "stepNum": 2,
+            "quantity": 3,
+            "unitId": "cmve6vmzb0000m1t7ab5cnm2i",
+            "ingredientRefId": "cmve6vmzf0003m1t7az4mlww4",
+            "updatedAt": "2026-10-18T18:59:02.816Z",
+            "unit": {
+              "id": "cmve6vmzb0000m1t7ab5cnm2i",
+              "name": "cup",
+              "updatedAt": "2026-10-18T18:59:02.807Z"
+            },
+            "ingredientRef": {
+              "id": "cmve6vmzf0003m1t7az4mlww4",
+              "name": "water",
+              "updatedAt": "2026-10-18T18:59:02.811Z"
+            }
+          }
+        ],
+        "usingSteps": [
+          {
+            "id": "cmve6vmzm000im1t7c5jfr8gy",
+            "recipeId": "fixture-lemon-rice",
+            "outputStepNum": 1,
+            "inputStepNum": 2,
+            "updatedAt": "2026-10-18T18:59:02.818Z",
+            "outputOfStep": {
+              "stepNum": 1,
+              "stepTitle": "Rinse the rice"
+            }
+          }
+        ]
+      },
+      {
+        "id": "cmve6vmzi000am1t7ekmb8o27",
+        "recipeId": "fixture-lemon-rice",
+        "stepNum": 3,
+        "stepTitle": "Fluff",
+        "description": "Fluff with a fork and fold in the zest.",
+        "duration": null,
+        "updatedAt": "2026-10-18T18:59:02.815Z",
+        "ingredients": [
+          {
+            "id": "cmve6vmzl000gm1t79tevyyfc",
+            "recipeId": "fixture-lemon-rice",
+            "stepNum": 3,
+            "quantity": 1,
+            "unitId": "cmve6vmzd0001m1t75gftipof",
+            "ingredientRefId": "cmve6vmzg0004m1t77lydxtj5",
+            "updatedAt": "2026-10-18T18:59:02.817Z",
+            "unit": {
+              "id": "cmve6vmzd0001m1t75gftipof",
+              "name": "tbsp",
+              "updatedAt": "2026-10-18T18:59:02.809Z"
+            },
+            "ingredientRef": {
+              "id": "cmve6vmzg0004m1t77lydxtj5",
+              "name": "lemon zest",
+              "updatedAt": "2026-10-18T18:59:02.812Z"
+            }
+          }
+        ],
+        "usingSteps": [
+          {
+            "id": "cmve6vmzn000km1t7xzr02ub4",
+            "recipeId": "fixture-lemon-rice",
+            "outputStepNum": 2,
+            "inputStepNum": 3,
+            "updatedAt": "2026-10-18T18:59:02.819Z",
+            "outputOfStep": {
+              "stepNum": 2,
+              "stepTitle": "Simmer"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "coverImageUrl": null,
+  "coverProvenanceLabel": null,
+  "activeCoverProcessing": null,
+  "canonicalUrl": "https://spoonjoy.app/recipes/fixture-lemon-rice",
+  "ogImageUrl": "https://spoonjoy.app/og/recipes/fixture-lemon-rice.png",
+  "recipeJsonLd": {
+    "@context": "https://schema.org",
+    "@type": "Recipe",
+    "name": "Lemon Herb Rice",
+    "author": {
+      "@type": "Person",
+      "name": "fixture_chef"
+    },
+    "datePublished": "2026-10-18T18:59:02.805Z",
+    "url": "https://spoonjoy.app/recipes/fixture-lemon-rice",
+    "recipeInstructions": [
+      {
+        "@type": "HowToStep",
+        "text": "Rinse until the water runs clear.",
+        "url": "https://spoonjoy.app/recipes/fixture-lemon-rice#step-1",
+        "name": "Rinse the rice"
+      },
+      {
+        "@type": "HowToStep",
+        "text": "Cover and simmer gently.",
+        "url": "https://spoonjoy.app/recipes/fixture-lemon-rice#step-2",
+        "name": "Simmer"
+      },
+      {
+        "@type": "HowToStep",
+        "text": "Fluff with a fork and fold in the zest.",
+        "url": "https://spoonjoy.app/recipes/fixture-lemon-rice#step-3",
+        "name": "Fluff"
+      }
+    ],
+    "image": "https://spoonjoy.app/og/recipes/fixture-lemon-rice.png",
+    "description": "Bright, fluffy rice.",
+    "recipeIngredient": [
+      "2 cup jasmine rice",
+      "3 cup water",
+      "1 tbsp lemon zest"
+    ],
+    "recipeYield": "4",
+    "totalTime": "PT15M"
+  },
+  "isOwner": false,
+  "cookbooks": [],
+  "savedInCookbookIds": [],
+  "hasIngredientsInShoppingList": false,
+  "spoons": [],
+  "renderedAt": 1792349942824,
+  "coverHistory": [],
+  "spoonImages": [],
+  "isOriginCookCandidate": false,
+  "coverPromptMode": "none",
+  "isAuthenticated": false,
+  "cookSessionUserId": null
+}

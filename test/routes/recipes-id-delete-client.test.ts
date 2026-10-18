@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { redirect } from "react-router";
 import * as recipeRoute from "~/routes/recipes.$id";
+import { getCookProgressStorageKey } from "~/hooks/use-route-cook-controller";
 import { syncedCookProgressStorageKey } from "~/lib/cook-session-sync";
 
 const deletedKey = syncedCookProgressStorageKey("user-1", "recipe-1");
 const otherRecipeKey = syncedCookProgressStorageKey("user-1", "recipe-2");
 const otherCookKey = syncedCookProgressStorageKey("user-2", "recipe-1");
-const deviceKey = recipeRoute.getCookProgressStorageKey("recipe-1");
-const otherDeviceKey = recipeRoute.getCookProgressStorageKey("recipe-2");
+const deviceKey = getCookProgressStorageKey("recipe-1");
+const otherDeviceKey = getCookProgressStorageKey("recipe-2");
 const pending = JSON.stringify({ progress: { scaleFactor: 2 }, server: { revision: 4 } });
 
 beforeEach(() => {

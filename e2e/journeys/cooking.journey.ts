@@ -15,6 +15,7 @@
 import { test, expect } from "./support/journey";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
+import { expectNoHydrationErrors } from "./support/hydration";
 import { pathUrl, recipeLink, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath, scratchForProject, scratchStorageStateForProject } from "./support/personas";
 
@@ -48,14 +49,17 @@ async function openLemonRiceFromHome(page: Page) {
   await recipeLink(page.getByRole("main"), "Lemon Herb Rice", LEMON_RICE).click();
   await expect(page).toHaveURL(pathUrl(LEMON_RICE));
   await expect(recipeHeading(page)).toBeVisible();
+  await expectNoHydrationErrors(page);
 }
 
-// Opens the recipe and waits until the page has read the cook's progress from their account.
+// Opens the recipe and waits until the page has read the cook's progress from their account. The
+// server renders it with no progress; the progress arrives after hydration, which must not mismatch.
 async function openLemonRiceDirectly(page: Page) {
   await page.goto(LEMON_RICE);
   await waitForHydration(page);
   await expect(recipeHeading(page)).toBeVisible();
   await expect(syncStatus(page)).toHaveText("Progress synced");
+  await expectNoHydrationErrors(page);
 }
 
 // Search, then Lemon Herb Rice through its result link: an in-app navigation, so the recipe page

@@ -9,6 +9,7 @@
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
+import { expectNoHydrationErrors } from "./support/hydration";
 import { waitForHydration } from "./support/navigation";
 import { scratchForProject, scratchStorageStateForProject } from "./support/personas";
 
@@ -22,12 +23,14 @@ function jasmineRice(page: Page) {
   return page.getByRole("checkbox", { name: "jasmine rice", exact: true });
 }
 
-// Opens Lemon Herb Rice and waits until the page has read the cook's progress from their account.
+// Opens Lemon Herb Rice and waits until the page has read the cook's progress from their account,
+// which arrives after the server-rendered page hydrates without a mismatch.
 async function openLemonRice(page: Page) {
   await page.goto(LEMON_RICE);
   await waitForHydration(page);
   await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
   await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+  await expectNoHydrationErrors(page);
 }
 
 test.describe("Cook progress across devices", () => {

@@ -5,9 +5,6 @@ import {
   useActionData,
   useFetcher,
   useLoaderData,
-  useLocation,
-  useNavigate,
-  useNavigation,
   useRevalidator,
   useRouteError,
   useSubmit,
@@ -15,10 +12,10 @@ import {
 } from "react-router";
 import { RecipeNotFound } from "~/components/recipe/RecipeNotFound";
 import { RouteErrorContent } from "~/components/errors/route-error";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { MouseEvent } from "react";
 import { usePostHog } from "~/lib/use-posthog";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import {
   handleRecipeDetailAction,
   loadRecipeDetail,
@@ -34,34 +31,19 @@ import { Heading } from "~/components/heading";
 import { Link } from "~/components/navigation/app-link";
 import { Text } from "~/components/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
-import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
-import { ScaleSelector } from "~/components/recipe/ScaleSelector";
+import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
 import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
 import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { StepCard } from "~/components/recipe/StepCard";
-import { IngredientList, type Ingredient } from "~/components/recipe/IngredientList";
-import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
-import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
+import { RecipeCookView } from "~/components/cook/RecipeCookView";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
-import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
-import { confirmCookSessionRecipeDeletion, useCookSessionSync } from "~/hooks/use-cook-session-sync";
-import { useCookTimers, type CookTimersController } from "~/hooks/use-cook-timers";
-import { useScreenWakeLock } from "~/hooks/use-screen-wake-lock";
+import { confirmCookSessionRecipeDeletion } from "~/hooks/use-cook-session-sync";
+import { getCookProgressStorageKey, useRouteCookController } from "~/hooks/use-route-cook-controller";
 import { useWriteToken } from "~/hooks/use-write-token";
-import {
-  DEFAULT_COOK_PROGRESS,
-  normalizeCookProgress,
-  normalizeScaleFactor,
-  normalizeStepIndex,
-  readSyncedCookCache,
-  type CookProgressBounds,
-  type CookProgressValue,
-} from "~/lib/cook-session-sync";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 
 export async function loader({ request, params, context }: Route.LoaderArgs) {
@@ -174,163 +156,7 @@ const recipeMastheadActionClass =
 const recipeMastheadPrimaryActionClass =
   "text-[var(--sj-action)] hover:text-[var(--sj-tomato)]";
 
-const COOK_PROGRESS_STORAGE_VERSION = 1;
 const COVER_PROCESSING_POLL_INTERVAL_MS = 3000;
-
-interface CookProgressSnapshot {
-  version: typeof COOK_PROGRESS_STORAGE_VERSION;
-  activeStepIndex: number;
-  /** Added later in the same version: older snapshots have only the index. */
-  activeStepId: string | null;
-  scaleFactor: number;
-  checkedIngredientIds: string[];
-  checkedStepOutputIds: string[];
-  updatedAt: string;
-}
-
-interface CookProgressState {
-  activeStepIndex: number;
-  activeStepId: string | null;
-  scaleFactor: number;
-  checkedIngredientIds: Set<string>;
-  checkedStepOutputIds: Set<string>;
-}
-
-// History state marking the `#cook` entry cook mode pushed (so Exit can pop it).
-const COOK_MODE_ENTRY_STATE = "spoonjoyCookModeEntry";
-
-function isCookModeEntryState(state: unknown): boolean {
-  return isRecord(state) && state[COOK_MODE_ENTRY_STATE] === true;
-}
-
-export function getCookProgressStorageKey(recipeId: string) {
-  return `spoonjoy-cook-progress:${recipeId}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
-export function parseCookProgressSnapshot(
-  value: string | null,
-  bounds: CookProgressBounds
-): CookProgressState | null {
-  if (!value) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!isRecord(parsed) || parsed.version !== COOK_PROGRESS_STORAGE_VERSION) {
-      return null;
-    }
-
-    // The step is found by its id, so it survives the steps being reordered; the index is the
-    // fallback for older snapshots and for a step the recipe no longer has.
-    const { activeStepIndex, activeStepId } = normalizeCookProgress({
-      ...DEFAULT_COOK_PROGRESS,
-      activeStepIndex: normalizeStepIndex(parsed.activeStepIndex, bounds.stepIds.length),
-      activeStepId: typeof parsed.activeStepId === "string" ? parsed.activeStepId : null,
-    }, bounds);
-    return {
-      activeStepIndex,
-      activeStepId,
-      scaleFactor: normalizeScaleFactor(parsed.scaleFactor),
-      checkedIngredientIds: new Set(
-        stringArray(parsed.checkedIngredientIds).filter((id) => bounds.ingredientIds.has(id))
-      ),
-      checkedStepOutputIds: new Set(
-        stringArray(parsed.checkedStepOutputIds).filter((id) => bounds.stepOutputIds.has(id))
-      ),
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function readCookProgress(recipeId: string, bounds: CookProgressBounds): CookProgressState | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    return parseCookProgressSnapshot(
-      window.localStorage.getItem(getCookProgressStorageKey(recipeId)),
-      bounds
-    );
-  } catch {
-    return null;
-  }
-}
-
-// Signed-in progress when cook-session sync is on: this browser's cache of the cook's session.
-export function readSyncedCookProgress(
-  userId: string,
-  recipeId: string,
-  bounds: CookProgressBounds
-): CookProgressState | null {
-  const cached = readSyncedCookCache(userId, recipeId, bounds);
-  if (!cached) {
-    return null;
-  }
-
-  return {
-    activeStepIndex: cached.progress.activeStepIndex,
-    activeStepId: cached.progress.activeStepId,
-    scaleFactor: cached.progress.scaleFactor,
-    checkedIngredientIds: new Set(cached.progress.checkedIngredientIds),
-    checkedStepOutputIds: new Set(cached.progress.checkedStepOutputIds),
-  };
-}
-
-export function writeCookProgress(
-  recipeId: string,
-  {
-    activeStepIndex,
-    activeStepId,
-    scaleFactor,
-    checkedIngredientIds,
-    checkedStepOutputIds,
-  }: CookProgressState
-) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const snapshot: CookProgressSnapshot = {
-    version: COOK_PROGRESS_STORAGE_VERSION,
-    activeStepIndex,
-    activeStepId,
-    scaleFactor,
-    checkedIngredientIds: Array.from(checkedIngredientIds),
-    checkedStepOutputIds: Array.from(checkedStepOutputIds),
-    updatedAt: new Date().toISOString(),
-  };
-
-  try {
-    window.localStorage.setItem(getCookProgressStorageKey(recipeId), JSON.stringify(snapshot));
-  } catch {
-    // Ignore unavailable storage. Cook mode remains fully usable for the current session.
-  }
-}
-
-export function findRecipeStepsScrollTarget(doc: Document): HTMLElement | null {
-  const candidates = Array.from(doc.querySelectorAll<HTMLElement>("#steps"));
-  return candidates.find((candidate) => {
-    const rect = candidate.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }) ?? candidates[0] ?? null;
-}
-
-export function findCookModeScrollTarget(doc: Document): HTMLElement | null {
-  return doc.getElementById("cook") ?? findRecipeStepsScrollTarget(doc);
-}
 
 export function applyCreatedCookbookState(
   currentCookbooks: CookbookListItem[],
@@ -397,28 +223,15 @@ export default function RecipeDetail() {
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
   const coverPromptMode = loaderData.coverPromptMode ?? "none";
   const submit = useSubmit();
-  const navigation = useNavigation();
-  // From the delete's submit until the page leaves (or the delete fails and the page stays).
-  const isDeletingRecipe = navigation.state !== "idle" && navigation.formData?.get("intent") === "delete";
   const revalidator = useRevalidator();
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
   const { showToast } = useToast();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  // Scale state for recipe scaling
-  const [scaleFactor, setScaleFactor] = useState(1);
-
-  // Track which ingredients have been checked off
-  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
-
-  // Track which step outputs have been checked off
-  const [checkedStepOutputs, setCheckedStepOutputs] = useState<Set<string>>(new Set());
-  const [isCookMode, setIsCookMode] = useState(false);
-  const [activeCookStepIndex, setActiveCookStepIndex] = useState(0);
-  const [loadedCookProgressRecipeId, setLoadedCookProgressRecipeId] = useState<string | null>(null);
+  // Cook progress, cook mode and timers: the view below draws them, the controller owns them.
+  const cookController = useRouteCookController(loaderData);
+  const { scaleFactor, setScale: handleScaleChange, enterCookMode } = cookController;
+  const isCookMode = cookController.cookMode;
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 
@@ -437,40 +250,8 @@ export default function RecipeDetail() {
   // One add per tap that succeeds: a tap after a 503, or a double tap, carries the same token and
   // adds the ingredients once; a success makes a fresh token for the next add.
   const [addToListToken, renewAddToListToken] = useWriteToken();
-  const pendingCookModeScroll = useRef(false);
   const lastHandledLoggedSpoonId = useRef<string | null>(null);
   const ingredientCount = recipe.steps.reduce((count, step) => count + step.ingredients.length, 0);
-  const stepOutputUseCount = recipe.steps.reduce((count, step) => count + (step.usingSteps?.length ?? 0), 0);
-  const cookProgressTotal = ingredientCount + stepOutputUseCount;
-  const cookProgressChecked = checkedIngredients.size + checkedStepOutputs.size;
-  const cookProgressBounds = useMemo<CookProgressBounds>(() => ({
-    stepIds: recipe.steps.map((step) => step.id),
-    ingredientIds: new Set(recipe.steps.flatMap((step) => step.ingredients.map((ingredient) => ingredient.id))),
-    stepOutputIds: new Set(recipe.steps.flatMap((step) => (step.usingSteps ?? []).map((use) => use.id))),
-  }), [recipe.steps]);
-
-  const cookProgress = useMemo<CookProgressValue>(() => ({
-    activeStepIndex: activeCookStepIndex,
-    activeStepId: recipe.steps[activeCookStepIndex]?.id ?? null,
-    scaleFactor,
-    checkedIngredientIds: Array.from(checkedIngredients),
-    checkedStepOutputIds: Array.from(checkedStepOutputs),
-  }), [activeCookStepIndex, recipe.steps, scaleFactor, checkedIngredients, checkedStepOutputs]);
-  const applyRemoteCookProgress = useCallback((progress: CookProgressValue) => {
-    setScaleFactor(progress.scaleFactor);
-    setCheckedIngredients(new Set(progress.checkedIngredientIds));
-    setCheckedStepOutputs(new Set(progress.checkedStepOutputIds));
-    setActiveCookStepIndex(progress.activeStepIndex);
-  }, []);
-  const cookSyncStatus = useCookSessionSync({
-    recipeId: recipe.id,
-    userId: cookSessionUserId,
-    ready: loadedCookProgressRecipeId === recipe.id,
-    bounds: cookProgressBounds,
-    progress: cookProgress,
-    onRemoteProgress: applyRemoteCookProgress,
-    deleting: isDeletingRecipe,
-  });
 
   // PostHog: Track recipe view on mount
   useEffect(() => {
@@ -516,151 +297,6 @@ export default function RecipeDetail() {
       document.removeEventListener("visibilitychange", revalidateIfVisible);
     };
   }, [activeCoverProcessing?.coverId, revalidator]);
-
-  // PostHog: Track scale changes
-  const handleScaleChange = (newScale: number) => {
-    setScaleFactor(newScale);
-    /* istanbul ignore next -- @preserve PostHog client-only analytics */
-    if (posthog) {
-      posthog.capture("recipe_scaled", {
-        recipe_id: recipe.id,
-        scale_factor: newScale,
-        previous_scale: scaleFactor,
-      });
-    }
-  };
-
-  const handleIngredientToggle = (id: string) => {
-    const newChecked = new Set(checkedIngredients);
-    const wasChecked = newChecked.has(id);
-    if (wasChecked) {
-      newChecked.delete(id);
-    } else {
-      newChecked.add(id);
-    }
-    setCheckedIngredients(newChecked);
-
-    // PostHog: Track ingredient check/uncheck
-    /* istanbul ignore next -- @preserve PostHog client-only analytics */
-    if (posthog) {
-      posthog.capture("ingredient_toggled", {
-        recipe_id: recipe.id,
-        ingredient_id: id,
-        is_checked: !wasChecked,
-        total_checked: newChecked.size,
-      });
-    }
-  };
-
-  const handleStepOutputToggle = (id: string) => {
-    const newChecked = new Set(checkedStepOutputs);
-    const wasChecked = newChecked.has(id);
-    if (wasChecked) {
-      newChecked.delete(id);
-    } else {
-      newChecked.add(id);
-    }
-    setCheckedStepOutputs(newChecked);
-
-    // PostHog: Track step output check/uncheck
-    /* istanbul ignore next -- @preserve PostHog client-only analytics */
-    if (posthog) {
-      posthog.capture("step_output_toggled", {
-        recipe_id: recipe.id,
-        step_output_id: id,
-        is_checked: !wasChecked,
-        total_checked: newChecked.size,
-      });
-    }
-  };
-
-  const handleClearProgress = () => {
-    setCheckedIngredients(new Set());
-    setCheckedStepOutputs(new Set());
-  };
-
-  useEffect(() => {
-    setScaleFactor(1);
-    setCheckedIngredients(new Set());
-    setCheckedStepOutputs(new Set());
-    setActiveCookStepIndex(0);
-
-    const storedProgress = cookSessionUserId
-      ? readSyncedCookProgress(cookSessionUserId, recipe.id, cookProgressBounds)
-      : readCookProgress(recipe.id, cookProgressBounds);
-    if (storedProgress) {
-      setScaleFactor(storedProgress.scaleFactor);
-      setCheckedIngredients(storedProgress.checkedIngredientIds);
-      setCheckedStepOutputs(storedProgress.checkedStepOutputIds);
-      setActiveCookStepIndex(storedProgress.activeStepIndex);
-    }
-
-    setLoadedCookProgressRecipeId(recipe.id);
-  }, [recipe.id, cookProgressBounds, cookSessionUserId]);
-
-  useEffect(() => {
-    // With cook-session sync on, useCookSessionSync keeps the signed-in cache instead.
-    if (loadedCookProgressRecipeId !== recipe.id || cookSessionUserId) {
-      return;
-    }
-
-    writeCookProgress(recipe.id, {
-      activeStepIndex: activeCookStepIndex,
-      activeStepId: recipe.steps[activeCookStepIndex]?.id ?? null,
-      scaleFactor,
-      checkedIngredientIds: checkedIngredients,
-      checkedStepOutputIds: checkedStepOutputs,
-    });
-  }, [
-    recipe.id,
-    loadedCookProgressRecipeId,
-    cookSessionUserId,
-    activeCookStepIndex,
-    recipe.steps,
-    scaleFactor,
-    checkedIngredients,
-    checkedStepOutputs,
-  ]);
-
-  useEffect(() => {
-    setActiveCookStepIndex((current) => {
-      if (recipe.steps.length === 0) {
-        return 0;
-      }
-
-      return Math.min(current, recipe.steps.length - 1);
-    });
-  }, [recipe.steps.length]);
-
-  const scrollCookModeIntoView = useCallback(() => {
-    window.setTimeout(() => {
-      const target = findCookModeScrollTarget(document);
-      target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
-    }, 0);
-  }, []);
-
-  // Cook mode is the recipe's `#cook` history entry. Reading the router's location (in an effect,
-  // so the server-rendered page hydrates first) opens it for a `#cook` link and closes it when
-  // Back or Exit leaves that entry. It re-runs for every new entry (`location.key`), not only a
-  // new hash: Exit hides the panel at once, and a "Cook mode" tap that lands before Exit's pop
-  // pushes a new `#cook` entry without the hash ever changing.
-  useEffect(() => {
-    const shouldShowCookMode = location.hash === "#cook" && recipe.steps.length > 0;
-    setIsCookMode(shouldShowCookMode);
-
-    if (shouldShowCookMode) {
-      pendingCookModeScroll.current = true;
-    }
-  }, [location.key, location.hash, recipe.steps.length]);
-
-  useEffect(() => {
-    if (!isCookMode || !pendingCookModeScroll.current) {
-      return;
-    }
-
-    pendingCookModeScroll.current = false;
-    scrollCookModeIntoView();
-  }, [isCookMode, scrollCookModeIntoView]);
 
   const handleShare = useCallback(async () => {
     /* istanbul ignore next -- @preserve browser share API */
@@ -759,20 +395,6 @@ export default function RecipeDetail() {
     }
   }, [addToListFetcher, recipe.id, scaleFactor, addToListToken, posthog, isAuthenticated, loginRedirect]);
 
-  // Entering cook mode pushes one `#cook` entry through the router, so the entry carries the
-  // router's history index (the recipe's Back reads it) and Back closes cook mode.
-  const enterCookMode = useCallback(() => {
-    if (recipe.steps.length === 0) {
-      scrollCookModeIntoView();
-      return;
-    }
-
-    void navigate(
-      { pathname: location.pathname, search: location.search, hash: "#cook" },
-      { state: { [COOK_MODE_ENTRY_STATE]: true }, preventScrollReset: true },
-    );
-  }, [navigate, location.pathname, location.search, recipe.steps.length, scrollCookModeIntoView]);
-
   const handleEnterCookMode = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     enterCookMode();
@@ -781,24 +403,6 @@ export default function RecipeDetail() {
   // Back means back: the "Recipes" link returns to the previous in-app page when there is
   // one, and only goes to /recipes when the recipe was opened directly.
   const handleBackToRecipes = useBackNavigation();
-
-  // Exit removes the `#cook` entry: it pops the entry cook mode pushed, so history never holds
-  // two entries for this recipe. A `#cook` page opened from a link was not pushed here, so its
-  // entry is replaced with the plain recipe instead of going back to whatever came before.
-  const handleExitCookMode = useCallback(() => {
-    pendingCookModeScroll.current = false;
-    setIsCookMode(false);
-
-    if (isCookModeEntryState(location.state)) {
-      void navigate(-1);
-      return;
-    }
-
-    void navigate(
-      { pathname: location.pathname, search: location.search },
-      { replace: true, preventScrollReset: true },
-    );
-  }, [navigate, location.pathname, location.search, location.state]);
 
   const addToListLabel = addToListFetcher.state !== "idle"
     ? "Adding"
@@ -936,15 +540,7 @@ export default function RecipeDetail() {
   }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast, renewAddToListToken]);
 
   // The tab bar is hidden in cook mode so it never covers the step controls.
-  useDockSuppressed(showOwnerTools || (isCookMode && recipe.steps.length > 0));
-
-  // Timers live here, above cook mode's step view, so changing step or leaving cook mode keeps them.
-  const cookTimerSteps = useMemo(
-    () => recipe.steps.map((step) => ({ stepNum: step.stepNum, label: step.stepTitle ?? "", durationMinutes: step.duration })),
-    [recipe.steps],
-  );
-  const cookTimers = useCookTimers(recipe.id, cookTimerSteps);
-  useScreenWakeLock(isCookMode && recipe.steps.length > 0);
+  useDockSuppressed(showOwnerTools || isCookMode);
 
   useEffect(() => {
     setAvailableCookbooks(cookbooks);
@@ -1029,91 +625,21 @@ export default function RecipeDetail() {
     submit({ intent: "delete", cookSessionUserId: cookSessionUserId ?? "" }, { method: "post" });
   };
 
-  /* istanbul ignore next -- @preserve browser scroll navigation */
-  const handleStepReferenceClick = (stepNumber: number) => {
-    // Scroll to the referenced step
-    const stepElement = document.getElementById(`step-${stepNumber}`);
-    if (stepElement) {
-      stepElement.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
-  // Transform step data to component format
-  const transformIngredients = (
-    ingredients: Array<{
-      id: string;
-      quantity: number | null;
-      unit: { name: string };
-      ingredientRef: { name: string };
-    }>
-  ): Ingredient[] => {
-    return ingredients.map((ing) => {
-      const affordance = resolveIngredientAffordance(ing.ingredientRef.name, null, null);
-      return {
-        id: ing.id,
-        quantity: ing.quantity,
-        unit: ing.unit.name,
-        name: ing.ingredientRef.name,
-        categoryLabel: affordance.categoryLabel,
-        iconKey: affordance.iconKey,
-      };
-    });
-  };
-
-  const transformStepOutputUses = (
-    usingSteps: Array<{
-      id: string;
-      outputStepNum: number;
-      outputOfStep: { stepNum: number; stepTitle: string | null };
-    }>
-  ): StepReference[] => {
-    return usingSteps.map((use) => ({
-      id: use.id,
-      stepNumber: use.outputOfStep.stepNum,
-      stepTitle: use.outputOfStep.stepTitle,
-    }));
-  };
-
-  if (isCookMode && recipe.steps.length > 0) {
-    return (
-      <CookModePanel
-        recipeTitle={recipe.title}
-        step={recipe.steps[activeCookStepIndex]}
-        stepCount={recipe.steps.length}
-        activeStepIndex={activeCookStepIndex}
-        progressChecked={cookProgressChecked}
-        progressTotal={cookProgressTotal}
-        ingredients={transformIngredients(recipe.steps[activeCookStepIndex].ingredients)}
-        stepOutputUses={transformStepOutputUses(recipe.steps[activeCookStepIndex].usingSteps ?? [])}
-        scaleFactor={scaleFactor}
-        checkedIngredientIds={checkedIngredients}
-        checkedStepOutputIds={checkedStepOutputs}
-        onIngredientToggle={handleIngredientToggle}
-        onStepOutputToggle={handleStepOutputToggle}
-        onScaleChange={handleScaleChange}
-        onPrevious={() => setActiveCookStepIndex((current) => Math.max(0, current - 1))}
-        onNext={() => setActiveCookStepIndex((current) => Math.min(recipe.steps.length - 1, current + 1))}
-        onStepSelect={(index) => setActiveCookStepIndex(index)}
-        onExit={handleExitCookMode}
-        timers={cookTimers}
-        onGoToStepNum={(stepNum) => {
-          // The tray only lists this recipe's steps, so the step is always found.
-          setActiveCookStepIndex(Math.max(0, recipe.steps.findIndex((candidate) => candidate.stepNum === stepNum)));
-        }}
-      />
-    );
+  // Cook mode replaces the whole page.
+  if (isCookMode) {
+    return <RecipeCookView controller={cookController} />;
   }
 
   return (
     <div className="sj-page pb-24">
-      {cookTimers.active.length > 0 ? (
+      {cookController.timers.active.length > 0 ? (
         <div className="sticky top-0 z-20 bg-[var(--sj-page)]">
           <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-            <CookTimerTray controller={cookTimers} />
+            <CookTimerTray controller={cookController.timers} />
           </div>
         </div>
       ) : (
-        <CookTimerTray controller={cookTimers} />
+        <CookTimerTray controller={cookController.timers} />
       )}
       {/* Recipe Header with prominent image */}
       <RecipeHeader
@@ -1130,7 +656,7 @@ export default function RecipeDetail() {
         servings={recipe.servings ?? undefined}
         scaleFactor={scaleFactor}
         onScaleChange={handleScaleChange}
-        progressSyncStatus={cookSyncStatus}
+        progressSyncStatus={cookController.syncStatus}
         masthead={headerMasthead}
         provenance={headerProvenance}
       />
@@ -1286,41 +812,14 @@ export default function RecipeDetail() {
       />
 
       {/* Steps Section */}
-      <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
-        <StepsSectionHeading hasProgress={cookProgressChecked > 0} onClearProgress={handleClearProgress} />
-
-        {recipe.steps.length === 0 ? (
-          <div className="border-y border-dashed border-[var(--sj-border-strong)] py-8 text-center">
-            <Text className="mb-4">No steps added yet</Text>
-            {/* istanbul ignore next -- @preserve owner-only UI rendering */}
-            {isOwner && (
-              <Button href={`/recipes/${recipe.id}/edit`}>
-                Add steps
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0">
-            {recipe.steps.map((step) => (
-              <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0 print:break-inside-avoid">
-                <StepCard
-                  stepNumber={step.stepNum}
-                  title={step.stepTitle ?? undefined}
-                  description={step.description}
-                  ingredients={transformIngredients(step.ingredients)}
-                  stepOutputUses={transformStepOutputUses(step.usingSteps ?? [])}
-                  scaleFactor={scaleFactor}
-                  checkedIngredientIds={checkedIngredients}
-                  onIngredientToggle={handleIngredientToggle}
-                  checkedStepOutputIds={checkedStepOutputs}
-                  onStepOutputToggle={handleStepOutputToggle}
-                  onStepReferenceClick={handleStepReferenceClick}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
+      <RecipeCookView
+        controller={cookController}
+        emptyStepsAction={isOwner ? (
+          <Button href={`/recipes/${recipe.id}/edit`}>
+            Add steps
+          </Button>
+        ) : null}
+      >
         {loaderData.canonicalUrl ? (
           <p className="hidden font-sj-ui text-sm text-[var(--sj-ink-soft)] print:mt-6 print:block" data-testid="recipe-print-source">
             From Spoonjoy: {loaderData.canonicalUrl}
@@ -1347,228 +846,7 @@ export default function RecipeDetail() {
             }
           />
         </div>
-      </div>
+      </RecipeCookView>
     </div>
-  );
-}
-
-type CookModeStep = {
-  stepNum: number;
-  stepTitle: string | null;
-  description: string;
-  duration?: number | null;
-};
-
-function CookModePanel({
-  recipeTitle,
-  step,
-  stepCount,
-  activeStepIndex,
-  progressChecked,
-  progressTotal,
-  ingredients,
-  stepOutputUses,
-  scaleFactor,
-  checkedIngredientIds,
-  checkedStepOutputIds,
-  onIngredientToggle,
-  onStepOutputToggle,
-  onScaleChange,
-  onPrevious,
-  onNext,
-  onStepSelect,
-  onExit,
-  timers,
-  onGoToStepNum,
-}: {
-  recipeTitle: string;
-  step: CookModeStep;
-  stepCount: number;
-  activeStepIndex: number;
-  progressChecked: number;
-  progressTotal: number;
-  ingredients: Ingredient[];
-  stepOutputUses: StepReference[];
-  scaleFactor: number;
-  checkedIngredientIds: Set<string>;
-  checkedStepOutputIds: Set<string>;
-  onIngredientToggle: (id: string) => void;
-  onStepOutputToggle: (id: string) => void;
-  onScaleChange: (value: number) => void;
-  onPrevious: () => void;
-  onNext: () => void;
-  onStepSelect: (index: number) => void;
-  onExit: () => void;
-  timers: CookTimersController;
-  onGoToStepNum: (stepNum: number) => void;
-}) {
-  const stepTitle = step.stepTitle ?? `Step ${step.stepNum}`;
-  const recipeProgressLabel = progressTotal > 0
-    ? `${progressChecked} of ${progressTotal} checked`
-    : "No checklist items";
-  const pageProgressTotal = ingredients.length + stepOutputUses.length;
-  const pageProgressChecked =
-    ingredients.filter((ingredient) => checkedIngredientIds.has(ingredient.id)).length +
-    stepOutputUses.filter((reference) => checkedStepOutputIds.has(reference.id)).length;
-  const pageProgressLabel = pageProgressTotal > 0
-    ? `${pageProgressChecked} of ${pageProgressTotal} checked`
-    : "No checklist items";
-  const isFirstStep = activeStepIndex === 0;
-  const isLastStep = activeStepIndex >= stepCount - 1;
-  const pageLabel = `Step ${activeStepIndex + 1} of ${stepCount}`;
-
-  return (
-    <section
-      id="cook"
-      data-testid="cook-mode-panel"
-      className="h-[100svh] overflow-hidden bg-[var(--sj-page)] text-[var(--sj-ink)]"
-      aria-labelledby="cook-mode-heading"
-    >
-      <div className="mx-auto flex h-[100svh] w-full max-w-7xl flex-col px-4 sm:px-6 lg:px-8">
-        <header className="flex min-h-20 shrink-0 items-center justify-between gap-4 border-b border-[var(--sj-border)] py-4">
-          <div className="min-w-0">
-            <p className="sj-eyebrow">Now cooking</p>
-            {/* Cook mode replaces the whole page (see the early return above), so this
-                promotes the recipe title to the page's `h1` instead of adding a second,
-                visually redundant one. */}
-            <h1 className="font-sj-ui mt-1 truncate text-sm font-semibold text-[var(--sj-ink-soft)]">
-              {recipeTitle}
-            </h1>
-            <p className="font-sj-ui mt-1 text-xs uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
-              {recipeProgressLabel}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onExit}
-            className={recipeMastheadActionClass}
-          >
-            Exit cook mode
-          </button>
-        </header>
-
-        <CookTimerTray controller={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
-
-        <div
-          data-testid="cook-mode-pager"
-          className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-stretch lg:gap-12 lg:py-10"
-        >
-          <article
-            key={step.stepNum}
-            className="flex shrink-0 flex-col border-y border-[var(--sj-border-strong)] py-8 sm:py-10 lg:min-h-0 lg:shrink lg:justify-center lg:py-12"
-          >
-            <p className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
-              {pageLabel}
-            </p>
-            <h2
-              id="cook-mode-heading"
-              className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] font-sj-display mt-5 max-w-4xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-6xl/15 lg:text-7xl/18"
-            >
-              {stepTitle}
-            </h2>
-            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
-              {step.description}
-            </p>
-            <CookStepTimer stepNum={step.stepNum} controller={timers} />
-          </article>
-
-          {/* A <div>, not <aside>: this ingredient checklist and scale selector are core
-              cook-mode controls for the current step, not tangential "complementary"
-              content, and root.tsx always wraps route content in a <main> landmark, so an
-              <aside> here would violate landmark-complementary-is-top-level. */}
-          <div className="mx-auto flex w-full max-w-[38rem] shrink-0 flex-col justify-between gap-8 border-y border-[var(--sj-border)] py-6 lg:min-h-0 lg:shrink lg:py-8">
-            <div>
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-                    On this page
-                  </p>
-                  <p className="font-sj-ui mt-2 text-xs uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-                    {pageProgressLabel}
-                  </p>
-                </div>
-                <p className="font-sj-display text-3xl/8 font-semibold tabular-nums text-[var(--sj-ink)]">
-                  {activeStepIndex + 1}/{stepCount}
-                </p>
-              </div>
-
-              {(ingredients.length > 0 || stepOutputUses.length > 0) ? (
-                <div className="mt-6">
-                  <IngredientList
-                    ingredients={ingredients}
-                    stepOutputUses={stepOutputUses}
-                    scaleFactor={scaleFactor}
-                    checkedIds={checkedIngredientIds}
-                    checkedStepOutputIds={checkedStepOutputIds}
-                    onToggle={onIngredientToggle}
-                    onStepOutputToggle={onStepOutputToggle}
-                  />
-                </div>
-              ) : (
-                <p className="font-sj-body mt-6 text-base text-[var(--sj-ink-soft)]">
-                  No ingredients to check on this step.
-                </p>
-              )}
-            </div>
-
-            <div className="mx-auto w-full max-w-[24rem]">
-              <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
-            </div>
-          </div>
-        </div>
-
-        <footer className="z-10 shrink-0 border-t border-[var(--sj-border)] bg-[var(--sj-page)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-            <Button
-              type="button"
-              plain
-              aria-label="Previous step"
-              disabled={isFirstStep}
-              onClick={onPrevious}
-              className="justify-self-start"
-            >
-              <ChevronLeft data-slot="icon" aria-hidden="true" />
-              <span className="hidden sm:inline">Previous step</span>
-              <span className="sm:hidden">Prev</span>
-            </Button>
-            <nav
-              aria-label="Cook steps"
-              className="hidden items-center gap-2 sm:flex"
-            >
-              {Array.from({ length: stepCount }, (_, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => onStepSelect(index)}
-                  aria-label={`Step ${index + 1}${index === activeStepIndex ? " current" : ""}`}
-                  aria-current={index === activeStepIndex ? "step" : undefined}
-                  className="group grid size-11 place-items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`size-2.5 rounded-full transition ${
-                      index === activeStepIndex
-                        ? "bg-[var(--sj-ink)]"
-                        : "bg-[var(--sj-border-strong)] group-hover:bg-[var(--sj-ink-soft)]"
-                    }`}
-                  />
-                </button>
-              ))}
-            </nav>
-            <Button
-              type="button"
-              aria-label="Next step"
-              disabled={isLastStep}
-              onClick={onNext}
-              className="justify-self-end"
-            >
-              <span className="hidden sm:inline">Next step</span>
-              <span className="sm:hidden">Next</span>
-              <ChevronRight data-slot="icon" aria-hidden="true" />
-            </Button>
-          </div>
-        </footer>
-      </div>
-    </section>
   );
 }
