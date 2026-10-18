@@ -3,6 +3,7 @@
 // (codex-e2e-*, removed by the workflow's QA cleanup) who forks Lemon Herb Rice, leaving the
 // personas' lists untouched.
 import { test, expect } from "./support/journey";
+import { expectNoHydrationErrors } from "./support/hydration";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { createDisposableJourneyUser, fillSecret } from "./support/secret";
 import { requiredLabel } from "./support/forms";
@@ -35,6 +36,7 @@ test.describe("Recipe list action on iPhone", () => {
     await page.goto(LEMON_RICE);
     await waitForHydration(page);
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
+    await expectNoHydrationErrors(page);
     // The back link and action row, closed by a single rule on a phone.
     await testInfo.attach("recipe-masthead-phone", {
       body: await page.getByTestId("recipe-masthead").screenshot(),

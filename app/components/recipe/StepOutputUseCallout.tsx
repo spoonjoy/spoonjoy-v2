@@ -15,7 +15,7 @@ export interface StepOutputUseCalloutProps {
   /** Optional callback when a step reference is clicked */
   onStepClick?: (stepNumber: number) => void
   /** Set of checked reference IDs */
-  checkedIds?: Set<string>
+  checkedIds?: ReadonlySet<string>
   /** Callback when a reference is toggled */
   onToggle?: (id: string) => void
   /** Whether to show checkboxes (default: true) */

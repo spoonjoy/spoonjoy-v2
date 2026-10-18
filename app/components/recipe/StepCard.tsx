@@ -15,11 +15,11 @@ export interface StepCardProps {
   /** Scale factor for ingredient quantities (default: 1) */
   scaleFactor?: number
   /** Set of checked ingredient IDs */
-  checkedIngredientIds?: Set<string>
+  checkedIngredientIds?: ReadonlySet<string>
   /** Callback when an ingredient is toggled */
   onIngredientToggle?: (id: string) => void
   /** Set of checked step output IDs */
-  checkedStepOutputIds?: Set<string>
+  checkedStepOutputIds?: ReadonlySet<string>
   /** Callback when a step output is toggled */
   onStepOutputToggle?: (id: string) => void
   /** Callback when a step reference is clicked */

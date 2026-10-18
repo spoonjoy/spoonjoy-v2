@@ -22,15 +22,17 @@ import {
   clientAction,
   meta,
   applyCreatedCookbookState,
+  shouldRevalidate as recipeShouldRevalidate,
+  ErrorBoundary as RecipeDetailErrorBoundary,
+} from "~/routes/recipes.$id";
+import {
   findRecipeStepsScrollTarget,
   getCookProgressStorageKey,
   parseCookProgressSnapshot,
   readCookProgress,
   readSyncedCookProgress,
   writeCookProgress,
-  shouldRevalidate as recipeShouldRevalidate,
-  ErrorBoundary as RecipeDetailErrorBoundary,
-} from "~/routes/recipes.$id";
+} from "~/hooks/use-route-cook-controller";
 import RecipeDetail from "~/routes/recipes.$id";
 import RecipesLayout, * as recipesLayoutRoute from "~/routes/recipes";
 import { shouldRevalidate as rootShouldRevalidate } from "~/root";

@@ -87,11 +87,12 @@ function nextChangeAt(timers: CookTimers, now: number): number | null {
 
 // Owns every cook-mode timer for one recipe. It lives at the recipe route, above cook mode's step
 // view, so moving between steps or leaving cook mode never drops a running timer. It re-renders
-// only when a timer changes state; the countdown digits tick inside the timer components.
+// only when a timer changes state; the countdown digits tick inside the timer components. Timers
+// are kept in this browser's storage unless `persist` is false, when they live only in memory.
 export function useCookTimers(
   recipeId: string,
   steps: CookTimerStep[],
-  { alarmFactory = createCookAlarm }: { alarmFactory?: () => CookAlarm } = {},
+  { alarmFactory = createCookAlarm, persist = true }: { alarmFactory?: () => CookAlarm; persist?: boolean } = {},
 ): CookTimersController {
   // Timers are stored with the recipe they were loaded for, so a recipe change can never write
   // one recipe's timers under another's storage key.
@@ -123,13 +124,13 @@ export function useCookTimers(
 
   // Load this recipe's timers after hydration (the server never sees localStorage).
   useEffect(() => {
-    setLoaded({ recipeId, timers: readStoredTimers(recipeId) });
+    setLoaded({ recipeId, timers: persist ? readStoredTimers(recipeId) : {} });
     setClock(Date.now());
-  }, [recipeId]);
+  }, [recipeId, persist]);
 
   useEffect(() => {
-    if (loaded.recipeId !== null) writeStoredTimers(loaded.recipeId, loaded.timers);
-  }, [loaded]);
+    if (persist && loaded.recipeId !== null) writeStoredTimers(loaded.recipeId, loaded.timers);
+  }, [loaded, persist]);
 
   // Wake up when the next timer ends or the next alarm falls quiet. A background tab may run this
   // late, so coming back to the tab also catches up.

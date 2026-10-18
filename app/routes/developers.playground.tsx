@@ -56,9 +56,8 @@ const SURFACES: Array<{ id: PlaygroundSurface; label: string; url: string; body:
 ];
 const PKCE_SESSION_STORAGE_KEY = "spoonjoy.playground.pkce";
 
-export function absoluteSpecUrl(path: string) {
-  if (typeof window === "undefined") return `https://spoonjoy.app${path}`;
-  return new URL(path, window.location.origin).toString();
+export function absoluteSpecUrl(path: string, origin: string) {
+  return new URL(path, origin).toString();
 }
 
 function defaultParams(operation: ApiV1PlaygroundOperation): Record<string, string> {
@@ -462,6 +461,7 @@ export async function loader(args?: { request?: Request; context?: { cloudflare?
   manifest: ApiV1PlaygroundManifest;
   canonicalUrl: string;
   ogImageUrl: string;
+  requestOrigin: string;
   viewer: { isAuthenticated: boolean };
 }> {
   const requestUrl = args?.request?.url;
@@ -474,6 +474,7 @@ export async function loader(args?: { request?: Request; context?: { cloudflare?
     manifest: API_V1_PLAYGROUND_MANIFEST,
     canonicalUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: PLAYGROUND_CANONICAL_PATH }),
     ogImageUrl: absoluteUrlFromPreferredBase({ requestUrl, baseUrl, path: PLAYGROUND_OG_PATH }),
+    requestOrigin: new URL(requestUrl ?? "https://spoonjoy.app").origin,
     viewer: { isAuthenticated: Boolean(userId) },
   };
 }
@@ -614,7 +615,7 @@ function rovingRadioKeyDown<T extends string>(
 }
 
 export default function DeveloperPlayground() {
-  const { manifest, viewer, canonicalUrl } = useLoaderData<typeof loader>();
+  const { manifest, viewer, canonicalUrl, requestOrigin } = useLoaderData<typeof loader>();
   const oauthIssuer = new URL(canonicalUrl).origin;
   const posthog = usePostHog();
   const isAuthenticated = viewer.isAuthenticated;
@@ -668,9 +669,7 @@ export default function DeveloperPlayground() {
   const multipartFiles = multipartFilesByOperation[selected.id] ?? {};
   const multipartValues = multipartValuesByOperation[selected.id]!;
   const path = useMemo(() => playgroundPath(selected, params), [selected, params]);
-  /* istanbul ignore next -- @preserve SSR fallback for non-interactive rendering; playground tests run with a browser-like window. */
-  const curlBaseUrl = typeof window === "undefined" ? "https://spoonjoy.app" : window.location.origin;
-  const curl = curlFor(path, selected, authMode, bodyText, curlBaseUrl, params, multipartValues);
+  const curl = curlFor(path, selected, authMode, bodyText, requestOrigin, params, multipartValues);
   const missingParams = missingRequiredParams(selected, params);
   const authModeAllowed = selected.credentialModes.includes(authMode);
   const bearerError = authMode === "bearer" && !token.trim() ? "Paste a bearer token before sending in Bearer mode." : null;
@@ -1020,10 +1019,10 @@ export default function DeveloperPlayground() {
         <div className="grid gap-2">
           <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Import URL</p>
           <p className="break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">
-            {absoluteSpecUrl(selectedSurface.url)}
+            {absoluteSpecUrl(selectedSurface.url, requestOrigin)}
           </p>
           <div className="flex flex-wrap gap-2">
-            <CopyButton value={absoluteSpecUrl(selectedSurface.url)} label="Copy import URL" />
+            <CopyButton value={absoluteSpecUrl(selectedSurface.url, requestOrigin)} label="Copy import URL" />
             <Button href={selectedSurface.url} plain>
               <Braces data-slot="icon" aria-hidden="true" />
               Open spec

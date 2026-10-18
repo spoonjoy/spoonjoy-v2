@@ -53,6 +53,11 @@ test-results/
 .playwright/
 e2e/.auth/
 journeys-report/
+hx-census/
+hx-census-actual.json
+hx-census-report/
+hx-census-test-results/
+.hx-census-download/
 explore-report/
 e2e/.auth/journeys-*.json
 .journeys/

@@ -9,6 +9,10 @@
 // SECRET_BOUNDARY_IDENTIFIERS below), and when anything is typed into a password field with
 // fill()/type()/pressSequentially() instead of fillSecret.
 //
+// With --census <file> --routes <file> (as `pnpm run check:journeys` passes them), it also requires
+// every page a *.journey.ts visits to have a journey in the HX census (rule census-missing-page);
+// see checkCensusCoverage below for how "visits" is read from the source.
+//
 // Support helpers run inside journeys, so they get the same retry, click-in-loop, skipped,
 // @mutates and secret-boundary rules; only the conditional-assertion rule is journey-only. `test` and `setup` are
 // both recognised as the test function, as is any local alias of `test` imported from
@@ -302,7 +306,7 @@ function containsVerifyAfterReloadCall(node) {
  * @returns {Array<{
  *   file: string,
  *   line: number,
- *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "secret-boundary" | "no-password-field-fill",
+ *   rule: "no-retry-config" | "no-click-in-loop" | "no-assertion-in-if" | "no-skipped-journeys" | "mutation-needs-reload-check" | "secret-boundary" | "no-password-field-fill" | "census-missing-page",
  *   message: string,
  * }>}
  */
@@ -396,6 +400,270 @@ export function checkJourneySource(fileName, source, { kind = "journey" } = {}) 
   return violations;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Census coverage (rule census-missing-page). The HX census (e2e/journeys/support/hx-census.ts)
+// must list every page the journeys visit. "Visits" is read statically and pragmatically:
+//   - a visit is a `<anything>.goto(arg)` call in a *.journey.ts file (the census journey itself,
+//     which visits the census, is skipped);
+//   - `arg` is a string literal, a template literal, or an identifier naming a `const` declared once
+//     in the same file with one of those as its value (resolved recursively, also inside template
+//     interpolations); any other interpolation (`${id}`) is a wildcard that fills a whole path
+//     segment, and an argument that does not start with a literal "/" (`${recipePath}/edit`, a
+//     variable from the page) is not read at all;
+//   - the query and hash are dropped, and the path is matched to the most specific route in
+//     app/routes.ts the way React Router ranks them (static over :param over *), with a wildcard
+//     segment matching only a :param or *;
+//   - only routes whose module has a default export render a page; resource routes are skipped.
+// The census's own `path:` properties are read the same way, and every visited page route must be
+// one of the census's routes. Navigation by clicking is not read.
+
+const WILDCARD = "\u0000";
+export const CENSUS_JOURNEY_PATTERN = /(?:^|\/)hx-census\.journey\.ts$/;
+
+function stringConstants(sourceFile) {
+  const counts = new Map();
+  const values = new Map();
+  function visit(node) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isVariableDeclarationList(node.parent) &&
+      (node.parent.flags & ts.NodeFlags.Const) !== 0
+    ) {
+      counts.set(node.name.text, (counts.get(node.name.text) ?? 0) + 1);
+      values.set(node.name.text, node.initializer);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return new Map([...values].filter(([name]) => counts.get(name) === 1));
+}
+
+// The node's static text with WILDCARD for each unknown interpolation, or undefined when the node
+// is not a string at all.
+function staticPathText(node, constants, depth = 0) {
+  if (depth > 8) return undefined;
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)) {
+    return staticPathText(node.expression, constants, depth + 1);
+  }
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isIdentifier(node)) {
+    const value = constants.get(node.text);
+    return value ? staticPathText(value, constants, depth + 1) : undefined;
+  }
+  if (ts.isTemplateExpression(node)) {
+    return node.templateSpans.reduce((text, span) => {
+      const inner = staticPathText(span.expression, constants, depth + 1);
+      return text + (inner ?? WILDCARD) + span.literal.text;
+    }, node.head.text);
+  }
+  return undefined;
+}
+
+/**
+ * A path's segments, each with WILDCARD standing for unknown text, or undefined when the path does
+ * not start with a literal "/".
+ * @param {string | undefined} text
+ * @returns {string[] | undefined}
+ */
+export function pathSegments(text) {
+  if (text === undefined || !text.startsWith("/")) return undefined;
+  const pathOnly = text.split(/[?#]/, 1)[0];
+  return pathOnly.split("/").filter((segment) => segment !== "");
+}
+
+/**
+ * The leaf routes of an app/routes.ts source: each route() or index() call's URL pattern and module
+ * file, with layout routes (those with children) marked.
+ * @param {string} source
+ * @returns {Array<{ pattern: string, file: string, layout: boolean }>}
+ */
+export function parseRouteConfig(source) {
+  const sourceFile = ts.createSourceFile("routes.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const routes = [];
+  function readCalls(elements, prefix) {
+    for (const element of elements) {
+      if (!ts.isCallExpression(element) || !ts.isIdentifier(element.expression)) continue;
+      const [first, second, third] = element.arguments;
+      if (element.expression.text === "index" && first && ts.isStringLiteralLike(first)) {
+        routes.push({ pattern: prefix, file: first.text, layout: false });
+      } else if (element.expression.text === "route" && first && second && ts.isStringLiteralLike(first) && ts.isStringLiteralLike(second)) {
+        const pattern = [prefix, first.text].filter(Boolean).join("/");
+        const children = third && ts.isArrayLiteralExpression(third) ? third.elements : undefined;
+        routes.push({ pattern, file: second.text, layout: Boolean(children) });
+        if (children) readCalls(children, pattern);
+      }
+    }
+  }
+  function visit(node) {
+    if (ts.isExportAssignment(node)) {
+      let expression = node.expression;
+      while (ts.isSatisfiesExpression(expression) || ts.isAsExpression(expression) || ts.isParenthesizedExpression(expression)) {
+        expression = expression.expression;
+      }
+      if (ts.isArrayLiteralExpression(expression)) readCalls(expression.elements, "");
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return routes;
+}
+
+/**
+ * The most specific non-layout route for a path's segments, ranked as React Router ranks them
+ * (a static segment 10, a :param 3, a splat -2), or undefined.
+ * @param {string[]} segments
+ * @param {Array<{ pattern: string, file: string, layout: boolean }>} routes
+ */
+export function matchRoute(segments, routes) {
+  let best;
+  let bestScore = -Infinity;
+  for (const route of routes) {
+    if (route.layout) continue;
+    const parts = route.pattern.split("/").filter((part) => part !== "");
+    let score = 0;
+    let matched = true;
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+      if (part === "*") {
+        score -= 2;
+        break;
+      }
+      const segment = segments[index];
+      if (segment === undefined) {
+        matched = false;
+        break;
+      }
+      if (part.startsWith(":")) score += 3;
+      else if (!segment.includes(WILDCARD) && segment.toLowerCase() === part.toLowerCase()) score += 10;
+      else {
+        matched = false;
+        break;
+      }
+    }
+    const hasSplat = parts.at(-1) === "*";
+    if (!hasSplat && segments.length !== parts.length) matched = false;
+    if (matched && score > bestScore) {
+      best = route;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/**
+ * Every visit (`.goto(...)`) whose path can be read: its line, its text and its segments.
+ * @param {string} fileName
+ * @param {string} source
+ */
+export function journeyVisits(fileName, source) {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const constants = stringConstants(sourceFile);
+  const visits = [];
+  function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "goto" &&
+      node.arguments.length > 0
+    ) {
+      const text = staticPathText(node.arguments[0], constants);
+      const segments = pathSegments(text);
+      if (segments) visits.push({ line: lineOf(sourceFile, node), text: text.replaceAll(WILDCARD, "${…}"), segments });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return visits;
+}
+
+/**
+ * The segments of every census journey's `path:` that can be read.
+ * @param {string} source
+ * @returns {string[][]}
+ */
+export function censusPaths(source) {
+  const sourceFile = ts.createSourceFile("hx-census.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const constants = stringConstants(sourceFile);
+  const paths = [];
+  function visit(node) {
+    if (ts.isPropertyAssignment(node) && propertyAssignmentName(node) === "path") {
+      const segments = pathSegments(staticPathText(node.initializer, constants));
+      if (segments) paths.push(segments);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return paths;
+}
+
+/**
+ * census-missing-page violations: pages the journeys visit that the census does not list.
+ * @param {{
+ *   journeys: Array<{ file: string, source: string }>,
+ *   censusFile: string,
+ *   censusSource: string,
+ *   routes: Array<{ pattern: string, file: string, layout: boolean }>,
+ *   pageFiles: Set<string>,
+ * }} options
+ */
+export function checkCensusCoverage({ journeys, censusFile, censusSource, routes, pageFiles }) {
+  const censused = new Set(censusPaths(censusSource).map((segments) => matchRoute(segments, routes)).filter(Boolean));
+  const violations = [];
+  for (const { file, source } of journeys) {
+    if (CENSUS_JOURNEY_PATTERN.test(file.split(path.sep).join("/"))) continue;
+    for (const visit of journeyVisits(file, source)) {
+      const route = matchRoute(visit.segments, routes);
+      if (!route || !pageFiles.has(route.file) || censused.has(route)) continue;
+      violations.push({
+        file,
+        line: visit.line,
+        rule: "census-missing-page",
+        message: `"${visit.text}" opens the page /${route.pattern} (${route.file}), which has no journey in the HX census (${censusFile}); add one.`,
+      });
+    }
+  }
+  return violations;
+}
+
+/**
+ * @param {string[]} argv
+ * @returns {{ directory?: string, census?: string, routes?: string }}
+ */
+export function parseRulesArgs(argv) {
+  const options = {};
+  const args = [...argv];
+  while (args.length > 0) {
+    const arg = args.shift();
+    if (arg === "--census" || arg === "--routes") {
+      const value = args.shift();
+      if (value === undefined || value.startsWith("--")) throw new Error(`${arg} needs a file.`);
+      options[arg.slice(2)] = value;
+    } else if (arg.startsWith("--")) {
+      throw new Error(`Unknown option ${arg}.`);
+    } else if (options.directory === undefined) {
+      options.directory = arg;
+    } else {
+      throw new Error(`Unexpected argument ${arg}.`);
+    }
+  }
+  if ((options.census === undefined) !== (options.routes === undefined)) throw new Error("--census and --routes go together.");
+  return options;
+}
+
+const DEFAULT_EXPORT_PATTERN = /^export default\b/m;
+
+async function censusViolations({ census, routes: routesFile }, journeys, readFile) {
+  const routes = parseRouteConfig(await readFile(routesFile));
+  const pageFiles = new Set();
+  for (const route of routes.filter((candidate) => !candidate.layout)) {
+    if (DEFAULT_EXPORT_PATTERN.test(await readFile(path.join(path.dirname(routesFile), route.file)))) pageFiles.add(route.file);
+  }
+  return checkCensusCoverage({ journeys, censusFile: census, censusSource: await readFile(census), routes, pageFiles });
+}
+
 async function defaultReaddir(directory) {
   return nodeReaddir(directory, { withFileTypes: true, recursive: true });
 }
@@ -418,9 +686,16 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
     },
   } = deps;
 
-  const directory = argv[0];
+  let options;
+  try {
+    options = parseRulesArgs(argv);
+  } catch (error) {
+    io.error(`check-journey-rules: ${error.message}`);
+    options = {};
+  }
+  const { directory } = options;
   if (!directory) {
-    io.error("Usage: check-journey-rules.mjs <directory>");
+    io.error("Usage: check-journey-rules.mjs <directory> [--census <census file> --routes <app/routes.ts>]");
     exit(1);
     return;
   }
@@ -443,9 +718,21 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
     .filter(({ kind }) => kind !== undefined);
 
   const violations = [];
+  const journeys = [];
   for (const { file, kind } of files) {
     const source = await readFile(file);
     violations.push(...checkJourneySource(file, source, { kind }));
+    if (file.endsWith(".journey.ts")) journeys.push({ file, source });
+  }
+
+  if (options.census) {
+    try {
+      violations.push(...(await censusViolations(options, journeys, readFile)));
+    } catch (error) {
+      io.error(`check-journey-rules: cannot check the HX census: ${error instanceof Error ? error.message : String(error)}`);
+      exit(1);
+      return;
+    }
   }
 
   for (const violation of violations) {

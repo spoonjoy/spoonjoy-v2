@@ -272,13 +272,43 @@ jobs:
             echo "::add-mask::$password"
           done < <(jq -r '(.scratch[]?, .scratchDesktop[]?) | .password' "$SPOONJOY_QA_CREDENTIALS")
 
+      # The HX census (e2e/journeys/hx-census.journey.ts) reads the seeded kitchen before any other
+      # journey changes QA data, so it runs alone first; the other journeys run whether or not it
+      # passed, and the step fails if either did. The census writes its report and results to
+      # hx-census-report/ and hx-census-test-results/, beside the main run's.
       - name: Run test suite
+        id: suite
         run: |
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
           else
-            pnpm run test:journeys
+            census=0
+            pnpm run test:journeys:census || census=$?
+            pnpm run test:journeys:after-census
+            exit "$census"
           fi
+
+      # Each census worker wrote hx-census/hx-census-actual.<project>.<worker>.json, and the census
+      # wrote the states it must cover to hx-census/hx-census-expected.json; merge them into one
+      # hx-census-actual.json, failing on a journey/state recorded twice or on any project that does
+      # not record exactly the expected states,
+      # and upload it on every run, pass or fail, for `pnpm census:update <run-id>` (AGENTS.md,
+      # "The HX census"). It holds only control roles, accessible names and HX markers of the
+      # personas' pages: no password, cookie or typed value, so it needs none of the report's gates.
+      - name: Merge the HX census
+        id: census-merge
+        if: always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'
+        run: node scripts/hx-census-merge.mjs hx-census hx-census-actual.json
+
+      - name: Upload the HX census
+        if: always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: hx-census-actual
+          path: hx-census-actual.json
+          retention-days: 30
+          if-no-files-found: warn
+          include-hidden-files: false
 
       # Reduce the Worker tail to a small summary inside test-results/ (uploaded with either
       # report) with scripts/summarize-worker-tail.jq, an allowlist locked by
@@ -411,7 +441,7 @@ jobs:
       - name: Strip network logs from traces
         id: strip-traces
         if: always()
-        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report explore-report
+        run: node scripts/sanitize-journey-traces.mjs test-results journeys-report explore-report hx-census-test-results hx-census-report
 
       # The artifact is public to any signed-in GitHub user. It can contain:
       #   - journeys-report/ or explore-report/: the HTML report, whose step titles include
@@ -425,6 +455,8 @@ jobs:
       #     exception names plus redacted, capped messages, and the QA Worker's error-level log
       #     lines reduced to class, scrubbed message and 5 scrubbed frames; no headers, cookies or
       #     bodies).
+      #   - hx-census-report/ and hx-census-test-results/: the same, for the HX census's own run
+      #     (it runs before the other journeys; see "Run test suite").
       # Traces keep the action log (with typed values other than secrets), DOM snapshots,
       # screencast frames and test source. A DOM snapshot records every input's value and the
       # error context prints a textbox's value, so "Strip network logs from traces" also redacts
@@ -447,6 +479,8 @@ jobs:
           path: |
             journeys-report/
             test-results/
+            hx-census-report/
+            hx-census-test-results/
           retention-days: 30
           include-hidden-files: false
 

@@ -1,10 +1,17 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  censusPaths,
+  checkCensusCoverage,
   checkJourneySource,
   defaultCliErrorHandler,
+  journeyVisits,
+  matchRoute,
+  parseRouteConfig,
+  parseRulesArgs,
+  pathSegments,
   isCliEntry,
   journeyFileKind,
   main,
@@ -570,7 +577,7 @@ describe("main", () => {
   it("uses default argv and default deps when neither is passed at all", async () => {
     const originalArgv = process.argv;
     process.argv = ["node", "check-journey-rules.mjs"];
-    expectConsoleError("Usage: check-journey-rules.mjs <directory>");
+    expectConsoleError("Usage: check-journey-rules.mjs <directory> [--census <census file> --routes <app/routes.ts>]");
     try {
       await expect(main()).resolves.toBeUndefined();
       expect(process.exitCode).toBe(1);
@@ -672,5 +679,222 @@ describe("CLI entry guard", () => {
     defaultCliErrorHandler(new Error("boom-default"));
     expect(process.exitCode).toBe(1);
     process.exitCode = 0;
+  });
+});
+
+const ROUTES = `
+import { type RouteConfig, index, route } from "@react-router/dev/routes";
+export default [
+  index("routes/_index.tsx"),
+  route("chefs", "routes/chefs.tsx"),
+  route("api/*", "routes/api.$.ts"),
+  route("recipes", "routes/recipes.tsx", [
+    index("routes/recipes._index.tsx"),
+    route("new", "routes/recipes.new.tsx"),
+    route(":id", "routes/recipes.$id.tsx"),
+    route(":id/edit", "routes/recipes.$id.edit.tsx"),
+  ]),
+  route("users/:identifier", "routes/users.$identifier.tsx"),
+  route("*", "routes/$.tsx"),
+] satisfies RouteConfig;
+`;
+const routes = parseRouteConfig(ROUTES);
+const PAGES = new Set(["routes/_index.tsx", "routes/chefs.tsx", "routes/recipes._index.tsx", "routes/recipes.new.tsx", "routes/recipes.$id.tsx", "routes/recipes.$id.edit.tsx", "routes/users.$identifier.tsx", "routes/$.tsx"]);
+const segmentsOf = (path: string) => pathSegments(path)!;
+const patternOf = (path: string) => matchRoute(segmentsOf(path), routes)?.pattern;
+
+describe("census coverage", () => {
+  it("reads every route and marks layouts", () => {
+    expect(routes).toEqual([
+      { pattern: "", file: "routes/_index.tsx", layout: false },
+      { pattern: "chefs", file: "routes/chefs.tsx", layout: false },
+      { pattern: "api/*", file: "routes/api.$.ts", layout: false },
+      { pattern: "recipes", file: "routes/recipes.tsx", layout: true },
+      { pattern: "recipes", file: "routes/recipes._index.tsx", layout: false },
+      { pattern: "recipes/new", file: "routes/recipes.new.tsx", layout: false },
+      { pattern: "recipes/:id", file: "routes/recipes.$id.tsx", layout: false },
+      { pattern: "recipes/:id/edit", file: "routes/recipes.$id.edit.tsx", layout: false },
+      { pattern: "users/:identifier", file: "routes/users.$identifier.tsx", layout: false },
+      { pattern: "*", file: "routes/$.tsx", layout: false },
+    ]);
+  });
+
+  it("reads an exported array however it is wrapped, and skips anything that is not a route call", () => {
+    expect(parseRouteConfig(`export default ([route("a", "a.tsx")] as RouteConfig);`)).toEqual([{ pattern: "a", file: "a.tsx", layout: false }]);
+    expect(parseRouteConfig(`export default [layout("x.tsx"), x.route("b", "b.tsx"), route(name, "c.tsx"), route("d"), index(file), "e", ...more];`)).toEqual([]);
+    expect(parseRouteConfig(`export default makeRoutes();`)).toEqual([]);
+    expect(parseRouteConfig(`const routes = [route("a", "a.tsx")]; export const x = 1;`)).toEqual([]);
+  });
+
+  it("reads a path's segments, dropping the query and hash, and nothing that does not start with /", () => {
+    expect(pathSegments("/search?q=lemon#top")).toEqual(["search"]);
+    expect(pathSegments("/recipes/x/")).toEqual(["recipes", "x"]);
+    expect(pathSegments("/")).toEqual([]);
+    expect(pathSegments("recipes")).toBeUndefined();
+    expect(pathSegments(undefined)).toBeUndefined();
+  });
+
+  it("matches the most specific route, as React Router ranks them", () => {
+    expect(patternOf("/")).toBe("");
+    expect(patternOf("/recipes")).toBe("recipes");
+    expect(patternOf("/recipes/new")).toBe("recipes/new");
+    expect(patternOf("/Recipes/NEW")).toBe("recipes/new");
+    expect(patternOf("/recipes/qa-kitchen-recipe-lemon-rice")).toBe("recipes/:id");
+    expect(patternOf("/recipes/\u0000/edit")).toBe("recipes/:id/edit");
+    expect(patternOf("/api/v1/recipes")).toBe("api/*");
+    expect(patternOf("/chefs/extra")).toBe("*");
+    expect(patternOf("/no-such-page")).toBe("*");
+    // An unknown segment can never be a static one.
+    expect(patternOf("/\u0000")).toBe("*");
+    expect(matchRoute(segmentsOf("/chefs/extra"), routes.filter((route) => route.pattern !== "*"))).toBeUndefined();
+    expect(matchRoute(segmentsOf("/recipes"), routes.filter((route) => route.pattern === "recipes/:id"))).toBeUndefined();
+  });
+
+  it("reads each goto's path from literals, templates and constants declared once", () => {
+    const source = `
+      const RICE_ID = "rice";
+      const RICE = \`/recipes/\${RICE_ID}\`;
+      const TWICE = "/a"; { const TWICE = "/b"; }
+      let LATER = "/later";
+      const A = \`/\${B}\`; const B = \`/\${A}\`;
+      await page.goto("/chefs");
+      await page.goto(RICE, { waitUntil: "commit" });
+      await otherPage.goto(\`/users/\${name}\`);
+      await page.goto((RICE as string));
+      await page.goto(\`\${recipePath}/edit\`);
+      await page.goto(TWICE);
+      await page.goto(LATER);
+      await page.goto(route);
+      await page.goto(paths[0]);
+      await page.goto();
+      await page.goto(A);
+      goto("/top-level");
+      await page.reload("/x");
+    `;
+    expect(journeyVisits("x.journey.ts", source).map(({ line, text, segments }) => ({ line, text, segments }))).toEqual([
+      { line: 7, text: "/chefs", segments: ["chefs"] },
+      { line: 8, text: "/recipes/rice", segments: ["recipes", "rice"] },
+      { line: 9, text: "/users/${…}", segments: ["users", "\u0000"] },
+      { line: 10, text: "/recipes/rice", segments: ["recipes", "rice"] },
+      { line: 17, text: "////${…}", segments: ["\u0000"] },
+    ]);
+  });
+
+  it("reads the census's path properties the same way", () => {
+    const source = `
+      const RICE = \`/recipes/\${KITCHEN.rice.id}\`;
+      export const census = [
+        { id: "home", path: "/", states: [] },
+        { id: "rice", path: RICE },
+        { id: "edit", path: \`\${RICE}/edit\` },
+        { id: "computed", path: build("x") },
+        { id: "shorthand", path },
+        { "path": "/quoted" },
+        { id: "other", route: "/ignored" },
+      ];
+    `;
+    expect(censusPaths(source)).toEqual([[], ["recipes", "\u0000"], ["recipes", "\u0000", "edit"], ["quoted"]]);
+  });
+
+  it("flags a visited page with no census journey, and skips resource routes, the census journey and listed pages", () => {
+    const censusSource = `const census = [{ path: "/" }, { path: \`/recipes/\${id}\` }, { path: "/no-such-page" }];`;
+    const journeys = [
+      { file: "e2e/journeys/a.journey.ts", source: `await page.goto("/");\nawait page.goto("/chefs");\nawait page.goto("/recipes/rice/edit");\nawait page.goto("/recipes/salmon");` },
+      { file: "e2e/journeys/b.journey.ts", source: `await page.goto("/api/v1/recipes");\nawait page.goto("/anything/else");` },
+      { file: "e2e/journeys/hx-census.journey.ts", source: `await page.goto("/users/someone");` },
+    ];
+    expect(checkCensusCoverage({ journeys, censusFile: "support/hx-census.ts", censusSource, routes, pageFiles: PAGES })).toEqual([
+      {
+        file: "e2e/journeys/a.journey.ts",
+        line: 2,
+        rule: "census-missing-page",
+        message: '"/chefs" opens the page /chefs (routes/chefs.tsx), which has no journey in the HX census (support/hx-census.ts); add one.',
+      },
+      {
+        file: "e2e/journeys/a.journey.ts",
+        line: 3,
+        rule: "census-missing-page",
+        message: '"/recipes/rice/edit" opens the page /recipes/:id/edit (routes/recipes.$id.edit.tsx), which has no journey in the HX census (support/hx-census.ts); add one.',
+      },
+    ]);
+    // A path no route matches is not a page.
+    expect(checkCensusCoverage({ journeys: [journeys[0]], censusFile: "c", censusSource: "", routes: [], pageFiles: PAGES })).toEqual([]);
+  });
+
+  it("parses the rule's arguments", () => {
+    expect(parseRulesArgs(["e2e/journeys"])).toEqual({ directory: "e2e/journeys" });
+    expect(parseRulesArgs(["--routes", "app/routes.ts", "e2e/journeys", "--census", "c.ts"])).toEqual({
+      directory: "e2e/journeys",
+      census: "c.ts",
+      routes: "app/routes.ts",
+    });
+    expect(parseRulesArgs([])).toEqual({});
+    expect(() => parseRulesArgs(["d", "--census"])).toThrow("--census needs a file.");
+    expect(() => parseRulesArgs(["d", "--routes", "--census"])).toThrow("--routes needs a file.");
+    expect(() => parseRulesArgs(["d", "--fix"])).toThrow("Unknown option --fix.");
+    expect(() => parseRulesArgs(["d", "e"])).toThrow("Unexpected argument e.");
+    expect(() => parseRulesArgs(["d", "--census", "c.ts"])).toThrow("--census and --routes go together.");
+  });
+
+  it("is what pnpm run check:journeys runs", () => {
+    const pkg = JSON.parse(readFileSync(join(__dirname, "../../package.json"), "utf8"));
+    expect(pkg.scripts["check:journeys"]).toBe("node scripts/check-journey-rules.mjs e2e/journeys --census e2e/journeys/support/hx-census.ts --routes app/routes.ts");
+  });
+});
+
+describe("main with the HX census", () => {
+  const files: Record<string, string> = {
+    "app/routes.ts": ROUTES,
+    "app/routes/_index.tsx": "export default function Home() {}",
+    "app/routes/chefs.tsx": "export default function Chefs() {}",
+    "app/routes/api.$.ts": "export function loader() {}",
+    "app/routes/recipes._index.tsx": "export default function Recipes() {}",
+    "app/routes/recipes.new.tsx": "export default function New() {}",
+    "app/routes/recipes.$id.tsx": "export default function Recipe() {}",
+    "app/routes/recipes.$id.edit.tsx": "export default function Edit() {}",
+    "app/routes/users.$identifier.tsx": "export default function User() {}",
+    "app/routes/$.tsx": "export default function NotFound() {}",
+    [join("e2e/journeys/support", "hx-census.ts")]: `export const census = [{ path: "/" }, { path: "/api/x" }];`,
+    [join("e2e/journeys", "chefs.journey.ts")]: `test("chefs", async ({ page }) => { await page.goto("/chefs"); await page.goto("/api/v1/x"); });`,
+  };
+  const args = ["e2e/journeys", "--census", join("e2e/journeys/support", "hx-census.ts"), "--routes", "app/routes.ts"];
+
+  it("fails on a page the journeys visit that the census lacks", async () => {
+    const io = { log: vi.fn(), error: vi.fn() };
+    const exit = vi.fn();
+    const readdir = vi.fn().mockResolvedValue([fakeFile("e2e/journeys", "chefs.journey.ts"), fakeFile("e2e/journeys/support", "hx-census.ts")]);
+    const readFile = vi.fn(async (file: string) => files[file]);
+    await main(args, { io, exit, readdir, readFile });
+    expect(io.log).toHaveBeenCalledWith(
+      `${join("e2e/journeys", "chefs.journey.ts")}:1 census-missing-page "/chefs" opens the page /chefs (routes/chefs.tsx), which has no journey in the HX census (${join("e2e/journeys/support", "hx-census.ts")}); add one.`,
+    );
+    expect(io.log).toHaveBeenCalledWith("Checked 2 journey file(s), 1 violation(s).");
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("fails when the census or a route module cannot be read", async () => {
+    const io = { log: vi.fn(), error: vi.fn() };
+    const exit = vi.fn();
+    const readdir = vi.fn().mockResolvedValue([]);
+    const readFile = vi.fn(async (file: string) => {
+      if (file === "app/routes.ts") return ROUTES;
+      throw new Error(`ENOENT: ${file}`);
+    });
+    await main(args, { io, exit, readdir, readFile });
+    expect(io.error).toHaveBeenCalledWith(`check-journey-rules: cannot check the HX census: ENOENT: ${join("app", "routes/_index.tsx")}`);
+    expect(exit).toHaveBeenCalledWith(1);
+
+    const thrown = { log: vi.fn(), error: vi.fn() };
+    await main(args, { io: thrown, exit, readdir, readFile: vi.fn().mockRejectedValue("unreadable") });
+    expect(thrown.error).toHaveBeenCalledWith("check-journey-rules: cannot check the HX census: unreadable");
+  });
+
+  it("prints a bad argument and the usage", async () => {
+    const io = { log: vi.fn(), error: vi.fn() };
+    const exit = vi.fn();
+    await main(["e2e/journeys", "--census", "c.ts"], { io, exit, readdir: vi.fn(), readFile: vi.fn() });
+    expect(io.error).toHaveBeenCalledWith("check-journey-rules: --census and --routes go together.");
+    expect(io.error).toHaveBeenCalledWith(expect.stringContaining("Usage"));
+    expect(exit).toHaveBeenCalledWith(1);
   });
 });
