@@ -1497,27 +1497,28 @@ describe("main", () => {
       }
     });
 
-    it("does not honour, and fails, an allowed regression already on the base", () => {
+    it("ignores an allowed regression already on the base: it allows nothing, and only a note says so", () => {
       const entry = { fingerprint: B, count: 1, reason: "spent" };
+      const stale = "hx-source-rules: 1 stale allowed regression(s) from an earlier pull request are ignored; the next --write-baseline drops them.";
       const { deps, io, exit, gitShow } = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry]), extra);
       gitShow.mockReturnValue(baselineOf({ [A]: 1 }, [entry]));
       main(["--base", "abc123"], deps);
-      expect(io.error).toHaveBeenCalledWith(
-        `Stale allowed regression: ${B} ("spent") is already in abc123's baseline. Rewrite the baseline: pnpm hx:source-rules --write-baseline --base abc123`,
-      );
+      expect(io.error).toHaveBeenCalledTimes(1);
       expect(io.error).toHaveBeenCalledWith(expect.stringContaining(`Regression against abc123: ${B} (+1)`));
       expect(exit).toHaveBeenCalledWith(1);
 
       const sameBaseline = setup(baselineOf({ [A]: 1, [B]: 1 }, [entry]), extra);
       sameBaseline.gitShow.mockReturnValue(baselineOf({ [A]: 1, [B]: 1 }, [entry]));
       main(["--base", "abc123"], sameBaseline.deps);
-      expect(sameBaseline.io.error).toHaveBeenCalledWith(expect.stringContaining("Stale allowed regression"));
-      expect(sameBaseline.exit).toHaveBeenCalledWith(1);
+      expect(sameBaseline.io.error).not.toHaveBeenCalled();
+      expect(sameBaseline.io.log).toHaveBeenCalledWith(stale);
+      expect(sameBaseline.exit).not.toHaveBeenCalled();
 
       const other = setup(baselineOf({ [A]: 1, [B]: 1 }, [{ ...entry, reason: "this pull request" }]), extra);
       other.gitShow.mockReturnValue(baselineOf({ [A]: 1 }, [entry]));
       main(["--base", "abc123"], other.deps);
       expect(other.exit).not.toHaveBeenCalled();
+      expect(other.io.log).not.toHaveBeenCalledWith(stale);
     });
 
     it("skips the ratchet when the base has no baseline yet", () => {

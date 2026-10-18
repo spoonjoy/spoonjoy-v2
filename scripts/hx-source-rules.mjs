@@ -41,8 +41,8 @@
 // scan must equal it exactly. `pnpm hx:source-rules` checks; with `--base <ref>` it also ratchets:
 // no fingerprint may rise against that ref's baseline unless the new baseline lists it under
 // `allowedRegressions` with a reason and the count it permits, and that entry is not already on
-// the base (an entry is spent by the pull request that adds it; a copy left on the base fails as
-// stale). A move is neutral: an added and a removed fingerprint with the same category, tag and
+// the base (an entry is spent by the pull request that adds it; a copy left on the base is stale:
+// ignored, noted, and dropped by the next write). A move is neutral: an added and a removed fingerprint with the same category, tag and
 // literal props, in the same file (a renamed component) or the same component (a moved file),
 // paired one-to-one. `--write-baseline` rewrites the file, refusing a rise unless
 // `--allow-regression <reason>` records why; when the base has no baseline it records nothing.
@@ -1042,11 +1042,13 @@ export function main(argv, deps) {
   }
   if (base) {
     const { regressions, moves } = findRegressions(offenders, base.offenders);
-    // An entry already on the base was spent by an earlier pull request: it is never honoured again.
+    // An entry already on the base was spent by an earlier pull request: it is never honoured
+    // again, so it cannot allow anything, and the next write drops it.
     const spent = new Set(base.allowedRegressions.map(entryKey));
-    for (const entry of committed.allowedRegressions.filter((candidate) => spent.has(entryKey(candidate)))) {
-      lines.push(
-        `Stale allowed regression: ${entry.fingerprint} ("${entry.reason}") is already in ${options.base}'s baseline. Rewrite the baseline: ${UPDATE_COMMAND} --base ${options.base}`,
+    const stale = committed.allowedRegressions.filter((entry) => spent.has(entryKey(entry))).length;
+    if (stale > 0) {
+      notes.push(
+        `hx-source-rules: ${stale} stale allowed regression(s) from an earlier pull request are ignored; the next --write-baseline drops them.`,
       );
     }
     const fresh = new Map(
