@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Combobox, type ComboboxProps } from "~/components/ouro/combobox/combobox";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<ComboboxProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.

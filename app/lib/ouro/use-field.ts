@@ -105,18 +105,22 @@ export function useFieldOwner(): FieldOwner {
 /** One error message: text, or a React element for a message that carries a link or other markup. */
 export type ErrorMessage = string | ReactElement;
 
-/** What an `error` prop or a `Form` `errors` value takes: one message, or several as an array. */
+/** Mutable error-message input for building a raw error record: one message, or several as an array. */
 export type ErrorMessages = ErrorMessage | ErrorMessage[];
+
+/** A read-only message view accepted by fields and Form; mutable input arrays remain valid. */
+export type ReadonlyErrorMessages = ErrorMessage | readonly ErrorMessage[];
 
 /**
  * The messages an `error` holds, in order: one for a single value, one per item for an array,
  * without repeats (merged validators can repeat one) or empty ones (`""`, and the `null` or
  * `false` a condition leaves behind in untyped code).
+ * Accepts readonly inputs and returns a fresh mutable array, never the snapshot container.
  *
  * @internal
  */
-export function errorMessages(error: ErrorMessages | null | undefined): ErrorMessage[] {
-  const list: unknown[] = Array.isArray(error) ? error : [error];
+export function errorMessages(error: ReadonlyErrorMessages | null | undefined): ErrorMessage[] {
+  const list: readonly unknown[] = Array.isArray(error) ? error : [error];
   return [...new Set(list)].filter((message): message is ErrorMessage => typeof message === "string" ? message !== "" : isValidElement(message));
 }
 
@@ -133,7 +137,7 @@ export function errorMessageKey(message: ErrorMessage, index: number): string {
 /** A form's server or client errors, by field name, as `Form` shares them with the fields inside it. */
 export interface FormErrorsValue {
   /** The messages for each field name; a field shows its own when it has no `error` prop. */
-  errors: Readonly<Record<string, ErrorMessages | null | undefined>>;
+  errors: Readonly<Record<string, ReadonlyErrorMessages | null | undefined>>;
   /** Drops one field's message, once the user changes that field. */
   clear: (name: string) => void;
   /**

@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Checkbox, type CheckboxProps } from "~/components/ouro/checkbox/checkbox";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<CheckboxProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.

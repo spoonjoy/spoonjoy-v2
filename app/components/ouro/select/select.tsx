@@ -16,7 +16,7 @@ import {
   triggerClass,
   type SelectOptions,
 } from "~/components/ouro/select/select-styles";
-import { FieldOwnerContext, useField, useFormErrors, type ErrorMessages } from "~/lib/ouro/use-field";
+import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMediaQuery } from "~/lib/ouro/use-media-query";
 
@@ -37,7 +37,7 @@ export interface SelectBaseProps {
    * What is wrong, from your server action or client check. The message (or several, as a
    * list) shows under the select, which gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
    */
-  error?: ErrorMessages | undefined;
+  error?: ReadonlyErrorMessages | undefined;
   /** A choice is required: the form will not submit without one, and the label gets a marker. */
   required?: boolean | undefined;
   /** Disables the select and fades it. */

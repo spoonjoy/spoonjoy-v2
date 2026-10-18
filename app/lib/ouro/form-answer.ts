@@ -1,9 +1,12 @@
 import { isValidElement } from "react";
 import { devThrow } from "~/lib/ouro/dev";
-import type { ErrorMessages } from "~/lib/ouro/use-field";
+import type { ErrorMessages, ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 
 /** Display messages by field name; `form` holds messages about the whole form. */
 export type FormErrors = Record<string, ErrorMessages | null | undefined>;
+
+/** A read-only display projection for Form and EditSheet; mutable raw `FormErrors` remain valid inputs. */
+export type ReadonlyFormErrors = Readonly<Record<string, ReadonlyErrorMessages | null | undefined>>;
 
 /** An accepted-answer key, compared with `Object.is`. Advance it on acceptance, never submit start. */
 export type FormErrorKey = string | number | bigint | boolean | symbol | object;
@@ -16,8 +19,11 @@ declare const errorValueBrand: unique symbol;
  * only the messages, not its identity. Reconstruct it beside Form in each environment.
  * Array containers are snapshotted and frozen; React elements are retained, not cloned.
  * React nodes are render inputs, not a promise that arbitrary node graphs JSON-serialize.
+ * Snapshot arrays are readonly, so use this type or `ReadonlyFormErrors`, not a mutable
+ * `FormErrors` annotation. This is not deep immutability of React nodes. TypeScript's
+ * `Array.isArray` narrows to `any[]` and can bypass readonly; runtime freezing still rejects mutation.
  */
-export type FormErrorValue = Readonly<FormErrors> & { readonly [errorValueBrand]: true };
+export type FormErrorValue = ReadonlyFormErrors & { readonly [errorValueBrand]: true };
 
 /** The private identity decoded by Form; tokens never retain source objects. @internal */
 export type FormErrorIdentity = { readonly kind: "answer" | "key" | "none"; readonly value: FormErrorKey | undefined };
@@ -63,9 +69,9 @@ const isObject = (value: unknown): value is object => (typeof value === "object"
  * // Reused payload: acceptance.key changes on completed acceptance, not while pending.
  * <Form errors={formErrors(acceptance.data, acceptance.data.errors, { key: acceptance.key })} />
  */
-export function formErrors(answer: object | null | undefined, messages?: FormErrors | null): FormErrorValue;
-export function formErrors(answer: unknown, messages: FormErrors | null | undefined, options: { key: FormErrorKey }): FormErrorValue;
-export function formErrors(answer: unknown, messages?: FormErrors | null, options?: { key: FormErrorKey }): FormErrorValue {
+export function formErrors(answer: object | null | undefined, messages?: ReadonlyFormErrors | null): FormErrorValue;
+export function formErrors(answer: unknown, messages: ReadonlyFormErrors | null | undefined, options: { key: FormErrorKey }): FormErrorValue;
+export function formErrors(answer: unknown, messages?: ReadonlyFormErrors | null, options?: { key: FormErrorKey }): FormErrorValue {
   let identity: FormErrorIdentity;
   if (options !== undefined) {
     const key = Object.hasOwn(options, "key") ? options.key : undefined;
@@ -86,19 +92,19 @@ export function formErrors(answer: unknown, messages?: FormErrors | null, option
     devThrow("Form", "formErrors messages must be a record",
       process.env.NODE_ENV !== "production" ? 'formErrors(answer, { email: "Taken.", form: "Try again." })' : /* istanbul ignore next @preserve -- production only */ "");
   }
-  const snapshot = Object.fromEntries(Object.entries(messages ?? {}).map(([name, message]) => {
+  const snapshot: ReadonlyFormErrors = Object.fromEntries(Object.entries(messages ?? {}).map(([name, message]) => {
     const valid = (value: unknown) => value === null || value === undefined || typeof value === "string" || isValidElement(value);
     if (!(Array.isArray(message) ? message.every(valid) : valid(message))) {
       devThrow("Form", `formErrors messages for "${name}" must be text, React elements or arrays of them`,
         process.env.NODE_ENV !== "production" ? "select only this form's display messages, not the answer payload" : /* istanbul ignore next @preserve -- production only */ "");
     }
     return [name, Array.isArray(message) ? Object.freeze([...message]) : message];
-  })) as FormErrors;
+  }));
   values.set(snapshot, Object.freeze(identity));
   return Object.freeze(snapshot) as FormErrorValue;
 }
 
 /** Reads metadata without accessing any payload property; a copied record has none. @internal */
-export function formErrorIdentity(value: FormErrors | null | undefined): FormErrorIdentity | undefined {
+export function formErrorIdentity(value: ReadonlyFormErrors | null | undefined): FormErrorIdentity | undefined {
   return value === null || value === undefined ? undefined : values.get(value);
 }

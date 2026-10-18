@@ -4,7 +4,7 @@ import { Form as BaseForm } from "@base-ui/react/form";
 import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
-import { formErrorIdentity, type FormErrorIdentity, type FormErrorValue, type FormErrors } from "~/lib/ouro/form-answer";
+import { formErrorIdentity, type FormErrorIdentity, type FormErrorValue, type ReadonlyFormErrors } from "~/lib/ouro/form-answer";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { errorMessageKey, errorMessages, FormErrorsContext } from "~/lib/ouro/use-field";
@@ -16,6 +16,9 @@ import { errorMessageKey, errorMessages, FormErrorsContext } from "~/lib/ouro/us
  * or list), so an object mapped from an action's answer needs no cleanup.
  */
 export type { FormErrors } from "~/lib/ouro/form-answer";
+
+/** A read-only error projection, including the frozen arrays returned by `formErrors`. */
+export type { ReadonlyFormErrors } from "~/lib/ouro/form-answer";
 
 /** Props for {@link Form}: a `<form>`'s attributes, one complete `errors` value, and Base UI Form's `render`. */
 export type FormProps = Omit<BaseForm.Props, "className" | "errors" | "children"> & {
@@ -53,7 +56,7 @@ export type FormProps = Omit<BaseForm.Props, "className" | "errors" | "children"
    * the form again (a server error may be fixed by changing another field, or by trying
    * again). The browser's own checks (`required`, `type="email"`) still block a submit.
    */
-  errors?: FormErrors | FormErrorValue | null | undefined;
+  errors?: ReadonlyFormErrors | FormErrorValue | null | undefined;
   /** Not a prop. Bind the accepted answer inside `errors`: `errors={formErrors(answer, messages)}`. */
   result?: { 'Use errors={formErrors(answer, messages)}': never };
   /** The fields and the submit button. */
@@ -68,9 +71,9 @@ export type FormProps = Omit<BaseForm.Props, "className" | "errors" | "children"
   validationErrors?: { 'Use <Form errors={actionData?.errors}>': never };
 };
 
-const EMPTY: FormErrors = {};
+const EMPTY: ReadonlyFormErrors = {};
 
-function maskErrors(projection: FormErrors | null | undefined, cleared: Set<string>): FormErrors {
+function maskErrors(projection: ReadonlyFormErrors | null | undefined, cleared: Set<string>): ReadonlyFormErrors {
   return Object.fromEntries(Object.entries(projection ?? EMPTY).filter(([name]) => !cleared.has(name)));
 }
 
@@ -246,7 +249,7 @@ export function Form(props: FormProps): JSX.Element {
     if (!errors || !Object.hasOwn(errors, name)) return;
     setShown((current) => {
       if (current.cleared.has(name)) return current;
-      const next: FormErrors = { ...current.rawErrors };
+      const next: Record<string, ReadonlyFormErrors[string]> = { ...current.rawErrors };
       delete next[name];
       return { ...current, rawErrors: next, cleared: new Set([...current.cleared, name]) };
     });
@@ -356,7 +359,7 @@ function FormMessage({
   showsAtTop,
 }: {
   ref: Ref<HTMLDivElement>;
-  errors: FormErrors;
+  errors: ReadonlyFormErrors;
   showsAtTop: (key: string) => boolean;
 }): JSX.Element | null {
   // The message about the whole form comes first, then the keys no field claims.

@@ -1,29 +1,44 @@
-// Task24's real CLI runs only on an isolated Actions checkout, never inherited Mac providers.
+// The readonly repair's real CLI runs only in Actions, never inherited Mac providers.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const acceptedHead = "9a5232ccf2a66787c3a3091287e7dbc5ed0562a6";
-const tag = "v1.0.1";
-const tagCommit = "ee20fbd991c09a334d573f574d4d751faad90c5d";
+const acceptedHead = "2b0a6dffbe7ef4fa61e2fc8f7de4837b8775b706";
+const tag = "v1.0.2";
+const tagCommit = "22f0b72388250d475bf8a34c60f8a164a0c3e932";
 // Hashes from the parent's qualified public manifest, not regenerated from local edits.
 const expected = {
-  "app/lib/ouro/testing/commands.touch.test.ts": "969a04f5612c72bde81b946320d8181bbf3bae54d8c816f20fd1b91955de5f65",
-  "app/lib/ouro/testing/vitest.ts": "86ce4715db30baaeb5b058542df9de0adfe0bd09fcb366d7570a8194f8c5b4e2",
-  "app/lib/ouro/dev.ts": "ad5c3c800b73d96879ba6a7ae868186859c2b0173ad71e882726103c9c108875",
-  "app/lib/ouro/dev.test.ts": "4b5eb776874c185ead510e875f359574e48e566212cbb9d6ca530afcf157f817",
-  "app/components/ouro/menu/menu.tsx": "1b9a76ab846b0f4bf2731432886e63a26978d1bd343312ec0f87c3ce4f8f466e",
-  "app/components/ouro/menu/menu.test.tsx": "b5636ad57d89efe0d07b955f1438211a703f98105a2a79cae5feb2654823adc2",
-  "app/components/ouro/swipe-actions/swipe-actions.touch.test.tsx": "a6cd3d782eb7c7d4fb229d4b7ccaa63fe3755a0e912d17a8a98869e575e626a4",
-  "app/components/ouro/swipe-actions/swipe-actions.test.tsx": "dbc2c4b80110b66012b6632f2dc6f172939c8d77cbf4542eb06e86b423c8a5cc",
+  "app/components/ouro/checkbox/checkbox-group.test-d.ts": "ea747fe60e8c5cde8c4f449701b0af3fd351d67fe04d11311e040d04f088405c",
+  "app/components/ouro/checkbox/checkbox-group.tsx": "ae8063b0413905ca057b3da2d798238a38d43da329ac5a769ef4f54c954cbd88",
+  "app/components/ouro/checkbox/checkbox.test-d.ts": "e261fb63263ce17fef5412a4efa079e354022d03093079d616c2bb7c41b3c959",
+  "app/components/ouro/checkbox/checkbox.tsx": "236b756304e45538f2725c2e904b22283df91af311e9d7fa3111ca4aa435a00a",
+  "app/components/ouro/combobox/combobox.test-d.ts": "54d61170cd76134a644b55b730ae855b27ce0e5341a73137d37aa2ce7d08f609",
+  "app/components/ouro/combobox/combobox.tsx": "80cd97cc86800180f4b995b385bfcda94a351eca568b57624eeca6494433da42",
+  "app/components/ouro/field/field.test-d.ts": "caafcb1194f284bf24334eb2716c78891365a54c8744318cd333345ae5c3c288",
+  "app/components/ouro/field/field.tsx": "887f8f41820efa3fc7782e2bcc47884c9d6be0f01845042cf86b88a1a2f87558",
+  "app/components/ouro/form/form.test-d.ts": "0d61c4621232a16de96ed262517cac2415d560197ed7d4662bff31c4d4b38739",
+  "app/components/ouro/form/form.tsx": "be8dd189e666a7a2853334bbfdf0c1a0dcccba288206e07f4c5aba766028060c",
+  "app/components/ouro/radio-group/radio-group.test-d.ts": "bb207eec8d6a7aa246b0a3a0296a54431e2c291a82e8e578bef99265ac531e44",
+  "app/components/ouro/radio-group/radio-group.tsx": "7ba91819ebda573c2c4921c91b5b0020ff1ef42276d6e6517cb56daf239a0d6d",
+  "app/components/ouro/select/native-select.test-d.ts": "0b896ec32a55394292c3e08bb9b33dc4db3accb32a92a06167aaa176580af516",
+  "app/components/ouro/select/native-select.tsx": "b2ec9109ea81910eb1f265e2eb5c0335a42e826fe0155185c4dd2e92d79ccb8d",
+  "app/components/ouro/select/select.test-d.ts": "77cb2461dad6946ff4b036d04ae835a018ee610e6171d8215262006b968e8f37",
+  "app/components/ouro/select/select.tsx": "0abef3fd1403d98b0c5c13f137b3426eb650eb7717992465e1b82ae1aab99bbc",
+  "app/components/ouro/switch/switch.test-d.ts": "6f16fada873f963fc46eec19fd9860fbbae513d82cd6c3e062fc1d2d3a0eb551",
+  "app/components/ouro/switch/switch.tsx": "31d30d47bee434ae1084846fac79fcdddd3b2a58a16ae49c7be2eddd10da8efc",
+  "app/components/ouro/text-field/text-area.test-d.ts": "c27ecba0eb1343294c426e31f8fb1245080faea6b25078fab462c6ddafe6edf1",
+  "app/components/ouro/text-field/text-area.tsx": "a009026a8e14467cad1485bb9e225e4feb53d4478e7df730942186291ec8b8f8",
+  "app/components/ouro/text-field/text-field.test-d.ts": "f8f49dc6539cb6f234321f0979431863a3b840b53ed12f7248c242db37079ed2",
+  "app/components/ouro/text-field/text-field.tsx": "7fb200fffa7ad01b52e699dea65530168f2490152e1b3c91261332327c212af6",
+  "app/lib/ouro/dev.test.ts": "94f4ab823bb7d1fe60bdd3d84b8120140406d63a6ce60071ce73b380f881cefa",
+  "app/lib/ouro/dev.ts": "7f320bdb0d05dd0dc097cd79574a947138e7a0e3a19e81021dc75c415dab630d",
+  "app/lib/ouro/form-answer.test.ts": "60a4254b4e4c0661594b966f2b7e74faf4a91a6a7eff5006433b5c441a53c26d",
+  "app/lib/ouro/form-answer.ts": "b0a40e58765ff860c3767c90658243b11a813869c2f1f0ef15ee128f6a7dcca7",
+  "app/lib/ouro/use-field.ts": "d1c1a06cb5c96a53b5d06474bc24b69863c70777ff952d4ba2277d65da28807c",
 };
-const expectedChanges = [
-  "app/components/ouro/swipe-actions/swipe-actions.test.tsx",
-  "app/lib/ouro/dev.test.ts",
-  "app/lib/ouro/dev.ts",
-];
+const expectedChanges = Object.keys(expected).sort();
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const normalizedHash = (file) => sha(readFileSync(file, "utf8")
   .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
@@ -44,7 +59,7 @@ if (mode === "classify") {
   console.log(JSON.stringify({ head: command("git", ["rev-parse", "HEAD"]).trim(), tag, upgrade, current }));
 } else {
   assert.ok(mode === "upgrade" || mode === "binding");
-  const directory = join(process.env.RUNNER_TEMP, mode === "upgrade" ? "task24-v101-cli" : "task24-v101-strict");
+  const directory = join(process.env.RUNNER_TEMP, mode === "upgrade" ? "task24-v102-cli" : "task24-v102-strict");
   mkdirSync(directory, { recursive: true });
   const receipt = {
     head: command("git", ["rev-parse", "HEAD"]).trim(),
@@ -66,7 +81,14 @@ if (mode === "classify") {
       "Bootstrap must preserve the previously gated consumer source");
     const originalLock = readFileSync("pnpm-lock.yaml");
     const originalPackage = readFileSync("package.json");
-    const items = ["swipe-actions-tests", "lib-dev-tests"]
+    const items = [
+      "checkbox", "checkbox-group", "checkbox-group-tests", "checkbox-tests",
+      "combobox", "combobox-tests", "field", "field-tests", "form", "form-tests",
+      "lib-dev", "lib-dev-tests", "lib-form-answer", "lib-form-answer-tests",
+      "lib-use-field", "native-select", "native-select-tests", "radio-group",
+      "radio-group-tests", "select", "select-tests", "switch", "switch-tests",
+      "text-area", "text-area-tests", "text-field", "text-field-tests",
+    ]
       .map((item) => `ourostack/ouro-ui/${item}#${tag}`);
     const args = ["dlx", "shadcn@4.21.1", "add", ...items, "--yes", "--overwrite"];
     receipt.commands = [];
@@ -91,7 +113,7 @@ if (mode === "classify") {
     assert.equal(sha(readFileSync("pnpm-lock.yaml")), receipt.lockSha256);
     assert.equal(command("git", ["ls-files", "--others", "--exclude-standard"]), "", "No unused new catalog files");
     const changed = command("git", ["diff", "--name-only"]).trim().split("\n").filter(Boolean).sort();
-    assert.deepEqual(changed, expectedChanges, "Only three qualified installed paths may change");
+    assert.deepEqual(changed, expectedChanges, "Only the 27 qualified installed paths may change");
     receipt.after = hashes();
     assert.deepEqual(receipt.after, expected, "CLI output must match the qualified public tag");
     const patch = command("git", ["diff", "--binary", "HEAD"]);

@@ -4,7 +4,7 @@ import type { JSX, ReactNode, Ref, SelectHTMLAttributes } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl, type FieldControlProps } from "~/components/ouro/field/field-parts";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
-import { FieldOwnerContext, type ErrorMessages } from "~/lib/ouro/use-field";
+import { FieldOwnerContext, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /** One choice: the `value` it submits and the `label` it shows. */
@@ -40,7 +40,7 @@ export interface NativeSelectOwnProps {
    * What is wrong, from your server action or client check. The message (or several, as a
    * list) shows under the select, which gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
    */
-  error?: ErrorMessages | undefined;
+  error?: ReadonlyErrorMessages | undefined;
   /** A choice is required: the form will not submit without one, and the label gets a marker. */
   required?: boolean | undefined;
   /** Disables the select and fades it. */

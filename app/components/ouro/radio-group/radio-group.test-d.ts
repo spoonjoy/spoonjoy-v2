@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { expectTypeOf } from "vitest";
 import { Radio, RadioGroup, type RadioGroupProps, type RadioProps } from "~/components/ouro/radio-group/radio-group";
+expectTypeOf<readonly ["Taken."]>().toExtend<NonNullable<RadioGroupProps["error"]>>();
 
 // Type tests: `pnpm typecheck` compiles this file, and every `@ts-expect-error`
 // fails the check if the line below it stops being an error.

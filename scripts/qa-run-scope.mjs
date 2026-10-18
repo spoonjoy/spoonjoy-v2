@@ -35,8 +35,8 @@
 // Commands (node scripts/qa-run-scope.mjs <command>):
 //   prepare   sweep stale run stacks, create this run's empty D1, rewrite the configs, write the
 //             per-run secrets file, export the run's base URL.
-//   deploy    deploy this build to the run's Worker with the run's secrets, retrying when
-//             Cloudflare does not yet know the brand-new script (code 10007).
+//   deploy    deploy this build to the run's Worker with the run's secrets, retrying code 10007
+//             or the specific internal authentication server error (code 10500).
 //   verify    after deploy: the run's Worker has its secrets, its D1 has no pending migration,
 //             and the URL serves /health and a hashed asset.
 //   teardown  delete this run's Worker and D1 (always; a failure only warns, and a later sweep
@@ -112,9 +112,12 @@ export const MAX_RUN_WORKERS = 100;
 // `wrangler deploy` uploads a brand-new script, then enables its workers.dev subdomain. Right
 // after the upload Cloudflare can still answer "This Worker does not exist on your account.
 // [code: 10007]" (seen on run 37917989293). Deploying again is idempotent (assets already
-// uploaded are skipped), so the deploy is retried after these delays.
+// uploaded are skipped), so the deploy is retried after these delays. The same bound applies
+// to the exact internal authentication server error seen during run 39088149235, not other
+// authentication or permission failures.
 export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
 const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
+const INTERNAL_AUTH_SERVER_ERROR_PATTERN = /Internal authentication error: internal server error\s+\[code: 10500\]/;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MIGRATION_FILE_PATTERN = /^\d{4}_[A-Za-z0-9_.-]+\.sql$/;
@@ -528,10 +531,16 @@ export async function deploy({ env, exec, fs, sleep, log }) {
       log(`${stdout}${stderr}`);
       return attempt + 1;
     } catch (error) {
-      log(outputOf(error));
-      if (!SCRIPT_NOT_FOUND_PATTERN.test(outputOf(error)) || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
+      const output = outputOf(error);
+      log(output);
+      const reason = SCRIPT_NOT_FOUND_PATTERN.test(output)
+        ? `Cloudflare did not yet know ${state.workerName} (code 10007)`
+        : INTERNAL_AUTH_SERVER_ERROR_PATTERN.test(output)
+          ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${state.workerName}`
+          : undefined;
+      if (!reason || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
       const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
-      log(`::warning::Cloudflare did not yet know ${state.workerName} (code 10007); deploying again in ${delay / 1000} s.`);
+      log(`::warning::${reason}; deploying again in ${delay / 1000} s.`);
       await sleep(delay);
     }
   }

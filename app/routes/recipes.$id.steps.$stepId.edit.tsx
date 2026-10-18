@@ -638,7 +638,7 @@ export default function EditStep() {
   // earlier steps) no field shows a usesSteps error, so it joins the message at the top of the
   // form; otherwise Update would fail silently.
   const errors = updateData?.errors;
-  const formErrors = useMemo<FormErrors | undefined>(() => {
+  const formErrors = useMemo(() => {
     const formErrors: FormErrors = {};
     if (errors?.stepTitle) formErrors.stepTitle = errors.stepTitle;
     if (errors?.description) formErrors.description = errors.description;
