@@ -14,6 +14,7 @@ import {
   expectedFromJourneys,
   findDrops,
   findRegressions,
+  findReplacements,
   formatDiff,
   identityContext,
   mergeActuals,
@@ -21,6 +22,7 @@ import {
   normalizeName,
   parseIdentity,
   parseWorkerFileName,
+  regressionLabel,
   removalNames,
   requireProjects,
   sortCensus,
@@ -505,27 +507,85 @@ describe("the unmarked ratchet", () => {
         "HX census: this run drops states the baseline has:",
         "  desktop-chrome / search / default",
         "  iphone-webkit / search / default",
-        "If they are meant to go (a renamed journey or state is a drop plus a new one), name each with --remove <project/journey/state>, or a whole journey with --remove <journey>.",
+        'If they are meant to go (a renamed journey or state is a drop plus a new one), name each with --remove <project/journey/state>, or a whole journey with --remove <journey>, and say why with --remove-reason "<reason>".',
       ].join("\n"),
     );
-    const { baseline, removed } = updateBaseline({ previous, actual, remove: ["search"] });
-    expect(baseline).toEqual(sortCensus(actual));
+    expect(() => updateBaseline({ previous, actual, remove: ["search"] })).toThrow(
+      'HX census: say why with --remove-reason "<reason>"; the baseline records it under $removed with each removed state\'s unmarked count.',
+    );
+    expect(() => updateBaseline({ previous, actual, remove: ["search"], removeReason: "  " })).toThrow("say why with --remove-reason");
+    const { baseline, removed, regressions } = updateBaseline({ previous, actual, remove: ["search"], removeReason: " renamed to search-no-results " });
+    expect(regressions).toEqual([]);
+    expect(baseline).toEqual({
+      $removed: [
+        { key: "desktop-chrome / search / default", unmarked: 3, reason: "renamed to search-no-results" },
+        { key: "iphone-webkit / search / default", unmarked: 3, reason: "renamed to search-no-results" },
+      ],
+      ...sortCensus(actual),
+    });
     expect(removed).toEqual([
       { project: "desktop-chrome", journey: "search", state: "default" },
       { project: "iphone-webkit", journey: "search", state: "default" },
     ]);
+    // The next update removes nothing, so it keeps no $removed.
+    expect(updateBaseline({ previous: baseline, actual }).baseline).toEqual(sortCensus(actual));
+  });
+
+  it("carries a renamed journey's unmarked count: the new journey may not start above the removed one without --allow-regression", () => {
+    const previous = census({ search: { default: one({ [SAVE]: 1 }), menu: one({ [CLOSE]: 1 }) }, home: { default: [] } });
+    const actual = merged({ "search-no-results": { default: one({ [SAVE]: 3 }) }, home: { default: [] } });
+    const renamed = { remove: ["search"], removeReason: "renamed" };
+    expect(() => updateBaseline({ previous, actual, ...renamed })).toThrow(
+      [
+        "HX census: unmarked controls may only fall, state by state. This run raises:",
+        "  desktop-chrome / search-no-results (replacing search): 2 → 3 unmarked",
+        "  iphone-webkit / search-no-results (replacing search): 2 → 3 unmarked",
+      ].join("\n"),
+    );
+    const { baseline } = updateBaseline({ previous, actual, ...renamed, allowRegression: "the new page shows a new filter" });
+    expect(baseline.$allowedRegressions).toEqual([
+      { project: "desktop-chrome", journey: "search-no-results", replaces: "search", from: 2, to: 3, reason: "the new page shows a new filter" },
+      { project: "iphone-webkit", journey: "search-no-results", replaces: "search", from: 2, to: 3, reason: "the new page shows a new filter" },
+    ]);
+    expect(baseline.$removed).toHaveLength(4);
+    // Equal or fewer unmarked controls under the new name pass.
+    expect(updateBaseline({ previous, actual: merged({ "search-no-results": { default: one({ [SAVE]: 2 }) }, home: { default: [] } }), ...renamed }).regressions).toEqual([]);
+  });
+
+  it("finds journeys and states replaced by ones with more unmarked controls, and nothing for pure additions", () => {
+    const previous = { p: { old: { default: one({ [SAVE]: 1 }) }, older: { default: one({ [SAVE]: 1 }) }, recipe: { a: one({ [SAVE]: 1 }), b: [] } } };
+    const next = {
+      p: { fresh: { default: one({ [SAVE]: 2 }) }, fresher: { default: one({ [SAVE]: 1 }) }, recipe: { b: [], c: one({ [SAVE]: 2 }) } },
+      q: { fresh: { default: one({ [SAVE]: 9 }) } },
+    };
+    expect(findReplacements(previous, next)).toEqual([
+      { project: "p", journey: "fresh, fresher", replaces: "old, older", from: 2, to: 3 },
+      { project: "p", journey: "recipe", state: "c", replaces: "a", from: 1, to: 2 },
+    ]);
+    expect(findReplacements({ p: { home: { default: [] } } }, { p: { home: { default: [], menu: one({ [SAVE]: 5 }) }, extra: { default: one({ [SAVE]: 5 }) } } })).toEqual([]);
+    expect(findReplacements({ p: { old: { default: one({ [SAVE]: 2 }) } } }, { p: { fresh: { default: one({ [SAVE]: 2 }) } } })).toEqual([]);
+    expect(findReplacements({ p: { recipe: { a: one({ [SAVE]: 2 }) } } }, { p: { recipe: { b: one({ [SAVE]: 2 }) } } })).toEqual([]);
+    expect(regressionLabel({ project: "p", journey: "recipe", state: "c", replaces: "a" })).toBe("p / recipe / c (replacing a)");
+    expect(regressionLabel({ project: "p", journey: "fresh", replaces: "old" })).toBe("p / fresh (replacing old)");
+    expect(regressionLabel({ project: "p", journey: "recipe", state: "default" })).toBe("p / recipe / default");
   });
 
   it("refuses a dropped state until --remove names it on every project, and a --remove that names nothing dropped", () => {
     const previous = census({ recipe: { default: one({ [SAVE]: 1 }), dialog: one({ [CLOSE]: 1 }) } });
     const actual = merged({ recipe: { default: one({ [SAVE]: 1 }) } });
-    expect(() => updateBaseline({ previous, actual, remove: ["iphone-webkit/recipe/dialog"] })).toThrow(
+    expect(() => updateBaseline({ previous, actual, remove: ["iphone-webkit/recipe/dialog"], removeReason: "gone" })).toThrow(
       "HX census: this run drops states the baseline has:\n  desktop-chrome / recipe / dialog\n",
     );
     expect(
-      updateBaseline({ previous, actual, remove: ["iphone-webkit/recipe/dialog", "desktop-chrome/recipe/dialog"] }).baseline,
-    ).toEqual(sortCensus(actual));
-    expect(() => updateBaseline({ previous, actual, remove: ["recipe", "home", "iphone-webkit/recipe/default"] })).toThrow(
+      updateBaseline({ previous, actual, remove: ["iphone-webkit/recipe/dialog", "desktop-chrome/recipe/dialog"], removeReason: "the dialog is gone" }).baseline,
+    ).toEqual({
+      $removed: [
+        { key: "desktop-chrome / recipe / dialog", unmarked: 1, reason: "the dialog is gone" },
+        { key: "iphone-webkit / recipe / dialog", unmarked: 1, reason: "the dialog is gone" },
+      ],
+      ...sortCensus(actual),
+    });
+    expect(() => updateBaseline({ previous, actual, remove: ["recipe", "home", "iphone-webkit/recipe/default"], removeReason: "x" })).toThrow(
       "HX census: --remove home names nothing this run drops.\nHX census: --remove iphone-webkit/recipe/default names nothing this run drops.",
     );
   });
@@ -584,13 +644,20 @@ describe("pnpm census:update", () => {
   }
 
   it("parses its arguments", () => {
-    expect(update.parseUpdateArgs(["123"])).toEqual({ source: "123", allowRegression: undefined, remove: [], baseline: BASELINE_PATH });
-    expect(update.parseUpdateArgs(["--allow-regression", "why", "a.json", "--remove", "search", "--baseline", "b.json", "--remove", "iphone-webkit/home/menu"])).toEqual({
+    expect(update.parseUpdateArgs(["123"])).toEqual({ source: "123", allowRegression: undefined, remove: [], removeReason: undefined, baseline: BASELINE_PATH });
+    expect(
+      update.parseUpdateArgs(["--allow-regression", "why", "a.json", "--remove", "search", "--baseline", "b.json", "--remove", "iphone-webkit/home/menu", "--remove-reason", "renamed"]),
+    ).toEqual({
       source: "a.json",
       allowRegression: "why",
       remove: ["search", "iphone-webkit/home/menu"],
+      removeReason: "renamed",
       baseline: "b.json",
     });
+    expect(() => update.parseUpdateArgs(["1", "--remove", "search"])).toThrow('--remove needs --remove-reason "<reason>".');
+    expect(() => update.parseUpdateArgs(["1", "--remove-reason", "why"])).toThrow("--remove-reason needs a --remove.");
+    expect(() => update.parseUpdateArgs(["1", "--remove", "search", "--remove-reason", " "])).toThrow("--remove-reason needs a reason.");
+    expect(() => update.parseUpdateArgs(["1", "--remove-reason"])).toThrow("--remove-reason needs a value.");
     expect(() => update.parseUpdateArgs(["1", "--remove"])).toThrow("--remove needs a value.");
     expect(() => update.parseUpdateArgs(["1", "--remove", "home/menu"])).toThrow("--remove takes <journey> or <project/journey/state>, not home/menu.");
     expect(() => update.parseUpdateArgs(["1", "--remove", "iphone-webkit//menu"])).toThrow("--remove takes <journey> or <project/journey/state>, not iphone-webkit//menu.");
@@ -662,10 +729,13 @@ describe("pnpm census:update", () => {
     expect(fs.writeFile).not.toHaveBeenCalled();
 
     const removed = io();
-    await update.main(["actual.json", "--remove", "search"], { ...fs, io: removed, exit: vi.fn() });
-    expect(fs.written[BASELINE_PATH]).toBe(stringifyCensus(sortCensus(actual)));
-    expect(removed.log).toHaveBeenCalledWith("Removed (--remove): desktop-chrome / search / default.");
-    expect(removed.log).toHaveBeenCalledWith("Removed (--remove): iphone-webkit / search / default.");
+    await update.main(["actual.json", "--remove", "search", "--remove-reason", "renamed to home"], { ...fs, io: removed, exit: vi.fn() });
+    expect(JSON.parse(fs.written[BASELINE_PATH]).$removed).toEqual([
+      { key: "desktop-chrome / search / default", unmarked: 1, reason: "renamed to home" },
+      { key: "iphone-webkit / search / default", unmarked: 1, reason: "renamed to home" },
+    ]);
+    expect(removed.log).toHaveBeenCalledWith("Removed (renamed to home): desktop-chrome / search / default.");
+    expect(removed.log).toHaveBeenCalledWith("Removed (renamed to home): iphone-webkit / search / default.");
   });
 
   it("reports a non-Error failure", async () => {
@@ -702,7 +772,7 @@ describe("pnpm census:update", () => {
 
   it("sets the exit code and prints to the console by default", async () => {
     expectConsoleError(
-      'Usage: pnpm census:update <run-id | path to hx-census-actual.json> [--allow-regression "<reason>"] [--remove <journey | project/journey/state>]... [--baseline <path>]',
+      'Usage: pnpm census:update <run-id | path to hx-census-actual.json> [--allow-regression "<reason>"] [--remove <journey | project/journey/state>]... [--remove-reason "<reason>"] [--baseline <path>]',
     );
     const originalArgv = process.argv;
     process.argv = ["node", "hx-census-update.mjs"];

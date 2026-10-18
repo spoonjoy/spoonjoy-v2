@@ -521,16 +521,67 @@ export function removalNames(removal, drop) {
 
 const stateLabel = ({ project, journey, state }) => `${project} / ${journey} / ${state}`;
 
+const sum = (counts) => Object.values(counts).reduce((total, count) => total + count, 0);
+
+/**
+ * Removed journeys (or states) replaced by new ones in the same update whose unmarked count is
+ * higher: a rename carries the old count, so the new name may not start above it. Per project, the
+ * journeys the previous baseline has and the next lacks are compared, in total, with the journeys
+ * the next has and the previous lacks; within a journey both have, its removed states with its new
+ * states. A new project, or new journeys or states with nothing removed beside them, are measurement.
+ * @param {Record<string, any>} previous
+ * @param {Record<string, any>} next
+ * @returns {Array<{ project: string, journey: string, state?: string, replaces: string, from: number, to: number }>}
+ */
+export function findReplacements(previous, next) {
+  const before = unmarkedCounts(previous);
+  const after = unmarkedCounts(next);
+  const replacements = [];
+  for (const project of Object.keys(after).sort(compareStrings)) {
+    const was = before[project];
+    if (!was) continue;
+    const now = after[project];
+    const removed = Object.keys(was).filter((journey) => !now[journey]).sort(compareStrings);
+    const added = Object.keys(now).filter((journey) => !was[journey]).sort(compareStrings);
+    if (removed.length > 0 && added.length > 0) {
+      const from = removed.reduce((total, journey) => total + sum(was[journey]), 0);
+      const to = added.reduce((total, journey) => total + sum(now[journey]), 0);
+      if (to > from) replacements.push({ project, journey: added.join(", "), replaces: removed.join(", "), from, to });
+    }
+    for (const journey of Object.keys(now).filter((id) => was[id]).sort(compareStrings)) {
+      const removedStates = Object.keys(was[journey]).filter((state) => now[journey][state] === undefined).sort(compareStrings);
+      const addedStates = Object.keys(now[journey]).filter((state) => was[journey][state] === undefined).sort(compareStrings);
+      if (removedStates.length === 0 || addedStates.length === 0) continue;
+      const from = removedStates.reduce((total, state) => total + was[journey][state], 0);
+      const to = addedStates.reduce((total, state) => total + now[journey][state], 0);
+      if (to > from) replacements.push({ project, journey, state: addedStates.join(", "), replaces: removedStates.join(", "), from, to });
+    }
+  }
+  return replacements;
+}
+
+/**
+ * A regression's label: `project / journey / state`, or `project / journey` for new journeys, then
+ * `(replacing ...)` for a rename.
+ * @param {{ project: string, journey: string, state?: string, replaces?: string }} regression
+ */
+export function regressionLabel({ project, journey, state, replaces }) {
+  const where = state === undefined ? `${project} / ${journey}` : stateLabel({ project, journey, state });
+  return replaces === undefined ? where : `${where} (replacing ${replaces})`;
+}
+
 /**
  * The new baseline from a merged actual, which must cover its expected set (`$expected`) on every
  * project. Refuses one that drops a project/journey/state the previous baseline has unless a
- * `remove` entry names it (a renamed journey or state is a drop plus a new one), a `remove` entry
- * that names nothing dropped, and one that raises a state's unmarked count unless `allowRegression`
- * gives a reason, which is then recorded under `$allowedRegressions` (dropped again by the next
- * update that raises nothing).
- * @param {{ previous: Record<string, any>, actual: Record<string, any>, allowRegression?: string, remove?: readonly string[], projects?: readonly string[] }} options
+ * `remove` entry names it (a renamed journey or state is a drop plus a new one) and `removeReason`
+ * says why, a `remove` entry that names nothing dropped, and one that raises a state's unmarked
+ * count, or replaces removed journeys or states with new ones holding more unmarked controls,
+ * unless `allowRegression` gives a reason. Allowed regressions are recorded under
+ * `$allowedRegressions` and removals, with each state's unmarked count, under `$removed`; the next
+ * update keeps neither unless it allows or removes something again.
+ * @param {{ previous: Record<string, any>, actual: Record<string, any>, allowRegression?: string, remove?: readonly string[], removeReason?: string, projects?: readonly string[] }} options
  */
-export function updateBaseline({ previous, actual, allowRegression, remove = [], projects = CENSUS_PROJECTS }) {
+export function updateBaseline({ previous, actual, allowRegression, remove = [], removeReason, projects = CENSUS_PROJECTS }) {
   validateCensus(previous, "the current baseline");
   validateCensus(actual, "the run's actual census");
   requireProjects(actual, projects, "the run's actual census");
@@ -554,28 +605,37 @@ export function updateBaseline({ previous, actual, allowRegression, remove = [],
           ? [
               "HX census: this run drops states the baseline has:",
               ...unnamed.map((drop) => `  ${stateLabel(drop)}`),
-              "If they are meant to go (a renamed journey or state is a drop plus a new one), name each with --remove <project/journey/state>, or a whole journey with --remove <journey>.",
+              'If they are meant to go (a renamed journey or state is a drop plus a new one), name each with --remove <project/journey/state>, or a whole journey with --remove <journey>, and say why with --remove-reason "<reason>".',
             ]
           : []),
         ...unused.map((removal) => `HX census: --remove ${removal} names nothing this run drops.`),
       ].join("\n"),
     );
   }
+  const whyRemoved = normalizeName(removeReason);
+  if (drops.length > 0 && !whyRemoved) {
+    throw new Error('HX census: say why with --remove-reason "<reason>"; the baseline records it under $removed with each removed state\'s unmarked count.');
+  }
 
-  const regressions = findRegressions(previous, census);
+  const regressions = [...findRegressions(previous, census), ...findReplacements(previous, census)];
   const reason = normalizeName(allowRegression);
   if (regressions.length > 0 && !reason) {
     throw new Error(
       [
         "HX census: unmarked controls may only fall, state by state. This run raises:",
-        ...regressions.map((regression) => `  ${stateLabel(regression)}: ${regression.from} → ${regression.to} unmarked`),
+        ...regressions.map((regression) => `  ${regressionLabel(regression)}: ${regression.from} → ${regression.to} unmarked`),
         'Use HX components instead, or record why with --allow-regression "<reason>" (review treats it as a finding).',
       ].join("\n"),
     );
   }
-  const baseline = regressions.length > 0
-    ? { $allowedRegressions: regressions.map((regression) => ({ ...regression, reason })), ...census }
-    : census;
+  const before = unmarkedCounts(previous);
+  const baseline = {
+    ...(regressions.length > 0 ? { $allowedRegressions: regressions.map((regression) => ({ ...regression, reason })) } : {}),
+    ...(drops.length > 0
+      ? { $removed: drops.map((drop) => ({ key: stateLabel(drop), unmarked: before[drop.project][drop.journey][drop.state], reason: whyRemoved })) }
+      : {}),
+    ...census,
+  };
   return { baseline, regressions, removed: drops };
 }
 
