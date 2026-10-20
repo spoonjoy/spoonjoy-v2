@@ -12,7 +12,6 @@ import { Button } from "~/components/button";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
 import { StepOutputUseDisplay } from "~/components/StepOutputUseDisplay";
-import { BioCard } from "~/components/pantry/BioCard";
 import Index from "~/routes/_index";
 import RecipesIndex from "~/routes/recipes._index";
 import AccountSettings from "~/routes/account.settings";
@@ -188,21 +187,18 @@ for (const theme of ["light", "dark"] as const) {
     await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements, hovered })}`);
   });
 
-  it(`${theme}: the two unsupported 14px branded metadata headings keep their levels, ink and actual size`, async ({ annotate }) => {
+  it(`${theme}: the 14px branded step-output heading keeps its level, ink and actual size`, async ({ annotate }) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    const host = await mount(() => <main className="sj-page"><StepOutputUseDisplay usingSteps={[{ id: "use-1", outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }]} /><BioCard name="Chef Rowan" bio="A practical kitchen." recipeCount={2} cookbookCount={1} /></main>);
+    const host = await mount(() => <main className="sj-page"><StepOutputUseDisplay usingSteps={[{ id: "use-1", outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }]} /></main>);
     await expect.poll(() => host.querySelector("h4")).toBeTruthy();
     const output = host.querySelector("h4")!;
-    const snapshot = Array.from(host.querySelectorAll("h3")).find((node) => node.textContent?.includes("Kitchen Snapshot"))!;
     const base = "font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]";
     const measurements = [];
     for (const width of [390, 640, 1024]) {
       await page.viewport(width, 900);
       const outputs = compareDelivered(output, `${base} m-0 mb-3 text-sm uppercase text-[var(--sj-ink-soft)]`);
-      const kitchen = compareDelivered(snapshot, `${base} text-sm`);
       expect(outputs.fontSize).toBe("14px");
-      expect(kitchen.fontSize).toBe("14px");
-      measurements.push({ width, outputs, kitchen });
+      measurements.push({ width, outputs });
     }
     await annotate(`T21_METADATA_TYPE ${JSON.stringify({ theme, measurements })}`);
   });

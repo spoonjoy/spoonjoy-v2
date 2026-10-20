@@ -2475,7 +2475,10 @@
       "components": [
         "avatar",
         "button",
+        "card",
         "heading",
+        "item",
+        "item-group",
         "link",
         "show-more",
         "text"
@@ -2487,10 +2490,18 @@
         "button": [
           "app/components/button.tsx"
         ],
+        "card": [
+          "app/components/pantry/CookbookCard.tsx"
+        ],
         "heading": [
-          "app/components/pantry/CookbookCard.tsx",
           "app/components/pantry/RecipeGrid.tsx",
           "app/routes/users.$identifier.tsx"
+        ],
+        "item": [
+          "app/components/pantry/RecipeGrid.tsx"
+        ],
+        "item-group": [
+          "app/components/pantry/RecipeGrid.tsx"
         ],
         "link": [
           "app/routes/users.$identifier.tsx"
