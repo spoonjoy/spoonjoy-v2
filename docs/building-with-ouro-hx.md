@@ -43,9 +43,15 @@ Examples in Spoonjoy:
 - **Cook mode** is a domain view built only from HX (`Checklist`, `NumberField`, `Pagination`, `Button`, `Text`), drawn from a `CookController` that knows nothing about routes: [`app/components/cook/RecipeCookView.tsx`](../app/components/cook/RecipeCookView.tsx). The recipe page and the Test Kitchen give it different controllers.
 - **The shopping list** puts one checklist per aisle together from `ChecklistRoot` and `ChecklistItem`, because each row swipes to delete with HX `SwipeActions`. Its views and aisles are HX `SegmentedControl`s: [`app/routes/shopping-list.tsx`](../app/routes/shopping-list.tsx).
 - **The Test Kitchen** is a whole page built this way, with X-ray (HX `Inspector`) behind an HX `Switch`: [`app/routes/test-kitchen.tsx`](../app/routes/test-kitchen.tsx).
+- **Lists of things** (cookbooks, saved recipes, chefs) are an HX `ItemGroup` of `Item`s. Each row is one link named by its title, with its count or byline as the `description`: [`app/routes/cookbooks._index.tsx`](../app/routes/cookbooks._index.tsx).
+- **Recipe steps** are put in order with HX `Reorderable`, which drags, and also moves a step from its handle's menu or with the keyboard: [`app/components/recipe/StepList.tsx`](../app/components/recipe/StepList.tsx).
+- **A cook's photo** goes through HX `FileField`, whose `accept`, `maxSize` and `rejectMessage` replace hand-written checks: [`app/components/recipe/SpoonDialog.tsx`](../app/components/recipe/SpoonDialog.tsx).
+- **Owner tools** fold away in an HX `Collapsible`, and saving to a cookbook is an HX `Toggle` per cookbook: [`app/routes/recipes.$id.tsx`](../app/routes/recipes.$id.tsx).
 - **Links go through the router.** `OuroProvider` in [`app/root.tsx`](../app/root.tsx) hands HX the app's link component, so HX `Link`, `Button href` and `Pagination` navigate with React Router.
 
 Pass what HX asks for: required props are required, hint types guide you to the right one (`<Inspector open onOpenChange>`, not `isOpen`), and `className` is for layout only (margins, grid placement). HX warns in development about an appearance class.
+
+Test what HX renders, the way a person meets it. A `SegmentedControl` is a radio group (`getByRole("radio")`, `aria-checked`), a `Checkbox` is `getByRole("checkbox")`, and a `Toggle` is a button with `aria-pressed`. An `Item` with `href` is named by its title alone, so read its description from the row (`getByRole("listitem")`). `FileField` writes the files it keeps back into its input, which user-event's `upload` stub refuses. In a unit test, set the input's `files` from a `DataTransfer` and fire `change`, as [`test/components/recipe/SpoonDialog.test.tsx`](../test/components/recipe/SpoonDialog.test.tsx) does.
 
 ## 4. When HX lacks a component
 
