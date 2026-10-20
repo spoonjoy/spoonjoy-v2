@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { MobileNav } from "~/components/navigation/mobile-nav";
+import { MobileNav, MobileNavToaster } from "~/components/navigation/mobile-nav";
 import { DockContext } from "~/components/navigation";
 
 function renderAt(path: string, isAuthenticated = true) {
@@ -132,5 +132,23 @@ describe("MobileNav signed out", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
       unmount();
     }
+  });
+});
+
+describe("MobileNavToaster", () => {
+  it("raises HX's toasts above the tab bar on phones only while the tab bar shows", () => {
+    const toaster = (path: string) => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <MobileNavToaster isAuthenticated />
+        </MemoryRouter>,
+      );
+      const viewport = screen.getByRole("region", { name: "Notifications", hidden: true });
+      const raised = viewport.classList.contains("max-lg:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]");
+      unmount();
+      return raised;
+    };
+    expect(toaster("/")).toBe(true);
+    expect(toaster("/recipes/new")).toBe(false);
   });
 });

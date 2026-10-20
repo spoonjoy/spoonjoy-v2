@@ -80,7 +80,7 @@ import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { useToast } from "~/components/feedback/toast";
+import { toast } from "~/lib/ouro/toast";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
@@ -345,7 +345,6 @@ interface CookbookActionData {
 export default function CookbookDetail() {
   const { cookbook, isOwner, availableRecipes, canonicalUrl } = useLoaderData<typeof loader>();
   const actionData = useActionData() as CookbookActionData | null | undefined;
-  const { showToast } = useToast();
   const recipeImages = cookbook.recipes.map((item) => ({
     coverImageUrl: item.recipe.coverImageUrl,
     title: item.recipe.title,
@@ -375,7 +374,7 @@ export default function CookbookDetail() {
       actionData?.retryable === true &&
       typeof actionData.error === "string"
     ) {
-      showToast({ message: actionData.error });
+      toast(actionData.error, { tone: "destructive" });
       return;
     }
     if (actionData?.intent !== "updateTitle") return;
@@ -385,8 +384,8 @@ export default function CookbookDetail() {
     }
     setTitleAnswer(undefined);
     setIsEditingTitle(false);
-    showToast({ message: "Cookbook renamed." });
-  }, [actionData, showToast]);
+    toast("Cookbook renamed.", { tone: "success" });
+  }, [actionData]);
 
   const openTitleEditor = () => {
     setTitleAnswer(undefined);

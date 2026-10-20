@@ -21,7 +21,7 @@ import {
   loadRecipeDetail,
 } from "~/lib/recipe-detail.server";
 import { Button } from "~/components/button";
-import { useToast } from "~/components/feedback/toast";
+import { toast } from "~/lib/ouro/toast";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
@@ -227,7 +227,6 @@ export default function RecipeDetail() {
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
-  const { showToast } = useToast();
   // Cook progress, cook mode and timers: the view below draws them, the controller owns them.
   const cookController = useRouteCookController(loaderData);
   const { scaleFactor, setScale: handleScaleChange, enterCookMode } = cookController;
@@ -349,8 +348,8 @@ export default function RecipeDetail() {
 
     lastHandledLoggedSpoonId.current = loggedSpoonId;
     setIsSpoonDialogOpen(false);
-    showToast({ message: "Cook logged." });
-  }, [actionData, showToast]);
+    toast("Cook logged.", { tone: "success" });
+  }, [actionData]);
 
   useEffect(() => {
     if (actionData?.intent === "createSpoon" && typeof actionData.error === "string") {
@@ -529,15 +528,13 @@ export default function RecipeDetail() {
 
     lastHandledAddToListSubmissionCount.current = addToListSubmissionCount.current;
     if (unavailable) {
-      showToast({ message: unavailable });
+      toast(unavailable, { tone: "destructive" });
       return;
     }
     renewAddToListToken();
     setIsAlreadyInList(true);
-    showToast({
-      message: `${ingredientCount} items added at ${scaleFactor}x`,
-    });
-  }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast, renewAddToListToken]);
+    toast(`${ingredientCount} items added at ${scaleFactor}x`, { tone: "success" });
+  }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, renewAddToListToken]);
 
   // The tab bar is hidden in cook mode so it never covers the step controls.
   useDockSuppressed(showOwnerTools || isCookMode);

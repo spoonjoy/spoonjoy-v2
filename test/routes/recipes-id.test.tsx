@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { data as routerData, Outlet, redirect, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", async () => {
   const actual = await vi.importActual<typeof import("~/components/navigation")>("~/components/navigation");
@@ -2993,9 +2993,9 @@ describe("Recipes $id Route", () => {
 
       const user = userEvent.setup();
       render(
-        <ToastProvider>
+        <>
           <Stub initialEntries={["/recipes/recipe-1"]} />
-        </ToastProvider>
+        <Toaster /></>
       );
       await screen.findByRole("heading", { name: "Dock Add Recipe" });
       await user.click(screen.getByRole("button", { name: "Increase scale" }));
@@ -3051,19 +3051,19 @@ describe("Recipes $id Route", () => {
 
       const user = userEvent.setup();
       render(
-        <ToastProvider>
+        <>
           <Stub initialEntries={["/recipes/recipe-1"]} />
-        </ToastProvider>
+        <Toaster /></>
       );
       await screen.findByRole("heading", { name: "Retry Add Recipe" });
       await user.click(screen.getByTestId("recipe-header-list-action"));
-      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
       await user.click(screen.getByTestId("recipe-header-list-action"));
       expect(await screen.findByText("1 items added at 1x")).toBeInTheDocument();
       await user.click(screen.getByTestId("recipe-header-list-action"));
       await waitFor(() => expect(tokens).toHaveLength(3));
       // Let the third answer render before the test ends, so its toast update lands inside act().
-      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
 
       expect(tokens[0]).toMatch(/^[\w-]{8,}$/);
       // The tap after the 503 is the same add; the tap after a success is a new one.

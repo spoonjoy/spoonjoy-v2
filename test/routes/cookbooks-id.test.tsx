@@ -11,7 +11,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { data as routerData, redirect } from "react-router";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", () => ({
   shareContent: vi.fn(async () => ({ success: true, method: "native" })),
@@ -1850,9 +1850,9 @@ describe("Cookbooks $id Route", () => {
         ]);
 
         render(
-          <ToastProvider>
+          <>
             <Stub initialEntries={["/cookbooks/cookbook-1"]} />
-          </ToastProvider>,
+          <Toaster /></>,
         );
       }
 
@@ -1971,7 +1971,8 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't save that just now/ })).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        // A destructive toast speaks through an alert; the toast itself is hidden from assistive tech.
+        expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now.");
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();

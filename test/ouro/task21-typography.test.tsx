@@ -7,7 +7,7 @@ import type { AccountSettingsLoaderData } from "~/lib/account-settings.server";
 import { act } from "~/lib/ouro/testing/act";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { Button } from "~/components/button";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
@@ -49,7 +49,7 @@ async function mount(Component: ComponentType, data: unknown = {}, path = "/", l
   }], { initialEntries: [path] });
   const root = createRoot(host);
   await act(async () => {
-    root.render(<OuroProvider linkComponent={OuroRouterLink}><ToastProvider><RouterProvider router={router} /></ToastProvider></OuroProvider>);
+    root.render(<OuroProvider linkComponent={OuroRouterLink}><><RouterProvider router={router} /><Toaster /></></OuroProvider>);
   });
   dispose = async () => {
     await act(async () => root.unmount());

@@ -27,7 +27,7 @@ import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
-import { useToast } from "~/components/feedback/toast";
+import { toast } from "~/lib/ouro/toast";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
@@ -614,7 +614,6 @@ export default function EditStep() {
   const submit = useSubmit();
   const addAllFetcher = useFetcher<ActionData>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showToast } = useToast();
 
   const stepDeletionError = actionData?.errors?.stepDeletion;
 
@@ -653,12 +652,12 @@ export default function EditStep() {
 
   useEffect(() => {
     if (searchParams.get("created") === "1") {
-      showToast({ message: "Step created successfully." });
+      toast("Step created successfully.", { tone: "success" });
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("created");
       setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, setSearchParams, showToast]);
+  }, [searchParams, setSearchParams]);
 
   // Ingredient input mode handlers
   const parsedListShown = showIngredientForm && ingredientInputMode !== "manual" && parsedIngredients.length > 0;

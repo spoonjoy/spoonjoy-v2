@@ -29,9 +29,8 @@ import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/theme-provider";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/feedback/toast";
 import { ThemeToggle } from "~/components/theme-toggle";
-import { MobileNav, DockContextProvider } from "~/components/navigation";
+import { MobileNav, MobileNavToaster, DockContextProvider } from "~/components/navigation";
 import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/button";
 import { OAuthButtonGroup } from "~/components/oauth";
@@ -232,27 +231,26 @@ export default function App() {
 
   return (
     <DockContextProvider>
-      <ToastProvider isAuthenticated={!!userId}>
-        <RouteTransitionIndicator />
-        <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
-          {userId ? null : <PhoneBrandBar />}
-          <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
-            <AppNavbar userId={userId} oauthProviders={oauthProviders} />
-          </header>
-          {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
-              max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
-              page never sits under it. */}
-          <main
-            id="main"
-            tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
-          >
-            <Outlet />
-          </main>
-        </div>
-        <MobileNav isAuthenticated={!!userId} />
-        <InstallPromptCard />
-      </ToastProvider>
+      <RouteTransitionIndicator />
+      <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+        {userId ? null : <PhoneBrandBar />}
+        <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
+          <AppNavbar userId={userId} oauthProviders={oauthProviders} />
+        </header>
+        {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
+            max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
+            page never sits under it. */}
+        <main
+          id="main"
+          tabIndex={-1}
+          className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
+        >
+          <Outlet />
+        </main>
+      </div>
+      <MobileNav isAuthenticated={!!userId} />
+      <InstallPromptCard />
+      <MobileNavToaster isAuthenticated={!!userId} />
     </DockContextProvider>
   );
 }

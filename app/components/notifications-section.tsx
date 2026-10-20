@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/button";
-import { useToast } from "~/components/feedback/toast";
+import { toast } from "~/lib/ouro/toast";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Switch } from "~/components/ouro/switch/switch";
 import { Dialog } from "~/components/ouro/dialog/dialog";
@@ -63,7 +63,6 @@ export function NotificationsSection({
     initialPreferences ?? DEFAULT_PREFS,
   );
   const [iosDialogOpen, setIosDialogOpen] = useState(false);
-  const { showToast } = useToast();
 
   useEffect(() => {
     setSupport(isPushSupported());
@@ -89,10 +88,10 @@ export function NotificationsSection({
       const result = await subscribeToPush();
       if (result.ok) {
         setSubscribed(true);
-        showToast({ message: "Notifications enabled." });
+        toast("Notifications enabled.", { tone: "success" });
       } else {
         const msg = FAILURE_COPY[result.reason] ?? "Unable to enable notifications.";
-        showToast({ message: msg });
+        toast(msg, { tone: "destructive" });
       }
     } finally {
       setBusy(false);
@@ -105,9 +104,9 @@ export function NotificationsSection({
       const result = await unsubscribeFromPush();
       if (result.ok) {
         setSubscribed(false);
-        showToast({ message: "Notifications disabled." });
+        toast("Notifications disabled.");
       } else {
-        showToast({ message: "Unable to disable notifications. Please try again." });
+        toast("Unable to disable notifications. Please try again.", { tone: "destructive" });
       }
     } finally {
       setBusy(false);
@@ -132,9 +131,7 @@ export function NotificationsSection({
     } catch {
       // Rollback on failure.
       setPrefs((p) => ({ ...p, [key]: previous }));
-      showToast({
-        message: "Unable to update notification preferences. Please try again.",
-      });
+      toast("Unable to update notification preferences. Please try again.", { tone: "destructive" });
     }
   }
 

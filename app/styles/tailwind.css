@@ -277,15 +277,6 @@
   }
 }
 
-/* Toaster.className targets its body-portaled viewport, not the app-shell sibling.
-   Match MobileNav's lg/print visibility and main's safe-area + dock + gap policy.
-   Only viewport layout changes; Ouro retains all toast appearance and motion. */
-@media screen and (width < 64rem) {
-  .sj-toast-above-dock {
-    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 5.25rem);
-  }
-}
-
 html {
   background: var(--sj-page);
   /* Below 1024px the phone tab bar is fixed to the bottom of the screen. Scrolling something into

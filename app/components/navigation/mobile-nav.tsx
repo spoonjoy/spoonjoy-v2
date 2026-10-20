@@ -3,6 +3,7 @@ import type { ElementType } from "react";
 import { useLocation } from "react-router";
 import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingBag } from "lucide-react";
 import { useDockContext } from "./dock-context";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { Link } from "~/components/navigation/app-link";
 
 /**
@@ -113,6 +114,15 @@ export function useMobileNavEligibility(isAuthenticated: boolean) {
   const { pathname } = useLocation();
   const { isSuppressed } = useDockContext();
   return !isSuppressed && !shouldHideTabBar(pathname, isAuthenticated);
+}
+
+/**
+ * HX's Toaster, raised on phones above the tab bar while it shows, by the same clearance as
+ * main's bottom padding, so a toast never covers a tab.
+ */
+export function MobileNavToaster({ isAuthenticated }: { isAuthenticated: boolean }) {
+  const clearsTabBar = useMobileNavEligibility(isAuthenticated);
+  return <Toaster className={clearsTabBar ? "max-lg:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]" : undefined} />;
 }
 
 // TODO(ouro-hx: tab-bar): The phone's bottom tab bar becomes HX's tab bar once it ships.
