@@ -100,8 +100,8 @@ describe("primary button contrast", () => {
     }
   });
 
-  it("the MCP page's primary link uses the same label and hover tokens", () => {
-    expect(MCP).toContain("text-[var(--sj-on-action)] hover:border-[var(--sj-action-hover)] hover:bg-[var(--sj-action-hover)]");
-    expect(MCP).not.toContain("bg-[var(--sj-action)] text-[var(--sj-on-photo)]");
+  it("the MCP page's primary link is the shared Button, so it uses the same label and hover tokens", () => {
+    expect(MCP).toContain('<Button href="/login" startIcon={Cable}>');
+    expect(MCP).not.toContain("bg-[var(--sj-action)]");
   });
 });

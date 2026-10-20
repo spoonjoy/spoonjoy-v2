@@ -96,14 +96,10 @@ function countVisibleInputs(content: string): number {
 }
 
 /**
- * The raw inputs each recipe route may keep. Every other field is one of Ouro UI's
- * (app/components/ouro/text-field/text-field.tsx).
+ * The raw inputs each recipe route may keep: none. Every field is one of Ouro HX's, and
+ * RecipeBuilder's data goes to the action with fetcher.submit, not through a hidden form.
  */
-const ALLOWED_RAW_INPUTS: Record<string, number> = {
-  // The image file input of the hidden form that carries RecipeBuilder's data to the action.
-  "app/routes/recipes.new.tsx": 1,
-  "app/routes/recipes.$id.edit.tsx": 1,
-};
+const ALLOWED_RAW_INPUTS: Record<string, number> = {};
 
 /**
  * How many raw <textarea> elements a chef can see. One with className="hidden" carries form data
