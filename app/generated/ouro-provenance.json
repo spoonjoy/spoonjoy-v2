@@ -129,7 +129,11 @@
       "components": [
         "avatar",
         "button",
+        "card",
+        "empty",
         "heading",
+        "item",
+        "item-group",
         "text",
         "toaster"
       ],
@@ -140,7 +144,19 @@
         "button": [
           "app/components/button.tsx"
         ],
+        "card": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "empty": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
         "heading": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "item": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "item-group": [
           "app/components/cookbook/KitchenHome.tsx"
         ],
         "text": [
