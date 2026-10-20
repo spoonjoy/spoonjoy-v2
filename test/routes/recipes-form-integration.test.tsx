@@ -778,25 +778,29 @@ describe("RecipeBuilder Route Integration", () => {
   });
 
   describe("encType for image upload", () => {
-    it("should use multipart/form-data encoding for new recipe form", async () => {
+    it("posts a new recipe as multipart/form-data", async () => {
+      let contentType: string | null = null;
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/new",
           Component: NewRecipe,
           loader: () => null,
+          action: async ({ request }) => {
+            contentType = request.headers.get("Content-Type");
+            return { errors: { general: "Stop here" } };
+          },
         },
       ]);
 
       render(<Stub initialEntries={["/recipes/new"]} />);
+      const user = userEvent.setup();
+      await user.type(await screen.findByRole("textbox", { name: "Title", exact: true }), "Multipart soup");
+      await user.click(screen.getByRole("button", { name: "Create recipe" }));
 
-      await screen.findByRole("button", { name: "Create recipe" });
-
-      // Find the form element and check encType
-      const form = document.querySelector("form");
-      expect(form).toHaveAttribute("encType", "multipart/form-data");
+      await waitFor(() => expect(contentType).toMatch(/^multipart\/form-data/));
     });
 
-    it("should use multipart/form-data encoding for edit recipe form", async () => {
+    it("posts an edited recipe as multipart/form-data", async () => {
       const mockData = {
         recipe: {
           id: recipeId,
@@ -808,23 +812,25 @@ describe("RecipeBuilder Route Integration", () => {
           coverImageUrl: "",
         formattedSteps: [],
       };
+      let contentType: string | null = null;
 
       const Stub = createTestRoutesStub([
         {
           path: "/recipes/:id/edit",
           Component: EditRecipe,
           loader: () => mockData,
+          action: async ({ request }) => {
+            contentType = request.headers.get("Content-Type");
+            return { errors: { general: "Stop here" } };
+          },
         },
       ]);
 
       render(<Stub initialEntries={[`/recipes/${recipeId}/edit`]} />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Save recipe" }));
 
-      await screen.findByRole("button", { name: "Save recipe" });
-
-      // Find the main recipe form (not step reorder forms)
-      const forms = document.querySelectorAll("form");
-      const mainForm = Array.from(forms).find(f => f.querySelector('button[type="submit"]')?.textContent?.includes("Save recipe"));
-      expect(mainForm).toHaveAttribute("encType", "multipart/form-data");
+      await waitFor(() => expect(contentType).toMatch(/^multipart\/form-data/));
     });
   });
 });

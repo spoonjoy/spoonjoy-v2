@@ -61,6 +61,14 @@ function ownerToolsToggle(page: Page) {
   return page.getByRole("button", { name: /^Owner tools/ });
 }
 
+// Opens the owner tools and waits until the panel has finished opening, so a tap on a tool lands
+// on the tool and not on a panel still sliding into place.
+async function openOwnerTools(page: Page) {
+  await ownerToolsToggle(page).click();
+  await expect(ownerToolsToggle(page)).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Edit title", exact: true })).toBeVisible();
+}
+
 test.describe("Cookbooks", () => {
   // The stored session path, not scratch(2).storageState: scratch() reads the per-run credentials
   // file, which `playwright test --list` must not need.
@@ -164,7 +172,7 @@ test.describe("Cookbooks", () => {
     await expect(seededRecipeLink(main, SALMON_TITLE, SALMON)).toBeVisible();
 
     // Remove it through the owner tools' confirmation dialog.
-    await ownerToolsToggle(page).click();
+    await openOwnerTools(page);
     await expect(ownerToolsToggle(page)).toHaveAttribute("aria-expanded", "true");
     await page.getByRole("button", { name: `Remove ${SALMON_TITLE} from cookbook`, exact: true }).click();
     const removeDialog = page.getByRole("alertdialog", { name: "Remove from cookbook?" });
@@ -204,7 +212,7 @@ test.describe("Cookbooks", () => {
     await expect(cookbookHeading(page, originalTitle)).toBeVisible();
     const cookbookPath = new URL(page.url()).pathname;
 
-    await ownerToolsToggle(page).click();
+    await openOwnerTools(page);
     await page.getByRole("button", { name: "Edit title", exact: true }).click();
     await expect(titleField).toHaveValue(originalTitle);
     // The title editor is an edit form, so it hides the tab bar too (R-M3-2).
@@ -251,7 +259,7 @@ test.describe("Cookbooks", () => {
     await cookbookLink(page, renamedTitle).click();
     await expect(page).toHaveURL(pathUrl(cookbookPath));
     await waitForHydration(page);
-    await ownerToolsToggle(page).click();
+    await openOwnerTools(page);
     await page.getByRole("button", { name: "Delete cookbook", exact: true }).click();
     const deleteDialog = page.getByRole("alertdialog", { name: "Delete this cookbook?" });
     await expect(deleteDialog).toBeVisible();
@@ -296,7 +304,7 @@ test.describe("Cookbooks", () => {
     await expect(cookbookHeading(page, title)).toBeVisible();
     await expect(forkLink).toHaveCount(0);
 
-    await ownerToolsToggle(page).click();
+    await openOwnerTools(page);
     const recipeSelect = page.getByRole("combobox", { name: "Recipe", exact: true });
     await recipeSelect.selectOption({ value: forkId });
     await expect(recipeSelect).toHaveValue(forkId);
