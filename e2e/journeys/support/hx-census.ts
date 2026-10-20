@@ -104,9 +104,9 @@ async function openUsesOutput(page: Page) {
 }
 
 async function pressImportMode(page: Page, name: string) {
-  const mode = page.getByRole("button", { name, exact: true });
+  const mode = page.getByRole("radio", { name, exact: true });
   await mode.click();
-  await expect(mode).toHaveAttribute("aria-pressed", "true");
+  await expect(mode).toHaveAttribute("aria-checked", "true");
 }
 
 function editStep(page: Page, stepNum: number) {

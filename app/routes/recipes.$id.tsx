@@ -22,6 +22,7 @@ import {
 } from "~/lib/recipe-detail.server";
 import { Button } from "~/components/button";
 import { toast } from "~/lib/ouro/toast";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
@@ -30,6 +31,7 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
+import { Toggle } from "~/components/ouro/toggle/toggle";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
@@ -610,19 +612,8 @@ export default function RecipeDetail() {
       {isOwner && (
         <div className="print:hidden" data-testid="recipe-owner-tools">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <button
-              type="button"
-              className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 border-b border-[var(--sj-border)] bg-transparent py-3 text-left font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-              aria-expanded={showOwnerTools}
-              aria-controls="recipe-owner-maintenance"
-              onClick={() => setShowOwnerTools((visible) => !visible)}
-            >
-              <span>Manage recipe</span>
-              <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
-            </button>
-
-            {showOwnerTools ? (
-              <div id="recipe-owner-maintenance" className="border-b border-[var(--sj-border)] py-5">
+            <Collapsible title="Manage recipe" open={showOwnerTools} onOpenChange={setShowOwnerTools}>
+              <div id="recipe-owner-maintenance" className="py-5">
                 <div className="flex flex-wrap gap-3">
                   <Button href={`/recipes/${recipe.id}/edit`} plain>
                     Edit recipe
@@ -650,7 +641,7 @@ export default function RecipeDetail() {
                   <RecipeCoverHistory covers={coverHistory} spoonImages={spoonImages} />
                 </div>
               </div>
-            ) : null}
+            </Collapsible>
           </div>
         </div>
       )}
@@ -718,22 +709,15 @@ export default function RecipeDetail() {
                 {availableCookbooks.map((cookbook) => {
                   const isSaved = savedCookbookIds.has(cookbook.id);
                   return (
-                    <button
+                    <Toggle
                       key={cookbook.id}
-                      onClick={() => handleToggleCookbookSave(cookbook.id)}
-                      aria-pressed={isSaved}
-                      className={`sj-instant-state w-full border-y px-4 py-3 text-left ${
-                        isSaved
-                          ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))] hover:bg-[color-mix(in_srgb,var(--sj-brass)_20%,var(--sj-panel-solid))]"
-                          : "border-[var(--sj-border)] bg-transparent hover:bg-[var(--sj-flour)]"
-                      }`}
+                      label={cookbook.title}
+                      variant="outline"
+                      pressed={isSaved}
+                      onPressedChange={() => handleToggleCookbookSave(cookbook.id)}
+                      className="w-full justify-start"
                       data-testid={`cookbook-item-${cookbook.id}`}
-                    >
-                      <Text tone="muted" className="flex items-center justify-between">
-                        <span>{cookbook.title}</span>
-                        {isSaved && <span className="text-[var(--sj-brass)]" aria-hidden="true">✓</span>}
-                      </Text>
-                    </button>
+                    />
                   );
                 })}
               </div>

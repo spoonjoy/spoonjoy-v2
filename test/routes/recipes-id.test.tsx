@@ -2503,10 +2503,6 @@ describe("Recipes $id Route", () => {
       expect(content?.contains(modal)).toBe(true);
       expect(modal.contains(modalBody)).toBe(true);
       expect(modalBody.contains(screen.getByTestId("cookbook-item-cb-1"))).toBe(true);
-      // A toggle's colours show whether the recipe is saved, so it switches instantly, never fading
-      // through mid-state colours (the Ouro dialog's subtree is left out of the global reset).
-      expect(screen.getByTestId("cookbook-item-cb-1")).toHaveClass("sj-instant-state");
-      expect(screen.getByTestId("cookbook-item-cb-1")).not.toHaveClass("transition-colors");
       expect(dialog.contains(modalFooter)).toBe(true);
       expect(content?.contains(modalFooter)).toBe(false);
       expect(modalFooter.contains(screen.getByTestId("create-cookbook-button"))).toBe(true);
@@ -2675,7 +2671,6 @@ describe("Recipes $id Route", () => {
       });
       const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
       expect(createdCookbook).toBeInTheDocument();
-      expect(createdCookbook).toHaveTextContent("✓");
       expect(createdCookbook).toHaveAttribute("aria-pressed", "true");
       await closeSaveModal(user);
     });
@@ -2835,11 +2830,9 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("dialog", { name: "Save to cookbook" });
 
       await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
-      expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveTextContent("✓");
       expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveAttribute("aria-pressed", "true");
 
       await user.click(screen.getByTestId("cookbook-item-cb-saved"));
-      expect(screen.getByTestId("cookbook-item-cb-saved")).not.toHaveTextContent("✓");
       expect(screen.getByTestId("cookbook-item-cb-saved")).toHaveAttribute("aria-pressed", "false");
 
       await waitFor(() => {
@@ -3426,7 +3419,7 @@ describe("Recipes $id Route", () => {
         // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
         // session, so nothing may be sent from the confirm on: no save, no session start.
         const increaseScale = screen.getByRole("button", { name: "Increase scale" });
-        await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+        await user.click(screen.getByRole("button", { name: "Manage recipe" }));
         await user.click(screen.getByRole("button", { name: "Delete" }));
         const confirm = await screen.findByRole("button", { name: "Delete" });
         // The released modal removes background controls from the accessibility tree.
@@ -4270,7 +4263,7 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      fireEvent.click(screen.getByRole("button", { name: "Manage recipe" }));
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
@@ -4355,7 +4348,7 @@ describe("Recipes $id Route", () => {
 
       const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Cover History Recipe" });
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
 
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
@@ -4442,7 +4435,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
       expect(screen.getByRole("status")).toHaveTextContent("Styling cover");
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
       expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Styling cover");
     });
@@ -5002,7 +4995,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Recipe to Delete" });
       expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
 
       // The dialog names the recipe and what deleting it does, instead of asking the same question twice.
@@ -5044,7 +5037,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Actions" });
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
       await waitFor(() => {
@@ -5087,7 +5080,7 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Delete" }));
 

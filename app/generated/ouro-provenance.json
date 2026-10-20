@@ -1386,9 +1386,11 @@
         "confirm-dialog",
         "field",
         "fieldset",
+        "file-field",
         "form",
         "link",
         "reorderable",
+        "segmented-control",
         "switch",
         "text",
         "text-area",
@@ -1407,11 +1409,13 @@
         "field": [
           "app/components/recipe/ManualIngredientInput.tsx",
           "app/components/recipe/ParsedIngredientRow.tsx",
-          "app/components/recipe/RecipeImportPanel.tsx",
           "app/components/recipe/StepEditorCard.tsx"
         ],
         "fieldset": [
           "app/components/recipe/RecipeBuilder.tsx"
+        ],
+        "file-field": [
+          "app/components/recipe/RecipeImportPanel.tsx"
         ],
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
@@ -1424,6 +1428,9 @@
         ],
         "reorderable": [
           "app/components/recipe/StepList.tsx"
+        ],
+        "segmented-control": [
+          "app/components/recipe/RecipeImportPanel.tsx"
         ],
         "switch": [
           "app/components/recipe/IngredientInputToggle.tsx"
@@ -1558,6 +1565,7 @@
         "button",
         "checkbox",
         "checklist",
+        "collapsible",
         "confirm-dialog",
         "dialog",
         "empty",
@@ -1574,7 +1582,8 @@
         "text",
         "text-area",
         "text-field",
-        "toaster"
+        "toaster",
+        "toggle"
       ],
       "renders": {
         "avatar": [
@@ -1595,6 +1604,9 @@
         ],
         "checklist": [
           "app/components/recipe/IngredientList.tsx"
+        ],
+        "collapsible": [
+          "app/routes/recipes.$id.tsx"
         ],
         "confirm-dialog": [
           "app/routes/recipes.$id.tsx"
@@ -1664,6 +1676,9 @@
         ],
         "toaster": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "toggle": [
+          "app/routes/recipes.$id.tsx"
         ]
       }
     },
@@ -1736,9 +1751,11 @@
         "confirm-dialog",
         "field",
         "fieldset",
+        "file-field",
         "form",
         "link",
         "reorderable",
+        "segmented-control",
         "switch",
         "text-area",
         "text-field"
@@ -1758,11 +1775,13 @@
         "field": [
           "app/components/recipe/ManualIngredientInput.tsx",
           "app/components/recipe/ParsedIngredientRow.tsx",
-          "app/components/recipe/RecipeImportPanel.tsx",
           "app/components/recipe/StepEditorCard.tsx"
         ],
         "fieldset": [
           "app/components/recipe/RecipeBuilder.tsx"
+        ],
+        "file-field": [
+          "app/components/recipe/RecipeImportPanel.tsx"
         ],
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
@@ -1775,6 +1794,9 @@
         ],
         "reorderable": [
           "app/components/recipe/StepList.tsx"
+        ],
+        "segmented-control": [
+          "app/components/recipe/RecipeImportPanel.tsx"
         ],
         "switch": [
           "app/components/recipe/IngredientInputToggle.tsx"
