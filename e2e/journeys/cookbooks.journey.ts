@@ -48,9 +48,13 @@ function cookbookLink(page: Page, title: string) {
   return page.getByRole("main").getByRole("link", { name: new RegExp(`^${title}`) });
 }
 
-// The cookbook's row in the list: its link, and the recipe count beside it.
+// The cookbook's row in the list: its link, and the recipe count beside it. (A filter's `has`
+// is looked up inside each row, so it names the link without the main landmark.)
 function cookbookRow(page: Page, title: string) {
-  return page.getByRole("main").getByRole("listitem").filter({ has: cookbookLink(page, title) });
+  return page
+    .getByRole("main")
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("link", { name: new RegExp(`^${title}`) }) });
 }
 
 function ownerToolsToggle(page: Page) {

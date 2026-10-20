@@ -13,7 +13,7 @@
 // the URL the app redirects to.
 import { test, expect } from "./support/journey";
 import type { Page, TestInfo } from "@playwright/test";
-import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
+import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 
 // qa_kitchen_friend's seeded recipe.
@@ -136,7 +136,7 @@ test.describe("Social", () => {
     const savedRow = page
       .getByRole("list", { name: "Saved recipes" })
       .getByRole("listitem")
-      .filter({ has: recipeLink(page.getByRole("list", { name: "Saved recipes" }), RISOTTO_TITLE, RISOTTO) });
+      .filter({ has: page.locator(`a[href="${RISOTTO}"]`) });
     await page.goto("/saved-recipes");
     await expect(page.getByRole("heading", { level: 1, name: "Saved Recipes", exact: true })).toBeVisible();
     await expect(savedRow).toContainText(`By ${FRIEND} - ${cookbook}`);
@@ -248,7 +248,7 @@ test.describe("Social, in a British locale in Kiritimati", () => {
     const fellowChefRow = page
       .getByRole("region", { name: "Fellow Chefs" })
       .getByRole("listitem")
-      .filter({ has: fellowChef });
+      .filter({ has: page.getByRole("link", { name: new RegExp(FRIEND) }) });
     const cookActivity = page
       .getByRole("region", { name: "Chef activity" })
       .getByText(`You cooked ${RISOTTO_TITLE} from ${FRIEND}.`, { exact: true })
