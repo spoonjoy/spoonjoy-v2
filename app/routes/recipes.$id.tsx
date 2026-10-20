@@ -27,7 +27,7 @@ import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Heading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/navigation/app-link";
 import { Text } from "~/components/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";

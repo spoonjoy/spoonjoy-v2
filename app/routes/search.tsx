@@ -3,7 +3,7 @@ import { useId } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
 import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/navigation/app-link";
 import { Text } from "~/components/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
@@ -228,7 +228,7 @@ export default function Search() {
               has no such top-level restriction, and it's the correct role for this: an in-page
               menu of links that switch the search scope. */}
           <nav aria-label="Search scope" className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
-            <Subheading level={2} size="lg">{SCOPE_LABELS[scope]}</Subheading>
+            <Heading level={2} size="lg">{SCOPE_LABELS[scope]}</Heading>
             <p className="text-base/6 text-[var(--sj-ink-soft)] mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</p>
             <div className="mt-5 grid gap-0">
               {SEARCH_SCOPES.map((searchScope) => {
@@ -261,7 +261,7 @@ export default function Search() {
           <section aria-label="Search results">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <Subheading level={2} size="xl">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
+                <Heading level={2} size="xl">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Heading>
                 <Text size="sm" className="mt-1">{resultCountLabel(results.length)}</Text>
               </div>
             </div>

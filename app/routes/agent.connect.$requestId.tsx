@@ -21,7 +21,7 @@ import {
   typedCodeFor,
 } from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/button";
-import { Heading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/text";
 
 type Requester = {
@@ -212,7 +212,7 @@ export default function AgentConnect() {
   return (
     <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
       <p className={LABEL}>Agent access</p>
-      <Heading className="mt-3">{connectionTitle(connection.status)}</Heading>
+      <Heading level={1} size="xl" className="mt-3">{connectionTitle(connection.status)}</Heading>
       <Text size="lg" className="mt-5 leading-7">
         {actionable
           ? `A client calling itself "${connection.agentName}" wants permission to use Spoonjoy with these exact scopes.`

@@ -88,7 +88,6 @@
         "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/KitchenHome.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/navigation/dock-context.tsx",
         "app/components/navigation/index.ts",
@@ -145,7 +144,7 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/components/cookbook/KitchenHome.tsx"
         ],
         "text": [
           "app/components/text.tsx"
@@ -596,7 +595,6 @@
       "sources": [
         "app/routes/agent.connect.tsx",
         "app/components/button.tsx",
-        "app/components/heading.tsx",
         "app/components/text.tsx",
         "app/lib/agent-connection-route.server.ts",
         "app/lib/analytics-server.ts",
@@ -632,7 +630,7 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/agent.connect.tsx"
         ],
         "text": [
           "app/components/text.tsx"
@@ -645,7 +643,6 @@
       "sources": [
         "app/routes/agent.connect.$requestId.tsx",
         "app/components/button.tsx",
-        "app/components/heading.tsx",
         "app/components/text.tsx",
         "app/lib/agent-connection-route.server.ts",
         "app/lib/agent-connection-scopes.ts",
@@ -741,7 +738,7 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/agent.connect.$requestId.tsx"
         ],
         "text": [
           "app/components/text.tsx"
@@ -800,7 +797,6 @@
       "sources": [
         "app/routes/privacy.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/text.tsx",
         "app/lib/image-loading.ts"
@@ -812,7 +808,7 @@
       ],
       "renders": {
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/privacy.tsx"
         ],
         "link": [
           "app/routes/privacy.tsx"
@@ -828,7 +824,6 @@
       "sources": [
         "app/routes/terms.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/text.tsx",
         "app/lib/image-loading.ts"
@@ -840,7 +835,7 @@
       ],
       "renders": {
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/terms.tsx"
         ],
         "link": [
           "app/routes/terms.tsx"
@@ -930,7 +925,6 @@
         "app/routes/search.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/components/text.tsx",
@@ -977,7 +971,7 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/search.tsx"
         ],
         "text": [
           "app/components/text.tsx"
@@ -1151,7 +1145,6 @@
         "app/routes/recipes._index.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/navigation/dock-context.tsx",
         "app/components/navigation/index.ts",
@@ -1210,7 +1203,7 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/recipes._index.tsx"
         ],
         "show-more": [
           "app/routes/recipes._index.tsx"
@@ -1369,7 +1362,6 @@
         "app/components/cookbook/page.tsx",
         "app/components/errors/route-error.tsx",
         "app/components/feedback/toast.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/navigation/dock-context.tsx",
         "app/components/navigation/index.ts",
@@ -1519,7 +1511,7 @@
           "app/routes/recipes.$id.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/recipes.$id.tsx"
         ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",
@@ -2462,7 +2454,6 @@
         "app/components/button.tsx",
         "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/local-date.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/pantry/CookbookCard.tsx",
@@ -2528,7 +2519,9 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/components/pantry/CookbookCard.tsx",
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/routes/users.$identifier.tsx"
         ],
         "link": [
           "app/routes/users.$identifier.tsx"
@@ -2547,7 +2540,6 @@
       "sources": [
         "app/routes/users.$identifier.fellow-chefs.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/text.tsx",
         "app/components/users/FellowChefList.tsx",
@@ -2580,7 +2572,7 @@
           "app/components/users/FellowChefList.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/users.$identifier.fellow-chefs.tsx"
         ],
         "link": [
           "app/routes/users.$identifier.fellow-chefs.tsx"
@@ -2596,7 +2588,6 @@
       "sources": [
         "app/routes/users.$identifier.kitchen-visitors.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/heading.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/text.tsx",
         "app/components/users/FellowChefList.tsx",
@@ -2629,7 +2620,7 @@
           "app/components/users/FellowChefList.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/users.$identifier.kitchen-visitors.tsx"
         ],
         "link": [
           "app/routes/users.$identifier.kitchen-visitors.tsx"
@@ -2752,7 +2743,6 @@
       "sources": [
         "app/routes/oauth.authorize.tsx",
         "app/components/button.tsx",
-        "app/components/heading.tsx",
         "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2794,7 +2784,7 @@
           "app/components/button.tsx"
         ],
         "heading": [
-          "app/components/heading.tsx"
+          "app/routes/oauth.authorize.tsx"
         ],
         "text": [
           "app/components/text.tsx"

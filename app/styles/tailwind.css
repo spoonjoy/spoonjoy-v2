@@ -152,6 +152,8 @@
   --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
+  /* HX Heading's typeface: Spoonjoy's display serif for every heading. */
+  --font-heading: var(--font-sj-display);
 }
 
 /* Spoonjoy's primary action palette is not its brass text-link palette. Bind the

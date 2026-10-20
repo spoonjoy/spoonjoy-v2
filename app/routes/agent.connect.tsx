@@ -9,7 +9,7 @@ import {
   rememberTypedCode,
 } from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/button";
-import { Heading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/text";
 
 type LookupData = {
@@ -71,7 +71,7 @@ export default function AgentConnectLookup() {
       <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
         Agent access
       </p>
-      <Heading className="mt-3">Enter Connection Code</Heading>
+      <Heading level={1} size="xl" className="mt-3">Enter Connection Code</Heading>
       <Text size="lg" className="mt-5 leading-7">
         Enter the short Spoonjoy code shown by your device, CLI, or agent. You will sign in before approving access.
       </Text>

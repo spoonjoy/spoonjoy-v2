@@ -1,7 +1,7 @@
 import type { Route } from "./+types/terms";
 import type { ReactNode } from "react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
-import { Subheading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/text";
 
@@ -18,7 +18,7 @@ export function meta({}: Route.MetaArgs) {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-8">
-      <Subheading level={2} size="xl">{title}</Subheading>
+      <Heading level={2} size="xl">{title}</Heading>
       <div className="mt-3 space-y-3 text-base/7 text-[var(--sj-ink-soft)]">{children}</div>
     </section>
   );

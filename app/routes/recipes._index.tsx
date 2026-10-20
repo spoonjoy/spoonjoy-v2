@@ -3,7 +3,7 @@ import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
 import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/navigation/app-link";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/text";
@@ -147,9 +147,9 @@ export default function RecipesIndex() {
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="sj-eyebrow">{hasQuery ? "Matches" : after ? "Older recipes" : "Recently cooked and saved"}</p>
-              <Subheading level={2} size="2xl" className="mt-1 leading-9">
+              <Heading level={2} size="2xl" className="mt-1 leading-9">
                 {hasQuery ? `Recipes for "${query}"` : "All public recipes"}
-              </Subheading>
+              </Heading>
             </div>
             <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs font-semibold uppercase tracking-[0.16em]">
               {list.nextCursor ? `${recipes.length} shown` : `${recipes.length} ${recipes.length === 1 ? "recipe" : "recipes"}`}

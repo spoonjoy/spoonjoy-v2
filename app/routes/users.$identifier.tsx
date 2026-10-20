@@ -6,7 +6,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/text";
 import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
@@ -301,7 +301,7 @@ export default function UserProfile() {
               region instead of dropping to a plain <div>. */}
           <section aria-labelledby="chef-cookbooks-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <Subheading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Subheading>
+              <Heading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Heading>
               <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</p>
             </div>
 

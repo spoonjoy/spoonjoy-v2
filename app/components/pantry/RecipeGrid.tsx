@@ -1,5 +1,5 @@
 import { Bookmark, Share2, UtensilsCrossed } from 'lucide-react'
-import { Subheading } from '../heading'
+import { Heading } from '~/components/ouro/text/heading'
 import { Link } from '../navigation/app-link'
 import { Text } from '../text'
 import { Button } from '../button'
@@ -139,7 +139,7 @@ export function RecipeGrid({
   return (
     <section>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <Subheading level={2} size="xl">Recipes</Subheading>
+        <Heading level={2} size="xl">Recipes</Heading>
         <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{totalCount} total</p>
       </div>
       <div className={loadMore ? "border-t border-[var(--sj-border)]" : "sj-list-ruled"}>

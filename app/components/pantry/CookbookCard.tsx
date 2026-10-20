@@ -1,5 +1,5 @@
 import { Share2 } from 'lucide-react'
-import { Heading } from '../heading'
+import { Heading } from '~/components/ouro/text/heading'
 import { Link } from '../navigation/app-link'
 import { CookbookCoverArt } from '../cookbook/CookbookCoverArt'
 

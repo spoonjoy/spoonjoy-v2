@@ -1,7 +1,7 @@
 import { Avatar } from '../ouro/avatar/avatar'
 import { Badge } from '../ouro/badge/badge'
 import { Button } from '../button'
-import { Heading } from '../heading'
+import { Heading } from '~/components/ouro/text/heading'
 import { Link } from '../navigation/app-link'
 import { Text } from '../text'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'

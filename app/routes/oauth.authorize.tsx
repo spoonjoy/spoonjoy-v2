@@ -27,7 +27,7 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { Heading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/button";
 import { Text } from "~/components/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
@@ -274,7 +274,7 @@ export default function OAuthAuthorize() {
         <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
           Kitchen connection
         </p>
-        <Heading className="mt-3">Connection problem</Heading>
+        <Heading level={1} size="xl" className="mt-3">Connection problem</Heading>
         <Text className="mt-4" role="alert">
           {view.message}
         </Text>
@@ -307,7 +307,7 @@ export default function OAuthAuthorize() {
           Approve only if you recognize this site and started the connection.
         </Text>
       </div>
-      <Heading className="mt-3">Connect {appName} to Spoonjoy</Heading>
+      <Heading level={1} size="xl" className="mt-3">Connect {appName} to Spoonjoy</Heading>
       <Text className="mt-4 leading-7">
         {appName} wants access to your Spoonjoy kitchen.
       </Text>

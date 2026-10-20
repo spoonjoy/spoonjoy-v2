@@ -294,14 +294,9 @@ describe("Individual Route Detailed Checks", () => {
   describe("recipes.$id.tsx (Recipe Detail)", () => {
     const filePath = "app/routes/recipes.$id.tsx";
 
-    it("should use Heading component for h1/h2", () => {
+    it("should use Ouro HX Heading for h1/h2", () => {
       const content = readSourceFile(filePath);
-      expect(
-        content.includes('from "~/components/heading"') ||
-        content.includes("from '~/components/heading'") ||
-        content.includes("Heading"),
-        "Should use Heading component for headings"
-      ).toBe(true);
+      expect(content, "Should use Ouro HX Heading for headings").toContain('from "~/components/ouro/text/heading"');
     });
 
     it("should use Text component for paragraphs", () => {

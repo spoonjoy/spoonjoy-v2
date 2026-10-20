@@ -1,5 +1,5 @@
 import { Button } from '../button'
-import { Subheading } from '../heading'
+import { Heading } from '~/components/ouro/text/heading'
 import { Text } from '../text'
 import { CookbookHeader, CookbookPage } from '~/components/cookbook/page'
 import { BioCard, type BioCardProps } from './BioCard'
@@ -32,9 +32,9 @@ export function PantryPage({
         </aside>
 
         <section className="lg:col-span-8">
-          <Subheading level={2} size="xl" className="mb-4">
+          <Heading level={2} size="xl" className="mb-4">
             Pantry Recipes
-          </Subheading>
+          </Heading>
           <RecipeGrid recipes={recipes} />
         </section>
       </div>
