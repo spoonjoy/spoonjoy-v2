@@ -432,6 +432,39 @@ describe("shopping list UX updates", () => {
     expect(screen.getByRole("heading", { name: "Nothing in the basket yet" })).toBeInTheDocument();
   });
 
+  it("says when a view other than the basket has nothing left", async () => {
+    const Stub = createTestRoutesStub([
+      {
+        path: "/shopping-list",
+        Component: ShoppingList,
+        loader: () => ({
+          shoppingList: {
+            id: "list-all-checked",
+            items: [
+              {
+                id: "item-done",
+                quantity: 1,
+                checked: true,
+                unit: null,
+                ingredientRef: { name: "tomatoes" },
+                categoryKey: "produce",
+                iconKey: "carrot",
+              },
+            ],
+          },
+          recipes: [],
+        }),
+        action: async () => ({ success: true }),
+      },
+    ]);
+
+    render(<Stub initialEntries={["/shopping-list"]} />);
+
+    fireEvent.click(within(await screen.findByRole("radiogroup", { name: "View" })).getByRole("radio", { name: /^Need/ }));
+
+    expect(screen.getByRole("heading", { name: "Nothing left in this view" })).toBeInTheDocument();
+  });
+
   it("groups repeated category headings into one aisle section", async () => {
     const Stub = createTestRoutesStub([
       {
