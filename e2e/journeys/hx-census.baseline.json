@@ -1429,47 +1429,83 @@
     "developers-playground": {
       "default": [
         {
-          "identity": "button \"Copy Browser extension ingredient sync sample\" [-/-] in main",
+          "identity": "button \"200 Example\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Cloudflare Worker sync bridge sample\" [-/-] in main",
+          "identity": "button \"400 Invalid Cursor\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Delegated approval link sample\" [-/-] in main",
+          "identity": "button \"400 Validation Error\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy No-code connector sample\" [-/-] in main",
+          "identity": "button \"401 Invalid Token\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy OAuth/PKCE delegated app sample\" [-/-] in main",
+          "identity": "button \"403 Insufficient Scope\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Public data export sample\" [-/-] in main",
+          "identity": "button \"405 Method Not Allowed\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Remote MCP client sample\" [-/-] in main",
+          "identity": "button \"429 Rate Limited\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Spoonjoy Apple native dogfood sample\" [-/-] in main",
+          "identity": "button \"500 Internal Error\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy curl\" [-/-] in main",
+          "identity": "button \"Copy Browser extension ingredient sync sample\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy import URL\" [-/-] in main",
+          "identity": "button \"Copy Cloudflare Worker sync bridge sample\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy path\" [-/-] in main",
+          "identity": "button \"Copy Delegated approval link sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No-code connector sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy OAuth/PKCE delegated app sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Public data export sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Remote MCP client sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Spoonjoy Apple native dogfood sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy curl\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy import URL\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy path\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Cursor policy\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -1789,6 +1825,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Retry policy\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Send request\" [button/root] in main",
           "count": 1
         },
@@ -1829,51 +1869,51 @@
           "count": 1
         },
         {
-          "identity": "radio \"All APIs\" [-/-] in main",
+          "identity": "radio \"All APIs\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Anonymous\" [-/-] in main",
+          "identity": "radio \"Anonymous\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Bearer\" [-/-] in main",
+          "identity": "radio \"Bearer\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Connector\" [-/-] in main",
+          "identity": "radio \"Connector\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"SDK\" [-/-] in main",
+          "identity": "radio \"SDK\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Session\" [-/-] in main",
+          "identity": "radio \"Session\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Cursor v1.cursor_from_nextCursor query - Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.\" [-/-] in main",
+          "identity": "searchbox \"Search operations\" [text-field/input] in region \"Operations\"",
           "count": 1
         },
         {
-          "identity": "textbox \"Limit 20 query - Page size from 1 to 50. Defaults to 20.\" [-/-] in main",
+          "identity": "textbox \"Cursor\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Q weeknight query - Search-text alias for clients that conventionally use q. Ignored when query is also present.\" [-/-] in main",
+          "identity": "textbox \"Limit\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Query pasta query - Search text. When both query and q are sent, query wins.\" [-/-] in main",
+          "identity": "textbox \"Q\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Search operationsrecipe, token, sync...\" [-/-] in region \"Operations\"",
+          "identity": "textbox \"Query\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"X Request Id X-Request-Id header - Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.\" [-/-] in main",
+          "identity": "textbox \"X Request Id\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -7439,47 +7479,83 @@
     "developers-playground": {
       "default": [
         {
-          "identity": "button \"Copy Browser extension ingredient sync sample\" [-/-] in main",
+          "identity": "button \"200 Example\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Cloudflare Worker sync bridge sample\" [-/-] in main",
+          "identity": "button \"400 Invalid Cursor\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Delegated approval link sample\" [-/-] in main",
+          "identity": "button \"400 Validation Error\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy No-code connector sample\" [-/-] in main",
+          "identity": "button \"401 Invalid Token\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy OAuth/PKCE delegated app sample\" [-/-] in main",
+          "identity": "button \"403 Insufficient Scope\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Public data export sample\" [-/-] in main",
+          "identity": "button \"405 Method Not Allowed\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Remote MCP client sample\" [-/-] in main",
+          "identity": "button \"429 Rate Limited\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy Spoonjoy Apple native dogfood sample\" [-/-] in main",
+          "identity": "button \"500 Internal Error\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy curl\" [-/-] in main",
+          "identity": "button \"Copy Browser extension ingredient sync sample\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy import URL\" [-/-] in main",
+          "identity": "button \"Copy Cloudflare Worker sync bridge sample\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "button \"Copy path\" [-/-] in main",
+          "identity": "button \"Copy Delegated approval link sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No-code connector sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy OAuth/PKCE delegated app sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Public data export sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Remote MCP client sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Spoonjoy Apple native dogfood sample\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy curl\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy import URL\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy path\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Cursor policy\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -7795,6 +7871,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Retry policy\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Send request\" [button/root] in main",
           "count": 1
         },
@@ -7835,51 +7915,51 @@
           "count": 1
         },
         {
-          "identity": "radio \"All APIs\" [-/-] in main",
+          "identity": "radio \"All APIs\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Anonymous\" [-/-] in main",
+          "identity": "radio \"Anonymous\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Bearer\" [-/-] in main",
+          "identity": "radio \"Bearer\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Connector\" [-/-] in main",
+          "identity": "radio \"Connector\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"SDK\" [-/-] in main",
+          "identity": "radio \"SDK\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "radio \"Session\" [-/-] in main",
+          "identity": "radio \"Session\" [segmented-control/segment] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Cursor v1.cursor_from_nextCursor query - Opaque pagination cursor returned as nextCursor. Catalog cursors are v1.* values; shopping-list sync also accepts an ISO timestamp only as bootstrap compatibility.\" [-/-] in main",
+          "identity": "searchbox \"Search operations\" [text-field/input] in region \"Operations\"",
           "count": 1
         },
         {
-          "identity": "textbox \"Limit 20 query - Page size from 1 to 50. Defaults to 20.\" [-/-] in main",
+          "identity": "textbox \"Cursor\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Q weeknight query - Search-text alias for clients that conventionally use q. Ignored when query is also present.\" [-/-] in main",
+          "identity": "textbox \"Limit\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Query pasta query - Search text. When both query and q are sent, query wins.\" [-/-] in main",
+          "identity": "textbox \"Q\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"Search operationsrecipe, token, sync...\" [-/-] in region \"Operations\"",
+          "identity": "textbox \"Query\" [text-field/input] in main",
           "count": 1
         },
         {
-          "identity": "textbox \"X Request Id X-Request-Id header - Optional client-generated request id. Spoonjoy echoes it in X-Request-Id and the REST envelope for logs, retries, and support.\" [-/-] in main",
+          "identity": "textbox \"X Request Id\" [text-field/input] in main",
           "count": 1
         }
       ]
