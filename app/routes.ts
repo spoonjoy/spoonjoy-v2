@@ -20,6 +20,7 @@ export default [
   route(".redwood/functions/auth/oauth", "routes/redwood-functions-auth-oauth.tsx"),
   route("privacy", "routes/privacy.tsx"),
   route("terms", "routes/terms.tsx"),
+  route("test-kitchen", "routes/test-kitchen.tsx"),
   route("search", "routes/search.tsx"),
   route("my-recipes", "routes/my-recipes.tsx"),
   route("saved-recipes", "routes/saved-recipes.tsx"),

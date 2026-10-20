@@ -60,6 +60,7 @@ describe("sitemap.xml route", () => {
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     );
     expect(xml).toContain("<loc>https://spoonjoy.app/</loc>");
+    expect(xml).toContain("<loc>https://spoonjoy.app/test-kitchen</loc>");
     expect(xml).toContain(`<loc>https://spoonjoy.app/recipes/${recipe.id}</loc>`);
     expect(xml).toContain(
       `<loc>https://spoonjoy.app/cookbooks/${cookbook.id}</loc>`,

@@ -129,6 +129,30 @@ export const census: Journey[] = [
   { id: "log-out", enrolled: false, persona: "chef", path: "/logout", states: [DEFAULT] },
   { id: "privacy", enrolled: false, persona: "signed-out", path: "/privacy", states: [DEFAULT] },
   { id: "terms", enrolled: false, persona: "signed-out", path: "/terms", states: [DEFAULT] },
+  // The Test Kitchen's own controls are all HX; it enrolls once the site header around it is too.
+  {
+    id: "test-kitchen",
+    enrolled: false,
+    persona: "signed-out",
+    path: "/test-kitchen",
+    states: [
+      DEFAULT,
+      {
+        id: "cook-mode",
+        action: async (page) => {
+          await page.getByRole("button", { name: "Start cooking", exact: true }).click();
+          await expect(page.getByTestId("cook-mode-panel")).toBeVisible();
+        },
+      },
+      {
+        id: "xray",
+        action: async (page) => {
+          await page.getByRole("switch", { name: "X-ray", exact: true }).click();
+          await expect(page.getByRole("group", { name: "X-ray", exact: true })).toBeVisible();
+        },
+      },
+    ],
+  },
   { id: "account-deleted", enrolled: false, persona: "signed-out", path: "/account/deleted", states: [DEFAULT] },
   { id: "not-found", enrolled: false, persona: "signed-out", path: "/hx-census-page-that-does-not-exist", status: 404, states: [DEFAULT] },
 

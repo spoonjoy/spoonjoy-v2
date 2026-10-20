@@ -226,6 +226,16 @@ class MockResizeObserver {
 }
 global.ResizeObserver = MockResizeObserver;
 
+// happy-dom has no Element.checkVisibility or Document.getAnimations, which HX's Inspector (X-ray)
+// reads to skip hidden components and wait for the page to settle; here every element is visible
+// and nothing is moving.
+if (typeof Element !== "undefined" && typeof Element.prototype.checkVisibility !== "function") {
+  Object.defineProperty(Element.prototype, "checkVisibility", { configurable: true, value: () => true });
+}
+if (typeof document !== "undefined" && typeof document.getAnimations !== "function") {
+  Object.defineProperty(document, "getAnimations", { configurable: true, value: () => [] });
+}
+
 // Mock window.confirm for browser confirm dialogs in tests
 // Returns true by default to allow forms to submit
 global.confirm = vi.fn(() => true);
