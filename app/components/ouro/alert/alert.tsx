@@ -287,6 +287,8 @@ export function Alert(props: AlertProps): JSX.Element {
           tone="secondary"
           size="sm"
           aria-label={dismissLabel}
+          data-ouro-control="alert"
+          data-ouro-part="dismiss"
           onClick={(event: MouseEvent<HTMLButtonElement>) => {
             const button = event.currentTarget;
             const target = focusTarget(button.closest('[data-ouro="alert"]')!);

@@ -239,7 +239,7 @@ export function Badge(props: BadgeProps): JSX.Element {
   if (rest.href !== undefined) {
     const { type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<BadgeLinkProps, keyof BadgeBaseProps>;
     return (
-      <RouterLink {...anchorProps} onClick={onClick} data-ouro="badge" className={cn(base, interactive, look, className)}>
+      <RouterLink data-ouro-control="badge" data-ouro-part="root" {...anchorProps} onClick={onClick} data-ouro="badge" className={cn(base, interactive, look, className)}>
         <TouchTarget />
         {content}
       </RouterLink>
@@ -248,7 +248,7 @@ export function Badge(props: BadgeProps): JSX.Element {
   const { ref, type = "button", disabled, ...buttonProps } = rest as Omit<BadgeButtonProps, keyof BadgeBaseProps>;
   if (onClick !== undefined) {
     return (
-      <BaseButton {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" className={cn(base, interactive, look, className)}>
+      <BaseButton data-ouro-control="badge" data-ouro-part="root" {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" className={cn(base, interactive, look, className)}>
         <TouchTarget />
         {content}
       </BaseButton>

@@ -6,6 +6,7 @@ import type { JSX, ReactNode, Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { choicesClass, contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -125,6 +126,8 @@ export interface RadioProps {
 const groupOwner = { name: "RadioGroup", data: "radio-group", layout: "group" } as const;
 /** Field's messages and root name Radio, and put the radio before its label. */
 const radioOwner = { name: "Radio", data: "radio", layout: "inline" } as const;
+/** Marks the hidden input Base UI submits each radio with. */
+const markInput = controlRef("radio-group", "hidden-input");
 
 /** The radio, inside its Field item: it takes its name and description ids from the field. */
 function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | undefined }): JSX.Element {
@@ -133,6 +136,9 @@ function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | un
     <BaseRadio.Root
       value={value}
       ref={ref}
+      inputRef={markInput}
+      data-ouro-control="radio-group"
+      data-ouro-part="circle"
       // Set here, not left to Base UI's effects, so the server HTML names and describes the radio.
       aria-labelledby={field.labelId}
       aria-describedby={field.describedBy}

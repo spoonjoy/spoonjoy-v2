@@ -262,7 +262,7 @@ function ShowMoreText({
         {children}
       </div>
       {overflowing && (
-        <Button variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" onClick={() => setExpanded(!expanded)}>
+        <Button variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" data-ouro-control="show-more" data-ouro-part="toggle" onClick={() => setExpanded(!expanded)}>
           {expanded ? showLessLabel : showMoreLabel}
         </Button>
       )}
@@ -363,7 +363,7 @@ function ShowMoreList(props: (ShowMoreItemsProps | ShowMoreLoadProps) & { showMo
       variant="plain"
       size="sm"
       className="-ms-(--ouro-button-px)"
-      data-ouro-show-more-toggle=""
+      data-ouro-show-more-toggle="" data-ouro-control="show-more" data-ouro-part="toggle"
       loading={loading}
       loadingLabel={load.loadingLabel}
       onClick={press}
@@ -372,7 +372,7 @@ function ShowMoreList(props: (ShowMoreItemsProps | ShowMoreLoadProps) & { showMo
       {showMoreLabel}
     </Button>
   ) : (
-    <Button ref={buttonRef as Ref<HTMLButtonElement>} variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" onClick={press}>
+    <Button ref={buttonRef as Ref<HTMLButtonElement>} variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" data-ouro-control="show-more" data-ouro-part="toggle" onClick={press}>
       {expanded ? showLessLabel : showMoreLabel}
     </Button>
   );

@@ -56,7 +56,7 @@ describe("devThrow", () => {
 
 describe("checkTheme", () => {
   const MESSAGE =
-    "[ouro-ui] theme: ouro-base is not in this page's CSS (--ouro-layer is unset), so overlays have no backdrop, layer or motion and fields have no border. Fix: npx shadcn@latest add ourostack/ouro-ui/ouro-base#v1.0.2.";
+    "[ouro-ui] theme: ouro-base is not in this page's CSS (--ouro-layer is unset), so overlays have no backdrop, layer or motion and fields have no border. Fix: npx shadcn@latest add ourostack/ouro-ui/ouro-base#v1.1.0.";
   const root = document.documentElement;
   const again = () => delete (window as unknown as Record<symbol, unknown>)[Symbol.for("ouro-ui.theme-checked")];
   /** The page as it is in an app that never added ouro-base: the token has no value. */

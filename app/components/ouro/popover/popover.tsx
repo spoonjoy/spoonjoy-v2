@@ -259,6 +259,8 @@ export function Popover(props: PopoverProps): JSX.Element {
             <div
               ref={bodyRef}
               data-ouro-popover-content=""
+              data-ouro-control="popover"
+              data-ouro-part="content"
               className="box-border min-h-0 flex-auto overflow-y-auto overscroll-contain text-sm leading-5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid"
             >
               {children}

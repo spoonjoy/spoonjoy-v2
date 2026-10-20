@@ -69,7 +69,7 @@ function CheckIcon(): JSX.Element {
 export function SelectItem({ value, children, disabled, label }: SelectItemProps): JSX.Element {
   useSelectPart("SelectItem");
   return (
-    <BaseSelect.Item value={value} disabled={disabled} label={label} className={itemClass}>
+    <BaseSelect.Item value={value} disabled={disabled} label={label} data-ouro-control="select" data-ouro-part="option" className={itemClass}>
       <BaseSelect.ItemIndicator className={itemIndicatorClass}>
         <CheckIcon />
       </BaseSelect.ItemIndicator>

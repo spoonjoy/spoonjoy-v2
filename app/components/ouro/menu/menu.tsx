@@ -338,7 +338,7 @@ function MenuSurface({
           {sheet && closeLabel !== undefined && (
             <>
               <BaseMenu.Separator className={menuSeparatorClass} />
-              <BaseMenu.Item data-ouro-menu-close="" className={menuItemClass}>
+              <BaseMenu.Item data-ouro-menu-close="" data-ouro-control="menu" data-ouro-part="close" className={menuItemClass}>
                 <span data-ouro-menu-label="">{closeLabel}</span>
               </BaseMenu.Item>
             </>
@@ -478,7 +478,7 @@ export function Menu(props: MenuProps): JSX.Element {
   return (
     <BaseMenu.Root {...control}>
       {label !== undefined ? (
-        <BaseMenu.Trigger className={menuBarTriggerClass}>
+        <BaseMenu.Trigger data-ouro-control="menu" data-ouro-part="bar-trigger" className={menuBarTriggerClass}>
           {label}
         </BaseMenu.Trigger>
       ) : (
@@ -632,7 +632,7 @@ export function MenuItem(props: MenuItemProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  const shared = { className: menuItemClass, "data-tone": tone, ...keyShortcutProps(shortcut), ...(onClick ? { onClick: (event: MouseEvent<HTMLElement>) => onClick(event) } : {}) };
+  const shared = { className: menuItemClass, "data-ouro-control": "menu", "data-ouro-part": "item", "data-tone": tone, ...keyShortcutProps(shortcut), ...(onClick ? { onClick: (event: MouseEvent<HTMLElement>) => onClick(event) } : {}) };
   const body = <ItemBody shortcut={shortcut}>{children}</ItemBody>;
   // A disabled link is a disabled item: nothing to follow.
   if (href !== undefined && !disabled) {
@@ -692,7 +692,7 @@ export function MenuCheckboxItem({ children, shortcut, onCheckedChange, ...rest 
     process.env.NODE_ENV !== "production" ? () => [shortcutWarning("MenuCheckboxItem", shortcut)] : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   return (
-    <BaseMenu.CheckboxItem {...rest} {...keyShortcutProps(shortcut)} {...(onCheckedChange ? { onCheckedChange: (next: boolean) => onCheckedChange(next) } : {})} className={menuItemClass}>
+    <BaseMenu.CheckboxItem data-ouro-control="menu" data-ouro-part="checkbox-item" {...rest} {...keyShortcutProps(shortcut)} {...(onCheckedChange ? { onCheckedChange: (next: boolean) => onCheckedChange(next) } : {})} className={menuItemClass}>
       <span data-ouro-menu-indicator="" className={menuIndicatorClass}>
         <BaseMenu.CheckboxItemIndicator className="flex">
           <CheckIcon />
@@ -779,7 +779,7 @@ export function MenuRadioItem({ children, shortcut, ...rest }: MenuRadioItemProp
     process.env.NODE_ENV !== "production" ? () => [shortcutWarning("MenuRadioItem", shortcut)] : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   return (
-    <BaseMenu.RadioItem {...rest} {...keyShortcutProps(shortcut)} className={menuItemClass}>
+    <BaseMenu.RadioItem data-ouro-control="menu" data-ouro-part="radio-item" {...rest} {...keyShortcutProps(shortcut)} className={menuItemClass}>
       <span data-ouro-menu-indicator="" className={menuIndicatorClass}>
         <BaseMenu.RadioItemIndicator className="flex">
           <CheckIcon />
@@ -873,7 +873,7 @@ export function MenuSub({ label, children, disabled, backLabel = "Back" }: MenuS
   const [open, setOpen] = useState(false);
   return (
     <BaseMenu.SubmenuRoot open={open} onOpenChange={setOpen} disabled={disabled}>
-      <BaseMenu.SubmenuTrigger className={menuItemClass} disabled={disabled} openOnHover={!sheet}>
+      <BaseMenu.SubmenuTrigger data-ouro-control="menu" data-ouro-part="submenu-trigger" className={menuItemClass} disabled={disabled} openOnHover={!sheet}>
         <span data-ouro-menu-label="" className="flex min-w-0 flex-1 items-center gap-2">
           {label}
         </span>
@@ -881,7 +881,7 @@ export function MenuSub({ label, children, disabled, backLabel = "Back" }: MenuS
       </BaseMenu.SubmenuTrigger>
       <MenuSurface sheet={sheet} context={false}>
         {sheet && (
-          <BaseMenu.Item data-ouro-menu-back="" className={menuItemClass} closeOnClick={false} onClick={() => setOpen(false)}>
+          <BaseMenu.Item data-ouro-menu-back="" data-ouro-control="menu" data-ouro-part="back" className={menuItemClass} closeOnClick={false} onClick={() => setOpen(false)}>
             <ChevronIcon back />
             <span data-ouro-menu-label="">{backLabel}</span>
           </BaseMenu.Item>

@@ -174,7 +174,9 @@ const sizes = {
 // `soft` is the tone at low opacity behind text in the tone, the pattern shadcn uses for
 // destructive, with the text mixed 20% toward the foreground so it keeps 4.5:1 on the
 // tint under shadcn's stock values too (plain `text-destructive` there is 3.97:1). `secondary` is shadcn's: a quiet surface (`bg-secondary`) with its own
-// foreground, so its outline and plain text are the page's foreground.
+// foreground, so its outline and plain text are the page's foreground. The primary outline's
+// text is the foreground too, as in shadcn, where --primary is a fill color: a theme whose primary
+// only just reaches 4.5:1 on its page loses it on any tinted surface around the button.
 const looks = {
   solid: {
     primary: "border-transparent bg-primary text-primary-foreground",
@@ -191,7 +193,7 @@ const looks = {
     warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:border-current",
   },
   outline: {
-    primary: "border-primary/45 bg-transparent text-primary",
+    primary: "border-primary/45 bg-transparent text-foreground",
     secondary: "border-border bg-transparent text-foreground",
     destructive: "border-destructive/45 bg-transparent text-destructive",
     success: "border-success/45 bg-transparent text-success",
@@ -375,6 +377,8 @@ export function Button(props: ButtonProps): JSX.Element {
     const { onClick, type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<ButtonLinkProps, keyof ButtonBaseProps>;
     return (
       <RouterLink
+        data-ouro-control="button"
+        data-ouro-part="root"
         {...anchorProps}
         onClick={loading ? preventDefault : onClick}
         onAuxClick={loading ? preventDefault : anchorProps.onAuxClick}
@@ -396,6 +400,8 @@ export function Button(props: ButtonProps): JSX.Element {
   const type = buttonTypes.includes(typeProp as (typeof buttonTypes)[number]) ? (typeProp as (typeof buttonTypes)[number]) : "button";
   return (
     <BaseButton
+      data-ouro-control="button"
+      data-ouro-part="root"
       {...buttonProps}
       ref={ref as Ref<HTMLElement> | undefined}
       type={type}

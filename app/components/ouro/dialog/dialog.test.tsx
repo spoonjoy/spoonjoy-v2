@@ -733,6 +733,31 @@ describe("Dialog dev messages", () => {
 });
 
 describe("Dialog parts", () => {
+  it("mark the buttons they render as the dialog's, and leave a rendered Button its own marker", async () => {
+    await render(
+      <DialogRoot>
+        <DialogTrigger>Edit</DialogTrigger>
+        <DialogTrigger render={<Button>Rename</Button>} />
+        <DialogPortal>
+          <DialogViewport>
+            <DialogPopup>
+              <DialogTitle>Parts</DialogTitle>
+              <DialogContent>Body</DialogContent>
+              <DialogClose>Close</DialogClose>
+              <DialogClose render={<Button>Done</Button>} />
+            </DialogPopup>
+          </DialogViewport>
+        </DialogPortal>
+      </DialogRoot>,
+    );
+    const marks = () => [...document.querySelectorAll("button")].map((element) => `${element.getAttribute("data-ouro-control")}/${element.getAttribute("data-ouro-part")}`);
+    expect(marks()).toEqual(["dialog/trigger", "button/root"]);
+    await userEvent.click(page.getByRole("button", { name: "Edit" }));
+    await expect.element(page.getByRole("dialog", { name: "Parts" })).toBeVisible();
+    expect(marks()).toEqual(["dialog/trigger", "button/root", "dialog/close", "button/root"]);
+    expect(document.querySelector("[data-ouro-dialog-content]")!.getAttribute("data-ouro-part")).toBe("content");
+  });
+
   it("renders an md DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix", async () => {
     await render(
       <DialogRoot open>

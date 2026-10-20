@@ -2,6 +2,17 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState, type CSSProperties } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Sheet } from "~/components/ouro/sheet/sheet";
+import {
+  SheetBackdrop,
+  SheetClose,
+  SheetContent,
+  SheetPopup,
+  SheetPortal,
+  SheetRoot,
+  SheetTitle,
+  SheetTrigger,
+  SheetViewport,
+} from "~/components/ouro/sheet/sheet-parts";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -119,6 +130,7 @@ export const WithForm: Story = {
       <label style={{ ...stack, gap: 6, fontWeight: 500, fontSize: "14px", lineHeight: "20px" }}>
         Note
         <input
+          data-test-harness=""
           placeholder="Less salt next time"
           style={{
             fontWeight: 400, fontSize: "16px", lineHeight: "24px",
@@ -154,4 +166,25 @@ export const Controlled: Story = {
       </div>
     );
   },
+};
+
+/** Built from parts. A part given no `render` is a plain button of its own: here the trigger and the close button. */
+export const Parts: Story = {
+  render: () => (
+    <SheetRoot>
+      <SheetTrigger>Add note</SheetTrigger>
+      <SheetPortal>
+        <SheetBackdrop />
+        <SheetViewport>
+          <SheetPopup>
+            <SheetTitle>Add a note</SheetTitle>
+            <SheetContent>
+              Notes stay with this recipe.
+              <SheetClose>Close</SheetClose>
+            </SheetContent>
+          </SheetPopup>
+        </SheetViewport>
+      </SheetPortal>
+    </SheetRoot>
+  ),
 };

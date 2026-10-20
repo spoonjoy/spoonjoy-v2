@@ -43,7 +43,7 @@ const menuSheetPositionerClass =
 const menuPopupClass =
   "box-border min-w-48 max-w-(--available-width) max-h-(--available-height) overflow-y-auto overscroll-contain p-1 " +
   "rounded-lg bg-popover text-popover-foreground outline-none " +
-  "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_8px_24px_rgb(0_0_0/0.14)] " +
+  "ring-1 ring-border/60 shadow-(--shadow-lg) " +
   "has-[[data-ouro-menu-indicator]]:[--ouro-menu-inset:1.5rem] " +
   "origin-(--transform-origin) " +
   "[transition:transform_var(--ouro-duration-fast)_var(--ouro-ease-out),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
@@ -62,7 +62,7 @@ const menuSheetPopupClass =
   "box-border w-full max-h-[min(80dvh,calc(100dvh-4rem))] overflow-y-auto overscroll-contain " +
   "px-2 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] " +
   "rounded-t-xl bg-popover text-popover-foreground outline-none " +
-  "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_-8px_32px_rgb(0_0_0/0.14)] " +
+  "[box-shadow:var(--ouro-shadow-sheet-bottom)] " +
   "has-[[data-ouro-menu-indicator]]:[--ouro-menu-inset:1.5rem] " +
   "[transition:transform_var(--ouro-duration-sheet)_var(--ouro-ease-drawer),opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "data-starting-style:[transform:translateY(100%)] data-ending-style:[transform:translateY(100%)] " +

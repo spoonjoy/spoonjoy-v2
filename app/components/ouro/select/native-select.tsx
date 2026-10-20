@@ -222,7 +222,7 @@ export function NativeSelect(props: NativeSelectProps): JSX.Element {
             {...start}
             ref={ref as Ref<HTMLInputElement> | undefined}
             render={(controlProps) => (
-              <select {...(controlProps as SelectHTMLAttributes<HTMLSelectElement>)} className={selectClass}>
+              <select {...(controlProps as SelectHTMLAttributes<HTMLSelectElement>)} data-ouro-control="native-select" data-ouro-part="select" className={selectClass}>
                 {placeholder !== undefined && (
                   <option value="" disabled={required}>
                     {placeholder}

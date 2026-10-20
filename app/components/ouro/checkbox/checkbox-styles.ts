@@ -32,15 +32,19 @@ const boxClass =
 const indicatorClass = "pointer-events-none flex size-full items-center justify-center";
 
 /**
- * The tick fades and grows in from 95% when the box is checked. With reduced motion it
- * only fades.
+ * The tick draws along its path (`pathLength` 1, so a dash of 1 is the whole tick, and its gap
+ * of 2 leaves no empty dash at either end for a round cap to draw as a dot) once the box has filled: `stroke-dashoffset` from 1 to 0 over `--ouro-duration-draw`, starting after
+ * `--ouro-duration-fast`. Unchecking takes it back along the same path at once, over
+ * `--ouro-duration-fast`. With reduced motion nothing draws: the whole tick fades in and out.
  *
  * @internal
  */
 const tickClass =
-  "origin-center [transform-box:fill-box] opacity-0 scale-95 group-data-checked:opacity-100 group-data-checked:scale-100 group-data-indeterminate:hidden " +
-  "[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out),scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
-  "motion-reduce:scale-100 motion-reduce:[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)]";
+  "[stroke-dasharray:1_2] [stroke-dashoffset:1] group-data-checked:[stroke-dashoffset:0] group-data-indeterminate:hidden " +
+  "motion-safe:[transition:stroke-dashoffset_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
+  "motion-safe:group-data-checked:[transition:stroke-dashoffset_var(--ouro-duration-draw)_var(--ouro-ease-out)_var(--ouro-duration-fast)] " +
+  "motion-reduce:[stroke-dashoffset:0] motion-reduce:opacity-0 motion-reduce:group-data-checked:opacity-100 " +
+  "motion-reduce:[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)]";
 
 /**
  * The dash a mixed box shows in place of the tick.

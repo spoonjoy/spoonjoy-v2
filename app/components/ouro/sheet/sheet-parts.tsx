@@ -106,14 +106,14 @@ const popupSides = {
     "w-full max-w-[40rem] max-h-[calc(100dvh-var(--ouro-sheet-gap))] ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)] " +
     "[--ouro-sheet-y:calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px))] " +
     "[--ouro-sheet-transform:translateY(calc(max(var(--ouro-sheet-y),0px)+min(var(--ouro-sheet-y)+var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-t-xl [box-shadow:0_-1px_0_color-mix(in_oklab,var(--border)_60%,transparent),0_-8px_32px_rgb(0_0_0/0.12)] " +
+    "rounded-t-xl [box-shadow:var(--ouro-shadow-sheet-bottom)] " +
     "after:inset-x-0 after:top-[calc(100%-1px)] after:h-[50dvh] " +
     "data-starting-style:[transform:translateY(calc(100%+2px))] data-ending-style:[transform:translateY(calc(100%+2px))]",
   top:
     "w-full max-w-[40rem] max-h-[calc(100dvh-var(--ouro-sheet-gap))] ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)] " +
     "[--ouro-sheet-y:calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px))] " +
     "[--ouro-sheet-transform:translateY(calc(min(var(--ouro-sheet-y),0px)+max(var(--ouro-sheet-y)-var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-b-xl [box-shadow:0_1px_0_color-mix(in_oklab,var(--border)_60%,transparent),0_8px_32px_rgb(0_0_0/0.12)] " +
+    "rounded-b-xl [box-shadow:var(--ouro-shadow-sheet-top)] " +
     "pt-[env(safe-area-inset-top,0px)] " +
     "after:inset-x-0 after:bottom-[calc(100%-1px)] after:h-[50dvh] " +
     "data-starting-style:[transform:translateY(calc(-100%-2px))] data-ending-style:[transform:translateY(calc(-100%-2px))]",
@@ -123,7 +123,7 @@ const popupSides = {
     "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))] " +
     "[--ouro-sheet-x:var(--drawer-swipe-movement-x,0px)] " +
     "[--ouro-sheet-transform:translateX(calc(min(var(--ouro-sheet-x),0px)+max(var(--ouro-sheet-x)-var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-r-xl [box-shadow:8px_0_32px_rgb(0_0_0/0.12)] pl-[env(safe-area-inset-left,0px)] " +
+    "rounded-r-xl [box-shadow:var(--ouro-shadow-sheet-left)] pl-[env(safe-area-inset-left,0px)] " +
     "after:inset-y-0 after:right-[calc(100%-1px)] after:w-[50vw] " +
     "data-starting-style:[transform:translateX(calc(-100%-2px))] data-ending-style:[transform:translateX(calc(-100%-2px))]",
   right:
@@ -131,7 +131,7 @@ const popupSides = {
     "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))] " +
     "[--ouro-sheet-x:var(--drawer-swipe-movement-x,0px)] " +
     "[--ouro-sheet-transform:translateX(calc(max(var(--ouro-sheet-x),0px)+min(var(--ouro-sheet-x)+var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-l-xl [box-shadow:-8px_0_32px_rgb(0_0_0/0.12)] pr-[env(safe-area-inset-right,0px)] " +
+    "rounded-l-xl [box-shadow:var(--ouro-shadow-sheet-right)] pr-[env(safe-area-inset-right,0px)] " +
     "after:inset-y-0 after:left-[calc(100%-1px)] after:w-[50vw] " +
     "data-starting-style:[transform:translateX(calc(100%+2px))] data-ending-style:[transform:translateX(calc(100%+2px))]",
 } as const;
@@ -213,7 +213,7 @@ export function SheetRoot({ side: sideProp = "bottom", snapPoints, ...props }: S
 /** Part: the button that opens the sheet. Pass your button as `render={<Button>Open</Button>}`. */
 export function SheetTrigger(props: Drawer.Trigger.Props): JSX.Element {
   useSheetPart("SheetTrigger", "…");
-  return <Drawer.Trigger {...props} />;
+  return <Drawer.Trigger {...(props.render === undefined ? { "data-ouro-control": "sheet", "data-ouro-part": "trigger" } : {})} {...props} />;
 }
 
 /**
@@ -388,7 +388,7 @@ export function SheetTitle({ visuallyHidden, ...props }: SheetTitleProps): JSX.E
       className={
         visuallyHidden
           ? "sr-only"
-          : "m-0 text-lg leading-6 font-semibold text-balance text-popover-foreground"
+          : "m-0 font-[family-name:var(--font-heading,inherit)] text-lg leading-6 font-semibold text-balance text-popover-foreground"
       }
     />
   );
@@ -426,6 +426,8 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
   );
   return (
     <Drawer.Content
+      data-ouro-control="sheet"
+      data-ouro-part="content"
       {...props}
       ref={scrollRef}
       data-ouro-sheet-content=""
@@ -442,5 +444,5 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
 /** Part: closes the sheet. Pass your button as `render={<Button>Done</Button>}`. */
 export function SheetClose(props: Drawer.Close.Props): JSX.Element {
   useSheetPart("SheetClose", "<SheetContent><SheetClose>…</SheetClose></SheetContent>");
-  return <Drawer.Close {...props} />;
+  return <Drawer.Close {...(props.render === undefined ? { "data-ouro-control": "sheet", "data-ouro-part": "close" } : {})} {...props} />;
 }

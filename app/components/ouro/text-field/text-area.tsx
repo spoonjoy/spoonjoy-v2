@@ -237,6 +237,8 @@ export function TextArea(props: TextAreaProps): JSX.Element {
             <textarea
               {...(controlProps as TextareaHTMLAttributes<HTMLTextAreaElement>)}
               rows={rows}
+              data-ouro-control="text-area"
+              data-ouro-part="input"
               data-variant={variant}
               data-size={size}
               className={cn(textAreaClass, textAreaVariants[variant], textAreaSizes[size], autoGrow ? "resize-none" : "resize-y")}

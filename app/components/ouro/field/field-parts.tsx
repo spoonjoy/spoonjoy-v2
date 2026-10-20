@@ -154,6 +154,8 @@ export function FieldControl({ className, required, ...props }: FieldControlProp
   const describedBy = [field.describedBy, props["aria-describedby"]].filter(Boolean).join(" ") || undefined;
   return (
     <BaseField.Control
+      data-ouro-control="field"
+      data-ouro-part="control"
       {...props}
       required={isRequired}
       // A passed `aria-required` says "required" without the browser's blocking check.

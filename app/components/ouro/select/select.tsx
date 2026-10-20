@@ -16,6 +16,7 @@ import {
   triggerClass,
   type SelectOptions,
 } from "~/components/ouro/select/select-styles";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMediaQuery } from "~/lib/ouro/use-media-query";
@@ -117,6 +118,8 @@ export type SelectProps = SelectSingleProps | SelectMultipleProps;
 
 /** Field's messages and root name Select; its label is a `<div>` that names the trigger. */
 const owner = { name: "Select", data: "select", nativeLabel: false as const };
+/** Marks the hidden input Base UI submits the value with. */
+const markInput = controlRef("select", "hidden-input");
 
 /** A chevron pointing up and down, drawn in the muted text color at 16px. */
 function ChevronIcon(): JSX.Element {
@@ -168,9 +171,12 @@ function SelectControl({
       readOnly={readOnly}
       autoComplete={autoComplete}
       form={formId}
+      inputRef={markInput}
     >
       <BaseSelect.Trigger
         ref={ref}
+        data-ouro-control="select"
+        data-ouro-part="trigger"
         className={triggerClass}
         aria-labelledby={field.labelId}
         aria-describedby={field.describedBy}

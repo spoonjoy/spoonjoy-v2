@@ -121,7 +121,7 @@ const floatingMotionClass =
  */
 const floatingSurfaceClass =
   "box-border rounded-lg bg-popover text-popover-foreground outline-none " +
-  "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_8px_24px_rgb(0_0_0/0.14)]";
+  "ring-1 ring-border/60 shadow-(--shadow-lg)";
 
 /**
  * The Fix code for an appearance class on a floating surface: the theme's CSS variables

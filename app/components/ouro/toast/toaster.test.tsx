@@ -9,6 +9,7 @@ import { springAt } from "~/lib/ouro/spring";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { holdFrames } from "~/lib/ouro/testing/frames";
+import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
 
 const chromiumOnly = it.skipIf(server.browser !== "chromium");
 
@@ -47,31 +48,6 @@ async function show(message: string, options?: ToastOptions) {
 
 /** The toasts' messages, in page order. */
 const titles = () => toasts().map((item) => item.querySelector("[data-ouro-toast-title]")!.textContent);
-
-/** Records the text each live region exposes as it changes; text inside aria-hidden is not exposed. */
-function watchAnnouncements() {
-  const liveSelector = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
-  const changes: Array<{ region: Element; text: string }> = [];
-  const exposed = (node: Node) => {
-    const element = node instanceof Element ? node : node.parentElement;
-    return !element?.closest('[aria-hidden="true"]');
-  };
-  const observer = new MutationObserver((records) => {
-    for (const record of records) {
-      const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      const nodes = record.type === "characterData" ? [record.target] : [...record.addedNodes];
-      for (const node of nodes) {
-        // Text added inside a live region, or a live region added with its text.
-        const region = target?.closest(liveSelector) ?? (node instanceof Element ? (node.matches(liveSelector) ? node : node.querySelector(liveSelector)) : null);
-        const text = exposed(node) ? (node.textContent ?? "") : "";
-        if (region && text) changes.push({ region, text });
-      }
-    }
-  });
-  observer.observe(document.body, { subtree: true, childList: true, characterData: true });
-  const matching = (message: string) => changes.filter((change) => change.text.includes(message));
-  return { changes, matching, count: (message: string) => matching(message).length, stop: () => observer.disconnect() };
-}
 
 /** Waits until the toast is gone from the page. */
 const gone = (message: string) => expect.poll(() => toastNamed(message)).toBeUndefined();

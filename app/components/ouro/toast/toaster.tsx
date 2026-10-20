@@ -255,15 +255,25 @@ function ToastItem({ item, closeLabel }: { item: ToastObject; closeLabel: string
   const { close } = Toast.useToastManager();
   const swipe = useSwipeAway(() => close(item.id), item.transitionStatus === "ending");
   return (
-    <Toast.Root toast={item} swipeDirection={NO_SWIPE} {...swipe} data-ouro="toast" data-tone={item.type} className={rootClass}>
+    <Toast.Root
+      toast={item}
+      swipeDirection={NO_SWIPE}
+      {...swipe}
+      data-ouro="toast"
+      data-tone={item.type}
+      // A high-priority toast is an alertdialog, an urgent part of its own.
+      data-ouro-control="toaster"
+      data-ouro-part={item.priority === "high" ? "alert" : "toast"}
+      className={rootClass}
+    >
       <Toast.Content className={contentClass}>
         <ToneIcon tone={item.type} />
         <div className="grid min-w-0 flex-1 gap-0.5">
           <Toast.Title render={<div />} data-ouro-toast-title="" className="m-0 text-sm font-medium text-popover-foreground" />
           <Toast.Description render={<div />} data-ouro-toast-description="" className="m-0 text-sm text-muted-foreground" />
         </div>
-        <Toast.Action className={actionClass} />
-        <Toast.Close aria-label={closeLabel} className={closeClass}>
+        <Toast.Action data-ouro-control="toaster" data-ouro-part="action" className={actionClass} />
+        <Toast.Close aria-label={closeLabel} data-ouro-control="toaster" data-ouro-part="close" className={closeClass}>
           <TouchTarget />
           <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-4">
             <path d="M4 4l8 8M12 4l-8 8" />

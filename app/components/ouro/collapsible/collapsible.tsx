@@ -114,7 +114,7 @@ export function Collapsible(props: CollapsibleProps): JSX.Element {
       data-ouro="collapsible"
       className={cn(rootClass, className)}
     >
-      <BaseCollapsible.Trigger className={triggerClass}>
+      <BaseCollapsible.Trigger data-ouro-control="collapsible" data-ouro-part="trigger" className={triggerClass}>
         {title}
         <svg
           aria-hidden="true"

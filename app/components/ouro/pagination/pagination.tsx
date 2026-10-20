@@ -259,7 +259,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
           {control(
             page - 1,
             page > 1,
-            { "data-ouro-pagination-previous": "", rel: href !== undefined && page > 1 ? "prev" : undefined },
+            { "data-ouro-pagination-previous": "", "data-ouro-control": "pagination", "data-ouro-part": "previous", rel: href !== undefined && page > 1 ? "prev" : undefined },
             "px-3",
             <>
               <Chevron back />
@@ -286,7 +286,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
               {control(
                 target,
                 true,
-                { "data-ouro-pagination-page": "", "aria-label": fill(pageLabel, target, pageCount), "aria-current": target === page ? "page" : undefined },
+                { "data-ouro-pagination-page": "", "data-ouro-control": "pagination", "data-ouro-part": "page", "aria-label": fill(pageLabel, target, pageCount), "aria-current": target === page ? "page" : undefined },
                 currentCell,
                 target,
               )}
@@ -297,7 +297,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
           {control(
             page + 1,
             hasNext,
-            { "data-ouro-pagination-next": "", rel: href !== undefined && hasNext ? "next" : undefined },
+            { "data-ouro-pagination-next": "", "data-ouro-control": "pagination", "data-ouro-part": "next", rel: href !== undefined && hasNext ? "next" : undefined },
             "px-3",
             <>
               {nextLabel}

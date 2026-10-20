@@ -76,7 +76,7 @@ const chipRemoveClass =
 const popupClass =
   "box-border flex w-(--anchor-width) max-w-(--available-width) max-h-[min(var(--available-height),22rem)] flex-col " +
   "origin-(--transform-origin) overflow-hidden rounded-md border border-solid border-border bg-popover text-popover-foreground " +
-  "[box-shadow:0_8px_24px_rgb(0_0_0/0.12)] outline-none " +
+  "shadow-(--shadow-lg) outline-none " +
   "[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out),scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
   "data-starting-style:transition-none data-ending-style:opacity-0 data-ending-style:scale-95 " +
   "motion-reduce:[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)] motion-reduce:data-ending-style:scale-100";

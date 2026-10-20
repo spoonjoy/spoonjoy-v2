@@ -38,7 +38,7 @@ const viewportClass =
 const popupClass =
   "relative box-border flex w-full max-h-full min-h-0 flex-col outline-none " +
   "rounded-xl bg-popover text-popover-foreground " +
-  "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_16px_48px_rgb(0_0_0/0.18)] " +
+  "ring-1 ring-border/60 shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
   "data-ending-style:[transform:scale(0.96)] data-ending-style:opacity-0 " +
@@ -110,7 +110,7 @@ export function AlertDialogRoot(props: AlertDialog.Root.Props): JSX.Element {
 /** Part: the button that opens the dialog. Pass your button as `render={<Button>Open</Button>}`. */
 export function DialogTrigger(props: BaseDialog.Trigger.Props): JSX.Element {
   useDialogPart("DialogTrigger", "…");
-  return <BaseDialog.Trigger {...props} />;
+  return <BaseDialog.Trigger {...(props.render === undefined ? { "data-ouro-control": "dialog", "data-ouro-part": "trigger" } : {})} {...props} />;
 }
 
 /**
@@ -211,7 +211,7 @@ export function DialogTitle({ visuallyHidden, ...props }: DialogTitleProps): JSX
       className={
         visuallyHidden
           ? "sr-only"
-          : "m-0 text-lg leading-6 font-semibold text-balance text-popover-foreground"
+          : "m-0 font-[family-name:var(--font-heading,inherit)] text-lg leading-6 font-semibold text-balance text-popover-foreground"
       }
     />
   );
@@ -248,6 +248,8 @@ export function DialogContent({ className, ref, ...props }: DialogContentProps):
   );
   return (
     <div
+      data-ouro-control="dialog"
+      data-ouro-part="content"
       {...props}
       ref={scrollRef}
       data-ouro-dialog-content=""
@@ -277,5 +279,5 @@ export function DialogFooter(props: Omit<JSX.IntrinsicElements["div"], "classNam
 /** Part: closes the dialog. Pass your button as `render={<Button>Done</Button>}`. */
 export function DialogClose(props: BaseDialog.Close.Props): JSX.Element {
   useDialogPart("DialogClose", "<DialogTitle>…</DialogTitle><DialogFooter><DialogClose>…</DialogClose></DialogFooter>");
-  return <BaseDialog.Close {...props} />;
+  return <BaseDialog.Close {...(props.render === undefined ? { "data-ouro-control": "dialog", "data-ouro-part": "close" } : {})} {...props} />;
 }

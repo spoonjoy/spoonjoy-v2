@@ -308,6 +308,8 @@ export function Item(props: ItemProps): JSX.Element {
             rel={external ? safeRel(undefined) : undefined}
             data-item-link=""
             data-stretched-link=""
+            data-ouro-control="item"
+            data-ouro-part="link"
             className={cn(stretchedLinkClass, variant === "outline" && "after:rounded-xl")}
           >
             {title}

@@ -133,6 +133,8 @@ function Strip({
           type="button"
           data-tone={toneOf(action)}
           data-primary={action === primary ? "" : undefined}
+          data-ouro-control="swipe-actions"
+          data-ouro-part="action"
           className={cn(actionClass, actionTones[toneOf(action)], action !== primary && fadeClass)}
           onClick={() => onAction(action)}
         >
@@ -548,7 +550,7 @@ export function SwipeActions(props: SwipeActionsProps): JSX.Element {
           <div data-ouro-swipe-actions-menu="" className={menuClass}>
             <Menu
               trigger={
-                <Button variant="plain" tone="secondary" size="sm" aria-label={actionsLabel.replaceAll("{label}", label)}>
+                <Button variant="plain" tone="secondary" size="sm" aria-label={actionsLabel.replaceAll("{label}", label)} data-ouro-control="swipe-actions" data-ouro-part="menu">
                   <EllipsisIcon />
                 </Button>
               }

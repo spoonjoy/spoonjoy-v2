@@ -113,7 +113,7 @@ const positionerClass =
 const popupClass =
   "box-border flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden outline-none " +
   "rounded-md border border-solid border-border bg-popover p-1 text-popover-foreground " +
-  "[box-shadow:0_8px_24px_rgb(0_0_0/0.12)] origin-(--transform-origin) " +
+  "shadow-(--shadow-lg) origin-(--transform-origin) " +
   "[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out),scale_var(--ouro-duration-base)_var(--ouro-ease-out)] data-ending-style:duration-(--ouro-duration-fast) " +
   "data-starting-style:opacity-0 data-starting-style:scale-95 data-ending-style:opacity-0 data-ending-style:scale-95 " +
   "data-[side=none]:data-starting-style:scale-100 data-[side=none]:data-starting-style:opacity-100 " +

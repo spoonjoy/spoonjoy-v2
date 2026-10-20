@@ -5,6 +5,7 @@ import type { JSX, ReactNode, Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -72,6 +73,8 @@ export interface SwitchProps {
 
 /** Field's messages and root name Switch, and put the switch before its label. */
 const owner = { name: "Switch", data: "switch", layout: "inline" } as const;
+/** Marks the hidden input Base UI submits the switch with. */
+const markInput = controlRef("switch", "hidden-input");
 
 /** The track and thumb, inside the Field: they take their name, description and error ids from the field. */
 function SwitchTrack(props: {
@@ -87,6 +90,9 @@ function SwitchTrack(props: {
   return (
     <BaseSwitch.Root
       {...rest}
+      inputRef={markInput}
+      data-ouro-control="switch"
+      data-ouro-part="track"
       onCheckedChange={onCheckedChange && ((checked) => onCheckedChange(checked))}
       required={field.required}
       // Set here, not left to Base UI's effects, so the server HTML names and describes the switch.

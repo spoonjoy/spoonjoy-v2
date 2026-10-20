@@ -411,7 +411,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
             enterKeyHint={rest.enterKeyHint ?? defaults.enterKeyHint}
             aria-describedby={describedBy}
             render={(controlProps) => (
-              <input {...controlProps} className={cn(inputClass, clearable && type === "search" && nativeClearClass)} />
+              <input {...controlProps} data-ouro-control="text-field" data-ouro-part="input" className={cn(inputClass, clearable && type === "search" && nativeClearClass)} />
             )}
           />
           {/* The buttons are named by visually hidden text, not `aria-label`: an aria-label is
@@ -425,6 +425,8 @@ export function TextField(props: TextFieldProps): JSX.Element {
                   tone="secondary"
                   size="sm"
                   data-ouro-clear=""
+                  data-ouro-control="text-field"
+                  data-ouro-part="clear"
                   className="aspect-square px-0"
                   onMouseDown={preventFocusMove}
                   onClick={clear}
@@ -441,6 +443,8 @@ export function TextField(props: TextFieldProps): JSX.Element {
                   tone="secondary"
                   size="sm"
                   data-ouro-show-password=""
+                  data-ouro-control="text-field"
+                  data-ouro-part="show-password"
                   aria-pressed={revealed}
                   disabled={disabled}
                   className="aspect-square px-0"

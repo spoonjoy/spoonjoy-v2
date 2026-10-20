@@ -268,12 +268,12 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
               <DialogClose
                 ref={cancelRef}
                 render={
-                  <Button variant="outline" tone="secondary">
+                  <Button variant="outline" tone="secondary" data-ouro-control="confirm-dialog" data-ouro-part="cancel">
                     {cancelLabel}
                   </Button>
                 }
               />
-              <Button tone={tone} loading={pending} onClick={confirm} data-tone={tone}>
+              <Button tone={tone} loading={pending} onClick={confirm} data-tone={tone} data-ouro-control="confirm-dialog" data-ouro-part="confirm">
                 {confirmLabel}
               </Button>
             </DialogFooter>

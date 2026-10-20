@@ -51,7 +51,7 @@ const viewportClass =
  */
 const rootClass =
   "absolute inset-x-0 bottom-0 box-border origin-bottom touch-none select-none [-webkit-tap-highlight-color:transparent] " +
-  "rounded-lg border border-solid border-border bg-popover text-popover-foreground shadow-lg " +
+  "rounded-lg border border-solid border-border bg-popover text-popover-foreground shadow-(--shadow-lg) " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
   "[--gap:0.75rem] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] " +
   "[--height:var(--toast-frontmost-height,var(--toast-height))] " +

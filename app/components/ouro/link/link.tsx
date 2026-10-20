@@ -159,6 +159,8 @@ export function Link(props: LinkProps): JSX.Element {
   );
   return (
     <RouterLink
+      data-ouro-control="link"
+      data-ouro-part="root"
       {...rest}
       href={href}
       target={external ? "_blank" : target}

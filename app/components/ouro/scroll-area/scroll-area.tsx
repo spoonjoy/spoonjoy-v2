@@ -139,6 +139,8 @@ export function ScrollArea(props: ScrollAreaProps): JSX.Element {
       <BaseScrollArea.Viewport
         ref={viewportRef}
         data-scroll-viewport=""
+        data-ouro-control="scroll-area"
+        data-ouro-part="viewport"
         role={label ? "region" : undefined}
         aria-label={label}
         className={cn(
