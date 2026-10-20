@@ -1381,6 +1381,7 @@
         "fieldset",
         "form",
         "link",
+        "reorderable",
         "switch",
         "text",
         "text-area",
@@ -1413,6 +1414,9 @@
           "app/components/recipe/RecipeImportPanel.tsx",
           "app/components/recipe/StepList.tsx",
           "app/routes/recipes.new.tsx"
+        ],
+        "reorderable": [
+          "app/components/recipe/StepList.tsx"
         ],
         "switch": [
           "app/components/recipe/IngredientInputToggle.tsx"
@@ -1725,6 +1729,7 @@
         "fieldset",
         "form",
         "link",
+        "reorderable",
         "switch",
         "text-area",
         "text-field"
@@ -1758,6 +1763,9 @@
           "app/components/recipe/RecipeImportPanel.tsx",
           "app/components/recipe/StepList.tsx",
           "app/routes/recipes.$id.edit.tsx"
+        ],
+        "reorderable": [
+          "app/components/recipe/StepList.tsx"
         ],
         "switch": [
           "app/components/recipe/IngredientInputToggle.tsx"
