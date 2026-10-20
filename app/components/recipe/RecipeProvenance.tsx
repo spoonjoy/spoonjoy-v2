@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "~/components/ouro/link/link";
 import { chefDisplayName } from "~/lib/username";
 
 export interface RecipeProvenanceSourceRecipe {
@@ -59,14 +59,9 @@ export function RecipeProvenance({ sourceUrl, sourceRecipe }: RecipeProvenancePr
       {hasUrl ? (
         <p>
           <span>originally from </span>
-          <a
-            href={sourceUrl!}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-[var(--sj-tomato)]"
-          >
+          <Link href={sourceUrl!} external>
             {hostname ?? sourceUrl}
-          </a>
+          </Link>
         </p>
       ) : null}
       {hasForked ? (
@@ -78,10 +73,7 @@ export function RecipeProvenance({ sourceUrl, sourceRecipe }: RecipeProvenancePr
         ) : (
           <p>
             <span>forked from </span>
-            <Link
-              to={`/recipes/${sourceRecipe!.id}`}
-              className="underline hover:text-[var(--sj-tomato)]"
-            >
+            <Link href={`/recipes/${sourceRecipe!.id}`}>
               <span>{chefDisplayName(sourceRecipe!.chef.username)}</span>
               <span aria-hidden> · </span>
               <span title={title}>{displayTitle}</span>

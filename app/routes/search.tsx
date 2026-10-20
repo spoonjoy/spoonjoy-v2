@@ -7,6 +7,7 @@ import { Badge } from "~/components/ouro/badge/badge";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Link } from "~/components/ouro/link/link";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
@@ -147,29 +148,21 @@ export default function Search() {
             </h1>
             <Form method="get" role="search" className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <input type="hidden" name="scope" value={scope} />
-              <label className="sr-only" htmlFor="search-query">Search terms</label>
-              <div className="flex h-[4.5rem] items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-5">
-                <SearchIcon className="mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-                <input
-                  ref={searchInputRef}
-                  id="search-query"
-                  type="search"
-                  name="q"
-                  defaultValue={query}
-                  // Off, so a document-level Back does not restore stale typed text over the
-                  // server-rendered query (the browser skips form restoration for these fields).
-                  autoComplete="off"
-                  placeholder="tomato basil"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  className="font-sj-display h-full w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
-                />
-              </div>
-              <Button type="submit" className="h-11">Search</Button>
+              <TextField
+                ref={searchInputRef}
+                type="search"
+                name="q"
+                label="Search terms"
+                hideLabel
+                defaultValue={query}
+                // Off, so a document-level Back does not restore stale typed text over the
+                // server-rendered query (the browser skips form restoration for these fields).
+                autoComplete="off"
+                placeholder="tomato basil"
+                startAdornment={<SearchIcon />}
+                size="lg"
+              />
+              <Button type="submit">Search</Button>
             </Form>
           </div>
 

@@ -240,6 +240,7 @@
           "app/routes/login.tsx"
         ],
         "link": [
+          "app/components/auth/auth-page.tsx",
           "app/routes/login.tsx"
         ],
         "text": [
@@ -310,6 +311,7 @@
           "app/routes/signup.tsx"
         ],
         "link": [
+          "app/components/auth/auth-page.tsx",
           "app/routes/signup.tsx"
         ],
         "text": [
@@ -362,6 +364,7 @@
           "app/routes/logout.tsx"
         ],
         "link": [
+          "app/components/auth/auth-page.tsx",
           "app/routes/logout.tsx"
         ],
         "text": [
@@ -985,7 +988,8 @@
         "item",
         "item-group",
         "link",
-        "text"
+        "text",
+        "text-field"
       ],
       "renders": {
         "badge": [
@@ -1008,6 +1012,9 @@
           "app/routes/search.tsx"
         ],
         "text": [
+          "app/routes/search.tsx"
+        ],
+        "text-field": [
           "app/routes/search.tsx"
         ]
       }
@@ -1619,6 +1626,7 @@
         ],
         "link": [
           "app/components/recipe/RecipeHeader.tsx",
+          "app/components/recipe/RecipeProvenance.tsx",
           "app/components/recipe/SpoonsStrip.tsx",
           "app/routes/recipes.$id.tsx"
         ],
@@ -1649,6 +1657,7 @@
         ],
         "text-field": [
           "app/components/recipe/RecipeCoverHistory.tsx",
+          "app/components/recipe/RecipeNotFound.tsx",
           "app/components/recipe/RecipePhotoStudio.tsx",
           "app/components/recipe/SpoonDialog.tsx",
           "app/routes/recipes.$id.tsx"
@@ -2938,6 +2947,7 @@
       "components": [
         "auth-layout",
         "button",
+        "link",
         "text"
       ],
       "renders": {
@@ -2946,6 +2956,9 @@
         ],
         "button": [
           "app/components/button.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx"
         ],
         "text": [
           "app/routes/oauth.callback.tsx"
