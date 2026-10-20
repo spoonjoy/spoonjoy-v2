@@ -135,6 +135,16 @@ export function describeCookView(name: string, makeController: () => CookViewHar
       expect(controller().scaleFactor).toBe(1.5);
     });
 
+    it("keeps the scale when the field is cleared", async () => {
+      const user = userEvent.setup();
+      await renderView();
+      const panel = await openCookMode();
+      await user.clear(within(panel).getByRole("textbox", { name: "Scale" }));
+      await user.tab();
+      expect(within(panel).getByRole("checkbox", { name: "jasmine rice" })).toHaveAccessibleDescription("Pantry 2 cups");
+      expect(controller().scaleFactor).toBe(1);
+    });
+
     it("clears progress", async () => {
       const user = userEvent.setup();
       await renderView();

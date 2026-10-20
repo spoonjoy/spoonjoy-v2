@@ -121,6 +121,18 @@ describe("Test Kitchen", () => {
     expect(screen.getByRole("checkbox", { name: "cooked chickpeas" })).toHaveAccessibleDescription(/3 cups$/);
   });
 
+  it("keeps the scale when the field is cleared", async () => {
+    const user = userEvent.setup();
+    render(page());
+
+    const scale = screen.getAllByRole("textbox", { name: "Scale" })[0]!;
+    await user.clear(scale);
+    await user.tab();
+
+    expect(scale).toHaveAccessibleDescription(TEST_KITCHEN.servings);
+    expect(screen.getByRole("checkbox", { name: "cooked chickpeas" })).toHaveAccessibleDescription(/1 ½ cups$/);
+  });
+
   it("opens cook mode as the whole page, and comes back", async () => {
     const user = userEvent.setup();
     render(page());
