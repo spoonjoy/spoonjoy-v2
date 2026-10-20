@@ -97,7 +97,7 @@
     "verify:clean:build": "node scripts/run-with-warning-policy.mjs -- pnpm run build",
     "verify:clean:migrations": "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local",
     "verify:clean:migrations:qa": "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local --env qa",
-    "verify:clean:generated-contract": "node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts'",
+    "verify:clean:generated-contract": "node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts && pnpm run provenance:generate --check'",
     "verify:clean:test:coverage": "node scripts/run-with-warning-policy.mjs -- pnpm run test:coverage",
     "verify:clean:test:changed": "node scripts/run-with-warning-policy.mjs -- pnpm run test:changed",
     "verify:clean:test:workers:coverage": "node scripts/run-with-warning-policy.mjs -- pnpm run test:workers:coverage",
