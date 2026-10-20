@@ -71,12 +71,12 @@ test.describe("Recipe list action on iPhone", () => {
     const parsley = page.getByRole("checkbox", { name: "parsley", exact: true });
     const lemon = page.getByRole("checkbox", { name: "lemon", exact: true });
     const expectWrittenAmounts = async () => {
-      await expect(jasmineRice).toContainText("1 ¼ cups");
-      await expect(chickenStock).toContainText("2 ½ cups");
-      await expect(parsley).toContainText("⅓ cup");
-      await expect(parsley).not.toContainText("0.3125");
+      // Each row's amount is its checklist value, heard after its name.
+      await expect(jasmineRice).toHaveAccessibleDescription("1 ¼ cups");
+      await expect(chickenStock).toHaveAccessibleDescription("2 ½ cups");
+      await expect(parsley).toHaveAccessibleDescription("⅓ cup");
       // A counted thing shows its number alone, not "2 whole".
-      await expect(lemon).toHaveText(/lemon2$/);
+      await expect(lemon).toHaveAccessibleDescription("2");
     };
     await page.goto("/shopping-list");
     await expectWrittenAmounts();

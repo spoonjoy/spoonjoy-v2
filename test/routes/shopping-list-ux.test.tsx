@@ -1,60 +1,37 @@
 import "@testing-library/jest-dom/vitest";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Outlet, useNavigate, useRevalidator } from "react-router";
 import React from "react";
 import { createTestRoutesStub, requiredLabel } from "../utils";
 
-vi.mock("motion/react", () => {
-  const MotionDiv = ({
-    children,
-    onDragEnd,
-    animate,
-    layout,
-    drag: _drag,
-    dragConstraints: _dragConstraints,
-    dragElastic: _dragElastic,
-    dragMomentum: _dragMomentum,
-    dragDirectionLock: _dragDirectionLock,
-    initial: _initial,
-    exit: _exit,
-    transition: _transition,
-    ...props
-  }: {
-    children: React.ReactNode;
-    onDragEnd?: (_event: unknown, info: { offset: { x: number; y: number } }) => void;
-    animate?: { x?: number };
-    layout?: boolean | "position";
-    [key: string]: unknown;
-  }) => (
-    <div
-      {...props}
-      data-motion-x={String(animate?.x ?? 0)}
-      data-layout={layout ? String(layout) : undefined}
-      onPointerUp={(event) => {
-        const offsetX = Number(
-          (event.currentTarget as HTMLDivElement).dataset.dragOffsetX ?? "0"
-        );
-        onDragEnd?.(event, { offset: { x: offsetX, y: 0 } });
-      }}
-    >
-      {children}
-    </div>
-  );
-
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    LayoutGroup: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    LazyMotion: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    m: { div: MotionDiv },
-  };
-});
-
 import ShoppingList, {
-  getShoppingSectionLabel,
   orderShoppingItemsForMarket,
+  shoppingSections,
 } from "~/routes/shopping-list";
+
+/** Opens a row's delete confirmation the way a keyboard or screen reader user does: its actions menu. */
+async function requestDelete(name: string) {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: `Actions for ${name}` }));
+  await user.click(await screen.findByRole("menuitem", { name: `Delete ${name}` }));
+}
+
+/** The shopping list's aisles, in order: one HX checklist each, named for its aisle. */
+function aisleNames() {
+  return screen
+    .getAllByRole("group")
+    .filter((group) => group.getAttribute("data-ouro") === "checklist")
+    .map((group) => document.getElementById(group.getAttribute("aria-labelledby")!)!.textContent);
+}
+
+/** The checklist rows' names, in order. */
+function rowNames() {
+  return screen
+    .getAllByRole("checkbox")
+    .map((box) => document.getElementById(box.getAttribute("aria-labelledby")!)!.textContent);
+}
 
 describe("shopping list UX updates", () => {
   const singleItemData = {
@@ -81,7 +58,7 @@ describe("shopping list UX updates", () => {
       loader: () => singleItemData, action: () => { writes++; return { success: true }; },
     }]);
     render(<Stub initialEntries={["/shopping-list"]} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus());
     await userEvent.setup().keyboard("{Escape}");
@@ -107,7 +84,7 @@ describe("shopping list UX updates", () => {
       action: () => { writes++; return { success: true }; },
     }] }]);
     render(<Stub initialEntries={["/shopping-list"]} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
     const oldConfirm = within(dialog).getByRole("button", { name: "Remove" });
     await act(async () => {
@@ -129,11 +106,11 @@ describe("shopping list UX updates", () => {
       },
     }]);
     render(<Stub initialEntries={["/shopping-list"]} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toBeInTheDocument());
     expect(writes).toEqual(["item-1"]);
-    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await waitFor(() => expect(writes).toEqual(["item-1", "item-1"]));
   });
@@ -154,32 +131,16 @@ describe("shopping list UX updates", () => {
     ]);
   });
 
-  it("labels sections by aisle even when items are checked", () => {
-    expect(getShoppingSectionLabel(
-      { checked: false, categoryLabel: "Produce" },
-      null,
-      "need"
-    )).toBe("Produce");
-    expect(getShoppingSectionLabel(
-      { checked: false, categoryLabel: "Produce" },
-      { checked: false, categoryLabel: "Produce" },
-      "need"
-    )).toBeNull();
-    expect(getShoppingSectionLabel(
-      { checked: true, categoryLabel: "Produce" },
-      { checked: false, categoryLabel: "Other" },
-      "all"
-    )).toBe("Produce");
-    expect(getShoppingSectionLabel(
-      { checked: true, categoryLabel: "Dairy" },
-      { checked: true, categoryLabel: "Produce" },
-      "all"
-    )).toBe("Dairy");
-    expect(getShoppingSectionLabel(
-      { checked: true, categoryLabel: "Produce" },
-      null,
-      "basket"
-    )).toBe("Produce");
+  it("splits the ordered list into one section per run of an aisle", () => {
+    expect(shoppingSections([
+      { id: "a", categoryLabel: "Produce" },
+      { id: "b", categoryLabel: "Produce" },
+      { id: "c", categoryLabel: "Dairy" },
+    ])).toEqual([
+      { label: "Produce", items: [{ id: "a", categoryLabel: "Produce" }, { id: "b", categoryLabel: "Produce" }] },
+      { label: "Dairy", items: [{ id: "c", categoryLabel: "Dairy" }] },
+    ]);
+    expect(shoppingSections([])).toEqual([]);
   });
 
   it("removes inline remove buttons and per-item category chips", async () => {
@@ -196,7 +157,9 @@ describe("shopping list UX updates", () => {
 
     expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("shopping-list-category")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Remove chicken thigh" })).not.toBeInTheDocument();
+    // The aisle names the row's checklist instead of a chip on every row.
+    expect(aisleNames()).toEqual(["Protein"]);
   });
 
   it("shows a retryable message and keeps the typed item when the add could not be saved", async () => {
@@ -316,17 +279,13 @@ describe("shopping list UX updates", () => {
 
     render(<Stub initialEntries={["/shopping-list"]} />);
 
-    const amountOf = async (name: string) => {
-      const item = await screen.findByRole("checkbox", { name: new RegExp(`^${name}`) });
-      return item.textContent ?? "";
-    };
-    expect(await amountOf("chicken stock")).toContain("⅓ cup");
-    expect(await amountOf("chicken stock")).not.toContain("0.3125");
-    expect(await amountOf("jasmine rice")).toContain("2 ½ cups");
+    // Each row's amount is its checklist value, heard after its name.
+    expect(await screen.findByRole("checkbox", { name: "chicken stock" })).toHaveAccessibleDescription("⅓ cup");
+    expect(screen.getByRole("checkbox", { name: "jasmine rice" })).toHaveAccessibleDescription("2 ½ cups");
     // A counted thing shows its number alone: "whole" is a stored unit, not a word a cook writes.
-    expect(await amountOf("lemon")).toMatch(/lemon2$/);
-    expect(await amountOf("garlic")).toContain("3 cloves");
-    expect(await amountOf("salt")).not.toMatch(/\d/);
+    expect(screen.getByRole("checkbox", { name: "lemon" })).toHaveAccessibleDescription("2");
+    expect(screen.getByRole("checkbox", { name: "garlic" })).toHaveAccessibleDescription("3 cloves");
+    expect(screen.getByRole("checkbox", { name: "salt" })).not.toHaveAttribute("aria-describedby");
   });
 
   it("filters the list by needed, basket, and all item views", async () => {
@@ -370,15 +329,15 @@ describe("shopping list UX updates", () => {
     expect(await screen.findByText("lemons")).toBeInTheDocument();
     expect(screen.getByText("limes")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Need 1/i }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "View" })).getByRole("radio", { name: "Need 1" }));
     expect(screen.getByText("lemons")).toBeInTheDocument();
     expect(screen.queryByText("limes")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Basket 1/i }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "View" })).getByRole("radio", { name: "Basket 1" }));
     expect(screen.queryByText("lemons")).not.toBeInTheDocument();
     expect(screen.getByText("limes")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /All 2/i }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "View" })).getByRole("radio", { name: "All 2" }));
     expect(screen.getByText("lemons")).toBeInTheDocument();
     expect(screen.getByText("limes")).toBeInTheDocument();
   });
@@ -432,12 +391,9 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("tomatoes")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /All 3/i }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "View" })).getByRole("radio", { name: "All 3" }));
 
-    expect(screen.getAllByTestId("shopping-list-category").map((category) => category.textContent)).toEqual([
-      "Produce",
-      "Dairy",
-    ]);
+    expect(aisleNames()).toEqual(["Produce", "Dairy"]);
     expect(screen.getByText("limes")).toBeInTheDocument();
     expect(screen.getByText("butter")).toBeInTheDocument();
   });
@@ -471,7 +427,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("tomatoes")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Basket 0/i }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "View" })).getByRole("radio", { name: "Basket 0" }));
 
     expect(screen.getByRole("heading", { name: "Nothing in the basket yet" })).toBeInTheDocument();
   });
@@ -523,10 +479,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("tomatoes")).toBeInTheDocument();
-    expect(screen.getAllByTestId("shopping-list-category").map((category) => category.textContent)).toEqual([
-      "Produce",
-      "Pantry",
-    ]);
+    expect(aisleNames()).toEqual(["Produce", "Pantry"]);
   });
 
   it("renders the parse review panel from action data after a failed add", async () => {
@@ -577,9 +530,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     await screen.findByText("chicken thigh");
-    expect(screen.getByRole("button", { name: "Remove chicken thigh" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Actions for chicken thigh" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete chicken thigh" }));
+    await requestDelete("chicken thigh");
     const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
     expect(writes).toEqual([]);
     expect(screen.getByRole("checkbox", { name: "chicken thigh", hidden: true })).toBeInTheDocument();
@@ -616,7 +567,7 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     await screen.findByText("chicken thigh");
-    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
 
     await waitFor(() => {
@@ -650,14 +601,14 @@ describe("shopping list UX updates", () => {
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     const dialog = await screen.findByRole("alertdialog", { name: 'Remove "chicken thigh"?' });
     expect(writes).toBe(0);
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(screen.getByRole("checkbox", { name: "chicken thigh" })).toBeInTheDocument();
     expect(writes).toBe(0);
-    fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" }));
+    await requestDelete("chicken thigh");
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByText("chicken thigh")).not.toBeInTheDocument());
     expect(writes).toBe(1);
@@ -762,20 +713,12 @@ describe("shopping list UX updates", () => {
     const { container } = render(<Stub initialEntries={["/shopping-list"]} />);
 
     expect(await screen.findByText("apples")).toBeInTheDocument();
-    expect(screen.getAllByTestId("shopping-list-motion-item")).toHaveLength(2);
-    for (const listItem of screen.getAllByTestId("shopping-list-motion-item")) {
-      expect(listItem).toHaveAttribute("data-layout", "position");
-    }
     expect(container.querySelectorAll('[data-ouro="swipe-actions"]')).toHaveLength(2);
     const applesRow = screen.getByText("apples").closest('[data-ouro="swipe-actions"]');
-    const applesCheck = within(applesRow!).getByRole("checkbox", { name: "apples" });
+    const applesCheck = within(applesRow as HTMLElement).getByRole("checkbox", { name: "apples" });
     fireEvent.click(applesCheck);
 
-    await waitFor(() => {
-      expect(screen.getAllByRole("checkbox").map((checkbox) => checkbox.getAttribute("aria-label"))).toEqual([
-        "apples",
-        "bananas",
-      ]);
-    });
+    await waitFor(() => expect(applesCheck).toHaveAttribute("aria-checked", "true"));
+    expect(rowNames()).toEqual(["apples", "bananas"]);
   });
 });

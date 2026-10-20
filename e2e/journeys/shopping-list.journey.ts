@@ -184,7 +184,8 @@ test.describe("Shopping list", () => {
     await expect(removalDialog).toBeVisible();
     await expect(removalDialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
     expect(removeRequests).toEqual([]);
-    await expect(lemons).toHaveAttribute("aria-checked", "false");
+    // The modal hides the list from assistive technology while it asks; the row is still unchecked.
+    await expect(page.getByRole("checkbox", { name: "lemons", exact: true, includeHidden: true })).toHaveAttribute("aria-checked", "false");
     await removalDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(removalDialog).toBeHidden();
     await expect(page.getByRole("button", { name: "Actions for lemons", exact: true })).toBeFocused();
