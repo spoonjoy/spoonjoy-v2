@@ -619,30 +619,6 @@ body:has(#cook) .sj-mobile-surface {
   color: var(--sj-on-photo-warm);
 }
 
-.sj-result-tone-recipe {
-  border-color: color-mix(in srgb, var(--sj-brass) 46%, var(--sj-border));
-  background: color-mix(in srgb, var(--sj-brass) 10%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
-.sj-result-tone-cookbook {
-  border-color: color-mix(in srgb, var(--sj-herb) 48%, var(--sj-border));
-  background: color-mix(in srgb, var(--sj-herb) 10%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
-.sj-result-tone-chef {
-  border-color: var(--sj-border-strong);
-  background: color-mix(in srgb, var(--sj-charcoal) 6%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
-.sj-result-tone-shopping-list-item {
-  border-color: color-mix(in srgb, var(--sj-tomato) 42%, var(--sj-border));
-  background: color-mix(in srgb, var(--sj-tomato) 9%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
 .sj-receipt {
   border: 1px solid var(--sj-border);
   background:

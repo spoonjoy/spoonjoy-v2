@@ -929,7 +929,6 @@
         "app/routes/search.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/hooks/useUrlSyncedInput.ts",
         "app/lib/analytics-server.ts",
@@ -965,15 +964,31 @@
         "app/lib/session.server.ts"
       ],
       "components": [
+        "badge",
         "button",
         "heading",
+        "item",
+        "item-group",
+        "link",
         "text"
       ],
       "renders": {
+        "badge": [
+          "app/routes/search.tsx"
+        ],
         "button": [
           "app/components/button.tsx"
         ],
         "heading": [
+          "app/routes/search.tsx"
+        ],
+        "item": [
+          "app/routes/search.tsx"
+        ],
+        "item-group": [
+          "app/routes/search.tsx"
+        ],
+        "link": [
           "app/routes/search.tsx"
         ],
         "text": [
