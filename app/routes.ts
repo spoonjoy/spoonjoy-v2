@@ -27,6 +27,8 @@ export default [
   route("chefs", "routes/chefs.tsx"),
   route("sitemap.xml", "routes/sitemap.xml.tsx"),
   route("robots.txt", "routes/robots.txt.tsx"),
+  route("llms.txt", "routes/llms[.]txt.ts"),
+  route("ouro-provenance.json", "routes/ouro-provenance[.]json.ts"),
   route("og/pages/:slug.png", "routes/og.pages.$slug.png.tsx"),
   route("og/recipes/:id.png", "routes/og.recipes.$id.png.tsx"),
   route("og/cookbooks/:id.png", "routes/og.cookbooks.$id.png.tsx"),

@@ -54,6 +54,7 @@
     "postinstall": "PRISMA_HIDE_UPDATE_MESSAGE=1 prisma generate",
     "dev": "react-router dev",
     "api:playground:generate": "tsx scripts/generate-api-playground.ts",
+    "provenance:generate": "node scripts/generate-ouro-provenance.mjs",
     "build": "pnpm run api:playground:generate && tsx scripts/react-router-build.ts",
     "preview": "wrangler pages dev",
     "deploy": "pnpm run deploy:preflight && pnpm run build && pnpm exec wrangler deploy",

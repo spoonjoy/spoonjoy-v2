@@ -215,6 +215,10 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm run verify:clean:generated-contract
 
+      - name: 🧬 Verify Ouro HX provenance
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run provenance:generate --check
+
       # Hand-rolled controls in app code may only fall: the scan must equal
       # test/scripts/hx-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
       - name: 🧭 HX source rule
@@ -287,6 +291,9 @@ jobs:
 
       - name: 🔐 Verify generated API contract
         run: pnpm run verify:clean:generated-contract
+
+      - name: 🧬 Verify Ouro HX provenance
+        run: node scripts/warning-gate.ts -- pnpm run provenance:generate --check
 
       # The checkout is the pull request's merge commit at depth 1. Deepening it by one fetches its
       # parents, the base commit among them, so `vitest --changed` (git diff base...HEAD) finds the

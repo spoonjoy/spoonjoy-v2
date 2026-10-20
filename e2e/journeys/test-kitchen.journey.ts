@@ -38,7 +38,17 @@ test.describe("Test Kitchen", () => {
     const bar = page.getByRole("group", { name: "X-ray", exact: true });
     await expect(bar).toBeVisible();
     await expect(page.locator('[data-ouro-control="inspector"][data-ouro-part="tag"]').first()).toBeAttached();
-    await bar.getByRole("button", { name: /close/i }).click();
+    // The list names every component with its docs and the source that renders it, at the commit
+    // this build was made from, and that source is really there.
+    await bar.locator('[data-ouro-part="list"]').click();
+    const list = page.getByRole("dialog", { name: "X-ray", exact: true });
+    const checklistSource = list.getByRole("link", { name: "Source of checklist (opens in a new tab)", exact: true }).first();
+    await expect(checklistSource).toHaveAttribute("href", /^https:\/\/github\.com\/spoonjoy\/spoonjoy-v2\/blob\/[0-9a-f]{40}\/app\/components\/recipe\/IngredientList\.tsx$/);
+    const source = await page.request.get((await checklistSource.getAttribute("href"))!);
+    expect(source.status()).toBe(200);
+    await page.keyboard.press("Escape");
+    await expect(list).toBeHidden();
+    await bar.getByRole("button", { name: "Close", exact: true }).click();
     await expect(bar).toBeHidden();
     await expect(xray).toHaveAttribute("aria-checked", "false");
 

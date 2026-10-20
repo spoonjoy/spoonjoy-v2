@@ -6,15 +6,20 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_KITCHEN } from "~/lib/test-kitchen/content";
 import { TEST_KITCHEN_STORAGE_KEY, readTestKitchen } from "~/lib/test-kitchen/storage";
-import TestKitchen, { meta } from "~/routes/test-kitchen";
+import { pageProvenance } from "~/lib/ouro-provenance.server";
+import TestKitchen, { TestKitchenPage, loader, meta } from "~/routes/test-kitchen";
+import { createTestRoutesStub } from "../utils";
 
 const RECIPE_ID = TEST_KITCHEN.recipe.id;
 const firstStepIngredients = TEST_KITCHEN.recipe.ingredientsByStep.get(TEST_KITCHEN.recipe.steps[0]!.id)!;
 
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+const provenance = pageProvenance("app/routes/test-kitchen.tsx", SHA);
+
 function page(path = "/test-kitchen") {
   return (
     <MemoryRouter initialEntries={[path]}>
-      <TestKitchen />
+      <TestKitchenPage provenance={provenance} />
     </MemoryRouter>
   );
 }
@@ -44,6 +49,15 @@ describe("Test Kitchen", () => {
     const tags = meta({} as Parameters<typeof meta>[0]);
     expect(tags).toContainEqual({ title: "Test Kitchen | Spoonjoy" });
     expect(tags.find((tag) => "name" in tag && tag.name === "description")).toBeTruthy();
+  });
+
+  it("loads only where its source lives, and renders from the route", async () => {
+    const data = loader({} as Parameters<typeof loader>[0]);
+    expect(data.provenance.file).toBe("app/routes/test-kitchen.tsx");
+
+    const Stub = createTestRoutesStub([{ path: "/test-kitchen", Component: TestKitchen, loader: () => data }]);
+    render(<Stub initialEntries={["/test-kitchen"]} />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
   });
 
   it("opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own", async () => {

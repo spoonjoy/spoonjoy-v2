@@ -27,6 +27,7 @@ const coverageInclude = [
   "scripts/e2e-run-cleanup.mjs",
   "scripts/check-journey-rules.mjs",
   "scripts/hx-source-rules.mjs",
+  "scripts/generate-ouro-provenance.mjs",
   "scripts/hx-census.mjs",
   "scripts/hx-census-update.mjs",
   "scripts/hx-census-merge.mjs",

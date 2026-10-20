@@ -179,7 +179,11 @@ jobs:
       - name: Check the QA config
         run: SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight
 
+      # X-ray's Source links point at the commit a person can open: the pull request's head, not
+      # its merge commit.
       - name: Build for QA
+        env:
+          SPOONJOY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build
 
       - name: Check the generated QA build

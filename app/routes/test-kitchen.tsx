@@ -1,6 +1,6 @@
 import type { Route } from "./+types/test-kitchen";
 import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { useLoaderData, useSearchParams } from "react-router";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
 import { SCALE_RANGE } from "~/components/cook/cook-controller";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
@@ -12,6 +12,8 @@ import { Switch } from "~/components/ouro/switch/switch";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 import { useLocalCookController } from "~/lib/cook/local-cook-controller";
+import { sourceHrefFor, type PageProvenance } from "~/lib/ouro-provenance";
+import { pageProvenance } from "~/lib/ouro-provenance.server";
 import { scaleServingsText } from "~/lib/quantity";
 import { TEST_KITCHEN } from "~/lib/test-kitchen/content";
 import { resetTestKitchen, testKitchenProgressStorage } from "~/lib/test-kitchen/storage";
@@ -33,8 +35,18 @@ const WHAT_TO_TRY = [
   "Turn on X-ray to see every Ouro HX component on the page, with its docs and its source.",
 ];
 
-/** A public page anyone can cook from: the recipe is bundled, so there is no loader, account or database. */
+/** Only where this page's source lives: the recipe is bundled, and there is no account or database. */
+export function loader({}: Route.LoaderArgs) {
+  return { provenance: pageProvenance("app/routes/test-kitchen.tsx") };
+}
+
 export default function TestKitchen() {
+  const { provenance } = useLoaderData<typeof loader>();
+  return <TestKitchenPage provenance={provenance} />;
+}
+
+/** The Test Kitchen, given where its source lives (for X-ray's Source links). */
+export function TestKitchenPage({ provenance }: { provenance: PageProvenance }) {
   const [searchParams] = useSearchParams();
   const [xray, setXray] = useState(() => searchParams.has("xray"));
   // Resetting starts the kitchen over: a new controller, reading the storage it just emptied.
@@ -51,7 +63,7 @@ export default function TestKitchen() {
           setVisit((current) => current + 1);
         }}
       />
-      <Inspector open={xray} onOpenChange={setXray} />
+      <Inspector open={xray} onOpenChange={setXray} sourceHref={sourceHrefFor(provenance)} />
     </>
   );
 }
