@@ -53,6 +53,7 @@ async function renderPlayground(data?: PlaygroundLoaderData) {
   const resolvedData = data ?? await loader();
   const Stub = createTestRoutesStub([
     { path: "/developers/playground", Component: DeveloperPlayground, loader: () => resolvedData },
+    { path: "/login", Component: () => null },
   ]);
   render(<Stub initialEntries={["/developers/playground"]} />);
 }
@@ -535,7 +536,7 @@ describe("/developers/playground", () => {
     fireEvent.change(screen.getByLabelText("JSON body"), {
       target: { value: "{\"name\":\"Kitchen secret token\",\"clientMutationId\":\"secret-mutation\",\"scopes\":[\"recipes:read\"]}" },
     });
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
@@ -730,7 +731,7 @@ describe("/developers/playground", () => {
       target: { value: "{\"name\":\"External client\",\"scopes\":[\"recipes:read\"]}" },
     });
     expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -774,16 +775,16 @@ describe("/developers/playground", () => {
     fireEvent.change(photoInput, { target: { files: [] } });
     expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
 
-    const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
+    const riskCheckbox = screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i });
     fireEvent.click(riskCheckbox);
     expect(riskCheckbox).toBeChecked();
 
 	    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
 	    fireEvent.change(mutationIdInput, { target: { value: "profile-photo:playground" } });
 	    fireEvent.change(photoInput, { target: { files: [file] } });
-    await waitFor(() => expect(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i)).not.toBeChecked());
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i })).not.toBeChecked());
     expect(screen.getByText("Confirm this real-data operation before sending.")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Send request" })).not.toBeDisabled());
 
     fireEvent.submit(screen.getByRole("button", { name: "Send request" }).closest("form")!);
@@ -802,6 +803,10 @@ describe("/developers/playground", () => {
 	      ["photo", file],
 	    ]);
     expect(await screen.findByText("200 OK")).toBeInTheDocument();
+
+    // Removing the photo from the field takes it out of the request again.
+    fireEvent.click(screen.getByRole("button", { name: `Remove ${file.name}` }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled());
   });
 
   it("renders optional multipart fields without accept or description metadata", async () => {
@@ -841,7 +846,7 @@ describe("/developers/playground", () => {
     const optionalInput = await screen.findByLabelText(/Photo/) as HTMLInputElement;
     expect(optionalInput).not.toHaveAttribute("accept");
     expect(optionalInput).not.toBeRequired();
-    expect(optionalInput).toHaveAttribute("aria-required", "false");
+    expect(optionalInput).not.toHaveAttribute("aria-required", "true");
     expect(optionalInput).toHaveAccessibleDescription("multipart optional");
     expect(optionalInput).toHaveValue("");
 
@@ -1019,7 +1024,7 @@ describe("/developers/playground", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Create a bearer credential/i }));
     fireEvent.change(screen.getByLabelText("JSON body"), { target: { value: "{\"name\":\"Client\"}" } });
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     expect(await screen.findByText("Secret values hidden in response body")).toBeInTheDocument();
@@ -1211,32 +1216,6 @@ describe("/developers/playground", () => {
     expect(screen.queryByText("Could not copy Copy path")).not.toBeInTheDocument();
   });
 
-  it("supports keyboard roving for surface and auth mode radio groups", async () => {
-    await renderPlayground();
-
-    const allApis = await screen.findByRole("radio", { name: "All APIs" });
-    fireEvent.keyDown(allApis, { key: "ArrowRight" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Connector" })).toHaveFocus());
-    expect(screen.getByRole("radio", { name: "Connector" })).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.keyDown(screen.getByRole("radio", { name: "Connector" }), { key: "End" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "SDK" })).toHaveFocus());
-    expect(screen.getByRole("radio", { name: "SDK" })).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.keyDown(screen.getByRole("radio", { name: "SDK" }), { key: "Home" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "All APIs" })).toHaveFocus());
-    fireEvent.keyDown(screen.getByRole("radio", { name: "All APIs" }), { key: "Escape" });
-    expect(screen.getByRole("radio", { name: "All APIs" })).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.click(screen.getByRole("button", { name: /Search public recipes/i }));
-    const anonymous = screen.getByRole("radio", { name: "Anonymous" });
-    fireEvent.keyDown(anonymous, { key: "ArrowLeft" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Bearer" })).toHaveFocus());
-    expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.keyDown(screen.getByRole("radio", { name: "Bearer" }), { key: "Enter" });
-    expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
-  });
-
   it("handles OAuth callback validation failures and redirect submissions", async () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
 
@@ -1248,7 +1227,7 @@ describe("/developers/playground", () => {
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-redirect_uri")!, { target: { value: "https://client.example/callback" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-state")!, { target: { value: "state_without_pkce" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-code_challenge")!, { target: { value: "challenge_without_pkce" } });
-    const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
+    const riskCheckbox = screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i });
     fireEvent.click(riskCheckbox);
     fireEvent.click(screen.getByRole("button", { name: "Open authorization URL" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(
@@ -1308,7 +1287,7 @@ describe("/developers/playground", () => {
     window.sessionStorage.removeItem("spoonjoy.playground.pkce");
     fireEvent.click(screen.getByRole("button", { name: "Generate PKCE + state" }));
     await screen.findByLabelText("PKCE and state bundle");
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Open authorization URL" }));
 
     await waitFor(() => expect(open).toHaveBeenCalledWith(

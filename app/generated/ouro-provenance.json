@@ -2586,7 +2586,16 @@
       "components": [
         "badge",
         "button",
-        "text"
+        "checkbox",
+        "collapsible",
+        "empty",
+        "file-field",
+        "heading",
+        "link",
+        "segmented-control",
+        "text",
+        "text-area",
+        "text-field"
       ],
       "renders": {
         "badge": [
@@ -2595,7 +2604,34 @@
         "button": [
           "app/components/button.tsx"
         ],
+        "checkbox": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "collapsible": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "empty": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "file-field": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "heading": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "link": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "segmented-control": [
+          "app/routes/developers.playground.tsx"
+        ],
         "text": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "text-area": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "text-field": [
           "app/routes/developers.playground.tsx"
         ]
       }
