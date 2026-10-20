@@ -44,8 +44,13 @@ function cookbooksHeading(page: Page) {
 }
 
 // A row on /cookbooks. Its name is the title followed by the "N recipes" subtitle.
-function cookbookRow(page: Page, title: string) {
+function cookbookLink(page: Page, title: string) {
   return page.getByRole("main").getByRole("link", { name: new RegExp(`^${title}`) });
+}
+
+// The cookbook's row in the list: its link, and the recipe count beside it.
+function cookbookRow(page: Page, title: string) {
+  return page.getByRole("main").getByRole("listitem").filter({ has: cookbookLink(page, title) });
 }
 
 function ownerToolsToggle(page: Page) {
@@ -149,7 +154,7 @@ test.describe("Cookbooks", () => {
     await page.goto("/cookbooks");
     await waitForHydration(page);
     await expect(cookbookRow(page, title)).toContainText("1 recipe");
-    await cookbookRow(page, title).click();
+    await cookbookLink(page, title).click();
     await expect(page).toHaveURL(pathUrl(cookbookPath));
     await expect(cookbookHeading(page, title)).toBeVisible();
     await expect(seededRecipeLink(main, SALMON_TITLE, SALMON)).toBeVisible();
@@ -239,7 +244,7 @@ test.describe("Cookbooks", () => {
     await expect(cookbookRow(page, originalTitle)).toHaveCount(0);
 
     // Delete it through the owner tools' confirmation dialog.
-    await cookbookRow(page, renamedTitle).click();
+    await cookbookLink(page, renamedTitle).click();
     await expect(page).toHaveURL(pathUrl(cookbookPath));
     await waitForHydration(page);
     await ownerToolsToggle(page).click();

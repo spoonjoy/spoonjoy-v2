@@ -1,4 +1,26 @@
 {
+  "allowedRegressions": [
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::",
+      "count": 1,
+      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
+    },
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::aria-label=Search",
+      "count": 1,
+      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
+    },
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::",
+      "count": 1,
+      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
+    },
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::aria-label=Search",
+      "count": 1,
+      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
+    }
+  ],
   "offenders": {
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
