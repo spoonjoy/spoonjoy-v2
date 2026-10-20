@@ -435,7 +435,7 @@
           "count": 1
         },
         {
-          "identity": "textbox \"Connection code ABCD-2345\" [-/-] in main",
+          "identity": "textbox \"Connection code\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -535,7 +535,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [-/-] in main",
+          "identity": "link \"Saffron Risotto\" [item/link] in main",
           "count": 1
         },
         {
@@ -631,7 +631,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [-/-] in main",
+          "identity": "link \"Saffron Risotto\" [item/link] in main",
           "count": 1
         },
         {
@@ -1233,39 +1233,39 @@
           "count": 1
         },
         {
-          "identity": "link \"Agent clients\" [-/-] in main",
+          "identity": "link \"Agent clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Auth Implementation\" [-/-] in main",
+          "identity": "link \"Auth Implementation\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Auth Implementation\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Auth Implementation\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Auth\" [-/-] in main",
+          "identity": "link \"Auth\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Auth\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Auth\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Browser clients\" [-/-] in main",
+          "identity": "link \"Browser clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"CLI/script clients\" [-/-] in main",
+          "identity": "link \"CLI/script clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Client Starting Points\" [-/-] in main",
+          "identity": "link \"Client Starting Points\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Client Starting Points\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Client Starting Points\" [link/root] in main",
           "count": 1
         },
         {
@@ -1277,23 +1277,23 @@
           "count": 1
         },
         {
-          "identity": "link \"Current API Boundary\" [-/-] in main",
+          "identity": "link \"Current API Boundary\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Current API Boundary\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Current API Boundary\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Enterprise clients\" [-/-] in main",
+          "identity": "link \"Enterprise clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"External Client Guide\" [-/-] in main",
+          "identity": "link \"External Client Guide\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"External Client Guide\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"External Client Guide\" [link/root] in main",
           "count": 1
         },
         {
@@ -1301,31 +1301,31 @@
           "count": 1
         },
         {
-          "identity": "link \"Mobile apps\" [-/-] in main",
+          "identity": "link \"Mobile apps\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"OAuth And Delegated Flows\" [-/-] in main",
+          "identity": "link \"OAuth And Delegated Flows\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"OAuth And Delegated Flows\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"OAuth And Delegated Flows\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"OAuth Scope Mapping\" [-/-] in main",
+          "identity": "link \"OAuth Scope Mapping\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"OAuth Scope Mapping\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"OAuth Scope Mapping\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Offline Product Contract\" [-/-] in main",
+          "identity": "link \"Offline Product Contract\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Offline Product Contract\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Offline Product Contract\" [link/root] in main",
           "count": 1
         },
         {
@@ -1337,19 +1337,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Reference\" [-/-] in main",
+          "identity": "link \"Reference\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Reference\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Reference\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Response Protocols\" [-/-] in main",
+          "identity": "link \"Response Protocols\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Response Protocols\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Response Protocols\" [link/root] in main",
           "count": 1
         },
         {
@@ -1357,19 +1357,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Scenario Quickstarts\" [-/-] in main",
+          "identity": "link \"Scenario Quickstarts\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Scenario Quickstarts\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Scenario Quickstarts\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Scopes\" [-/-] in main",
+          "identity": "link \"Scopes\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Scopes\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Scopes\" [link/root] in main",
           "count": 1
         },
         {
@@ -1385,11 +1385,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [-/-] in main",
+          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [link/root] in main",
           "count": 1
         },
         {
@@ -1397,31 +1397,31 @@
           "count": 1
         },
         {
-          "identity": "link \"Sync And Safety\" [-/-] in main",
+          "identity": "link \"Sync And Safety\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Sync And Safety\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Sync And Safety\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Terminal Quickstart\" [-/-] in main",
+          "identity": "link \"Terminal Quickstart\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Terminal Quickstart\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Terminal Quickstart\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Tiny-device clients\" [-/-] in main",
+          "identity": "link \"Tiny-device clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Token Acquisition\" [-/-] in main",
+          "identity": "link \"Token Acquisition\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Token Acquisition\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Token Acquisition\" [link/root] in main",
           "count": 1
         }
       ]
@@ -2221,7 +2221,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
@@ -2249,7 +2249,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         }
       ]
@@ -2265,7 +2265,7 @@
           "count": 1
         },
         {
-          "identity": "link \"API guide\" [-/-] in main",
+          "identity": "link \"API guide\" [link/root] in main",
           "count": 1
         },
         {
@@ -2273,11 +2273,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Developer Platform\" [-/-] in main",
+          "identity": "link \"Developer Platform\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Protected-resource metadata\" [-/-] in region \"Auth Discovery\"",
+          "identity": "link \"Protected-resource metadata\" [link/root] in region \"Auth Discovery\"",
           "count": 1
         },
         {
@@ -2289,7 +2289,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Sign In\" [-/-] in main",
+          "identity": "link \"Sign In\" [button/root] in main",
           "count": 1
         },
         {
@@ -2497,7 +2497,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
@@ -2521,7 +2521,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         }
       ]
@@ -2953,23 +2953,11 @@
           "count": 1
         },
         {
-          "identity": "button \"From a link\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"From a photo\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Import recipe\" [button/root] in form \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Paste text\" [-/-] in group \"How to bring the recipe in\"",
           "count": 1
         },
         {
@@ -3026,6 +3014,18 @@
         },
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -3059,14 +3059,6 @@
           "count": 1
         },
         {
-          "identity": "button \"From a link\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"From a photo\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Import recipe\" [button/root] in form \"Start from a recipe you already have.\"",
           "count": 1
         },
@@ -3075,11 +3067,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Paste text\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Recipe photo\" [field/control] in form \"Start from a recipe you already have.\"",
+          "identity": "button \"Recipe photo\" [file-field/input] in form \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -3136,6 +3124,18 @@
         },
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -3165,23 +3165,11 @@
           "count": 1
         },
         {
-          "identity": "button \"From a link\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"From a photo\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Import recipe\" [button/root] in form \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Paste text\" [-/-] in group \"How to bring the recipe in\"",
           "count": 1
         },
         {
@@ -3238,6 +3226,18 @@
         },
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -3323,6 +3323,14 @@
       ],
       "default": [
         {
+          "identity": "button \"\" [button/root] in main",
+          "count": 6
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
@@ -3347,7 +3355,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Manage recipeOpen +\" [-/-] in main",
+          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -3361,6 +3369,14 @@
         {
           "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in main",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
@@ -3384,6 +3400,10 @@
         },
         {
           "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [button/root] in main",
           "count": 1
         },
         {
@@ -3451,15 +3471,15 @@
           "count": 1
         },
         {
+          "identity": "textbox \"\" [text-field/input] in main",
+          "count": 2
+        },
+        {
           "identity": "textbox \"Scale\" [number-field/input] in main",
           "count": 1
         }
       ],
       "delete-dialog": [
-        {
-          "identity": "button \"\" [-/-] in main",
-          "count": 2
-        },
         {
           "identity": "button \"\" [button/root] in banner",
           "count": 2
@@ -3467,6 +3487,14 @@
         {
           "identity": "button \"\" [button/root] in main",
           "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -3539,16 +3567,20 @@
       ],
       "log-cook-dialog": [
         {
-          "identity": "button \"\" [-/-] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"\" [button/root] in banner",
           "count": 2
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 5
+          "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -3571,8 +3603,16 @@
           "count": 1
         },
         {
-          "identity": "button \"Photo Add photoNo photo yetJPG, PNG, or WebP. 5 MB max.\" [-/-] in dialog \"Log a cook\"",
+          "identity": "button \"Photo\" [file-field/input] in dialog \"Log a cook\"",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in main",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/box] in main",
@@ -3592,7 +3632,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in banner",
@@ -3613,6 +3653,10 @@
         {
           "identity": "textbox \"\" [number-field/input] in main",
           "count": 1
+        },
+        {
+          "identity": "textbox \"\" [text-field/input] in main",
+          "count": 2
         },
         {
           "identity": "textbox \"Cooked at\" [field/control] in dialog \"Log a cook\"",
@@ -3665,7 +3709,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Manage recipeClose\" [-/-] in main",
+          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -3673,7 +3717,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Recipe photo Lemon Herb RiceNo photo selectedJPG, PNG, or WebP. 5 MB max.\" [-/-] in region \"Photos\"",
+          "identity": "button \"Recipe photo\" [file-field/input] in region \"Photos\"",
           "count": 1
         },
         {
@@ -3815,16 +3859,20 @@
       ],
       "save-dialog": [
         {
-          "identity": "button \"\" [-/-] in main",
-          "count": 1
-        },
-        {
           "identity": "button \"\" [button/root] in banner",
           "count": 2
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 5
+          "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -3843,12 +3891,20 @@
           "count": 1
         },
         {
-          "identity": "button \"Soups\" [-/-] in dialog \"Save to cookbook\"",
+          "identity": "button \"Soups\" [toggle/root] in dialog \"Save to cookbook\"",
           "count": 1
         },
         {
-          "identity": "button \"Weeknight Dinners\" [-/-] in dialog \"Save to cookbook\"",
+          "identity": "button \"Weeknight Dinners\" [toggle/root] in dialog \"Save to cookbook\"",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in main",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/box] in main",
@@ -3868,7 +3924,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in banner",
@@ -3891,15 +3947,15 @@
           "count": 1
         },
         {
+          "identity": "textbox \"\" [text-field/input] in main",
+          "count": 2
+        },
+        {
           "identity": "textbox \"Create new cookbook\" [text-field/input] in dialog \"Save to cookbook\"",
           "count": 1
         }
       ],
       "variation-dialog": [
-        {
-          "identity": "button \"\" [-/-] in main",
-          "count": 2
-        },
         {
           "identity": "button \"\" [button/root] in banner",
           "count": 2
@@ -3907,6 +3963,14 @@
         {
           "identity": "button \"\" [button/root] in main",
           "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -4609,7 +4673,7 @@
           "count": 1
         },
         {
-          "identity": "searchbox \"Search terms\" [-/-] in search",
+          "identity": "searchbox \"Search terms\" [text-field/input] in search",
           "count": 1
         }
       ]
@@ -4705,7 +4769,7 @@
           "count": 1
         },
         {
-          "identity": "searchbox \"Search terms\" [-/-] in search",
+          "identity": "searchbox \"Search terms\" [text-field/input] in search",
           "count": 1
         }
       ]
@@ -5283,7 +5347,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
@@ -5311,7 +5375,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         },
         {
@@ -5351,7 +5415,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
@@ -5375,7 +5439,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         },
         {
@@ -6425,7 +6489,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         }
       ]
@@ -6657,7 +6721,7 @@
           "count": 1
         },
         {
-          "identity": "textbox \"Connection code ABCD-2345\" [-/-] in main",
+          "identity": "textbox \"Connection code\" [text-field/input] in main",
           "count": 1
         }
       ]
@@ -6725,7 +6789,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [-/-] in main",
+          "identity": "link \"Saffron Risotto\" [item/link] in main",
           "count": 1
         },
         {
@@ -6745,7 +6809,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -6797,7 +6861,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saffron Risotto\" [-/-] in main",
+          "identity": "link \"Saffron Risotto\" [item/link] in main",
           "count": 1
         },
         {
@@ -7175,39 +7239,39 @@
     "developers": {
       "default": [
         {
-          "identity": "link \"Agent clients\" [-/-] in main",
+          "identity": "link \"Agent clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Auth Implementation\" [-/-] in main",
+          "identity": "link \"Auth Implementation\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Auth Implementation\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Auth Implementation\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Auth\" [-/-] in main",
+          "identity": "link \"Auth\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Auth\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Auth\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Browser clients\" [-/-] in main",
+          "identity": "link \"Browser clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"CLI/script clients\" [-/-] in main",
+          "identity": "link \"CLI/script clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Client Starting Points\" [-/-] in main",
+          "identity": "link \"Client Starting Points\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Client Starting Points\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Client Starting Points\" [link/root] in main",
           "count": 1
         },
         {
@@ -7215,23 +7279,23 @@
           "count": 1
         },
         {
-          "identity": "link \"Current API Boundary\" [-/-] in main",
+          "identity": "link \"Current API Boundary\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Current API Boundary\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Current API Boundary\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Enterprise clients\" [-/-] in main",
+          "identity": "link \"Enterprise clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"External Client Guide\" [-/-] in main",
+          "identity": "link \"External Client Guide\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"External Client Guide\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"External Client Guide\" [link/root] in main",
           "count": 1
         },
         {
@@ -7247,31 +7311,31 @@
           "count": 1
         },
         {
-          "identity": "link \"Mobile apps\" [-/-] in main",
+          "identity": "link \"Mobile apps\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"OAuth And Delegated Flows\" [-/-] in main",
+          "identity": "link \"OAuth And Delegated Flows\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"OAuth And Delegated Flows\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"OAuth And Delegated Flows\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"OAuth Scope Mapping\" [-/-] in main",
+          "identity": "link \"OAuth Scope Mapping\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"OAuth Scope Mapping\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"OAuth Scope Mapping\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Offline Product Contract\" [-/-] in main",
+          "identity": "link \"Offline Product Contract\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Offline Product Contract\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Offline Product Contract\" [link/root] in main",
           "count": 1
         },
         {
@@ -7283,19 +7347,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Reference\" [-/-] in main",
+          "identity": "link \"Reference\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Reference\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Reference\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Response Protocols\" [-/-] in main",
+          "identity": "link \"Response Protocols\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Response Protocols\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Response Protocols\" [link/root] in main",
           "count": 1
         },
         {
@@ -7303,19 +7367,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Scenario Quickstarts\" [-/-] in main",
+          "identity": "link \"Scenario Quickstarts\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Scenario Quickstarts\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Scenario Quickstarts\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Scopes\" [-/-] in main",
+          "identity": "link \"Scopes\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Scopes\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Scopes\" [link/root] in main",
           "count": 1
         },
         {
@@ -7331,43 +7395,43 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [-/-] in main",
+          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Spoonjoy Apple native dogfood quickstart\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
-          "identity": "link \"Sync And Safety\" [-/-] in main",
+          "identity": "link \"Sync And Safety\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Sync And Safety\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Sync And Safety\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Terminal Quickstart\" [-/-] in main",
+          "identity": "link \"Terminal Quickstart\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Terminal Quickstart\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Terminal Quickstart\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Tiny-device clients\" [-/-] in main",
+          "identity": "link \"Tiny-device clients\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Token Acquisition\" [-/-] in main",
+          "identity": "link \"Token Acquisition\" [button/root] in navigation \"Developer guide sections\"",
           "count": 1
         },
         {
-          "identity": "link \"Token Acquisition\" [-/-] in navigation \"Developer guide sections\"",
+          "identity": "link \"Token Acquisition\" [link/root] in main",
           "count": 1
         }
       ]
@@ -7767,7 +7831,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -7847,7 +7911,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -8023,7 +8087,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -8059,7 +8123,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         }
       ]
@@ -8071,11 +8135,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"SPOONJOY\" [-/-] in main",
+          "identity": "link \"SPOONJOY\" [link/root] in main",
           "count": 1
         },
         {
@@ -8087,7 +8151,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         }
       ]
@@ -8095,11 +8159,11 @@
     "mcp": {
       "default": [
         {
-          "identity": "link \"API guide\" [-/-] in main",
+          "identity": "link \"API guide\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Developer Platform\" [-/-] in main",
+          "identity": "link \"Developer Platform\" [button/root] in main",
           "count": 1
         },
         {
@@ -8111,7 +8175,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Protected-resource metadata\" [-/-] in region \"Auth Discovery\"",
+          "identity": "link \"Protected-resource metadata\" [link/root] in region \"Auth Discovery\"",
           "count": 1
         },
         {
@@ -8123,7 +8187,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Sign In\" [-/-] in main",
+          "identity": "link \"Sign In\" [button/root] in main",
           "count": 1
         },
         {
@@ -8135,7 +8199,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         }
       ]
@@ -8231,7 +8295,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         }
       ]
@@ -8259,7 +8323,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
@@ -8267,7 +8331,7 @@
           "count": 1
         },
         {
-          "identity": "link \"SPOONJOY\" [-/-] in main",
+          "identity": "link \"SPOONJOY\" [link/root] in main",
           "count": 1
         },
         {
@@ -8283,11 +8347,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         }
       ]
@@ -8323,7 +8387,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -8611,19 +8675,7 @@
           "count": 1
         },
         {
-          "identity": "button \"From a link\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"From a photo\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Import recipe\" [button/root] in form \"Start from a recipe you already have.\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Paste text\" [-/-] in group \"How to bring the recipe in\"",
           "count": 1
         },
         {
@@ -8636,6 +8688,18 @@
         },
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -8669,23 +8733,11 @@
           "count": 1
         },
         {
-          "identity": "button \"From a link\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"From a photo\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Import recipe\" [button/root] in form \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
-          "identity": "button \"Paste text\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Recipe photo\" [field/control] in form \"Start from a recipe you already have.\"",
+          "identity": "button \"Recipe photo\" [file-field/input] in form \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -8698,6 +8750,18 @@
         },
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -8727,19 +8791,7 @@
           "count": 1
         },
         {
-          "identity": "button \"From a link\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"From a photo\" [-/-] in group \"How to bring the recipe in\"",
-          "count": 1
-        },
-        {
           "identity": "button \"Import recipe\" [button/root] in form \"Start from a recipe you already have.\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Paste text\" [-/-] in group \"How to bring the recipe in\"",
           "count": 1
         },
         {
@@ -8752,6 +8804,18 @@
         },
         {
           "identity": "link \"← Back to recipes\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a link\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"From a photo\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Paste text\" [segmented-control/segment] in region \"Start from a recipe you already have.\"",
           "count": 1
         },
         {
@@ -8825,6 +8889,14 @@
       ],
       "default": [
         {
+          "identity": "button \"\" [button/root] in main",
+          "count": 6
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Add to list\" [button/root] in main",
           "count": 1
         },
@@ -8845,7 +8917,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Manage recipeOpen +\" [-/-] in main",
+          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -8855,6 +8927,14 @@
         {
           "identity": "button \"Share\" [button/root] in main",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in main",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Ingredients\"",
@@ -8878,6 +8958,10 @@
         },
         {
           "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [button/root] in main",
           "count": 1
         },
         {
@@ -8925,18 +9009,26 @@
           "count": 1
         },
         {
+          "identity": "textbox \"\" [text-field/input] in main",
+          "count": 2
+        },
+        {
           "identity": "textbox \"Scale\" [number-field/input] in main",
           "count": 1
         }
       ],
       "delete-dialog": [
         {
-          "identity": "button \"\" [-/-] in main",
-          "count": 2
-        },
-        {
           "identity": "button \"\" [button/root] in main",
           "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -8997,12 +9089,16 @@
       ],
       "log-cook-dialog": [
         {
-          "identity": "button \"\" [-/-] in main",
+          "identity": "button \"\" [button/root] in main",
+          "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -9025,8 +9121,16 @@
           "count": 1
         },
         {
-          "identity": "button \"Photo Add photoNo photo yetJPG, PNG, or WebP. 5 MB max.\" [-/-] in dialog \"Log a cook\"",
+          "identity": "button \"Photo\" [file-field/input] in dialog \"Log a cook\"",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in main",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/box] in main",
@@ -9037,7 +9141,7 @@
           "count": 5
         },
         {
-          "identity": "generic \"Add a photo to create the recipe cover PhotoAdd photoNo photo yetJPG, PNG, or WebP. 5 MB max. Note How did it go? Next time What would you change? Cooked at CancelLog cook\" [sheet/content] in dialog \"Log a cook\"",
+          "identity": "generic \"Add a photo to create the recipe cover Photo JPG, PNG, or WebP. 5 MB max. Drag a file here, or choose one Note How did it go? Next time What would you change? Cooked at CancelLog cook\" [sheet/content] in dialog \"Log a cook\"",
           "count": 1
         },
         {
@@ -9050,7 +9154,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -9063,6 +9167,10 @@
         {
           "identity": "textbox \"\" [number-field/input] in main",
           "count": 1
+        },
+        {
+          "identity": "textbox \"\" [text-field/input] in main",
+          "count": 2
         },
         {
           "identity": "textbox \"Cooked at\" [field/control] in dialog \"Log a cook\"",
@@ -9111,7 +9219,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Manage recipeClose\" [-/-] in main",
+          "identity": "button \"Manage recipe\" [collapsible/trigger] in main",
           "count": 1
         },
         {
@@ -9119,7 +9227,7 @@
           "count": 1
         },
         {
-          "identity": "button \"Recipe photo Lemon Herb RiceNo photo selectedJPG, PNG, or WebP. 5 MB max.\" [-/-] in region \"Photos\"",
+          "identity": "button \"Recipe photo\" [file-field/input] in region \"Photos\"",
           "count": 1
         },
         {
@@ -9217,12 +9325,16 @@
       ],
       "save-dialog": [
         {
-          "identity": "button \"\" [-/-] in main",
+          "identity": "button \"\" [button/root] in main",
+          "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
           "count": 1
         },
         {
-          "identity": "button \"\" [button/root] in main",
-          "count": 5
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -9241,12 +9353,20 @@
           "count": 1
         },
         {
-          "identity": "button \"Soups\" [-/-] in dialog \"Save to cookbook\"",
+          "identity": "button \"Soups\" [toggle/root] in dialog \"Save to cookbook\"",
           "count": 1
         },
         {
-          "identity": "button \"Weeknight Dinners\" [-/-] in dialog \"Save to cookbook\"",
+          "identity": "button \"Weeknight Dinners\" [toggle/root] in dialog \"Save to cookbook\"",
           "count": 1
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/box] in main",
+          "count": 2
+        },
+        {
+          "identity": "checkbox \"\" [checkbox/hidden-input] in main",
+          "count": 2
         },
         {
           "identity": "checkbox \"\" [checklist/box] in main",
@@ -9266,7 +9386,7 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
-          "count": 2
+          "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -9281,18 +9401,26 @@
           "count": 1
         },
         {
+          "identity": "textbox \"\" [text-field/input] in main",
+          "count": 2
+        },
+        {
           "identity": "textbox \"Create new cookbook\" [text-field/input] in dialog \"Save to cookbook\"",
           "count": 1
         }
       ],
       "variation-dialog": [
         {
-          "identity": "button \"\" [-/-] in main",
-          "count": 2
-        },
-        {
           "identity": "button \"\" [button/root] in main",
           "count": 11
+        },
+        {
+          "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [file-field/input] in main",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -9543,7 +9671,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -9755,7 +9883,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -9907,7 +10035,7 @@
           "count": 1
         },
         {
-          "identity": "searchbox \"Search terms\" [-/-] in search",
+          "identity": "searchbox \"Search terms\" [text-field/input] in search",
           "count": 1
         }
       ]
@@ -9975,7 +10103,7 @@
           "count": 1
         },
         {
-          "identity": "searchbox \"Search terms\" [-/-] in search",
+          "identity": "searchbox \"Search terms\" [text-field/input] in search",
           "count": 1
         }
       ]
@@ -10433,11 +10561,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"SPOONJOY\" [-/-] in main",
+          "identity": "link \"SPOONJOY\" [link/root] in main",
           "count": 1
         },
         {
@@ -10453,11 +10581,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         },
         {
@@ -10485,11 +10613,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Privacy\" [-/-] in main",
+          "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"SPOONJOY\" [-/-] in main",
+          "identity": "link \"SPOONJOY\" [link/root] in main",
           "count": 1
         },
         {
@@ -10501,11 +10629,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
-          "identity": "link \"Terms\" [-/-] in main",
+          "identity": "link \"Terms\" [link/root] in main",
           "count": 1
         },
         {
@@ -10873,7 +11001,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -11059,7 +11187,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
@@ -11077,7 +11205,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"15 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"16 components\" [inspector/list] in group \"X-ray\"",
           "count": 1
         },
         {
@@ -11158,7 +11286,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 14
+          "count": 15
         },
         {
           "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
@@ -11189,7 +11317,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Spoonjoy\" [-/-] in banner",
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
           "count": 1
         },
         {
