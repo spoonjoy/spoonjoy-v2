@@ -1,7 +1,11 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
-import { Link } from "react-router";
 import { ChefHat } from "lucide-react";
+import { ShowMore } from "~/components/ouro/collapsible/show-more";
+import { Empty } from "~/components/ouro/empty/empty";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ouro/text/text";
 import { LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
 export interface SpoonsStripRecipe {
@@ -34,8 +38,6 @@ export interface SpoonsStripProps {
   now?: number;
 }
 
-const NOTE_TRUNCATE_AT = 180;
-
 function relativeTime(iso: string, now: number): string {
   const then = new Date(iso).getTime();
   const seconds = Math.max(0, Math.round((now - then) / 1000));
@@ -52,115 +54,47 @@ function relativeTime(iso: string, now: number): string {
   return `${years} yr ago`;
 }
 
-function NoteBlock({ note }: { note: string }) {
-  const [expanded, setExpanded] = useState(false);
-  if (note.length <= NOTE_TRUNCATE_AT) {
-    return <p className="whitespace-pre-wrap text-sm">{note}</p>;
-  }
-  return (
-    <div className="space-y-1">
-      <p className="whitespace-pre-wrap text-sm">
-        {expanded ? note : `${note.slice(0, NOTE_TRUNCATE_AT)}…`}
-      </p>
-      <button
-        type="button"
-        className="inline-flex min-h-11 items-center text-xs underline text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)]"
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {expanded ? "Show less" : "Show more"}
-      </button>
-    </div>
-  );
-}
-
-function CompactCookVisual({ spoon }: { spoon: SpoonsStripItem }) {
-  const imageUrl = spoon.photoUrl ?? spoon.coverImageUrl;
-  const alt = spoon.photoUrl
-    ? `Cook by ${spoon.chef.username}`
-    : spoon.recipe
-      ? `${spoon.recipe.title} cover`
-      : "";
-
-  if (imageUrl) {
-    return (
-      <img
-        src={imageUrl}
-        alt={alt}
-        {...LAZY_IMAGE_PROPS}
-        className="aspect-square w-16 border border-[var(--sj-border)] object-cover"
-      />
-    );
-  }
-
-  return (
-    <div
-      className="flex aspect-square w-16 items-center justify-center border border-[var(--sj-border)] bg-[var(--sj-flour)] text-[var(--sj-ink-soft)]"
-      aria-hidden="true"
-    >
-      <ChefHat className="size-5" />
-    </div>
-  );
-}
-
 function CookedAt({ iso, now }: { iso: string; now: number }) {
   return <time dateTime={iso}>{relativeTime(iso, now)}</time>;
 }
 
+function NextTime({ text }: { text: string }) {
+  return <Text size="sm"><strong>Next time:</strong> {text}</Text>;
+}
+
+/** A chef's cooks across recipes: each an HX Item linked to the recipe, with the cook's photo or the recipe's cover. */
 function CompactSpoonList({ spoons, now }: { spoons: SpoonsStripItem[]; now: number }) {
   return (
-    <ul className="sj-list-ruled">
-      {spoons.map((spoon) => (
-        <li key={spoon.id} className="py-3">
-          <div className="grid min-h-20 grid-cols-[4rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
-            <CompactCookVisual spoon={spoon} />
-            <div className="min-w-0">
-              {spoon.recipe ? (
-                <Link
-                  to={`/recipes/${spoon.recipe.id}`}
-                  className="font-sj-ui inline-flex min-h-11 items-center text-base/5 font-bold text-[var(--sj-ink)] no-underline hover:text-[var(--sj-tomato)]"
-                >
-                  {spoon.recipe.title}
-                </Link>
-              ) : null}
-              <p className="text-sm/5 text-[var(--sj-ink-soft)]">
-                <span className="font-sj-ui font-semibold text-[var(--sj-ink)]">
-                  {spoon.chef.username}
-                </span>
-                {" cooked this "}
-                <span className="sm:hidden"><CookedAt iso={spoon.cookedAt} now={now} /></span>
-              </p>
-              {spoon.note ? (
-                <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink)]">
-                  {spoon.note}
-                </p>
-              ) : null}
-              {spoon.nextTime ? (
-                <p className="mt-1 line-clamp-1 text-sm/5 text-[var(--sj-ink-soft)]">
-                  <span className="font-semibold text-[var(--sj-ink)]">Next time: </span>
-                  {spoon.nextTime}
-                </p>
-              ) : null}
-            </div>
-            <span className="hidden font-sj-ui text-xs font-bold uppercase tracking-[0.12em] text-[var(--sj-brass)] sm:block">
-              <CookedAt iso={spoon.cookedAt} now={now} />
-            </span>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <ItemGroup aria-label="Recent cooks" variant="divided">
+      {spoons.map((spoon) => {
+        const imageUrl = spoon.photoUrl ?? spoon.coverImageUrl;
+        const alt = spoon.photoUrl ? `Cook by ${spoon.chef.username}` : spoon.recipe ? `${spoon.recipe.title} cover` : "";
+        const description = (
+          <>
+            <Text size="sm">{spoon.chef.username} cooked this</Text>
+            {spoon.note ? <Text size="sm" lines={2}>{spoon.note}</Text> : null}
+            {spoon.nextTime ? <NextTime text={spoon.nextTime} /> : null}
+          </>
+        );
+        const shared = {
+          description,
+          media: imageUrl ? <img src={imageUrl} alt={alt} {...LAZY_IMAGE_PROPS} /> : <ChefHat />,
+          mediaSize: imageUrl ? ("md" as const) : ("icon" as const),
+          actions: <Text size="sm" tone="muted"><CookedAt iso={spoon.cookedAt} now={now} /></Text>,
+        };
+        return spoon.recipe ? (
+          <Item key={spoon.id} href={`/recipes/${spoon.recipe.id}`} title={spoon.recipe.title} {...shared} />
+        ) : (
+          <Item key={spoon.id} title={spoon.chef.username} {...shared} />
+        );
+      })}
+    </ItemGroup>
   );
 }
 
 export function SpoonsStrip({ spoons, showRecipe = false, emptyAction, now = Date.now() }: SpoonsStripProps) {
   if (spoons.length === 0) {
-    return (
-      <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
-        <p className="text-sm text-[var(--sj-ink-soft)]">
-          No cooks yet.
-        </p>
-        {emptyAction ? <div className="mt-3">{emptyAction}</div> : null}
-      </div>
-    );
+    return <Empty title="No cooks yet." headingLevel={3} variant="plain" align="start" action={emptyAction} />;
   }
 
   if (showRecipe) {
@@ -168,40 +102,27 @@ export function SpoonsStrip({ spoons, showRecipe = false, emptyAction, now = Dat
   }
 
   return (
-    <ul className="sj-list-ruled">
+    <ItemGroup aria-label="Cooks" variant="divided">
       {spoons.map((spoon) => (
-        <li
+        <Item
           key={spoon.id}
-          className="space-y-3 py-4"
-        >
-          <div className="flex items-center justify-between text-sm">
-            <Link
-              to={`/users/${spoon.chef.username}`}
-              className="font-medium underline hover:text-[var(--sj-tomato)]"
-            >
-              {spoon.chef.username}
-            </Link>
-            <span className="text-[var(--sj-ink-soft)]">
-              <CookedAt iso={spoon.cookedAt} now={now} />
-            </span>
-          </div>
-          {spoon.photoUrl ? (
-            <img
-              src={spoon.photoUrl}
-              alt={`Cook by ${spoon.chef.username}`}
-              {...LAZY_IMAGE_PROPS}
-              className="aspect-square w-full object-cover"
-            />
-          ) : null}
-          {spoon.note ? <NoteBlock note={spoon.note} /> : null}
-          {spoon.nextTime ? (
-            <p className="text-sm">
-              <span className="font-semibold">Next time: </span>
-              {spoon.nextTime}
-            </p>
-          ) : null}
-        </li>
+          title={<Link href={`/users/${spoon.chef.username}`}>{spoon.chef.username}</Link>}
+          description={
+            spoon.note || spoon.nextTime ? (
+              <>
+                {spoon.note ? <ShowMore lines={4}><Text size="sm" className="whitespace-pre-wrap">{spoon.note}</Text></ShowMore> : null}
+                {spoon.nextTime ? <NextTime text={spoon.nextTime} /> : null}
+              </>
+            ) : undefined
+          }
+          {...(spoon.photoUrl ? {
+            media: <img src={spoon.photoUrl} alt={`Cook by ${spoon.chef.username}`} {...LAZY_IMAGE_PROPS} />,
+            mediaSize: "lg" as const,
+            mediaAbove: "always" as const,
+          } : {})}
+          actions={<Text size="sm" tone="muted"><CookedAt iso={spoon.cookedAt} now={now} /></Text>}
+        />
       ))}
-    </ul>
+    </ItemGroup>
   );
 }

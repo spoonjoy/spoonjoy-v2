@@ -139,6 +139,7 @@
       ],
       "components": [
         "avatar",
+        "badge",
         "button",
         "card",
         "empty",
@@ -151,6 +152,9 @@
       "renders": {
         "avatar": [
           "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
         ],
         "button": [
           "app/components/button.tsx"
@@ -985,6 +989,7 @@
       ],
       "renders": {
         "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx",
           "app/routes/search.tsx"
         ],
         "button": [
@@ -1261,6 +1266,7 @@
         "app/lib/username.ts"
       ],
       "components": [
+        "badge",
         "button",
         "heading",
         "item",
@@ -1270,6 +1276,9 @@
         "toaster"
       ],
       "renders": {
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
         "button": [
           "app/components/button.tsx"
         ],
@@ -1534,17 +1543,23 @@
       ],
       "components": [
         "avatar",
+        "badge",
         "button",
         "checkbox",
         "checklist",
         "confirm-dialog",
         "dialog",
+        "empty",
         "field",
         "form",
         "heading",
+        "item",
+        "item-group",
         "link",
         "number-field",
         "pagination",
+        "show-more",
+        "spinner",
         "text",
         "text-area",
         "text-field",
@@ -1552,6 +1567,10 @@
       ],
       "renders": {
         "avatar": [
+          "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx",
           "app/components/recipe/RecipeHeader.tsx"
         ],
         "button": [
@@ -1574,6 +1593,9 @@
           "app/components/recipe/SpoonDialog.tsx",
           "app/routes/recipes.$id.tsx"
         ],
+        "empty": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
         "field": [
           "app/components/recipe/RecipePhotoStudio.tsx",
           "app/components/recipe/SpoonDialog.tsx"
@@ -1585,8 +1607,15 @@
         "heading": [
           "app/routes/recipes.$id.tsx"
         ],
+        "item": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "item-group": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
         "link": [
           "app/components/recipe/RecipeHeader.tsx",
+          "app/components/recipe/SpoonsStrip.tsx",
           "app/routes/recipes.$id.tsx"
         ],
         "number-field": [
@@ -1596,11 +1625,18 @@
         "pagination": [
           "app/components/cook/RecipeCookView.tsx"
         ],
+        "show-more": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "spinner": [
+          "app/components/recipe/RecipeHeader.tsx"
+        ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",
           "app/components/errors/route-error.tsx",
           "app/components/recipe/ForkRecipeButton.tsx",
           "app/components/recipe/RecipeNotFound.tsx",
+          "app/components/recipe/SpoonsStrip.tsx",
           "app/routes/recipes.$id.tsx"
         ],
         "text-area": [
@@ -2169,6 +2205,7 @@
         "app/lib/web-push.server.ts"
       ],
       "components": [
+        "badge",
         "button",
         "collapsible",
         "confirm-dialog",
@@ -2182,6 +2219,9 @@
         "toaster"
       ],
       "renders": {
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
         "button": [
           "app/components/button.tsx"
         ],
@@ -2560,8 +2600,10 @@
       ],
       "components": [
         "avatar",
+        "badge",
         "button",
         "card",
+        "empty",
         "heading",
         "item",
         "item-group",
@@ -2573,30 +2615,41 @@
         "avatar": [
           "app/routes/users.$identifier.tsx"
         ],
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
         "button": [
           "app/components/button.tsx"
         ],
         "card": [
           "app/components/pantry/CookbookCard.tsx"
         ],
+        "empty": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
         "heading": [
           "app/components/pantry/RecipeGrid.tsx",
           "app/routes/users.$identifier.tsx"
         ],
         "item": [
-          "app/components/pantry/RecipeGrid.tsx"
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx"
         ],
         "item-group": [
-          "app/components/pantry/RecipeGrid.tsx"
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx"
         ],
         "link": [
+          "app/components/recipe/SpoonsStrip.tsx",
           "app/routes/users.$identifier.tsx"
         ],
         "show-more": [
-          "app/components/pantry/RecipeGrid.tsx"
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx"
         ],
         "text": [
           "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx",
           "app/routes/users.$identifier.tsx"
         ]
       }

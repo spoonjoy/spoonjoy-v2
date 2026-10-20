@@ -4635,8 +4635,8 @@ describe("Recipes $id Route", () => {
 
       expect(await screen.findByText("Simple Recipe")).toBeInTheDocument();
       expect(screen.getByText("Just do the thing")).toBeInTheDocument();
-      // Only the Steps heading h2 should exist, no h3 for step title
-      expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+      // No h3 for the step title: the only level-3 heading is the empty Cooks section's.
+      expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["No cooks yet."]);
     });
 
     it("should render step output uses when present", async () => {
