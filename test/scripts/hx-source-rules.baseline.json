@@ -1,16 +1,36 @@
 {
+  "allowedRegressions": [
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::",
+      "count": 1,
+      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
+    },
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::aria-label=Search",
+      "count": 1,
+      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
+    },
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::",
+      "count": 1,
+      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
+    },
+    {
+      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::aria-label=Search",
+      "count": 1,
+      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
+    }
+  ],
   "offenders": {
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
     "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::raw-input::input::type=file,name=photo": 1,
     "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::uses-hand-rolled-control::app/components/account/ProfilePhotoCropper#ProfilePhotoCropper::": 1,
     "app/components/auth/auth-page.tsx::AuthPage::raw-anchor::a::": 3,
-    "app/components/navigation/app-link.tsx::Link::raw-anchor::a::": 1,
-    "app/components/navigation/app-link.tsx::Link::raw-anchor::react-router.Link::": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::app/components/navigation/app-link#Link::": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::app/components/navigation/app-link#Link::aria-label=Search": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::uses-hand-rolled-control::app/components/navigation/app-link#Link::": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::uses-hand-rolled-control::app/components/navigation/app-link#Link::aria-label=Search": 1,
+    "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::": 1,
+    "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::aria-label=Search": 1,
+    "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::": 1,
+    "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::aria-label=Search": 1,
     "app/components/navigation/phone-brand-bar.tsx::PhoneBrandBar::raw-anchor::react-router.Link::": 1,
     "app/components/navigation/skip-link.tsx::SkipLink::raw-anchor::a::": 1,
     "app/components/pwa/InstallPromptCard.tsx::InstallPromptCard::raw-button::button::type=button,aria-label=Dismiss install prompt": 1,

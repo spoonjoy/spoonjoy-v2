@@ -4,7 +4,7 @@ import { useLocation } from "react-router";
 import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingBag } from "lucide-react";
 import { useDockContext } from "./dock-context";
 import { Toaster } from "~/components/ouro/toast/toaster";
-import { Link } from "~/components/navigation/app-link";
+import { Link } from "react-router";
 
 /**
  * The phone tab bar. It is navigation only, and it is the same on every page: a row of equal
@@ -152,7 +152,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
           return (
             <li key={id} className="flex min-w-0 flex-1">
               <Link
-                href={href}
+                to={href}
                 aria-current={active ? "page" : undefined}
                 data-testid={`tab-${id}`}
                 className={clsx(
@@ -177,7 +177,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
       </ul>
 
       <Link
-        href="/search"
+        to="/search"
         aria-label="Search"
         aria-current={searchActive ? "page" : undefined}
         data-testid="tab-search"
