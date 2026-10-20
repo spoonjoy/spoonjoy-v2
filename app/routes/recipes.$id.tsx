@@ -28,7 +28,7 @@ import { Form } from "~/components/ouro/form/form";
 import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
-import { Link } from "~/components/navigation/app-link";
+import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
@@ -146,15 +146,6 @@ type RecipeDetailActionData = {
   /** Why the action failed, such as the database being briefly unavailable (a 503). */
   error?: unknown;
 };
-
-const recipeMastheadLinkClass =
-  "inline-flex min-h-11 items-center gap-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] no-underline transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]";
-
-const recipeMastheadActionClass =
-  "inline-flex min-h-12 min-w-11 items-center justify-center px-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:min-h-11 sm:px-2";
-
-const recipeMastheadPrimaryActionClass =
-  "text-[var(--sj-action)] hover:text-[var(--sj-tomato)]";
 
 const COVER_PROCESSING_POLL_INTERVAL_MS = 3000;
 
@@ -418,73 +409,36 @@ export default function RecipeDetail() {
 
   const headerMasthead = (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <Link href="/recipes" onClick={handleBackToRecipes} className={recipeMastheadLinkClass}>
+      <Link href="/recipes" onClick={handleBackToRecipes} tone="secondary">
         <ArrowLeft className="size-4" aria-hidden="true" />
         Recipes
       </Link>
-      <div
-        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-[var(--sj-border)] py-1 sm:border-t-0 sm:py-0"
-        data-testid="recipe-header-actions"
-      >
-        <Link
-          href="#cook"
-          onClick={handleEnterCookMode}
-          className={`${recipeMastheadActionClass} ${recipeMastheadPrimaryActionClass}`}
-          data-testid="recipe-header-cook-action"
-        >
+      <div className="flex flex-wrap items-center gap-2" data-testid="recipe-header-actions">
+        <Button href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
           Cook mode
-        </Link>
-        <button
-          type="button"
-          onClick={handleOpenSaveModal}
-          className={`${recipeMastheadActionClass} bg-transparent`}
-          data-testid="recipe-header-save-action"
-        >
+        </Button>
+        <Button plain onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">
           Save
-        </button>
-        <button
-          type="button"
-          onClick={handleAddToList}
-          aria-pressed={isAlreadyInList}
-          className={`${recipeMastheadActionClass} bg-transparent`}
-          data-testid="recipe-header-list-action"
-        >
+        </Button>
+        <Button plain onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
           {addToListLabel}
-        </button>
-        <button
-          type="button"
-          onClick={handleShare}
-          className={`${recipeMastheadActionClass} bg-transparent`}
-          data-testid="recipe-header-share-action"
-        >
+        </Button>
+        <Button plain onClick={handleShare} data-testid="recipe-header-share-action">
           Share
-        </button>
+        </Button>
         {isOwner ? (
-          <Link
-            href={`/recipes/${recipe.id}/edit`}
-            className={recipeMastheadActionClass}
-            data-testid="recipe-header-edit-action"
-          >
+          <Button href={`/recipes/${recipe.id}/edit`} plain data-testid="recipe-header-edit-action">
             Edit
-          </Link>
+          </Button>
         ) : null}
         {isAuthenticated ? (
-          <button
-            type="button"
-            onClick={openSpoonDialog}
-            className={`${recipeMastheadActionClass} bg-transparent`}
-            data-testid="recipe-header-log-cook-action"
-          >
+          <Button plain onClick={openSpoonDialog} data-testid="recipe-header-log-cook-action">
             Log cook
-          </button>
+          </Button>
         ) : (
-          <Link
-            href={loginRedirect}
-            className={recipeMastheadActionClass}
-            data-testid="recipe-header-log-cook-action"
-          >
+          <Button href={loginRedirect} plain data-testid="recipe-header-log-cook-action">
             Log cook
-          </Link>
+          </Button>
         )}
         {!isOwner && (
           isAuthenticated ? (
@@ -493,18 +447,12 @@ export default function RecipeDetail() {
               recipeTitle={recipe.title}
               sourceChefUsername={recipe.chef.username}
               isOwner={false}
-              triggerClassName={recipeMastheadActionClass}
-              triggerStyle="text"
               triggerTestId="recipe-header-fork-action"
             />
           ) : (
-            <Link
-              href={loginRedirect}
-              className={recipeMastheadActionClass}
-              data-testid="recipe-header-fork-action"
-            >
+            <Button href={loginRedirect} plain data-testid="recipe-header-fork-action">
               Fork
-            </Link>
+            </Button>
           )
         )}
       </div>

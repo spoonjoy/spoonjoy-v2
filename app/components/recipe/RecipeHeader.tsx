@@ -1,6 +1,6 @@
 import { ImageOff, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link } from '../navigation/app-link'
+import { Link } from '~/components/ouro/link/link'
 import { Avatar } from '../ouro/avatar/avatar'
 import { NumberField } from '~/components/ouro/number-field/number-field'
 import { SCALE_RANGE } from '~/components/cook/cook-controller'
@@ -118,11 +118,7 @@ export function RecipeHeader({
   )
 
   const chefLine = resolvedChefHref ? (
-    <Link
-      href={resolvedChefHref}
-      aria-label={chefName}
-      className="mt-5 inline-flex min-h-11 items-center gap-2 no-underline hover:[&_strong]:text-[var(--sj-brass)]"
-    >
+    <Link href={resolvedChefHref} aria-label={chefName} tone="secondary" inline={false} className="mt-5 inline-flex items-center gap-2">
       {chefIdentity}
     </Link>
   ) : (

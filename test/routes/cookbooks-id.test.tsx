@@ -1523,7 +1523,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools Open +" });
+      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools" });
       expect(ownerToolsToggle).toBeInTheDocument();
       expect(ownerToolsToggle).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
@@ -1532,7 +1532,7 @@ describe("Cookbooks $id Route", () => {
 
       await openOwnerTools();
 
-      expect(screen.getByRole("button", { name: "Owner tools Close" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("button", { name: "Owner tools" })).toHaveAttribute("aria-expanded", "true");
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
       // Each row's button names its recipe, so rows are told apart by name.

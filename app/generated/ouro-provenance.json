@@ -1535,6 +1535,7 @@
         "field",
         "form",
         "heading",
+        "link",
         "number-field",
         "pagination",
         "text",
@@ -1577,6 +1578,10 @@
         "heading": [
           "app/routes/recipes.$id.tsx"
         ],
+        "link": [
+          "app/components/recipe/RecipeHeader.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",
           "app/components/recipe/RecipeHeader.tsx"
@@ -1587,6 +1592,7 @@
         "text": [
           "app/components/cook/RecipeCookView.tsx",
           "app/components/errors/route-error.tsx",
+          "app/components/recipe/ForkRecipeButton.tsx",
           "app/components/recipe/RecipeNotFound.tsx",
           "app/routes/recipes.$id.tsx"
         ],
@@ -2159,8 +2165,11 @@
       ],
       "components": [
         "button",
+        "collapsible",
         "confirm-dialog",
         "form",
+        "item",
+        "item-group",
         "link",
         "native-select",
         "text",
@@ -2171,10 +2180,19 @@
         "button": [
           "app/components/button.tsx"
         ],
+        "collapsible": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
         "confirm-dialog": [
           "app/routes/cookbooks.$id.tsx"
         ],
         "form": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "item": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "item-group": [
           "app/routes/cookbooks.$id.tsx"
         ],
         "link": [
