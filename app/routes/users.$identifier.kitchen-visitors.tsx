@@ -140,7 +140,7 @@ export default function KitchenVisitorsPage() {
         </CookbookHeader>
 
         <div className="mt-6">
-          <FellowChefList rows={renderRows} emptyStateText={emptyStateText} />
+          <FellowChefList label="Kitchen visitors" rows={renderRows} emptyStateText={emptyStateText} />
         </div>
 
         {(hasPrev || hasNext) && (

@@ -2,12 +2,15 @@ import type { Route } from "./+types/cookbooks._index";
 import { useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
 import { Button } from "~/components/button";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readCookbookListFromD1, readCookbookListWithPrisma } from "~/lib/collection-reads.server";
 import { requireUserId } from "~/lib/session.server";
+import { LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 import { DrawerSearch } from "./my-recipes";
 
 function normalizedQuery(request: Request) {
@@ -73,17 +76,20 @@ export default function CookbooksIndexRedirect() {
       <DrawerSearch label="Search cookbooks" query={query} placeholder="weeknight, holidays, pasta" />
 
       {cookbooks.length > 0 ? (
-        <section aria-label="Cookbooks" className="mt-6 divide-y divide-[var(--sj-border)]">
-          {cookbooks.map((cookbook) => (
-            <ObjectRow
-              key={cookbook.id}
-              href={`/cookbooks/${cookbook.id}`}
-              title={cookbook.title}
-              subtitle={`${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}`}
-              imageUrl={cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe.coverImageUrl ?? null}
-            />
-          ))}
-        </section>
+        <ItemGroup aria-label="Cookbooks" variant="divided" className="mt-6">
+          {cookbooks.map((cookbook) => {
+            const coverImageUrl = cookbook.recipes.find((item) => item.recipe.coverImageUrl)?.recipe.coverImageUrl;
+            return (
+              <Item
+                key={cookbook.id}
+                href={`/cookbooks/${cookbook.id}`}
+                title={cookbook.title}
+                description={`${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}`}
+                media={coverImageUrl ? <img src={coverImageUrl} alt="" {...LAZY_IMAGE_PROPS} /> : undefined}
+              />
+            );
+          })}
+        </ItemGroup>
       ) : (
         <RuledEmptyState
           title={query ? "No matching cookbooks" : "No cookbooks yet"}

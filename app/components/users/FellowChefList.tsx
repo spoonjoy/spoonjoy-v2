@@ -1,6 +1,7 @@
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { chefDisplayName } from "~/lib/username";
-import { Link } from "~/components/navigation/app-link";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
@@ -10,6 +11,8 @@ export interface FellowChefListRow extends FellowChefRow {
 }
 
 export interface FellowChefListProps {
+  /** The list's name for screen readers: the page's title already shows it. */
+  label: string;
   rows: FellowChefListRow[];
   emptyStateText: string;
 }
@@ -34,46 +37,27 @@ function summarizeInteractions(counts: {
   return parts.join(" · ");
 }
 
-export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
-  if (rows.length === 0) {
-    return <Text tone="muted">{emptyStateText}</Text>;
-  }
-
+export function FellowChefList({ label, rows, emptyStateText }: FellowChefListProps) {
   return (
-    <ul className="sj-list-ruled">
-      {rows.map((row) => {
-        const summary = summarizeInteractions(row.interactionCounts);
-        const initials = row.username.charAt(0).toUpperCase();
-        return (
-          <li key={row.chefId}>
-            <Link
-              href={`/users/${row.username}`}
-              className="grid min-h-17 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 py-3 no-underline"
-            >
-              <Avatar
-                name={chefDisplayName(row.username)}
-                src={resolveChefAvatarUrl(row.photoUrl)}
-                alt={chefDisplayName(row.username)}
-                initials={initials}
-                size="md"
-              />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="sj-link font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-                  {chefDisplayName(row.username)}
-                </span>
-              {summary ? (
-                <p className="text-base/6 text-[var(--sj-ink-soft)] text-xs text-[var(--sj-ink-soft)]">
-                  {summary}
-                </p>
-              ) : null}
-              </div>
-              <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.12em] text-[var(--sj-ink-soft)]">
-                {row.latestInteractionLabel}
-              </p>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    <ItemGroup aria-label={label} variant="divided" empty={<Text tone="muted">{emptyStateText}</Text>}>
+      {rows.map((row) => (
+        <Item
+          key={row.chefId}
+          href={`/users/${row.username}`}
+          title={chefDisplayName(row.username)}
+          description={summarizeInteractions(row.interactionCounts) || undefined}
+          media={
+            <Avatar
+              name={chefDisplayName(row.username)}
+              src={resolveChefAvatarUrl(row.photoUrl)}
+              alt=""
+              initials={row.username.charAt(0).toUpperCase()}
+              size="md"
+            />
+          }
+          actions={<Text size="sm" tone="muted">{row.latestInteractionLabel}</Text>}
+        />
+      ))}
+    </ItemGroup>
   );
 }

@@ -2,8 +2,10 @@ import type { Route } from "./+types/saved-recipes";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Button } from "~/components/button";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
@@ -67,17 +69,17 @@ export default function SavedRecipes() {
       <DrawerSearch label="Search saved recipes" query={query} placeholder="cookbook, chef, ingredient" />
 
       {recipes.length > 0 ? (
-        <section aria-label="Saved recipes" className="mt-6 divide-y divide-[var(--sj-border)]">
+        <ItemGroup aria-label="Saved recipes" variant="divided" className="mt-6">
           {recipes.map((recipe) => (
-            <ObjectRow
+            <Item
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              subtitle={`By ${chefDisplayName(recipe.chef.username)} - ${recipe.savedCookbookTitles.join(", ")}`}
-              stamp={recipe.servings ?? undefined}
+              description={`By ${chefDisplayName(recipe.chef.username)} - ${recipe.savedCookbookTitles.join(", ")}`}
+              actions={recipe.servings ? <Text size="sm" tone="muted">{recipe.servings}</Text> : undefined}
             />
           ))}
-        </section>
+        </ItemGroup>
       ) : (
         <RuledEmptyState
           title={query ? "No matching saved recipes" : "No saved recipes yet"}

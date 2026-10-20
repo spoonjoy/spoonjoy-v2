@@ -40,7 +40,6 @@
       "app/lib/env.server.ts",
       "app/lib/gemini-text.server.ts",
       "app/lib/hash-only-revalidation.ts",
-      "app/lib/image-loading.ts",
       "app/lib/ingredient-parse.server.ts",
       "app/lib/llm-telemetry.server.ts",
       "app/lib/nonce.ts",
@@ -793,9 +792,7 @@
       "file": "app/routes/privacy.tsx",
       "sources": [
         "app/routes/privacy.tsx",
-        "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
-        "app/lib/image-loading.ts"
+        "app/components/cookbook/page.tsx"
       ],
       "components": [
         "heading",
@@ -819,9 +816,7 @@
       "file": "app/routes/terms.tsx",
       "sources": [
         "app/routes/terms.tsx",
-        "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
-        "app/lib/image-loading.ts"
+        "app/components/cookbook/page.tsx"
       ],
       "components": [
         "heading",
@@ -849,7 +844,6 @@
         "app/components/cook/RecipeCookView.tsx",
         "app/components/cook/cook-controller.ts",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/recipe/CookTimers.tsx",
         "app/components/recipe/IngredientList.tsx",
         "app/components/recipe/StepCard.tsx",
@@ -859,7 +853,6 @@
         "app/lib/cook-alarm.client.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cook/local-cook-controller.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-affordances.ts",
         "app/lib/ouro-provenance.server.ts",
         "app/lib/ouro-provenance.ts",
@@ -991,7 +984,6 @@
         "app/lib/d1-read.server.ts",
         "app/lib/db.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/my-recipes-search.server.ts",
@@ -1003,18 +995,34 @@
       ],
       "components": [
         "button",
+        "item",
+        "item-group",
+        "link",
         "pagination",
         "text",
+        "text-field",
         "toaster"
       ],
       "renders": {
         "button": [
           "app/components/button.tsx"
         ],
+        "item": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "item-group": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "link": [
+          "app/routes/my-recipes.tsx"
+        ],
         "pagination": [
           "app/routes/my-recipes.tsx"
         ],
         "text": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "text-field": [
           "app/routes/my-recipes.tsx"
         ],
         "toaster": [
@@ -1049,7 +1057,6 @@
         "app/lib/d1-write.server.ts",
         "app/lib/db.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/my-recipes-search.server.ts",
@@ -1074,13 +1081,28 @@
       ],
       "components": [
         "button",
+        "item",
+        "item-group",
+        "link",
         "pagination",
         "text",
+        "text-field",
         "toaster"
       ],
       "renders": {
         "button": [
           "app/components/button.tsx"
+        ],
+        "item": [
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
+        ],
+        "item-group": [
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
+        ],
+        "link": [
+          "app/routes/my-recipes.tsx"
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
@@ -1088,6 +1110,9 @@
         "text": [
           "app/routes/my-recipes.tsx",
           "app/routes/saved-recipes.tsx"
+        ],
+        "text-field": [
+          "app/routes/my-recipes.tsx"
         ],
         "toaster": [
           "app/components/navigation/mobile-nav.tsx"
@@ -1101,7 +1126,6 @@
         "app/routes/chefs.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/local-date.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/chef-activity.server.ts",
@@ -1109,7 +1133,6 @@
         "app/lib/db.server.ts",
         "app/lib/fellow-chefs.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/openai-client.server.ts",
@@ -1121,9 +1144,17 @@
         "app/lib/username.ts"
       ],
       "components": [
+        "item",
+        "item-group",
         "text"
       ],
       "renders": {
+        "item": [
+          "app/routes/chefs.tsx"
+        ],
+        "item-group": [
+          "app/routes/chefs.tsx"
+        ],
         "text": [
           "app/routes/chefs.tsx"
         ]
@@ -1226,7 +1257,6 @@
         "app/routes/recipes.new.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/recipe/IngredientInputToggle.tsx",
         "app/components/recipe/IngredientParseInput.tsx",
         "app/components/recipe/ManualIngredientInput.tsx",
@@ -1254,7 +1284,6 @@
         "app/lib/image-gen-ledger.server.ts",
         "app/lib/image-gen-telemetry.server.ts",
         "app/lib/image-gen.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/image-storage.server.ts",
         "app/lib/ingredient-parse-fallback.server.ts",
         "app/lib/ingredient-parse-revalidation.ts",
@@ -1548,7 +1577,6 @@
         "app/routes/recipes.$id.edit.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/recipe/IngredientInputToggle.tsx",
         "app/components/recipe/IngredientParseInput.tsx",
         "app/components/recipe/ManualIngredientInput.tsx",
@@ -1574,7 +1602,6 @@
         "app/lib/image-gen-ledger.server.ts",
         "app/lib/image-gen-telemetry.server.ts",
         "app/lib/image-gen.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/image-storage.server.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
@@ -1672,7 +1699,6 @@
         "app/routes/recipes.$id.steps.new.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/recipe/IngredientInputToggle.tsx",
         "app/components/recipe/IngredientParseInput.tsx",
         "app/components/recipe/ManualIngredientInput.tsx",
@@ -1691,7 +1717,6 @@
         "app/lib/d1-write.server.ts",
         "app/lib/db.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse-fallback.server.ts",
         "app/lib/ingredient-parse-revalidation.ts",
         "app/lib/ingredient-parse.server.ts",
@@ -1786,7 +1811,6 @@
         "app/routes/recipes.$id.steps.$stepId.edit.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/recipe/IngredientInputToggle.tsx",
         "app/components/recipe/IngredientParseInput.tsx",
         "app/components/recipe/ManualIngredientInput.tsx",
@@ -1803,7 +1827,6 @@
         "app/lib/d1-write.server.ts",
         "app/lib/db.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse-fallback.server.ts",
         "app/lib/ingredient-parse-revalidation.ts",
         "app/lib/ingredient-parse.server.ts",
@@ -1956,19 +1979,37 @@
       ],
       "components": [
         "button",
+        "item",
+        "item-group",
+        "link",
         "pagination",
         "text",
+        "text-field",
         "toaster"
       ],
       "renders": {
         "button": [
           "app/components/button.tsx"
         ],
+        "item": [
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "item-group": [
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "link": [
+          "app/routes/my-recipes.tsx"
+        ],
         "pagination": [
           "app/routes/my-recipes.tsx"
         ],
         "text": [
           "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "text-field": [
           "app/routes/my-recipes.tsx"
         ],
         "toaster": [
@@ -1983,7 +2024,6 @@
         "app/routes/cookbooks.new.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-write-token.ts",
         "app/lib/analytics-server.ts",
@@ -1992,7 +2032,6 @@
         "app/lib/d1-write-retry.server.ts",
         "app/lib/db.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/openai-client.server.ts",
@@ -2141,7 +2180,6 @@
         "app/lib/d1-write.server.ts",
         "app/lib/db.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-affordances.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
@@ -2218,7 +2256,6 @@
         "app/components/auth/AddPasskeyButton.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/notifications-section.tsx",
         "app/components/oauth.tsx",
         "app/hooks/use-form-errors.ts",
@@ -2250,7 +2287,6 @@
         "app/lib/env.server.ts",
         "app/lib/gemini-text.server.ts",
         "app/lib/image-crop.ts",
-        "app/lib/image-loading.ts",
         "app/lib/image-storage.server.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
@@ -2333,9 +2369,7 @@
       "file": "app/routes/account.deleted.tsx",
       "sources": [
         "app/routes/account.deleted.tsx",
-        "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
-        "app/lib/image-loading.ts"
+        "app/components/cookbook/page.tsx"
       ],
       "components": [
         "link",
@@ -2357,11 +2391,9 @@
         "app/routes/developers.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/lib/analytics.ts",
         "app/lib/api-v1-contract.server.ts",
         "app/lib/generated/api-v1-playground.ts",
-        "app/lib/image-loading.ts",
         "app/lib/og-metadata.ts",
         "app/lib/photo-variants.ts",
         "app/lib/use-posthog.ts"
@@ -2390,11 +2422,9 @@
         "app/routes/developers.playground.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/lib/analytics.ts",
         "app/lib/db.server.ts",
         "app/lib/generated/api-v1-playground.ts",
-        "app/lib/image-loading.ts",
         "app/lib/og-metadata.ts",
         "app/lib/session.server.ts",
         "app/lib/use-posthog.ts"
@@ -2425,7 +2455,6 @@
         "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/local-date.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/pantry/CookbookCard.tsx",
         "app/components/pantry/RecipeGrid.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
@@ -2521,7 +2550,6 @@
       "sources": [
         "app/routes/users.$identifier.fellow-chefs.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/users/FellowChefList.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2530,7 +2558,6 @@
         "app/lib/db.server.ts",
         "app/lib/fellow-chefs.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/openai-client.server.ts",
@@ -2544,6 +2571,8 @@
       "components": [
         "avatar",
         "heading",
+        "item",
+        "item-group",
         "link",
         "text"
       ],
@@ -2553,6 +2582,12 @@
         ],
         "heading": [
           "app/routes/users.$identifier.fellow-chefs.tsx"
+        ],
+        "item": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "item-group": [
+          "app/components/users/FellowChefList.tsx"
         ],
         "link": [
           "app/routes/users.$identifier.fellow-chefs.tsx"
@@ -2568,7 +2603,6 @@
       "sources": [
         "app/routes/users.$identifier.kitchen-visitors.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/components/users/FellowChefList.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2577,7 +2611,6 @@
         "app/lib/db.server.ts",
         "app/lib/fellow-chefs.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/openai-client.server.ts",
@@ -2591,6 +2624,8 @@
       "components": [
         "avatar",
         "heading",
+        "item",
+        "item-group",
         "link",
         "text"
       ],
@@ -2600,6 +2635,12 @@
         ],
         "heading": [
           "app/routes/users.$identifier.kitchen-visitors.tsx"
+        ],
+        "item": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "item-group": [
+          "app/components/users/FellowChefList.tsx"
         ],
         "link": [
           "app/routes/users.$identifier.kitchen-visitors.tsx"
@@ -2615,7 +2656,6 @@
       "sources": [
         "app/routes/mcp.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/lib/agent-connection-scopes.ts",
         "app/lib/agent-connection.server.ts",
         "app/lib/ai-placeholder-cover.server.ts",
@@ -2643,7 +2683,6 @@
         "app/lib/image-gen-ledger.server.ts",
         "app/lib/image-gen-telemetry.server.ts",
         "app/lib/image-gen.server.ts",
-        "app/lib/image-loading.ts",
         "app/lib/image-storage.server.ts",
         "app/lib/image-upload-tools.server.ts",
         "app/lib/ingredient-affordances.ts",
@@ -2819,9 +2858,7 @@
       "sources": [
         "app/routes/$.tsx",
         "app/components/button.tsx",
-        "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
-        "app/lib/image-loading.ts"
+        "app/components/cookbook/page.tsx"
       ],
       "components": [
         "button",

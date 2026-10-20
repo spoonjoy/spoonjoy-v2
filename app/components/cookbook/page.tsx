@@ -1,8 +1,5 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { ChefHat } from "lucide-react";
-import { Link } from "~/components/navigation/app-link";
-import { HERO_IMAGE_PROPS, LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
 export function CookbookPage({
   children,
@@ -70,53 +67,6 @@ export function CookbookSectionTitle({
   );
 }
 
-export function FoodHero({
-  imageUrl,
-  title,
-  eyebrow = "Recipe",
-  href,
-  children,
-  className,
-}: {
-  imageUrl?: string | null;
-  title: string;
-  eyebrow?: string;
-  href?: string;
-  children?: ReactNode;
-  className?: string;
-}) {
-  const content = (
-    <figure className={clsx("sj-food-photo relative -mx-5 overflow-hidden sm:-mx-6 lg:mx-0", className)}>
-      <div className="aspect-[5/4] sm:aspect-[16/9] lg:aspect-[16/10]">
-        {imageUrl ? (
-          <img src={imageUrl} alt={title} {...HERO_IMAGE_PROPS} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[var(--sj-photo-charcoal)]">
-            <ChefHat className="size-10 text-[var(--sj-on-photo-muted)]" aria-hidden="true" />
-          </div>
-        )}
-      </div>
-      <figcaption className="absolute inset-x-0 bottom-0 z-10 p-5 sm:p-7">
-        <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-on-photo-muted)]">
-          {eyebrow}
-        </p>
-        <h2 className="font-sj-display mt-1 max-w-3xl text-4xl/10 font-semibold text-[var(--sj-on-photo)] sm:text-5xl/12">
-          {title}
-        </h2>
-        {children ? <div className="mt-3 max-w-2xl text-sm/6 text-[var(--sj-on-photo-muted)]">{children}</div> : null}
-      </figcaption>
-    </figure>
-  );
-
-  if (!href) return content;
-
-  return (
-    <Link href={href} className="block no-underline">
-      {content}
-    </Link>
-  );
-}
-
 export function RuledEmptyState({
   title,
   children,
@@ -132,37 +82,6 @@ export function RuledEmptyState({
       {children ? <div className="mt-2 max-w-2xl text-sm/6 text-[var(--sj-ink-soft)]">{children}</div> : null}
       {action ? <div className="mt-5">{action}</div> : null}
     </div>
-  );
-}
-
-export function ObjectRow({
-  href,
-  imageUrl,
-  title,
-  subtitle,
-  stamp,
-}: {
-  href: string;
-  imageUrl?: string | null;
-  title: string;
-  subtitle?: string | null;
-  stamp?: string;
-}) {
-  return (
-    <Link href={href} className="group grid min-h-17 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 py-3 no-underline">
-      <div className="aspect-square overflow-hidden border border-[var(--sj-border)] bg-[var(--sj-flour)]">
-        {imageUrl ? <img src={imageUrl} alt="" {...LAZY_IMAGE_PROPS} className="h-full w-full object-cover" /> : null}
-      </div>
-      <div className="min-w-0">
-        <span className="line-clamp-2 font-sj-ui text-base/5 font-bold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
-          {title}
-        </span>
-        {subtitle ? <span className="mt-0.5 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{subtitle}</span> : null}
-      </div>
-      {stamp ? (
-        <span className="font-sj-ui text-xs font-bold uppercase tracking-[0.12em] text-[var(--sj-brass)]">{stamp}</span>
-      ) : null}
-    </Link>
   );
 }
 

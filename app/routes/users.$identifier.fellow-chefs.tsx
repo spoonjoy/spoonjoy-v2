@@ -138,7 +138,7 @@ export default function FellowChefsPage() {
         </CookbookHeader>
 
         <div className="mt-6">
-          <FellowChefList rows={renderRows} emptyStateText={emptyStateText} />
+          <FellowChefList label="Fellow chefs" rows={renderRows} emptyStateText={emptyStateText} />
         </div>
 
         {(hasPrev || hasNext) && (

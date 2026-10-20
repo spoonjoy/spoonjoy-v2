@@ -2,10 +2,13 @@ import type { Route } from "./+types/my-recipes";
 import { Form, useLoaderData, useLocation } from "react-router";
 import { Plus, Search } from "lucide-react";
 import { Button } from "~/components/button";
-import { Link } from "~/components/navigation/app-link";
+import { Link } from "~/components/ouro/link/link";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Pagination } from "~/components/ouro/pagination/pagination";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import {
   normalizeMyRecipesPage,
   normalizeMyRecipesQuery,
@@ -109,17 +112,17 @@ export default function MyRecipes() {
       <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" />
 
       {recipes.length > 0 ? (
-        <section aria-label="My recipes" className="mt-6 divide-y divide-[var(--sj-border)]">
+        <ItemGroup aria-label="My recipes" variant="divided" className="mt-6">
           {recipes.map((recipe) => (
-            <ObjectRow
+            <Item
               key={recipe.id}
               href={`/recipes/${recipe.id}`}
               title={recipe.title}
-              subtitle={recipe.description ?? `By ${recipe.chef.username}`}
-              stamp={recipe.servings ?? undefined}
+              description={recipe.description ?? `By ${recipe.chef.username}`}
+              actions={recipe.servings ? <Text size="sm" tone="muted">{recipe.servings}</Text> : undefined}
             />
           ))}
-        </section>
+        </ItemGroup>
       ) : (
         <RuledEmptyState
           title={query ? "No matching recipes" : "No recipes yet"}
@@ -170,20 +173,18 @@ export function DrawerSearch({
 }) {
   return (
     <Form method="get" role="search" className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-      <label className="sr-only" htmlFor="drawer-search">{label}</label>
-      <div className="flex min-h-12 flex-1 items-center border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4">
-        <Search className="mr-2 size-4 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-        <input
-          id="drawer-search"
-          type="search"
-          name="q"
-          defaultValue={query}
-          placeholder={placeholder}
-          className="min-h-11 w-full border-0 bg-transparent text-base text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
-        />
-      </div>
+      <TextField
+        type="search"
+        name="q"
+        label={label}
+        hideLabel
+        defaultValue={query}
+        placeholder={placeholder}
+        startAdornment={<Search />}
+        className="flex-1"
+      />
       <Button type="submit" plain>Search</Button>
-      {query ? <Link href="." className="font-sj-ui text-sm font-semibold">Clear</Link> : null}
+      {query ? <Link href=".">Clear</Link> : null}
     </Form>
   );
 }
