@@ -68,6 +68,12 @@
   --ouro-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ouro-duration-press: 160ms;
   --ouro-duration-sheet: 500ms;
+  --ouro-duration-draw: 240ms; /* a stroke drawn along its path: the checkbox tick, a checklist strike */
+  /* The shadow under a sheet, by the side it comes from: a hairline on its open edge and a soft shadow. */
+  --ouro-shadow-sheet-bottom: 0 -1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 -8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-top: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-left: 8px 0 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-right: -8px 0 32px rgb(0 0 0 / 0.12);
 }
 
 .dark {
