@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { loader, llmsText } from "~/routes/llms[.]txt";
+import { llmsText } from "~/lib/llms-txt.server";
+import { loader } from "~/routes/llms[.]txt";
 
 describe("/llms.txt", () => {
   it("says hello in plain text and links the Test Kitchen, the source, the API, MCP and the provenance", async () => {

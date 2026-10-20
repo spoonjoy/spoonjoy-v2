@@ -40,11 +40,11 @@ describe('Motion loading', () => {
     expect(importers).toEqual([])
   })
 
-  it('keeps the full motion component out of the recipe page and the shopping list', () => {
+  it('keeps Motion out of the recipe checklist and the shopping list, which HX Checklist animates', () => {
     for (const file of ['app/components/recipe/IngredientList.tsx', 'app/routes/shopping-list.tsx']) {
       const source = readFileSync(join(ROOT, file), 'utf8')
-      expect(source, file).not.toMatch(/<motion\./)
-      expect(source, file).toContain('LazyLayoutGroup')
+      expect(source, file).not.toMatch(/<motion\.|<m\.|from ['"]motion\//)
+      expect(source, file).toContain('~/components/ouro/checklist/')
     }
   })
 
