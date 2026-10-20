@@ -1,50 +1,405 @@
-// The readonly repair's real CLI runs only in Actions, never inherited Mac providers.
+// Ouro HX upgrades run the real CLI only in Actions, never inherited Mac providers.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const acceptedHead = "2b0a6dffbe7ef4fa61e2fc8f7de4837b8775b706";
-const tag = "v1.0.2";
-const tagCommit = "22f0b72388250d475bf8a34c60f8a164a0c3e932";
-// Hashes from the parent's qualified public manifest, not regenerated from local edits.
+// Pull request #561's merge commit on main: the last gated consumer source before this upgrade.
+const acceptedHead = "727c2091c719cf31621aa76c6d7d6559a40d57d9";
+const tag = "v1.1.0";
+const tagCommit = "f4043a76d8c35a5ed10e777c909526836baa03c5";
+// Every installed registry item, plus Checklist, Inspector and lib-control-ref, which v1.1.0 adds.
+const items = [
+  "alert", "alert-tests", "aspect-ratio", "aspect-ratio-tests", "auth-layout", "auth-layout-tests",
+  "avatar", "avatar-tests", "badge", "badge-tests", "button", "button-tests", "card", "card-tests",
+  "checkbox", "checkbox-group", "checkbox-group-tests", "checkbox-tests", "checklist",
+  "checklist-tests", "collapsible", "collapsible-tests", "combobox", "combobox-tests",
+  "confirm-dialog", "confirm-dialog-tests", "description-list", "description-list-tests", "dialog",
+  "dialog-tests", "field", "field-tests", "fieldset", "fieldset-tests", "form", "form-tests",
+  "heading", "heading-tests", "inspector", "inspector-tests", "item", "item-group",
+  "item-group-tests", "item-tests", "kbd", "kbd-tests", "lib-announce", "lib-announce-tests",
+  "lib-appearance-hints", "lib-appearance-hints-tests", "lib-class-name-check",
+  "lib-class-name-check-tests", "lib-cn", "lib-cn-tests", "lib-dev", "lib-dev-tests", "lib-env",
+  "lib-floating", "lib-floating-tests", "lib-form-answer", "lib-form-answer-tests",
+  "lib-control-ref", "lib-control-ref-tests", "lib-key-shortcuts", "lib-key-shortcuts-tests",
+  "lib-last-input", "lib-last-input-tests",
+  "lib-open-mode", "lib-ouro-provider", "lib-ouro-provider-tests", "lib-refs", "lib-router-link",
+  "lib-server-element", "lib-server-element-tests", "lib-spring", "lib-spring-tests",
+  "lib-stretched-link", "lib-toast", "lib-tones", "lib-touch-target", "lib-use-backdrop-anchor",
+  "lib-use-dev-messages", "lib-use-dev-messages-tests", "lib-use-drag", "lib-use-drag-tests",
+  "lib-use-field", "lib-use-keyboard-scrollable", "lib-use-keyboard-scrollable-tests",
+  "lib-use-media-query", "lib-use-media-query-tests", "lib-use-ouro", "lib-use-sheet-presentation",
+  "lib-use-sheet-presentation-tests", "link", "link-tests", "menu", "menu-tests", "native-select",
+  "native-select-tests", "ouro-testing", "pagination", "pagination-tests", "popover",
+  "popover-tests", "radio-group", "radio-group-tests", "scroll-area", "scroll-area-tests", "select",
+  "select-tests", "sheet", "sheet-tests", "show-more", "show-more-tests", "swipe-actions",
+  "swipe-actions-tests", "switch", "switch-tests", "text", "text-area", "text-area-tests",
+  "text-field", "text-field-tests", "text-tests", "toaster", "toaster-tests", "tooltip",
+  "tooltip-tests",
+];
+// Hashes of the tag's registry sources (the public build serves them byte for byte), never
+// regenerated from local edits: every file the CLI writes for these items and their dependencies.
 const expected = {
+  "app/components/ouro/alert/alert.stories.tsx": "5d243c879ad0049273c9012aa2909beec29737f02dfa5431aa2b77b1ac2f67fd",
+  "app/components/ouro/alert/alert.test-d.ts": "c38d5b25baf08de761e58dacf9acbde315036f7f8f4c7efdd710c55f6e5c286e",
+  "app/components/ouro/alert/alert.test.tsx": "03484e3fefc3606639dc3d989da07b4dfe17f2b5f52c25bda3c59b3bc3a4493b",
+  "app/components/ouro/alert/alert.tsx": "83e439d2f36cd8f1f3f184f9ec54d5da9b8ed958db0e8bbc22793f62473e055d",
+  "app/components/ouro/aspect-ratio/aspect-ratio.stories.tsx": "3ee8dd39f88b6a0f0fd263a55e6bf88c79ca1e3e84943395c136541347d2caf7",
+  "app/components/ouro/aspect-ratio/aspect-ratio.test-d.ts": "fde0d8ace2a78436b490e3fde9c7bb15368aa2a0ec1f781a52923bd217a30ff6",
+  "app/components/ouro/aspect-ratio/aspect-ratio.test.tsx": "19ac89f380ec891494fd0cfbf56f9404d01fde60ed2afb9efca7b02d49118976",
+  "app/components/ouro/aspect-ratio/aspect-ratio.tsx": "620e2ce17372b28ec80d939322ec206408ba5ab5931f78fe1ee617312abe54d4",
+  "app/components/ouro/auth-layout/auth-layout.stories.tsx": "51c549a622411ea9f0da6950a7ec9cd338e3d5749e65ca165e9238bd16347642",
+  "app/components/ouro/auth-layout/auth-layout.test-d.ts": "8ae7a1b94ac9c641366d309f52305309e8e6c671bb96513849ae7ea433d3c875",
+  "app/components/ouro/auth-layout/auth-layout.test.tsx": "22acedce757fb611f2cdf4122dc739cba8f8d650e4abad97247af306ccc13641",
+  "app/components/ouro/auth-layout/auth-layout.tsx": "027df06cac03793e887c7dc146358addaea185e833e0494d0bdef8e3dd85bee9",
+  "app/components/ouro/avatar/avatar.stories.tsx": "bd43761340e3ec6e0af96d51e427abe6e411b8a0ca693c6c296cab5ff44fecd0",
+  "app/components/ouro/avatar/avatar.test-d.ts": "b7a036d0ea101a852cebe539279acc5049cd5ced12b8c74ba5be79eff3297a0e",
+  "app/components/ouro/avatar/avatar.test.tsx": "b5a9856f55699ab686e17307f463209b0e9ba893eb9deda38117b62c8fa3ebf1",
+  "app/components/ouro/avatar/avatar.tsx": "dc9e940652c7ce7f9f33a4582c49e0b2a6096452276ae6e55702e86ceccf7ff7",
+  "app/components/ouro/badge/badge.stories.tsx": "9ef59be1605312b2f7b68a59f9ec2983b73c5584d8f11f66310934b562480163",
+  "app/components/ouro/badge/badge.test-d.ts": "69d5460984519803403a832a98d62dd2e8fed72f41fbe02cbc6965b1b03729d2",
+  "app/components/ouro/badge/badge.test.tsx": "13ab99c9d44b9c6dbe54744d63fc8cc4a93602fbd70b1f184507d9b1ca654ff4",
+  "app/components/ouro/badge/badge.touch.test.tsx": "082eb739d5e8f10e2946b10cc3d2338cb7598870ea731d8dc0338381bb455f56",
+  "app/components/ouro/badge/badge.tsx": "2c923a63f5ac2bca4bac302c80fc4a38dcc3dce66dab6ad5884753a14ccc5cc5",
+  "app/components/ouro/button/button.stories.tsx": "3217a184e0dfbb944459b280ded9a4fdddcc21260785dff292c80219c699d006",
+  "app/components/ouro/button/button.test-d.ts": "1d9d967f8374c4b4261e0d5a8cd30d31cf48d425eb17d90afe248862506b1a10",
+  "app/components/ouro/button/button.test.tsx": "efb916b82a30f21ea95812227f1db7930f217066c9caeefa58f5aa7ed75eaf54",
+  "app/components/ouro/button/button.touch.test.tsx": "d3437d62bed63ca88f630229c30dd42eb07dd55f4301bd5c8cb685ffd9a310c8",
+  "app/components/ouro/button/button.tsx": "07fedcda249779b02b287880111b8e846c079eab878f62dac06f2e01ac9cf7e5",
+  "app/components/ouro/card/card.stories.tsx": "0cfa6feb22fdeff4807387813b930e5e5a896742c006bd78e218b887cb641d70",
+  "app/components/ouro/card/card.test-d.ts": "a1802cc8b475aaf4b32bb81e27719d5de618fd1e2749434fcbaf227a65d69eed",
+  "app/components/ouro/card/card.test.tsx": "d89f2c1d08e7a3563a6399438012a31508c86c468ee52e116d4c8ade3fefefec",
+  "app/components/ouro/card/card.tsx": "8d64959a0d14e797542c57e46a37185282bc1c647b5ddd48401b79eb7679dd48",
+  "app/components/ouro/checkbox/checkbox-group.stories.tsx": "9340ab5101215616bd6620c498f4b8c95545812fdd9d35080cdea0514579185a",
   "app/components/ouro/checkbox/checkbox-group.test-d.ts": "ea747fe60e8c5cde8c4f449701b0af3fd351d67fe04d11311e040d04f088405c",
+  "app/components/ouro/checkbox/checkbox-group.test.tsx": "f180d8c8b6ce813ee8b965f7a7c9e038ef15c24d90d01c6ad3fc14365d8fe984",
+  "app/components/ouro/checkbox/checkbox-group.touch.test.tsx": "5c2f60cd16d40a0b3cd01ba4884a2646cbb7da814df03a54f061d51ae59ccf97",
   "app/components/ouro/checkbox/checkbox-group.tsx": "ae8063b0413905ca057b3da2d798238a38d43da329ac5a769ef4f54c954cbd88",
+  "app/components/ouro/checkbox/checkbox-styles.ts": "433eafce3f5e269500300058b29bb21d7d3d54175a7d86f608c5049f6fa29f39",
+  "app/components/ouro/checkbox/checkbox.stories.tsx": "f289ec77c6bf989b6cb27a980d3a22b7a4b282c4454706f1d649e6d994c4472a",
   "app/components/ouro/checkbox/checkbox.test-d.ts": "e261fb63263ce17fef5412a4efa079e354022d03093079d616c2bb7c41b3c959",
-  "app/components/ouro/checkbox/checkbox.tsx": "236b756304e45538f2725c2e904b22283df91af311e9d7fa3111ca4aa435a00a",
+  "app/components/ouro/checkbox/checkbox.test.tsx": "58e5aca1b07b917833e62658628fe33cca8dcc357935bd13ef95435da6f1e5c1",
+  "app/components/ouro/checkbox/checkbox.touch.test.tsx": "c570979d8bbddbcee0e0617b9ef68e1487d36b69cd6f2a1310cb5f0a76fe5a4f",
+  "app/components/ouro/checkbox/checkbox.tsx": "9b0ced9c07d72b0a4a5d082e1703b5ef35b07d467cfb8989ae9e5ebcdfff86ac",
+  "app/components/ouro/checklist/checklist-parts.tsx": "a0f8ab70617e0685486e6165adbf886b35adae9f226f40e2f5dccf1cacae04a4",
+  "app/components/ouro/checklist/checklist-styles.ts": "a488e992463fa4be246b3c4a78220659f28333f1a83de4d9090e1650d9cc6f36",
+  "app/components/ouro/checklist/checklist.stories.tsx": "dbfacad530c9213f1f88ec7dccf981c269a7c7339deab10adc1f50c5ed047edf",
+  "app/components/ouro/checklist/checklist.test-d.ts": "f41758947737a7254a1a73ff9fe8aac2588fae91313f71ef16f2121666ce807e",
+  "app/components/ouro/checklist/checklist.test.tsx": "57b9616dbbbaba8dc0404dc61ae40a147fef9149af844bbc32487600a39d32b0",
+  "app/components/ouro/checklist/checklist.touch.test.tsx": "b1c1e60873b61fbec4d3488ac2c5b28c41399bd11acc280f7d79d30e978af480",
+  "app/components/ouro/checklist/checklist.tsx": "b0db2b60bfde612d8128d2e473b29792af781ffa0bba9872c52a3b29dab3fc05",
+  "app/components/ouro/collapsible/collapsible-styles.ts": "355aecea4873903a9063191bc5c44e2e92302096742281f807ab6dfbaadb60e1",
+  "app/components/ouro/collapsible/collapsible.stories.tsx": "d1c785560bf7e5c30f3189a8e4277d0a827c80b0b1d86d919aec272a031d1c27",
+  "app/components/ouro/collapsible/collapsible.test-d.ts": "f2e4368f304f7f87786183d4da401c772cffab4d5ce69e9d6ddde2e26ce06ca3",
+  "app/components/ouro/collapsible/collapsible.test.tsx": "6a1016bddbe56c3e7b25b6ecdd3fa2af171f0998db1e70755fd3713d3b3fc07f",
+  "app/components/ouro/collapsible/collapsible.touch.test.tsx": "c2d4f81db6e02a0cdf104a3ec3e7041583875a7c90386b42075217c6c31ea687",
+  "app/components/ouro/collapsible/collapsible.tsx": "a7016d7b09e6cb709f49d24a7b91ec6bfa1dedba1b2bc6107753e0e0b6b3205a",
+  "app/components/ouro/collapsible/show-more.stories.tsx": "183262384db096e27abfbe61d6bd93b7cd549d3eeea0a1f2cec5289b227e48ca",
+  "app/components/ouro/collapsible/show-more.test-d.ts": "b2aed940b6814d29854154f318afcb1946ee6ed2ff9dc3ef158436d2ecdcd9ac",
+  "app/components/ouro/collapsible/show-more.test.tsx": "1e784ff685fec0dbb4243992df68a1c53fabec9597c397b76728eda616988bb0",
+  "app/components/ouro/collapsible/show-more.tsx": "6a916cf739275f19e46b7990a9335042e369d16bb445ac1afe37ccc4c105baef",
+  "app/components/ouro/combobox/combobox-styles.ts": "ce8c093dd4676a68baf52911ba17066299f7a54f79670b00c825249bc294d202",
+  "app/components/ouro/combobox/combobox.stories.tsx": "be21da93b32e500cb5d7f5c2abefed2f2272de7fb2735c05457680946e074ceb",
   "app/components/ouro/combobox/combobox.test-d.ts": "54d61170cd76134a644b55b730ae855b27ce0e5341a73137d37aa2ce7d08f609",
-  "app/components/ouro/combobox/combobox.tsx": "80cd97cc86800180f4b995b385bfcda94a351eca568b57624eeca6494433da42",
+  "app/components/ouro/combobox/combobox.test.tsx": "88fbcc31501bb76e168c6a7ba3741cb01d2147ebb1be9530211a171226bdf662",
+  "app/components/ouro/combobox/combobox.touch.test.tsx": "4acbee870b67e80b131791944bfb15a77a6c537460a8bcc0ec28e95f45821582",
+  "app/components/ouro/combobox/combobox.tsx": "ce65b60b766d51521e09f32508cd08c3d87363dc26d496f9d9e9dc5c2ce546cc",
+  "app/components/ouro/description-list/description-list.stories.tsx": "80cb8073831309d1488c63d21358014fccf8fffec94cda6d114d72a474d5d8c3",
+  "app/components/ouro/description-list/description-list.test-d.ts": "5ab3ac80c55c2ff95d03a239ac058dfa9be9fd9e19e7c8a9cca867e554b038ae",
+  "app/components/ouro/description-list/description-list.test.tsx": "bd16560a30656ca415f74932560930f25c19925669e0ce3dd98b5c52aff72fe8",
+  "app/components/ouro/description-list/description-list.touch.test.tsx": "cfce04d2507060595e8fbd3a896f11117e66ccb442f4674d5bd2f54b890a9eff",
+  "app/components/ouro/description-list/description-list.tsx": "374e9fa1d916f1da810183fa98ca3e1c846bf153d3bce1ca01b7bcff0cfd390f",
+  "app/components/ouro/dialog/confirm-dialog.stories.tsx": "0a27a9d48d9aad858b95ec3e21c15940f9ece6eefd238b1c41e3c5e4604470f4",
+  "app/components/ouro/dialog/confirm-dialog.test-d.ts": "e14eb044ca638b084e34303a569667fcfa2bcc657c5c6eab4ec52d6debf68ac9",
+  "app/components/ouro/dialog/confirm-dialog.test.tsx": "b1c290a2cfade765857f742b8e6508cb857e287bd7ca2b8e083c882b0b5e64b6",
+  "app/components/ouro/dialog/confirm-dialog.touch.test.tsx": "a03aeb1a20b08bb6e6c7cb6d6e31ae94f548d34b77ac6514eeabb6e57a8694d5",
+  "app/components/ouro/dialog/confirm-dialog.tsx": "284a393e936d9f3111550cb53e6a177d0695e47255ff58dbb37d8388941aefe0",
+  "app/components/ouro/dialog/dialog-parts.tsx": "f6170c68eae70ed5d5cfe7e3c9934ba662a697cda4f4099ca068744647ef1ff1",
+  "app/components/ouro/dialog/dialog-styles.ts": "ef9ec614dec3ce23b419252b8cf8a755efe5a57124f886516862e6d60f97aa7e",
+  "app/components/ouro/dialog/dialog.first-mount.touch.test.tsx": "3814d10ed8a292e452ad11f00d0975ea8b64a420e19a789f59a098234de47026",
+  "app/components/ouro/dialog/dialog.stories.tsx": "4628a809179136cce629c896c6a53c7280a9dcc596926474929e0301f0aa99f9",
+  "app/components/ouro/dialog/dialog.test-d.ts": "e007a9c6f29961ab0c027957176e02fdab60605a362e695422884ac20f747d53",
+  "app/components/ouro/dialog/dialog.test.tsx": "4626585538f03cf0220c3c8254725c34c7770829d102c1385a7fe4a1ac96bc33",
+  "app/components/ouro/dialog/dialog.touch.test.tsx": "bd7e9e1cefb93a157addb6dc5cf3a87ef30d223df31293bcdecbe88b5958df27",
+  "app/components/ouro/dialog/dialog.tsx": "444bf0bb6917c37fab40ee53673fc1522f0d6a4c0ed13b5a6a81e4ca116de979",
+  "app/components/ouro/field/field-parts.tsx": "d55752e77ce595189fc49bee3c616031d168c0e1e6200f7deda9741f20d96596",
+  "app/components/ouro/field/field-styles.ts": "79d3151d736c3976bd93cd0f0a58f8db48c7920d0381e0676ae28797bc2a1ebf",
+  "app/components/ouro/field/field.stories.tsx": "55e06fb2d6c2f1ff329872fb66f2b4a47859e6b377ea0bcf5bc6f957b9d3a1da",
   "app/components/ouro/field/field.test-d.ts": "caafcb1194f284bf24334eb2716c78891365a54c8744318cd333345ae5c3c288",
+  "app/components/ouro/field/field.test.tsx": "f54792257e6e439fed39ee0433d8995626f17b2885558c8538e8ac3d356baf7a",
   "app/components/ouro/field/field.tsx": "887f8f41820efa3fc7782e2bcc47884c9d6be0f01845042cf86b88a1a2f87558",
+  "app/components/ouro/field/fieldset.stories.tsx": "204f3edb10710e48319cec78e2f86226a073c4ad38964b1a3fcf4ef7caa8399b",
+  "app/components/ouro/field/fieldset.test-d.ts": "fa584dd31eb62c1cac3642899291c2cadbb2de9b01fa1a6388f6a2241272e038",
+  "app/components/ouro/field/fieldset.test.tsx": "942b9045026beb042f624614f54310f6a7a6c714385288bec026c5051236c8b7",
+  "app/components/ouro/field/fieldset.tsx": "2970d20cfd906f874a00645c865365693b8cd9d0d2aca1ac9fc80344a3ce7a00",
+  "app/components/ouro/form/form.stories.tsx": "038cc54b0adbfe0e78edb817469cf91f2244f7cf6b15b009c367aaddc091d09e",
   "app/components/ouro/form/form.test-d.ts": "0d61c4621232a16de96ed262517cac2415d560197ed7d4662bff31c4d4b38739",
+  "app/components/ouro/form/form.test.tsx": "67d91cc605b79d27eb193ec1c622bab483c4e3564d4e70182b49555dfdf11ba8",
   "app/components/ouro/form/form.tsx": "be8dd189e666a7a2853334bbfdf0c1a0dcccba288206e07f4c5aba766028060c",
+  "app/components/ouro/form/form.unrelated-change.test.tsx": "338cad61e3340c43a9facfefd588dc9858f8a6f15cc68152bf26be8e0d4803cc",
+  "app/components/ouro/inspector/inspector-styles.ts": "55f5bc08227002db6362bfae2bfca48dc341e8f53bf40843aafbae8903e019d2",
+  "app/components/ouro/inspector/inspector.stories.tsx": "5b227b80e76545a716d2669333862e91e4719bc8b849c5b0214973d398fc26a7",
+  "app/components/ouro/inspector/inspector.test-d.ts": "41d8a3c733c5d6507acc50d4b9750c57344f49ae46900a8c456424c05bcb2595",
+  "app/components/ouro/inspector/inspector.test.tsx": "f3f7159da37044c36c3966ea65e82c992aaf302d56edf0567a83a76e8b0a036e",
+  "app/components/ouro/inspector/inspector.touch.test.tsx": "a15d7973d971a4a1877bc23abff56ac4c430f6c2015e4ca47ea37149c1dc464e",
+  "app/components/ouro/inspector/inspector.tsx": "535a3c4b723d79d16a439e6f093e99309c709e4c07cd8154b8f88f685a3edff5",
+  "app/components/ouro/item/item-group.stories.tsx": "6e7d6723aec004d4dc516683e55f279bf4eecf97a0714237bd9512bf6d75b137",
+  "app/components/ouro/item/item-group.test-d.ts": "f4f86e2895bbaa0594a1ca87bc0e7da064625a20f1a37560527088ecc5cc7a1e",
+  "app/components/ouro/item/item-group.test.tsx": "4458d2cdc1ea0cb64fb5b82f2f3ae251f3ddf5eb4e38da0da131c05028610b2b",
+  "app/components/ouro/item/item-group.tsx": "c79b3f09fda9a62dd18e641b40384f8badc1eb689484e56a25f22f8d9a420fdc",
+  "app/components/ouro/item/item.stories.tsx": "4c170f44b8fc7cb7cdbe9142dfc4fbbb4d3aa98f8a175b21c11392c5bce966bd",
+  "app/components/ouro/item/item.test-d.ts": "e6758c543c9e2af95e5cf99cf73796fe494787cf3ae808dedd31e5140867b4c9",
+  "app/components/ouro/item/item.test.tsx": "a90fa40338a7d9aa3d94a9976fa5515d2e913e8620b7c7413c403a1583e369ec",
+  "app/components/ouro/item/item.touch.test.tsx": "a4bf364ecb2d28394ba33d541ac41301ec179a7d56a3b8a1742148db2b4d2acc",
+  "app/components/ouro/item/item.tsx": "2cab21bcf1efc198a8c1ba0a4dad6c3cf963041069b8a5d1ae0d28723ba6b496",
+  "app/components/ouro/kbd/kbd.stories.tsx": "983051d6ce92367adba0290f629557892c973b891bda0bdda9e41f78f76d591b",
+  "app/components/ouro/kbd/kbd.test-d.ts": "ef5aac17088d94806f25addb9362062f8283a347ab4f35696bcd970f2f344f5b",
+  "app/components/ouro/kbd/kbd.test.tsx": "06be34baea8b549b03e3d7c56c88f98265cfcace6ec52a136ef9c3c66b385c8a",
+  "app/components/ouro/kbd/kbd.tsx": "82918befaa0fa12fcf5f766b70a8adb26db17e57cb344eb01b736e28c6aa140d",
+  "app/components/ouro/link/link.stories.tsx": "7441dd4d759ffc345bd009e549e0d90e067752934f0a1c1b3641cb29a0c3613e",
+  "app/components/ouro/link/link.test-d.ts": "9c3cece2049d8ca5582e1f1a02741c847e88580235e8b3554c9efec5cd6f3314",
+  "app/components/ouro/link/link.test.tsx": "d5d9087df34b33dd2f07d04a6f215989e7695a2da3b5749b4b535a8ef13d02b0",
+  "app/components/ouro/link/link.touch.test.tsx": "ae18b4409bd5f6f5c6b395c8ff465a04c0e72c63882e7eca537ef169c4cf13a6",
+  "app/components/ouro/link/link.tsx": "bf28203e8cc35e4c3fbe051e19bacadec62964d60819df46323be350a3f453c3",
+  "app/components/ouro/menu/menu-styles.ts": "13dcfaaf5bf17c4bc3d833f36d160fcbc50aa47b1337ed1ce719dc0cf0674d78",
+  "app/components/ouro/menu/menu.stories.tsx": "967d53324d871d10c78c58aea552775fb110bd0fb8b680440b48df39cd4bd3aa",
+  "app/components/ouro/menu/menu.test-d.ts": "30162e747b50ea262f903ad83ba10bf717da17e5fe56eb921f914929871cd435",
+  "app/components/ouro/menu/menu.test.tsx": "b5636ad57d89efe0d07b955f1438211a703f98105a2a79cae5feb2654823adc2",
+  "app/components/ouro/menu/menu.touch.test.tsx": "fa188e6dc5157dfc31fadbcc882b72bfb7c7dbd1adcdf75ce3d09d9d59727061",
+  "app/components/ouro/menu/menu.tsx": "ca04f309e3386d1a7ff3d303695d67781f3fd326372c9539ea4f5a6ddd53f62c",
+  "app/components/ouro/pagination/pagination.stories.tsx": "9aa0e10d642d101a15c57ff11837a3bba0a1e1374c8d8731a925b1fe28bf254b",
+  "app/components/ouro/pagination/pagination.test-d.ts": "392913ad7bf59b4c0bae058958422eda995cd9c3910a4e39f723ea3da86da665",
+  "app/components/ouro/pagination/pagination.test.tsx": "5ace8d8aab63dcb9afd14156b2a40f2e42251aa67785eb14e5372031458ee5e8",
+  "app/components/ouro/pagination/pagination.touch.test.tsx": "f62d3560ec443ab3ee60d12e71e54b1e4b566fac7a74434ddd14ff4703db84f2",
+  "app/components/ouro/pagination/pagination.tsx": "ff08631cca1d6e9a33ed2e9b6900ed8c05f6105d9861dce3b9be68b4cc8ba716",
+  "app/components/ouro/popover/popover-parts.tsx": "8cabcde4ff204c8bcc3df8056af080cae162dcbeb874e3abd2802cebe4fb0414",
+  "app/components/ouro/popover/popover-styles.ts": "e86ee8724678492bc859238a488ba73d21a2c2ccd31bf3a84c6b2840104327b3",
+  "app/components/ouro/popover/popover.stories.tsx": "f01e637b0acf693252dc870fe7ecc83dfc90d90ed4c5fa6377d430a9e7563282",
+  "app/components/ouro/popover/popover.test-d.ts": "c5eacce415a63feb28e23a7f4ec2f909721ff5bc3cdd1d365d1d93e4977d1471",
+  "app/components/ouro/popover/popover.test.tsx": "f2cd18dd9d7412fa607c7f258e057540fab74701816656427f47db5d92061871",
+  "app/components/ouro/popover/popover.touch.test.tsx": "d66dcb55259763ee031a4e148927d8795bd1dae2d63447c43663f706306f825b",
+  "app/components/ouro/popover/popover.tsx": "491d70e97fc5198a16d478e5938443b0884ea929c3cf976a5201901e04994ecc",
+  "app/components/ouro/radio-group/radio-group-styles.ts": "03345b4cb8dc7be29e59ff0a85543fce6dee7ec21c28936d1cfe076cb05dc312",
+  "app/components/ouro/radio-group/radio-group.stories.tsx": "226e878035f91521cbc1b280d140f8a99c46eca39a939999c2f8ea4de3eb1772",
   "app/components/ouro/radio-group/radio-group.test-d.ts": "bb207eec8d6a7aa246b0a3a0296a54431e2c291a82e8e578bef99265ac531e44",
-  "app/components/ouro/radio-group/radio-group.tsx": "7ba91819ebda573c2c4921c91b5b0020ff1ef42276d6e6517cb56daf239a0d6d",
+  "app/components/ouro/radio-group/radio-group.test.tsx": "2bd6a6a159ecdbdbb0133174818232fd60c485fe777c11ba1467f13d71adbde3",
+  "app/components/ouro/radio-group/radio-group.touch.test.tsx": "db3b642ecef5d81f28b82349ab0ae4ea8d25a32b510305865c7bd56eba6002d1",
+  "app/components/ouro/radio-group/radio-group.tsx": "c3795821d441dec981f59c5994d3544d14dec465d81c20cda03fcddcc51e9b35",
+  "app/components/ouro/scroll-area/scroll-area.stories.tsx": "a84c6bccace4bfa4b7f911d0ca4cf701a55659a8d8b4efde13a5102382a062ee",
+  "app/components/ouro/scroll-area/scroll-area.test-d.ts": "a8cb495c715628aece1b20d893909544347850e482482cf54ca7f060b9a7dbc4",
+  "app/components/ouro/scroll-area/scroll-area.test.tsx": "4150f88d6d08f451a38b84f7df92a14b75638a241fb4525547bea32bc3cf7ebd",
+  "app/components/ouro/scroll-area/scroll-area.touch.test.tsx": "ae54f36ea96fc9c132e3bf4e99349e9087a08cd3d7f1a50f79b3aa091fada5bb",
+  "app/components/ouro/scroll-area/scroll-area.tsx": "abe587c2c27669ea2548c798fcf7d846e695a81732aaaaba946995f5efce7883",
+  "app/components/ouro/select/native-select.stories.tsx": "cb76d36bfddd0f1b2b19986646838459697b438f30213b34cafe8d6e55330331",
   "app/components/ouro/select/native-select.test-d.ts": "0b896ec32a55394292c3e08bb9b33dc4db3accb32a92a06167aaa176580af516",
-  "app/components/ouro/select/native-select.tsx": "b2ec9109ea81910eb1f265e2eb5c0335a42e826fe0155185c4dd2e92d79ccb8d",
+  "app/components/ouro/select/native-select.test.tsx": "9f5e8f8d3d86ccf08b3ba3e834a67cf7bdb2f99bab0162c2d8ce07fa31773d7b",
+  "app/components/ouro/select/native-select.tsx": "6fd996d27594caa62d7e2d9e8d1d9a217a5cae014ec2e76c167f0071c2a4a279",
+  "app/components/ouro/select/select-parts.tsx": "da1e724ff0c35fde56957b669992083fa85d1a71b8811343e6c5f9a90f908f83",
+  "app/components/ouro/select/select-styles.ts": "82091e7e08f56405dacf44a2fdb0c9784b9f5ee2d60998504fae3ba0893c43ce",
+  "app/components/ouro/select/select.server-items.test.tsx": "f25313bb16f159fd0de80b64374dfd889081efcd63f9284850c91bcdc901166b",
+  "app/components/ouro/select/select.stories.tsx": "bf63166bc083809f0078f773102fb424be162ebba4bd7f2cb5daf4844230ec21",
   "app/components/ouro/select/select.test-d.ts": "77cb2461dad6946ff4b036d04ae835a018ee610e6171d8215262006b968e8f37",
-  "app/components/ouro/select/select.tsx": "0abef3fd1403d98b0c5c13f137b3426eb650eb7717992465e1b82ae1aab99bbc",
+  "app/components/ouro/select/select.test.tsx": "a70807562440ee376c2e2ae9dd9f7b5bda688728934f56983a28586560d267f5",
+  "app/components/ouro/select/select.touch.test.tsx": "3349b0ffd8b0145676994adc58c76b40761f5f610b5f05f0d958a414469aea87",
+  "app/components/ouro/select/select.tsx": "3138c68ad10c9368de202d66b07e1319c1b68003dcbf58c9b0cf11dded5d7502",
+  "app/components/ouro/sheet/sheet-parts.tsx": "b17669b111986c2648c36a85a3cb5d8d61392004647054a7095c44c142498ec2",
+  "app/components/ouro/sheet/sheet-styles.ts": "28b9fe4319547636074b0986d7cc1242579d5f604f4b26efd50b860972fde17b",
+  "app/components/ouro/sheet/sheet.final-focus.test.tsx": "306d28fd6a250469105768d7d4cdb78343c67e128aa124f01f1bf31a3d2a730f",
+  "app/components/ouro/sheet/sheet.stories.tsx": "2e23ae5634734975bb27aed17360ecf87647ac26ec2ebdf5756c7d14538ed327",
+  "app/components/ouro/sheet/sheet.test-d.ts": "d554db7a2f608a80d9aaded0e646424557b7a4be13068d072f248e04ef14d41e",
+  "app/components/ouro/sheet/sheet.test.tsx": "021bf585a80ac9b29f96d82307678710c889c64bc7b77e0e5ac9d5fd628cd489",
+  "app/components/ouro/sheet/sheet.touch.test.tsx": "9917bef526eab3473bea033737dcab7ee9b84f9de607df8870c87474334eeeb3",
+  "app/components/ouro/sheet/sheet.tsx": "5653f6122ac354f300f1ebfb3e4b235e67b2f0d54c3bacfb5710adb485df91ef",
+  "app/components/ouro/swipe-actions/swipe-actions-styles.ts": "d59cec8846a869df676d7404aed9f502894195bacdcf120f65d061c24f7cfcd1",
+  "app/components/ouro/swipe-actions/swipe-actions.stories.tsx": "8b2974b5c78f9ca8275890195a1402ae9cc1b61c8fc693fc8869bae622993f1d",
+  "app/components/ouro/swipe-actions/swipe-actions.test-d.ts": "d0ca1e9ac43ffec29ae41b8218d9a0e8aaf186b0fb54dc512463c104554f6e96",
+  "app/components/ouro/swipe-actions/swipe-actions.test.tsx": "dbc2c4b80110b66012b6632f2dc6f172939c8d77cbf4542eb06e86b423c8a5cc",
+  "app/components/ouro/swipe-actions/swipe-actions.touch.test.tsx": "a6cd3d782eb7c7d4fb229d4b7ccaa63fe3755a0e912d17a8a98869e575e626a4",
+  "app/components/ouro/swipe-actions/swipe-actions.tsx": "0d402ac4bbd9137a75d1cf5443a19a20335059b2b721c21bbb7bc54fcdf303b9",
+  "app/components/ouro/switch/switch-styles.ts": "3b4d3f0f7bb27186f0c8c1cd7a245dbdd811b8e41f6bc53f6948d29db4e3e1c9",
+  "app/components/ouro/switch/switch.stories.tsx": "5f33a290fb905a954b177c1f662fe813d0f4ac5ad50ef79ae04a23349314bd7e",
   "app/components/ouro/switch/switch.test-d.ts": "6f16fada873f963fc46eec19fd9860fbbae513d82cd6c3e062fc1d2d3a0eb551",
-  "app/components/ouro/switch/switch.tsx": "31d30d47bee434ae1084846fac79fcdddd3b2a58a16ae49c7be2eddd10da8efc",
+  "app/components/ouro/switch/switch.test.tsx": "9da7930181af7cf2213df53ac1b85179e809926fd297b640f0ddf0fc10d33d63",
+  "app/components/ouro/switch/switch.touch.test.tsx": "38e3a9a9827b45602845a3815a86cf48cc7f47f87c226c885c93b605bfbf3d06",
+  "app/components/ouro/switch/switch.tsx": "8de7a5184acdf55779facabfbb0c2f9bd7e215ddb3727c0307cf3d29b4965790",
+  "app/components/ouro/text-field/text-area-styles.ts": "3ab8915ddc369621fcc3141df0f0c941bfc1851ab85a83557c59d5f3eed8f160",
+  "app/components/ouro/text-field/text-area.stories.tsx": "e94c73434f22f4ffe3e90a38385ce044c7b89032830592c5117b5c7121d28516",
   "app/components/ouro/text-field/text-area.test-d.ts": "c27ecba0eb1343294c426e31f8fb1245080faea6b25078fab462c6ddafe6edf1",
-  "app/components/ouro/text-field/text-area.tsx": "a009026a8e14467cad1485bb9e225e4feb53d4478e7df730942186291ec8b8f8",
+  "app/components/ouro/text-field/text-area.test.tsx": "0f018346503fd7bc4e955af0c460a51095fe6d22d6787095b0bb7b3bff46b324",
+  "app/components/ouro/text-field/text-area.tsx": "213506133debdf9d2ac46bd1150791eee87675fe78cae8deb50b7fcaaf5488af",
+  "app/components/ouro/text-field/text-field-styles.ts": "18115637908bfc7304bb47e18bdcc3ba56c0116f717d2ebedc92005f0a95ef58",
+  "app/components/ouro/text-field/text-field.stories.tsx": "10a7dc66a198e0dfcbb7a4110026b4285fb32c02bc41fa4563eb721d86cf9206",
   "app/components/ouro/text-field/text-field.test-d.ts": "f8f49dc6539cb6f234321f0979431863a3b840b53ed12f7248c242db37079ed2",
-  "app/components/ouro/text-field/text-field.tsx": "7fb200fffa7ad01b52e699dea65530168f2490152e1b3c91261332327c212af6",
-  "app/lib/ouro/dev.test.ts": "94f4ab823bb7d1fe60bdd3d84b8120140406d63a6ce60071ce73b380f881cefa",
-  "app/lib/ouro/dev.ts": "7f320bdb0d05dd0dc097cd79574a947138e7a0e3a19e81021dc75c415dab630d",
+  "app/components/ouro/text-field/text-field.test.tsx": "9c62af5c06c9b5e93ad7472bd372b75b16cb3f507bf7c9833901b9b82fcc4b28",
+  "app/components/ouro/text-field/text-field.touch.test.tsx": "eea64d4870c82078b17a0f94260f0af448be9e040467d83a70e5ecb48b45048e",
+  "app/components/ouro/text-field/text-field.tsx": "57432f5d9e18b903bd86c6d3c73a25528b7d118d8da7410f9fe8c960e6160a99",
+  "app/components/ouro/text/heading.stories.tsx": "38b32784eecb3044fa1878212d3ebaa5a45760afb30575eee57f8c3fb9097539",
+  "app/components/ouro/text/heading.test-d.ts": "1bf96abe99697e9fc9d76d25131050af835b7205ef3faee59b1a29f41709f325",
+  "app/components/ouro/text/heading.test.tsx": "6c04cacbcc2cbff50b821a0876eb09060975a5ff1e7161c4b754fcc108c1411f",
+  "app/components/ouro/text/heading.tsx": "576422182fe730358fb33bc92772fc09982267aba54b07f6ddf5cc55a0b34a5e",
+  "app/components/ouro/text/text-styles.ts": "6ab868c5987d061c51793b5429b9bf03a9e7105daa485045f7f466aba58d8d40",
+  "app/components/ouro/text/text.stories.tsx": "002f1376fddf187f5852cfffa04ceff6f46584434fead40f48b9a9e83a1719c6",
+  "app/components/ouro/text/text.test-d.ts": "6281eaa7d014cc931698b5c4970fa2a6871f210c7c602cbf49eae27bbadb7d21",
+  "app/components/ouro/text/text.test.tsx": "33151e2a8859a789d770a59203f7c634a27dd2275fb2196c13e43280ebbd2b4c",
+  "app/components/ouro/text/text.tsx": "927d4b124f01f7fe55fd3d9751750c91208a43514e75c353119a32c7c8782db8",
+  "app/components/ouro/toast/toaster-styles.ts": "48a9676604501d1a032f018c6298afc80129fa2fb35df69ec796453adcd23cd1",
+  "app/components/ouro/toast/toaster.stories.tsx": "0c082839183e8c6a26750d888ac713591a9f8d67fb302b27a229e73b66c0f27c",
+  "app/components/ouro/toast/toaster.test-d.ts": "0eaf9dace4f7d1ef557bfefd4831cb8b41b05e7b8917408dad5d3e4cb11b6746",
+  "app/components/ouro/toast/toaster.test.tsx": "06804c7092620ff230f078fdeb53df4588e899f71612a8091a6ccf7f6eb55af9",
+  "app/components/ouro/toast/toaster.touch.test.tsx": "d91c2fab7a208ca6d3138f69d67e07b5a42f427ded7c6f9e66ce52eaa2ff6d82",
+  "app/components/ouro/toast/toaster.tsx": "6fa7e1e1845f135b30a9df3f88e11d4bcda8a8c3caad46a87fdf0bf41ea99e68",
+  "app/components/ouro/tooltip/tooltip.stories.tsx": "8601b35f2bb1e0825b2dcb657093579003a744136fc6ab56eecccfe0df71b119",
+  "app/components/ouro/tooltip/tooltip.test-d.ts": "23dabef495787dcc223abea37b8a424bbef0dbb7c823ac0aa185c4721c16ecfe",
+  "app/components/ouro/tooltip/tooltip.test.tsx": "1f071369e50baa888ebf9c959a3ce28f415d1d9203d1ae83acf84ad6e756fd47",
+  "app/components/ouro/tooltip/tooltip.touch.test.tsx": "d49e67591c6bfb142d95642e400519f650e211dc21c44da472efea432cec2da0",
+  "app/components/ouro/tooltip/tooltip.tsx": "e41515f78f81e5693fe8a13a6a2d203621de0454e628a03bebce9e5c541d620e",
+  "app/lib/ouro/announce.test.ts": "6fbf39625474cb1c386a449bc075b74ebea4d8b07880d71db6479f06afe42d0c",
+  "app/lib/ouro/announce.ts": "cc309eb5253e953e2bded313f2ea72ce6c9d7e4f46e421f711111ddf79ab5ede",
+  "app/lib/ouro/appearance-hints.test.ts": "988affb283d94abb0aabd598dd63b3f5f8628ab9bbd4b5ff0bd3ca24a2798527",
+  "app/lib/ouro/appearance-hints.ts": "425329b0e45fe239e3ef1710c6c09060730a1e922fe1d29a5780adbde7bc6c7b",
+  "app/lib/ouro/class-name-check.test.tsx": "dde148739543b9b70436b908e91a6f9da1cd2dd3ba16657af7e9bfe43f538039",
+  "app/lib/ouro/class-name-check.ts": "91207a92917671b342afc5d6f644def221e2a01756ec355cf3d509f3c7a378ec",
+  "app/lib/ouro/cn.test.ts": "881265c4c6d01fc4a370204f0cc3858636c77baf451253183b0f3980d0e7fb80",
+  "app/lib/ouro/cn.ts": "083897395c56504e1f7862f396d0323298a8e8d49ac0e30761bac58f772309b4",
+  "app/lib/ouro/control-ref.test.ts": "0839cc1b76c3aaf1aa050c72b0679668c9c79f61b881687daca3fb975a6ba087",
+  "app/lib/ouro/control-ref.ts": "1bbe41198b08459b212158edfc9b0a1068ef0585caa8a5e8e7832495ad3dfe30",
+  "app/lib/ouro/dev.test.ts": "92113f4ce35fb25756c74a575daee9d347c6b265d0162fe51738b854374e9c67",
+  "app/lib/ouro/dev.ts": "68ac99329b2b0b7b3fecf7ab6dd864feb958e2e6536486a8eb531d96971e0e2c",
+  "app/lib/ouro/env.d.ts": "b9b1f9fbff01e0acecd2452110007846804d4d30e159a302f56312d2771fe90c",
+  "app/lib/ouro/floating.test.ts": "1eb3508c60d6b24f31b0401739aab29759259e69b97242d5a1e2dcb2fa266e99",
+  "app/lib/ouro/floating.ts": "4e1896a639e6606d8420ef57d5fd51288c5a80abf5de81324d4e0f25664cc5eb",
   "app/lib/ouro/form-answer.test.ts": "60a4254b4e4c0661594b966f2b7e74faf4a91a6a7eff5006433b5c441a53c26d",
   "app/lib/ouro/form-answer.ts": "b0a40e58765ff860c3767c90658243b11a813869c2f1f0ef15ee128f6a7dcca7",
+  "app/lib/ouro/key-shortcuts.test.ts": "1c3834e75c3cb3033dffbe5c7ed61cc40bdc023edd40411ce36fc74f1be72238",
+  "app/lib/ouro/key-shortcuts.ts": "628d7b1b6586777808d3bac717da2dbd550a413a0bd18b7e50d28990493175f9",
+  "app/lib/ouro/last-input.test.ts": "b356b987125c504af2e98a18dd5be754b51044b0842c370b20367dca197eef0e",
+  "app/lib/ouro/last-input.ts": "b0c7794c2395d2cee7d0a87ad6c77153623e0139f490c981c895b805f3f52f48",
+  "app/lib/ouro/open-mode.ts": "069c426efdcd4cbfd9a0d30d9de4839b12681cb4e859c0703e5a29e22109a0c6",
+  "app/lib/ouro/ouro-provider.test.tsx": "f488a212e77c50c46e38fad0de245de82c1fc6157e8d09f4014c44888f715a8c",
+  "app/lib/ouro/ouro-provider.tsx": "5bdfe824fa28ffc16c12cd65d86d234f7fe2e9342d06cf88f9366948724ac0b0",
+  "app/lib/ouro/refs.ts": "95cb17ac130a9ff17c826a0b69110302c35881944c37184d6c831ba143260d2e",
+  "app/lib/ouro/router-link.ts": "bde383336f29225dcc09703b4c9aa5aa582ead5b10e7c93d2d87ae2555152242",
+  "app/lib/ouro/server-element.test.tsx": "0ef78db3658b1059aa57a0a1b164204d3c2c57a28121785ce09e0073d963d12e",
+  "app/lib/ouro/server-element.ts": "67ff9eb7120f384e659e1a410e6eac81c57508cb529a27cb0f30a432cb35f0df",
+  "app/lib/ouro/spring.test.ts": "0585a2adb96a88eb9162c6d61fbb8cfefdc286a12b177986ca630d6aa2591460",
+  "app/lib/ouro/spring.ts": "a7b5993b57351aa222e277f9144717c1761cf51598feb02f3cbe9f3176ee2e5e",
+  "app/lib/ouro/stretched-link.ts": "edd4657bf3ce76c579d8b41a06c28287d38fff81745866b0cfdd3f8f60eff4d1",
+  "app/lib/ouro/testing/act.ts": "38a4cc59c51a45c56fd1fd52ea2da7418b1867eff23aa12bf64ed650c8e09339",
+  "app/lib/ouro/testing/announcements.test.tsx": "1c5753c88ef5815d1cd073eb6a4e5e41716bc2138c7c348270c7d5f2ebce45d2",
+  "app/lib/ouro/testing/announcements.ts": "0c3d31ef4376e52b73d4f08329fc800891e3e6fa7a92f7dfe3cc44960ee48b98",
+  "app/lib/ouro/testing/axe.ts": "7dfe3ffaf6f29ae9694a80549d4b4e5c082149d7f5cd1284cff526cef5d90b7e",
+  "app/lib/ouro/testing/color.test.ts": "ba00f03403285845d76b7004753fbcf05fb88259505036c921e93d39b87b1f5b",
+  "app/lib/ouro/testing/color.ts": "9960df07bc1ba67337a1ba4772986121ccd837c8524654bc95e94a9733ed9a89",
+  "app/lib/ouro/testing/commands.test.ts": "5d539fa436cbaa1170b41d66ee8aa5a21f0b51a5386a0808e3634ac17e0d6146",
+  "app/lib/ouro/testing/commands.touch.test.ts": "969a04f5612c72bde81b946320d8181bbf3bae54d8c816f20fd1b91955de5f65",
+  "app/lib/ouro/testing/commands.ts": "19102b9ca8ef90b9f726282605fc38cf116ad70bf64b8387be692d1820ebe6c9",
+  "app/lib/ouro/testing/frames.test.ts": "66aebdd57663ad17334b1432893777996fdef78d70116e35d5ea18cfa68b8103",
+  "app/lib/ouro/testing/frames.ts": "0641ec4479be4f82d0c89dfb93678d7562a96cc4740be746ac0441f6ea44517c",
+  "app/lib/ouro/testing/motion.ts": "b6e417dfe4a1a1510115effd0225dec635baa1ca46086aa3bffe8899ea48a003",
+  "app/lib/ouro/testing/page-css.ts": "8488fade57e63e105e9591265ea6935943a316d4f503d1c8bb41fefd635e1639",
+  "app/lib/ouro/testing/press.touch.test.ts": "9719d881b6cf5cfadcf28629d4404e8890c9537e102fd58093d4d022d58be506",
+  "app/lib/ouro/testing/press.ts": "1648cf4b46da397ba0b8a0ecf539e3796fcef97af9ed18916f689e23d933dda9",
+  "app/lib/ouro/testing/rotate.touch.test.ts": "ce3058b5f7c3c71679da20b03a82a4b4adf7115ea2ac90c46cfcf8e81efb2b70",
+  "app/lib/ouro/testing/rotate.ts": "c795c9ded66bd5cde0ce45edefc11cfa714cb08fddae0b4bc9b54d862d3bcc9f",
+  "app/lib/ouro/testing/setup.ts": "5b7e771244eefe5a86df2a1fea3f8b3c1a641ef7c70343d6dd621c5591f71b4f",
+  "app/lib/ouro/testing/tab.test.ts": "cf51aadf97591459693b334aba38e3ece10f8dcdc9ea34dcdaac321e56d54af4",
+  "app/lib/ouro/testing/tab.ts": "57987544e033ad6ead4ecd91295b09597045d934dea8427bdeaf6e56bb6563aa",
+  "app/lib/ouro/testing/touch-setup.touch.test.ts": "95fdbb5e48d1796f66318f4a29382e89ec3c4db6af49404dd56d1db7e9e54402",
+  "app/lib/ouro/testing/touch-setup.ts": "cee8adb32cf2b76e8e6375767dabe9de2657bdf6a85a419878a170ae0ba31f03",
+  "app/lib/ouro/testing/vitest.ts": "86ce4715db30baaeb5b058542df9de0adfe0bd09fcb366d7570a8194f8c5b4e2",
+  "app/lib/ouro/toast.ts": "2c6e416861df0f8a3597222a255941a2de5e24045205943a7dd2fe3428263acd",
+  "app/lib/ouro/tones.ts": "1ff10969afb2d22bb0aacb5a7edabe2057e091f35638fe6e1736957b4330c1fc",
+  "app/lib/ouro/touch-target.tsx": "f55a6476373c078f08e9e335836ac354377531959cd08e50da66b87f3b59be77",
+  "app/lib/ouro/use-backdrop-anchor.ts": "95f7e732953285276d54752a227124b857d13da57679c9f7114dd9a72e50c26b",
+  "app/lib/ouro/use-dev-messages.test.tsx": "cf5e78838ef10b2a27348dd00fd6e303b9290c654732afbef9294c42c874bdbb",
+  "app/lib/ouro/use-dev-messages.ts": "7ad8f0e2955326a8a3d405d34fff3bc0e8030e42ddce8bb46451784818e16613",
+  "app/lib/ouro/use-drag.test.tsx": "c2ba356139edbf074711069e948a9de749abd4c558642d21dcda672c2f717cdd",
+  "app/lib/ouro/use-drag.ts": "74b3b9424c79e96c1c737ee5367930ca1cc369ef9f23572b29821dcc0563f5f2",
   "app/lib/ouro/use-field.ts": "d1c1a06cb5c96a53b5d06474bc24b69863c70777ff952d4ba2277d65da28807c",
+  "app/lib/ouro/use-keyboard-scrollable.test.tsx": "33cee46100cc74df1341f2de68a8065876e33ac03dcd855bc210fb4a8915d2a5",
+  "app/lib/ouro/use-keyboard-scrollable.ts": "5cdb4d38eeebb1eb805894135d327e87c0bea6c7102a1a6fcab959fd3cef8925",
+  "app/lib/ouro/use-media-query.test.tsx": "61d4cf509aecbb6e7112d19c3c4a3a279762ec75ece02399ada89d964e0c6261",
+  "app/lib/ouro/use-media-query.ts": "2d750b94a766b74acc8daab989239f1a6c15dc3b4a82884c00a734134711fbe1",
+  "app/lib/ouro/use-ouro.ts": "b9153128e8b148f96caf35bc598f0a0247f5730b132125df9a683ee5b8800fb8",
+  "app/lib/ouro/use-sheet-presentation.test.tsx": "71bc752e23742ccd9a9ae444bda1a6ebe91443c3b59813a36d865eec58208859",
+  "app/lib/ouro/use-sheet-presentation.ts": "fdd5bac1b3705c0a27babe63535dcd88e362357ec4e6a80348ad3a78ae82be53",
+  "e2e/ouro/alert.spec.ts": "b7b95b6bb9279a16568f8fde422a8c51a62468397de63c00dc4175e3fcc8c1ca",
+  "e2e/ouro/aspect-ratio.spec.ts": "3ebfaa3f7f16cb14e49ec5434d99684ca2b48f16d8de59571e2c22dce1a5778d",
+  "e2e/ouro/auth-layout.spec.ts": "d1e5d1b2b1c9e636ffc31cb344b4270fe45dd95d45b882acb02449bb3008c50e",
+  "e2e/ouro/avatar.spec.ts": "1b856a12f21d64b4c5ee5c26305b8724b5b414bd36be569da5de98e97f3eff0f",
+  "e2e/ouro/badge.spec.ts": "bcef9f3f54c6987a273b01b1b8a6b6e5eb512074a3a01e336bec90d6707a1c01",
+  "e2e/ouro/button.spec.ts": "de794a6b81c1dc0cce66b3d509beff3255f193506cdf66b3cf3c4df7c4fb3f3a",
+  "e2e/ouro/card.spec.ts": "b2f477df1aff50ad4f6e3d0e080fdd98d58d802883a9e80d830cfd5cf008d32b",
+  "e2e/ouro/checkbox-group.spec.ts": "c0e6f54964d3772204ef0ea4900e5ac82515ec71ce9d2c37c2f1631ca8d98628",
+  "e2e/ouro/checkbox.spec.ts": "a8f5e0fa5fc2ce48cb39f6513fa8f721e28777ff6673a8b91ad5effa0b794d25",
+  "e2e/ouro/checklist.spec.ts": "4e44ebcc6991dbc59b295628377ce57aa3008eecb8e1b864dab66298cbd27b6c",
+  "e2e/ouro/collapsible.spec.ts": "ac5f51fcc1062b11473ddadf850053b1f0e98d8034ce3cde09ac38d5fd3eb820",
+  "e2e/ouro/combobox.spec.ts": "35d643f8ee1f52eb472d5adbb4942d84dc12248b795033b5a7e4e005285109fd",
+  "e2e/ouro/confirm-dialog.spec.ts": "1d9e55e3204813a14616cc4dbd652ad43bbeea14958998ac1fe844e0673ea0e2",
+  "e2e/ouro/description-list.spec.ts": "e6d2e7c90c647a1ab37671474752b08eadc1e51dc3cfd0e98d1ceb72a1c06570",
+  "e2e/ouro/dialog.spec.ts": "8befd9feb10fd19e03962fdc99c414190748a30118f369d1c8c1cfd97b512c60",
+  "e2e/ouro/field.spec.ts": "04252fd5471384cb6e6cc67264959277dd4be65706e0e4e527b1b1c19b4e38e6",
+  "e2e/ouro/fieldset.spec.ts": "340461dab49e0a43097928d4a8571a419429b8b4079eac127a6e8c8c3f6c8daa",
+  "e2e/ouro/form.spec.ts": "dc497900631f708e6621ef163e7c20a994a42a9ac0461f7889c3817caa4982ab",
+  "e2e/ouro/heading.spec.ts": "9a2165603b1e1c6a005daf1e554da4c134e9a184cc1b1104944ff55dc749ae91",
+  "e2e/ouro/inspector.spec.ts": "c529422c233056a7361c6bb945ed60a4bb32d8e334caafe8f9ee6910aa469176",
+  "e2e/ouro/item-group.spec.ts": "b632233535ce43ef7a521cab97822f892311e4fde003604c3d28336d20932a68",
+  "e2e/ouro/item.spec.ts": "1f66aca9e158f66437689ab24243e35806399c387177bcd56bbcbd071c969782",
+  "e2e/ouro/kbd.spec.ts": "166ca1b9221cc382a475ada41ec43f9ee93b85e64b88f4b337fc0557db3cdb2e",
+  "e2e/ouro/link.spec.ts": "94aa7ff82afdf89de9506d6a34ad1e766b9c85493578e68dd9799a2cad148eb8",
+  "e2e/ouro/menu.spec.ts": "e21d74de72b0f5e600701b844951dac4cf966340eed19280c12c71ad2c5f4895",
+  "e2e/ouro/native-select.spec.ts": "9a98912e4f64b486692f7a224a620f73779762fef783678086082d36a4ef1bc5",
+  "e2e/ouro/pagination.spec.ts": "90e310c7792bf788c81fe8bc5a15edbcb47fba5fd6428a5a4eb719de89b4530f",
+  "e2e/ouro/popover.spec.ts": "798f5526d4e54cde858305694d64fe804e4cbc34da1db5c33c0af58f65dbfe75",
+  "e2e/ouro/radio-group.spec.ts": "c722835bfe15d2e8fa160c4f3d69a269d17ee8e97d4966f5c0a8409707e1d8ae",
+  "e2e/ouro/scroll-area.spec.ts": "581a52accbbe9b1b07ffe26f8a805304a184b5664de7ed4978c246d2138ada5c",
+  "e2e/ouro/select.spec.ts": "d58203092ef2d5b3658062524fc0370e11c2ede30687f45eca47cb22b9ff03f3",
+  "e2e/ouro/sheet.spec.ts": "cc75854109d8b69b8c56dd0e51438791b4db4facf7df82a9a1edd83e3ac311d2",
+  "e2e/ouro/show-more.spec.ts": "12af6f67dd5529d29837905669e2991d10b2bb23609060f3f2be23dd0fae3069",
+  "e2e/ouro/story.ts": "fdd83fd56b17768ada6829c08096faaff6d7644d177bf8e214e46cdced5c9a1e",
+  "e2e/ouro/swipe-actions.spec.ts": "aa3e47641d70cba5fd0f31e4abf701136efa3d4921173884ebea39c932ffc645",
+  "e2e/ouro/switch.spec.ts": "1f805fbadc48885e7a6772cc0dd7a4cc8cb130ef9b3fdd424f80efa84b941ada",
+  "e2e/ouro/text-area.spec.ts": "96ede7aa2d9f2e106a6668ef17252f8f33776d80524c181c2532d0cc412a5e8f",
+  "e2e/ouro/text-field.spec.ts": "951d6972e10df53e8810f7c36b4485482a9b264c6aef97cc9f7dc6956cc6ad8e",
+  "e2e/ouro/text.spec.ts": "e86fca18558617f8e08589cd9f5e38c230c71245966da4b897f43fdc791f6624",
+  "e2e/ouro/toaster.spec.ts": "b467f3a8f1b797482e36ce136332e72781d82d7fa2fa510abbea7d8684923797",
+  "e2e/ouro/tooltip.spec.ts": "0281a6131d5e145c3b421001270af27fd2b39c3c57e4b17a5d6061f211a79c5e",
 };
-const expectedChanges = Object.keys(expected).sort();
+// The files v1.1.0 adds; every other expected path is already installed.
+const expectedNew = [
+  "app/components/ouro/checklist/checklist-parts.tsx",
+  "app/components/ouro/checklist/checklist-styles.ts",
+  "app/components/ouro/checklist/checklist.stories.tsx",
+  "app/components/ouro/checklist/checklist.test-d.ts",
+  "app/components/ouro/checklist/checklist.test.tsx",
+  "app/components/ouro/checklist/checklist.touch.test.tsx",
+  "app/components/ouro/checklist/checklist.tsx",
+  "app/components/ouro/inspector/inspector-styles.ts",
+  "app/components/ouro/inspector/inspector.stories.tsx",
+  "app/components/ouro/inspector/inspector.test-d.ts",
+  "app/components/ouro/inspector/inspector.test.tsx",
+  "app/components/ouro/inspector/inspector.touch.test.tsx",
+  "app/components/ouro/inspector/inspector.tsx",
+  "app/lib/ouro/control-ref.test.ts",
+  "app/lib/ouro/control-ref.ts",
+  "app/lib/ouro/testing/announcements.test.tsx",
+  "app/lib/ouro/testing/announcements.ts",
+  "app/lib/ouro/testing/motion.ts",
+  "e2e/ouro/checklist.spec.ts",
+  "e2e/ouro/inspector.spec.ts",
+];
+const protectedPaths = [
+  "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
+  "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
+];
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const normalizedHash = (file) => sha(readFileSync(file, "utf8")
+const normalizedHash = (file) => existsSync(file) ? sha(readFileSync(file, "utf8")
   .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
-  .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/"));
+  .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/")) : null;
+const run = (name, args) => spawnSync(name, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 const command = (name, args) => {
-  const result = spawnSync(name, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  const result = run(name, args);
   assert.equal(result.status, 0, `${name} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
   return result.stdout;
 };
@@ -52,19 +407,29 @@ const hashes = () => Object.fromEntries(Object.keys(expected).map((file) => [fil
 const mode = process.argv[2];
 assert.equal(process.env.GITHUB_ACTIONS, "true", "CI-only: do not run against inherited local providers");
 
+// The binding holds on every push: the accepted head stays an ancestor of HEAD, and the commit
+// that bound it (the last to change acceptedHead in this file) changed no consumer source.
+assert.equal(run("git", ["merge-base", "--is-ancestor", acceptedHead, "HEAD"]).status, 0,
+  `acceptedHead ${acceptedHead} must be an ancestor of HEAD`);
+const bootstrapCommit = command("git", [
+  "log", "-1", "--format=%H", "-G", "^const acceptedHead = ", "--", ".github/task21-v083-cli.mjs",
+]).trim();
+assert.equal(command("git", ["diff", "--name-only", acceptedHead, bootstrapCommit, "--", ...protectedPaths]), "",
+  `Bootstrap commit ${bootstrapCommit} must preserve the gated consumer source of ${acceptedHead}`);
+
 if (mode === "classify") {
   const current = hashes();
   const upgrade = Object.entries(expected).some(([file, hash]) => current[file] !== hash);
   appendFileSync(process.env.GITHUB_OUTPUT, `upgrade=${upgrade}\n`);
-  console.log(JSON.stringify({ head: command("git", ["rev-parse", "HEAD"]).trim(), tag, upgrade, current }));
+  console.log(JSON.stringify({ head: command("git", ["rev-parse", "HEAD"]).trim(), bootstrapCommit, tag, upgrade, current }));
 } else {
   assert.ok(mode === "upgrade" || mode === "binding");
-  const directory = join(process.env.RUNNER_TEMP, mode === "upgrade" ? "task24-v102-cli" : "task24-v102-strict");
+  const directory = join(process.env.RUNNER_TEMP, mode === "upgrade" ? "task25-v110-cli" : "task25-v110-strict");
   mkdirSync(directory, { recursive: true });
   const receipt = {
     head: command("git", ["rev-parse", "HEAD"]).trim(),
     tree: command("git", ["rev-parse", "HEAD^{tree}"]).trim(),
-    acceptedHead, tag, tagCommit, node: process.version,
+    acceptedHead, bootstrapCommit, tag, tagCommit, node: process.version,
     pnpm: command("pnpm", ["--version"]).trim(),
     packageSha256: sha(readFileSync("package.json")),
     lockSha256: sha(readFileSync("pnpm-lock.yaml")),
@@ -73,28 +438,15 @@ if (mode === "classify") {
   writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
   if (mode === "upgrade") {
     assert.equal(command("git", ["status", "--porcelain"]), "");
-    const protectedPaths = [
-      "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
-      "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
-    ];
-    assert.equal(command("git", ["diff", "--name-only", acceptedHead, "HEAD", "--", ...protectedPaths]), "",
-      "Bootstrap must preserve the previously gated consumer source");
     const originalLock = readFileSync("pnpm-lock.yaml");
     const originalPackage = readFileSync("package.json");
-    const items = [
-      "checkbox", "checkbox-group", "checkbox-group-tests", "checkbox-tests",
-      "combobox", "combobox-tests", "field", "field-tests", "form", "form-tests",
-      "lib-dev", "lib-dev-tests", "lib-form-answer", "lib-form-answer-tests",
-      "lib-use-field", "native-select", "native-select-tests", "radio-group",
-      "radio-group-tests", "select", "select-tests", "switch", "switch-tests",
-      "text-area", "text-area-tests", "text-field", "text-field-tests",
-    ]
-      .map((item) => `ourostack/ouro-ui/${item}#${tag}`);
-    const args = ["dlx", "shadcn@4.21.1", "add", ...items, "--yes", "--overwrite"];
+    const args = [
+      "dlx", "shadcn@4.21.1", "add", ...items.map((item) => `ourostack/ouro-ui/${item}#${tag}`), "--yes", "--overwrite",
+    ];
     receipt.commands = [];
     for (const dryRun of [true, false]) {
       const argv = [...args, ...(dryRun ? ["--dry-run"] : [])];
-      const result = spawnSync("pnpm", argv, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+      const result = run("pnpm", argv);
       process.stdout.write(result.stdout ?? "");
       process.stderr.write(result.stderr ?? "");
       writeFileSync(join(directory, dryRun ? "cli-preview.log" : "cli-install.log"),
@@ -111,17 +463,36 @@ if (mode === "classify") {
     assert.deepEqual(readFileSync("package.json"), originalPackage, "Unexpected dependency-field mutation");
     writeFileSync("pnpm-lock.yaml", originalLock);
     assert.equal(sha(readFileSync("pnpm-lock.yaml")), receipt.lockSha256);
-    assert.equal(command("git", ["ls-files", "--others", "--exclude-standard"]), "", "No unused new catalog files");
+    const untracked = command("git", ["ls-files", "--others", "--exclude-standard"]).trim().split("\n").filter(Boolean).sort();
+    receipt.untracked = untracked;
+    writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
+    assert.deepEqual(untracked, [...expectedNew].sort(), "Only the files v1.1.0 adds may be new");
+    command("git", ["add", "--intent-to-add", "--", ...untracked]);
     const changed = command("git", ["diff", "--name-only"]).trim().split("\n").filter(Boolean).sort();
-    assert.deepEqual(changed, expectedChanges, "Only the 27 qualified installed paths may change");
+    receipt.changedPaths = changed;
     receipt.after = hashes();
+    writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
+    assert.deepEqual(changed.filter((file) => !(file in expected)), [], "Only qualified installed paths may change");
     assert.deepEqual(receipt.after, expected, "CLI output must match the qualified public tag");
     const patch = command("git", ["diff", "--binary", "HEAD"]);
     receipt.generatedPatchSha256 = sha(patch);
-    receipt.changedPaths = changed;
     writeFileSync(join(directory, "registry-generated.patch"), patch);
     writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
   } else {
     assert.deepEqual(receipt.before, expected, "Strict proof must consume the actual qualified CLI output");
+    // HX keeps interactiveSelector and censusExclusions in its repository-only test/controls.ts,
+    // which no registry item installs; Spoonjoy's census copies both, so compare with the tag.
+    const response = await fetch(`https://raw.githubusercontent.com/ourostack/ouro-ui/${tagCommit}/test/controls.ts`);
+    assert.equal(response.status, 200, "HX test/controls.ts at the tag");
+    const constants = (source) => ["interactiveSelector", "censusExclusions"].map((name) => {
+      const match = source.match(new RegExp(`export const ${name}(?:: [^=]+)? =\\s*([^;]+);`));
+      assert.ok(match, `${name} is declared`);
+      return match[1].trim();
+    });
+    const hx = constants(await response.text());
+    receipt.censusSelectors = hx;
+    writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
+    assert.deepEqual(constants(readFileSync("e2e/journeys/support/hx-census.ts", "utf8")), hx,
+      "The census copies HX interactiveSelector and censusExclusions exactly");
   }
 }
