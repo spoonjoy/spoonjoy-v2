@@ -21,6 +21,7 @@ import {
   typedCodeFor,
 } from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/button";
+import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 
@@ -333,19 +334,17 @@ export default function AgentConnect() {
               </p>
             </div>
           ) : (
-            <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-              Type the code your agent shows you
-              <input
-                name="userCode"
-                required
-                autoComplete="one-time-code"
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="ABCD-2345"
-                className="min-h-12 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xl font-semibold tracking-[0.12em] text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-              />
-            </label>
+            <TextField
+              label="Type the code your agent shows you"
+              name="userCode"
+              size="lg"
+              required
+              autoComplete="one-time-code"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="ABCD-2345"
+            />
           )}
           {/* Full-width stacked buttons on phones, side by side from sm up, as on the other auth pages.
               Deny needs the code too, so a leaked link or a guessed request can't cancel a connection;

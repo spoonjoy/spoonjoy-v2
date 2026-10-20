@@ -27,6 +27,8 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
+import { DescriptionList } from "~/components/ouro/description-list/description-list";
 import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/button";
 import { Text } from "~/components/ouro/text/text";
@@ -334,25 +336,15 @@ export default function OAuthAuthorize() {
         everywhere, or leave it unused for 180 days.
       </Text>
 
-      <details className="mt-5 border-y border-[var(--sj-border)] py-4 text-sm text-[var(--sj-ink)]">
-        <summary className="cursor-default font-sj-ui font-semibold text-[var(--sj-ink)]">
-          Connection details
-        </summary>
-        <dl className="mt-4 space-y-3">
-          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt className="font-semibold">Redirect origin</dt>
-            <dd className="break-words">{redirectOrigin}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt className="font-semibold">Client id</dt>
-            <dd className="break-all font-mono text-xs">{view.params.clientId}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt className="font-semibold">Resource</dt>
-            <dd className="break-words">{resourceLabel}</dd>
-          </div>
-        </dl>
-      </details>
+      <Collapsible title="Connection details" className="mt-5">
+        <DescriptionList
+          items={[
+            { term: "Redirect origin", details: redirectOrigin },
+            { term: "Client id", details: view.params.clientId },
+            { term: "Resource", details: resourceLabel },
+          ]}
+        />
+      </Collapsible>
 
       <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
         <form method="post">

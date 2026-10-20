@@ -70,6 +70,7 @@
         "app/components/button.tsx"
       ],
       "link": [
+        "app/components/navigation/phone-brand-bar.tsx",
         "app/root.tsx"
       ],
       "navbar": [
@@ -654,7 +655,8 @@
       "components": [
         "button",
         "heading",
-        "text"
+        "text",
+        "text-field"
       ],
       "renders": {
         "button": [
@@ -664,6 +666,9 @@
           "app/routes/agent.connect.tsx"
         ],
         "text": [
+          "app/routes/agent.connect.tsx"
+        ],
+        "text-field": [
           "app/routes/agent.connect.tsx"
         ]
       }
@@ -761,7 +766,8 @@
       "components": [
         "button",
         "heading",
-        "text"
+        "text",
+        "text-field"
       ],
       "renders": {
         "button": [
@@ -771,6 +777,9 @@
           "app/routes/agent.connect.$requestId.tsx"
         ],
         "text": [
+          "app/routes/agent.connect.$requestId.tsx"
+        ],
+        "text-field": [
           "app/routes/agent.connect.$requestId.tsx"
         ]
       }
@@ -1570,6 +1579,7 @@
         "dialog",
         "empty",
         "field",
+        "file-field",
         "form",
         "heading",
         "item",
@@ -1620,6 +1630,10 @@
           "app/components/recipe/SpoonsStrip.tsx"
         ],
         "field": [
+          "app/components/recipe/RecipePhotoStudio.tsx",
+          "app/components/recipe/SpoonDialog.tsx"
+        ],
+        "file-field": [
           "app/components/recipe/RecipePhotoStudio.tsx",
           "app/components/recipe/SpoonDialog.tsx"
         ],
@@ -2537,6 +2551,7 @@
       "components": [
         "badge",
         "button",
+        "link",
         "text"
       ],
       "renders": {
@@ -2545,6 +2560,9 @@
         ],
         "button": [
           "app/components/button.tsx"
+        ],
+        "link": [
+          "app/routes/developers.tsx"
         ],
         "text": [
           "app/routes/developers.tsx"
@@ -2804,6 +2822,7 @@
       "file": "app/routes/mcp.tsx",
       "sources": [
         "app/routes/mcp.tsx",
+        "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
         "app/lib/agent-connection-scopes.ts",
         "app/lib/agent-connection.server.ts",
@@ -2896,10 +2915,18 @@
         "app/lib/web-push.server.ts"
       ],
       "components": [
-        "badge"
+        "badge",
+        "button",
+        "link"
       ],
       "renders": {
         "badge": [
+          "app/routes/mcp.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "link": [
           "app/routes/mcp.tsx"
         ]
       }
@@ -2942,12 +2969,20 @@
       ],
       "components": [
         "button",
+        "collapsible",
+        "description-list",
         "heading",
         "text"
       ],
       "renders": {
         "button": [
           "app/components/button.tsx"
+        ],
+        "collapsible": [
+          "app/routes/oauth.authorize.tsx"
+        ],
+        "description-list": [
+          "app/routes/oauth.authorize.tsx"
         ],
         "heading": [
           "app/routes/oauth.authorize.tsx"
@@ -2993,8 +3028,14 @@
       "sources": [
         "app/routes/well-known.spoonjoy-release-readiness.tsx"
       ],
-      "components": [],
-      "renders": {}
+      "components": [
+        "button"
+      ],
+      "renders": {
+        "button": [
+          "app/routes/well-known.spoonjoy-release-readiness.tsx"
+        ]
+      }
     },
     {
       "path": "/.well-known/appspecific/com.chrome.devtools.json",

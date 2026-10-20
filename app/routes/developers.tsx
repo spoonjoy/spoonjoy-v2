@@ -19,6 +19,7 @@ import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
+import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
@@ -499,9 +500,9 @@ function SectionShell({ title, children }: { title: string; children: ReactNode 
   return (
     <section id={sectionId(title)} className="scroll-mt-6 border-t border-[var(--sj-border-strong)] py-8">
       <CookbookSectionTitle className="my-0">
-        <a href={`#${sectionId(title)}`} className="underline decoration-transparent underline-offset-4 hover:decoration-[var(--sj-brass)]">
+        <Link href={`#${sectionId(title)}`} tone="secondary">
           {title}
-        </a>
+        </Link>
       </CookbookSectionTitle>
       <div className="mt-5">{children}</div>
     </section>
@@ -575,13 +576,9 @@ export default function Developers() {
 
       <nav aria-label="Developer guide sections" className="flex flex-wrap gap-2 border-b border-[var(--sj-border-strong)] py-4">
         {guideSections.map((section) => (
-          <a
-            key={section}
-            href={`#${sectionId(section)}`}
-            className="inline-flex min-h-9 items-center border border-[var(--sj-border)] px-3 font-sj-ui text-xs font-bold text-[var(--sj-ink)] underline decoration-transparent underline-offset-4 hover:border-[var(--sj-border-strong)] hover:decoration-[var(--sj-brass)]"
-          >
+          <Button key={section} href={`#${sectionId(section)}`} plain size="sm">
             {section}
-          </a>
+          </Button>
         ))}
       </nav>
 
@@ -639,12 +636,9 @@ export default function Developers() {
                 <li key={profile.title} className="flex gap-3 text-sm/6 text-[var(--sj-ink-soft)]">
                   <span className="mt-2 size-1.5 shrink-0 rounded-full bg-[var(--sj-brass)]" aria-hidden="true" />
                   <span>
-                    <a
-                      href={profile.href}
-                      className="font-sj-ui font-bold text-[var(--sj-ink)] underline decoration-[var(--sj-brass)] underline-offset-4"
-                    >
+                    <Link href={profile.href} tone="secondary">
                       {profile.title}
-                    </a>
+                    </Link>
                     : {profile.body}
                   </span>
                 </li>
