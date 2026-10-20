@@ -59,6 +59,9 @@
     ],
     "components": [
       "button",
+      "link",
+      "navbar",
+      "popover",
       "text",
       "toaster"
     ],
@@ -66,8 +69,18 @@
       "button": [
         "app/components/button.tsx"
       ],
+      "link": [
+        "app/root.tsx"
+      ],
+      "navbar": [
+        "app/root.tsx"
+      ],
+      "popover": [
+        "app/root.tsx"
+      ],
       "text": [
-        "app/components/errors/route-error.tsx"
+        "app/components/errors/route-error.tsx",
+        "app/root.tsx"
       ],
       "toaster": [
         "app/components/navigation/mobile-nav.tsx"

@@ -9,13 +9,11 @@ import {
   useRouteError,
   useNavigation,
   Form,
-  Link as RouterLink,
   useLocation,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useContext, useEffect } from "react";
 import { usePostHog } from "~/lib/use-posthog";
-import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
@@ -30,6 +28,10 @@ import { ThemeProvider } from "~/components/theme-provider";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 import { ThemeToggle } from "~/components/theme-toggle";
+import { Link } from "~/components/ouro/link/link";
+import { Navbar } from "~/components/ouro/navbar/navbar";
+import { Popover } from "~/components/ouro/popover/popover";
+import { Text } from "~/components/ouro/text/text";
 import { MobileNav, MobileNavToaster, DockContextProvider } from "~/components/navigation";
 import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/button";
@@ -96,38 +98,41 @@ function getActiveNav(pathname: string): string | null {
   return null;
 }
 
-/**
- * Desktop Navbar component - shown in StackedLayout header
- */
-function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
+const signedInLinks = [
+  { label: "Kitchen", href: "/", nav: "kitchen" },
+  { label: "Recipes", href: "/recipes", nav: "recipes" },
+  { label: "My Recipes", href: "/my-recipes", nav: "my-recipes" },
+  { label: "Saved", href: "/saved-recipes", nav: "saved-recipes" },
+  { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+  { label: "Shopping List", href: "/shopping-list", nav: "shopping" },
+  { label: "Chefs", href: "/chefs", nav: "chefs" },
+  { label: "Kitchen Search", href: "/search", nav: "search" },
+];
+
+const signedOutLinks = [
+  { label: "Search", href: "/search", nav: "search" },
+  { label: "Recipes", href: "/recipes", nav: "recipes" },
+  { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+];
+
+/** Signing in from the desktop bar: an HX Popover with the providers, the password form and signup. */
+function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
-    <Headless.Menu as="div" className="relative">
-      <Headless.MenuButton className="sj-desktop-nav-link">
-        Log in
-      </Headless.MenuButton>
-      <Headless.MenuItems
-        anchor="bottom end"
-        className="z-50 mt-3 w-80 border border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)] focus:outline-none"
-      >
-        <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-          Sign in to SPOONJOY
-        </p>
-        {oauthProviders.length > 0 ? (
-          <OAuthButtonGroup providers={oauthProviders} className="mt-4" />
-        ) : (
-          <p className="mt-4 text-sm/6 text-[var(--sj-ink-soft)]">
-            OAuth is not configured here, but email and password sign-in is available.
-          </p>
-        )}
-        <div className="mt-4 grid gap-2 border-t border-[var(--sj-border)] pt-4">
-          <Button href="/login" plain>Use Password</Button>
-          <Button href="/signup">Create Account</Button>
-        </div>
-      </Headless.MenuItems>
-    </Headless.Menu>
+    <Popover title="Sign in to SPOONJOY" align="end" trigger={<Button plain>Log in</Button>}>
+      {oauthProviders.length > 0 ? (
+        <OAuthButtonGroup providers={oauthProviders} />
+      ) : (
+        <Text tone="muted" size="sm">OAuth is not configured here, but email and password sign-in is available.</Text>
+      )}
+      <div className="mt-4 grid gap-2">
+        <Button href="/login" plain>Use Password</Button>
+        <Button href="/signup">Create Account</Button>
+      </div>
+    </Popover>
   );
 }
 
+/** The desktop bar: HX Navbar with Spoonjoy's links, the current one marked, and the account actions. */
 export function AppNavbar({
   userId,
   oauthProviders = [],
@@ -137,56 +142,34 @@ export function AppNavbar({
 }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
-  const navLinkClass = "sj-desktop-nav-link";
+  const links = userId ? signedInLinks : signedOutLinks;
 
   return (
-    <nav className="sj-desktop-nav" aria-label="Main navigation">
-      <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "kitchen"}>
-        <SpoonjoyLogo
-          width={42}
-          height={26}
-          className="sj-desktop-brand-logo"
-          aria-hidden="true"
-        />
-        <span className="sj-desktop-brand-word">SPOONJOY</span>
-      </RouterLink>
-      {userId ? (
+    <Navbar
+      label="Main navigation"
+      brand={
+        <Link href="/" tone="secondary" inline={false} aria-label="Spoonjoy kitchen" className="inline-flex items-center gap-4">
+          <SpoonjoyLogo width={42} height={26} aria-hidden="true" />
+          <span className="font-sj-display text-lg font-extrabold">SPOONJOY</span>
+        </Link>
+      }
+      items={links.map(({ label, href, nav }) => ({ label, href, current: currentNav === nav }))}
+      actions={userId ? (
         <>
-          <div className="sj-desktop-nav-center">
-            <RouterLink to="/" className={navLinkClass} data-current={currentNav === "kitchen"}>Kitchen</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
-            <RouterLink to="/my-recipes" className={navLinkClass} data-current={currentNav === "my-recipes"}>My Recipes</RouterLink>
-            <RouterLink to="/saved-recipes" className={navLinkClass} data-current={currentNav === "saved-recipes"}>Saved</RouterLink>
-            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-            <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>Shopping List</RouterLink>
-            <RouterLink to="/chefs" className={navLinkClass} data-current={currentNav === "chefs"}>Chefs</RouterLink>
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Kitchen Search</RouterLink>
-          </div>
-          <div className="sj-desktop-nav-actions">
-            <ThemeToggle />
-            <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
-            <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-              <button type="submit" className={navLinkClass}>
-                Log out
-              </button>
-            </Form>
-          </div>
+          <ThemeToggle />
+          <Button href="/account/settings" plain aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
+          <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
+            <Button type="submit" plain>Log out</Button>
+          </Form>
         </>
       ) : (
         <>
-          <div className="sj-desktop-nav-center">
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Search</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
-            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-          </div>
-          <div className="sj-desktop-nav-actions">
-            <ThemeToggle />
-            <LoginMenu oauthProviders={oauthProviders} />
-            <Button href="/signup">Sign up</Button>
-          </div>
+          <ThemeToggle />
+          <LoginPopover oauthProviders={oauthProviders} />
+          <Button href="/signup">Sign up</Button>
         </>
       )}
-    </nav>
+    />
   );
 }
 
@@ -234,9 +217,9 @@ export default function App() {
       <RouteTransitionIndicator />
       <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
         {userId ? null : <PhoneBrandBar />}
-        <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
+        <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
           <AppNavbar userId={userId} oauthProviders={oauthProviders} />
-        </header>
+        </div>
         {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
             max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
             page never sits under it. */}

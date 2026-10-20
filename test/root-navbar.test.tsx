@@ -3,16 +3,17 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import { ThemeProvider } from "~/components/theme-provider";
+import type { OAuthProvider } from "~/lib/env.server";
 import { AppNavbar } from "~/root";
 
-function renderNavbar(userId: string | null = null, path = "/") {
+function renderNavbar(userId: string | null = null, path = "/", oauthProviders: OAuthProvider[] = []) {
   const router = createMemoryRouter(
     [
       {
         path: "*",
         element: (
           <ThemeProvider>
-            <AppNavbar userId={userId} />
+            <AppNavbar userId={userId} oauthProviders={oauthProviders} />
           </ThemeProvider>
         ),
       },
@@ -66,12 +67,10 @@ describe("AppNavbar", () => {
 
     const brandLink = screen.getByRole("link", { name: /spoonjoy/i });
     expect(brandLink).toHaveAttribute("href", "/");
-    expect(brandLink).toHaveAttribute("data-current", "true");
+    expect(within(brandLink).getByText("SPOONJOY")).toBeInTheDocument();
+    expect(brandLink.closest('[data-ouro="navbar"]')).not.toBeNull();
 
-    const brandScope = within(brandLink);
-    expect(brandScope.getByText("SPOONJOY")).toHaveClass("sj-desktop-brand-word");
-
-    const mark = brandLink.querySelector("svg.sj-desktop-brand-logo");
+    const mark = brandLink.querySelector("svg");
     expect(mark).toBeInTheDocument();
     expect(mark).toHaveAttribute("data-slot", "icon");
     expect(mark).toHaveAttribute("viewBox", "0 0 500 300");
@@ -83,7 +82,7 @@ describe("AppNavbar", () => {
     const { container } = renderNavbar();
 
     expect(screen.getByRole("link", { name: /spoonjoy/i })).toHaveAttribute("href", "/");
-    expect(container.querySelector("svg.sj-desktop-brand-logo")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /spoonjoy/i }).querySelector('svg[viewBox="0 0 500 300"]')).toBeInTheDocument();
     expect(container.querySelector(".sj-nav-mark")).not.toBeInTheDocument();
   });
 
@@ -93,6 +92,41 @@ describe("AppNavbar", () => {
     const loginButton = screen.getByRole("button", { name: "Log in" });
     expect(loginButton).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument();
+  });
+
+  it("signs in from an HX Popover with the password and signup ways in", async () => {
+    renderNavbar();
+
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+
+    const popover = await screen.findByRole("dialog", { name: "Sign in to SPOONJOY" });
+    expect(within(popover).getByText(/OAuth is not configured here/)).toBeInTheDocument();
+    expect(within(popover).getByRole("link", { name: "Use Password" })).toHaveAttribute("href", "/login");
+    expect(within(popover).getByRole("link", { name: "Create Account" })).toHaveAttribute("href", "/signup");
+  });
+
+  it("offers the configured providers in the sign-in popover", async () => {
+    renderNavbar(null, "/", ["github"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+
+    const popover = await screen.findByRole("dialog", { name: "Sign in to SPOONJOY" });
+    expect(within(popover).queryByText(/OAuth is not configured here/)).not.toBeInTheDocument();
+    expect(within(popover).getByRole("link", { name: /GitHub/i })).toHaveAttribute("href", expect.stringContaining("github"));
+  });
+
+  it("marks Account as the current page in account settings", () => {
+    renderNavbar("chef-1", "/account/settings");
+
+    expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("marks no link on a page outside the bar", () => {
+    renderNavbar("chef-1", "/privacy");
+
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    expect(within(nav).getAllByRole("link").filter((link) => link.hasAttribute("aria-current"))).toEqual([]);
+    expect(screen.getByRole("link", { name: "Account" })).not.toHaveAttribute("aria-current");
   });
 
   it("uses clear signed-in kitchen drawer navigation", () => {
@@ -114,19 +148,19 @@ describe("AppNavbar", () => {
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     const recipes = within(nav).getByRole("link", { name: "Recipes", exact: true });
     expect(recipes).toHaveAttribute("href", "/recipes");
-    expect(recipes).toHaveAttribute("data-current", "true");
-    expect(within(nav).getByRole("link", { name: "Kitchen" })).toHaveAttribute("data-current", "false");
-    expect(within(nav).getByRole("link", { name: "My Recipes" })).toHaveAttribute("data-current", "false");
+    expect(recipes).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Kitchen" })).not.toHaveAttribute("aria-current");
+    expect(within(nav).getByRole("link", { name: "My Recipes" })).not.toHaveAttribute("aria-current");
 
     const centerLinks = within(nav).getAllByRole("link").map((link) => link.textContent);
-    expect(centerLinks.slice(1, 3)).toEqual(["Kitchen", "Recipes"]);
+    expect(centerLinks.slice(0, 2)).toEqual(["Kitchen", "Recipes"]);
   });
 
   it("keeps Recipes unmarked on the kitchen home page", () => {
     renderNavbar("chef-1", "/");
 
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    expect(within(nav).getByRole("link", { name: "Recipes", exact: true })).toHaveAttribute("data-current", "false");
-    expect(within(nav).getByRole("link", { name: "Kitchen" })).toHaveAttribute("data-current", "true");
+    expect(within(nav).getByRole("link", { name: "Recipes", exact: true })).not.toHaveAttribute("aria-current");
+    expect(within(nav).getByRole("link", { name: "Kitchen" })).toHaveAttribute("aria-current", "page");
   });
 });

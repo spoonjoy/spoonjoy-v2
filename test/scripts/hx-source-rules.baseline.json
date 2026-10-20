@@ -1,26 +1,4 @@
 {
-  "allowedRegressions": [
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::",
-      "count": 1,
-      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::aria-label=Search",
-      "count": 1,
-      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::",
-      "count": 1,
-      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::aria-label=Search",
-      "count": 1,
-      "reason": "The tab bar's links render React Router's Link directly now that app-link is deleted: the same two controls, counted where they render instead of inside the wrapper. HX's tab-bar (ourostack/ouro-ui#121) replaces them."
-    }
-  ],
   "offenders": {
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
@@ -81,26 +59,10 @@
     "app/components/recipe/StepList.tsx::StepReorderItem::plain-element-handler::li::": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::raw-button::button::type=button,aria-label=Drag to reorder": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::uses-hand-rolled-control::app/components/recipe/StepEditorCard#StepEditorCard::": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::control-state-style::@headlessui/react.MenuButton::aria-label=Toggle theme": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::control-state-style::@headlessui/react.MenuItems::": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::raw-button::button::": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::third-party-control::@headlessui/react.Menu::": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::third-party-control::@headlessui/react.MenuButton::aria-label=Toggle theme": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::third-party-control::@headlessui/react.MenuItem::": 1,
-    "app/components/theme-toggle.tsx::ThemeDropdown::third-party-control::@headlessui/react.MenuItems::": 1,
-    "app/components/theme-toggle.tsx::ThemeToggle::control-state-style::@headlessui/react.Button::aria-label={`Switch theme to ${nextTheme} mode`}": 1,
-    "app/components/theme-toggle.tsx::ThemeToggle::third-party-control::@headlessui/react.Button::aria-label={`Switch theme to ${nextTheme} mode`}": 1,
     "app/root.tsx::App::uses-hand-rolled-control::app/components/navigation/mobile-nav#MobileNav::": 1,
     "app/root.tsx::App::uses-hand-rolled-control::app/components/navigation/phone-brand-bar#PhoneBrandBar::": 1,
     "app/root.tsx::App::uses-hand-rolled-control::app/components/pwa/InstallPromptCard#InstallPromptCard::": 1,
-    "app/root.tsx::AppNavbar::raw-anchor::react-router.Link::": 13,
-    "app/root.tsx::AppNavbar::raw-button::button::type=submit": 1,
-    "app/root.tsx::AppNavbar::uses-hand-rolled-control::app/components/theme-toggle#ThemeToggle::": 2,
     "app/root.tsx::Layout::uses-hand-rolled-control::app/components/navigation/skip-link#SkipLink::": 1,
-    "app/root.tsx::LoginMenu::control-state-style::@headlessui/react.MenuItems::": 1,
-    "app/root.tsx::LoginMenu::third-party-control::@headlessui/react.Menu::": 1,
-    "app/root.tsx::LoginMenu::third-party-control::@headlessui/react.MenuButton::": 1,
-    "app/root.tsx::LoginMenu::third-party-control::@headlessui/react.MenuItems::": 1,
     "app/routes/account.settings.tsx::AccountSettings::uses-hand-rolled-control::app/components/account/ProfilePhotoField#ProfilePhotoField::": 1,
     "app/routes/agent.connect.$requestId.tsx::AgentConnect::control-state-style::input::name=userCode": 1,
     "app/routes/agent.connect.$requestId.tsx::AgentConnect::raw-input::input::name=userCode": 1,
@@ -162,8 +124,6 @@
     "app/routes/signup.tsx::Signup::uses-hand-rolled-control::app/components/auth/auth-page#AuthPage::": 1,
     "app/routes/users.$identifier.tsx::UserProfile::uses-hand-rolled-control::app/components/recipe/SpoonsStrip#SpoonsStrip::": 1,
     "app/routes/well-known.spoonjoy-release-readiness.tsx::ReleaseReadiness::raw-button::button::type=submit": 1,
-    "app/styles/tailwind.css::(stylesheet)::control-state-style::.sj-desktop-nav-link[data-current=\"true\"]::": 1,
-    "app/styles/tailwind.css::(stylesheet)::control-state-style::.sj-desktop-nav-link[data-current=\"true\"]::after::": 1,
     "app/styles/tailwind.css::(stylesheet)::control-state-style::.sj-skip-link:focus-visible::": 1,
     "app/styles/tailwind.css::(stylesheet)::control-state-style::.sj-skip-link:focus::": 1,
     "app/styles/tailwind.css::(stylesheet)::control-state-style::[data-sj-action=\"primary\"]:active:not([data-disabled])::": 1
