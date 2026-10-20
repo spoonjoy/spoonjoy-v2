@@ -7,7 +7,7 @@ import { getUserId } from "~/lib/session.server";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/button";
 import { Heading } from "~/components/ouro/text/heading";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
@@ -235,7 +235,7 @@ export default function UserProfile() {
               <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 text-5xl/12 tracking-normal">
                 {chefDisplayName(profile.username)}
               </h1>
-              <Text size="sm" className="mt-1">
+              <Text tone="muted" size="sm" className="mt-1">
                 Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <p className="m-0 mt-2 text-sm">
@@ -307,7 +307,7 @@ export default function UserProfile() {
 
             {cookbooks.length === 0 ? (
               <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
-                <Text>
+                <Text tone="muted">
                   {isOwner ? "No cookbooks yet." : `${chefDisplayName(profile.username)} has not shared any cookbooks yet.`}
                 </Text>
               </div>

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 
 const LAST_UPDATED = "October 9, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
@@ -28,18 +28,18 @@ export default function Privacy() {
   return (
     <CookbookPage>
       <CookbookHeader eyebrow="Spoonjoy" title="Privacy Policy">
-        <Text>Last updated {LAST_UPDATED}.</Text>
+        <Text tone="muted">Last updated {LAST_UPDATED}.</Text>
       </CookbookHeader>
 
       <div className="mt-6 max-w-2xl">
-        <Text>
+        <Text tone="muted">
           Spoonjoy is a personal recipe kitchen. This policy explains what we collect, why,
           and the choices you have. We collect the minimum needed to run the product and we
           do not sell your personal information.
         </Text>
 
         <Section title="Information we collect">
-          <Text>When you create an account and use Spoonjoy, we store:</Text>
+          <Text tone="muted">When you create an account and use Spoonjoy, we store:</Text>
           <ul className="list-disc space-y-2 pl-6">
             <li>Account details: your email address and username. Passwords are stored only as a salted hash, never in plain text.</li>
             <li>Sign-in methods you choose to connect: passkeys (WebAuthn credentials) and OAuth provider account identifiers from Apple, GitHub, or Google. We request only your name and email from those providers and never receive your provider password.</li>
@@ -60,20 +60,20 @@ export default function Privacy() {
         </Section>
 
         <Section title="What others can see">
-          <Text>
+          <Text tone="muted">
             Spoonjoy is a public cookbook. Every recipe you create, its covers and photos, your
             cookbooks, the cooks you log (with their notes and photos), your username, and your
             profile photo can be seen by anyone, signed in or not, and can show up in search.
             Other cooks can fork your recipes into their own kitchens and save them to their
             cookbooks.
           </Text>
-          <Text>
+          <Text tone="muted">
             Your email address, shopping list, sign-in methods, and API tokens are private to you.
           </Text>
         </Section>
 
         <Section title="Service providers we rely on">
-          <Text>
+          <Text tone="muted">
             We share data only with infrastructure providers that process it on our behalf to
             run Spoonjoy:
           </Text>
@@ -85,14 +85,14 @@ export default function Privacy() {
             <li>Apple, GitHub, and Google: only if you choose to sign in with them.</li>
             <li>Apple, Google, Mozilla, and Microsoft push services: only if you turn on notifications, to deliver them to your browser or device.</li>
           </ul>
-          <Text>
+          <Text tone="muted">
             OpenAI and Google receive only what a request needs, not your email address or
             password. We do not sell your personal information or share it for advertising.
           </Text>
         </Section>
 
         <Section title="Connectors and AI assistants">
-          <Text>
+          <Text tone="muted">
             You can connect Spoonjoy to AI assistants (for example, through the Model Context
             Protocol connector). Connectors act on your behalf using a scoped authorization
             you approve, and you can revoke that access at any time from your account settings.
@@ -101,7 +101,7 @@ export default function Privacy() {
         </Section>
 
         <Section id="export" title="Download your data">
-          <Text>
+          <Text tone="muted">
             In account settings, choose
             Download my data to get one JSON file with your account details, your recipes with
             their steps and ingredients, your cookbooks, shopping list, and cooks, and links to
@@ -111,19 +111,19 @@ export default function Privacy() {
         </Section>
 
         <Section id="deletion" title="Deleting your account">
-          <Text>
+          <Text tone="muted">
             You can delete your account yourself in account settings or in the iPhone app. We ask
             you to type your username and confirm it is you: with your password, or, if you have
             no password, by signing in again.
           </Text>
-          <Text>Deleting your account permanently removes:</Text>
+          <Text tone="muted">Deleting your account permanently removes:</Text>
           <ul className="list-disc space-y-2 pl-6">
             <li>your account, email address, and profile photo;</li>
             <li>your recipes, cookbooks, shopping list, and the cooks you logged, with their photos;</li>
             <li>your passkeys, linked sign-in accounts, API tokens, and every app and assistant you connected;</li>
             <li>your notifications, and notifications to other cooks that mention you.</li>
           </ul>
-          <Text>
+          <Text tone="muted">
             A recipe of yours that another cook has forked, saved to a cookbook, or cooked stays
             up so their kitchen keeps working, but it is credited to a &ldquo;Deleted chef&rdquo;
             placeholder instead of you. Their forks remain theirs. Photos are erased from storage
@@ -132,7 +132,7 @@ export default function Privacy() {
         </Section>
 
         <Section title="Data retention">
-          <Text>
+          <Text tone="muted">
             We keep your account and content for as long as your account is active. Deleting a
             recipe or shopping-list item removes it from your kitchen. Analytics and error data
             already sent to PostHog stay there until PostHog&rsquo;s retention period ends.
@@ -149,21 +149,21 @@ export default function Privacy() {
         </Section>
 
         <Section title="Children">
-          <Text>
+          <Text tone="muted">
             Spoonjoy is not directed to children under 13, and we do not knowingly collect
             personal information from them.
           </Text>
         </Section>
 
         <Section title="Changes to this policy">
-          <Text>
+          <Text tone="muted">
             We may update this policy as Spoonjoy evolves. Material changes will be reflected
             in the “last updated” date above.
           </Text>
         </Section>
 
         <Section title="Contact">
-          <Text>
+          <Text tone="muted">
             Questions or requests? Email{" "}
             <Link href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</Link>.
           </Text>

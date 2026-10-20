@@ -26,7 +26,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useToast } from "~/components/feedback/toast";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
 import { Item } from "~/components/ouro/item/item";
@@ -717,7 +717,7 @@ export default function EditStep() {
         title="Edit Step"
         action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
       >
-        <Text>Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
+        <Text tone="muted">Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
       </CookbookHeader>
 
       <div className="mt-8 max-w-4xl">
@@ -731,7 +731,7 @@ export default function EditStep() {
 
           {step.stepNum === 1 ? (
             <Fieldset legend="Uses output from">
-              <Text className="italic">No previous steps available</Text>
+              <Text tone="muted" className="italic">No previous steps available</Text>
             </Fieldset>
           ) : availableSteps.length > 0 && (
             <Select

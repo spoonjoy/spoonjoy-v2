@@ -1,6 +1,6 @@
 import { Button } from '../button'
 import { Heading } from '~/components/ouro/text/heading'
-import { Text } from '../text'
+import { Text } from '~/components/ouro/text/text'
 import { CookbookHeader, CookbookPage } from '~/components/cookbook/page'
 import { BioCard, type BioCardProps } from './BioCard'
 import { RecipeGrid, type PantryRecipeCard } from './RecipeGrid'
@@ -23,7 +23,7 @@ export function PantryPage({
         title="Pantry"
         action={<Button href={createRecipeHref} className="w-full justify-center sm:w-auto">Create recipe</Button>}
       >
-        <Text>Your personal kitchen profile with recipes and pantry-ready favorites.</Text>
+        <Text tone="muted">Your personal kitchen profile with recipes and pantry-ready favorites.</Text>
       </CookbookHeader>
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">

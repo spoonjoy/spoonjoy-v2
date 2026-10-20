@@ -3,7 +3,7 @@ import { Badge } from '../ouro/badge/badge'
 import { Button } from '../button'
 import { Heading } from '~/components/ouro/text/heading'
 import { Link } from '../navigation/app-link'
-import { Text } from '../text'
+import { Text } from '~/components/ouro/text/text'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 
 export interface BioCardProps {
@@ -68,7 +68,7 @@ export function BioCard({
         </div>
       </div>
 
-      <Text size="sm" className="mt-4 leading-6">{bio}</Text>
+      <Text tone="muted" size="sm" className="mt-4 leading-6">{bio}</Text>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Badge variant="soft">{recipeCount} recipes</Badge>

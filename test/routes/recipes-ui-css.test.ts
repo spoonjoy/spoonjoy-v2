@@ -62,7 +62,6 @@ function hasUIComponentImports(content: string): boolean {
     content.includes('from "~/components/ouro/') ||
     content.includes("from '~/components/ouro/") ||
     content.includes('from "~/components/button"') ||
-    content.includes('from "~/components/text"') ||
     content.includes('from "~/components/recipe/') ||
     content.includes('from "@/') ||
     content.includes("from '@/")
@@ -301,12 +300,7 @@ describe("Individual Route Detailed Checks", () => {
 
     it("should use Text component for paragraphs", () => {
       const content = readSourceFile(filePath);
-      expect(
-        content.includes('from "~/components/text"') ||
-        content.includes("from '~/components/text'") ||
-        content.includes("Text"),
-        "Should use Text component for text content"
-      ).toBe(true);
+      expect(content, "Should use Ouro HX Text for paragraphs").toContain('from "~/components/ouro/text/text"');
     });
   });
 

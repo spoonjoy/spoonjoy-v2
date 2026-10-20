@@ -4,7 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { Button } from "~/components/button";
 import { Link } from "~/components/navigation/app-link";
 import { Pagination } from "~/components/ouro/pagination/pagination";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
 import {
   normalizeMyRecipesPage,
@@ -125,7 +125,7 @@ export default function MyRecipes() {
           title={query ? "No matching recipes" : "No recipes yet"}
           action={<Button href="/recipes/new">Create recipe</Button>}
         >
-          <Text>
+          <Text tone="muted">
             {query
               ? "Try another title, ingredient, serving size, or note."
               : "Start with the dish you make most often."}

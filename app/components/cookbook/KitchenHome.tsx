@@ -3,7 +3,7 @@ import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/button";
 import { Link } from "~/components/navigation/app-link";
 import { Heading } from "~/components/ouro/text/heading";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
@@ -63,7 +63,7 @@ export function KitchenHome({
             <div className="mt-5 lg:mt-0">
               <p className="font-sj-ui text-sm font-semibold tracking-[0.01em] text-[var(--sj-brass)]">@{kitchenUser.username}</p>
               <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-3 text-5xl/12 sm:text-6xl/14 lg:text-7xl/16">{heading}</h1>
-              <Text size="sm" className="mt-2">
+              <Text tone="muted" size="sm" className="mt-2">
                 {displayRecipes.length} {displayRecipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
             </div>
@@ -166,7 +166,7 @@ function RecipeIndex({
             <div>
               <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipes</p>
               <Heading level={2} size="2xl" className="mt-3 leading-9">Create your first recipe</Heading>
-              <Text className="mt-3 max-w-md">
+              <Text tone="muted" className="mt-3 max-w-md">
                 Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
               </Text>
               {isOwner ? (
@@ -177,7 +177,7 @@ function RecipeIndex({
                   </Button>
                 </div>
               ) : (
-                <Text size="sm" className="mt-6">No public recipes yet.</Text>
+                <Text tone="muted" size="sm" className="mt-6">No public recipes yet.</Text>
               )}
             </div>
           </div>
@@ -267,7 +267,7 @@ function CookbookShelf({
           <BookOpen className="size-8 text-[var(--sj-action)]" aria-hidden="true" />
           <div>
             <Heading level={3} size="xl">{isOwner ? "Build your first cookbook" : "No public cookbooks yet."}</Heading>
-            <Text className="mt-1 max-w-2xl">
+            <Text tone="muted" className="mt-1 max-w-2xl">
               {isOwner
                 ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal."
                 : "This kitchen has not published a cookbook yet."}

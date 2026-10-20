@@ -3,7 +3,7 @@ import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Users } from "lucide-react";
 import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
@@ -63,13 +63,13 @@ export default function Chefs() {
                 <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
                   {row.direction === "inbound" ? "In your kitchen" : "From your kitchen"}
                 </p>
-                <Text className="mt-1">{row.label}</Text>
+                <Text tone="muted" className="mt-1">{row.label}</Text>
               </article>
             ))}
           </div>
         ) : (
           <RuledEmptyState title="No chef activity yet">
-            <Text>Cook, fork or save another chef's recipe, and that chef shows up here.</Text>
+            <Text tone="muted">Cook, fork or save another chef's recipe, and that chef shows up here.</Text>
           </RuledEmptyState>
         )}
       </section>
@@ -106,7 +106,7 @@ function ChefList({
           ))}
         </div>
       ) : (
-        <Text className="mt-3">{empty}</Text>
+        <Text tone="muted" className="mt-3">{empty}</Text>
       )}
     </section>
   );

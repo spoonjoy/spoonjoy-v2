@@ -6,7 +6,7 @@ import { Button } from "~/components/button";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/navigation/app-link";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
@@ -186,7 +186,7 @@ export default function RecipesIndex() {
                 <Button href="/recipes" plain>Back to the newest</Button>
               ) : null}
             >
-              <Text className="mx-auto mt-2 max-w-xl">
+              <Text tone="muted" className="mx-auto mt-2 max-w-xl">
                 {hasQuery
                   ? "Try a broader ingredient, dish name, or chef."
                   : after

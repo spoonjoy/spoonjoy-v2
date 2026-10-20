@@ -15,7 +15,7 @@ import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 
 interface ActionData {
@@ -175,7 +175,7 @@ export default function Login() {
         <div className="my-6 border-t border-[var(--sj-border)]" aria-hidden="true" />
         <PasskeySignInButton identifierRef={identifierRef} redirectTo={redirectTo} />
 
-        <Text align="center" className="mt-6">
+        <Text tone="muted" align="center" className="mt-6">
           Don't have an account?{" "}
           <Link href={redirectTo ? `/signup?redirectTo=${encodeURIComponent(redirectTo)}` : "/signup"}>Sign up</Link>
         </Text>

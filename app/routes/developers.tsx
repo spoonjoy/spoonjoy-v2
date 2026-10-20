@@ -19,7 +19,7 @@ import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 const DEVELOPER_SCOPES = [
@@ -553,7 +553,7 @@ export default function Developers() {
           </Button>
         </div>
       )}>
-        <Text size="lg" className="leading-8">
+        <Text tone="muted" size="lg" className="leading-8">
           Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private
           shopping-list state, recipe-cover management, token management, or delegated access.
         </Text>
@@ -592,7 +592,7 @@ export default function Developers() {
               curl + jq
             </p>
             <h3 className="mt-2 font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">First successful calls</h3>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Anonymous public reads work immediately. For the first external token, use delegated approval: the client shows an approval URL, the chef signs into Spoonjoy, and polling returns a one-time-display bearer token.
             </Text>
           </div>
@@ -615,13 +615,13 @@ export default function Developers() {
             <ul className="mt-3 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are not in API v1 yet; they are future API surface, not hidden current endpoints.
             </Text>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
             </Text>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Legacy /api/* routes reject OAuth access tokens that are audience-bound to /mcp. New external REST clients should use /api/v1/*.
             </Text>
           </div>
@@ -681,7 +681,7 @@ export default function Developers() {
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               Native Apple
             </p>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Spoonjoy Apple dogfoods the public REST and OAuth contracts with a real HTTPS universal-link redirect, Keychain-backed token storage, and the same offline sync rules as in-app UI, Siri, and Shortcuts.
             </Text>
             <ul className="mt-4 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
@@ -746,7 +746,7 @@ export default function Developers() {
         <div className="grid gap-4 md:grid-cols-2">
           <article className="border-y border-[var(--sj-border)] py-5">
             <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">API v1 REST response shape</h3>
-            <Text className="mt-2">
+            <Text tone="muted" className="mt-2">
               /api/v1 REST resources return ok, requestId, and data or error fields. Raw OpenAPI documents are the exception.
             </Text>
             <pre className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
@@ -755,7 +755,7 @@ export default function Developers() {
           </article>
           <article className="border-y border-[var(--sj-border)] py-5">
             <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Protocol exceptions</h3>
-            <Text className="mt-2">
+            <Text tone="muted" className="mt-2">
               OAuth endpoints use OAuth token/error JSON except 429 rate limits, delegated /api/tools/* helpers use the legacy helper envelope, and /mcp uses JSON-RPC result/error objects.
             </Text>
             <pre className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
@@ -766,11 +766,11 @@ export default function Developers() {
       </SectionShell>
 
       <SectionShell title="OAuth And Delegated Flows">
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Browser clients may call /oauth/register, /oauth/token, and /oauth/revoke cross-origin; those endpoints answer OPTIONS with CORS headers.
           Cookie-authenticated API mutations remain same-origin session calls and should never rely on copied cookies in external clients.
         </Text>
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Do not request `offline_access` in OAuth authorize. OAuth clients can request account scopes, kitchen scopes, or least-privilege public, recipe, cookbook, and shopping-list scopes; refresh tokens are returned by the authorization-code flow.
         </Text>
         <div className="grid gap-4">
@@ -809,10 +809,10 @@ export default function Developers() {
             </div>
           ))}
         </div>
-        <Text className="mt-4">
+        <Text tone="muted" className="mt-4">
           OAuth clients may request the delegated scopes above directly. Token-management scopes remain personal-token or Session-only and are not granted by OAuth.
         </Text>
-        <Text className="mt-3">
+        <Text tone="muted" className="mt-3">
           Blank OAuth authorize scope defaults to kitchen:read. Omitted delegated approval scopes default to shopping_list:read shopping_list:write. Omit resource for REST OAuth apps. Use resource=https://spoonjoy.app/mcp only for MCP OAuth; resource-bound MCP tokens are rejected by REST API v1. OAuth kitchen scopes do not grant tokens:read or tokens:write.
         </Text>
       </SectionShell>
@@ -842,7 +842,7 @@ export default function Developers() {
       </SectionShell>
 
       <SectionShell title="Offline Product Contract">
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Native clients treat offline as product behavior. They restore cached reads only inside the account/environment/schema boundary, preserve freshness metadata, apply tombstones before advancing cursors, and queue only safe product mutations.
         </Text>
         <div className="grid gap-3">
@@ -919,25 +919,25 @@ export default function Developers() {
             <article key={title} className="border-y border-[var(--sj-border)] py-5">
               <Icon className="size-5 text-[var(--sj-brass)]" aria-hidden="true" />
               <h3 className="mt-3 font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">{title}</h3>
-              <Text className="mt-2">{body}</Text>
+              <Text tone="muted" className="mt-2">{body}</Text>
             </article>
           ))}
         </div>
       </SectionShell>
 
       <SectionShell title="Sync And Safety">
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Recipe and cookbook lists are public catalog search endpoints today. The query parameter wins when both query and q are supplied;
           lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Native owner sync lives at /api/v1/me/sync and includes owned recipe/cookbook delete tombstones.
         </Text>
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Store nextCursor after applying each native sync or shopping-list sync batch and retry mutations with stable clientMutationId values.
         </Text>
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings,
           not a canonical conversion model; there is no /api/v1/units registry or density table yet.
         </Text>
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           API v1 is rate limited by IP and credential before authentication work. Rate-limited responses return 429 and Retry-After; configured limits are edge abuse protection, not a globally precise quota meter.
         </Text>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
@@ -972,7 +972,7 @@ export default function Developers() {
             <article key={title as string} className="border-t border-[var(--sj-border)] pt-4">
               <Icon className="size-5 text-[var(--sj-brass)]" aria-hidden="true" />
               <h3 className="mt-3 font-sj-display text-xl/7 font-semibold text-[var(--sj-ink)]">{title as string}</h3>
-              <Text className="mt-1">{body as string}</Text>
+              <Text tone="muted" className="mt-1">{body as string}</Text>
             </article>
           ))}
         </div>

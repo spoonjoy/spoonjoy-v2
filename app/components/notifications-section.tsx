@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/button";
 import { useToast } from "~/components/feedback/toast";
 import { Fieldset } from "~/components/ouro/field/fieldset";
@@ -72,7 +72,7 @@ export function NotificationsSection({
   if (!support.supported) {
     return (
       <SettingsPanel title="Notifications">
-        <Text className="mt-2">
+        <Text tone="muted" className="mt-2">
           Not supported on this browser ({support.reason}).
         </Text>
       </SettingsPanel>
@@ -142,14 +142,14 @@ export function NotificationsSection({
     <SettingsPanel title="Notifications">
       {subscribed ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <Text>Notifications enabled.</Text>
+          <Text tone="muted">Notifications enabled.</Text>
           <Button type="button" plain onClick={onDisable} disabled={busy}>
             Disable
           </Button>
         </div>
       ) : (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <Text>Get a ping when fellow chefs cook, fork, or save your recipes.</Text>
+          <Text tone="muted">Get a ping when fellow chefs cook, fork, or save your recipes.</Text>
           <Button type="button" onClick={onEnable} disabled={busy}>
             Enable notifications
           </Button>

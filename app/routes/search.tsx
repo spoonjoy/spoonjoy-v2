@@ -5,7 +5,7 @@ import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lu
 import { Button } from "~/components/button";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -137,8 +137,8 @@ function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: 
         <h2 id={`${id}-title`} className="font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]">
           {result.title}
         </h2>
-        <Text id={`${id}-subtitle`} size="sm" className="mt-1">{result.subtitle}</Text>
-        <Text id={`${id}-snippet`} size="sm" className="mt-3 line-clamp-2 leading-6">{result.snippet}</Text>
+        <Text tone="muted" id={`${id}-subtitle`} size="sm" className="mt-1">{result.subtitle}</Text>
+        <Text tone="muted" id={`${id}-snippet`} size="sm" className="mt-3 line-clamp-2 leading-6">{result.snippet}</Text>
       </div>
     </Link>
   );
@@ -262,7 +262,7 @@ export default function Search() {
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <Heading level={2} size="xl">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Heading>
-                <Text size="sm" className="mt-1">{resultCountLabel(results.length)}</Text>
+                <Text tone="muted" size="sm" className="mt-1">{resultCountLabel(results.length)}</Text>
               </div>
             </div>
 
@@ -274,7 +274,7 @@ export default function Search() {
 
             {!hasQuery ? (
               <div className="mb-4 border-y border-dashed border-[var(--sj-border-strong)] py-4">
-                <Text size="sm" className="leading-6">
+                <Text tone="muted" size="sm" className="leading-6">
                   Try searching by ingredient, step wording, cookbook theme, chef username, or shopping list category.
                 </Text>
               </div>
@@ -288,7 +288,7 @@ export default function Search() {
               </div>
             ) : (
               <RuledEmptyState title="No matches yet">
-                <Text className="mx-auto mt-2 max-w-xl">
+                <Text tone="muted" className="mx-auto mt-2 max-w-xl">
                   Broaden the scope, try an ingredient, or search for a chef username.
                 </Text>
               </RuledEmptyState>

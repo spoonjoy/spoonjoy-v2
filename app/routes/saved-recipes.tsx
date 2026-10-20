@@ -2,7 +2,7 @@ import type { Route } from "./+types/saved-recipes";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -88,7 +88,7 @@ export default function SavedRecipes() {
             </div>
           )}
         >
-          <Text>
+          <Text tone="muted">
             {query
               ? "Try a different cookbook, chef, or recipe term."
               : "Save recipes by adding them to one of your cookbooks."}

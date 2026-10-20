@@ -18,7 +18,7 @@
 
 import { useEffect, useState, type RefObject } from "react";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import {
   authenticatePasskey,
   browserSupportsPasskeys,

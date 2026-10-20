@@ -3,7 +3,7 @@ import { data, redirect } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { AuthPage } from "~/components/auth/auth-page";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 
 const CALLBACK_COPY = {
   eyebrow: "Spoonjoy Apple",
@@ -43,7 +43,7 @@ export default function OAuthCallback() {
   return (
     <AuthPage {...CALLBACK_COPY} formTitle="Continue in Spoonjoy">
       <div className="w-full max-w-sm">
-        <Text className="mt-4">
+        <Text tone="muted" className="mt-4">
           If the native app did not open, return to Spoonjoy and start the connection again.
         </Text>
         <div className="mt-8">

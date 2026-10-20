@@ -16,7 +16,7 @@ import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 
 interface ActionData {
@@ -229,7 +229,7 @@ export default function Signup() {
           </Button>
         </Form>
 
-        <Text align="center" className="mt-6">
+        <Text tone="muted" align="center" className="mt-6">
           Already have an account?{" "}
           <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}>Log in</Link>
         </Text>

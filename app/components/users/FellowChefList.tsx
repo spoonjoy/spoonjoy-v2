@@ -1,7 +1,7 @@
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { chefDisplayName } from "~/lib/username";
 import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 
@@ -36,7 +36,7 @@ function summarizeInteractions(counts: {
 
 export function FellowChefList({ rows, emptyStateText }: FellowChefListProps) {
   if (rows.length === 0) {
-    return <Text>{emptyStateText}</Text>;
+    return <Text tone="muted">{emptyStateText}</Text>;
   }
 
   return (

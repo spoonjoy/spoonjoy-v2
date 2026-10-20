@@ -2,7 +2,7 @@ import type { Route } from "./+types/cookbooks._index";
 import { useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, ObjectRow, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -89,7 +89,7 @@ export default function CookbooksIndexRedirect() {
           title={query ? "No matching cookbooks" : "No cookbooks yet"}
           action={<Button href="/cookbooks/new">Create cookbook</Button>}
         >
-          <Text>
+          <Text tone="muted">
             {query
               ? "Try another cookbook title or recipe title."
               : "Group recipes into a shelf you can find again."}

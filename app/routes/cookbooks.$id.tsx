@@ -73,7 +73,7 @@ function captureCookbookActionFailure(
 }
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Link as AppLink } from "~/components/navigation/app-link";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors } from "~/hooks/use-form-errors";
@@ -427,7 +427,7 @@ export default function CookbookDetail() {
             title={cookbook.title}
             ruled={false}
           >
-            <Text className="m-0">
+            <Text tone="muted" className="m-0">
               By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
               <span>
                 {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
@@ -467,7 +467,7 @@ export default function CookbookDetail() {
 
         {cookbook.recipes.length === 0 ? (
           <RuledEmptyState title="No recipes yet">
-            <Text className="mb-6">
+            <Text tone="muted" className="mb-6">
               {isOwner ? "Add recipes to your cookbook using the owner tools below." : "This cookbook is empty."}
             </Text>
           </RuledEmptyState>

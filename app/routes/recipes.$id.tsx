@@ -29,7 +29,7 @@ import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
@@ -784,7 +784,7 @@ export default function RecipeDetail() {
                       }`}
                       data-testid={`cookbook-item-${cookbook.id}`}
                     >
-                      <Text className="flex items-center justify-between">
+                      <Text tone="muted" className="flex items-center justify-between">
                         <span>{cookbook.title}</span>
                         {isSaved && <span className="text-[var(--sj-brass)]" aria-hidden="true">✓</span>}
                       </Text>
@@ -793,7 +793,7 @@ export default function RecipeDetail() {
                 })}
               </div>
             ) : (
-              <Text align="center" className="py-8">
+              <Text tone="muted" align="center" className="py-8">
                 No cookbooks yet. Create your first one below!
               </Text>
             )}

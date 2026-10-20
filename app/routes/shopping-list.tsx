@@ -12,7 +12,7 @@ import {
   type ShoppingListActionData,
 } from "~/lib/shopping-list-parser";
 import { Link as OuroLink } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/button";
 import { Plus } from "lucide-react";
 import { Field } from "~/components/ouro/field/field";
@@ -304,7 +304,7 @@ export default function ShoppingList() {
             <span className="sr-only">Shopping list</span>
             <span aria-hidden="true">Shopping List</span>
           </h1>
-          <Text className="mt-3">
+          <Text tone="muted" className="mt-3">
             {checkedCount > 0 ? `${checkedCount} checked, ${uncheckedCount} remaining` : "Grouped for the aisle, built for one thumb."}
           </Text>
           {/* The Item field sits below the list, so a long list needs a way straight to it. */}
@@ -376,13 +376,13 @@ export default function ShoppingList() {
           // to the public recipes, where any recipe's ingredients can be added. The link sits in
           // the sentence, not in a button row, so the Add button still clears the dock on a phone.
           <RuledEmptyState title="Your shopping list is empty">
-            <Text className="mt-2">
+            <Text tone="muted" className="mt-2">
               <OuroLink href="/recipes">Explore recipes</OuroLink> to add a recipe&apos;s ingredients, or add items one at a time below.
             </Text>
           </RuledEmptyState>
         ) : filteredItems.length === 0 ? (
           <RuledEmptyState title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"}>
-            <Text className="mt-2">
+            <Text tone="muted" className="mt-2">
               Switch views or categories to see the rest of your shopping list.
             </Text>
           </RuledEmptyState>

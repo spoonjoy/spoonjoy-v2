@@ -13,7 +13,7 @@ import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferre
 import { getUserId } from "~/lib/session.server";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
@@ -982,7 +982,7 @@ export default function DeveloperPlayground() {
           Docs
         </Button>
       )}>
-        <Text size="lg" className="leading-8">
+        <Text tone="muted" size="lg" className="leading-8">
           Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for
           private, scoped, and mutating calls.
         </Text>

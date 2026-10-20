@@ -21,7 +21,6 @@
       "app/components/oauth.tsx",
       "app/components/pwa/InstallPromptCard.tsx",
       "app/components/spoonjoy-logo.tsx",
-      "app/components/text.tsx",
       "app/components/theme-provider.tsx",
       "app/components/theme-toggle.tsx",
       "app/hooks/use-back-navigation.ts",
@@ -71,7 +70,7 @@
         "app/components/button.tsx"
       ],
       "text": [
-        "app/components/text.tsx"
+        "app/components/errors/route-error.tsx"
       ],
       "toaster": [
         "app/components/feedback/toast.tsx"
@@ -95,7 +94,6 @@
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -147,7 +145,7 @@
           "app/components/cookbook/KitchenHome.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/components/cookbook/KitchenHome.tsx"
         ]
       }
     },
@@ -161,7 +159,6 @@
         "app/components/button.tsx",
         "app/components/oauth.tsx",
         "app/components/spoonjoy-logo.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -213,7 +210,8 @@
           "app/routes/login.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/components/auth/PasskeySignInButton.tsx",
+          "app/routes/login.tsx"
         ],
         "text-field": [
           "app/routes/login.tsx"
@@ -229,7 +227,6 @@
         "app/components/button.tsx",
         "app/components/oauth.tsx",
         "app/components/spoonjoy-logo.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/account-identity.server.ts",
         "app/lib/analytics-server.ts",
@@ -283,7 +280,7 @@
           "app/routes/signup.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/signup.tsx"
         ],
         "text-field": [
           "app/routes/signup.tsx"
@@ -298,7 +295,6 @@
         "app/components/auth/auth-page.tsx",
         "app/components/button.tsx",
         "app/components/spoonjoy-logo.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/api-auth.server.ts",
         "app/lib/api-idempotency.server.ts",
@@ -336,7 +332,7 @@
           "app/routes/logout.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/logout.tsx"
         ]
       }
     },
@@ -595,7 +591,6 @@
       "sources": [
         "app/routes/agent.connect.tsx",
         "app/components/button.tsx",
-        "app/components/text.tsx",
         "app/lib/agent-connection-route.server.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -633,7 +628,7 @@
           "app/routes/agent.connect.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/agent.connect.tsx"
         ]
       }
     },
@@ -643,7 +638,6 @@
       "sources": [
         "app/routes/agent.connect.$requestId.tsx",
         "app/components/button.tsx",
-        "app/components/text.tsx",
         "app/lib/agent-connection-route.server.ts",
         "app/lib/agent-connection-scopes.ts",
         "app/lib/agent-connection.server.ts",
@@ -741,7 +735,7 @@
           "app/routes/agent.connect.$requestId.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/agent.connect.$requestId.tsx"
         ]
       }
     },
@@ -798,7 +792,6 @@
         "app/routes/privacy.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/image-loading.ts"
       ],
       "components": [
@@ -814,7 +807,7 @@
           "app/routes/privacy.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/privacy.tsx"
         ]
       }
     },
@@ -825,7 +818,6 @@
         "app/routes/terms.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/image-loading.ts"
       ],
       "components": [
@@ -841,7 +833,7 @@
           "app/routes/terms.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/terms.tsx"
         ]
       }
     },
@@ -927,7 +919,6 @@
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
-        "app/components/text.tsx",
         "app/hooks/useUrlSyncedInput.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -974,7 +965,7 @@
           "app/routes/search.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/search.tsx"
         ]
       }
     },
@@ -991,7 +982,6 @@
         "app/components/navigation/mobile-nav.tsx",
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/d1-models.server.ts",
@@ -1021,7 +1011,7 @@
           "app/routes/my-recipes.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/my-recipes.tsx"
         ]
       }
     },
@@ -1038,7 +1028,6 @@
         "app/components/navigation/mobile-nav.tsx",
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -1089,7 +1078,8 @@
           "app/routes/my-recipes.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
         ]
       }
     },
@@ -1101,7 +1091,6 @@
         "app/components/cookbook/page.tsx",
         "app/components/local-date.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/chef-activity.server.ts",
@@ -1125,7 +1114,7 @@
       ],
       "renders": {
         "text": [
-          "app/components/text.tsx"
+          "app/routes/chefs.tsx"
         ]
       }
     },
@@ -1152,7 +1141,6 @@
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-appending-list.ts",
         "app/hooks/useUrlSyncedInput.ts",
         "app/lib/analytics-server.ts",
@@ -1209,7 +1197,7 @@
           "app/routes/recipes._index.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/recipes._index.tsx"
         ],
         "text-field": [
           "app/routes/recipes._index.tsx"
@@ -1234,7 +1222,6 @@
         "app/components/recipe/RecipeImportPanel.tsx",
         "app/components/recipe/StepEditorCard.tsx",
         "app/components/recipe/StepList.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-write-token.ts",
         "app/hooks/useIngredientParser.ts",
@@ -1335,7 +1322,7 @@
           "app/components/recipe/IngredientInputToggle.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/recipes.new.tsx"
         ],
         "text-area": [
           "app/components/recipe/IngredientParseInput.tsx",
@@ -1382,7 +1369,6 @@
         "app/components/recipe/SpoonsStrip.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-back-navigation.ts",
         "app/hooks/use-cook-session-sync.ts",
         "app/hooks/use-cook-timers.ts",
@@ -1522,7 +1508,9 @@
         ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",
-          "app/components/text.tsx"
+          "app/components/errors/route-error.tsx",
+          "app/components/recipe/RecipeNotFound.tsx",
+          "app/routes/recipes.$id.tsx"
         ],
         "text-area": [
           "app/components/recipe/RecipePhotoStudio.tsx",
@@ -1676,7 +1664,6 @@
         "app/components/recipe/ManualIngredientInput.tsx",
         "app/components/recipe/ParsedIngredientList.tsx",
         "app/components/recipe/ParsedIngredientRow.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-write-token.ts",
         "app/hooks/useIngredientParser.ts",
@@ -1765,7 +1752,7 @@
           "app/components/recipe/IngredientInputToggle.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/recipes.$id.steps.new.tsx"
         ],
         "text-area": [
           "app/components/recipe/IngredientParseInput.tsx",
@@ -1795,7 +1782,6 @@
         "app/components/recipe/ManualIngredientInput.tsx",
         "app/components/recipe/ParsedIngredientList.tsx",
         "app/components/recipe/ParsedIngredientRow.tsx",
-        "app/components/text.tsx",
         "app/hooks/useIngredientParser.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -1892,7 +1878,7 @@
           "app/components/recipe/IngredientInputToggle.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
         ],
         "text-area": [
           "app/components/recipe/IngredientParseInput.tsx",
@@ -1930,7 +1916,6 @@
         "app/components/navigation/mobile-nav.tsx",
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -1980,7 +1965,8 @@
           "app/routes/my-recipes.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
         ]
       }
     },
@@ -1992,7 +1978,6 @@
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-write-token.ts",
         "app/lib/analytics-server.ts",
@@ -2029,7 +2014,7 @@
           "app/routes/cookbooks.new.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/cookbooks.new.tsx"
         ],
         "text-field": [
           "app/routes/cookbooks.new.tsx"
@@ -2053,7 +2038,6 @@
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2126,7 +2110,7 @@
           "app/routes/cookbooks.$id.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/cookbooks.$id.tsx"
         ],
         "text-field": [
           "app/routes/cookbooks.$id.tsx"
@@ -2145,7 +2129,6 @@
         "app/components/confirmation-dialog.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-write-token.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2223,7 +2206,7 @@
           "app/routes/shopping-list.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/shopping-list.tsx"
         ],
         "text-field": [
           "app/routes/shopping-list.tsx"
@@ -2247,7 +2230,6 @@
         "app/components/navigation/mobile-nav.tsx",
         "app/components/notifications-section.tsx",
         "app/components/oauth.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-form-errors.ts",
         "app/lib/account-deletion.server.ts",
         "app/lib/account-identity.server.ts",
@@ -2343,7 +2325,11 @@
           "app/components/notifications-section.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/components/account/AccountDataSection.tsx",
+          "app/components/account/ProfilePhotoField.tsx",
+          "app/components/auth/AddPasskeyButton.tsx",
+          "app/components/notifications-section.tsx",
+          "app/routes/account.settings.tsx"
         ],
         "text-field": [
           "app/components/account/AccountDataSection.tsx",
@@ -2362,7 +2348,6 @@
         "app/routes/account.deleted.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/image-loading.ts"
       ],
       "components": [
@@ -2374,7 +2359,7 @@
           "app/routes/account.deleted.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/account.deleted.tsx"
         ]
       }
     },
@@ -2386,7 +2371,6 @@
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics.ts",
         "app/lib/api-v1-contract.server.ts",
         "app/lib/generated/api-v1-playground.ts",
@@ -2408,7 +2392,7 @@
           "app/components/button.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/developers.tsx"
         ]
       }
     },
@@ -2420,7 +2404,6 @@
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics.ts",
         "app/lib/db.server.ts",
         "app/lib/generated/api-v1-playground.ts",
@@ -2442,7 +2425,7 @@
           "app/components/button.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/developers.playground.tsx"
         ]
       }
     },
@@ -2460,7 +2443,6 @@
         "app/components/pantry/RecipeGrid.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/components/recipe/SpoonsStrip.tsx",
-        "app/components/text.tsx",
         "app/hooks/use-appending-list.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2530,7 +2512,8 @@
           "app/components/pantry/RecipeGrid.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/routes/users.$identifier.tsx"
         ]
       }
     },
@@ -2541,7 +2524,6 @@
         "app/routes/users.$identifier.fellow-chefs.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/components/users/FellowChefList.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2578,7 +2560,7 @@
           "app/routes/users.$identifier.fellow-chefs.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/components/users/FellowChefList.tsx"
         ]
       }
     },
@@ -2589,7 +2571,6 @@
         "app/routes/users.$identifier.kitchen-visitors.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/components/users/FellowChefList.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -2626,7 +2607,7 @@
           "app/routes/users.$identifier.kitchen-visitors.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/components/users/FellowChefList.tsx"
         ]
       }
     },
@@ -2743,7 +2724,6 @@
       "sources": [
         "app/routes/oauth.authorize.tsx",
         "app/components/button.tsx",
-        "app/components/text.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -2787,7 +2767,7 @@
           "app/routes/oauth.authorize.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/oauth.authorize.tsx"
         ]
       }
     },
@@ -2798,8 +2778,7 @@
         "app/routes/oauth.callback.tsx",
         "app/components/auth/auth-page.tsx",
         "app/components/button.tsx",
-        "app/components/spoonjoy-logo.tsx",
-        "app/components/text.tsx"
+        "app/components/spoonjoy-logo.tsx"
       ],
       "components": [
         "auth-layout",
@@ -2814,7 +2793,7 @@
           "app/components/button.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/oauth.callback.tsx"
         ]
       }
     },
@@ -2844,7 +2823,6 @@
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
         "app/components/navigation/app-link.tsx",
-        "app/components/text.tsx",
         "app/lib/image-loading.ts"
       ],
       "components": [
@@ -2856,7 +2834,7 @@
           "app/components/button.tsx"
         ],
         "text": [
-          "app/components/text.tsx"
+          "app/routes/$.tsx"
         ]
       }
     }

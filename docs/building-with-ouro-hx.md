@@ -29,7 +29,7 @@ Spoonjoy's heavy cookbook look is all theme. Not one component is forked.
 
 - **Colours.** HX reads shadcn's variable names (`--background`, `--primary`, `--ring`, …). [`app/styles/tailwind.css`](../app/styles/tailwind.css) maps each one onto Spoonjoy's palette (`--sj-*`) in a single block, so HX follows dark mode and print along with the rest of the app. [`test/styles/ouro-theme-mapping.test.ts`](../test/styles/ouro-theme-mapping.test.ts) checks that every foreground pair reaches 4.5:1 in both themes.
 - **Shape and motion.** `--radius` sets HX's corners. The `--ouro-*` tokens set durations, easings, the press scale, the overlay layer and sheet shadows. Spoonjoy overrides only what differs, such as `--ouro-layer: 60`, which lifts dialogs above its tab bar.
-- **Typography.** HX's `Heading` and `Text` take `size` and `tone`. The fonts come from the theme.
+- **Typography.** HX's `Heading` and `Text` take `size` and `tone`. The fonts come from the theme: `--font-heading` gives every `Heading` Spoonjoy's display serif. Text's tone is `default` unless you say otherwise, so secondary copy says `tone="muted"` where it's written.
 - **Never style a component's states in app CSS.** Rules like `.my-button:focus`, `[aria-checked]` or `data-[state=open]:` on app elements are what the source rule calls `control-state-style`. Every HX component already draws its own focus, pressed, checked, open and disabled states from the tokens.
 
 ## 3. Compose HX directly

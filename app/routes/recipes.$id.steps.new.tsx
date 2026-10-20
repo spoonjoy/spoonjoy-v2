@@ -10,7 +10,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { Item } from "~/components/ouro/item/item";
@@ -469,7 +469,7 @@ export default function NewStep() {
         title="Add Step"
         action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
       >
-        <Text>Write the next bit of method for {recipe.title}.</Text>
+        <Text tone="muted">Write the next bit of method for {recipe.title}.</Text>
       </CookbookHeader>
 
       <div className="mt-8 max-w-4xl">
@@ -485,7 +485,7 @@ export default function NewStep() {
 
             {nextStepNum === 1 ? (
               <Fieldset legend="Uses output from">
-                <Text className="italic">No previous steps available</Text>
+                <Text tone="muted" className="italic">No previous steps available</Text>
               </Fieldset>
             ) : availableSteps.length > 0 && (
               <Select

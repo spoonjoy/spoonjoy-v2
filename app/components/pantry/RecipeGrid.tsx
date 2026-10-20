@@ -1,7 +1,7 @@
 import { Bookmark, Share2, UtensilsCrossed } from 'lucide-react'
 import { Heading } from '~/components/ouro/text/heading'
 import { Link } from '../navigation/app-link'
-import { Text } from '../text'
+import { Text } from '~/components/ouro/text/text'
 import { Button } from '../button'
 import { RuledEmptyState } from '~/components/cookbook/page'
 import { formatServingsLabel } from '~/lib/quantity'
@@ -47,7 +47,7 @@ export function RecipeGrid({
   if (recipes.length === 0) {
     return (
       <RuledEmptyState title={emptyTitle}>
-        <Text className="mt-2">{emptyMessage}</Text>
+        <Text tone="muted" className="mt-2">{emptyMessage}</Text>
         {emptyCtaHref ? (
           <div className="mt-4">
             <Button href={emptyCtaHref}>
