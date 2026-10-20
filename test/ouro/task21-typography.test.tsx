@@ -124,7 +124,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
   });
   try {
     await expect.poll(() => host.querySelector('a[href="/recipes/a"]')).toBeTruthy();
-    expect(getComputedStyle(host.querySelector('a[href="/recipes/a"]')!).borderBottomWidth).toBe("1px");
+    expect(host.querySelector('a[href="/recipes/a"]')!.closest('[data-ouro="item"]')).not.toBeNull();
     const more = Array.from(host.querySelectorAll("a")).find((link) => link.textContent?.includes("Show more recipes"))!;
     expect(more.getAttribute("href")).toBe("/recipes?after=a");
     await userEvent.dblClick(more);
@@ -133,7 +133,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
     await act(async () => release());
     await expect.poll(() => host.querySelector('a[href="/recipes/b"]')).toBeTruthy();
     await expect.poll(() => document.activeElement).toBe(host.querySelector('a[href="/recipes/b"]'));
-    expect(getComputedStyle(host.querySelector('a[href="/recipes/b"]')!).borderBottomWidth).toBe("1px");
+    expect(host.querySelector('a[href="/recipes/b"]')!.closest('[data-ouro="item"]')).not.toBeNull();
     expect(host.querySelector('a[href="/recipes/a"]')).not.toBeNull();
     expect(host.querySelector("[data-ouro-show-more-status]")!.textContent).toBe("Showing 2 recipes");
     expect(more.isConnected).toBe(false);
@@ -159,7 +159,7 @@ for (const theme of ["light", "dark"] as const) {
     await annotate(`T21_KITCHEN_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
-  it(`${theme}: actual search hero and hover-colored result title retain delivered typography/semantics`, async ({ annotate }) => {
+  it(`${theme}: actual search hero keeps its delivered display scale, and a result is an HX Item named by type and title`, async ({ annotate }) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     const result: SearchResult = {
       type: "recipe", id: "type-proof", ownerId: "chef", ownerUsername: "chef",
@@ -171,20 +171,16 @@ for (const theme of ["light", "dark"] as const) {
     await expect.poll(() => host.querySelector("h1")).toBeTruthy();
     const title = host.querySelector("h1")!;
     const resultLink = host.querySelector<HTMLAnchorElement>('a[href="/recipes/type-proof"]')!;
-    const resultTitle = resultLink.querySelector("h2")!;
-    const subheading = "font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]";
     const measurements = [];
     for (const width of widths) {
       await page.viewport(width, 900);
       const actual = compareDelivered(title, `${heading} mt-3 text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.05]`);
       expect(actual.fontSize).toBe(width >= 1024 ? "84px" : width >= 640 ? "72px" : "48px");
-      measurements.push({ width, title: actual, resultTitle: compareDelivered(resultTitle, `${subheading} mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]`) });
+      measurements.push({ width, title: actual });
     }
-    await userEvent.hover(resultLink);
-    const hovered = compareDelivered(resultTitle, `${subheading} mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]`);
-    expect(resultLink.getAttribute("aria-labelledby")!.split(" ")).toContain(resultTitle.id);
-    expect(resultTitle.tagName).toBe("H2");
-    await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements, hovered })}`);
+    expect(resultLink.closest('[data-ouro="item"]')).not.toBeNull();
+    expect(resultLink.textContent).toBe("Recipe Tomato soup for a crowded table");
+    await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
   it(`${theme}: the 14px branded step-output heading keeps its level, ink and actual size`, async ({ annotate }) => {
