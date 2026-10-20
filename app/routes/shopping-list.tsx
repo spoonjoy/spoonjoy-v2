@@ -1,8 +1,6 @@
 import type { Route } from "./+types/shopping-list";
 import { formatAmount } from "~/lib/quantity";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, m } from "motion/react";
-import { LazyLayoutGroup } from "~/components/motion/lazy-motion";
 import { useLoaderData, Form, useSubmit, useFetchers, useActionData, useLocation } from "react-router";
 import {
   handleShoppingListAction,
@@ -25,7 +23,8 @@ import { Link } from "~/components/navigation/app-link";
 import { ConfirmationDialog } from "~/components/confirmation-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
-import { ChecklistRow } from "~/components/shopping/checklist-row";
+import { ChecklistItem, ChecklistRoot } from "~/components/ouro/checklist/checklist-parts";
+import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { useWriteToken } from "~/hooks/use-write-token";
 import { SwipeActions } from "~/components/ouro/swipe-actions/swipe-actions";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
@@ -76,15 +75,15 @@ export function orderShoppingItemsForMarket<T extends { checked: boolean; catego
     .map(({ item }) => item);
 }
 
-export function getShoppingSectionLabel(
-  item: { checked: boolean; categoryLabel: string },
-  previousItem: { checked: boolean; categoryLabel: string } | null,
-  _viewMode: ShoppingListViewMode
-) {
-  const label = item.categoryLabel;
-  const previousLabel = previousItem ? previousItem.categoryLabel : null;
-
-  return previousLabel === label ? null : label;
+/** The items as runs of one aisle each, in order, for one checklist per aisle. */
+export function shoppingSections<T extends { categoryLabel: string }>(items: T[]) {
+  const sections: Array<{ label: string; items: T[] }> = [];
+  for (const item of items) {
+    const last = sections.at(-1);
+    if (last?.label === item.categoryLabel) last.items.push(item);
+    else sections.push({ label: item.categoryLabel, items: [item] });
+  }
+  return sections;
 }
 
 export type PendingShoppingItemChanges = {
@@ -208,18 +207,20 @@ export default function ShoppingList() {
 
     return displayItems;
   }, [displayItems, viewMode]);
-  const viewOptions: Array<{ mode: ShoppingListViewMode; label: string }> = [
-    { mode: "need", label: `Need ${uncheckedCount}` },
-    { mode: "basket", label: `Basket ${checkedCount}` },
-    { mode: "all", label: `All ${displayItems.length}` },
+  const viewOptions: Array<{ value: ShoppingListViewMode; label: string }> = [
+    { value: "need", label: `Need ${uncheckedCount}` },
+    { value: "basket", label: `Basket ${checkedCount}` },
+    { value: "all", label: `All ${displayItems.length}` },
   ];
   const categoryOptions = useMemo(() => {
     const uniqueLabels = Array.from(new Set(visibleItems.map((item) => item.categoryLabel)));
     return ["all", ...uniqueLabels];
   }, [visibleItems]);
-  const filteredItems = activeCategory === "all"
+  // A chosen aisle with nothing left in this view falls back to every aisle.
+  const selectedCategory = categoryOptions.includes(activeCategory) ? activeCategory : "all";
+  const filteredItems = selectedCategory === "all"
     ? visibleItems
-    : visibleItems.filter((item) => item.categoryLabel === activeCategory);
+    : visibleItems.filter((item) => item.categoryLabel === selectedCategory);
 
   // A hidden/deleted selection or a different Router entry has no remaining authority.
   // Keep its descriptor for the released dialog's exit animation; never retarget it.
@@ -269,7 +270,7 @@ export default function ShoppingList() {
     // Base UI then restores cancellation focus to that control, not a disappearing menu item.
     const row = Array.from(boardRef.current!.querySelectorAll<HTMLElement>("[data-shopping-item]"))
       .find((element) => element.dataset.shoppingItem === item.id)!;
-    row.querySelector<HTMLButtonElement>("[data-ouro-swipe-actions-menu] button")!.focus();
+    row.querySelector<HTMLButtonElement>(`[data-ouro-control="swipe-actions"][data-ouro-part="menu"]`)!.focus();
     const selected = { id: item.id, name: item.ingredientRef.name, locationKey: location.key };
     removalAuthority.current = selected;
     setRemoval(selected);
@@ -320,42 +321,23 @@ export default function ShoppingList() {
       </div>
 
       <div className="mx-auto lg:max-w-[40rem]" data-testid="shopping-list-checklist-board">
-        <div className="grid grid-cols-3 border-y border-[var(--sj-border)] font-sj-ui text-xs font-bold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-          {viewOptions.map((option) => (
-            <button
-              key={option.mode}
-              type="button"
-              onClick={() => setViewMode(option.mode)}
-              className={[
-                // sj-instant-state: no colour fade (see tailwind.css); mid-fade, the label and
-                // background pass through near-identical greys, below readable contrast.
-                "sj-instant-state min-h-11 px-3 first:text-left last:text-right",
-                viewMode === option.mode
-                  ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                  : "bg-transparent hover:text-[var(--sj-ink)]",
-              ].join(" ")}
-              aria-pressed={viewMode === option.mode}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
-          {categoryOptions.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setActiveCategory(category)}
-              className={[
-                "sj-instant-state font-sj-ui min-h-11 shrink-0 rounded-[var(--sj-radius-control)] border px-4 py-2 text-sm font-bold capitalize",
-                activeCategory === category
-                  ? "border-[var(--sj-ink)] bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                  : "border-[var(--sj-border)] text-[var(--sj-ink)]",
-              ].join(" ")}
-            >
-              {category}
-            </button>
-          ))}
+        <SegmentedControl
+          label="View"
+          hideLabel
+          fullWidth
+          items={viewOptions}
+          value={viewMode}
+          onValueChange={(mode) => setViewMode(mode as ShoppingListViewMode)}
+        />
+        {/* A long list has more aisles than a phone is wide: the aisles scroll sideways. */}
+        <div className="mt-5 overflow-x-auto pb-1">
+          <SegmentedControl
+            label="Aisle"
+            hideLabel
+            items={categoryOptions.map((category) => ({ value: category, label: category === "all" ? "All aisles" : category }))}
+            value={selectedCategory}
+            onValueChange={setActiveCategory}
+          />
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
           {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
@@ -405,67 +387,32 @@ export default function ShoppingList() {
             </Text>
           </RuledEmptyState>
         ) : (
-          /* Item List */
-          <LazyLayoutGroup id="shopping-list-items">
-            <div ref={boardRef} className="sj-list-ruled mt-6">
-              <AnimatePresence initial={false}>
-                {filteredItems.map((item, index) => {
-                  const previousItem = index > 0 ? filteredItems[index - 1] : null;
-                  const sectionLabel = getShoppingSectionLabel(item, previousItem, viewMode);
-
-                  return (
-                    <m.div
-                      key={item.id}
-                      layout="position"
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 6 }}
-                      transition={{
-                        layout: { type: "spring", stiffness: 360, damping: 34, mass: 0.75 },
-                        opacity: { duration: 0.16 },
-                        y: { type: "spring", stiffness: 460, damping: 38, mass: 0.55 },
-                      }}
-                      className="space-y-1"
-                      data-testid="shopping-list-motion-item"
-                      data-shopping-item={item.id}
+          /* One checklist per aisle; each row swipes (or opens its actions menu) to delete. */
+          <div ref={boardRef} className="mt-6 grid gap-6">
+            {shoppingSections(filteredItems).map((section) => (
+              <ChecklistRoot key={section.label} label={section.label}>
+                {section.items.map((item) => (
+                  <div key={item.id} data-testid="shopping-list-item" data-shopping-item={item.id}>
+                    <SwipeActions
+                      label={item.ingredientRef.name}
+                      trailing={[{
+                        label: `Delete ${item.ingredientRef.name}`,
+                        tone: "destructive",
+                        onClick: () => requestRemoval(item),
+                      }]}
                     >
-                      {sectionLabel && (
-                        <div className="font-sj-ui pt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-brass)]" data-testid="shopping-list-category">
-                          {sectionLabel}
-                        </div>
-                      )}
-                      <SwipeActions
+                      <ChecklistItem
                         label={item.ingredientRef.name}
-                        trailing={[{
-                          label: `Delete ${item.ingredientRef.name}`,
-                          tone: "destructive",
-                          onClick: () => requestRemoval(item),
-                        }]}
-                      >
-                          <ChecklistRow
-                            checked={item.checked}
-                            name={item.ingredientRef.name}
-                            quantity={amountLabel(item)}
-                            note={item.checked ? "already in basket" : null}
-                            onToggle={() => toggleItem(item)}
-                            action={(
-                              <button
-                                type="button"
-                                onClick={() => requestRemoval(item)}
-                                className="sr-only"
-                                aria-label={`Remove ${item.ingredientRef.name}`}
-                              >
-                                Remove
-                              </button>
-                            )}
-                          />
-                      </SwipeActions>
-                    </m.div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
-          </LazyLayoutGroup>
+                        value={amountLabel(item) || undefined}
+                        checked={item.checked}
+                        onCheckedChange={() => toggleItem(item)}
+                      />
+                    </SwipeActions>
+                  </div>
+                ))}
+              </ChecklistRoot>
+            ))}
+          </div>
         )}
 
       {removal && (

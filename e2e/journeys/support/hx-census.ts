@@ -315,7 +315,8 @@ export const census: Journey[] = [
       {
         id: "remove-item-dialog",
         action: async (page) => {
-          await page.getByRole("button", { name: "Remove jasmine rice", exact: true }).press("Enter");
+          await page.getByRole("button", { name: "Actions for jasmine rice", exact: true }).press("Enter");
+          await page.getByRole("menuitem", { name: "Delete jasmine rice", exact: true }).press("Enter");
           await expect(page.getByRole("alertdialog", { name: 'Remove "jasmine rice"?', exact: true })).toBeVisible();
         },
       },

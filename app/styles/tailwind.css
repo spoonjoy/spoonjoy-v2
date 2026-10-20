@@ -233,23 +233,6 @@
     display: none !important;
   }
 
-  /* Ticked ingredients are this cook's progress, not part of the recipe: print every ingredient plain,
-   * without its tick box or strike-through. */
-  #steps .sj-checklist-box,
-  #steps .sj-checklist-strike {
-    display: none !important;
-  }
-
-  /* Without its box, a row is one column. Left at the screen's 2rem box column, the name and amount
-   * would be squeezed into it and the name would print at no width at all. */
-  #steps .sj-checklist-row {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  #steps .sj-checklist-name {
-    color: var(--sj-ink) !important;
-  }
-
   /* The rules below are unlayered, so they beat Tailwind's layered utilities at every breakpoint. A
    * print: utility can lose to a component class (.sj-eyebrow sets display) or to an lg: utility,
    * and a desktop-width print still matches lg. */
@@ -625,27 +608,6 @@ body:has(#cook) .sj-mobile-surface {
   inset: 0;
   pointer-events: none;
   background: linear-gradient(180deg, transparent 34%, var(--sj-photo-shade));
-}
-
-@keyframes sj-checklist-strike-draw {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.sj-checklist-strike {
-  transform-origin: left center;
-  animation: sj-checklist-strike-draw 220ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sj-checklist-strike {
-    animation: none;
-    transform: scaleX(1);
-  }
 }
 
 .sj-on-photo {

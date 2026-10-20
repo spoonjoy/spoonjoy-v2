@@ -29,7 +29,8 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/text";
 import { useToast } from "~/components/feedback/toast";
 import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
-import { ChecklistRow } from "~/components/shopping/checklist-row";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
@@ -821,30 +822,26 @@ export default function EditStep() {
             // Parsed ingredients waiting for "Add All" are not "none yet".
             !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
           ) : (
-            <div className="sj-list-ruled">
+            <ItemGroup aria-label="Ingredients" variant="divided">
               {step.ingredients.map((ingredient) => (
-                <div key={ingredient.id}>
-                  <ChecklistRow
-                    name={ingredient.ingredientRef.name}
-                    quantity={`${ingredient.quantity} ${ingredient.unit.name}`}
-                    action={
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => setIngredientToRemove(ingredient.id)}
-                        aria-label={`Remove ${ingredient.ingredientRef.name}`}
-                      >
-                        Remove
-                      </Button>
-                    }
-                  />
-                  <span className="sr-only">{ingredient.quantity}</span>
-                  <span className="sr-only">
-                    {ingredient.unit.name} {ingredient.ingredientRef.name}
-                  </span>
-                </div>
+                <Item
+                  key={ingredient.id}
+                  size="sm"
+                  title={ingredient.ingredientRef.name}
+                  description={`${ingredient.quantity} ${ingredient.unit.name}`}
+                  actions={
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => setIngredientToRemove(ingredient.id)}
+                      aria-label={`Remove ${ingredient.ingredientRef.name}`}
+                    >
+                      Remove
+                    </Button>
+                  }
+                />
               ))}
-            </div>
+            </ItemGroup>
           )}
         </SettingsPanel>
 

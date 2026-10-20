@@ -91,32 +91,33 @@ export function describeCookView(name: string, makeController: () => CookViewHar
       expect(screen.queryByTestId("cook-mode-panel")).not.toBeInTheDocument();
 
       const panel = await openCookMode();
-      expect(within(panel).getByText("Step 1 of 3")).toBeInTheDocument();
+      expect(within(panel).getAllByText("Step 1 of 3")[0]).toBeInTheDocument();
       expect(within(panel).getByRole("heading", { level: 2, name: STEP_TITLES[0] })).toBeInTheDocument();
       expect(within(panel).getByRole("heading", { level: 1, name: "Lemon Herb Rice" })).toBeInTheDocument();
       expect(screen.queryByRole("heading", { level: 2, name: "Steps" })).not.toBeInTheDocument();
     });
 
-    it("moves between steps with next, previous and the step dots", async () => {
+    it("moves between steps with next, previous and the step numbers", async () => {
       const user = userEvent.setup();
       await renderView();
       const panel = await openCookMode();
+      const pager = within(within(panel).getByRole("navigation", { name: "Cook steps" }));
 
-      expect(within(panel).getByRole("button", { name: "Previous step" })).toBeDisabled();
-      await user.click(within(panel).getByRole("button", { name: "Next step" }));
-      expect(within(panel).getByText("Step 2 of 3")).toBeInTheDocument();
+      expect(pager.getByRole("button", { name: "Previous step" })).toBeDisabled();
+      await user.click(pager.getByRole("button", { name: "Next step" }));
+      expect(within(panel).getAllByText("Step 2 of 3")[0]).toBeInTheDocument();
       expect(within(panel).getByRole("heading", { level: 2, name: STEP_TITLES[1] })).toBeInTheDocument();
 
-      await user.click(within(panel).getByRole("button", { name: "Next step" }));
-      expect(within(panel).getByText("Step 3 of 3")).toBeInTheDocument();
-      expect(within(panel).getByRole("button", { name: "Next step" })).toBeDisabled();
+      await user.click(pager.getByRole("button", { name: "Next step" }));
+      expect(within(panel).getAllByText("Step 3 of 3")[0]).toBeInTheDocument();
+      expect(pager.getByRole("button", { name: "Next step" })).toBeDisabled();
 
-      await user.click(within(panel).getByRole("button", { name: "Previous step" }));
+      await user.click(pager.getByRole("button", { name: "Previous step" }));
       expect(within(panel).getByRole("heading", { level: 2, name: STEP_TITLES[1] })).toBeInTheDocument();
 
-      await user.click(within(panel).getByRole("button", { name: "Step 1" }));
-      expect(within(panel).getByText("Step 1 of 3")).toBeInTheDocument();
-      expect(within(panel).getByRole("button", { name: "Step 1 current" })).toHaveAttribute("aria-current", "step");
+      await user.click(pager.getByRole("button", { name: "Step 1" }));
+      expect(within(panel).getAllByText("Step 1 of 3")[0]).toBeInTheDocument();
+      expect(pager.getByRole("button", { name: "Step 1" })).toHaveAttribute("aria-current", "page");
       expect(controller().activeStepIndex).toBe(0);
     });
 
@@ -124,13 +125,13 @@ export function describeCookView(name: string, makeController: () => CookViewHar
       const user = userEvent.setup();
       await renderView();
       const panel = await openCookMode();
-      const quantity = () => within(panel).getByTestId(`ingredient-quantity-${ingredientId(0)}`);
+      const quantity = () => within(panel).getByRole("checkbox", { name: "jasmine rice" });
 
-      expect(quantity()).toHaveTextContent("2 cups");
+      expect(quantity()).toHaveAccessibleDescription("Pantry 2 cups");
       await user.click(within(panel).getByRole("button", { name: "Increase scale" }));
       await user.click(within(panel).getByRole("button", { name: "Increase scale" }));
-      expect(within(panel).getByTestId("scale-display")).toHaveTextContent("1.5×");
-      expect(quantity()).toHaveTextContent("3 cups");
+      expect(within(panel).getByRole("textbox", { name: "Scale" })).toHaveValue("1.5");
+      expect(quantity()).toHaveAccessibleDescription("Pantry 3 cups");
       expect(controller().scaleFactor).toBe(1.5);
     });
 

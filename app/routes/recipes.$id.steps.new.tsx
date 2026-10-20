@@ -13,7 +13,8 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
-import { ChecklistRow } from "~/components/shopping/checklist-row";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import {
   validateStepTitle,
   validateStepDescription,
@@ -559,26 +560,26 @@ export default function NewStep() {
                 // Parsed ingredients waiting for "Add All" are not "none yet".
                 !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
               ) : (
-                <ul className="sj-list-ruled mt-4 list-none p-0">
+                <ItemGroup aria-label="Ingredients" variant="divided" className="mt-4">
                   {ingredients.map((ingredient, index) => (
-                    <li key={`${ingredient.ingredientName}-${index}`}>
-                      <ChecklistRow
-                        name={ingredient.ingredientName}
-                        quantity={`${ingredient.quantity} ${ingredient.unit}`}
-                        action={
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            onClick={() => handleRemoveIngredient(index)}
-                            aria-label={`Remove ${ingredient.ingredientName}`}
-                          >
-                            Remove
-                          </Button>
-                        }
-                      />
-                    </li>
+                    <Item
+                      key={`${ingredient.ingredientName}-${index}`}
+                          size="sm"
+                      title={ingredient.ingredientName}
+                      description={`${ingredient.quantity} ${ingredient.unit}`}
+                      actions={
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={() => handleRemoveIngredient(index)}
+                          aria-label={`Remove ${ingredient.ingredientName}`}
+                        >
+                          Remove
+                        </Button>
+                      }
+                    />
                   ))}
-                </ul>
+                </ItemGroup>
               )}
             </section>
 

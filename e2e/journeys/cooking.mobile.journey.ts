@@ -16,7 +16,7 @@ test.describe("Recipe list action on iPhone", () => {
   test("Add to list adds ingredients at the current scale and then reads as already on the list @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
     const user = createDisposableJourneyUser();
     const listAction = page.getByTestId("recipe-header-list-action");
-    const scaleDisplay = page.getByTestId("scale-display");
+    const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
     const increaseScale = page.getByRole("button", { name: "Increase scale" });
 
     // Sign up as the throwaway user.
@@ -53,7 +53,7 @@ test.describe("Recipe list action on iPhone", () => {
 
     // 1.25×, one press of 0.25, so the list gets fractional amounts to write out.
     await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("1.25×");
+    await expect(scaleDisplay).toHaveValue("1.25");
 
     await expect(listAction).toHaveText("Add to list");
     await listAction.click();
