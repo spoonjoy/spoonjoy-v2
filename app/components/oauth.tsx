@@ -48,6 +48,7 @@ interface OAuthDividerProps {
   className?: string
 }
 
+// TODO(ouro-hx: separator): The labelled "or" divider becomes HX's Separator with a label once that ships.
 export function OAuthDivider({ className }: OAuthDividerProps) {
   return (
     <div

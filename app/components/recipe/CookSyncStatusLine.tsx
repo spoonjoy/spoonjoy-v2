@@ -36,6 +36,7 @@ export interface CookSyncStatusLineProps {
   onReload?: () => void
 }
 
+// TODO(ouro-hx: sync-status): Saved, syncing and offline become HX's sync status once it ships.
 /**
  * Whether the cook's progress is reaching their account. The visible line follows every change;
  * the screen-reader announcement (a polite live region) speaks only when progress stops reaching

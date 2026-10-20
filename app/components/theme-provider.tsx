@@ -37,6 +37,7 @@ function getStoredTheme(): Theme {
   return 'system'
 }
 
+// TODO(ouro-hx: lib-color-scheme): Reading, storing and applying the colour scheme moves to HX's lib-color-scheme once it ships.
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('system')
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')

@@ -17,6 +17,7 @@ function useHydrated(): boolean {
   );
 }
 
+// TODO(ouro-hx: local-date, relative-time): Dates in the reader's locale and "3 days ago" become HX's local date and relative time once they ship.
 /**
  * A calendar date ("Jun 1, 2026", or "Jun 2026" with unit="month") in the viewer's own timezone,
  * in a <time> carrying the exact instant. Only the browser knows the viewer's timezone, so the

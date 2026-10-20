@@ -3,6 +3,7 @@ import { useTheme } from './theme-provider'
 import * as Headless from '@headlessui/react'
 import clsx from 'clsx'
 
+// TODO(ouro-hx: color-scheme-toggle): The light, dark and system control becomes HX's color scheme toggle once it ships.
 export function ThemeToggle() {
   const { setTheme, resolvedTheme } = useTheme()
 

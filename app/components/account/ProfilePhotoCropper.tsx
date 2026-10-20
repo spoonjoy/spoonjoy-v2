@@ -13,6 +13,7 @@ interface ProfilePhotoCropperProps {
   outputSize?: number;
 }
 
+// TODO(ouro-hx: image-cropper): Cropping a photo becomes HX's image cropper once it ships.
 export function ProfilePhotoCropper({ file, onConfirm, onCancel, outputSize = 512 }: ProfilePhotoCropperProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);

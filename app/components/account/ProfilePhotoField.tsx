@@ -8,6 +8,7 @@ import { ProfilePhotoCropper } from "~/components/account/ProfilePhotoCropper";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_ACCEPT, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 
+// TODO(ouro-hx: image-field): Picking a photo with a preview becomes HX's image field once it ships.
 export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
   const actionData = useActionData<AccountSettingsActionResult>();
   const submit = useSubmit();

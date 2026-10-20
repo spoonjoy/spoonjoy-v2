@@ -115,6 +115,7 @@ export function useMobileNavEligibility(isAuthenticated: boolean) {
   return !isSuppressed && !shouldHideTabBar(pathname, isAuthenticated);
 }
 
+// TODO(ouro-hx: tab-bar): The phone's bottom tab bar becomes HX's tab bar once it ships.
 export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   const { pathname } = useLocation();
   const isEligible = useMobileNavEligibility(isAuthenticated);

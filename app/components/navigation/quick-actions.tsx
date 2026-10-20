@@ -21,6 +21,7 @@ export interface ShareResult {
   method: 'native' | 'clipboard'
 }
 
+// TODO(ouro-hx: share-button, lib-share): Native share with a copy fallback becomes HX's share button once it ships.
 /**
  * Check if native share is supported
  */

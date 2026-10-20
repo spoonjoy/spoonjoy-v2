@@ -22,6 +22,7 @@ interface RecipeImageUploadProps {
   error?: string
 }
 
+// TODO(ouro-hx: image-field): Picking a photo with a preview becomes HX's image field once it ships.
 export function RecipeImageUpload({
   onFileSelect,
   onClear,

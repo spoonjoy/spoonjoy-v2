@@ -18,6 +18,7 @@ export function CookbookPage({
   );
 }
 
+// TODO(ouro-hx: page-header): A page's title area with its eyebrow, actions and media becomes HX's page header once it ships.
 export function CookbookHeader({
   eyebrow,
   title,

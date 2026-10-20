@@ -24,6 +24,7 @@ export interface CookAlarm {
   close(): void;
 }
 
+// TODO(ouro-hx: lib-feedback): The beep and the vibration come from HX's lib-feedback (chime, buzz) once it ships; Spoonjoy keeps the alarm's lifecycle.
 export function createCookAlarm(): CookAlarm {
   let context: AudioContext | null = null;
 
