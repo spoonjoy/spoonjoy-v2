@@ -11,7 +11,7 @@ import {
   parseShoppingItemFallback,
   type ShoppingListActionData,
 } from "~/lib/shopping-list-parser";
-import { Link as OuroLink } from "~/components/ouro/link/link";
+import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/button";
 import { Plus } from "lucide-react";
@@ -19,7 +19,6 @@ import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Link } from "~/components/navigation/app-link";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
@@ -294,7 +293,7 @@ export default function ShoppingList() {
       <div className="mx-auto max-w-4xl">
         <header className="pb-6" data-testid="shopping-list-page-header">
           <div className="flex items-center justify-between gap-4 font-sj-ui text-sm font-bold">
-            <Link href="/" className="inline-flex min-h-11 items-center text-[var(--sj-ink)] no-underline">Kitchen</Link>
+            <Link href="/" tone="secondary">Kitchen</Link>
             <span className="text-[var(--sj-ink-soft)]">
               {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
             </span>
@@ -376,7 +375,7 @@ export default function ShoppingList() {
           // the sentence, not in a button row, so the Add button still clears the dock on a phone.
           <RuledEmptyState title="Your shopping list is empty">
             <Text tone="muted" className="mt-2">
-              <OuroLink href="/recipes">Explore recipes</OuroLink> to add a recipe&apos;s ingredients, or add items one at a time below.
+              <Link href="/recipes">Explore recipes</Link> to add a recipe&apos;s ingredients, or add items one at a time below.
             </Text>
           </RuledEmptyState>
         ) : filteredItems.length === 0 ? (

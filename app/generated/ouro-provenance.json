@@ -1255,6 +1255,7 @@
       "components": [
         "button",
         "heading",
+        "item",
         "show-more",
         "text",
         "text-field",
@@ -1265,6 +1266,9 @@
           "app/components/button.tsx"
         ],
         "heading": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "item": [
           "app/routes/recipes._index.tsx"
         ],
         "show-more": [
@@ -2197,7 +2201,6 @@
         "app/routes/shopping-list.tsx",
         "app/components/button.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/app-link.tsx",
         "app/hooks/use-write-token.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
