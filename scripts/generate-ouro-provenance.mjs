@@ -17,6 +17,8 @@ export const TAG_SOURCE_PATH = "app/lib/ouro/dev.ts";
 const OURO_COMPONENTS = "app/components/ouro/";
 const OURO_LIB = "app/lib/ouro/";
 const EXTENSIONS = [".tsx", ".ts", "/index.tsx", "/index.ts"];
+// An import written with its file's extension (`./x.css`), as opposed to a module (`./x.server`).
+const FILE_EXTENSION = /\.(?:tsx?|jsx?|mjs|json|css|svg|png|jpe?g|webp|gif|txt)$/;
 // A component's own files that are parts of it, not items of their own.
 const PART_SUFFIXES = ["-parts", "-styles", "-context"];
 const USAGE = "Usage: generate-ouro-provenance.mjs [--check]";
@@ -104,15 +106,19 @@ export function itemForOuroFile(file) {
 
 const isOuro = (file) => file.startsWith(OURO_COMPONENTS) || file.startsWith(OURO_LIB);
 
-/** Resolves an import specifier from an app file to a repository path, or null for a package. */
+/** Resolves an import specifier from an app file to a repository path, or null for a package. Fails on an app import that resolves to nothing. */
 export function resolveImport(specifier, from, exists) {
   let base;
+  // React Router's generated route types: types only, and absent until `react-router typegen`.
+  if (specifier.includes("/+types/")) return null;
   if (specifier.startsWith("~/")) base = `app/${specifier.slice(2)}`;
   else if (specifier.startsWith(".")) base = path.posix.join(path.posix.dirname(from), specifier);
   else return null;
-  if (/\.(tsx?|json|css)$/.test(base)) return exists(base) ? base : null;
-  for (const extension of EXTENSIONS) if (exists(`${base}${extension}`)) return `${base}${extension}`;
-  return null;
+  base = base.replace(/\?.*$/, "");
+  const candidates = FILE_EXTENSION.test(base) ? [base] : EXTENSIONS.map((extension) => `${base}${extension}`);
+  const found = candidates.find((candidate) => exists(candidate));
+  if (found === undefined) throw new Error(`${from} imports ${specifier}, which does not exist`);
+  return found;
 }
 
 /** The import specifiers of a module, type-only imports included (they cost nothing to list). */

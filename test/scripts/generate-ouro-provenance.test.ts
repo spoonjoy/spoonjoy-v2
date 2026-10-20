@@ -32,9 +32,10 @@ export default [
     "app/routes/home.tsx": `import { View } from "../components/view";\nimport { Text } from "~/components/ouro/text/text";\nimport "./home.css";\nimport type { Thing } from "~/lib/thing";\nimport data from "~/lib/data.json";\nexport default function Home() {}`,
     "app/routes/home.css": "",
     "app/lib/data.json": "{}",
+    "app/lib/thing.server.ts": "",
     "app/lib/thing.ts": `import { cn } from "~/lib/ouro/cn";\nimport { View } from "~/components/view";\nexport type Thing = 1;`,
     "app/lib/ouro/cn.ts": "",
-    "app/components/view/index.tsx": `import { ChecklistRoot } from "~/components/ouro/checklist/checklist-parts";\nimport { Text } from "~/components/ouro/text/text";\nimport { useState } from "react";\nimport { gone } from "~/lib/missing";\nexport function View() {}`,
+    "app/components/view/index.tsx": `import { ChecklistRoot } from "~/components/ouro/checklist/checklist-parts";\nimport { Text } from "~/components/ouro/text/text";\nimport { useState } from "react";\nexport function View() {}`,
     "app/routes/kitchen.tsx": `export default function Kitchen() {}`,
     "app/routes/deep.tsx": `export default function Deep() {}`,
     "app/routes/shell.tsx": `export default function Shell() {}`,
@@ -126,10 +127,17 @@ describe("files and items", () => {
     expect(resolveImport("~/components/view", "app/routes/home.tsx", exists)).toBe("app/components/view/index.tsx");
     expect(resolveImport("../components/view", "app/routes/home.tsx", exists)).toBe("app/components/view/index.tsx");
     expect(resolveImport("~/lib/thing", "app/routes/home.tsx", exists)).toBe("app/lib/thing.ts");
+    expect(resolveImport("~/lib/thing.server", "app/routes/home.tsx", exists)).toBe("app/lib/thing.server.ts");
     expect(resolveImport("./home.css", "app/routes/home.tsx", exists)).toBe("app/routes/home.css");
-    expect(resolveImport("./gone.css", "app/routes/home.tsx", exists)).toBeNull();
-    expect(resolveImport("~/lib/missing", "app/routes/home.tsx", exists)).toBeNull();
+    expect(resolveImport("./home.css?url", "app/routes/home.tsx", exists)).toBe("app/routes/home.css");
     expect(resolveImport("react", "app/routes/home.tsx", exists)).toBeNull();
+    expect(resolveImport("./+types/home", "app/routes/home.tsx", exists)).toBeNull();
+  });
+
+  it("fails on an app import that resolves to nothing", () => {
+    const { exists } = fixture().deps;
+    expect(() => resolveImport("./gone.css", "app/routes/home.tsx", exists)).toThrow("app/routes/home.tsx imports ./gone.css, which does not exist");
+    expect(() => resolveImport("~/lib/missing", "app/routes/home.tsx", exists)).toThrow("imports ~/lib/missing, which does not exist");
   });
 
   it("follows a page's imports to the HX it renders, and stops at HX", () => {
