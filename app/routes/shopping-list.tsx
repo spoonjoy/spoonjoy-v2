@@ -20,14 +20,13 @@ import { FieldControl } from "~/components/ouro/field/field-parts";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Link } from "~/components/navigation/app-link";
-import { ConfirmationDialog } from "~/components/confirmation-dialog";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
 import { ChecklistItem, ChecklistRoot } from "~/components/ouro/checklist/checklist-parts";
 import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { useWriteToken } from "~/hooks/use-write-token";
 import { SwipeActions } from "~/components/ouro/swipe-actions/swipe-actions";
-import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 
 export { __internal__, parseShoppingItemFallback };
 
@@ -356,15 +355,15 @@ export default function ShoppingList() {
               >
                 Clear all
               </Button>
-              <ConfirmationDialog
+              <ConfirmDialog
                 open={showClearDialog}
-                onClose={() => setShowClearDialog(false)}
+                onOpenChange={() => setShowClearDialog(false)}
                 onConfirm={handleClearAllConfirm}
                 title="Start fresh?"
                 description="All items will be cleared from your shopping list."
                 confirmLabel="Clear all"
                 cancelLabel="Keep list"
-                destructive
+                tone="destructive"
               />
             </>
           )}

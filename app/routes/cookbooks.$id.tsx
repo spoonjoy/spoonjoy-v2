@@ -71,7 +71,7 @@ function captureCookbookActionFailure(
     void capture;
   }
 }
-import { ConfirmationDialog } from "~/components/confirmation-dialog";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Button } from "~/components/button";
 import { Text } from "~/components/ouro/text/text";
 import { Link as AppLink } from "~/components/navigation/app-link";
@@ -448,9 +448,9 @@ export default function CookbookDetail() {
         </div>
 
         {isOwner && (
-          <ConfirmationDialog
+          <ConfirmDialog
             open={showDeleteDialog}
-            onClose={() => setShowDeleteDialog(false)}
+            onOpenChange={() => setShowDeleteDialog(false)}
             onConfirm={() => {
               setShowDeleteDialog(false);
               // Through the router, like the page's other actions: it follows the action's redirect
@@ -461,7 +461,7 @@ export default function CookbookDetail() {
             description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
             confirmLabel="Delete it"
             cancelLabel="Keep it"
-            destructive
+            tone="destructive"
           />
         )}
 
@@ -644,9 +644,9 @@ export default function CookbookDetail() {
       </div>
 
       {/* Remove recipe confirmation dialog */}
-      <ConfirmationDialog
+      <ConfirmDialog
         open={!!recipeToRemove}
-        onClose={() => setRecipeToRemove(null)}
+        onOpenChange={() => setRecipeToRemove(null)}
         onConfirm={() => {
           /* istanbul ignore next -- @preserve defensive check: dialog is only open when recipeToRemove is set */
           if (recipeToRemove) {
@@ -661,7 +661,7 @@ export default function CookbookDetail() {
         description="This recipe will be removed from this cookbook. The recipe itself won't be deleted."
         confirmLabel="Remove it"
         cancelLabel="Keep it"
-        destructive
+        tone="destructive"
       />
     </CookbookPage>
   );

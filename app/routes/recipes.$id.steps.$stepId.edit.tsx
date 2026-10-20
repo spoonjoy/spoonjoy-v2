@@ -16,7 +16,7 @@ import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useMemo, useState } from "react";
-import { ConfirmationDialog } from "~/components/confirmation-dialog";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Button } from "~/components/button";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Fieldset } from "~/components/ouro/field/fieldset";
@@ -846,9 +846,9 @@ export default function EditStep() {
         </SettingsPanel>
 
         {/* Remove ingredient confirmation dialog */}
-        <ConfirmationDialog
+        <ConfirmDialog
           open={!!ingredientToRemove}
-          onClose={() => setIngredientToRemove(null)}
+          onOpenChange={() => setIngredientToRemove(null)}
           onConfirm={() => {
             /* istanbul ignore next -- @preserve TypeScript requires null check; dialog only opens when ingredientToRemove is truthy */
             if (!ingredientToRemove) return;
@@ -862,7 +862,7 @@ export default function EditStep() {
           description="This ingredient will be removed from the step."
           confirmLabel="Remove it"
           cancelLabel="Keep it"
-          destructive
+          tone="destructive"
         />
       </div>
     </CookbookPage>
