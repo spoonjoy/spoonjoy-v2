@@ -92,6 +92,19 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
+    // `--changed` follows imports only. These files reach tests another way (setup, the database,
+    // the lockfile, TypeScript settings), so a change to any of them reruns every test.
+    forceRerunTriggers: [
+      "**/package.json/**",
+      "**/{vitest,vite}.config.*/**",
+      "pnpm-lock.yaml",
+      "tsconfig*.json",
+      "test/setup.ts",
+      "test/support/**",
+      "prisma/schema.prisma",
+      "migrations/**",
+      "scripts/test-changed.mjs",
+    ],
     exclude: [
       "**/node_modules/**",
       "**/e2e/**",

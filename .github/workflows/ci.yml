@@ -239,7 +239,8 @@ jobs:
 
   # Pull requests only, and not a required check: typecheck and the generated API contract, then
   # the unit tests affected by the files this pull request changes (vitest --changed against the
-  # base commit; a change to package.json, the lockfile or the Vitest config reruns everything).
+  # base commit; a change to package.json, the lockfile, the Vitest or TypeScript config, the test
+  # setup, the Prisma schema or a migration reruns everything: forceRerunTriggers in vitest.config.ts).
   # Full coverage runs in the merge queue before anything lands.
   unit-changed:
     name: unit-changed
