@@ -27,7 +27,7 @@ describe("dependency advisory refresh contract", () => {
       "@storybook/react-vite": "10.2.10",
       "happy-dom": "20.8.9",
       "storybook": "10.2.10",
-      "vite": "7.3.5",
+      "vite": "7.3.7",
     });
   });
 
