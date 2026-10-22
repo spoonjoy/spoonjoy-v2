@@ -133,6 +133,18 @@ const rest = async (element: HTMLElement) => {
 };
 
 describe("Reorderable", () => {
+  it("keeps each handle's edge under forced colours, which drop its fill", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      await render(list());
+      const grip = handle("Soften");
+      expect(parseFloat(getComputedStyle(grip).borderTopWidth)).toBeGreaterThan(0);
+      expect(getComputedStyle(grip).borderTopStyle).toBe("solid");
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("renders a named list of rows, each with a handle that says how to use it", async () => {
     const element = await render(list());
     expect(element.tagName).toBe("OL");

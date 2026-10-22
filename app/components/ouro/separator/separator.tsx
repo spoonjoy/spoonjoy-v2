@@ -1,7 +1,7 @@
 "use client";
 
 import { Separator as BaseSeparator } from "@base-ui/react/separator";
-import type { HTMLAttributes, JSX, Ref } from "react";
+import type { HTMLAttributes, JSX, ReactNode, Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -20,14 +20,23 @@ export interface SeparatorOwnProps {
    * two groups of content a reader should hear as separate.
    */
   decorative?: boolean | undefined;
+  /**
+   * A short word in the middle of a horizontal line, such as "or" between two ways to sign
+   * in: `<Separator label="or" />`. The label is read as text in its place, and the lines on
+   * either side are hidden from screen readers. Only for `horizontal`.
+   * @claim "A short word in the middle" registry/ouro/components/ouro/separator/separator.test.tsx verify:testExists(registry/ouro/components/ouro/separator/separator.test.tsx::Separator > puts a label in the middle of a horizontal line, read as text while the lines are hidden)
+   */
+  label?: ReactNode;
   /** Layout only: margins, width, flex sizing (`my-4`, `flex-1`). Appearance classes warn in development. */
   className?: string | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 
   /** Not a prop. Ouro UI uses `orientation`: `<Separator orientation="vertical" />`. */
   vertical?: { 'Use <Separator orientation="vertical" />': never };
-  /** Not a prop. A separator has no content; put a label beside it. */
-  children?: { 'Separator takes no children; put a <Text> between two Separators': never };
+  /** Not a prop. The text in the middle of the line is `label`: `<Separator label="or" />`. */
+  children?: { 'Use <Separator label="or" />': never };
+  /** Not a prop. The text in the middle of the line is `label`: `<Separator label="or" />`. */
+  text?: { 'Use <Separator label="or" />': never };
 }
 
 /** Props for {@link Separator}: its own props and the `<div>` attributes it passes through. */
@@ -38,10 +47,13 @@ const orientations = {
   vertical: "w-px self-stretch",
 } as const;
 
+const line = "h-px min-w-0 flex-1 shrink border-0 bg-border";
+
 /**
  * A thin line in the theme's border color between groups of content, horizontal or
  * vertical. Built on Base UI's Separator, so it is a `role="separator"` with its
- * orientation for screen readers, unless `decorative`.
+ * orientation for screen readers, unless `decorative`. With `label` it is a horizontal
+ * line with a word in its middle, such as "or" between two ways to sign in.
  *
  * Use spacing (margins or a gap) instead when whitespace alone separates the groups,
  * and a `Heading` when the next group needs a name.
@@ -56,19 +68,24 @@ const orientations = {
  *   <Separator orientation="vertical" />
  *   <Button variant="plain">Share</Button>
  * </div>
+ * <Separator label="or" className="my-6" />
+ * @claim "With `label` it is a horizontal" registry/ouro/components/ouro/separator/separator.test.tsx verify:testExists(registry/ouro/components/ouro/separator/separator.test.tsx::Separator > puts a label in the middle of a horizontal line, read as text while the lines are hidden)
  */
 export function Separator(props: SeparatorProps): JSX.Element {
   const {
     orientation: orientationProp = "horizontal",
     decorative,
+    label,
     className,
     // Guard props (hint types), dropped here so they never reach the DOM.
     vertical,
     children,
+    text,
     ...rest
   } = props;
   // An orientation that is not one of Ouro UI's (a type error) warns and renders horizontal.
   const orientation = Object.hasOwn(orientations, orientationProp) ? (orientationProp as keyof typeof orientations) : "horizontal";
+  const labelled = label != null && label !== false;
   useAppearanceClassNameCheck(
     "Separator",
     className,
@@ -85,13 +102,29 @@ export function Separator(props: SeparatorProps): JSX.Element {
             `orientation="${String(orientationProp)}" is not an orientation; use "horizontal", "vertical"`,
             /col|vert|^y$/i.test(String(orientationProp)) ? '<Separator orientation="vertical" />' : '<Separator orientation="horizontal" />',
           ],
-          children !== undefined && [
-            "Separator takes no children",
-            '<div className="flex items-center gap-3"><Separator className="flex-1" /><Text>or</Text><Separator className="flex-1" /></div>',
-          ],
+          children !== undefined && ["Separator takes no children; its text is label", `<Separator label="${typeof children === "string" ? children : "or"}" />`],
+          text !== undefined && ["text is not a prop", `<Separator label="${typeof text === "string" ? text : "or"}" />`],
+          labelled && orientation === "vertical" && ["label works on a horizontal line only, so the line renders horizontal", `<Separator label="or" />`],
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
+  if (labelled) {
+    // The text reads in its place; the two lines only decorate it.
+    return (
+      <div
+        {...rest}
+        data-ouro="separator"
+        data-orientation="horizontal"
+        className={cn("flex w-full min-w-0 items-center gap-3", className)}
+      >
+        <BaseSeparator role="none" aria-orientation={undefined} data-slot="separator-line" className={line} />
+        <span data-slot="separator-label" className="max-w-full shrink-0 text-center text-sm leading-5 text-muted-foreground">
+          {label}
+        </span>
+        <BaseSeparator role="none" aria-orientation={undefined} data-slot="separator-line" className={line} />
+      </div>
+    );
+  }
   return (
     <BaseSeparator
       {...rest}

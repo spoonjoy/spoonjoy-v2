@@ -9,13 +9,18 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
 /** Props for {@link Inspector}. */
 export interface InspectorProps {
-  /** Whether X-ray is on: outlines over every Ouro component, and the bar with the list. Pair it with `onOpenChange`. */
+  /**
+   * Whether X-ray is on: outlines over every Ouro component, and the bar with the list. Pair it with `onOpenChange`.
+   *
+   * @claim "Whether X-ray is on: outlines over" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines every Ouro component on the page, each tagged with its item and linked to its docs)
+   */
   open: boolean;
   /** Called with `false` when the person closes X-ray (its Close button, or Escape). */
   onOpenChange: (open: boolean) => void;
   /**
    * The address of an item's docs page, from its registry name, where each tag and the list link.
    * Without it they link to Ouro's public docs, `https://ourostack.github.io/ouro-ui/docs/<item>/`.
+   * @claim "The address of an item's docs" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines every Ouro component on the page, each tagged with its item and linked to its docs)
    */
   docsHref?: ((item: string) => string) | undefined;
   /** The address of the source that renders a component, if you publish it: the list shows a Source link where this returns one. */
@@ -68,6 +73,8 @@ const modalOpen = (own: Element) =>
 /**
  * Every visible Ouro component root in the page, in document order, but X-ray's own, one behind an
  * open dialog, and a part's root inside its own component (a Radio in its RadioGroup counts once).
+ * @claim "Every visible Ouro component root in" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines every Ouro component on the page, each tagged with its item and linked to its docs)
+ * @claim "Every visible Ouro component root in" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > does not outline itself, an overlay's wrappers, a hidden component or a part apart from its component)
  */
 function findComponents(own: Element, modal: boolean): Found[] {
   const found: Found[] = [];
@@ -93,7 +100,11 @@ interface Edges {
   left: number;
 }
 
-/** What X-ray reads once an update from a component or an ancestor: its position and direction, and the edges it clips its overflow to on each axis. */
+/**
+ * What X-ray reads once an update from a component or an ancestor: its position and direction, and the edges it clips its overflow to on each axis.
+ *
+ * @claim "What X-ray reads once an update" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > clips by each box a component's overflow belongs to, from the start edge on either axis)
+ */
 interface Ancestor {
   position: string;
   rtl: boolean;
@@ -125,6 +136,10 @@ const readAncestor = (element: Element, cache: Map<Element, Ancestor>): Ancestor
  * containing blocks that clips its overflow (a scrolling list, a card that hides its overflow).
  * A positioned box escapes the overflow of the ancestors between it and its containing block, and a
  * fixed one all of them.
+ * @claim "The part of a component's box" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
+ * @claim "The part of a component's box" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > clips by each box a component's overflow belongs to, from the start edge on either axis)
+ * @claim "The part of a component's box" https://www.w3.org/TR/CSS2/visufx.html#overflow verify:urlOk(https://www.w3.org/TR/CSS2/visufx.html#overflow)
+ * @claim "A positioned box escapes the overflow" https://www.w3.org/TR/CSS2/visufx.html#overflow verify:urlOk(https://www.w3.org/TR/CSS2/visufx.html#overflow)
  */
 function visiblePart(element: Element, box: DOMRect, cache: Map<Element, Ancestor>): Edges {
   const part = { top: box.top, right: box.right, bottom: box.bottom, left: box.left };
@@ -216,6 +231,10 @@ const ouroDocs = (item: string) => `https://ourostack.github.io/ouro-ui/docs/${i
  * <Switch label="X-ray" checked={xray} onCheckedChange={setXray} />
  * <Inspector open={xray} onOpenChange={setXray} />
  * <Inspector open={xray} onOpenChange={setXray} sourceHref={(item) => sourceOf(item)} />
+ * @claim "X-ray for a page built with" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines every Ouro component on the page, each tagged with its item and linked to its docs)
+ * @claim "Each tag names the component's registry" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > lists every component in document order in its sheet, with docs and source links)
+ * @claim "Outlines follow their components through scrolling" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > follows its components as the page scrolls and resizes)
+ * @claim "Outlines follow their components through scrolling" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > lets a click through an outline reach the control underneath, and only the tags take a pointer)
  */
 export function Inspector(props: InspectorProps): JSX.Element | null {
   const {
@@ -261,6 +280,8 @@ function InspectorLayer({ onOpenChange, docsHref, sourceHref, label }: Pick<Insp
    * Puts each outline over its component, cut to the part of it that shows: every box read first,
    * then every outline written, so the page lays out once. An outline with nothing showing hides,
    * and so does its tag.
+   * @claim "Puts each outline over its component" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
+   * @claim "Puts each outline over its component" registry/ouro/components/ouro/inspector/inspector.tsx verify:fileLine(registry/ouro/components/ouro/inspector/inspector.tsx, /const\sboxes\s=\scomponents\.map\(\(component\)\s=>\scomponent\.element\.getBoundingClientRect\(\)\)/)
    */
   const place = (components: Found[]) => {
     const own = layer.current!;

@@ -22,7 +22,13 @@ export interface KbdOwnProps {
   className?: string | undefined;
   ref?: Ref<HTMLElement> | undefined;
 
-  /** Not a prop. Kbd takes `keys`, so each platform gets the right glyphs: `<Kbd keys={["mod", "k"]} />`. */
+  /**
+   * Not a prop. Kbd takes `keys`, so each platform gets the right glyphs: `<Kbd keys={["mod", "k"]} />`.
+   *
+   * @claim "Kbd takes `keys`, so each platform" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > names Apple glyphs for screen readers)
+   * @claim "Kbd takes `keys`, so each platform" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd)
+   * @claim "Kbd takes `keys`, so each platform" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > puts other modifiers in Win, Ctrl, Alt, Shift order, before the key)
+   */
   children?: { 'Use <Kbd keys={["mod", "k"]} />': never };
   /** Not a prop. Ouro UI uses `keys`, an array: `<Kbd keys={["mod", "k"]} />`. */
   shortcut?: { 'Use <Kbd keys={["mod", "k"]} />': never };
@@ -36,6 +42,9 @@ type Platform = "apple" | "windows" | "other" | "unknown";
 /**
  * Each named key as `[Apple glyph, Apple name, other label, other name]`. A name is
  * given where the visible label is a symbol, for screen readers.
+ * @claim "Each named key as `[Apple glyph" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > names Apple glyphs for screen readers)
+ * @claim "Each named key as `[Apple glyph" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > puts Apple modifiers in Apple's order, Control, Option, Shift, Command, before the key)
+ * @claim "Each named key as `[Apple glyph" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > puts other modifiers in Win, Ctrl, Alt, Shift order, before the key)
  */
 const named: Readonly<Record<string, readonly [string, string, string, string?]>> = {
   mod: ["⌘", "Command", "Ctrl"],
@@ -84,6 +93,8 @@ function detectPlatform(): Platform {
  * Where each modifier goes, so a shortcut reads as the platform writes it: Apple's menus
  * use Control, Option, Shift, Command (⌃⌥⇧⌘); elsewhere it is Win, Ctrl, Alt, Shift. Other
  * keys follow the modifiers in the order given.
+ * @claim "Where each modifier goes, so a" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > puts Apple modifiers in Apple's order, Control, Option, Shift, Command, before the key)
+ * @claim "Where each modifier goes, so a" registry/ouro/components/ouro/kbd/kbd.test.tsx verify:testExists(registry/ouro/components/ouro/kbd/kbd.test.tsx::Kbd > puts other modifiers in Win, Ctrl, Alt, Shift order, before the key)
  */
 const appleOrder: Readonly<Record<string, number>> = { ctrl: 0, alt: 1, shift: 2, mod: 3, cmd: 3 };
 const otherOrder: Readonly<Record<string, number>> = { cmd: 0, mod: 1, ctrl: 1, alt: 2, shift: 3 };

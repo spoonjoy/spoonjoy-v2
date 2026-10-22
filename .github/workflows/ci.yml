@@ -216,10 +216,17 @@ jobs:
         run: pnpm run verify:clean:generated-contract
 
       # Hand-rolled controls in app code may only fall: the scan must equal
-      # test/scripts/hx-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
+      # ouro-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
       - name: 🧭 HX source rule
         if: github.event_name != 'pull_request'
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules
+
+      # Each factual sentence on Spoonjoy's surfaces (claims.config.json) carries its primary
+      # source and a check that still holds, checked with HX's lib-claims checker (AGENTS.md,
+      # "Claims").
+      - name: 🧾 Claims
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run claims:check
 
       - name: 🧪 Test & Coverage
         if: github.event_name != 'pull_request'
@@ -239,7 +246,8 @@ jobs:
 
   # Pull requests only, and not a required check: typecheck and the generated API contract, then
   # the unit tests affected by the files this pull request changes (vitest --changed against the
-  # base commit; a change to package.json, the lockfile or the Vitest config reruns everything).
+  # base commit; a change to package.json, the lockfile, the Vitest or TypeScript config, the test
+  # setup, the Prisma schema or a migration reruns everything: forceRerunTriggers in vitest.config.ts).
   # Full coverage runs in the merge queue before anything lands.
   unit-changed:
     name: unit-changed
@@ -294,11 +302,16 @@ jobs:
       - name: 📥 Fetch the pull request's base commit
         run: node scripts/warning-gate.ts -- git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"
 
-      # Runs on every pull request (`vitest --changed` skips the rule's own test when only app code
-      # changes) and ratchets: no fingerprint may rise against the base commit's baseline unless
+      # Runs on every pull request and ratchets: no fingerprint may rise against the base commit's baseline unless
       # the new baseline records why under allowedRegressions.
       - name: 🧭 HX source rule
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules --base "$(git rev-parse HEAD^1)"
+
+      # The claims ratchet against the base commit (an exemption claims.config.json adds needs a
+      # reason and a mention in the description), the title and body, and every claim, with the
+      # addresses this pull request adds fetched again (scripts/claims-pr.mjs).
+      - name: 🧾 Claims in this pull request
+        run: node scripts/warning-gate.ts -- pnpm run claims:pr
 
       # The base is the merge commit's first parent, which is exactly what this pull request is
       # merged onto, so the affected tests are always computed from history the checkout has.

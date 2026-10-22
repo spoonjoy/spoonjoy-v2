@@ -7,6 +7,7 @@ export { frameClass, isPartOf, itemFor, layerClass, linkClass, listClass, outlin
  * The root names (`data-ouro`) that are not their registry item's name, by the item they belong
  * to. Roots that only position or hold an overlay (`-portal`, `-positioner`, `-backdrop`,
  * `-viewport`) are no component of their own and get no outline.
+ * @claim "Roots that only position or hold" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > does not outline itself, an overlay's wrappers, a hidden component or a part apart from its component)
  */
 const aliases: Readonly<Record<string, string>> = {
   "avatar-group": "avatar",
@@ -36,8 +37,8 @@ function itemFor(name: string): string | null {
 /**
  * Whether a root is a part of the component around it rather than a component of its own: its name
  * is a part's (`radio`, `resizable-panel`, `form-message`) and the nearest root around it belongs
- * to the same item (a Radio in its RadioGroup). A part with no such root around it, like a popup in
- * a portal, still counts.
+ * to the same item (a Radio in its RadioGroup). A part outside its component's root, like a popup in
+ * a portal, counts as a component.
  *
  * @internal
  */
@@ -51,13 +52,21 @@ function isPartOf(name: string, around: Element | null | undefined): boolean {
  * while its own list is open, so the list's sheet is never under an outline.
  *
  * @internal
+ * @claim "The layer over the page: it" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > lets a click through an outline reach the control underneath, and only the tags take a pointer)
+ * @claim "The layer over the page: it" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > fades in when it opens, and appears at once with reduced motion)
+ * @claim "The layer over the page: it" registry/ouro/components/ouro/inspector/inspector-styles.ts verify:fileLine(registry/ouro/components/ouro/inspector/inspector-styles.ts, /"pointer-events-none\sfixed\sinset-0\sz-\[calc\(var\(--ouro-layer\)\+1\)\]/)
  */
 const layerClass =
   "pointer-events-none fixed inset-0 z-[calc(var(--ouro-layer)+1)] opacity-100 " +
   "motion-safe:[transition:opacity_var(--ouro-duration-base)_var(--ouro-ease-out)] starting:data-starting-style:opacity-0 " +
   "[body:has([data-ouro-inspector-list])_&]:invisible";
 
-/** One outline: placed by `transform` from its component's box, and hidden, tag and all, while nothing of it shows. @internal */
+/**
+ * One outline: placed by `transform` from its component's box, and hidden, tag and all, while nothing of it shows. @internal
+ *
+ * @claim "One outline: placed by `transform` from" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
+ * @claim "One outline: placed by `transform` from" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > does not outline itself, an overlay's wrappers, a hidden component or a part apart from its component)
+ */
 const outlineClass = "absolute top-0 left-0 will-change-transform data-clipped:invisible";
 
 /** An outline's frame in the primary color, cut (`clip-path`) to the part of its component that shows. @internal */
@@ -71,6 +80,8 @@ const frameClass =
  * something else (a menu, a select list) lies over it or its corner.
  *
  * @internal
+ * @claim "It hides, and takes no pointer" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the tag of a component an open select list covers, and leaves its options within reach)
+ * @claim "It hides, and takes no pointer" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides a tag an overlay lies over though its component shows)
  */
 const tagClass =
   "pointer-events-auto absolute start-0 bottom-full z-1 inline-flex max-w-48 items-center truncate rounded-t-sm rounded-e-sm px-1.5 " +

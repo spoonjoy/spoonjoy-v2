@@ -43,7 +43,11 @@ export interface TextOwnProps {
   ref?: Ref<HTMLElement> | undefined;
   /** Not a prop. Ouro UI uses `tone`: `<Text tone="muted">`. */
   color?: { 'Use <Text tone="muted">': never };
-  /** Not a prop. Text has no variants; use `size` and `tone`: `<Text size="sm" tone="muted">`. */
+  /**
+   * Not a prop. Text has no variants; use `size` and `tone`: `<Text size="sm" tone="muted">`.
+   *
+   * @claim "Text has no variants; use `size`" registry/ouro/components/ouro/text/text.test.tsx verify:testExists(registry/ouro/components/ouro/text/text.test.tsx::runtime guards > strips variant from Text and warns with the fix)
+   */
   variant?: { 'Use <Text size="sm" tone="muted">': never };
 }
 
@@ -51,6 +55,8 @@ export interface TextOwnProps {
  * Props for {@link Text}. `truncate` (one line) and `lines` (many) are exclusive. The
  * HTML attributes sit outside the `truncate`/`lines` union, which keeps the editor's
  * hover docs on every prop.
+ * @claim "The HTML attributes sit outside the" registry/ouro/components/ouro/text/text.test.tsx verify:testExists(registry/ouro/components/ouro/text/text.test.tsx::Text > passes HTML attributes and a ref through)
+ * @claim "The HTML attributes sit outside the" registry/ouro/components/ouro/text/text.tsx verify:fileLine(registry/ouro/components/ouro/text/text.tsx, /^export\stype\sTextProps\s=\sOmit</)
  */
 export type TextProps = Omit<
   HTMLAttributes<HTMLElement>,

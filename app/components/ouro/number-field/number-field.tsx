@@ -17,6 +17,7 @@ export interface NumberFieldProps {
    * What the number is, shown above the field and read as its name. Required: every control
    * needs a name. To hide it visually, keep it and add `hideLabel`. Drag it sideways with a
    * mouse to change the value.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/number-field/number-field.test-d.ts verify:fileLine(registry/ouro/components/ouro/number-field/number-field.test-d.ts, /expectTypeOf<\{\sdefaultValue:\s4\s\}>\(\)\.not\.toExtend<NumberFieldProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the field's name. */
@@ -42,15 +43,27 @@ export interface NumberFieldProps {
   defaultValue?: number | null | undefined;
   /** Called with the new number as it changes, or `null` when the field is emptied. */
   onValueChange?: ((value: number | null) => void) | undefined;
-  /** Called when the value settles: on blur after typing, when a stepper or scrub is released, and with each key press. Use it to save. */
+  /**
+   * Called when the value settles: on blur after typing, when a stepper or scrub is released, and with each key press. Use it to save.
+   *
+   * @claim "Called when the value settles: on" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.test.tsx::NumberField > steps by step with the arrow keys and parses typed text on blur)
+   * @claim "Called when the value settles: on" https://base-ui.com/react/components/number-field verify:urlOk(https://base-ui.com/react/components/number-field)
+   */
   onValueCommitted?: ((value: number | null) => void) | undefined;
   /**
    * The lowest value; the steppers stop there. A minimum of 0 or more also gives phones a
    * number keypad: iOS's keypads have no minus key, so a field that takes negatives (no
    * `min`, or a negative one) gets the full keyboard.
+   * @claim "A minimum of 0 or more" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.test.tsx::NumberField > steps with its buttons, within min and max)
+   * @claim "A minimum of 0 or more" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.test.tsx, /\["integers\sfrom\s1",\s\{\smin:\s1\s\},\s"numeric"\]/)
+   * @claim "The lowest value; the steppers stop" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.test.tsx::NumberField > steps with its buttons, within min and max)
    */
   min?: number | undefined;
-  /** The highest value; the steppers stop there. */
+  /**
+   * The highest value; the steppers stop there.
+   *
+   * @claim "The highest value; the steppers stop" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.test.tsx::NumberField > steps with its buttons, within min and max)
+   */
   max?: number | undefined;
   /** The amount the steppers, the arrow keys and a scrub change the value by. @default 1 */
   step?: number | undefined;
@@ -112,11 +125,21 @@ export interface NumberFieldProps {
   precision?: { 'Use <NumberField format={{ maximumFractionDigits: 2 }}>': never };
   /** Not a prop. Currency is a format option: `<NumberField format={{ style: "currency", currency: "USD" }}>`. */
   currency?: { 'Use <NumberField format={{ style: "currency", currency: "USD" }}>': never };
-  /** Not a prop. NumberField is always a number field; for text use `TextField`. */
+  /**
+   * Not a prop. NumberField is always a number field; for text use `TextField`.
+   *
+   * @claim "NumberField is always a number field" registry/ouro/components/ouro/number-field/number-field.test-d.ts verify:fileLine(registry/ouro/components/ouro/number-field/number-field.test-d.ts, /^type\sGuess\s=/)
+   * @claim "NumberField is always a number field" registry/ouro/components/ouro/number-field/number-field.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.tsx, /type\?:\s\{\s'NumberField\sis\salways\sa\snumber;\sfor\stext\suse\s<TextField>':\snever\s\};/)
+   */
   type?: { 'NumberField is always a number; for text use <TextField>': never };
 }
 
-/** Icons drawn in the text color at 16px, like the other Ouro icons. */
+/**
+ * Icons drawn in the text color at 16px, like the other Ouro icons.
+ *
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/number-field/number-field.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.tsx, /viewBox="0\s0\s16\s16"/)
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/number-field/number-field.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.tsx, /stroke="currentColor"/)
+ */
 /** Marks the hidden input Base UI submits the number with. */
 const markInput = controlRef("number-field", "hidden-input");
 
@@ -149,6 +172,8 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  * @example
  * <NumberField label="Servings" name="servings" defaultValue={4} min={1} max={24} />
  * <NumberField label="Price" name="price" min={0} format={{ style: "currency", currency: "USD" }} step={0.5} />
+ * @claim "The steppers take taps over 44px" registry/ouro/components/ouro/number-field/number-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.touch.test.tsx::is 44px tall with 16px text, and its steppers have a 44px hit area, also on a landscape phone)
+ * @claim "It picks the phone keyboard itself" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.test.tsx, /\["half\ssteps\sfrom\s0",\s\{\smin:\s0,\sstep:\s0\.5\s\},\s"decimal"\]/)
  */
 export function NumberField(props: NumberFieldProps): JSX.Element {
   const {
@@ -286,6 +311,8 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
  * The phone keyboard for the field: `decimal` for fractions and `numeric` for whole numbers
  * when nothing below 0 is allowed, and `text` otherwise, since iOS's number keypads have no
  * minus key. Base UI's own choice depends on the platform, so the field sets it.
+ * @claim "The phone keyboard for the field" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.test.tsx, /\["half\ssteps\sfrom\s0",\s\{\smin:\s0,\sstep:\s0\.5\s\},\s"decimal"\]/)
+ * @claim "The phone keyboard for the field" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:fileLine(registry/ouro/components/ouro/number-field/number-field.test.tsx, /\["integers\sfrom\s1",\s\{\smin:\s1\s\},\s"numeric"\]/)
  */
 function phoneKeyboard(
   min: number | undefined,

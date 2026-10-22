@@ -74,6 +74,45 @@ describe("Separator", () => {
     expect(separator.hasAttribute("aria-orientation")).toBe(false);
   });
 
+  it("puts a label in the middle of a horizontal line, read as text while the lines are hidden", async () => {
+    const { separator } = await render(
+      <div style={{ width: 300 }}>
+        <Separator label="or" className="my-4" data-testid="divider" />
+      </div>,
+    );
+    expect(separator.getAttribute("data-testid")).toBe("divider");
+    expect(separator.hasAttribute("role")).toBe(false);
+    expect(separator.textContent).toBe("or");
+    expect(getComputedStyle(separator).marginTop).toBe("16px");
+    const lines = [...separator.querySelectorAll<HTMLElement>('[data-slot="separator-line"]')];
+    expect(lines).toHaveLength(2);
+    const text = separator.querySelector<HTMLElement>('[data-slot="separator-label"]')!.getBoundingClientRect();
+    for (const element of lines) {
+      expect(element.getAttribute("role")).toBe("none");
+      expect(element.hasAttribute("aria-orientation")).toBe(false);
+      const rect = element.getBoundingClientRect();
+      expect(rect.height).toBe(1);
+      expect(rect.width).toBeGreaterThan(100);
+      expect(Math.abs(rect.top + rect.height / 2 - (text.top + text.height / 2))).toBeLessThanOrEqual(1);
+    }
+    expect(Math.round(lines[0]!.getBoundingClientRect().width)).toBe(Math.round(lines[1]!.getBoundingClientRect().width));
+    const probe = document.createElement("span");
+    probe.style.color = "var(--muted-foreground)";
+    document.body.append(probe);
+    mounted.push(probe);
+    expect(getComputedStyle(separator.querySelector('[data-slot="separator-label"]')!).color).toBe(getComputedStyle(probe).color);
+  });
+
+  it("is a plain separator when the label is false or null", async () => {
+    const { host } = await render(
+      <>
+        <Separator label={false} />
+        <Separator label={null} />
+      </>,
+    );
+    for (const element of host.querySelectorAll('[data-ouro="separator"]')) expect(element.getAttribute("role")).toBe("separator");
+  });
+
   it("forwards a ref and lets app layout classes win", async () => {
     let element: HTMLDivElement | null = null;
     const { separator } = await render(<Separator className="my-4" ref={(node) => void (element = node)} />);
@@ -87,13 +126,24 @@ describe("Separator development messages", () => {
     ["vertical", { vertical: true }, "vertical is not a prop", '<Separator orientation="vertical" />'],
     ["orientation", { orientation: "column" }, 'orientation="column" is not an orientation; use "horizontal", "vertical"', '<Separator orientation="vertical" />'],
     ["orientation", { orientation: "row" }, 'orientation="row" is not an orientation; use "horizontal", "vertical"', '<Separator orientation="horizontal" />'],
-    ["children", { children: "or" }, "Separator takes no children", '<div className="flex items-center gap-3"><Separator className="flex-1" /><Text>or</Text><Separator className="flex-1" /></div>'],
+    ["children", { children: "and" }, "Separator takes no children; its text is label", '<Separator label="and" />'],
+    ["children", { children: 3 }, "Separator takes no children; its text is label", '<Separator label="or" />'],
+    ["text", { text: "and" }, "text is not a prop", '<Separator label="and" />'],
+    ["text", { text: true }, "text is not a prop", '<Separator label="or" />'],
   ])("warns for %s with the fix", async (_name, extra, problem, fix) => {
     const props = { ...extra } as unknown as Parameters<typeof Separator>[0];
     const { separator } = await render(<Separator {...props} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Separator: ${problem}. Fix: ${fix}.`);
     expect(separator.hasAttribute("vertical")).toBe(false);
+    expect(separator.hasAttribute("text")).toBe(false);
     expect(separator.textContent).toBe("");
+  });
+
+  it("draws a labelled line horizontal when it is asked to be vertical, and says so", async () => {
+    const { separator } = await render(<Separator orientation="vertical" label="or" />);
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Separator: label works on a horizontal line only, so the line renders horizontal. Fix: <Separator label="or" />.');
+    expect(separator.getAttribute("data-orientation")).toBe("horizontal");
+    expect(separator.textContent).toBe("or");
   });
 
   it("renders horizontal for an unknown orientation", async () => {

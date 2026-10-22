@@ -29,6 +29,8 @@ const stretchedLinkClass =
  * @internal
  * @example
  * <tr data-linked="" className={cn("relative isolate", raiseControlsClass)}>…</tr>
+ * @claim "The class for a linked root" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card with href > keeps the action and footer controls on top, as their own tab stops)
+ * @claim "The selector is inside `:where()`, with" registry/ouro/lib/ouro/stretched-link.ts verify:fileLine(registry/ouro/lib/ouro/stretched-link.ts, /:where\(/)
  */
 const raiseControlsClass =
   "[:where(&_:is(a,button,input,select,textarea,label,summary,[tabindex]:not([tabindex='-1']),[role=button],[data-linked]):not([data-stretched-link]))]:relative " +

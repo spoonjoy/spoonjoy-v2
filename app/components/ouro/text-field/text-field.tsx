@@ -32,6 +32,7 @@ export interface TextFieldOwnProps {
   /**
    * What the field is for, shown above it and read as its name. Required: every control
    * needs a name. To hide it visually, keep it and add `hideLabel`. A placeholder is not a label.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/text-field/text-field.test-d.ts verify:fileLine(registry/ouro/components/ouro/text-field/text-field.test-d.ts, /expectTypeOf<\{\stype:\s"email"\s\}>\(\)\.not\.toExtend<TextFieldProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the field's name. */
@@ -58,6 +59,10 @@ export interface TextFieldOwnProps {
    * time (there is no `datetime-local`), and `FileField` for files. Any other string is a type
    * error whose message names them.
    * @default "text"
+   * @claim "Each type sets the phone keyboard" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField > lets the app's inputMode and autoComplete win over the type's defaults)
+   * @claim "Each type sets the phone keyboard" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > turns off capitalization and spell check for email and url)
+   * @claim "Other kinds of value have their" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > renders a text input with a decimal keyboard and points to NumberField for type=number)
+   * @claim "Other kinds of value have their" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:fileLine(registry/ouro/components/ouro/text-field/text-field.test.tsx, /\["datetime-local",\s"has\sno\sdate-and-time\sfield/)
    */
   type?:
     | "text"
@@ -76,6 +81,8 @@ export interface TextFieldOwnProps {
    * a button beside the input); it keeps the focus outline, and the error message still shows
    * under it, but with no border to turn red, color your own frame for an invalid field.
    * Any other string is a type error whose message names the fix. @default "outline"
+   * @claim "`plain` draws no border, background or" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > draws no frame of its own with variant plain, and still outlines on keyboard focus)
+   * @claim "`plain` draws no border, background or" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > keeps a plain field's buttons inside its box)
    */
   variant?: "outline" | "plain" | (string & { 'default is "outline"; ghost, unstyled and borderless are "plain"': never }) | undefined;
   /**
@@ -84,6 +91,10 @@ export interface TextFieldOwnProps {
    * text at every width, for a page's main search. The font family is inherited, so set a
    * display font on a parent. It replaces the input's own `size` attribute (a width in
    * characters); set the width with `className`. @default "md"
+   * @claim "`md` is 44px tall with 16px" registry/ouro/components/ouro/text-field/text-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.touch.test.tsx::keeps 16px text and a 44px box on a landscape phone, past the sm breakpoint)
+   * @claim "`lg` is 56px tall (48px on" registry/ouro/components/ouro/text-field/text-area.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-area.test.tsx::TextArea variant and size > sets 20px text on 28px lines with size lg, at phone and desktop widths)
+   * @claim "`md` is 44px tall with 16px" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField looks > uses a 16px font on phones, so iOS does not zoom on focus, and a 44px box)
+   * @claim "`lg` is 56px tall (48px on" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sets 20px text in a taller box with size lg, at phone and desktop widths)
    */
   size?: "md" | "lg" | (string & { 'default is "md"; "lg" is 20px text. For a width, use className="w-40"': never }) | undefined;
   /**
@@ -165,7 +176,12 @@ const isText = (node: ReactNode): node is string | number => typeof node === "st
 /** The value prop as text, to know whether there is something to clear. */
 const textOf = (value: unknown): string => (value === undefined || value === null ? "" : String(value));
 
-/** Icons drawn in the text color at 16px, like the other Ouro icons. */
+/**
+ * Icons drawn in the text color at 16px, like the other Ouro icons.
+ *
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/text-field/text-field.tsx verify:fileLine(registry/ouro/components/ouro/text-field/text-field.tsx, /viewBox="0\s0\s16\s16"/)
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/text-field/text-field.tsx verify:fileLine(registry/ouro/components/ouro/text-field/text-field.tsx, /stroke="currentColor"/)
+ */
 function Icon({ children }: { children: ReactNode }): JSX.Element {
   return (
     <svg
@@ -223,6 +239,10 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  *   <TextField label="Search recipes" hideLabel type="search" name="q" placeholder="tomato, beans, lemon" variant="plain" size="lg" className="flex-1" />
  *   <Button type="submit">Search</Button>
  * </form>
+ * @claim "` sets 20px text: together they put the" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sits inside the app's own bordered row: the row draws the one frame)
+ * @claim "` sets 20px text: together they put the" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField variant and size > sets 20px text in a taller box with size lg, at phone and desktop widths)
+ * @claim "Not here, because each has its" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:testExists(registry/ouro/components/ouro/text-field/text-field.test.tsx::TextField types > renders a text input and lists the types for any other type)
+ * @claim "A date and time together: there" registry/ouro/components/ouro/text-field/text-field.test.tsx verify:fileLine(registry/ouro/components/ouro/text-field/text-field.test.tsx, /\["datetime-local",\s"has\sno\sdate-and-time\sfield/)
  */
 export function TextField(props: TextFieldProps): JSX.Element {
   const {

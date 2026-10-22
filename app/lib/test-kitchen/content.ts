@@ -22,7 +22,7 @@ const output = (n: number, from: number) => `${RECIPE_ID}-output-${n}-from-${fro
  */
 export const TEST_KITCHEN: TestKitchenRecipe = {
   servings: "Serves 2",
-  description: "Roasted chickpeas, a bright yogurt and a squeeze of lemon: a weeknight bowl in three steps.",
+  description: "Roasted chickpeas, a bright yogurt and a squeeze of lemon: a quick weeknight bowl.",
   cover: {
     src: "/test-kitchen/crispy-chickpeas.webp",
     alt: "A shallow bowl of golden roasted chickpeas on herby yogurt, with lemon wedges and dill",

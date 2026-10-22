@@ -2,7 +2,9 @@
 // Runs the unit tests a pull request's changes affect: Vitest's --changed against the pull
 // request's base commit (SPOONJOY_CHANGED_SINCE). A change to package.json or the Vitest or Vite
 // config makes Vitest select every test. When no test is affected it says so and passes, because
-// Vitest's own "No test files found" goes to stderr, which the warning gate rightly rejects.
+// Vitest's own "No test files found" goes to stderr, which the warning gate rightly rejects. The
+// affected tests run in parallel, one SQLite test database per worker process, as the full coverage
+// run does (vitest.config.ts, test/support/worker-db.ts).
 import { spawnSync } from "node:child_process";
 import { readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +43,7 @@ export function testChanged({
     return 0;
   }
   log(`${files.length} test file(s) are affected by the changes since ${base}.`);
-  return run("pnpm", ["exec", "vitest", "run", "--changed", base, "--fileParallelism=false"]);
+  return run("pnpm", ["exec", "vitest", "run", "--changed", base]);
 }
 
 /* istanbul ignore if -- @preserve CLI boundary delegates to the tested testChanged above. */

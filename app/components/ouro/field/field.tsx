@@ -21,11 +21,14 @@ import { fieldHint, inlineRootClass, labelFrameClass, requiredMarkClass, rootCla
 /**
  * The props every Ouro form control takes, with these exact names: a required `label`,
  * `description`, `error`, `required`, `disabled` and `name`.
+ * @claim "The props every Ouro form control" test/field-contract.test.tsx verify:testExists(test/field-contract.test.tsx::%s with display-only errors > shows its own error prop, marks the control, and resubmits unchanged)
+ * @claim "The props every Ouro form control" registry/ouro/components/ouro/field/field.test-d.ts verify:fileLine(registry/ouro/components/ouro/field/field.test-d.ts, /expectTypeOf<\{\schildren:\snull\s\}>\(\)\.not\.toExtend<FieldProps>/)
  */
 export interface FieldProps {
   /**
    * What the control is for, shown above it and read as its name. Required: every control
    * needs a name. To hide it visually, keep it and add `hideLabel`.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/field/field.test-d.ts verify:fileLine(registry/ouro/components/ouro/field/field.test-d.ts, /expectTypeOf<\{\schildren:\snull\s\}>\(\)\.not\.toExtend<FieldProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the control's name. */
@@ -39,6 +42,9 @@ export interface FieldProps {
    * it can carry a link: `error={<>Already imported. <Link href="/recipes/soup">Open it</Link></>}`.
    * An empty string or array means valid. It only
    * shows: it never blocks the next submit of the form around it.
+   * @claim "A message (or several, as an" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > shows every message of an error array as a list)
+   * @claim "A message (or several, as an" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > shows an error that is a React node, such as a message with a link, and describes the control with it)
+   * @claim "It only shows: it never blocks" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form errors are display-only (review fix round 1, finding 1) > resubmits a TextField after a server error, with the field unchanged)
    */
   error?: ReadonlyErrorMessages | undefined;
   /** The control must be filled: it gets `required` and `aria-required`, and the label a marker. */
@@ -48,6 +54,7 @@ export interface FieldProps {
   /**
    * The form field name the control submits under. A `Form`'s `errors` for this name show
    * here when there is no `error` prop, and go away once the user changes the control.
+   * @claim "A `Form`'s `errors` for this name" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > shows a Base UI Form error for its name without an error prop)
    */
   name?: string | undefined;
   /** The control: `<FieldControl />`, or `<FieldControl render={<textarea />} />` for another element. */
@@ -117,8 +124,8 @@ function labelConnected(root: HTMLElement, data: string, labelId: string, native
  * The order is fixed: label, `description`, control, error. To put helper text after the
  * control, leave `description` out and render a `FieldDescription` after the `FieldControl`.
  * It is linked to the control (`aria-describedby`) wherever it sits, and the error still
- * comes last. `TextField` and the other one-tag controls take no children, so build that
- * field from `Field` and `FieldControl`.
+ * comes last. `TextField` and the other one-tag controls render their own control, so
+ * build that field from `Field` and `FieldControl`.
  *
  * The required marker is drawn with CSS beside the label and is not part of its text, so a
  * test finds the field by the label alone: `getByLabelText("Email")`, or Playwright's
@@ -143,6 +150,9 @@ function labelConnected(root: HTMLElement, data: string, labelId: string, native
  *   <FieldControl type="password" autoComplete="new-password" />
  *   <FieldDescription>Use 8 or more characters.</FieldDescription>
  * </Field>
+ * @claim "The error only shows: it never" test/field-contract.test.tsx verify:testExists(test/field-contract.test.tsx::%s with display-only errors > shows its own error prop, marks the control, and resubmits unchanged)
+ * @claim "Inside a `Form`, a field with" test/field-contract.test.tsx verify:testExists(test/field-contract.test.tsx::%s with display-only errors > shows its own error prop, marks the control, and resubmits unchanged)
+ * @claim "Every Ouro form control takes these" test/field-contract.test.tsx verify:fileLine(test/field-contract.test.tsx, /const\scontrols:\s\[string,/)
  */
 export function Field(props: FieldProps): JSX.Element {
   const {
