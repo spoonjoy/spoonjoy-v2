@@ -35,6 +35,8 @@
     "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::type=password,aria-label=Bearer token": 1,
     "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::type=text": 1,
     "app/routes/developers.playground.tsx::DeveloperPlayground::raw-textarea::textarea::aria-label={bodyLabel}": 1,
+    "app/routes/mcp.tsx::McpPage::control-state-style::a::": 1,
+    "app/routes/mcp.tsx::McpPage::raw-anchor::a::": 1,
     "app/routes/recipes.$id.edit.tsx::EditRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
     "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipeHeader#RecipeHeader::": 1,
     "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
