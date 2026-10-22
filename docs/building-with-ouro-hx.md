@@ -15,7 +15,7 @@ The short version:
 HX ships through a shadcn registry, but it isn't a shadcn add-on. The registry is just how the files get to you. Each item installs as plain source under `app/components/ouro/` and `app/lib/ouro/`:
 
 ```sh
-npx shadcn@4.21.1 add ourostack/ouro-ui/checklist#v1.1.0 ourostack/ouro-ui/number-field#v1.1.0
+npx shadcn@4.21.1 add ourostack/ouro-ui/checklist#v1.2.0 ourostack/ouro-ui/number-field#v1.2.0
 ```
 
 - **Pin the tag.** Spoonjoy installs from a release tag, never from `main`. The installed release is named in HX's own source (`app/lib/ouro/dev.ts`), and [`/ouro-provenance.json`](../app/generated/ouro-provenance.json) reports it.
