@@ -83,6 +83,7 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
       label="Spoonjoy navigation"
       currentPath={pathname}
       hideFrom="lg"
+      className="sj-tab-bar"
       items={isAuthenticated ? signedInTabs : signedOutTabs}
       accessory={{ label: "Search", href: "/search", icon: <Search /> }}
     />
