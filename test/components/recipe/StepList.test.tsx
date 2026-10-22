@@ -390,6 +390,18 @@ describe('StepList', () => {
       expect(screen.getAllByRole('button', { name: /^Reorder Step \d$/ })).toHaveLength(3)
     })
 
+    it('disabled state disables reordering, so a step cannot move while a save is in flight', () => {
+      const onChange = vi.fn()
+      const Wrapper = createTestWrapper({ steps: threeSteps(), onChange, disabled: true })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      // The steps are still a list named Steps, in order, with no handle to move one.
+      const list = screen.getByRole('list', { name: 'Steps' })
+      expect(within(list).getAllByRole('listitem').filter((item) => item.parentElement === list)).toHaveLength(3)
+      expect(screen.queryAllByRole('button', { name: /^Reorder Step \d$/ })).toHaveLength(0)
+      expect(onChange).not.toHaveBeenCalled()
+    })
+
     it("a handle's Move up moves the step up and renumbers every step", async () => {
       const onChange = vi.fn()
       const Wrapper = createTestWrapper({ steps: threeSteps(), onChange })

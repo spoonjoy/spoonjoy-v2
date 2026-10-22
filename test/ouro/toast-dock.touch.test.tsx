@@ -67,7 +67,7 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
     }).toBe(true);
     const toastBox = toast()!.getBoundingClientRect();
     expect(toast()!.checkVisibility()).toBe(true);
-    const nav = document.querySelector<HTMLElement>('[data-testid="mobile-tab-bar"]');
+    const nav = document.querySelector<HTMLElement>('nav[aria-label="Spoonjoy navigation"]');
     const navBox = nav?.getBoundingClientRect();
     const links = nav ? [...nav.querySelectorAll("a")] : [];
     expect(toastBox.width).toBeGreaterThan(0);

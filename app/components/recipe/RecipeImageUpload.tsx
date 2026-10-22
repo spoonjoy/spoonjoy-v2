@@ -22,7 +22,7 @@ interface RecipeImageUploadProps {
   error?: string
 }
 
-// TODO(ouro-hx: image-field): Picking a photo with a preview becomes HX's image field once it ships.
+// TODO(ouro-hx: image-field, spoonjoy/spoonjoy-v2#570): Picking a photo with a preview becomes HX's ImageField in #570.
 export function RecipeImageUpload({
   onFileSelect,
   onClear,

@@ -20,14 +20,15 @@ import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
-import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
+import { applyStorageSchemaMigration, THEME_STORAGE_KEY } from "~/lib/client-storage-schema";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
-import { ThemeProvider } from "~/components/theme-provider";
+import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
+import { colorSchemeScript } from "~/lib/ouro/color-scheme-script";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { ColorSchemeToggle } from "~/components/ouro/color-scheme-toggle/color-scheme-toggle";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ThemeToggle } from "~/components/theme-toggle";
 import { Link } from "~/components/ouro/link/link";
 import { Navbar } from "~/components/ouro/navbar/navbar";
 import { Popover } from "~/components/ouro/popover/popover";
@@ -156,7 +157,7 @@ export function AppNavbar({
       items={links.map(({ label, href, nav }) => ({ label, href, current: currentNav === nav }))}
       actions={userId ? (
         <>
-          <ThemeToggle />
+          <ColorSchemeToggle />
           <Button href="/account/settings" plain aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
           <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
             <Button type="submit" plain>Log out</Button>
@@ -164,7 +165,7 @@ export function AppNavbar({
         </>
       ) : (
         <>
-          <ThemeToggle />
+          <ColorSchemeToggle />
           <LoginPopover oauthProviders={oauthProviders} />
           <Button href="/signup">Sign up</Button>
         </>
@@ -226,7 +227,7 @@ export default function App() {
         <main
           id="main"
           tabIndex={-1}
-          className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
+          className="sj-desktop-surface sj-mobile-surface grow"
         >
           <Outlet />
         </main>
@@ -238,7 +239,7 @@ export default function App() {
   );
 }
 
-// TODO(ouro-hx: route-progress): The bar that shows a navigation in progress becomes HX's route progress once it ships.
+// TODO(ouro-hx: route-progress, spoonjoy/spoonjoy-v2#570): The bar that shows a navigation in progress becomes HX's RouteProgress in #570.
 /**
  * Thin top-of-page brass bar that appears while React Router is loading a new
  * route or submitting a form. One global affordance covers every action that
@@ -284,30 +285,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <Meta />
         <Links />
-        {/* Prevent flash of wrong theme */}
-        <script
-          nonce={nonce}
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                const stored = localStorage.getItem('spoonjoy-theme');
-                const theme = stored === 'light' || stored === 'dark'
-                  ? stored
-                  : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-                document.documentElement.classList.add(theme);
-              })();
-            `,
-          }}
-        />
+        {/* Applies the kept colour scheme before the page paints, so a reload never flashes the wrong one. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: colorSchemeScript({ storageKey: THEME_STORAGE_KEY }) }} />
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
-        <ThemeProvider>
+        <ColorSchemeProvider storageKey={THEME_STORAGE_KEY}>
           {/* Ouro UI's links and link buttons navigate through React Router. */}
           <OuroProvider linkComponent={OuroRouterLink}>
             <SkipLink />
             {children}
           </OuroProvider>
-        </ThemeProvider>
+        </ColorSchemeProvider>
         <ScrollRestoration nonce={nonce} />
         <Scripts nonce={nonce} />
       </body>

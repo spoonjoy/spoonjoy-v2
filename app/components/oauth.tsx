@@ -44,24 +44,6 @@ export function OAuthButton({ provider, className, redirectTo }: OAuthButtonProp
   )
 }
 
-interface OAuthDividerProps {
-  className?: string
-}
-
-// TODO(ouro-hx: separator): The labelled "or" divider becomes HX's Separator with a label once that ships.
-export function OAuthDivider({ className }: OAuthDividerProps) {
-  return (
-    <div
-      data-testid="oauth-separator"
-      className={clsx('flex items-center', className)}
-    >
-      <div className="flex-1 border-t border-[var(--sj-border)]" />
-      <span className="px-4 text-sm text-[var(--sj-ink-soft)]">or</span>
-      <div className="flex-1 border-t border-[var(--sj-border)]" />
-    </div>
-  )
-}
-
 interface OAuthButtonGroupProps {
   providers?: OAuthProvider[]
   className?: string
