@@ -68,7 +68,13 @@ function mockApiResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe("/developers/playground", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    vi.useRealTimers();
+    // HX ChoiceCard and fields settle their highlight and validity a tick after a click; let that
+    // land inside act before the page unmounts, so a test that ends right after a click stays quiet.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
