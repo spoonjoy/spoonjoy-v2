@@ -8,7 +8,8 @@ import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { normalizeUsername, USERNAME_HINT, usernameFormatError } from "~/lib/username";
-import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/oauth";
+import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
+import { Separator } from "~/components/ouro/separator/separator";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthPage } from "~/components/auth/auth-page";
@@ -174,7 +175,7 @@ export default function Signup() {
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
-            <OAuthDivider className="my-6" />
+            <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}
 

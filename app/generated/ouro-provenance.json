@@ -197,6 +197,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -211,6 +212,9 @@
           "app/routes/login.tsx"
         ],
         "link": [
+          "app/routes/login.tsx"
+        ],
+        "separator": [
           "app/routes/login.tsx"
         ],
         "text": [
@@ -267,6 +271,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -281,6 +286,9 @@
           "app/routes/signup.tsx"
         ],
         "link": [
+          "app/routes/signup.tsx"
+        ],
+        "separator": [
           "app/routes/signup.tsx"
         ],
         "text": [
