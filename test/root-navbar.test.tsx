@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 
-import { ThemeProvider } from "~/components/theme-provider";
+import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
 import type { OAuthProvider } from "~/lib/env.server";
 import { AppNavbar } from "~/root";
 
@@ -12,9 +12,9 @@ function renderNavbar(userId: string | null = null, path = "/", oauthProviders: 
       {
         path: "*",
         element: (
-          <ThemeProvider>
+          <ColorSchemeProvider storageKey="spoonjoy-theme">
             <AppNavbar userId={userId} oauthProviders={oauthProviders} />
-          </ThemeProvider>
+          </ColorSchemeProvider>
         ),
       },
     ],
@@ -41,9 +41,9 @@ describe("AppNavbar", () => {
         {
           path: "*",
           element: (
-            <ThemeProvider>
+            <ColorSchemeProvider storageKey="spoonjoy-theme">
               <AppNavbar userId="user-1" />
-            </ThemeProvider>
+            </ColorSchemeProvider>
           ),
         },
       ],

@@ -12,13 +12,13 @@ vi.mock('motion/react', () => ({
 }))
 
 import { MobileNav } from '~/components/navigation/mobile-nav'
-import { ThemeProvider } from '~/components/theme-provider'
+import { ColorSchemeProvider } from '~/lib/ouro/color-scheme'
 
 function CurrentRootLayoutBehavior({ userId }: { userId: string | null }) {
   const isAuthenticated = !!userId
 
   return (
-    <ThemeProvider>
+    <ColorSchemeProvider storageKey="spoonjoy-theme">
       <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
         <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
           <nav data-testid="desktop-navbar">Desktop Navbar</nav>
@@ -28,7 +28,7 @@ function CurrentRootLayoutBehavior({ userId }: { userId: string | null }) {
         </main>
       </div>
       <MobileNav isAuthenticated={isAuthenticated} />
-    </ThemeProvider>
+    </ColorSchemeProvider>
   )
 }
 

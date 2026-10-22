@@ -310,15 +310,10 @@ select {
 }
 
 /*
- * Colours fade only while the theme is switching.
- *
- * The theme provider sets data-theme-switching on <html> for a moment around each
- * theme change (never for reduced-motion users), and only then does the page fade
- * between themes. Outside that window nothing transitions globally, so a control whose
- * colours show its state (checked, pressed, selected) changes instantly instead of
- * passing through low-contrast mid-fade colours. These rules are unlayered, so they win
- * over Tailwind's layered transition utilities, exactly as the old always-on theme fade
- * did; they have zero specificity, so unlayered component rules with a class selector
+ * Nothing transitions globally, so a control whose colours show its state (checked, pressed,
+ * selected) changes instantly instead of passing through low-contrast mid-fade colours, and a
+ * colour-scheme switch is instant too. The rule is unlayered, so it wins over Tailwind's layered
+ * transition utilities; it has zero specificity, so unlayered component rules with a class selector
  * (such as .sj-hover-lift) still set their own transitions.
  */
 /* Ouro UI subtrees ([data-ouro], on each dialog, sheet and button root) are left out: they animate
@@ -328,20 +323,10 @@ select {
   transition: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  :where(html[data-theme-switching], html[data-theme-switching] *) {
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  :where(html[data-theme-switching] :is(input, textarea, select, button)) {
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.15s ease-in-out;
-  }
-}
-
 /* Controls whose colours show their state (pressed view buttons, filter chips, checkboxes) switch
-   instantly instead of fading with the theme rules above: mid-fade, their text and background
-   pass through near-identical greys (axe measured 1.19:1 to 2.87:1 on the shopping list's view
-   buttons right after a tap). Unlayered like the rules above, and more specific, so it wins. */
+   instantly: mid-fade, their text and background pass through near-identical greys (axe measured
+   1.19:1 to 2.87:1 on the shopping list's view buttons right after a tap). Unlayered like the reset
+   above, and more specific, so it also wins over a component rule's transition. */
 .sj-instant-state {
   transition: none;
 }

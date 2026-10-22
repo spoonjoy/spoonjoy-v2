@@ -18,8 +18,6 @@
       "app/components/oauth.tsx",
       "app/components/pwa/InstallPromptCard.tsx",
       "app/components/spoonjoy-logo.tsx",
-      "app/components/theme-provider.tsx",
-      "app/components/theme-toggle.tsx",
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
       "app/hooks/use-unsaved-form-guard.ts",
@@ -58,6 +56,7 @@
     ],
     "components": [
       "button",
+      "color-scheme-toggle",
       "link",
       "navbar",
       "popover",
@@ -69,6 +68,9 @@
     "renders": {
       "button": [
         "app/components/button.tsx"
+      ],
+      "color-scheme-toggle": [
+        "app/root.tsx"
       ],
       "link": [
         "app/components/navigation/phone-brand-bar.tsx",
