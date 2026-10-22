@@ -1,11 +1,11 @@
-name: Task25 real Ouro HX v1.1.0 CLI and strict consumer proof
+name: Real Ouro HX v1.2.0 CLI and strict consumer proof
 on:
   push:
     branches: [feat/test-kitchen]
 permissions:
   contents: read
 concurrency:
-  group: task25-v110-${{ github.ref }}
+  group: hx-v120-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   binding:
@@ -49,8 +49,8 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: task25-v110-real-cli-${{ github.run_id }}
-          path: ${{ runner.temp }}/task25-v110-cli/
+          name: hx-v120-real-cli-${{ github.run_id }}
+          path: ${{ runner.temp }}/hx-v120-cli/
           if-no-files-found: error
   strict:
     needs: binding
@@ -84,8 +84,8 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: task25-v110-strict-${{ github.run_id }}
+          name: hx-v120-strict-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/task25-v110-strict/
+            ${{ runner.temp }}/hx-v120-strict/
             coverage/coverage-final.json
           if-no-files-found: error
