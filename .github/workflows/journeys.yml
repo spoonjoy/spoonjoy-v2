@@ -171,6 +171,11 @@ jobs:
       - name: Typecheck the journeys
         run: node scripts/warning-gate.ts -- pnpm exec tsc -p tsconfig.e2e.json
 
+      # A stalled Ubuntu mirror once held a Playwright system-package install for 29 minutes and
+      # ran the job out of time. Bound apt's waits, so a dead mirror fails over within a minute.
+      - name: Bound apt's network waits
+        run: printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' | sudo tee /etc/apt/apt.conf.d/99spoonjoy-timeouts
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium webkit
 

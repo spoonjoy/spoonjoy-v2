@@ -382,6 +382,11 @@ jobs:
           node scripts/warning-gate.ts -- pnpm why blake3-wasm
           node scripts/warning-gate.ts -- pnpm why @c4312/blake3-internal
 
+      # A stalled Ubuntu mirror once held a Playwright system-package install for 29 minutes and
+      # ran the job out of time. Bound apt's waits, so a dead mirror fails over within a minute.
+      - name: Bound apt's network waits
+        run: printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' | sudo tee /etc/apt/apt.conf.d/99spoonjoy-timeouts
+
       - name: 🎭 Install Playwright Browsers
         run: |
           node scripts/warning-gate.ts -- sudo apt-get update
