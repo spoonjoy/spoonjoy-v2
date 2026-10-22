@@ -110,6 +110,10 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     });
   });
 
+  it("hides the step handles while a recipe's steps save, keeping the list in place", () => {
+    expect(block(".sj-steps-saving [data-ouro-reorderable-handle]", /([\w-]+):\s*([^;]+);/g)).toEqual({ visibility: "hidden" });
+  });
+
   it("declares the mapping after the .dark palette, so it wins over ouro-base's defaults there", () => {
     expect(CSS.indexOf(":root,\n.dark {")).toBeGreaterThan(CSS.indexOf(".dark {"));
   });

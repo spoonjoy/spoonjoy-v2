@@ -1,4 +1,16 @@
 {
+  "allowedRegressions": [
+    {
+      "fingerprint": "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/StepList#StepList::",
+      "count": 1,
+      "reason": "While a save is in flight StepList keeps HX Reorderable mounted, so each step keeps its drafts, and a plain wrapper stops presses and keys on its handles until HX Reorderable has a disabled state (ourostack/ouro-ui#185)"
+    },
+    {
+      "fingerprint": "app/components/recipe/StepList.tsx::StepList::plain-element-handler::div::",
+      "count": 1,
+      "reason": "While a save is in flight StepList keeps HX Reorderable mounted, so each step keeps its drafts, and a plain wrapper stops presses and keys on its handles until HX Reorderable has a disabled state (ourostack/ouro-ui#185)"
+    }
+  ],
   "offenders": {
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
@@ -9,8 +21,10 @@
     "app/components/recipe/CookSyncStatusLine.tsx::CookSyncStatusLine::control-state-style::span::": 1,
     "app/components/recipe/CookSyncStatusLine.tsx::CookSyncStatusLine::raw-button::button::type=button": 1,
     "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/RecipeImageUpload#RecipeImageUpload::": 1,
+    "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/StepList#StepList::": 1,
     "app/components/recipe/RecipeHeader.tsx::RecipeHeader::uses-hand-rolled-control::app/components/recipe/CookSyncStatusLine#CookSyncStatusLine::": 1,
     "app/components/recipe/RecipeImageUpload.tsx::RecipeImageUpload::raw-input::input::type=file,aria-label=Upload recipe image": 1,
+    "app/components/recipe/StepList.tsx::StepList::plain-element-handler::div::": 1,
     "app/root.tsx::Layout::uses-hand-rolled-control::app/components/navigation/skip-link#SkipLink::": 1,
     "app/routes/account.settings.tsx::AccountSettings::uses-hand-rolled-control::app/components/account/ProfilePhotoField#ProfilePhotoField::": 1,
     "app/routes/developers.playground.tsx::CopyButton::raw-button::button::type=button": 1,
