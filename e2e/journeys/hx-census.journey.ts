@@ -8,6 +8,7 @@
 // The census reads the seeded QA kitchen before any other journey changes QA data, so the Journeys
 // workflow runs it alone first (`pnpm run test:journeys:census`), then everything else
 // (`pnpm run test:journeys:after-census`). The kit tags its tests @ouro-census.
+import type { TestInfo } from "@playwright/test";
 import { censusTests } from "../ouro-census/census-page.mjs";
 import { test as journeyTest } from "./support/journey";
 import { CENSUS_PROJECTS, censusJourneys } from "./support/hx-census";
@@ -29,8 +30,24 @@ const test = journeyTest.extend<{ notFoundDocument: void }>({
   ],
 });
 
+// Playwright reads a hook's first parameter for the fixtures it asks for and accepts only an object
+// pattern there; the kit's beforeAll names it `_fixtures`, which Playwright refuses before any test
+// runs. This hands the kit a test whose beforeAll gives Playwright the pattern it wants. Its tests
+// are declared through this file too (the apply trap), which is where Playwright then finds them.
+const censusTest = new Proxy(test, {
+  apply(target, thisArg, args) {
+    return Reflect.apply(target, thisArg, args);
+  },
+  get(target, key, receiver) {
+    if (key !== "beforeAll") return Reflect.get(target, key, receiver);
+    return (hook: (fixtures: object, testInfo: TestInfo) => void) =>
+      // eslint-disable-next-line no-empty-pattern -- Playwright requires an object pattern here.
+      target.beforeAll(({}, testInfo) => hook({}, testInfo));
+  },
+});
+
 censusTests({
-  test,
+  test: censusTest,
   journeys: censusJourneys(),
   projects: CENSUS_PROJECTS,
   componentsDir: "app/components/ouro",
