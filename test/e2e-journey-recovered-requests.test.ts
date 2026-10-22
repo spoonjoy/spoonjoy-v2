@@ -19,11 +19,15 @@ const fixtures = fixtureState.extension as {
 const RENAME = "https://spoonjoy-v2-qa-run-39838941793-1.mendelow-studio.workers.dev/cookbooks/3c09f8ae-2e09-740c-a510-9ace7212d12a.data";
 // WebKit's log for the rename in Journeys run 39838941793.
 const RESET = "Failed to load resource: Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer";
-const request = (method: string, url: string) => ({ method: () => method, url: () => url });
+const RENAME_BODY = "intent=updateTitle&title=++";
+const DELETE_BODY = "intent=delete";
+const request = (method: string, url: string, body: string | null = RENAME_BODY) =>
+  ({ method: () => method, url: () => url, postData: () => body });
 
+type Sent = [string, string] | [string, string, string | null];
 type Event =
-  | { failed: [string, string] }
-  | { answered: [string, string] }
+  | { failed: Sent }
+  | { answered: Sent }
   | { log: string; url?: string };
 
 async function gate(events: Event[]) {
@@ -53,18 +57,31 @@ describe("isTransportFailureLog", () => {
 });
 
 describe("RequestLedger", () => {
-  it("calls a request recovered only when the same method and URL were answered after it failed", () => {
+  it("counts a request recovered only when the same method, URL and body were answered after it failed", () => {
     const ledger = new RequestLedger();
     ledger.answered(request("POST", RENAME));
     ledger.failed(request("POST", RENAME));
-    expect(ledger.recovered(RENAME)).toBe(false);
-    ledger.answered(request("GET", RENAME));
-    expect(ledger.recovered(RENAME)).toBe(false);
+    expect(ledger.recoveredCount(RENAME)).toBe(0);
+    ledger.answered(request("GET", RENAME, null));
+    expect(ledger.recoveredCount(RENAME)).toBe(0);
     ledger.answered(request("POST", `${RENAME}?index`));
-    expect(ledger.recovered(RENAME)).toBe(false);
+    expect(ledger.recoveredCount(RENAME)).toBe(0);
+    ledger.answered(request("POST", RENAME, DELETE_BODY));
+    expect(ledger.recoveredCount(RENAME)).toBe(0);
     ledger.answered(request("POST", RENAME));
-    expect(ledger.recovered(RENAME)).toBe(true);
-    expect(ledger.recovered(`${RENAME}?index`)).toBe(false);
+    expect(ledger.recoveredCount(RENAME)).toBe(1);
+    expect(ledger.recoveredCount(`${RENAME}?index`)).toBe(0);
+  });
+
+  it("pairs each failure with its own later answer, one to one", () => {
+    const ledger = new RequestLedger();
+    ledger.failed(request("POST", RENAME));
+    ledger.failed(request("POST", RENAME));
+    ledger.answered(request("POST", RENAME));
+    expect(ledger.recoveredCount(RENAME)).toBe(1);
+    ledger.answered(request("POST", RENAME));
+    ledger.answered(request("POST", RENAME));
+    expect(ledger.recoveredCount(RENAME)).toBe(2);
   });
 });
 
@@ -82,6 +99,25 @@ describe("the console gate and lost requests", () => {
     ["sent again without an answer", [{ failed: ["POST", RENAME] }, { log: RESET, url: RENAME }, { failed: ["POST", RENAME] }]],
     ["answered only before it was lost", [{ answered: ["POST", RENAME] }, { failed: ["POST", RENAME] }, { log: RESET, url: RENAME }]],
     ["followed by another request", [{ failed: ["POST", RENAME] }, { log: RESET, url: RENAME }, { answered: ["GET", RENAME] }]],
+    ["when a different intent was answered later", [
+      { failed: ["POST", RENAME, DELETE_BODY] },
+      { log: RESET, url: RENAME },
+      { answered: ["POST", RENAME, RENAME_BODY] },
+    ]],
+    ["when one was recovered and another to the same URL was not", [
+      { failed: ["POST", RENAME, RENAME_BODY] },
+      { log: RESET, url: RENAME },
+      { failed: ["POST", RENAME, DELETE_BODY] },
+      { log: RESET, url: RENAME },
+      { answered: ["POST", RENAME, RENAME_BODY] },
+    ]],
+    ["twice, with one answer", [
+      { failed: ["POST", RENAME] },
+      { log: RESET, url: RENAME },
+      { failed: ["POST", RENAME] },
+      { log: RESET, url: RENAME },
+      { answered: ["POST", RENAME] },
+    ]],
     ["logged without a URL", [{ failed: ["POST", RENAME] }, { log: RESET }, { answered: ["POST", RENAME] }]],
     ["an HTTP error, which is an answer", [
       { failed: ["POST", RENAME] },

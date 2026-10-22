@@ -200,8 +200,15 @@ export function watchConsole(page: Page): ConsoleWatcher {
     // A lost request the page sent again and got an answer to is not an issue (see
     // support/recovered-requests.ts). Read at the end, once the second request has finished.
     get issues() {
+      const excused = new Map<string, number>();
       return collected
-        .filter(({ issue, url }) => !(url && isTransportFailureLog(issue.text) && requests.recovered(url)))
+        .filter(({ issue, url }) => {
+          if (!url || !isTransportFailureLog(issue.text)) return true;
+          const used = excused.get(url) ?? 0;
+          if (used >= requests.recoveredCount(url)) return true;
+          excused.set(url, used + 1);
+          return false;
+        })
         .map(({ issue }) => issue);
     },
     dispose() {
