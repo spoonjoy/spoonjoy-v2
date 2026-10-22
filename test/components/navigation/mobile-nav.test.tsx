@@ -33,7 +33,7 @@ describe("MobileNav signed in", () => {
   it("is a phone-only bar of four labeled tabs plus Search in its own circle", () => {
     renderAt("/");
 
-    expect(tabBar().closest('[data-ouro="tab-bar"]')).toHaveClass("lg:hidden");
+    expect(tabBar().closest('[data-ouro="tab-bar"]')).toHaveClass("lg:hidden", "sj-tab-bar");
     expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
     expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/my-recipes");
