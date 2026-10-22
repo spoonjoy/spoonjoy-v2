@@ -16,7 +16,7 @@
  * - Character limits on inputs
  */
 
-import { useState, useEffect, useRef, type FormEvent } from 'react'
+import { useState, useEffect, useRef, type DragEvent, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { Button } from '~/components/button'
 import { Form } from '~/components/ouro/form/form'
 import { ImageField, type ImageFieldRejection } from '~/components/ouro/image-field/image-field'
@@ -97,6 +97,7 @@ export function RecipeBuilder({
 
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // The title, description and servings fields are uncontrolled, and saving
   // reads them from the DOM. They are server-rendered, and a controlled `value`
@@ -221,7 +222,9 @@ export function RecipeBuilder({
             maxLength={SERVINGS_MAX_LENGTH}
             disabled={isDisabled}
           />
+          <ImageDropZone input={imageInputRef} disabled={isDisabled}>
           <ImageField
+            ref={imageInputRef}
             label="Recipe image"
             description="JPG, PNG, or WebP. 5 MB max."
             src={savedImageUrl}
@@ -238,6 +241,7 @@ export function RecipeBuilder({
             disabled={isDisabled}
             error={errors?.image}
           />
+          </ImageDropZone>
           {loading ? (
             <p role="status" className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
               {imageFile ? 'Uploading image...' : 'Saving recipe...'}
@@ -296,6 +300,44 @@ export function RecipeBuilder({
           {recipe ? 'Save recipe' : 'Create recipe'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+// TODO(ouro-hx: image-field drop, ourostack/ouro-ui#186): HX ImageField takes a dropped image, as
+// FileField does. Until then this zone hands a dropped file to the field's own input, which checks
+// and shows it as it does a chosen one.
+function ImageDropZone({ input, disabled, children }: { input: RefObject<HTMLInputElement | null>; disabled: boolean; children: ReactNode }) {
+  const [over, setOver] = useState(false)
+  const carriesFiles = (event: DragEvent) => !disabled && Array.from(event.dataTransfer.types).includes('Files')
+  return (
+    <div
+      data-drop-zone=""
+      data-drag-active={over ? '' : undefined}
+      className="rounded-[var(--sj-radius-surface)] outline-2 outline-offset-4 outline-transparent outline-dashed data-drag-active:outline-[var(--sj-brass)]"
+      onDragEnter={(event) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        setOver(true)
+      }}
+      onDragOver={(event) => {
+        if (carriesFiles(event)) event.preventDefault()
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false)
+      }}
+      onDrop={(event) => {
+        setOver(false)
+        const file = event.dataTransfer.files[0]
+        if (!carriesFiles(event) || !file || !input.current) return
+        event.preventDefault()
+        const transfer = new DataTransfer()
+        transfer.items.add(file)
+        input.current.files = transfer.files
+        input.current.dispatchEvent(new Event('change', { bubbles: true }))
+      }}
+    >
+      {children}
     </div>
   )
 }
