@@ -238,22 +238,29 @@ describe('RecipeHeader', () => {
   })
 
   describe('scaling', () => {
-    it('renders scale selector with current scale factor', () => {
+    it('shows the scale as Ouro HX NumberField at the current scale factor', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} scaleFactor={2} />)
-      expect(screen.getByTestId('scale-selector')).toBeInTheDocument()
-      expect(screen.getByText('Scale')).toBeInTheDocument()
+      const scale = screen.getByRole('textbox', { name: 'Scale' })
+      expect(scale).toHaveValue('2')
+      expect(scale).toHaveAttribute('data-ouro-control', 'number-field')
     })
 
-    it('calls onScaleChange when scale is changed', () => {
+    it('calls onScaleChange a quarter at a time, and never with an empty scale', async () => {
       const onScaleChange = vi.fn()
       renderWithRouter(<RecipeHeader {...defaultProps} onScaleChange={onScaleChange} />)
-      expect(screen.getByTestId('scale-selector')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Increase scale' }))
+      expect(onScaleChange).toHaveBeenLastCalledWith(1.25)
+      await userEvent.click(screen.getByRole('button', { name: 'Decrease scale' }))
+      expect(onScaleChange).toHaveBeenLastCalledWith(0.75)
+      onScaleChange.mockClear()
+      await userEvent.clear(screen.getByRole('textbox', { name: 'Scale' }))
+      await userEvent.tab()
+      expect(onScaleChange).not.toHaveBeenCalled()
     })
 
-    it('displays scaled servings when servings text is provided', () => {
+    it('describes the scale with the scaled servings when servings text is provided', () => {
       renderWithRouter(<RecipeHeader {...defaultProps} servings="Serves 4" scaleFactor={2} />)
-      expect(screen.getByText('Serves 8')).toBeInTheDocument()
-      expect(screen.getByText('Yield')).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Scale' })).toHaveAccessibleDescription('Serves 8')
     })
 
     it('does not display original servings note when scale factor is not 1', () => {

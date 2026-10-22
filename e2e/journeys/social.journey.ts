@@ -13,7 +13,7 @@
 // the URL the app redirects to.
 import { test, expect } from "./support/journey";
 import type { Page, TestInfo } from "@playwright/test";
-import { pathUrl, recipeLink, waitForHydration } from "./support/navigation";
+import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStateForProject } from "./support/personas";
 
 // qa_kitchen_friend's seeded recipe.
@@ -133,7 +133,10 @@ test.describe("Social", () => {
     await expect(saveDialog).toBeHidden();
 
     // Saved Recipes lists it, credited to the friend and filed under the new cookbook.
-    const savedRow = recipeLink(page.getByRole("region", { name: "Saved recipes" }), RISOTTO_TITLE, RISOTTO);
+    const savedRow = page
+      .getByRole("list", { name: "Saved recipes" })
+      .getByRole("listitem")
+      .filter({ has: page.locator(`a[href="${RISOTTO}"]`) });
     await page.goto("/saved-recipes");
     await expect(page.getByRole("heading", { level: 1, name: "Saved Recipes", exact: true })).toBeVisible();
     await expect(savedRow).toContainText(`By ${FRIEND} - ${cookbook}`);
@@ -177,7 +180,7 @@ test.describe("Social", () => {
     });
 
     // My Recipes lists the fork at its own URL.
-    const myRow = page.getByRole("region", { name: "My recipes" }).locator(`a[href="${forkPath}"]`);
+    const myRow = page.getByRole("list", { name: "My recipes" }).locator(`a[href="${forkPath}"]`);
     await page.goto("/my-recipes");
     await expect(page.getByRole("heading", { level: 1, name: "My Recipes", exact: true })).toBeVisible();
     await expect(myRow).toContainText(RISOTTO_TITLE);
@@ -242,25 +245,29 @@ test.describe("Social, in a British locale in Kiritimati", () => {
     const fellowChef = page
       .getByRole("region", { name: "Fellow Chefs" })
       .getByRole("link", { name: new RegExp(FRIEND) });
+    const fellowChefRow = page
+      .getByRole("region", { name: "Fellow Chefs" })
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("link", { name: new RegExp(FRIEND) }) });
     const cookActivity = page
       .getByRole("region", { name: "Chef activity" })
       .getByText(`You cooked ${RISOTTO_TITLE} from ${FRIEND}.`, { exact: true })
       .first();
     // "Latest activity" is the cook just logged, shown as the date it is in Kiritimati.
-    const latestActivity = fellowChef.locator("time");
+    const latestActivity = fellowChefRow.locator("time");
     await page.goto("/chefs");
     await waitForHydration(page);
     await expect(fellowChef).toHaveAttribute("href", `/?chef=${FRIEND}`);
     await expect(latestActivity).toHaveAttribute("datetime", /Z$/);
     const latestAt = (await latestActivity.getAttribute("datetime")) as string;
-    await expect(fellowChef).toContainText(`Latest activity ${calendarDate(latestAt, KIRITIMATI)}`);
+    await expect(fellowChefRow).toContainText(`Latest activity ${calendarDate(latestAt, KIRITIMATI)}`);
     await expect(cookActivity).toBeVisible();
     await expectAccessible();
 
     await verifyAfterReload(async () => {
       await expect(fellowChef).toHaveAttribute("href", `/?chef=${FRIEND}`);
       await expect(latestActivity).toHaveAttribute("datetime", latestAt);
-      await expect(fellowChef).toContainText(`Latest activity ${calendarDate(latestAt, KIRITIMATI)}`);
+      await expect(fellowChefRow).toContainText(`Latest activity ${calendarDate(latestAt, KIRITIMATI)}`);
       await expect(cookActivity).toBeVisible();
     });
 

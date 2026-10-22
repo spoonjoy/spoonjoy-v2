@@ -1,6 +1,6 @@
 import type { Route } from "./+types/users.$identifier.fellow-chefs";
 import { redirect, useLoaderData } from "react-router";
-import { Subheading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
@@ -132,13 +132,13 @@ export default function FellowChefsPage() {
     <CookbookPage>
       <section className="mx-auto max-w-3xl">
         <CookbookHeader eyebrow="Chef profile" title="Fellow chefs">
-        <Subheading level={2} size="sm" className="leading-6">
+        <Heading level={2} size="sm" className="leading-6">
           {viewerIsOwner ? "Your kitchen network" : `${profileUsername}'s kitchen network`}
-        </Subheading>
+        </Heading>
         </CookbookHeader>
 
         <div className="mt-6">
-          <FellowChefList rows={renderRows} emptyStateText={emptyStateText} />
+          <FellowChefList label="Fellow chefs" rows={renderRows} emptyStateText={emptyStateText} />
         </div>
 
         {(hasPrev || hasNext) && (

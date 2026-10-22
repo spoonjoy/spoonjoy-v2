@@ -62,7 +62,6 @@ function hasUIComponentImports(content: string): boolean {
     content.includes('from "~/components/ouro/') ||
     content.includes("from '~/components/ouro/") ||
     content.includes('from "~/components/button"') ||
-    content.includes('from "~/components/text"') ||
     content.includes('from "~/components/recipe/') ||
     content.includes('from "@/') ||
     content.includes("from '@/")
@@ -294,24 +293,14 @@ describe("Individual Route Detailed Checks", () => {
   describe("recipes.$id.tsx (Recipe Detail)", () => {
     const filePath = "app/routes/recipes.$id.tsx";
 
-    it("should use Heading component for h1/h2", () => {
+    it("should use Ouro HX Heading for h1/h2", () => {
       const content = readSourceFile(filePath);
-      expect(
-        content.includes('from "~/components/heading"') ||
-        content.includes("from '~/components/heading'") ||
-        content.includes("Heading"),
-        "Should use Heading component for headings"
-      ).toBe(true);
+      expect(content, "Should use Ouro HX Heading for headings").toContain('from "~/components/ouro/text/heading"');
     });
 
     it("should use Text component for paragraphs", () => {
       const content = readSourceFile(filePath);
-      expect(
-        content.includes('from "~/components/text"') ||
-        content.includes("from '~/components/text'") ||
-        content.includes("Text"),
-        "Should use Text component for text content"
-      ).toBe(true);
+      expect(content, "Should use Ouro HX Text for paragraphs").toContain('from "~/components/ouro/text/text"');
     });
   });
 

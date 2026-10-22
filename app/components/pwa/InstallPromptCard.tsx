@@ -49,6 +49,7 @@ interface UseInstallPromptResult {
   dismiss: () => void;
 }
 
+// TODO(ouro-hx: install-prompt, lib-use-install-prompt, spoonjoy/spoonjoy-v2#570): The install-the-app prompt and its hook become HX's InstallPrompt and useInstallPrompt in #570.
 export function useInstallPrompt(opts: UseInstallPromptOptions): UseInstallPromptResult {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEventLike | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);

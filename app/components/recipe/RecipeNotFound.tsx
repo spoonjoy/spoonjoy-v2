@@ -2,7 +2,7 @@ import { Form } from "react-router";
 import { Search as SearchIcon } from "lucide-react";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 
 // What a recipe link shows when its recipe is gone: whether it was deleted, a recipe search and the
 // recipe box (product audit 2026-10-09, finding 20). It never names the deleted recipe's chef: until
@@ -11,7 +11,7 @@ export function RecipeNotFound({ deleted }: { deleted: boolean }) {
   return (
     <CookbookPage>
       <CookbookHeader eyebrow="Recipes" title={deleted ? "This recipe was deleted." : "We can't find this recipe."}>
-        <Text>
+        <Text tone="muted">
           {deleted
             ? "Its chef deleted it, so the link no longer opens. Search for something like it, or browse every public recipe."
             : "The link may be mistyped, or the recipe may have been removed. Try a search, or browse every public recipe."}

@@ -21,8 +21,8 @@ import {
   typedCodeFor,
 } from "~/lib/agent-connection-route.server";
 import { Button } from "~/components/button";
-import { Heading } from "~/components/heading";
-import { Text } from "~/components/text";
+import { Heading } from "~/components/ouro/text/heading";
+import { Text } from "~/components/ouro/text/text";
 
 type Requester = {
   ip: string | null;
@@ -212,8 +212,8 @@ export default function AgentConnect() {
   return (
     <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
       <p className={LABEL}>Agent access</p>
-      <Heading className="mt-3">{connectionTitle(connection.status)}</Heading>
-      <Text size="lg" className="mt-5 leading-7">
+      <Heading level={1} size="xl" className="mt-3">{connectionTitle(connection.status)}</Heading>
+      <Text tone="muted" size="lg" className="mt-5 leading-7">
         {actionable
           ? `A client calling itself "${connection.agentName}" wants permission to use Spoonjoy with these exact scopes.`
           : connected
@@ -225,7 +225,7 @@ export default function AgentConnect() {
 
       {actionable ? (
         <>
-          <Text className="mt-5" role="alert">
+          <Text tone="muted" className="mt-5" role="alert">
             Spoonjoy did not verify who made this request; the name above is whatever the client chose. If you didn't just start this connection from your own agent, device, or app, close this page. Without its code, nobody can approve it, and it expires on its own.
           </Text>
 
@@ -286,7 +286,7 @@ export default function AgentConnect() {
         <ul className="mt-5 grid gap-2" aria-label="Write access warnings">
           {writeScopes.map((scope) => (
             <li key={scope}>
-              <Text>
+              <Text tone="muted">
                 <strong>Write access:</strong> with <span className="font-mono">{scope}</span>, this client {WRITE_SCOPE_WARNINGS[scope]}
               </Text>
             </li>
@@ -295,20 +295,20 @@ export default function AgentConnect() {
       ) : null}
 
       {connection.userEmail && actionable && (
-        <Text className="mt-5">
+        <Text tone="muted" className="mt-5">
           You are approving as {connection.userEmail}.
         </Text>
       )}
 
       {actionable ? (
-        <Text className="mt-5">
+        <Text tone="muted" className="mt-5">
           Approval creates a Spoonjoy bearer token for this client that lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days. The client should never ask for your Spoonjoy password, and you can revoke the token in account settings.
         </Text>
       ) : null}
 
       {connected ? (
         <>
-          <Text className="mt-5">
+          <Text tone="muted" className="mt-5">
             This access lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days from approval. You can revoke it at any time under API and app access in your account settings.
           </Text>
           <div className="mt-8 flex flex-col sm:flex-row">
@@ -320,7 +320,7 @@ export default function AgentConnect() {
       ) : null}
 
       {actionData?.error ? (
-        <Text className="mt-5" role="alert">{actionData.error}</Text>
+        <Text tone="muted" className="mt-5" role="alert">{actionData.error}</Text>
       ) : null}
 
       {actionable && (

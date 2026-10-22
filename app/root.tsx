@@ -9,29 +9,31 @@ import {
   useRouteError,
   useNavigation,
   Form,
-  Link as RouterLink,
   useLocation,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useContext, useEffect } from "react";
 import { usePostHog } from "~/lib/use-posthog";
-import * as Headless from "@headlessui/react";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { toAnalyticsPageUrl } from "~/lib/analytics";
-import { applyStorageSchemaMigration } from "~/lib/client-storage-schema";
+import { applyStorageSchemaMigration, THEME_STORAGE_KEY } from "~/lib/client-storage-schema";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
-import { ThemeProvider } from "~/components/theme-provider";
+import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
+import { colorSchemeScript } from "~/lib/ouro/color-scheme-script";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { ColorSchemeToggle } from "~/components/ouro/color-scheme-toggle/color-scheme-toggle";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/feedback/toast";
-import { ThemeToggle } from "~/components/theme-toggle";
-import { MobileNav, DockContextProvider } from "~/components/navigation";
+import { Link } from "~/components/ouro/link/link";
+import { Navbar } from "~/components/ouro/navbar/navbar";
+import { Popover } from "~/components/ouro/popover/popover";
+import { Text } from "~/components/ouro/text/text";
+import { MobileNav, MobileNavToaster, DockContextProvider } from "~/components/navigation";
 import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/button";
 import { OAuthButtonGroup } from "~/components/oauth";
@@ -97,38 +99,41 @@ function getActiveNav(pathname: string): string | null {
   return null;
 }
 
-/**
- * Desktop Navbar component - shown in StackedLayout header
- */
-function LoginMenu({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
+const signedInLinks = [
+  { label: "Kitchen", href: "/", nav: "kitchen" },
+  { label: "Recipes", href: "/recipes", nav: "recipes" },
+  { label: "My Recipes", href: "/my-recipes", nav: "my-recipes" },
+  { label: "Saved", href: "/saved-recipes", nav: "saved-recipes" },
+  { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+  { label: "Shopping List", href: "/shopping-list", nav: "shopping" },
+  { label: "Chefs", href: "/chefs", nav: "chefs" },
+  { label: "Kitchen Search", href: "/search", nav: "search" },
+];
+
+const signedOutLinks = [
+  { label: "Search", href: "/search", nav: "search" },
+  { label: "Recipes", href: "/recipes", nav: "recipes" },
+  { label: "Cookbooks", href: "/cookbooks", nav: "cookbooks" },
+];
+
+/** Signing in from the desktop bar: an HX Popover with the providers, the password form and signup. */
+function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
-    <Headless.Menu as="div" className="relative">
-      <Headless.MenuButton className="sj-desktop-nav-link">
-        Log in
-      </Headless.MenuButton>
-      <Headless.MenuItems
-        anchor="bottom end"
-        className="z-50 mt-3 w-80 border border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-4 shadow-[var(--sj-shadow-soft)] focus:outline-none"
-      >
-        <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-          Sign in to SPOONJOY
-        </p>
-        {oauthProviders.length > 0 ? (
-          <OAuthButtonGroup providers={oauthProviders} className="mt-4" />
-        ) : (
-          <p className="mt-4 text-sm/6 text-[var(--sj-ink-soft)]">
-            OAuth is not configured here, but email and password sign-in is available.
-          </p>
-        )}
-        <div className="mt-4 grid gap-2 border-t border-[var(--sj-border)] pt-4">
-          <Button href="/login" plain>Use Password</Button>
-          <Button href="/signup">Create Account</Button>
-        </div>
-      </Headless.MenuItems>
-    </Headless.Menu>
+    <Popover title="Sign in to SPOONJOY" align="end" trigger={<Button plain>Log in</Button>}>
+      {oauthProviders.length > 0 ? (
+        <OAuthButtonGroup providers={oauthProviders} />
+      ) : (
+        <Text tone="muted" size="sm">OAuth is not configured here, but email and password sign-in is available.</Text>
+      )}
+      <div className="mt-4 grid gap-2">
+        <Button href="/login" plain>Use Password</Button>
+        <Button href="/signup">Create Account</Button>
+      </div>
+    </Popover>
   );
 }
 
+/** The desktop bar: HX Navbar with Spoonjoy's links, the current one marked, and the account actions. */
 export function AppNavbar({
   userId,
   oauthProviders = [],
@@ -138,56 +143,34 @@ export function AppNavbar({
 }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
-  const navLinkClass = "sj-desktop-nav-link";
+  const links = userId ? signedInLinks : signedOutLinks;
 
   return (
-    <nav className="sj-desktop-nav" aria-label="Main navigation">
-      <RouterLink to="/" className="sj-desktop-brand" data-current={currentNav === "kitchen"}>
-        <SpoonjoyLogo
-          width={42}
-          height={26}
-          className="sj-desktop-brand-logo"
-          aria-hidden="true"
-        />
-        <span className="sj-desktop-brand-word">SPOONJOY</span>
-      </RouterLink>
-      {userId ? (
+    <Navbar
+      label="Main navigation"
+      brand={
+        <Link href="/" tone="secondary" inline={false} aria-label="Spoonjoy kitchen" className="inline-flex items-center gap-4">
+          <SpoonjoyLogo width={42} height={26} aria-hidden="true" />
+          <span className="font-sj-display text-lg font-extrabold">SPOONJOY</span>
+        </Link>
+      }
+      items={links.map(({ label, href, nav }) => ({ label, href, current: currentNav === nav }))}
+      actions={userId ? (
         <>
-          <div className="sj-desktop-nav-center">
-            <RouterLink to="/" className={navLinkClass} data-current={currentNav === "kitchen"}>Kitchen</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
-            <RouterLink to="/my-recipes" className={navLinkClass} data-current={currentNav === "my-recipes"}>My Recipes</RouterLink>
-            <RouterLink to="/saved-recipes" className={navLinkClass} data-current={currentNav === "saved-recipes"}>Saved</RouterLink>
-            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-            <RouterLink to="/shopping-list" className={navLinkClass} data-current={currentNav === "shopping"}>Shopping List</RouterLink>
-            <RouterLink to="/chefs" className={navLinkClass} data-current={currentNav === "chefs"}>Chefs</RouterLink>
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Kitchen Search</RouterLink>
-          </div>
-          <div className="sj-desktop-nav-actions">
-            <ThemeToggle />
-            <RouterLink to="/account/settings" className={navLinkClass} data-current={currentNav === "account"}>Account</RouterLink>
-            <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-              <button type="submit" className={navLinkClass}>
-                Log out
-              </button>
-            </Form>
-          </div>
+          <ColorSchemeToggle />
+          <Button href="/account/settings" plain aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
+          <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
+            <Button type="submit" plain>Log out</Button>
+          </Form>
         </>
       ) : (
         <>
-          <div className="sj-desktop-nav-center">
-            <RouterLink to="/search" className={navLinkClass} data-current={currentNav === "search"}>Search</RouterLink>
-            <RouterLink to="/recipes" className={navLinkClass} data-current={currentNav === "recipes"}>Recipes</RouterLink>
-            <RouterLink to="/cookbooks" className={navLinkClass} data-current={currentNav === "cookbooks"}>Cookbooks</RouterLink>
-          </div>
-          <div className="sj-desktop-nav-actions">
-            <ThemeToggle />
-            <LoginMenu oauthProviders={oauthProviders} />
-            <Button href="/signup">Sign up</Button>
-          </div>
+          <ColorSchemeToggle />
+          <LoginPopover oauthProviders={oauthProviders} />
+          <Button href="/signup">Sign up</Button>
         </>
       )}
-    </nav>
+    />
   );
 }
 
@@ -232,31 +215,31 @@ export default function App() {
 
   return (
     <DockContextProvider>
-      <ToastProvider isAuthenticated={!!userId}>
-        <RouteTransitionIndicator />
-        <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
-          {userId ? null : <PhoneBrandBar />}
-          <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
-            <AppNavbar userId={userId} oauthProviders={oauthProviders} />
-          </header>
-          {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
-              max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
-              page never sits under it. */}
-          <main
-            id="main"
-            tabIndex={-1}
-            className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0 print:pb-0"
-          >
-            <Outlet />
-          </main>
+      <RouteTransitionIndicator />
+      <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+        {userId ? null : <PhoneBrandBar />}
+        <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
+          <AppNavbar userId={userId} oauthProviders={oauthProviders} />
         </div>
-        <MobileNav isAuthenticated={!!userId} />
-        <InstallPromptCard />
-      </ToastProvider>
+        {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
+            max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
+            page never sits under it. */}
+        <main
+          id="main"
+          tabIndex={-1}
+          className="sj-desktop-surface sj-mobile-surface grow"
+        >
+          <Outlet />
+        </main>
+      </div>
+      <MobileNav isAuthenticated={!!userId} />
+      <InstallPromptCard />
+      <MobileNavToaster isAuthenticated={!!userId} />
     </DockContextProvider>
   );
 }
 
+// TODO(ouro-hx: route-progress, spoonjoy/spoonjoy-v2#570): The bar that shows a navigation in progress becomes HX's RouteProgress in #570.
 /**
  * Thin top-of-page brass bar that appears while React Router is loading a new
  * route or submitting a form. One global affordance covers every action that
@@ -302,30 +285,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <Meta />
         <Links />
-        {/* Prevent flash of wrong theme */}
-        <script
-          nonce={nonce}
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                const stored = localStorage.getItem('spoonjoy-theme');
-                const theme = stored === 'light' || stored === 'dark'
-                  ? stored
-                  : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-                document.documentElement.classList.add(theme);
-              })();
-            `,
-          }}
-        />
+        {/* Applies the kept colour scheme before the page paints, so a reload never flashes the wrong one. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: colorSchemeScript({ storageKey: THEME_STORAGE_KEY }) }} />
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
-        <ThemeProvider>
+        <ColorSchemeProvider storageKey={THEME_STORAGE_KEY}>
           {/* Ouro UI's links and link buttons navigate through React Router. */}
           <OuroProvider linkComponent={OuroRouterLink}>
             <SkipLink />
             {children}
           </OuroProvider>
-        </ThemeProvider>
+        </ColorSchemeProvider>
         <ScrollRestoration nonce={nonce} />
         <Scripts nonce={nonce} />
       </body>

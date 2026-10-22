@@ -96,3 +96,13 @@ export const Indeterminate: Story = {
     </Surface>
   ),
 };
+
+/** A read-only box shows its state and ignores clicks and keys, unlike a disabled one, which also fades. */
+export const ReadOnly: Story = {
+  render: () => (
+    <Surface>
+      <Checkbox label="Saved to my cookbook" name="saved" checked readOnly />
+      <Checkbox label="Shared with the family" name="shared" checked={false} readOnly />
+    </Surface>
+  ),
+};

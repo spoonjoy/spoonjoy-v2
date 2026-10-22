@@ -11,7 +11,7 @@ import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { data as routerData, redirect } from "react-router";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", () => ({
   shareContent: vi.fn(async () => ({ success: true, method: "native" })),
@@ -1523,7 +1523,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools Open +" });
+      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools" });
       expect(ownerToolsToggle).toBeInTheDocument();
       expect(ownerToolsToggle).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
@@ -1532,7 +1532,7 @@ describe("Cookbooks $id Route", () => {
 
       await openOwnerTools();
 
-      expect(screen.getByRole("button", { name: "Owner tools Close" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("button", { name: "Owner tools" })).toHaveAttribute("aria-expanded", "true");
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
       // Each row's button names its recipe, so rows are told apart by name.
@@ -1850,9 +1850,9 @@ describe("Cookbooks $id Route", () => {
         ]);
 
         render(
-          <ToastProvider>
+          <>
             <Stub initialEntries={["/cookbooks/cookbook-1"]} />
-          </ToastProvider>,
+          <Toaster /></>,
         );
       }
 
@@ -1971,7 +1971,8 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't save that just now/ })).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        // A destructive toast speaks through an alert; the toast itself is hidden from assistive tech.
+        expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now.");
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();

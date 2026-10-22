@@ -1,14 +1,15 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  getIngredientLayoutTransition,
+  formatStepReferenceName,
   IngredientList,
+  type IngredientListProps,
   type Ingredient,
 } from '../../../app/components/recipe/IngredientList'
 
 const sampleIngredients: Ingredient[] = [
-  { id: '1', quantity: 2, unit: 'cups', name: 'flour', iconKey: 'wheat' },
+  { id: '1', quantity: 2, unit: 'cups', name: 'flour', iconKey: 'wheat', categoryLabel: 'Pantry' },
   { id: '2', quantity: 1, unit: 'cup', name: 'sugar' },
   { id: '3', quantity: 0.5, unit: 'cup', name: 'butter', iconKey: 'milk' },
 ]
@@ -18,313 +19,107 @@ const sampleStepOutputUses = [
   { id: 'step-2', stepNumber: 2, stepTitle: null },
 ]
 
+function renderList(props: Partial<IngredientListProps> = {}) {
+  const onToggle = vi.fn()
+  const onStepOutputToggle = vi.fn()
+  render(
+    <IngredientList
+      ingredients={sampleIngredients}
+      checkedIds={new Set()}
+      onToggle={onToggle}
+      stepOutputUses={[]}
+      checkedStepOutputIds={new Set()}
+      onStepOutputToggle={onStepOutputToggle}
+      {...props}
+    />
+  )
+  return { onToggle, onStepOutputToggle }
+}
+
 describe('IngredientList', () => {
   it('returns null for empty ingredients and empty step outputs', () => {
-    const { container } = render(<IngredientList ingredients={[]} stepOutputUses={[]} />)
+    const { container } = render(
+      <IngredientList
+        ingredients={[]}
+        checkedIds={new Set()}
+        onToggle={vi.fn()}
+        stepOutputUses={[]}
+        checkedStepOutputIds={new Set()}
+        onStepOutputToggle={vi.fn()}
+      />
+    )
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders ingredients with name, quantity column, and checkbox', () => {
-    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set()} onToggle={vi.fn()} />)
+  it('is an Ouro HX checklist named Ingredients, one checkbox per ingredient', () => {
+    renderList()
 
-    expect(screen.getByTestId('ingredient-list')).toBeInTheDocument()
-    expect(screen.getByText('flour')).toBeInTheDocument()
-    expect(screen.getByTestId('ingredient-quantity-1')).toHaveTextContent('2 cups')
-    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    const list = screen.getByRole('group', { name: 'Ingredients' })
+    expect(list).toHaveAttribute('data-ouro', 'checklist')
+    const boxes = screen.getAllByRole('checkbox')
+    expect(boxes.map((box) => box.getAttribute('data-ouro-control'))).toEqual(['checklist', 'checklist', 'checklist'])
   })
 
-  it('hides checkboxes when showCheckboxes is false', () => {
-    render(<IngredientList ingredients={sampleIngredients} showCheckboxes={false} />)
-    expect(screen.queryByRole('checkbox')).toBeNull()
+  it('describes each ingredient by its aisle and its amount', () => {
+    renderList()
+
+    expect(screen.getByRole('checkbox', { name: 'flour' })).toHaveAccessibleDescription('Pantry 2 cups')
+    expect(screen.getByRole('checkbox', { name: 'sugar' })).toHaveAccessibleDescription('1 cup')
   })
 
-  it('does not render checkboxes when onToggle is missing', () => {
-    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set()} />)
-    expect(screen.queryByRole('checkbox')).toBeNull()
+  it('scales quantity values', () => {
+    renderList({ ingredients: [{ id: '1', quantity: 2, unit: 'cups', name: 'flour' }], scaleFactor: 2 })
+    expect(screen.getByRole('checkbox', { name: 'flour' })).toHaveAccessibleDescription('4 cups')
   })
 
-  it('scales quantity values in the quantity column', () => {
-    render(
-      <IngredientList
-        ingredients={[{ id: '1', quantity: 2, unit: 'cups', name: 'flour' }]}
-        scaleFactor={2}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    expect(screen.getByTestId('ingredient-quantity-1')).toHaveTextContent('4 cups')
+  it('formats a fractional quantity', () => {
+    renderList({ ingredients: [{ id: '1', quantity: 1.5, unit: 'cups', name: 'milk' }] })
+    expect(screen.getByRole('checkbox', { name: 'milk' })).toHaveAccessibleDescription('1 ½ cups')
   })
 
-  it('formats fractional scaled quantity', () => {
-    render(
-      <IngredientList
-        ingredients={[{ id: '1', quantity: 1.5, unit: 'cups', name: 'milk' }]}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    expect(screen.getByTestId('ingredient-quantity-1')).toHaveTextContent('1 ½ cups')
+  it('shows only the unit when there is no quantity', () => {
+    renderList({ ingredients: [{ id: '1', quantity: null, unit: 'pinch', name: 'garnish' }] })
+    expect(screen.getByRole('checkbox', { name: 'garnish' })).toHaveAccessibleDescription('pinch')
   })
 
-  it('renders unit-only quantity text when quantity is null', () => {
-    render(
-      <IngredientList
-        ingredients={[{ id: '1', quantity: null, unit: 'pinch', name: 'garnish' }]}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    expect(screen.getByTestId('ingredient-quantity-1')).toHaveTextContent('pinch')
-    expect(screen.getByText('garnish')).toBeInTheDocument()
+  it('shows no amount when there is neither a quantity nor a unit', () => {
+    renderList({ ingredients: [{ id: '1', quantity: Number.NaN, unit: '', name: 'salt' }] })
+    expect(screen.getByRole('checkbox', { name: 'salt' })).not.toHaveAttribute('aria-describedby')
   })
 
-  it('uses checkbox labels for accessibility', () => {
-    render(
-      <IngredientList
-        ingredients={[{ id: '1', quantity: 2, unit: 'cups', name: 'flour' }]}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    expect(screen.getByRole('checkbox', { name: 'flour' })).toBeInTheDocument()
+  it('reflects the checked ingredients', () => {
+    renderList({ checkedIds: new Set(['2']) })
+    expect(screen.getByRole('checkbox', { name: 'sugar' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'flour' })).not.toBeChecked()
   })
 
-  it('calls onToggle when ingredient name is clicked', async () => {
-    const onToggle = vi.fn()
-    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set()} onToggle={onToggle} />)
-
+  it('calls onToggle with the ingredient id when its row is clicked', async () => {
+    const { onToggle, onStepOutputToggle } = renderList()
     await userEvent.click(screen.getByText('flour'))
     expect(onToggle).toHaveBeenCalledWith('1')
+    expect(onStepOutputToggle).not.toHaveBeenCalled()
   })
 
-  it('calls onToggle when checkbox is clicked', async () => {
-    const onToggle = vi.fn()
-    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set()} onToggle={onToggle} />)
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'sugar' }))
-    expect(onToggle).toHaveBeenCalledWith('2')
-  })
-
-  it('applies a full-width ruled strike to checked ingredient rows', () => {
-    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set(['1'])} onToggle={vi.fn()} />)
-
-    const flourItem = screen.getByTestId('ingredient-item-1')
-    const strike = within(flourItem).getByTestId('checklist-row-strike')
-    expect(strike).toHaveClass('left-0')
-    expect(strike).toHaveClass('right-0')
-    expect(within(flourItem).getByText('flour')).toHaveClass('text-[var(--sj-ink-soft)]')
-    expect(screen.getByTestId('ingredient-quantity-1')).toHaveClass('text-[var(--sj-ink-soft)]')
-  })
-
-  it('moves checked ingredients to the bottom of the list', () => {
-    const { container } = render(
-      <IngredientList ingredients={sampleIngredients} checkedIds={new Set(['1'])} onToggle={vi.fn()} />
-    )
-    const orderedNames = Array.from(container.querySelectorAll('[data-testid^="ingredient-item-"]')).map(
-      (item) => item.textContent ?? ''
-    )
-
-    expect(orderedNames[0]).toContain('sugar')
-    expect(orderedNames[1]).toContain('butter')
-    expect(orderedNames[2]).toContain('flour')
-  })
-
-  it('marks ingredient rows for pleasant layout animation when checkoff reorders them', () => {
-    render(<IngredientList ingredients={sampleIngredients} checkedIds={new Set(['1'])} onToggle={vi.fn()} />)
-
-    for (const item of screen.getAllByTestId(/^ingredient-item-/)) {
-      expect(item).toHaveAttribute('data-layout-animation', 'ingredient-checkoff-reorder')
-    }
-  })
-
-  it('uses a spring layout transition unless reduced motion is requested', () => {
-    expect(getIngredientLayoutTransition(false)).toMatchObject({
-      type: 'spring',
-      stiffness: 420,
-      damping: 38,
-      mass: 0.7,
+  it('lists step outputs first, and toggles them through onStepOutputToggle', async () => {
+    const { onToggle, onStepOutputToggle } = renderList({
+      stepOutputUses: sampleStepOutputUses,
+      checkedStepOutputIds: new Set(['step-2']),
     })
-    expect(getIngredientLayoutTransition(null)).toMatchObject({
-      type: 'spring',
-      stiffness: 420,
-      damping: 38,
-      mass: 0.7,
-    })
-  })
 
-  it('removes layout animation duration when reduced motion is requested', () => {
-    expect(getIngredientLayoutTransition(true)).toEqual({ duration: 0 })
-  })
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5)
+    const [first, second] = screen.getAllByRole('checkbox')
+    expect(first).toHaveAccessibleName('Step 1: Make the dough')
+    expect(first).toHaveAccessibleDescription('Step output')
+    expect(second).toHaveAccessibleName('Step 2')
+    expect(second).toBeChecked()
 
-  it('keeps unchecked ingredients before a later checked ingredient', () => {
-    const { container } = render(
-      <IngredientList ingredients={sampleIngredients} checkedIds={new Set(['2'])} onToggle={vi.fn()} />
-    )
-    const orderedNames = Array.from(container.querySelectorAll('[data-testid^="ingredient-item-"]')).map(
-      (item) => item.textContent ?? ''
-    )
-
-    expect(orderedNames[0]).toContain('flour')
-    expect(orderedNames[1]).toContain('butter')
-    expect(orderedNames[2]).toContain('sugar')
-  })
-
-  it('renders a step output uses section when references are present', () => {
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        stepOutputUses={sampleStepOutputUses}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    const section = screen.getByTestId('step-output-uses-section')
-    expect(section).toBeInTheDocument()
-    expect(section).not.toHaveClass('border-l')
-    expect(screen.getByTestId('step-output-item-step-1')).toHaveTextContent('Step 1: Make the dough')
-    expect(screen.getByTestId('step-output-item-step-1')).toHaveTextContent('step output')
-  })
-
-  it('renders step output references without checkboxes when onStepOutputToggle is missing', () => {
-    render(
-      <IngredientList
-        ingredients={[]}
-        stepOutputUses={sampleStepOutputUses}
-        showCheckboxes={true}
-      />
-    )
-
-    expect(screen.queryByRole('checkbox')).toBeNull()
-    expect(screen.getByText(/step 2/i)).toBeInTheDocument()
-  })
-
-  it('renders step output checkboxes and toggles the selected reference', async () => {
-    const onStepOutputToggle = vi.fn()
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        stepOutputUses={sampleStepOutputUses}
-        checkedIds={new Set()}
-        checkedStepOutputIds={new Set()}
-        onToggle={vi.fn()}
-        onStepOutputToggle={onStepOutputToggle}
-      />
-    )
-
-    await userEvent.click(screen.getByRole('checkbox', { name: /step 1.*make the dough/i }))
+    await userEvent.click(first!)
     expect(onStepOutputToggle).toHaveBeenCalledWith('step-1')
+    expect(onToggle).not.toHaveBeenCalled()
   })
 
-  it('toggles a step output when its text button is clicked', async () => {
-    const onStepOutputToggle = vi.fn()
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        stepOutputUses={sampleStepOutputUses}
-        checkedIds={new Set()}
-        checkedStepOutputIds={new Set()}
-        onToggle={vi.fn()}
-        onStepOutputToggle={onStepOutputToggle}
-      />
-    )
-
-    await userEvent.click(screen.getByRole('checkbox', { name: /step 1.*make the dough/i }))
-    expect(onStepOutputToggle).toHaveBeenCalledWith('step-1')
-  })
-
-  it('renders checked step output references with the shared row strike', () => {
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        stepOutputUses={sampleStepOutputUses}
-        checkedIds={new Set()}
-        checkedStepOutputIds={new Set(['step-1'])}
-        onToggle={vi.fn()}
-        onStepOutputToggle={vi.fn()}
-      />
-    )
-
-    const checkedItem = screen.getByTestId('step-output-item-step-1')
-    expect(within(checkedItem).getByTestId('checklist-row-strike')).toHaveClass('right-0')
-    expect(within(checkedItem).getByText('used')).toBeInTheDocument()
-  })
-
-  it('applies min-h-11 touch target class to step output use buttons', () => {
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        stepOutputUses={sampleStepOutputUses}
-        checkedIds={new Set()}
-        checkedStepOutputIds={new Set()}
-        onToggle={vi.fn()}
-        onStepOutputToggle={vi.fn()}
-      />
-    )
-
-    const section = screen.getByTestId('step-output-uses-section')
-    const checkboxes = within(section).getAllByRole('checkbox')
-    for (const checkbox of checkboxes) {
-      expect(checkbox).toHaveClass('min-h-14')
-    }
-  })
-
-  it('applies min-h-11 touch target class to ingredient row buttons', () => {
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    const checkboxes = screen.getAllByRole('checkbox')
-    for (const checkbox of checkboxes) {
-      expect(checkbox).toHaveClass('min-h-14')
-    }
-  })
-
-  it('hides step output checkboxes when showCheckboxes is false', () => {
-    render(
-      <IngredientList
-        ingredients={sampleIngredients}
-        stepOutputUses={sampleStepOutputUses}
-        showCheckboxes={false}
-      />
-    )
-
-    expect(screen.queryByRole('checkbox')).toBeNull()
-    expect(screen.getByText(/step 1/i)).toBeInTheDocument()
-  })
-
-  it('shows checked styling without checkbox controls when checked ids are provided', () => {
-    render(
-      <IngredientList
-        ingredients={[{ id: '1', quantity: 1, unit: 'cup', name: 'flour' }]}
-        checkedIds={new Set(['1'])}
-        showCheckboxes={false}
-      />
-    )
-
-    const flourItem = screen.getByText('flour').closest('li')
-    expect(flourItem).not.toBeNull()
-    expect(within(flourItem as HTMLElement).getByTestId('checklist-row-strike')).toBeInTheDocument()
-    expect(screen.getByTestId('ingredient-quantity-1')).toHaveClass('text-[var(--sj-ink-soft)]')
-  })
-
-  it('renders a non-empty placeholder when quantity and unit are missing', () => {
-    render(
-      <IngredientList
-        ingredients={[{ id: '1', quantity: null, unit: '', name: 'pepper' }]}
-        checkedIds={new Set()}
-        onToggle={vi.fn()}
-      />
-    )
-
-    expect(screen.getByTestId('ingredient-quantity-1').textContent).toBe('\u00A0')
+  it('names a step output by its number alone when it has no title', () => {
+    expect(formatStepReferenceName({ id: 'a', stepNumber: 3, stepTitle: null })).toBe('Step 3')
+    expect(formatStepReferenceName({ id: 'a', stepNumber: 3, stepTitle: 'Rest' })).toBe('Step 3: Rest')
   })
 })

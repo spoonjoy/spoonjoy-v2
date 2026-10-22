@@ -45,7 +45,7 @@ export const Playground: Story = {};
 
 /** A recipe row that is a link with a save action, a settings row whose action drops under it on a phone, and an icon row. */
 export const InContext: Story = {
-  parameters: { screenshot: { name: "item" } },
+  parameters: { mode: "link", screenshot: { name: "item" } },
   render: () => (
     <Page>
       <Item
@@ -83,6 +83,7 @@ export const InContext: Story = {
 
 /** A recipe list: rows with the photo beside the text, and on a phone the photo full width above it. */
 export const RecipeList: Story = {
+  parameters: { mode: "link" },
   render: () => (
     <Page>
       <ItemGroup label="Recipes">

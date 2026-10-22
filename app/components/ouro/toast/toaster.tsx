@@ -1,10 +1,12 @@
 "use client";
 
 import { Toast } from "@base-ui/react/toast";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type JSX, type PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "~/lib/ouro/cn";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { devWarn } from "~/lib/ouro/dev";
+import { useFocusHandoff, type FocusHandoffOptions } from "~/lib/ouro/focus-handoff";
+import { useMergedRef } from "~/lib/ouro/refs";
 import { rubberband, spring, type SpringHandle } from "~/lib/ouro/spring";
 import { connectToaster, type ToastRecord } from "~/lib/ouro/toast";
 import { TouchTarget } from "~/lib/ouro/touch-target";
@@ -29,6 +31,8 @@ export interface ToasterProps {
    * safe-area expression; include the appropriate inset in your own clearance.
    * Use statically written classes matching your app's visibility/breakpoints,
    * which need not match the Toaster's `sm` breakpoint.
+   * @claim "Layout classes on the actual portaled" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::Toaster > updates viewport layout without replacing or reannouncing a live toast or resetting its countdown)
+   * @claim "Layout classes on the actual portaled" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::Toaster > lets unprefixed app clearance and width win on the actual viewport at phone and desktop widths)
    */
   className?: string | undefined;
   /**
@@ -40,23 +44,32 @@ export interface ToasterProps {
   /**
    * The accessible name of each toast's dismiss button, which shows an icon only.
    * @default "Dismiss"
+   * @claim "The accessible name of each toast's" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::Toaster > translates the region name and the dismiss button with label and closeLabel)
    */
   closeLabel?: string | undefined;
 
   /** Not a prop. Toasts default to the bottom: full width on phones, at the bottom end from `sm`; className adjusts viewport layout. */
   position?: { 'Not a prop: toasts show at the bottom. Use <Toaster />': never };
-  /** Not a prop. Each toast takes its own `tone`: `toast("Saved", { tone: "success" })`. */
+  /**
+   * Not a prop. Each toast takes its own `tone`: `toast("Saved", { tone: "success" })`.
+   *
+   * @claim "Each toast takes its own `tone`" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > marks the tone and shows an icon for every tone but secondary)
+   */
   richColors?: { 'Use toast("Saved", { tone: "success" })': never };
   /** Not a prop. Dark mode follows the `.dark` class, as in shadcn. */
   theme?: { 'Not a prop: dark mode follows the .dark class. Use <Toaster />': never };
-  /** Not a prop. Each toast takes its own `duration`: `toast("Saved", { duration: 8000 })`. */
+  /**
+   * Not a prop. Each toast takes its own `duration`: `toast("Saved", { duration: 8000 })`.
+   *
+   * @claim "Each toast takes its own `duration`" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > dismisses itself after duration; 0 and Infinity keep it)
+   */
   duration?: { 'Use toast("Saved", { duration: 8000 })': never };
 }
 
 /**
  * Shows the toasts you send with `toast("Saved")` from `@/lib/ouro/toast`: render it
- * once, at the root of your app, inside `OuroProvider` if you use one, or alone. Every
- * Ouro UI install has `toast`. Toasts stack at the
+ * once, at the root of your app, inside `OuroProvider` if you use one, or alone. Adding
+ * Toaster installs `toast` with it. Toasts stack at the
  * bottom of the screen, full width on phones by default; `className` adjusts viewport
  * layout/clearance, not each toast's appearance. Up to three show, and later ones wait their
  * turn, a `destructive` toast ahead of the others. They pause while the pointer is over them or a toast has focus, F6 moves focus to
@@ -90,6 +103,16 @@ export interface ToasterProps {
  * </OuroProvider>
  * // Anywhere in the app:
  * toast("Recipe saved", { tone: "success" });
+ * @claim "Toasts stack at the bottom of" registry/ouro/components/ouro/toast/toaster.tsx verify:fileLine(registry/ouro/components/ouro/toast/toaster.tsx, /^import\s\{\sconnectToaster,\stype\sToastRecord\s\}\sfrom\s"@\/registry\/ouro\/lib\/ouro\/toast";/)
+ * @claim "Up to three show, and later" registry/ouro/components/ouro/toast/toaster.tsx verify:fileLine(registry/ouro/components/ouro/toast/toaster.tsx, /^import\s\{\sconnectToaster,\stype\sToastRecord\s\}\sfrom\s"@\/registry\/ouro\/lib\/ouro\/toast";/)
+ * @claim "They pause while the pointer is" registry/ouro/components/ouro/toast/toaster.tsx verify:fileLine(registry/ouro/components/ouro/toast/toaster.tsx, /^import\s\{\sconnectToaster,\stype\sToastRecord\s\}\sfrom\s"@\/registry\/ouro\/lib\/ouro\/toast";/)
+ * @claim "Each toast is read to screen" registry/ouro/components/ouro/toast/toaster.tsx verify:fileLine(registry/ouro/components/ouro/toast/toaster.tsx, /^import\s\{\sconnectToaster,\stype\sToastRecord\s\}\sfrom\s"@\/registry\/ouro\/lib\/ouro\/toast";/)
+ * @claim "They pause while the pointer is" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::pausing > pauses while the pointer is over the toasts, and resumes after)
+ * @claim "They pause while the pointer is" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::pausing > pauses while a toast has keyboard focus; F6 moves focus to the toasts)
+ * @claim "Toasts stack at the bottom of" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > puts the newest toast first in the page, where F6 then Tab reaches it, then each older one)
+ * @claim "Up to three show, and later" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > puts the newest toast first in the page, where F6 then Tab reaches it, then each older one)
+ * @claim "They pause while the pointer is" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > puts the newest toast first in the page, where F6 then Tab reaches it, then each older one)
+ * @claim "Each toast is read to screen" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > puts the newest toast first in the page, where F6 then Tab reaches it, then each older one)
  */
 export function Toaster(props: ToasterProps): JSX.Element | null {
   const { className, label = "Notifications", closeLabel = "Dismiss", position, richColors, theme, duration } = props;
@@ -120,7 +143,7 @@ export function Toaster(props: ToasterProps): JSX.Element | null {
       <Connect onActive={setActive} />
       {active && (
         <Toast.Portal className={portalClass}>
-          <Toast.Viewport aria-label={label} data-ouro="toaster" className={cn(viewportClass, className)}>
+          <Toast.Viewport aria-label={label} data-ouro="toaster" className={cn(viewportClass, className)} onFocus={rememberEntry}>
             <ToastList closeLabel={closeLabel} />
           </Toast.Viewport>
         </Toast.Portal>
@@ -134,13 +157,15 @@ const urgent = (record: ToastRecord) => record.tone === "destructive";
 
 /** How many toasts show at once; later ones wait in the Toaster's queue. */
 const VISIBLE = 3;
-/** How many toasts may wait before development warns that the app sends too many. There is no cap. */
+/** How many toasts may wait before development warns that the app sends too many; more may still wait. */
 const MAX_WAITING_HINT = 10;
 
 /**
  * Connects this Toaster to `toast()`. Up to three toasts are in Base UI's manager at a time;
  * later ones wait here, first in first out, and are added, with their countdown, when a
  * slot frees. Another Toaster already connected keeps this one waiting until it unmounts.
+ * @claim "Up to three toasts are in" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > queues: up to three show, and later ones wait, out of the page, until a slot frees)
+ * @claim "Up to three toasts are in" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > starts a waiting toast's countdown only when it shows, so it shows for its full duration and is announced once)
  */
 function Connect({ onActive }: { onActive: (active: boolean) => void }): null {
   // add and close are the store's own methods, stable for the Toaster's life. The queue
@@ -242,6 +267,10 @@ function Connect({ onActive }: { onActive: (active: boolean) => void }): null {
 /**
  * The toasts, newest first in the page as Base UI orders them, so F6 then Tab reaches the
  * newest and goes on to each older one. Each is announced as it arrives.
+ * @claim "The toasts, newest first in the" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > puts the newest toast first in the page, where F6 then Tab reaches it, then each older one)
+ * @claim "The toasts, newest first in the" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::keyboard > reaches and runs the oldest toast's action with F6, then Tab)
+ * @claim "Each is announced as it arrives" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > is announced once: politely through the Notifications region, and a destructive toast assertively (Review Focus 5))
+ * @claim "Each is announced as it arrives" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > starts a waiting toast's countdown only when it shows, so it shows for its full duration and is announced once)
  */
 function ToastList({ closeLabel }: { closeLabel: string }): JSX.Element[] {
   const { toasts } = Toast.useToastManager();
@@ -250,20 +279,59 @@ function ToastList({ closeLabel }: { closeLabel: string }): JSX.Element[] {
 
 type ToastObject = ReturnType<typeof Toast.useToastManager>["toasts"][number];
 
+/**
+ * Where focus was before it entered each toast region, so a toast that leaves with it can send it back there.
+ *
+ * @claim "Where focus was before it entered" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > hands focus to %s when its dismiss button closes it from the keyboard)
+ */
+const cameFrom = new WeakMap<Element, HTMLElement>();
+
+function rememberEntry(event: FocusEvent<HTMLElement>): void {
+  const from = event.relatedTarget;
+  // Focus that comes from nowhere (a handoff from a toast that left, after focus fell to <body>)
+  // keeps the place it entered from.
+  if (from instanceof HTMLElement && !event.currentTarget.contains(from)) cameFrom.set(event.currentTarget, from);
+}
+
+/**
+ * A toast hands focus to the next toast, and never past its region to some other control of the
+ * page (a footer link): when it was the last, focus goes back where it was before it entered the
+ * toasts, or stays on the page when it came from nowhere.
+ *
+ * @claim "A toast hands focus to the next toast" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > hands focus to %s when its dismiss button closes it from the keyboard) verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > leaves focus on the page when the last toast goes and focus came from nowhere, rather than moving it to the page's last control)
+ */
+function toastHandoff(element: HTMLDivElement): FocusHandoffOptions {
+  const region = element.closest('[data-ouro="toaster"]')!;
+  return { within: region, fallback: cameFrom.get(region) ?? null };
+}
+
 /** One toast. The swipe is Ouro's own, so Base UI's is off. */
 function ToastItem({ item, closeLabel }: { item: ToastObject; closeLabel: string }): JSX.Element {
   const { close } = Toast.useToastManager();
   const swipe = useSwipeAway(() => close(item.id), item.transitionStatus === "ending");
+  // A toast its dismiss button or action closes hands focus to the next toast, or back to the page.
+  const ref = useMergedRef(swipe.ref, useFocusHandoff<HTMLDivElement>(toastHandoff));
   return (
-    <Toast.Root toast={item} swipeDirection={NO_SWIPE} {...swipe} data-ouro="toast" data-tone={item.type} className={rootClass}>
+    <Toast.Root
+      toast={item}
+      swipeDirection={NO_SWIPE}
+      {...swipe}
+      ref={ref}
+      data-ouro="toast"
+      data-tone={item.type}
+      // A high-priority toast is an alertdialog, an urgent part of its own.
+      data-ouro-control="toaster"
+      data-ouro-part={item.priority === "high" ? "alert" : "toast"}
+      className={rootClass}
+    >
       <Toast.Content className={contentClass}>
         <ToneIcon tone={item.type} />
         <div className="grid min-w-0 flex-1 gap-0.5">
           <Toast.Title render={<div />} data-ouro-toast-title="" className="m-0 text-sm font-medium text-popover-foreground" />
           <Toast.Description render={<div />} data-ouro-toast-description="" className="m-0 text-sm text-muted-foreground" />
         </div>
-        <Toast.Action className={actionClass} />
-        <Toast.Close aria-label={closeLabel} className={closeClass}>
+        <Toast.Action data-ouro-control="toaster" data-ouro-part="action" className={actionClass} />
+        <Toast.Close aria-label={closeLabel} data-ouro-control="toaster" data-ouro-part="close" className={closeClass}>
           <TouchTarget />
           <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-4">
             <path d="M4 4l8 8M12 4l-8 8" />
@@ -277,7 +345,12 @@ function ToastItem({ item, closeLabel }: { item: ToastObject; closeLabel: string
 const NO_SWIPE: [] = [];
 /** How far, in px, a toast let go without a flick must be from rest to leave. */
 const AWAY = 40;
-/** A press on one of these never starts a swipe: the action, the dismiss button, a link or a control in the message, and anything an app marks `data-swipe-ignore`. The list Base UI's swipe used. */
+/**
+ * A press on one of these never starts a swipe: the action, the dismiss button, a link or a control in the message, and anything an app marks `data-swipe-ignore`. The list Base UI's swipe used.
+ *
+ * @claim "A press on one of these" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::swiping > takes its press from the first pointer: a second one on a button does not stop the swipe, and one that began on a button starts none)
+ * @claim "A press on one of these" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::swiping > starts no swipe from content marked data-swipe-ignore or data-base-ui-swipe-ignore, as before)
+ */
 const CONTROLS = 'button,a,input,textarea,[role="button"],[data-base-ui-swipe-ignore],[data-swipe-ignore]';
 
 type Axis = "x" | "y";
@@ -293,6 +366,10 @@ type Axis = "x" | "y";
  * finger, then returns or fades with no travel.
  *
  * The offset is the element's `translate`, which adds to the `transform` the stack sets.
+ * @claim "The toast follows the finger from" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::the swipe follows the finger (rule 12) > moves 1:1 from where it was taken, either way, once 10px have chosen sideways)
+ * @claim "With reduced motion it still follows" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::the swipe follows the finger (rule 12) > moves 1:1 from where it was taken, either way, once 10px have chosen sideways)
+ * @claim "The toast follows the finger from" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::the swipe follows the finger (rule 12) > is taken without a jump when caught above rest, where it was held back)
+ * @claim "With reduced motion it still follows" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::the swipe follows the finger (rule 12) > is taken without a jump when caught above rest, where it was held back)
  */
 function useSwipeAway(dismiss: () => void, ending: boolean) {
   const state = useRef<SwipeState>({ element: null, axis: null, offset: 0, grab: 0, pressed: { x: false, y: false }, moved: false, leaving: false, control: false, settle: undefined });
@@ -470,7 +547,11 @@ interface SwipeState {
   offset: number;
   /** The finger travel that put the toast where it was taken. */
   grab: number;
-  /** Which of the two drags, one per axis, still follows a press that has not chosen. */
+  /**
+   * Which of the two drags, one per axis, still follows a press that has not chosen.
+   *
+   * @claim "Which of the two drags, one" registry/ouro/components/ouro/toast/toaster.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.touch.test.tsx::the swipe follows the finger (rule 12) > moves 1:1 from where it was taken, either way, once 10px have chosen sideways)
+   */
   pressed: { x: boolean; y: boolean };
   /** Whether the press became a drag. */
   moved: boolean;
@@ -485,7 +566,11 @@ function unband(shown: number, size: number, constant = 0.55): number {
   return (shown * size) / (constant * (size - Math.abs(shown)));
 }
 
-/** The tone's icon, drawn in the tone's color; `secondary` has none. */
+/**
+ * The tone's icon, drawn in the tone's color; `secondary` has none.
+ *
+ * @claim "The tone's icon, drawn in the" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > marks the tone and shows an icon for every tone but secondary)
+ */
 function ToneIcon({ tone }: { tone: string | undefined }): JSX.Element | null {
   if (tone === undefined || !Object.hasOwn(iconTones, tone)) return null;
   const color = iconTones[tone as keyof typeof iconTones];

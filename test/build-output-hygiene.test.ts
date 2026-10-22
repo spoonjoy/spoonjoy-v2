@@ -82,6 +82,14 @@ describe("build output hygiene", () => {
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("warn", {
       code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "llms_._txt".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
+      message: 'Generated an empty chunk: "ouro-provenance_._json".',
+    })).toBe(false);
+    expect(shouldLogRollupBuildMessage("warn", {
+      code: "EMPTY_BUNDLE",
       message: 'Generated an empty chunk: "csp-report".',
     })).toBe(false);
     expect(shouldLogRollupBuildMessage("warn", {

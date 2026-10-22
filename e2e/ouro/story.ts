@@ -23,6 +23,26 @@ export async function openStory(page: Page, id: string): Promise<void> {
   });
 }
 
+/**
+ * Stops the page's clock where it is, so a state that lasts a set time (a confirmation, a toast,
+ * a save in progress) stays until the spec moves the clock on with `page.clock.runFor(ms)` or lets
+ * it run again with `page.clock.resume()`: a loaded runner can take longer than that time between
+ * two steps. Call `page.clock.install()` before `openStory`, so the page's timers are the clock's.
+ */
+export async function holdClock(page: Page): Promise<void> {
+  // pauseAt takes a time ahead of the page's clock, which runs on while the request travels: aim a
+  // little ahead, and further each time the clock got there first.
+  for (let ahead = 50; ; ahead *= 2) {
+    const at = await page.evaluate((ms) => Date.now() + ms, ahead);
+    try {
+      await page.clock.pauseAt(at);
+      return;
+    } catch (error) {
+      if (ahead >= 3200 || !String(error).includes("Cannot fast-forward to the past")) throw error;
+    }
+  }
+}
+
 /** Waits for an element's transitions (opening, springing back) to finish, then returns its box. */
 export async function settledBox(element: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
   await element.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((animation) => animation.finished)));

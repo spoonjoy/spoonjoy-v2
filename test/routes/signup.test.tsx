@@ -990,6 +990,9 @@ describe("Signup Route", () => {
         await screen.findByRole("heading", { name: "Sign up" });
         // Look for a separator element that says "or" as a standalone element
         expect(screen.getByTestId("oauth-separator")).toBeInTheDocument();
+        // HX Separator with its label, not a hand-rolled rule.
+        expect(screen.getByTestId("oauth-separator")).toHaveAttribute("data-ouro", "separator");
+        expect(screen.getByTestId("oauth-separator")).toHaveTextContent("or");
       });
 
       it("should hide OAuth separator and buttons when no providers are configured", async () => {

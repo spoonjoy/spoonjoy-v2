@@ -1,6 +1,6 @@
 import type { Route } from "./+types/$";
 import { data } from "react-router";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/button";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 
@@ -19,7 +19,7 @@ export default function CatchAll() {
   return (
     <CookbookPage>
       <CookbookHeader eyebrow="404" title="Page not found">
-        <Text>
+        <Text tone="muted">
           The page you are looking for does not exist or may have moved.
         </Text>
       </CookbookHeader>

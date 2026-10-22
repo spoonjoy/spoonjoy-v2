@@ -29,59 +29,59 @@ test.describe("Round trips on desktop", () => {
     await page.goto("/");
     await waitForHydration(page);
     await expect(page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true })).toBeVisible();
-    await expect(kitchen).toHaveAttribute("data-current", "true");
+    await expect(kitchen).toHaveAttribute("aria-current", "page");
     await expectAccessible();
 
     // Recipes is reachable when signed in (R-M2-3).
     await recipes.click();
     await expect(page).toHaveURL(pathUrl("/recipes"));
     await expect(page.getByRole("heading", { name: "All public recipes", exact: true })).toBeVisible();
-    await expect(recipes).toHaveAttribute("data-current", "true");
-    await expect(kitchen).toHaveAttribute("data-current", "false");
+    await expect(recipes).toHaveAttribute("aria-current", "page");
+    await expect(kitchen).not.toHaveAttribute("aria-current");
     await expectAccessible();
 
     await myRecipes.click();
     await expect(page).toHaveURL(pathUrl("/my-recipes"));
     await expect(page.getByRole("heading", { level: 1, name: "My Recipes", exact: true })).toBeVisible();
-    await expect(myRecipes).toHaveAttribute("data-current", "true");
-    await expect(recipes).toHaveAttribute("data-current", "false");
+    await expect(myRecipes).toHaveAttribute("aria-current", "page");
+    await expect(recipes).not.toHaveAttribute("aria-current");
     await expectAccessible();
 
     await saved.click();
     await expect(page).toHaveURL(pathUrl("/saved-recipes"));
     await expect(page.getByRole("heading", { level: 1, name: "Saved Recipes", exact: true })).toBeVisible();
-    await expect(saved).toHaveAttribute("data-current", "true");
+    await expect(saved).toHaveAttribute("aria-current", "page");
     await expectAccessible();
 
     await cookbooks.click();
     await expect(page).toHaveURL(pathUrl("/cookbooks"));
     await expect(page.getByRole("heading", { level: 1, name: "Cookbooks", exact: true })).toBeVisible();
-    await expect(cookbooks).toHaveAttribute("data-current", "true");
+    await expect(cookbooks).toHaveAttribute("aria-current", "page");
     await expectAccessible();
 
     await shoppingList.click();
     await expect(page).toHaveURL(pathUrl("/shopping-list"));
     await expect(page.getByRole("heading", { level: 1, name: "Shopping list", exact: true })).toBeVisible();
-    await expect(shoppingList).toHaveAttribute("data-current", "true");
+    await expect(shoppingList).toHaveAttribute("aria-current", "page");
     await expectAccessible();
 
     await chefs.click();
     await expect(page).toHaveURL(pathUrl("/chefs"));
     await expect(page.getByRole("heading", { level: 1, name: "Chefs", exact: true })).toBeVisible();
-    await expect(chefs).toHaveAttribute("data-current", "true");
+    await expect(chefs).toHaveAttribute("aria-current", "page");
     await expectAccessible();
 
     await kitchenSearch.click();
     await expect(page).toHaveURL(pathUrl("/search"));
     await expect(page.getByRole("heading", { level: 1, name: "Find the thing you meant to cook.", exact: true })).toBeVisible();
-    await expect(kitchenSearch).toHaveAttribute("data-current", "true");
+    await expect(kitchenSearch).toHaveAttribute("aria-current", "page");
     await expectAccessible();
 
     await kitchen.click();
     await expect(page).toHaveURL(pathUrl("/"));
     await expect(page.getByRole("heading", { level: 1, name: "My Kitchen", exact: true })).toBeVisible();
-    await expect(kitchen).toHaveAttribute("data-current", "true");
-    await expect(kitchenSearch).toHaveAttribute("data-current", "false");
+    await expect(kitchen).toHaveAttribute("aria-current", "page");
+    await expect(kitchenSearch).not.toHaveAttribute("aria-current");
   });
 
   test("the recipe page's Recipes link goes back to the page the cook came from", async ({ page, expectAccessible }) => {
@@ -107,7 +107,7 @@ test.describe("Round trips on desktop", () => {
     await recipesLink.click();
     await expect(page).toHaveURL(pathUrl("/my-recipes"));
     await expect(myRecipesHeading).toBeVisible();
-    await expect(nav.getByRole("link", { name: "My Recipes", exact: true })).toHaveAttribute("data-current", "true");
+    await expect(nav.getByRole("link", { name: "My Recipes", exact: true })).toHaveAttribute("aria-current", "page");
 
     // Kitchen -> Roasted Tomato Soup -> "Recipes" returns to the kitchen.
     await nav.getByRole("link", { name: "Kitchen", exact: true }).click();
@@ -131,7 +131,7 @@ test.describe("Round trips on desktop", () => {
     await page.goBack();
     await expect(page).toHaveURL(pathUrl("/"));
     await expect(kitchenHeading).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Kitchen", exact: true })).toHaveAttribute("data-current", "true");
+    await expect(nav.getByRole("link", { name: "Kitchen", exact: true })).toHaveAttribute("aria-current", "page");
   });
 
   test("the Recipes link on a recipe opened directly goes to all recipes", async ({ page }) => {

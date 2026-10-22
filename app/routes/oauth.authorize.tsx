@@ -27,9 +27,9 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { Heading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
 
@@ -274,8 +274,8 @@ export default function OAuthAuthorize() {
         <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
           Kitchen connection
         </p>
-        <Heading className="mt-3">Connection problem</Heading>
-        <Text className="mt-4" role="alert">
+        <Heading level={1} size="xl" className="mt-3">Connection problem</Heading>
+        <Text tone="muted" className="mt-4" role="alert">
           {view.message}
         </Text>
       </ConnectorConsentShell>
@@ -302,13 +302,13 @@ export default function OAuthAuthorize() {
       </p>
       <div className="mt-4 border-y border-[var(--sj-border)] py-4" role="alert">
         <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Unverified app</p>
-        <Text className="mt-1">
+        <Text tone="muted" className="mt-1">
           Sends you back to <span className="break-all font-semibold text-[var(--sj-ink)]">{redirectOrigin}</span>.
           Approve only if you recognize this site and started the connection.
         </Text>
       </div>
-      <Heading className="mt-3">Connect {appName} to Spoonjoy</Heading>
-      <Text className="mt-4 leading-7">
+      <Heading level={1} size="xl" className="mt-3">Connect {appName} to Spoonjoy</Heading>
+      <Text tone="muted" className="mt-4 leading-7">
         {appName} wants access to your Spoonjoy kitchen.
       </Text>
 
@@ -325,11 +325,11 @@ export default function OAuthAuthorize() {
       </div>
 
       {kitchenWarning ? (
-        <Text className="mt-4" role="alert">
+        <Text tone="muted" className="mt-4" role="alert">
           {kitchenWarning}
         </Text>
       ) : null}
-      <Text className="mt-4">
+      <Text tone="muted" className="mt-4">
         This connection stays active while {appName} keeps using it. It ends when you disconnect it, sign out
         everywhere, or leave it unused for 180 days.
       </Text>

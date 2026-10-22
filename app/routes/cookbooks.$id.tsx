@@ -71,16 +71,19 @@ function captureCookbookActionFailure(
     void capture;
   }
 }
-import { ConfirmationDialog } from "~/components/confirmation-dialog";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
-import { Link as AppLink } from "~/components/navigation/app-link";
+import { Text } from "~/components/ouro/text/text";
+import { BookOpen } from "lucide-react";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors } from "~/hooks/use-form-errors";
 import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { useToast } from "~/components/feedback/toast";
+import { toast } from "~/lib/ouro/toast";
 import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
@@ -345,7 +348,6 @@ interface CookbookActionData {
 export default function CookbookDetail() {
   const { cookbook, isOwner, availableRecipes, canonicalUrl } = useLoaderData<typeof loader>();
   const actionData = useActionData() as CookbookActionData | null | undefined;
-  const { showToast } = useToast();
   const recipeImages = cookbook.recipes.map((item) => ({
     coverImageUrl: item.recipe.coverImageUrl,
     title: item.recipe.title,
@@ -375,7 +377,7 @@ export default function CookbookDetail() {
       actionData?.retryable === true &&
       typeof actionData.error === "string"
     ) {
-      showToast({ message: actionData.error });
+      toast(actionData.error, { tone: "destructive" });
       return;
     }
     if (actionData?.intent !== "updateTitle") return;
@@ -385,8 +387,8 @@ export default function CookbookDetail() {
     }
     setTitleAnswer(undefined);
     setIsEditingTitle(false);
-    showToast({ message: "Cookbook renamed." });
-  }, [actionData, showToast]);
+    toast("Cookbook renamed.", { tone: "success" });
+  }, [actionData]);
 
   const openTitleEditor = () => {
     setTitleAnswer(undefined);
@@ -410,10 +412,7 @@ export default function CookbookDetail() {
     <CookbookPage>
       <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
-          <Link
-            href="/cookbooks"
-            className="inline-flex min-h-11 items-center"
-          >
+          <Link href="/cookbooks" tone="secondary">
             ← Back to cookbooks
           </Link>
           <Button type="button" plain onClick={handleShare}>
@@ -427,7 +426,7 @@ export default function CookbookDetail() {
             title={cookbook.title}
             ruled={false}
           >
-            <Text className="m-0">
+            <Text tone="muted" className="m-0">
               By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
               <span>
                 {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
@@ -448,9 +447,9 @@ export default function CookbookDetail() {
         </div>
 
         {isOwner && (
-          <ConfirmationDialog
+          <ConfirmDialog
             open={showDeleteDialog}
-            onClose={() => setShowDeleteDialog(false)}
+            onOpenChange={() => setShowDeleteDialog(false)}
             onConfirm={() => {
               setShowDeleteDialog(false);
               // Through the router, like the page's other actions: it follows the action's redirect
@@ -461,13 +460,13 @@ export default function CookbookDetail() {
             description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
             confirmLabel="Delete it"
             cancelLabel="Keep it"
-            destructive
+            tone="destructive"
           />
         )}
 
         {cookbook.recipes.length === 0 ? (
           <RuledEmptyState title="No recipes yet">
-            <Text className="mb-6">
+            <Text tone="muted" className="mb-6">
               {isOwner ? "Add recipes to your cookbook using the owner tools below." : "This cookbook is empty."}
             </Text>
           </RuledEmptyState>
@@ -480,64 +479,31 @@ export default function CookbookDetail() {
               </h2>
             </div>
 
-            <ol className="mt-6 border-y border-[var(--sj-border-strong)]">
-              {cookbook.recipes.map((item, index) => {
-                const servingsLabel = formatServingsLabel(item.recipe.servings);
-
-                return (
-                  <li key={item.id} className="border-b border-[var(--sj-border)] last:border-b-0">
-                    <AppLink
-                      href={`/recipes/${item.recipe.id}`}
-                      className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
-                      aria-label={item.recipe.title}
-                    >
-                      <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
-                        {item.recipe.coverImageUrl ? (
-                          <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
-                        ) : (
-                          <span className="block h-full w-full bg-[linear-gradient(135deg,color-mix(in_srgb,var(--sj-flour)_82%,var(--sj-panel-solid)),var(--sj-panel-solid))]" />
-                        )}
-                      </span>
-                      <span className="min-w-0 self-center">
-                        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] sm:text-3xl/8">
-                          {item.recipe.title}
-                        </span>
-                        <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} className="mt-2" />
-                        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)]">
-                          {item.recipe.description ?? `By ${chefDisplayName(item.recipe.chef.username)}`}
-                        </span>
-                      </span>
-                      {servingsLabel ? (
-                        <span className="font-sj-ui col-start-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:justify-self-end">
-                          {servingsLabel}
-                        </span>
-                      ) : null}
-                    </AppLink>
-                  </li>
-                );
-              })}
-            </ol>
+            <ItemGroup aria-labelledby="cookbook-recipes-heading" ordered variant="divided" className="mt-6">
+              {cookbook.recipes.map((item, index) => (
+                <Item
+                  key={item.id}
+                  href={`/recipes/${item.recipe.id}`}
+                  title={item.recipe.title}
+                  description={
+                    <>
+                      <Text lines={2}>{item.recipe.description ?? `By ${chefDisplayName(item.recipe.chef.username)}`}</Text>
+                      {formatServingsLabel(item.recipe.servings) ? <Text size="sm">{formatServingsLabel(item.recipe.servings)}</Text> : null}
+                    </>
+                  }
+                  media={item.recipe.coverImageUrl ? <img src={item.recipe.coverImageUrl} alt="" {...listImageProps(index, { prioritizeFirst: false })} /> : <BookOpen />}
+                  mediaSize={item.recipe.coverImageUrl ? "md" : "icon"}
+                  actions={item.recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} /> : undefined}
+                />
+              ))}
+            </ItemGroup>
           </section>
         )}
 
         {isOwner ? (
           <div className="mt-12 print:hidden">
-            <button
-              type="button"
-              className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 border-y border-[var(--sj-border)] bg-transparent py-3 text-left font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-              aria-expanded={showOwnerTools}
-              aria-controls="cookbook-owner-tools"
-              onClick={() => setShowOwnerTools((visible) => !visible)}
-            >
-              <span>Owner tools</span>
-              <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
-            </button>
-
-            {showOwnerTools ? (
-              <div id="cookbook-owner-tools" className="border-b border-[var(--sj-border)] py-6">
+            <Collapsible title="Owner tools" open={showOwnerTools} onOpenChange={setShowOwnerTools}>
+              <div id="cookbook-owner-tools" className="py-6">
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                   <div>
                     <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Cookbook details</h3>
@@ -638,15 +604,15 @@ export default function CookbookDetail() {
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            </Collapsible>
           </div>
         ) : null}
       </div>
 
       {/* Remove recipe confirmation dialog */}
-      <ConfirmationDialog
+      <ConfirmDialog
         open={!!recipeToRemove}
-        onClose={() => setRecipeToRemove(null)}
+        onOpenChange={() => setRecipeToRemove(null)}
         onConfirm={() => {
           /* istanbul ignore next -- @preserve defensive check: dialog is only open when recipeToRemove is set */
           if (recipeToRemove) {
@@ -661,7 +627,7 @@ export default function CookbookDetail() {
         description="This recipe will be removed from this cookbook. The recipe itself won't be deleted."
         confirmLabel="Remove it"
         cancelLabel="Keep it"
-        destructive
+        tone="destructive"
       />
     </CookbookPage>
   );
