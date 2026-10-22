@@ -36,8 +36,9 @@ const LOS_ANGELES = "America/Los_Angeles";
 const KIRITIMATI = "Pacific/Kiritimati";
 
 // The calendar date `iso` falls on in `timeZone`, in the app's format ("Sep 27, 2026").
-function calendarDate(iso: string, timeZone: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone });
+// HX LocalDate writes the date in the reader's own locale and time zone, as this journey's browser has them.
+function calendarDate(iso: string, timeZone: string, locale = "en-GB"): string {
+  return new Date(iso).toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric", timeZone });
 }
 
 function runSuffix(testInfo: TestInfo): string {
