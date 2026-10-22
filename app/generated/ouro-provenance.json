@@ -239,6 +239,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -254,6 +255,9 @@
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
+          "app/routes/login.tsx"
+        ],
+        "separator": [
           "app/routes/login.tsx"
         ],
         "text": [
@@ -310,6 +314,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -325,6 +330,9 @@
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
+          "app/routes/signup.tsx"
+        ],
+        "separator": [
           "app/routes/signup.tsx"
         ],
         "text": [
