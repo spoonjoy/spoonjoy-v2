@@ -195,8 +195,10 @@ test.describe("Account settings", () => {
     await expect(cropDialog).toBeVisible();
     await expect(cropDialog.getByRole("slider", { name: "Zoom" })).toBeVisible();
     const savePhoto = cropDialog.getByRole("button", { name: "Save", exact: true });
-    // Enabled once the preview has loaded.
+    // Enabled once the preview has loaded. HX's button fades its label in as it enables; the
+    // contrast scan waits for that fade, which it would otherwise measure half-way.
     await expect(savePhoto).toBeEnabled();
+    await expect.poll(() => savePhoto.evaluate((button) => button.getAnimations({ subtree: true }).length)).toBe(0);
     await expectAccessible();
     const uploaded = page.waitForResponse(
       (response) => response.request().method() === "POST" && new URL(response.url()).pathname === SETTINGS_ACTION,
