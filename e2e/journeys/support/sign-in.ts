@@ -6,9 +6,15 @@ import { expect } from "./journey";
 import { persona, scratch, scratchDesktop, type PersonaName } from "./personas";
 import { fillSecret, type Secret } from "./secret";
 import { requiredLabel } from "./forms";
+import { waitForHydration } from "./navigation";
 
+// The login page is ready once React Router has hydrated it, which is its own signal; the
+// window's load event can wait on a subresource the form never needs (in spoonjoy/spoonjoy-v2#567's
+// CI, the personas setup sat out its whole 60 s timeout on a fully drawn login page). When a
+// journey fails, journey.ts attaches the requests still open, so the next one names the resource.
 async function submitLoginForm(page: Page, user: { username: string; password: Secret }): Promise<void> {
-  await page.goto("/login");
+  await page.goto("/login", { waitUntil: "commit" });
+  await waitForHydration(page);
   await page.getByLabel("Username or email").fill(user.username);
   await fillSecret(page.getByLabel(requiredLabel("Password"), { exact: true }), user.password);
   // The desktop header also has a "Log in" menu button; the form's submit is the one in <main>.
