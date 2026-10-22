@@ -311,7 +311,9 @@ body {
   color: var(--sj-ink);
 }
 
-button,
+/* Controls use the UI face, except HX SyncStatus's Retry, which sits inside its sentence and takes
+   the sentence's face so the line keeps one height whichever state it shows. */
+button:not([data-ouro-control="sync-status"]),
 input,
 textarea,
 select {
