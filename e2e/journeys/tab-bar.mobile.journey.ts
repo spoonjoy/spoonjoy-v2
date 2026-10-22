@@ -108,7 +108,7 @@ test.describe("Tab bar on iPhone", () => {
       await page.goto(path);
       await waitForHydration(page);
       await expect(tabBar, `${path}: tab bar`).toBeVisible();
-      await expect(tabBar.getByRole("link"), `${path}: the tabs, in order`).toHaveText(["Kitchen", "Recipes", "Cookbooks", "Shopping", ""]);
+      await expect(tabBar.getByRole("link"), `${path}: the tabs, in order`).toHaveText(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
       await expect(tabBar.getByRole("button"), `${path}: no page actions in the tab bar`).toHaveCount(0);
       await expect(page.getByTestId("phone-brand-bar"), `${path}: no sign-up bar for a signed-in chef`).toHaveCount(0);
       await expect(tabBar.locator('[aria-current="page"]'), `${path}: one current tab`).toHaveCount(1);
@@ -186,7 +186,7 @@ test.describe("Tab bar on iPhone", () => {
     await page.goto("/account/settings");
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/");
-    await expect(tabBar.getByRole("link")).toHaveText(["Home", "Recipes", "Log in", ""]);
+    await expect(tabBar.getByRole("link")).toHaveText(["Home", "Recipes", "Log in", "Search"]);
     await expect(tabBar.getByRole("link", { name: "Log in", exact: true })).toHaveAttribute("href", "/login");
 
     // Signed out, a slim bar names Spoonjoy and offers sign-up above the page, so someone who
