@@ -25,7 +25,7 @@ describe("testChanged", () => {
     expect(testChanged(d)).toBe(0);
     expect(d.run.mock.calls).toEqual([
       ["pnpm", ["exec", "vitest", "list", "--changed", BASE, "--filesOnly", "--json=/tmp/changed.json"]],
-      ["pnpm", ["exec", "vitest", "run", "--changed", BASE, "--fileParallelism=false"]],
+      ["pnpm", ["exec", "vitest", "run", "--changed", BASE]],
     ]);
     expect(d.log).toHaveBeenCalledWith(`1 test file(s) are affected by the changes since ${BASE}.`);
   });
