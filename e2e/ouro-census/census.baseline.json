@@ -1,13 +1,23 @@
 {
+  "$allowedRegressions": [
+    {
+      "project": "desktop-chrome",
+      "journey": "mcp",
+      "state": "default",
+      "from": 1,
+      "to": 2,
+      "reason": "The MCP page links its protected-resource metadata with a plain <a>, styled as HX Link, until HX Link can navigate the document (ourostack/ouro-ui#184)"
+    }
+  ],
   "desktop-chrome": {
     "account-deleted": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -48,11 +58,15 @@
       "crop-photo-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 10
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
         },
         {
           "identity": "button \"Cancel\" [button/root] in dialog \"Crop your photo\"",
@@ -117,6 +131,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Delete account…\" [button/root] in main",
           "count": 1
         },
@@ -146,10 +164,6 @@
         },
         {
           "identity": "button \"Sign out everywhere\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -247,6 +261,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Delete my account\" [button/root] in main",
           "count": 1
         },
@@ -280,10 +298,6 @@
         },
         {
           "identity": "button \"Sign out everywhere\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -379,15 +393,15 @@
     "agent-connect": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Continue\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -443,11 +457,11 @@
     "agent-connect-request": {
       "default": [
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -499,11 +513,11 @@
     "chef-profile": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -567,15 +581,15 @@
     "chef-profile-own": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -663,11 +677,11 @@
     "chefs": {
       "default": [
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -727,6 +741,10 @@
           "count": 5
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -736,10 +754,6 @@
         },
         {
           "identity": "button \"Share\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -806,7 +820,7 @@
       "delete-cookbook-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
@@ -814,6 +828,10 @@
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -859,6 +877,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Delete cookbook\" [button/root] in main",
           "count": 1
         },
@@ -884,10 +906,6 @@
         },
         {
           "identity": "button \"Share\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -954,7 +972,7 @@
       "remove-recipe-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
@@ -962,6 +980,10 @@
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -1005,15 +1027,15 @@
     "cookbook-new": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Create cookbook\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -1077,15 +1099,15 @@
     "cookbooks": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -1153,15 +1175,15 @@
     "cookbooks-newbie": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -1225,11 +1247,11 @@
     "developers": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -1428,6 +1450,10 @@
     },
     "developers-playground": {
       "default": [
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
         {
           "identity": "button \"Copy Browser extension ingredient sync sample\" [-/-] in main",
           "count": 1
@@ -1793,10 +1819,6 @@
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
-          "count": 1
-        },
-        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -1881,11 +1903,11 @@
     "fellow-chefs": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -1921,6 +1943,10 @@
     "home-chef": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -1938,10 +1964,6 @@
         },
         {
           "identity": "button \"Share Weeknight Dinners\" [button/root] in region \"Cookbooks\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2025,11 +2047,11 @@
     "home-newbie": {
       "default": [
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2101,11 +2123,11 @@
     "home-signed-out": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2149,11 +2171,11 @@
     "kitchen-visitors": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2185,15 +2207,15 @@
     "log-out": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2257,11 +2279,11 @@
     "mcp": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2277,7 +2299,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Protected-resource metadata\" [link/root] in region \"Auth Discovery\"",
+          "identity": "link \"Protected-resource metadata\" [-/-] in region \"Auth Discovery\"",
           "count": 1
         },
         {
@@ -2309,15 +2331,15 @@
     "my-recipes": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2385,11 +2407,11 @@
     "not-found": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2425,11 +2447,11 @@
     "oauth-authorize": {
       "default": [
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2481,11 +2503,11 @@
     "oauth-callback": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2529,11 +2551,11 @@
     "privacy": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2577,6 +2599,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Delete\" [button/root] in region \"Recipe steps\"",
           "count": 3
         },
@@ -2594,10 +2620,6 @@
         },
         {
           "identity": "button \"Save recipe\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2676,7 +2698,7 @@
       "delete-step-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in group \"Recipe details\"",
@@ -2689,6 +2711,10 @@
         {
           "identity": "button \"\" [button/root] in region \"Recipe steps\"",
           "count": 9
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
         },
         {
           "identity": "button \"Cancel\" [confirm-dialog/cancel] in alertdialog \"Delete step\"",
@@ -2743,6 +2769,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Decrease scale\" [number-field/decrement] in main",
           "count": 1
         },
@@ -2772,10 +2802,6 @@
         },
         {
           "identity": "button \"Share\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -2870,11 +2896,15 @@
       "fork-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 6
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -2949,6 +2979,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Create recipe\" [button/root] in main",
           "count": 1
         },
@@ -2958,10 +2992,6 @@
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -3055,6 +3085,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Create recipe\" [button/root] in main",
           "count": 1
         },
@@ -3068,10 +3102,6 @@
         },
         {
           "identity": "button \"Recipe photo\" [file-field/input] in form \"Start from a recipe you already have.\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -3161,6 +3191,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Create recipe\" [button/root] in main",
           "count": 1
         },
@@ -3170,10 +3204,6 @@
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -3335,6 +3365,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Decrease scale\" [number-field/decrement] in main",
           "count": 1
         },
@@ -3364,10 +3398,6 @@
         },
         {
           "identity": "button \"Share\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -3482,7 +3512,7 @@
       "delete-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
@@ -3490,6 +3520,10 @@
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -3568,7 +3602,7 @@
       "log-cook-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
@@ -3576,6 +3610,10 @@
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -3677,6 +3715,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Decrease scale\" [number-field/decrement] in main",
           "count": 1
         },
@@ -3734,10 +3776,6 @@
         },
         {
           "identity": "button \"Share\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -3860,7 +3898,7 @@
       "save-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
@@ -3868,6 +3906,10 @@
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -3958,7 +4000,7 @@
       "variation-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
@@ -3966,6 +4008,10 @@
         },
         {
           "identity": "button \"\" [collapsible/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -4173,6 +4219,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Decrease scale\" [number-field/decrement] in main",
           "count": 1
         },
@@ -4190,10 +4240,6 @@
         },
         {
           "identity": "button \"Share\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -4281,15 +4327,15 @@
     "recipes": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -4521,15 +4567,15 @@
     "saved-recipes": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -4597,15 +4643,15 @@
     "search-no-results": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -4681,15 +4727,15 @@
     "search-results": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
           "identity": "button \"Search\" [button/root] in search",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -4705,7 +4751,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbook Weeknight Dinners\" [item/link] in region \"Search results\"",
+          "identity": "link \"Cookbook Weeknight Dinners Cookbook by qa_kitchen_chef\" [item/link] in region \"Search results\"",
           "count": 1
         },
         {
@@ -4733,7 +4779,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipe Lemon Herb Rice\" [item/link] in region \"Search results\"",
+          "identity": "link \"Recipe Lemon Herb Rice Recipe by qa_kitchen_chef\" [item/link] in region \"Search results\"",
           "count": 1
         },
         {
@@ -4749,7 +4795,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping List lemon\" [item/link] in region \"Search results\"",
+          "identity": "link \"Shopping List Private lemon Shopping list item for qa_kitchen_chef\" [item/link] in region \"Search results\"",
           "count": 1
         },
         {
@@ -4778,11 +4824,15 @@
       "clear-all-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 3
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
         },
         {
           "identity": "button \"\" [swipe-actions/action] in main",
@@ -4883,11 +4933,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5033,11 +5083,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5156,11 +5206,15 @@
       "remove-item-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 3
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
         },
         {
           "identity": "button \"\" [swipe-actions/action] in main",
@@ -5235,11 +5289,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5323,6 +5377,10 @@
     "sign-in": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
@@ -5336,10 +5394,6 @@
         },
         {
           "identity": "button \"Sign in with a passkey\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5391,6 +5445,10 @@
     "sign-up": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
@@ -5400,10 +5458,6 @@
         },
         {
           "identity": "button \"Sign up\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5467,6 +5521,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -5476,10 +5534,6 @@
         },
         {
           "identity": "button \"Remove jasmine rice\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5565,6 +5619,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
@@ -5574,10 +5632,6 @@
         },
         {
           "identity": "button \"Remove jasmine rice\" [button/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5648,11 +5702,15 @@
       "remove-ingredient-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
-          "count": 2
+          "count": 1
         },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 4
+        },
+        {
+          "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
         },
         {
           "identity": "button \"Keep it\" [confirm-dialog/cancel] in alertdialog \"Remove this ingredient?\"",
@@ -5703,11 +5761,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5789,11 +5847,11 @@
           "count": 1
         },
         {
-          "identity": "button \"Log out\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log out\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5881,15 +5939,15 @@
     "step-new": {
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Create\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -5975,15 +6033,15 @@
       ],
       "uses-output-open": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Create\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Log out\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -6083,11 +6141,11 @@
     "terms": {
       "default": [
         {
-          "identity": "button \"Log in\" [button/root] in banner",
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
+          "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
         {
@@ -6197,6 +6255,10 @@
       ],
       "default": [
         {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
           "identity": "button \"Decrease scale\" [number-field/decrement] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
@@ -6214,10 +6276,6 @@
         },
         {
           "identity": "button \"Start cooking\" [button/root] in region \"Crispy Lemon Chickpeas\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -6319,11 +6377,15 @@
       ],
       "xray": [
         {
-          "identity": "button \"20 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"22 components\" [inspector/list] in group \"X-ray\"",
           "count": 1
         },
         {
           "identity": "button \"Close\" [inspector/close] in group \"X-ray\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
           "count": 1
         },
         {
@@ -6344,10 +6406,6 @@
         },
         {
           "identity": "button \"Start cooking\" [button/root] in region \"Crispy Lemon Chickpeas\"",
-          "count": 1
-        },
-        {
-          "identity": "button \"Switch theme to dark mode\" [button/root] in banner",
           "count": 1
         },
         {
@@ -6408,7 +6466,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 19
+          "count": 21
         },
         {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
@@ -6461,7 +6519,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6469,15 +6527,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6517,16 +6575,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         },
         {
           "identity": "slider \"Zoom\" [-/-] in dialog \"Crop your photo\"",
@@ -6571,7 +6633,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6579,19 +6641,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6649,7 +6711,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6657,19 +6719,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6697,23 +6759,23 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6729,23 +6791,23 @@
     "agent-connect-request": {
       "default": [
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6761,7 +6823,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6773,7 +6835,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6781,7 +6843,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6793,7 +6855,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6825,7 +6887,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6837,7 +6899,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6853,7 +6915,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6865,11 +6927,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6889,23 +6951,23 @@
     "chefs": {
       "default": [
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6937,11 +6999,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6949,7 +7011,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6957,11 +7019,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -6999,16 +7061,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [item/link] in main",
           "count": 2
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         }
       ],
       "owner-tools-open": [
@@ -7045,11 +7111,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7057,7 +7123,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7065,11 +7131,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7107,16 +7173,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [item/link] in main",
           "count": 2
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         }
       ]
     },
@@ -7151,11 +7221,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7163,15 +7233,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7199,7 +7269,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7207,7 +7277,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7215,15 +7285,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7303,11 +7373,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7343,7 +7413,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7383,7 +7453,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7803,11 +7873,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7815,11 +7885,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7887,19 +7957,19 @@
     "fellow-chefs": {
       "default": [
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7943,7 +8013,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7955,7 +8025,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7971,7 +8041,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -7979,11 +8049,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8007,7 +8077,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8027,7 +8097,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8035,15 +8105,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8055,11 +8125,7 @@
     "home-signed-out": {
       "default": [
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8067,7 +8133,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8075,7 +8145,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8099,19 +8169,19 @@
     "kitchen-visitors": {
       "default": [
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8167,23 +8237,23 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Protected-resource metadata\" [link/root] in region \"Auth Discovery\"",
+          "identity": "link \"Protected-resource metadata\" [-/-] in region \"Auth Discovery\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8211,7 +8281,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8223,7 +8293,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8235,7 +8305,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8247,11 +8317,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8271,19 +8341,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8311,11 +8381,11 @@
     "oauth-callback": {
       "default": [
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8327,7 +8397,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8335,7 +8405,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8359,11 +8429,11 @@
     "privacy": {
       "default": [
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8371,11 +8441,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8561,15 +8631,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8577,11 +8643,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8639,16 +8709,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 2
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         },
         {
           "identity": "spinbutton \"\" [number-field/hidden-input] in main",
@@ -8969,7 +9043,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8977,11 +9051,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -8989,11 +9059,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9149,16 +9223,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [button/root] in main",
           "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 2
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         },
         {
           "identity": "spinbutton \"\" [number-field/hidden-input] in main",
@@ -9381,16 +9459,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [button/root] in main",
           "count": 3
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 2
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         },
         {
           "identity": "spinbutton \"\" [number-field/hidden-input] in main",
@@ -9635,7 +9717,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9643,7 +9725,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9651,15 +9733,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
           "identity": "link \"Recipes\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9695,7 +9777,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9703,7 +9785,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9855,7 +9937,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9867,7 +9949,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9931,7 +10013,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9939,7 +10021,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9951,7 +10033,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9967,11 +10049,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -9995,11 +10077,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [link/root] in navigation \"Search scope\"",
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10007,11 +10089,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10019,7 +10097,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10027,7 +10109,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10051,11 +10133,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbook Weeknight Dinners\" [item/link] in region \"Search results\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbook Weeknight Dinners Cookbook by qa_kitchen_chef\" [item/link] in region \"Search results\"",
           "count": 1
         },
         {
@@ -10063,19 +10141,19 @@
           "count": 1
         },
         {
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
           "identity": "link \"Everything\" [link/root] in navigation \"Search scope\"",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipe Lemon Herb Rice\" [item/link] in region \"Search results\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipe Lemon Herb Rice Recipe by qa_kitchen_chef\" [item/link] in region \"Search results\"",
           "count": 1
         },
         {
@@ -10083,11 +10161,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping List lemon\" [item/link] in region \"Search results\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Shopping List Private lemon Shopping list item for qa_kitchen_chef\" [item/link] in region \"Search results\"",
           "count": 1
         },
         {
@@ -10095,7 +10177,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10147,16 +10229,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         },
         {
           "identity": "radio \"\" [segmented-control/segment] in main",
@@ -10229,11 +10315,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10241,19 +10323,23 @@
           "count": 1
         },
         {
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
           "identity": "link \"New item\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10351,11 +10437,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10363,19 +10445,23 @@
           "count": 1
         },
         {
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
           "identity": "link \"New item\" [button/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10461,16 +10547,20 @@
           "count": 1
         },
         {
-          "identity": "link \"\" [-/-] in navigation \"Spoonjoy navigation\"",
-          "count": 5
-        },
-        {
           "identity": "link \"\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
           "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 4
         },
         {
           "identity": "radio \"\" [segmented-control/segment] in main",
@@ -10493,7 +10583,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10501,11 +10591,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Kitchen\" [link/root] in main",
           "count": 1
         },
         {
-          "identity": "link \"Kitchen\" [link/root] in main",
+          "identity": "link \"Kitchen\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10513,15 +10603,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Shopping\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10973,11 +11063,11 @@
     "terms": {
       "default": [
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -10985,11 +11075,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -11057,19 +11147,19 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -11159,11 +11249,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -11171,11 +11261,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -11205,7 +11295,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"16 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"18 components\" [inspector/list] in group \"X-ray\"",
           "count": 1
         },
         {
@@ -11286,14 +11376,14 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 15
+          "count": 17
         },
         {
-          "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Log in\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
@@ -11301,11 +11391,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Search\" [-/-] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
