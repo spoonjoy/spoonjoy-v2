@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 
 // A global colour fade on every element made state-coloured controls (checked, pressed,
 // selected) pass through low-contrast mid-fade colours right after a tap; axe measured
-// the shopping list's view buttons at 1.72:1. The fade belongs only to the moment the
-// theme switches, which the theme provider marks with data-theme-switching on <html>.
+// the shopping list's view buttons at 1.72:1. Nothing fades globally, and HX's colour
+// scheme switches the page instantly.
 
 const CSS = readFileSync(resolve(process.cwd(), "app/styles/tailwind.css"), "utf-8");
 const root = postcss.parse(CSS);
@@ -66,25 +66,12 @@ const globalColourTransitionRules = (() => {
   return found;
 })();
 
-describe("theme-switching colour transitions", () => {
-  it("fades colours globally only while <html> carries data-theme-switching", () => {
-    expect(globalColourTransitionRules.length).toBeGreaterThan(0);
-    for (const { selector } of globalColourTransitionRules) {
-      expect(selector, `${selector} fades colours outside a theme switch`).toMatch(
-        /^(:where\()?html\[data-theme-switching\]/,
-      );
-    }
+describe("global colour transitions", () => {
+  it("fades no colour globally, not even while the colour scheme switches", () => {
+    expect(globalColourTransitionRules).toEqual([]);
   });
 
-  it("gives reduced-motion users no theme fade", () => {
-    for (const { selector, atRules } of globalColourTransitionRules) {
-      expect(atRules, `${selector} must sit inside a no-preference motion query`).toContain(
-        "@media (prefers-reduced-motion: no-preference)",
-      );
-    }
-  });
-
-  it("switches every element's transitions off outside the switching window, so state colours change instantly", () => {
+  it("switches every element's transitions off, so state colours change instantly", () => {
     expect(globalReset).toHaveLength(1);
   });
 
@@ -98,12 +85,5 @@ describe("theme-switching colour transitions", () => {
   it("keeps the reset at zero specificity, so class rules such as .sj-instant-state still win", () => {
     // Every argument sits inside :where(), which contributes no specificity.
     expect(globalReset[0]?.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, "")).toBe("");
-  });
-
-  it("keeps the switching rules unlayered and with zero specificity, so component rules still win", () => {
-    for (const { selector, atRules } of globalColourTransitionRules) {
-      expect(atRules.some((atRule) => atRule.startsWith("@layer")), `${selector} is layered`).toBe(false);
-      expect(selector, `${selector} should be wrapped in :where()`).toMatch(/^:where\(.*\)$/);
-    }
   });
 });
