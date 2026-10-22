@@ -4,7 +4,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup, act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { redirect } from "react-router";
-import { createTestRoutesStub } from "../utils";
+import { createTestRoutesStub, chooseImage } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/recipes.new";
 import { action as shoppingListAction } from "~/routes/shopping-list";
@@ -1681,8 +1681,8 @@ describe("Recipes New Route", () => {
       await user.type(titleInput, "Recipe with Image");
 
       // Upload image
-      const fileInput = await screen.findByLabelText("Upload recipe image");
-      await user.upload(fileInput, testImage);
+      const fileInput = await screen.findByLabelText("Recipe image", { selector: "input" });
+      await chooseImage(fileInput, testImage);
 
       // Wait a bit for state update
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -1721,8 +1721,8 @@ describe("Recipes New Route", () => {
       render(<Stub initialEntries={["/recipes/new"]} />);
 
       await user.type(await screen.findByLabelText(/Title/), "Recipe with Image");
-      await user.upload(
-        await screen.findByLabelText("Upload recipe image"),
+      await chooseImage(
+        await screen.findByLabelText("Recipe image", { selector: "input" }),
         new File(["test image"], "test.jpg", { type: "image/jpeg" }),
       );
 
@@ -1733,7 +1733,7 @@ describe("Recipes New Route", () => {
       await waitFor(() => {
         expect(actionCalls).toBe(1);
       });
-      expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
+      expect(screen.getByText(/uploading image/i)).toHaveAttribute("role", "status");
       expect(submitButton).toBeDisabled();
 
       await act(async () => {
@@ -1761,7 +1761,7 @@ describe("Recipes New Route", () => {
       await screen.findByLabelText(/Title/);
     });
 
-    it("should set clearImage value to 'true' when clearImage flag is true", async () => {
+    it("sends no image once the photo just chosen is removed", async () => {
       const user = userEvent.setup();
       let formDataReceived: Record<string, string> = {};
 
@@ -1787,19 +1787,11 @@ describe("Recipes New Route", () => {
       const titleInput = await screen.findByLabelText(/Title/);
       await user.type(titleInput, "Test Recipe");
 
-      // Upload an image first, then clear it to trigger clearImage = true
+      // Choose a photo, then remove it again before creating the recipe.
       const testImage = new File(["test"], "test.jpg", { type: "image/jpeg" });
-      const fileInput = await screen.findByLabelText("Upload recipe image");
-      await user.upload(fileInput, testImage);
-
-      // Wait for Remove button to appear (shows up after image is selected)
-      await waitFor(() => {
-        expect(screen.queryByRole("button", { name: "Remove" })).toBeInTheDocument();
-      });
-
-      // Clear the image - this should set clearImage to true in RecipeBuilder state
-      const removeButton = screen.getByRole("button", { name: "Remove" });
-      await user.click(removeButton);
+      const fileInput = await screen.findByLabelText("Recipe image", { selector: "input" });
+      await chooseImage(fileInput, testImage);
+      await user.click(screen.getByRole("button", { name: "Remove image" }));
 
       const submitButton = screen.getByRole("button", { name: "Create recipe" });
       await user.click(submitButton);
@@ -1807,8 +1799,9 @@ describe("Recipes New Route", () => {
       await waitFor(() => {
         expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
       });
-      // clearImage should be "true" when an image was added then removed
-      expect(formDataReceived.clearImage).toBe("true");
+      expect(formDataReceived.title).toBe("Test Recipe");
+      expect(formDataReceived.image).toBeUndefined();
+      expect(formDataReceived.clearImage).toBeUndefined();
     });
   });
 });

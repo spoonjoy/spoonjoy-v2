@@ -58,7 +58,7 @@ test.describe('Recipe image handling', () => {
         await titleInput.fill(title);
         return createButton.getAttribute('aria-disabled');
       }, { timeout: 10_000 }).not.toBe('true');
-      await page.getByLabel('Upload recipe image').setInputFiles(ORIENTATION_FIXTURE);
+      await page.getByLabel('Recipe image').and(page.locator('input[type="file"]')).setInputFiles(ORIENTATION_FIXTURE);
       await expect(page.getByRole('img', { name: /recipe image preview/i })).toBeVisible();
       await expect(createButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 15_000 });
       await createButton.click();

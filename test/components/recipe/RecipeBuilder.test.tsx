@@ -16,14 +16,14 @@
  * - Character limits on inputs
  */
 
-import { render, screen, within, act, fireEvent } from "@testing-library/react";
+import { render, screen, within, act, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoutesStub } from "react-router";
 import { useState } from "react";
 import { RecipeBuilder } from "~/components/recipe/RecipeBuilder";
 import type { StepData } from "~/components/recipe/StepEditorCard";
-import { getShownAlert, requiredLabel } from "../../utils";
+import { chooseImage, getShownAlert, requiredLabel } from "../../utils";
 
 // Mock localStorage for IngredientInputToggle used by StepEditorCard
 let localStorageStore: Record<string, string> = {};
@@ -718,65 +718,68 @@ describe("RecipeBuilder", () => {
       expect(screen.queryByRole("img")).not.toBeInTheDocument();
     });
 
-    it("revokes previous preview URL when selecting a new image", async () => {
-      const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
-      const Wrapper = createTestWrapper();
-      render(<Wrapper initialEntries={["/recipes/new"]} />);
+    it("saves the photo just chosen, and goes back to the saved one when it is removed", async () => {
+      const onSave = vi.fn();
+      const recipe = createTestRecipe({ coverImageUrl: "https://example.com/cover.jpg" });
+      const Wrapper = createTestWrapper({ onSave, recipe });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      // Find the file input (it should be present in the image upload component)
-      const fileInput = screen.getByLabelText("Upload recipe image");
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      expect(within(field).getByRole("img", { name: `Photo of ${recipe.title}` })).toHaveAttribute("src", "https://example.com/cover.jpg");
+      const photo = new File(["content"], "image.jpg", { type: "image/jpeg" });
+      await chooseImage(within(field).getByLabelText("Recipe image", { selector: "input" }), photo);
 
-      // Create first image file
-      const firstFile = new File(["content1"], "image1.jpg", {
-        type: "image/jpeg",
-      });
-      await userEvent.upload(fileInput, firstFile);
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ imageFile: photo, clearImage: undefined }));
 
-      // Wait a moment for state to update
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      // Create second image file and upload it
-      const secondFile = new File(["content2"], "image2.jpg", {
-        type: "image/jpeg",
-      });
-      await userEvent.upload(fileInput, secondFile);
-
-      // Wait a moment for state to update
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      // revokeObjectURL should have been called when the second image was selected
-      expect(revokeObjectURL).toHaveBeenCalled();
-
-      revokeObjectURL.mockRestore();
+      await userEvent.click(within(field).getByRole("button", { name: "Remove image" }));
+      expect(within(field).getByRole("img", { name: `Photo of ${recipe.title}` })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ imageFile: null, clearImage: undefined }));
     });
 
-    it("revokes preview URL when clearing an image", async () => {
-      const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
-      const Wrapper = createTestWrapper();
+    it("clears the saved photo on save once it is removed", async () => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave, recipe: createTestRecipe({ coverImageUrl: "https://example.com/cover.jpg" }) });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      await userEvent.click(within(field).getByRole("button", { name: "Remove image" }));
+      expect(within(field).queryByRole("img")).not.toBeInTheDocument();
+      expect(within(field).queryByRole("button", { name: "Remove image" })).not.toBeInTheDocument();
+      expect(within(field).getByRole("button", { name: "Upload image" })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ clearImage: true }));
+    });
+
+    it.each([
+      ["a GIF", new File(["gif"], "spin.gif", { type: "image/gif" }), "Photos must be JPG, PNG, or WebP."],
+      ["another type", new File(["svg"], "logo.svg", { type: "image/svg+xml" }), "Invalid image type. Photos must be JPG, PNG, or WebP."],
+      ["a photo over 5 MB", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "huge.jpg", { type: "image/jpeg" }), "Image must be less than 5MB"],
+    ])("turns away %s with Spoonjoy's message", async (_kind, file, message) => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave });
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
-      // Find the file input and upload an image
-      const fileInput = screen.getByLabelText("Upload recipe image");
-      const file = new File(["content"], "image.jpg", { type: "image/jpeg" });
-      await userEvent.upload(fileInput, file);
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      fireEvent.change(within(field).getByLabelText("Recipe image", { selector: "input" }), { target: { files: [file] } });
+      await waitFor(() => expect(within(field).getByText(message)).toHaveAttribute("role", "status"));
+    });
 
-      // Wait for state to update
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      // Clear the image (look for clear/remove button)
-      const clearButton = screen.getByRole("button", { name: /clear|remove/i });
-      await userEvent.click(clearButton);
-
-      // revokeObjectURL should have been called when clearing
-      expect(revokeObjectURL).toHaveBeenCalled();
-
-      revokeObjectURL.mockRestore();
+    it("says when a chosen file cannot be opened as a photo", async () => {
+      const decode = vi.spyOn(HTMLImageElement.prototype, "decode").mockRejectedValue(new Error("not an image"));
+      try {
+        const Wrapper = createTestWrapper();
+        render(<Wrapper initialEntries={["/recipes/new"]} />);
+        const field = screen.getByRole("group", { name: "Recipe image" });
+        fireEvent.change(within(field).getByLabelText("Recipe image", { selector: "input" }), {
+          target: { files: [new File(["?"], "broken.jpg", { type: "image/jpeg" })] },
+        });
+        await waitFor(() => expect(within(field).getByText("broken.jpg could not be opened as a photo.")).toBeInTheDocument());
+      } finally {
+        decode.mockRestore();
+      }
     });
   });
 

@@ -1391,7 +1391,6 @@
         "app/components/recipe/ParsedIngredientList.tsx",
         "app/components/recipe/ParsedIngredientRow.tsx",
         "app/components/recipe/RecipeBuilder.tsx",
-        "app/components/recipe/RecipeImageUpload.tsx",
         "app/components/recipe/RecipeImportPanel.tsx",
         "app/components/recipe/StepEditorCard.tsx",
         "app/components/recipe/StepList.tsx",
@@ -1454,9 +1453,9 @@
         "button",
         "confirm-dialog",
         "field",
-        "fieldset",
         "file-field",
         "form",
+        "image-field",
         "link",
         "page-header",
         "reorderable",
@@ -1480,15 +1479,15 @@
           "app/components/recipe/ParsedIngredientRow.tsx",
           "app/components/recipe/StepEditorCard.tsx"
         ],
-        "fieldset": [
-          "app/components/recipe/RecipeBuilder.tsx"
-        ],
         "file-field": [
           "app/components/recipe/RecipeImportPanel.tsx"
         ],
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
           "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "image-field": [
+          "app/components/recipe/RecipeBuilder.tsx"
         ],
         "link": [
           "app/components/recipe/RecipeImportPanel.tsx",
@@ -1795,7 +1794,6 @@
         "app/components/recipe/ParsedIngredientList.tsx",
         "app/components/recipe/ParsedIngredientRow.tsx",
         "app/components/recipe/RecipeBuilder.tsx",
-        "app/components/recipe/RecipeImageUpload.tsx",
         "app/components/recipe/RecipeImportPanel.tsx",
         "app/components/recipe/StepEditorCard.tsx",
         "app/components/recipe/StepList.tsx",
@@ -1850,9 +1848,9 @@
         "button",
         "confirm-dialog",
         "field",
-        "fieldset",
         "file-field",
         "form",
+        "image-field",
         "link",
         "page-header",
         "reorderable",
@@ -1878,15 +1876,15 @@
           "app/components/recipe/ParsedIngredientRow.tsx",
           "app/components/recipe/StepEditorCard.tsx"
         ],
-        "fieldset": [
-          "app/components/recipe/RecipeBuilder.tsx"
-        ],
         "file-field": [
           "app/components/recipe/RecipeImportPanel.tsx"
         ],
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
           "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "image-field": [
+          "app/components/recipe/RecipeBuilder.tsx"
         ],
         "link": [
           "app/components/recipe/RecipeImportPanel.tsx",

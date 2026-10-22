@@ -427,7 +427,6 @@ export default function NewRecipe() {
     formData.set("description", recipeData.description || "");
     formData.set("servings", recipeData.servings || "");
     formData.set("steps", JSON.stringify(recipeData.steps));
-    formData.set("clearImage", recipeData.clearImage ? "true" : "");
     if (recipeData.imageFile) formData.set("image", recipeData.imageFile);
     saveFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
   };

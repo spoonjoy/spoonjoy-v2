@@ -1,9 +1,5 @@
 {
   "offenders": {
-    "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/RecipeImageUpload#RecipeImageUpload::": 1,
-    "app/components/recipe/RecipeImageUpload.tsx::RecipeImageUpload::raw-input::input::type=file,aria-label=Upload recipe image": 1,
-    "app/routes/recipes.$id.edit.tsx::EditRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
-    "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
     "app/styles/tailwind.css::(stylesheet)::control-state-style::[data-sj-action=\"primary\"]:active:not([data-disabled])::": 1
   }
 }

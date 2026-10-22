@@ -5,7 +5,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { data } from "react-router";
 import { cleanup, act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestRoutesStub, requiredLabel } from "../utils";
+import { createTestRoutesStub, requiredLabel, chooseImage } from "../utils";
 import { db } from "~/lib/db.server";
 import { loader, action, meta } from "~/routes/recipes.$id.edit";
 import EditRecipe from "~/routes/recipes.$id.edit";
@@ -2744,9 +2744,9 @@ describe("Recipes $id Edit Route", () => {
       await screen.findByRole("button", { name: "Save recipe" });
 
       // Upload an image file via RecipeImageUpload's file input
-      const fileInput = screen.getByLabelText("Upload recipe image");
+      const fileInput = screen.getByLabelText("Recipe image", { selector: "input" });
       const testFile = new File(["image-data"], "test.jpg", { type: "image/jpeg" });
-      await user.upload(fileInput, testFile);
+      await chooseImage(fileInput, testFile);
 
       // Click Save Recipe to trigger handleSave which should use DataTransfer
       await user.click(screen.getByRole("button", { name: "Save recipe" }));
@@ -2794,8 +2794,8 @@ describe("Recipes $id Edit Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1/edit"]} />);
 
       await screen.findByRole("button", { name: "Save recipe" });
-      await user.upload(
-        screen.getByLabelText("Upload recipe image"),
+      await chooseImage(
+        screen.getByLabelText("Recipe image", { selector: "input" }),
         new File(["image-data"], "test.jpg", { type: "image/jpeg" }),
       );
 
@@ -2806,7 +2806,7 @@ describe("Recipes $id Edit Route", () => {
       await waitFor(() => {
         expect(actionCalls).toBe(1);
       });
-      expect(screen.getByRole("status")).toHaveTextContent(/uploading image/i);
+      expect(screen.getByText(/uploading image/i)).toHaveAttribute("role", "status");
       expect(submitButton).toBeDisabled();
 
       await act(async () => {
@@ -2814,7 +2814,7 @@ describe("Recipes $id Edit Route", () => {
         await actionPromise;
       });
       await waitFor(() => {
-        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(screen.queryByText(/uploading image/i)).not.toBeInTheDocument();
         expect(submitButton).not.toBeDisabled();
       });
     });
