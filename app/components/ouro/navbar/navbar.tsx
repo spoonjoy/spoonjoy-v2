@@ -17,7 +17,11 @@ export interface NavbarLink {
   label: string;
   /** Where it goes. Internal paths go through `OuroProvider`'s `linkComponent` (your router's link). */
   href: string;
-  /** In a group: a line under the label in the bar's panel, "Everything you have saved." */
+  /**
+   * In a group: a line under the label in the bar's panel, "Everything you have saved."
+   *
+   * @claim "In a group: a line under" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > opens a group of links as a panel in the bar)
+   */
   description?: string | undefined;
   /**
    * Marks this link as the current page (`aria-current="page"`), when the Navbar's
@@ -32,7 +36,11 @@ export interface NavbarLink {
 export interface NavbarGroup {
   /** The group's name, the button's text: "Recipes". */
   label: string;
-  /** The group's links, each with an optional `description`. */
+  /**
+   * The group's links, each with an optional `description`.
+   *
+   * @claim "The group's links, each with an" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > closes the sheet when the links come to fit)
+   */
   links: readonly NavbarLink[];
   /** Not with `links`. To link the section's own page, make it the group's first link. */
   href?: never;
@@ -58,11 +66,17 @@ export interface NavbarProps {
   currentPath?: string | undefined;
   /** Your logo or product name, at the start of the bar. Link it to the home page. */
   brand?: ReactNode;
-  /** Controls at the end of the bar, at every width: a search button, an account `Menu`. */
+  /**
+   * Controls at the end of the bar, at every width: a search button, an account `Menu`.
+   *
+   * @claim "Controls at the end of the" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar > shows the brand at the start and the actions at the end)
+   */
   actions?: ReactNode;
   /**
    * The name of the button that opens the links below 640px, and the title of the sheet
    * it opens. @default "Menu"
+   * @claim "The name of the button that" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar > collapses the links into a sheet behind a menu button below 640px)
+   * @claim "The name of the button that" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar > hides the menu button from 640px up)
    */
   menuLabel?: string | undefined;
   /** The label of that sheet's close button. @default "Close" */
@@ -110,8 +124,8 @@ const example = '<Navbar label="Main" items={[{ label: "Recipes", href: "/recipe
  * the side, with each group under its name; the brand and `actions` stay in the bar. Links
  * render through `OuroProvider`'s `linkComponent`, so your router navigates.
  *
- * The phone menu opens once JavaScript has loaded (after hydration), as in shadcn/ui and
- * Catalyst; the links are in the server HTML from 640px up.
+ * The phone menu opens once JavaScript has loaded (after hydration); the links are in the
+ * server HTML from 640px up.
  *
  * Use `Sidebar` instead for more than a handful of destinations, or sections of them. Use
  * `NavigationMenu` alone for a row of panels inside a page, and `Tabs` for views of one
@@ -131,6 +145,11 @@ const example = '<Navbar label="Main" items={[{ label: "Recipes", href: "/recipe
  *   currentPath={pathname}
  *   actions={<Button href="/recipes/new">New recipe</Button>}
  * />
+ * @claim "Whenever the links do not fit" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > collapses into the menu button whenever its links do not fit, from 640px up too)
+ * @claim "Whenever the links do not fit" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar > collapses the links into a sheet behind a menu button below 640px)
+ * @claim "Whenever the links do not fit" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > puts a group's button and the bar's links in the server HTML)
+ * @claim "The phone menu opens once JavaScript" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar > collapses the links into a sheet behind a menu button below 640px)
+ * @claim "The phone menu opens once JavaScript" registry/ouro/components/ouro/navbar/navbar.test.tsx verify:testExists(registry/ouro/components/ouro/navbar/navbar.test.tsx::Navbar at tablet widths and with groups > puts a group's button and the bar's links in the server HTML)
  */
 export function Navbar(props: NavbarProps): JSX.Element {
   const {

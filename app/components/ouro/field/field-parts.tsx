@@ -35,7 +35,11 @@ function useFieldPart(part: string): FieldContextValue {
   return field;
 }
 
-/** The className check every part runs, with the field's hint. */
+/**
+ * The className check every part runs, with the field's hint.
+ *
+ * @claim "The className check every part runs" registry/ouro/components/ouro/field/field-parts.tsx verify:fileLine(registry/ouro/components/ouro/field/field-parts.tsx, /function\suseLayoutClassName\(part:\sstring,/)
+ */
 function useLayoutClassName(part: string, className: string | undefined): void {
   useAppearanceClassNameCheck(
     part,
@@ -82,6 +86,8 @@ export function FieldRoot({ className, required, ...props }: FieldRootProps): JS
  * Props for {@link FieldLabel}. `className` goes on the element around the label and is for
  * layout only (`sr-only` hides the label visually); every other prop (`style`, `id`, `data-*`,
  * event handlers) goes on the `<label>` itself.
+ * @claim "`className` goes on the element around" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > hides the label visually with hideLabel and keeps it as the name)
+ * @claim "`className` goes on the element around" registry/ouro/components/ouro/field/field-parts.tsx verify:fileLine(registry/ouro/components/ouro/field/field-parts.tsx, /export\stype\sFieldLabelProps\s=\sOmit<BaseField\.Label\.Props,\s"className">/)
  */
 export type FieldLabelProps = Omit<BaseField.Label.Props, "className"> & { className?: string | undefined };
 
@@ -128,6 +134,8 @@ export type FieldErrorProps = Omit<BaseField.Error.Props, "className"> & { class
  * Part: the error message, linked to the control through `aria-describedby`. Without
  * children it shows the browser's validation message, or a Base UI `Form` error for the
  * field's `name`; with `match` and children it always shows them. It fades and slides in.
+ * @claim "Without children it shows the browser's" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > shows a Base UI Form error for its name without an error prop)
+ * @claim "Without children it shows the browser's" registry/ouro/components/ouro/field/field.test.tsx verify:fileLine(registry/ouro/components/ouro/field/field.test.tsx, /<FieldError\smatch>Enter\san\semail\saddress\.</FieldError>/)
  */
 export function FieldError({ className, ...props }: FieldErrorProps): JSX.Element {
   useFieldPart("FieldError");

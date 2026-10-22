@@ -37,14 +37,23 @@ import { dialogSizes, dialogSizeWarning, type DialogSize } from "~/components/ou
 
 export type { DialogSize } from "~/components/ouro/dialog/dialog-parts";
 
-/** How a Dialog presents: `auto` is a centered dialog from 640px up and a bottom sheet below. */
+/**
+ * How a Dialog presents: `auto` is a centered dialog from 640px up and a bottom sheet below.
+ *
+ * @claim "How a Dialog presents: `auto` is" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders a centered dialog at 1280px)
+ * @claim "How a Dialog presents: `auto` is" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders the bottom sheet at 390px)
+ */
 export type DialogPresentation = "auto" | "dialog" | "sheet";
 
 const presentations: readonly DialogPresentation[] = ["auto", "dialog", "sheet"];
 
 /** Props shared by both ways of opening a Dialog. */
 export interface DialogBaseProps {
-  /** Names the dialog for screen readers and shows at its top. Always required; hide it with `hideTitle`. */
+  /**
+   * Names the dialog for screen readers and shows at its top. Always required; hide it with `hideTitle`.
+   *
+   * @claim "Always required; hide it with `hideTitle`" registry/ouro/components/ouro/dialog/dialog.test-d.ts verify:fileLine(registry/ouro/components/ouro/dialog/dialog.test-d.ts, /\{\strigger:\sReactElement;\schildren:\s"Body"\s\}>\(\)\.not\.toExtend<DialogProps>/)
+   */
   title: string;
   /** Hides the title visually. It still names the dialog for screen readers. */
   hideTitle?: boolean | undefined;
@@ -53,6 +62,7 @@ export interface DialogBaseProps {
    * in the top corner; as a sheet it is hidden until it has keyboard focus.
    * Screen-reader users on phones (who have no Escape key) can always reach it.
    * @default "Close"
+   * @claim "Screen-reader users on phones (who have" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > keeps the sheet's hidden-until-focused close control in sheet presentation)
    */
   closeLabel?: string | undefined;
   /** A short line under the title, read out when the dialog opens. */
@@ -64,9 +74,15 @@ export interface DialogBaseProps {
    * it opens, so nothing shifts; one that is open at load (a route such as `?edit=1`)
    * shows as the centered dialog on a phone until hydration swaps it to the sheet.
    * @default "auto"
+   * @claim "`auto` renders a centered dialog from" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders a centered dialog at 1280px)
+   * @claim "`auto` renders a centered dialog from" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders the bottom sheet at 390px)
    */
   presentation?: DialogPresentation | (string & { 'Use "auto", "dialog" or "sheet"': never }) | undefined;
-  /** The centered dialog's maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. @default "md" */
+  /**
+   * The centered dialog's maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. @default "md"
+   *
+   * @claim "The centered dialog's maximum width: `sm`" registry/ouro/components/ouro/dialog/dialog-parts.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog-parts.tsx, /const\spopupSizes\s=\s\{\ssm:\s"max-w-\[24rem\]",\smd:\s"max-w-\[32rem\]",\slg:\s"max-w-\[40rem\]"\s\}/)
+   */
   size?: DialogSize | (string & { 'Use "sm", "md" or "lg"': never }) | undefined;
   /**
    * The actions row: a row at the end on wider screens, stacked full width on
@@ -111,6 +127,8 @@ export type DialogControlledProps = DialogBaseProps & {
    * Whether the dialog is open. When a touch or pen tap opened it (on your own
    * button, say), the centered dialog focuses itself rather than its first input,
    * so no software keyboard pops up; after a key press it focuses the first control.
+   * @claim "When a touch or pen tap" registry/ouro/components/ouro/dialog/dialog.touch.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.touch.test.tsx::initial focus in a controlled dialog opened from the app's own button > focuses the centered popup, not its first input, after a tap)
+   * @claim "When a touch or pen tap" registry/ouro/components/ouro/dialog/dialog.touch.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.touch.test.tsx::initial focus in a controlled dialog opened from the app's own button > focuses the centered popup's first input after a keyboard open)
    */
   open: boolean;
   /** Called with `false` when the user dismisses the dialog (close button, Escape, outside press, swipe). */
@@ -134,16 +152,23 @@ type TriggerProps = {
 /**
  * A compact icon button in the top corner: a centered dialog has no swipe to dismiss.
  * The header's end padding keeps the title clear of it, even when the title is hidden.
+ * @claim "A compact icon button in the" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > has a visible, compact close button in the top corner, labelled by closeLabel)
  */
 const closeClass =
   "absolute top-3 end-3 box-border inline-flex size-8 items-center justify-center m-0 p-0 border-0 rounded-lg " +
+  "forced-colors:border forced-colors:border-solid " +
   "press bg-transparent text-muted-foreground cursor-pointer [-webkit-tap-highlight-color:transparent] " +
   "not-disabled:pointer-fine:hover:bg-accent not-disabled:pointer-fine:hover:text-accent-foreground " +
   "not-disabled:active:bg-accent not-disabled:active:text-accent-foreground motion-safe:not-disabled:active:scale-(--ouro-press-scale) " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid [&>svg]:size-4";
 
-/** The close button's icon: a 16px cross in the text color. */
+/**
+ * The close button's icon: a 16px cross in the text color.
+ *
+ * @claim "The close button's icon: a 16px" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::centered dialog > has a visible, compact close button in the top corner, labelled by closeLabel)
+ * @claim "The close button's icon: a 16px" registry/ouro/components/ouro/dialog/dialog.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog.tsx, /\[&>svg\]:size-4/)
+ */
 function CloseIcon(): JSX.Element {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" fill="none">
@@ -185,6 +210,11 @@ function CloseIcon(): JSX.Element {
  * >
  *   <CookbookList />
  * </Dialog>
+ * @claim "A dialog that presents itself for" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders a centered dialog at 1280px)
+ * @claim "A dialog that presents itself for" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders the bottom sheet at 390px)
+ * @claim "It stacks above the page at" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
+ * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded axe finds nothing)
  */
 export function Dialog(props: DialogProps): JSX.Element {
   const {
@@ -396,7 +426,7 @@ export function DialogFrame({
             {...initialFocus}
           >
             {/* Always rendered: with a hidden title it still keeps the body clear of the close button. */}
-            <div data-ouro-dialog-header="" className="box-border grid min-h-13 shrink-0 gap-1 pt-5 pr-13 pb-2 pl-5">
+            <div data-ouro-dialog-header="" className="box-border grid min-h-13 shrink-0 gap-1 pt-5 pe-13 pb-2 ps-5">
               <DialogTitle visuallyHidden={hideTitle}>{title}</DialogTitle>
               {description !== undefined && <DialogDescription>{description}</DialogDescription>}
             </div>

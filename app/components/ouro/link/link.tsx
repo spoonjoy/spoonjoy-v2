@@ -43,6 +43,9 @@ export interface LinkOwnProps {
    * a `<label>`, a `<dt>` or `<dd>`, a `Text`, and Ouro's own text (a field's description and
    * error, a Form's message, an Alert's text, an Item's description). Pass `inline` for a
    * sentence in another element, and `inline={false}` for a link that is alone in its `Text`.
+   * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::gives a link on its own line a 44px box, centred on its text)
+   * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
+   * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::a link in running text keeps to its line)
    */
   inline?: boolean | undefined;
   /** The link text. Make it say where the link goes: "Browse recipes", not "click here". */
@@ -120,6 +123,9 @@ function linkHint(token: string): string {
  * <Link href="https://ouro.bot" external>Ouro</Link>
  * <Text>Read the <Link href="/terms">terms</Link> first.</Text>
  * <Text size="sm"><Link href="/forgot" inline={false}>Forgot password?</Link></Text>
+ * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
+ * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::gives a link on its own line a 44px box, centred on its text)
+ * @claim "With a mouse every link is" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
  */
 export function Link(props: LinkProps): JSX.Element {
   const {

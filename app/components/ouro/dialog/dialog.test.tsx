@@ -379,6 +379,20 @@ describe("Dialog stacking above the app's fixed bars", () => {
 });
 
 describe("centered dialog", () => {
+  it("keeps the title clear of the close button in a right-to-left page", async () => {
+    document.documentElement.dir = "rtl";
+    try {
+      await openUncontrolled({ title: "A title long enough to run into the close button if the header left it no room" });
+      const close = (page.getByRole("dialog").getByRole("button", { name: "Close" }).element() as HTMLElement).getBoundingClientRect();
+      const title = page.getByRole("dialog").getByRole("heading").element().getBoundingClientRect();
+      // The close button sits at the inline end, the left in right-to-left text; the title stops short of it.
+      expect(close.left).toBeLessThan(title.left);
+      expect(title.left).toBeGreaterThanOrEqual(close.right);
+    } finally {
+      document.documentElement.removeAttribute("dir");
+    }
+  });
+
   it("closes on Escape and returns focus to the trigger", async () => {
     await openUncontrolled();
     await userEvent.keyboard("{Escape}");

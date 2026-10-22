@@ -92,6 +92,7 @@ export type TabsListProps = Omit<BaseTabs.List.Props, "className"> & { className
 /**
  * Marks which sides of a scrolling tab row hide more tabs, as `data-fade="left"`, `"right"` or
  * `"both"`, so the row fades out on that edge. Physical sides, so the CSS needs no direction.
+ * @claim "Physical sides, so the CSS needs" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs > fades the leading edge on the right in a right-to-left row)
  */
 function useEdgeFade(list: { current: HTMLElement | null }): void {
   useEffect(() => {

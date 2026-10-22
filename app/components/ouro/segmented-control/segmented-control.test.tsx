@@ -259,6 +259,37 @@ describe("SegmentedControl", () => {
     expect(Math.abs(thumb.getBoundingClientRect().width - r.segments[2]!.getBoundingClientRect().width)).toBeLessThanOrEqual(1);
   });
 
+  it("puts the thumb under the pressed segment in a right-to-left page, where the first segment is on the right", async () => {
+    const r = await render(
+      <div dir="rtl">
+        <SegmentedControl label="View" items={items} defaultValue="grid" />
+      </div>,
+    );
+    await settled(r.thumb);
+    const [first, second] = [r.segments[0]!.getBoundingClientRect(), r.segments[1]!.getBoundingClientRect()];
+    expect(first.left).toBeGreaterThan(second.left);
+    expect(Math.abs(r.thumb.getBoundingClientRect().left - second.left)).toBeLessThanOrEqual(1);
+    await userEvent.click(r.segments[0]!);
+    await settled(r.thumb);
+    expect(Math.abs(r.thumb.getBoundingClientRect().left - r.segments[0]!.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
+  });
+
+  it("keeps its edge and shows the pressed segment under forced colours", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      const r = await render(<SegmentedControl label="View" items={items} defaultValue="grid" />);
+      const group = r.segments[0]!.parentElement!;
+      // Forced colours drop the track's and the thumb's fills, so the track draws a border and the
+      // thumb and pressed segment take the system's Highlight pair.
+      expect(parseFloat(getComputedStyle(group).borderTopWidth)).toBeGreaterThan(0);
+      expect(getComputedStyle(group).borderTopStyle).toBe("solid");
+      expect(getComputedStyle(r.segments[1]!).color).not.toBe(getComputedStyle(r.segments[0]!).color);
+      expect(getComputedStyle(r.thumb).backgroundColor).not.toBe(getComputedStyle(group).backgroundColor);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("slides the thumb on the ease-in-out token, and moves it at once on an arrow key", async () => {
     const r = await render(<SegmentedControl label="View" items={items} />);
     const style = () => getComputedStyle(r.thumb);

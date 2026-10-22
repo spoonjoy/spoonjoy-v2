@@ -263,7 +263,9 @@ describe("Navbar", () => {
 });
 
 describe("Navbar at tablet widths and with groups", () => {
-  const eight = ["Kitchen", "My recipes", "Cookbooks", "Shopping list", "Spoons", "Chefs", "Discover", "Kitchen Search"].map((label) => ({
+  // Long enough not to fit at 768px in any app's font (these tests run with the app's theme), and
+  // short enough to fit at 1600px.
+  const eight = ["Kitchen and pantry", "My saved recipes", "Shared cookbooks", "Weekly shopping list", "Spoons and forks", "Fellow chefs", "Discover new dishes", "Kitchen Search"].map((label) => ({
     label,
     href: `/${label.toLowerCase().replaceAll(" ", "-")}`,
   }));

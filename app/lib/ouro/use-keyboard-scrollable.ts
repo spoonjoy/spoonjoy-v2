@@ -15,6 +15,11 @@ import { useCallback, type RefCallback } from "react";
  *
  * @example
  * const scrollRef = useKeyboardScrollable<HTMLDivElement>(props.tabIndex === undefined);
+ * @claim "It adds no tab stop while" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::keeps the tab stop while the body has focus, and drops it on blur once the content fits)
+ * @claim "A dialog body of plain text" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::makes an overflowing scroll container a tab stop, so a keyboard can scroll it)
+ * @claim "It adds no tab stop while" registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx verify:testExists(registry/ouro/lib/ouro/use-keyboard-scrollable.test.tsx::makes an overflowing scroll container a tab stop, so a keyboard can scroll it)
+ * @claim "A dialog body of plain text" https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable verify:urlOk(https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable)
+ * @claim "A dialog body of plain text" https://www.w3.org/TR/WCAG22/#keyboard verify:urlOk(https://www.w3.org/TR/WCAG22/#keyboard)
  */
 export function useKeyboardScrollable<T extends HTMLElement>(enabled: boolean): RefCallback<T> {
   return useCallback(
@@ -30,16 +35,20 @@ export function useKeyboardScrollable<T extends HTMLElement>(enabled: boolean): 
       // children come and go and as text changes (React updates a lone text
       // child through nodeValue, which no box resize reports), so watch the
       // container, each child, and every mutation below it.
+      //
+      // A mutation only observes afresh: the ResizeObserver reports each newly
+      // observed box after the next layout, and `update` reads the sizes then.
+      // Reading them in the mutation callback would force a layout of its own
+      // right after every React commit, before the browser's own one, and for
+      // a container in a closed `hidden="until-found"` panel a layout of the
+      // skipped content (a ship's log the voyage's every press writes to).
       const resize = new ResizeObserver(update);
       const observe = () => {
         resize.disconnect();
         resize.observe(element);
         for (const child of element.children) resize.observe(child);
       };
-      const children = new MutationObserver(() => {
-        observe();
-        update();
-      });
+      const children = new MutationObserver(observe);
       observe();
       children.observe(element, { childList: true, subtree: true, characterData: true });
       element.addEventListener("blur", update);

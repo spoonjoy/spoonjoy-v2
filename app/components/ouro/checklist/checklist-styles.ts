@@ -37,7 +37,11 @@ const groupDescriptionClass = "m-0 text-sm leading-5 text-muted-foreground";
 /** The rows. @internal */
 const rowsClass = "grid min-w-0";
 
-/** What shows when there are no rows. @internal */
+/**
+ * What shows when there are no rows. @internal
+ *
+ * @claim "What shows when there are no" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist > shows the empty state once the last row has left)
+ */
 const emptyClass = "py-2 text-sm leading-5 text-muted-foreground";
 
 /**
@@ -63,6 +67,8 @@ const rowInnerClass = "flex min-h-0 min-w-0 items-center gap-1 group-data-starti
  * does, and is at least 44px tall on a coarse pointer.
  *
  * @internal
+ * @claim "It highlights while hovered (a mouse's" registry/ouro/components/ouro/checklist/checklist.touch.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.touch.test.tsx::gives every row at least 44px to tap)
+ * @claim "It highlights while hovered (a mouse's" registry/ouro/components/ouro/checklist/checklist-styles.ts verify:fileLine(registry/ouro/components/ouro/checklist/checklist-styles.ts, /not-has-data-disabled:pointer-fine:hover:bg-muted\/60\snot-has-data-disabled:active:bg-muted\/60/)
  */
 const hitClass =
   "relative m-0 flex min-w-0 flex-1 items-start gap-3 rounded-md px-2 py-2 pointer-coarse:min-h-11 pointer-coarse:py-2.5 " +
@@ -89,6 +95,7 @@ const labelClass = "relative w-fit max-w-full text-base leading-6 sm:pointer-fin
  * tick finishes, and taken back at once when unchecked. With reduced motion it is whole and fades.
  *
  * @internal
+ * @claim "The strike: a line through the" registry/ouro/components/ouro/checklist/checklist.test.tsx verify:testExists(registry/ouro/components/ouro/checklist/checklist.test.tsx::Checklist > draws the tick, then the strike, and softens the text)
  */
 const strikeClass =
   "pointer-events-none absolute inset-0 " +

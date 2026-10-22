@@ -10,7 +10,11 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 
-/** The props every Card takes, with or without `href`. */
+/**
+ * The props every Card takes, with or without `href`.
+ *
+ * @claim "The props every Card takes, with" registry/ouro/components/ouro/card/card.tsx verify:fileLine(registry/ouro/components/ouro/card/card.test-d.ts, /expectTypeOf<\{ href: "\/cookbooks\/1" \}>\(\)\.toExtend<CardProps>\(\)/)
+ */
 export interface CardOwnProps {
   /** The card's title, as a heading. With `href` it is the link's text, so a linked card needs one. */
   title?: ReactNode;
@@ -44,6 +48,7 @@ export interface CardOwnProps {
   /**
    * Below this breakpoint the `action` drops under the title and description, as in a
    * settings panel on a phone. Without it the action stays beside the title at every width.
+   * @claim "Without it the action stays beside" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > keeps the action beside the title on a phone without stackBelow)
    */
   stackBelow?: "sm" | "md" | (string & { 'Use "sm" (640px) or "md" (768px)': never }) | undefined;
   /**
@@ -55,9 +60,16 @@ export interface CardOwnProps {
    * `outline` is a bordered surface in the theme's card colors; `plain` has no frame or
    * padding, for a card's structure inside a surface of your own.
    * @default "outline"
+   * @claim "`outline` is a bordered surface in" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > is a bordered surface in the card colors, with 24px padding)
+   * @claim "`outline` is a bordered surface in" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > has no frame or padding with variant=plain)
    */
   variant?: "outline" | "plain" | (string & { 'Use "outline" or "plain"; elevation comes from the theme': never }) | undefined;
-  /** Padding: `md` is 24px, `sm` 16px for dense grids. @default "md" */
+  /**
+   * Padding: `md` is 24px, `sm` 16px for dense grids. @default "md"
+   *
+   * @claim "Padding: `md` is 24px, `sm` 16px" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > is a bordered surface in the card colors, with 24px padding)
+   * @claim "Padding: `md` is 24px, `sm` 16px" registry/ouro/components/ouro/card/card.test.tsx verify:testExists(registry/ouro/components/ouro/card/card.test.tsx::Card > is tighter with size=sm)
+   */
   size?: "md" | "sm" | (string & { 'Use "md" or "sm"': never }) | undefined;
   /**
    * The element to render: `li` in a list of cards, `article` for a self-contained item.

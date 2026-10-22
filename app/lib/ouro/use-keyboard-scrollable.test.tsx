@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { act } from "~/lib/ouro/testing/act";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
 
@@ -78,6 +78,20 @@ it("follows a lone text child as its text grows (React sets nodeValue)", async (
   await rerender(<TextScroller words={200} />);
   await frames();
   expect(scroller(host).getAttribute("tabindex")).toBe("0");
+});
+
+it("reads the sizes after the browser's layout, not when the content changes", async () => {
+  const { host } = await render(<Scroller lines={2} />);
+  await frames();
+  const read = vi.spyOn(Element.prototype, "scrollHeight", "get");
+  scroller(host).insertAdjacentHTML("beforeend", '<p style="height: 400px; margin: 0">Long</p>');
+  // The mutation's callback has run (a microtask), and read nothing: a read there forces a layout.
+  await Promise.resolve();
+  expect(read).not.toHaveBeenCalled();
+  await frames();
+  expect(read).toHaveBeenCalled();
+  expect(scroller(host).getAttribute("tabindex")).toBe("0");
+  read.mockRestore();
 });
 
 it("keeps the tab stop while the body has focus, and drops it on blur once the content fits", async () => {

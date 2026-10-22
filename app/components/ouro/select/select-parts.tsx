@@ -46,7 +46,11 @@ export interface SelectItemProps {
   label?: string | undefined;
 }
 
-/** A check mark, drawn in the text color at 16px. */
+/**
+ * A check mark, drawn in the text color at 16px.
+ *
+ * @claim "A check mark, drawn in the" registry/ouro/components/ouro/select/select-parts.tsx verify:fileLine(registry/ouro/components/ouro/select/select-parts.tsx, /viewBox="0\s0\s16\s16"\sfill="none"\sstroke="currentColor"/)
+ */
 function CheckIcon(): JSX.Element {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

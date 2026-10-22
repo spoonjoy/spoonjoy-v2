@@ -45,7 +45,12 @@ export interface ReorderableItem {
   content?: ReactNode;
 }
 
-/** The move `onReorder` reports: the row's id and its position before and after, counting from 0. */
+/**
+ * The move `onReorder` reports: the row's id and its position before and after, counting from 0.
+ *
+ * @claim "The move `onReorder` reports: the row's" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > drops a row in place without reporting when it did not move)
+ * @claim "The move `onReorder` reports: the row's" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > picks a row up with Space, moves it with the arrows, drops it with Space, and announces each step with its position)
+ */
 export interface ReorderableMove {
   id: string;
   from: number;
@@ -54,7 +59,11 @@ export interface ReorderableMove {
 
 /** Props for {@link Reorderable}. */
 export interface ReorderableProps {
-  /** Names the list for screen readers, such as "Steps". Always required. */
+  /**
+   * Names the list for screen readers, such as "Steps". It is always required.
+   *
+   * @claim "It is always required" registry/ouro/components/ouro/reorderable/reorderable.test-d.ts verify:fileLine(registry/ouro/components/ouro/reorderable/reorderable.test-d.ts, /\{\sitems:\s\[\]\s\}>\(\)\.not\.toExtend<ReorderableProps>/)
+   */
   label: string;
   /** The rows, in order: `{ id, label, content }`. Pass them in a new order to change the order from outside. */
   items: readonly ReorderableItem[];
@@ -62,9 +71,16 @@ export interface ReorderableProps {
    * Called once when the user drops a row in a new place, or moves it from its handle's
    * menu, with every id in the new order and the move. The list already shows the new
    * order; save it, or keep it in state.
+   * @claim "Called once when the user drops" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the handle's menu, with no drag > opens a menu of moves on a click of the handle; a move is done at once, announced and reported)
+   * @claim "Called once when the user drops" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > drops a row in place without reporting when it did not move)
    */
   onReorder?: ((ids: string[], move: ReorderableMove) => void) | undefined;
-  /** Each handle's accessible name; `{label}` is the row's label. @default "Reorder {label}" */
+  /**
+   * Each handle's accessible name; `{label}` is the row's label. @default "Reorder {label}"
+   *
+   * @claim "Each handle's accessible name; `{label}` is" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > renders a named list of rows, each with a handle that says how to use it)
+   * @claim "Each handle's accessible name; `{label}` is" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > speaks and names with the labels the app passes)
+   */
   handleLabel?: string | undefined;
   /**
    * How to use a handle from the keyboard, read after its name.
@@ -89,7 +105,12 @@ export interface ReorderableProps {
   closeLabel?: string | undefined;
   /** Announced when a row is picked up; `{label}`, `{n}` (its position) and `{total}` are filled in. @default "{label} picked up. Position {n} of {total}." */
   pickedUpLabel?: string | undefined;
-  /** Announced on each move, with the arrow keys or from a handle's menu. @default "{label} moved. Position {n} of {total}." */
+  /**
+   * Announced on each move, with the arrow keys or from a handle's menu. @default "{label} moved. Position {n} of {total}."
+   *
+   * @claim "Announced on each move, with the" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the handle's menu, with no drag > opens a menu of moves on a click of the handle; a move is done at once, announced and reported)
+   * @claim "Announced on each move, with the" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > opens the menu of moves on an arrow key, and moves the row with one only once it is picked up)
+   */
   movedLabel?: string | undefined;
   /** Announced when a row is dropped. @default "{label} dropped. Position {n} of {total}." */
   droppedLabel?: string | undefined;
@@ -102,7 +123,11 @@ export interface ReorderableProps {
   values?: { "Use items={[{ id, label, content }]}": never };
   /** Not a prop. Rows are data, with their content in `content`: `items={[{ id: "1", label: "Sear", content: <Item title="Sear" /> }]}`. */
   children?: { "Use items={[{ id, label, content: <Item ... /> }]}": never };
-  /** Not a prop. Each row's `content` is what it shows: `items={[{ id: "1", label: "Sear", content: <Item title="Sear" /> }]}`. */
+  /**
+   * Not a prop. Each row's `content` is what it shows: `items={[{ id: "1", label: "Sear", content: <Item title="Sear" /> }]}`.
+   *
+   * @claim "Each row's `content` is what it" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > shows a row's label when it has no content)
+   */
   renderItem?: { "Use items={[{ id, label, content: <Item ... /> }]}": never };
   /** Not a prop. Ouro UI uses `onReorder`: `onReorder={(ids) => save(ids)}`. */
   onChange?: { "Use onReorder={(ids) => save(ids)}": never };
@@ -122,7 +147,7 @@ interface Drag {
   from: number;
   row: HTMLElement;
   rows: HTMLElement[];
-  /** The center of each row's place, in the viewport, when the drag began. */
+  /** The centers of the rows' places, in the viewport, when the drag began. */
   centers: number[];
   /** How far a passed row moves to make room. */
   shift: number;
@@ -186,6 +211,13 @@ function GripIcon(): JSX.Element {
  *   items={steps.map((step) => ({ id: step.id, label: step.title, content: <Item title={step.title} description={step.text} /> }))}
  *   onReorder={(ids) => setSteps(ids.map((id) => steps.find((step) => step.id === id)!))}
  * />
+ * @claim "Every move is announced to screen" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the handle's menu, with no drag > opens a menu of moves on a click of the handle; a move is done at once, announced and reported)
+ * @claim "Each row has a drag handle" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the handle's menu, with no drag > moves a row to the top and to the bottom, and disables the moves that cannot apply)
+ * @claim "Every move is announced to screen" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > says the position again at either end instead of moving)
+ * @claim "Dragging is never the only way" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the handle's menu, with no drag > opens a menu of moves on a click of the handle; a move is done at once, announced and reported)
+ * @claim "Dragging is never the only way" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > picks a row up with Space, moves it with the arrows, drops it with Space, and announces each step with its position)
+ * @claim "), and each spoken string and menu item" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > speaks and names with the labels the app passes)
+ * @claim "), and each spoken string and menu item" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > from the keyboard > picks a row up with Space, moves it with the arrows, drops it with Space, and announces each step with its position)
  */
 export function Reorderable(props: ReorderableProps): JSX.Element {
   const {
@@ -282,7 +314,11 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     listRef.current!.children[order.indexOf(id)]!.querySelector("button")!.focus();
   });
 
-  /** The springs carrying rows to rest after a drop, by row element. Each row carries `data-ouro-settling` while its spring runs. */
+  /**
+   * The springs carrying rows to rest after a drop, by row element. Each row carries `data-ouro-settling` while its spring runs.
+   *
+   * @claim "Each row carries `data-ouro-settling` while its" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > with a pointer > moves the row with the pointer, makes room in the rows it passes, and reports the drop once)
+   */
   const springs = useRef(new Map<HTMLElement, SpringHandle>());
   /** Set by a drop for the layout effect that follows it: where each row was on screen, the dropped row and how it was let go. */
   const dropped = useRef<{ tops: Map<HTMLElement, number>; row: HTMLElement; velocity: number; flick: boolean } | undefined>(undefined);
@@ -494,7 +530,12 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
         pressedKey.stopPropagation();
         finishRef.current(false, 0, false);
       };
-      /** Each frame: scrolls while the pointer is near the top or bottom edge of what scrolls, by the time the frame took, so as fast on any screen. */
+      /**
+       * Each frame: scrolls while the pointer is near the top or bottom edge of what scrolls, by the time the frame took, so as fast on any screen.
+       *
+       * @claim "Each frame: scrolls while the pointer" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > with a pointer > scrolls a list that scrolls in place while the pointer is held near its bottom edge, then near its top)
+       * @claim "Each frame: scrolls while the pointer" registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx::Reorderable on a phone > scrolls the page while the finger holds a row near the bottom edge, and drops it where it ends up)
+       */
       const tick = (now: number) => {
         const held = drag.current!;
         const box = scroller === document.documentElement ? { top: 0, bottom: innerHeight } : scroller.getBoundingClientRect();

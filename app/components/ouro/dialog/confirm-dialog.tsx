@@ -42,6 +42,8 @@ export interface ConfirmDialogBaseProps {
    *
    * If the action removes the trigger (a delete), pass `finalFocus` to what
    * replaces it, such as the next item or the page heading.
+   * @claim "Cancel and Escape still close it" registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx::ConfirmDialog > ignores a promise that settles after the user cancelled)
+   * @claim "Cancel and Escape still close it" registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx::ConfirmDialog > closes from Cancel without confirming, and takes cancelLabel)
    */
   onConfirm: () => void | Promise<void>;
   /**
@@ -126,6 +128,11 @@ export type ConfirmDialogProps = ConfirmDialogWithTriggerProps | ConfirmDialogCo
  *   onConfirm={() => deleteRecipe(id)}
  *   trigger={<Button tone="destructive" variant="soft">Delete</Button>}
  * />
+ * @claim "It stacks above the page at" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
+ * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded axe finds nothing)
+ * @claim "It is always a centered dialog" registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx::ConfirmDialog > does not close on an outside press)
+ * @claim "It is always a centered dialog" registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx::ConfirmDialog > stays centered on a phone with side margins and stacks its actions with confirm at the bottom)
  */
 export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
   const {

@@ -39,7 +39,11 @@ export interface ScrollAreaOwnProps {
   className?: string | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 
-  /** Not a prop. The scrollbar shows while the pointer is over the area or it scrolls, on every device. */
+  /**
+   * Not a prop. The scrollbar shows while the pointer is over the area or it scrolls, on every device.
+   *
+   * @claim "The scrollbar shows while the pointer" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > shows the scrollbar while hovered or scrolled, and keeps it in the corner)
+   */
   type?: { "Use <ScrollArea>; the scrollbar shows on hover and scroll": never };
   /** Not a prop. Set the height with a class: `<ScrollArea className="max-h-80">`. */
   maxHeight?: { 'Use <ScrollArea className="max-h-80">': never };
@@ -70,6 +74,7 @@ const focusable = "a[href],button,input,select,textarea,summary,[tabindex]:not([
  * Warns when the viewport takes keyboard focus to scroll (Base UI makes it a tab stop once
  * the content overflows) but has no name and nothing inside that could take focus instead.
  * Development only.
+ * @claim "Warns when the viewport takes keyboard" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea development messages > warns when the area takes keyboard focus to scroll but has no name)
  */
 function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, label: string | undefined): void {
   const key = useRef({});
@@ -109,6 +114,8 @@ function useUnnamedRegionCheck(viewportRef: { current: HTMLDivElement | null }, 
  * <ScrollArea orientation="horizontal" label="Tags">
  *   <Row gap="sm">{tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</Row>
  * </ScrollArea>
+ * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.touch.test.tsx::leaves touch scrolling to the browser: the scrollbar never takes a touch)
+ * @claim "It keeps the browser's own scrolling" registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx verify:testExists(registry/ouro/components/ouro/scroll-area/scroll-area.test.tsx::ScrollArea > shows the scrollbar while hovered or scrolled, and keeps it in the corner)
  */
 export function ScrollArea(props: ScrollAreaProps): JSX.Element {
   const { children, orientation: orientationProp = "vertical", label, contain, className, type, maxHeight, height, ...rest } = props;
