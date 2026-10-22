@@ -257,7 +257,7 @@ export default function App() {
   );
 }
 
-// TODO(ouro-hx: route-progress): The bar that shows a navigation in progress becomes HX's route progress once it ships.
+// TODO(ouro-hx: route-progress, spoonjoy/spoonjoy-v2#570): The bar that shows a navigation in progress becomes HX's RouteProgress in #570.
 /**
  * Thin top-of-page brass bar that appears while React Router is loading a new
  * route or submitting a form. One global affordance covers every action that

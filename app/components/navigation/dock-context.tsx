@@ -22,7 +22,7 @@ const defaultValue: DockContextValue = {
   isSuppressed: false,
 };
 
-// TODO(ouro-hx: tab-bar): What the dock reserves under the tab bar moves into HX's tab bar once it ships.
+// TODO(ouro-hx: tab-bar, spoonjoy/spoonjoy-v2#563): What the dock reserves under the tab bar moves into HX's TabBar in #563.
 export const DockContext = createContext<DockContextValue>(defaultValue);
 
 export interface DockContextProviderProps {
