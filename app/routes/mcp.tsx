@@ -26,6 +26,7 @@ import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
 import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { claim } from "~/lib/ouro/claims";
 
 /**
  * Remote MCP connector endpoint (Streamable HTTP, `application/json`).
@@ -79,8 +80,8 @@ const protocolFacts = [
   ["Endpoint", "POST /mcp"],
   ["Transport", "Streamable HTTP, stateless"],
   ["Payload", "JSON-RPC initialize, tools/list, tools/call"],
-  ["Auth", "Authorization: Bearer on every request"],
-  ["Streaming", "no SSE, no batching"],
+  ["Auth", claim("Authorization: Bearer on every request", { source: { test: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, verify: [{ testExists: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, { fileLine: "app/lib/mcp/http-mcp.server.ts", pattern: "EVERY request \\(including" }] })],
+  ["Streaming", claim("no SSE, no batching", { source: { file: "app/lib/mcp/http-mcp.server.ts" }, verify: [{ fileLine: "app/lib/mcp/http-mcp.server.ts", pattern: "each POST carries one" }, { fileLine: "app/lib/mcp/http-mcp.server.ts", pattern: "\\(no SSE\\)" }] })],
 ] as const;
 
 const taskGradient = [
@@ -227,11 +228,7 @@ export default function McpPage() {
             </h2>
             <p className="mt-3 max-w-3xl text-base/7 text-[var(--sj-ink-soft)]">
               Visiting this URL shows setup help. MCP is not a better way to browse Spoonjoy; it is the bridge for
-              agent work where reading, transforming, and writing structured kitchen data belong together. MCP clients
-              send JSON-RPC to the same URL with{" "}
-              <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">POST</code>; every request, including{" "}
-              <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">initialize</code>, needs a valid bearer token
-              or an OAuth access token bound to this resource.
+              agent work where reading, transforming, and writing structured kitchen data belong together. {claim("MCP clients send JSON-RPC to the same URL with POST; every request, including initialize, needs a valid bearer token or an OAuth access token bound to this resource.", { source: { test: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, verify: [{ testExists: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, { testExists: "test/routes/mcp.test.ts::/mcp route > accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere" }] })}
             </p>
             <div className="mt-6">
               <CodeBlock>{endpoint}</CodeBlock>
@@ -260,7 +257,7 @@ export default function McpPage() {
             })}
           </div>
           <p className="mt-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
-            MCP deliberately has no arbitrary URL import tool. For imports, let the agent read the source you provide and
+            {claim("MCP deliberately has no arbitrary URL import tool.", { source: { file: "app/lib/mcp/spoonjoy-tools.server.ts" }, verify: [{ fileLine: "app/lib/mcp/spoonjoy-tools.server.ts", pattern: "MCP_EXCLUDED_TOOLS = new Set" }, { fileLine: "app/lib/mcp/spoonjoy-tools.server.ts", pattern: "^  \"import_recipe_from_url\",$" }] })} For imports, let the agent read the source you provide and
             create structured Spoonjoy data through <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">create_recipe</code>.
             AI cover generation also stays out of MCP. For broader REST and OpenAPI access, use the{" "}
             <Link href="/api">API guide</Link>.

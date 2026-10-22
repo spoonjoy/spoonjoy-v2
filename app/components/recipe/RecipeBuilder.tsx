@@ -37,6 +37,7 @@ import {
   IMAGE_MAX_FILE_SIZE,
   RECIPE_IMAGE_SIZE_MESSAGE,
 } from '~/lib/recipe-image'
+import { claim } from "~/lib/ouro/claims";
 
 export interface RecipeBuilderData {
   id?: string
@@ -223,7 +224,7 @@ export function RecipeBuilder({
           />
           <ImageField
             label="Recipe image"
-            description="JPG, PNG, or WebP. 5 MB max."
+            description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024" }] })}
             src={savedImageUrl}
             alt={recipe?.title ? `Photo of ${recipe.title}` : 'Recipe photo'}
             accept={FOOD_IMAGE_ACCEPT}

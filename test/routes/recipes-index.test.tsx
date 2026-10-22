@@ -276,7 +276,7 @@ describe("Recipes Index Route", () => {
     expect(await screen.findByRole("heading", { name: "Recipes worth opening." })).toBeInTheDocument();
     // Signed-in visitors must not be told to "sign in".
     expect(screen.queryByText(/before you sign in/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Every public Spoonjoy recipe, to cook, fork, save or shop from.")).toBeInTheDocument();
+    expect(screen.getByText("Public Spoonjoy recipes, to cook, fork, save or shop from.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Public Tomato Beans" })).toHaveAttribute("href", "/recipes/r1");
     expect(screen.getByRole("link", { name: /create recipe/i })).toHaveAttribute("href", "/recipes/new");
   });
@@ -309,7 +309,7 @@ describe("Recipes Index Route", () => {
     expect(await screen.findByRole("heading", { name: 'Recipes for "tomato"' })).toBeInTheDocument();
     // Signed-out visitors still see the sign-up invitation in the hero, now in one short line.
     expect(screen.getByRole("heading", { level: 1, name: "Recipes worth opening." })).toBeInTheDocument();
-    expect(screen.getByText("Every public Spoonjoy recipe, free to read. Sign up to cook, save and shop from them.")).toBeInTheDocument();
+    expect(screen.getByText("Public Spoonjoy recipes, free to read. Sign up to cook, save and shop from them.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Clear" })).toHaveAttribute("href", "/recipes");
     expect(screen.queryByRole("link", { name: /create recipe/i })).not.toBeInTheDocument();
     expect(screen.getAllByText("By rowan").length).toBeGreaterThan(0);
@@ -452,7 +452,7 @@ describe("Recipes Index Route", () => {
   it("returns public recipe metadata", () => {
     expect(meta({} as any)).toEqual([
       { title: "Recipes - Spoonjoy" },
-      { name: "description", content: "Browse public Spoonjoy recipes from every kitchen." },
+      { name: "description", content: "Browse public Spoonjoy recipes from kitchens across Spoonjoy." },
     ]);
   });
 });

@@ -12,7 +12,7 @@ describe("RecipeNotFound", () => {
   it("says a deleted recipe was deleted, without naming its chef, and offers search and the recipe box", () => {
     renderNotFound({ deleted: true });
     expect(screen.getByRole("heading", { level: 1, name: "This recipe was deleted." })).toBeInTheDocument();
-    expect(screen.getByText("Its chef deleted it, so the link no longer opens. Search for something like it, or browse every public recipe.")).toBeInTheDocument();
+    expect(screen.getByText("Its chef deleted it, so this link stopped working. Search for something like it, or browse the public recipes.")).toBeInTheDocument();
     expect(screen.getByRole("search")).toHaveAttribute("action", "/search");
     expect(screen.queryByRole("link", { name: /kitchen/ })).toBeNull();
     expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/recipes"]);

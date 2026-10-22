@@ -303,7 +303,7 @@ export default function AgentConnect() {
 
       {actionable ? (
         <Text tone="muted" className="mt-5">
-          Approval creates a Spoonjoy bearer token for this client that lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days. The client should never ask for your Spoonjoy password, and you can revoke the token in account settings.
+          Approval creates a Spoonjoy bearer token for this client that lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days. Don't give the client your Spoonjoy password; you can revoke the token in account settings.
         </Text>
       ) : null}
 

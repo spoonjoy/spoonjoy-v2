@@ -17,7 +17,7 @@ export function RecipeNotFound({ deleted }: { deleted: boolean }) {
         size="lg"
         divider
         description={deleted
-          ? "Its chef deleted it, so the link no longer opens. Search for something like it, or browse every public recipe."
+          ? "Its chef deleted it, so this link stopped working. Search for something like it, or browse the public recipes."
           : "The link may be mistyped, or the recipe may have been removed. Try a search, or browse every public recipe."}
       />
 

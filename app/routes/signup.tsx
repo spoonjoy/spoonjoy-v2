@@ -19,6 +19,7 @@ import { Button } from "~/components/button";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
+import { claim } from "~/lib/ouro/claims";
 
 interface ActionData {
   errors?: {
@@ -97,7 +98,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (!password || password.length < 8) {
-    errors.password = "Password must be at least 8 characters";
+    errors.password = claim("Password must be at least 8 characters", { source: { file: "app/routes/signup.tsx" }, verify: [{ fileLine: "app/routes/signup.tsx", pattern: "password\\.length < 8" }] });
   }
 
   if (password !== confirmPassword) {
@@ -215,7 +216,7 @@ export default function Signup() {
             name="password"
             autoComplete="new-password"
             required
-            description="At least 8 characters."
+            description={claim("At least 8 characters.", { source: { file: "app/routes/signup.tsx" }, verify: [{ fileLine: "app/routes/signup.tsx", pattern: "password\\.length < 8" }] })}
           />
           <TextField
             label="Confirm password"

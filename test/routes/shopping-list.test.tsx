@@ -1215,7 +1215,7 @@ describe("Shopping List Routes", () => {
 
       // Dialog should be open
       expect(await screen.findByText("Start fresh?")).toBeInTheDocument();
-      expect(screen.getByText(/All items will be cleared/)).toBeInTheDocument();
+      expect(screen.getByText(/This clears your shopping list/)).toBeInTheDocument();
 
       // Click confirm button
       const confirmButton = screen.getByRole("button", { name: "Clear all" });

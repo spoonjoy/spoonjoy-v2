@@ -29,7 +29,7 @@ const PUBLIC_RECIPE_LIMIT = 48;
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Recipes - Spoonjoy" },
-    { name: "description", content: "Browse public Spoonjoy recipes from every kitchen." },
+    { name: "description", content: "Browse public Spoonjoy recipes from kitchens across Spoonjoy." },
   ];
 }
 
@@ -99,8 +99,8 @@ export default function RecipesIndex() {
               </h1>
               <p className="text-base/6 text-[var(--sj-ink-soft)] mt-3 max-w-2xl text-base/7 sm:mt-5 sm:text-lg/8">
                 {isAuthenticated
-                  ? "Every public Spoonjoy recipe, to cook, fork, save or shop from."
-                  : "Every public Spoonjoy recipe, free to read. Sign up to cook, save and shop from them."}
+                  ? "Public Spoonjoy recipes, to cook, fork, save or shop from."
+                  : "Public Spoonjoy recipes, free to read. Sign up to cook, save and shop from them."}
               </p>
             </div>
 

@@ -23,6 +23,7 @@ import { AccountDataSection } from "~/components/account/AccountDataSection";
 import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
+import { claim } from "~/lib/ouro/claims";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -30,6 +31,8 @@ export function meta({}: Route.MetaArgs) {
     { name: "description", content: "Manage your Spoonjoy account settings." },
   ];
 }
+
+const PASSWORD_LENGTH_HINT = claim("Must be at least 8 characters", { source: { file: "app/lib/account-settings.server.ts" }, verify: [{ fileLine: "app/lib/account-settings.server.ts", pattern: "newPassword\\.length < 8" }] });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   return loadAccountSettings({ request, context });
@@ -201,8 +204,8 @@ export default function AccountSettings() {
               />
             ) : (
               <Text tone="muted" size="sm" className="leading-6">
-                To change your email, you need to have signed in within the last 10 minutes. If it has been longer,
-                sign in again first.
+                {claim("To change your email, you need to have signed in within the last 10 minutes.", { source: { file: "app/lib/account-reauthentication.server.ts" }, verify: [{ fileLine: "app/lib/account-reauthentication.server.ts", pattern: "RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000" }] })}{" "}
+                If it has been longer, sign in again first.
               </Text>
             )}
             <div className="flex flex-wrap gap-3">
@@ -543,7 +546,7 @@ export default function AccountSettings() {
                 <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                 <TextField
                   label="New password"
-                  description="Must be at least 8 characters"
+                  description={PASSWORD_LENGTH_HINT}
                   type="password"
                   name="newPassword"
                   autoComplete="new-password"
@@ -600,7 +603,7 @@ export default function AccountSettings() {
                 <input type="hidden" name="intent" value="setPassword" />
                 <TextField
                   label="New password"
-                  description="Must be at least 8 characters"
+                  description={PASSWORD_LENGTH_HINT}
                   type="password"
                   name="newPassword"
                   autoComplete="new-password"
@@ -631,8 +634,8 @@ export default function AccountSettings() {
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="sign-out-everywhere">
           <Text tone="default"><strong className="font-medium">Sign out everywhere</strong></Text>
           <Text tone="muted" size="sm" className="mt-1">
-            Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app,
-            agent and API token, including Claude. You stay signed in here; reconnect what you still use afterwards.
+            {claim("Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app, agent and API token, including Claude.", { source: { test: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > bearer credentials > sign out everywhere revokes API tokens, agent tokens, OAuth and MCP connections, unused codes and approved agent requests" }, verify: [{ testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > bearer credentials > sign out everywhere revokes API tokens, agent tokens, OAuth and MCP connections, unused codes and approved agent requests" }, { testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > action - sign out everywhere > revokes every existing session and re-issues this browser's session at the new version" }] })}{" "}
+            You stay signed in here; reconnect what you still use afterwards.
           </Text>
           {isConfirmingSignOutEverywhere ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">

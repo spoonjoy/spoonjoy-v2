@@ -3,6 +3,9 @@ import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
+import { claim } from "~/lib/ouro/claims";
+
+const ACCOUNT_GONE = claim("Your recipes, cookbooks, shopping list, cooks and sign-in methods are gone, and every app and agent you connected has lost access.", { source: { test: "test/lib/account-deletion.server.test.ts::deleteAccount > removes the account and everything only it used, and keeps what other cooks built on" }, verify: [{ testExists: "test/lib/account-deletion.server.test.ts::deleteAccount > removes the account and everything only it used, and keeps what other cooks built on" }] });
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -20,7 +23,7 @@ export default function AccountDeleted() {
           title="Your account is deleted"
           size="lg"
           divider
-          description="Your recipes, cookbooks, shopping list, cooks and sign-in methods are gone, and every app and agent you connected has lost access. Recipes other cooks forked, saved or cooked stay up, credited to a “Deleted chef” placeholder."
+          description={`${ACCOUNT_GONE} Recipes other cooks forked, saved or cooked stay up, credited to a “Deleted chef” placeholder.`}
         />
         <Text tone="muted" className="mt-6 leading-7">Thanks for cooking with us. You're welcome back any time.</Text>
         <div className="mt-2 flex flex-wrap gap-x-6">

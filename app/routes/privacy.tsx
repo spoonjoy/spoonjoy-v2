@@ -5,6 +5,7 @@ import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
+import { claim } from "~/lib/ouro/claims";
 
 const LAST_UPDATED = "October 9, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
@@ -46,8 +47,8 @@ export default function Privacy() {
         <Section title="Information we collect">
           <Text tone="muted">When you create an account and use Spoonjoy, we store:</Text>
           <ul className="list-disc space-y-2 pl-6">
-            <li>Account details: your email address and username. Passwords are stored only as a salted hash, never in plain text.</li>
-            <li>Sign-in methods you choose to connect: passkeys (WebAuthn credentials) and OAuth provider account identifiers from Apple, GitHub, or Google. We request only your name and email from those providers and never receive your provider password.</li>
+            <li>Account details: your email address and username. {claim("Passwords are stored only as a salted hash, never in plain text.", { source: { file: "app/lib/auth.server.ts" }, verify: [{ fileLine: "app/lib/auth.server.ts", pattern: "import bcrypt from \"bcryptjs\"" }] })}</li>
+            <li>Sign-in methods you choose to connect: passkeys (WebAuthn credentials) and OAuth provider account identifiers from Apple, GitHub, or Google. {claim("We request only your name and email from those providers and never receive your provider password.", { source: { file: "app/lib/google-oauth.server.ts" }, verify: [{ fileLine: "app/lib/google-oauth.server.ts", pattern: "\\[\"openid\", \"email\", \"profile\"\\]" }, { fileLine: "app/lib/github-oauth.server.ts", pattern: "\\[\"read:user\", \"user:email\"\\]" }, { fileLine: "app/lib/apple-oauth.server.ts", pattern: "\\[\"name\", \"email\"\\]" }] })}</li>
             <li>Your content: recipes, cookbooks, shopping lists, cook logs, notes, and any photos you upload.</li>
             <li>API tokens and connector authorizations you create for programmatic or AI-assistant access. Token secrets are stored hashed and shown only once.</li>
             <li>Optional push-notification subscriptions, if you enable notifications.</li>
@@ -117,15 +118,13 @@ export default function Privacy() {
 
         <Section id="deletion" title="Deleting your account">
           <Text tone="muted">
-            You can delete your account yourself in account settings or in the iPhone app. We ask
-            you to type your username and confirm it is you: with your password, or, if you have
-            no password, by signing in again.
+            You can delete your account yourself in account settings or in the iPhone app. {claim("We ask you to type your username and confirm it is you: with your password, or, if you have no password, by signing in again.", { source: { test: "test/routes/account-settings-deletion.test.tsx::Account settings - delete account > deletes a password account after the username and password, signs out, and shows the goodbye page" }, verify: [{ testExists: "test/routes/account-settings-deletion.test.tsx::Account settings - delete account > deletes a password account after the username and password, signs out, and shows the goodbye page" }, { testExists: "test/routes/account-settings-deletion.test.tsx::Account settings - delete account > lets a passwordless account delete only within ten minutes of signing in" }] })}
           </Text>
           <Text tone="muted">Deleting your account permanently removes:</Text>
           <ul className="list-disc space-y-2 pl-6">
             <li>your account, email address, and profile photo;</li>
             <li>your recipes, cookbooks, shopping list, and the cooks you logged, with their photos;</li>
-            <li>your passkeys, linked sign-in accounts, API tokens, and every app and assistant you connected;</li>
+            <li>{claim("your passkeys, linked sign-in accounts, API tokens, and every app and assistant you connected;", { source: { test: "test/lib/account-deletion.server.test.ts::deleteAccount > removes the account and everything only it used, and keeps what other cooks built on" }, verify: [{ testExists: "test/lib/account-deletion.server.test.ts::deleteAccount > removes the account and everything only it used, and keeps what other cooks built on" }] })}</li>
             <li>your notifications, and notifications to other cooks that mention you.</li>
           </ul>
           <Text tone="muted">

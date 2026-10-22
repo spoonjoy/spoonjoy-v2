@@ -34,6 +34,7 @@ import { Button } from "~/components/button";
 import { Text } from "~/components/ouro/text/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
+import { claim } from "~/lib/ouro/claims";
 
 // Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
 // loader (consent screen / login-gate redirect) and the action (Approve/Deny).
@@ -332,8 +333,7 @@ export default function OAuthAuthorize() {
         </Text>
       ) : null}
       <Text tone="muted" className="mt-4">
-        This connection stays active while {appName} keeps using it. It ends when you disconnect it, sign out
-        everywhere, or leave it unused for 180 days.
+        This connection stays active while {appName} keeps using it. {claim("It ends when you disconnect it, sign out everywhere, or leave it unused for 180 days.", { source: { file: "app/lib/oauth-server.server.ts" }, verify: [{ fileLine: "app/lib/oauth-server.server.ts", pattern: "OAUTH_REFRESH_TOKEN_TTL_SECONDS = 180 \\* 24 \\* 60 \\* 60" }] })}
       </Text>
 
       <Collapsible title="Connection details" className="mt-5">

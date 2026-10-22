@@ -455,7 +455,7 @@ export default function CookbookDetail() {
               submit({ intent: "delete" }, { method: "post" });
             }}
             title="Delete this cookbook?"
-            description="This will permanently delete the cookbook and remove all recipe associations. The recipes themselves will not be deleted."
+            description="This deletes the cookbook and its list of recipes for good. The recipes themselves stay."
             confirmLabel="Delete it"
             cancelLabel="Keep it"
             tone="destructive"

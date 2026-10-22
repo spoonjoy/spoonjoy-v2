@@ -17,6 +17,7 @@ import {
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
 import { localDateTimeToIso } from "~/lib/cooked-at";
+import { claim } from "~/lib/ouro/claims";
 
 /* istanbul ignore next -- @preserve backdrop closes are intentionally ignored while a post is in flight */
 function ignoreCloseWhilePosting() {}
@@ -130,7 +131,7 @@ export function SpoonDialog({
             name="photo"
             accept={FOOD_IMAGE_ACCEPT}
             maxSize={IMAGE_MAX_FILE_SIZE}
-            description="JPG, PNG, or WebP. 5 MB max."
+            description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024" }] })}
             rejectMessage={(rejection) =>
               rejection.reason === "size" ? FOOD_IMAGE_SIZE_MESSAGE : FOOD_IMAGE_TYPE_MESSAGE
             }

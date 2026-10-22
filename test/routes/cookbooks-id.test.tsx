@@ -1680,7 +1680,7 @@ describe("Cookbooks $id Route", () => {
 
       // Dialog should be open
       expect(await screen.findByText("Delete this cookbook?")).toBeInTheDocument();
-      expect(screen.getByText(/This will permanently delete/)).toBeInTheDocument();
+      expect(screen.getByText(/This deletes the cookbook/)).toBeInTheDocument();
 
       // Confirming submits through the router, which follows the action's redirect to the list.
       const confirmButton = screen.getByRole("button", { name: "Delete it" });

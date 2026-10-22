@@ -16,6 +16,7 @@ import {
   FOOD_IMAGE_TYPE_MESSAGE,
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
+import { claim } from "~/lib/ouro/claims";
 
 const PHOTO_STUDIO_INTENTS = ["createFirstPhotoCover"] as const;
 
@@ -161,7 +162,7 @@ export function RecipePhotoStudio({
           name="photo"
           accept={FOOD_IMAGE_ACCEPT}
           maxSize={IMAGE_MAX_FILE_SIZE}
-          description="JPG, PNG, or WebP. 5 MB max."
+          description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024" }] })}
           rejectMessage={(rejection) =>
             rejection.reason === "size" ? FOOD_IMAGE_SIZE_MESSAGE : FOOD_IMAGE_TYPE_MESSAGE
           }

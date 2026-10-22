@@ -26,6 +26,9 @@ import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { claim } from "~/lib/ouro/claims";
+
+const GENERATED_FROM_OPENAPI = claim("Generated from the live v1 OpenAPI surface.", { source: { file: "scripts/generate-api-playground.ts" }, verify: [{ fileLine: "scripts/generate-api-playground.ts", pattern: "openapi" }] });
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
 type PlaygroundSurface = "full" | "connector" | "sdk";
@@ -58,7 +61,7 @@ const AUTH_MODES: Array<{ id: PlaygroundAuthMode; label: string }> = [
 
 const SURFACES: Array<{ id: PlaygroundSurface; label: string; url: string; body: string }> = [
   { id: "full", label: "All APIs", url: "/api/v1/openapi.json", body: "Full docs and playground source of truth." },
-  { id: "connector", label: "Connector", url: "/api/v1/openapi.connector.json", body: "OpenAPI 3.0 REST profile for no-code importers." },
+  { id: "connector", label: "Connector", url: "/api/v1/openapi.connector.json", body: claim("OpenAPI 3.0 REST profile for no-code importers.", { source: { file: "app/lib/api-v1-openapi.server.ts" }, verify: [{ fileLine: "app/lib/api-v1-openapi.server.ts", pattern: "openapi: \"3\\.0\\.3\"" }] }) },
   { id: "sdk", label: "SDK", url: "/api/v1/openapi.sdk.json", body: "REST plus OAuth and delegated approval bootstrap for generated SDKs." },
 ];
 const PKCE_SESSION_STORAGE_KEY = "spoonjoy.playground.pkce";
@@ -925,7 +928,7 @@ export default function DeveloperPlayground() {
         title="Spoonjoy API Playground"
         size="lg"
         divider
-        description="Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for private, scoped, and mutating calls."
+        description={`${GENERATED_FROM_OPENAPI} Sign into Spoonjoy and the playground uses that session for private, scoped, and mutating calls.`}
         actions={(
         <Button href="/api" plain>
           <Terminal data-slot="icon" aria-hidden="true" />

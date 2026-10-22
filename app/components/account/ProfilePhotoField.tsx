@@ -3,6 +3,7 @@ import { ImageField } from "~/components/ouro/image-field/image-field";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_ACCEPT } from "~/lib/recipe-image";
+import { claim } from "~/lib/ouro/claims";
 
 /**
  * The chef's profile photo on Account settings: HX's image field, round and cropped, which saves a
@@ -39,7 +40,7 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
       label="Profile photo"
       hideLabel
       alt="Profile photo"
-      description="JPG, PNG, GIF, or WebP. 5 MB max."
+      description={claim("JPG, PNG, GIF, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024" }] })}
       src={resolveChefAvatarUrl(savedPhotoUrl)}
       accept={PROFILE_IMAGE_ACCEPT}
       maxSize={IMAGE_MAX_FILE_SIZE}

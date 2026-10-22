@@ -146,7 +146,7 @@ function RecipeIndex({
             title="Create your first recipe"
             headingLevel={3}
             icon={<ChefHat />}
-            description="Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose."
+            description="Capture the dish you make again and again, the family classic people ask about, or the weeknight save you want to keep."
             action={isOwner
               ? <Button href="/recipes/new" startIcon={Plus}>Create first recipe</Button>
               : <Text tone="muted" size="sm">No public recipes yet.</Text>}
@@ -230,7 +230,7 @@ function CookbookShelf({
           title={isOwner ? "Build your first cookbook" : "No public cookbooks yet."}
           icon={<BookOpen />}
           description={isOwner
-            ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal."
+            ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows meal by meal."
             : "This kitchen has not published a cookbook yet."}
           action={isOwner ? <Button href="/cookbooks/new">Create first cookbook</Button> : undefined}
         />

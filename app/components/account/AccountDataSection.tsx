@@ -9,6 +9,7 @@ import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { SettingsPanel } from "~/components/cookbook/page";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
+import { claim } from "~/lib/ouro/claims";
 
 export interface AccountDataSectionProps {
   username: string;
@@ -57,8 +58,8 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="delete-account">
           <Text tone="default">Delete account</Text>
           <Text tone="muted" size="sm" className="mt-1">
-            Permanently deletes your account, recipes, cookbooks, shopping list, cooks and photos, and signs out every
-            app and agent you connected. Recipes other cooks forked, saved or cooked stay up,
+            {claim("Permanently deletes your account, recipes, cookbooks, shopping list, cooks and photos, and signs out every app and agent you connected.", { source: { test: "test/lib/account-deletion.server.test.ts::deleteAccount > removes the account and everything only it used, and keeps what other cooks built on" }, verify: [{ testExists: "test/lib/account-deletion.server.test.ts::deleteAccount > removes the account and everything only it used, and keeps what other cooks built on" }] })}{" "}
+            Recipes other cooks forked, saved or cooked stay up,
             credited to a “Deleted chef” placeholder; their forks stay theirs. This can't be undone, so download your data first if you want a copy.
           </Text>
           <p className="m-0 text-sm/6">
@@ -87,8 +88,8 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
               ) : needsFreshSignIn ? null : (
                 // Neutral guidance before any attempt; a failed attempt's message replaces it.
                 <Text tone="muted" size="sm">
-                  Your account has no password, so you need to have signed in within the last 10 minutes. If it has
-                  been longer, sign in again first.
+                  {claim("Your account has no password, so you need to have signed in within the last 10 minutes.", { source: { file: "app/lib/account-reauthentication.server.ts" }, verify: [{ fileLine: "app/lib/account-reauthentication.server.ts", pattern: "RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000" }] })}{" "}
+                  If it has been longer, sign in again first.
                 </Text>
               )}
               <div className="flex flex-wrap gap-3">

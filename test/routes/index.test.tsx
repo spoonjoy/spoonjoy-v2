@@ -627,7 +627,7 @@ describe("Kitchen Index Route", () => {
 
       expect(await screen.findByText("0 recipes and 0 cookbooks")).toBeInTheDocument();
       expect(screen.getByText("Create your first recipe")).toBeInTheDocument();
-      expect(screen.getByText(/the family classic everyone asks about/i)).toBeInTheDocument();
+      expect(screen.getByText(/the family classic people ask about/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Create first recipe" })).toHaveAttribute("href", "/recipes/new");
       expect(screen.getByText("Build your first cookbook")).toBeInTheDocument();
       expect(screen.getByText(/a family collection that grows/i)).toBeInTheDocument();

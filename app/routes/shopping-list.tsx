@@ -359,7 +359,7 @@ export default function ShoppingList() {
                 onOpenChange={() => setShowClearDialog(false)}
                 onConfirm={handleClearAllConfirm}
                 title="Start fresh?"
-                description="All items will be cleared from your shopping list."
+                description="This clears your shopping list."
                 confirmLabel="Clear all"
                 cancelLabel="Keep list"
                 tone="destructive"
