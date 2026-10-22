@@ -28,7 +28,20 @@ describe("dependency advisory refresh contract", () => {
       "happy-dom": "20.8.9",
       "storybook": "10.6.2",
       "vite": "7.3.7",
+      // 4.1.12 patches @vitest/mocker's GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp.
+      "vitest": "4.1.12",
+      "@vitest/ui": "4.1.12",
+      "@vitest/coverage-istanbul": "4.1.12",
+      "@vitest/coverage-v8": "4.1.12",
+      "@vitest/browser-playwright": "4.1.12",
     });
+  });
+
+  it("locks the patched Vitest mocker, and allows no advisory", () => {
+    const lock = readFileSync(join(projectRoot, "pnpm-lock.yaml"), "utf8");
+    const mockers = [...new Set(lock.match(/^  '?@vitest\/mocker@[^:(']+/gm) ?? [])];
+    expect(mockers.map((entry) => entry.replace(/^  '?/, ""))).toEqual(["@vitest/mocker@4.1.12"]);
+    expect(allowlist.allowedVulnerabilities).toEqual([]);
   });
 
   it("uses exact defensive transitive overrides and the reviewed React Router patch", () => {
