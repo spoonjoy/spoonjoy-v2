@@ -41,7 +41,6 @@ concurrency:
 
 env:
   PRISMA_HIDE_UPDATE_MESSAGE: "1"
-  SPOONJOY_QA_CREDENTIALS: ${{ github.workspace }}/.journeys/credentials.json
   # Push, pull_request, and the daily schedule always run the journeys suite; only a
   # workflow_dispatch can choose explore. Everything else (the run's QA stack, deploy, seed,
   # rotate, sanitise, gated upload, cleanup, teardown, concurrency) is shared between the two suites.
@@ -127,23 +126,47 @@ jobs:
     needs: [queue-tested, changes]
     if: ${{ !cancelled() && needs.queue-tested.outputs.tested != 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.journeys != 'false')) }}
     name: journeys
-    runs-on: ubuntu-latest
+    # Runs in Playwright's image, at the version package.json pins, by digest
+    # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
+    # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
+    # image ships zstd; the runner's own is mounted over it, as ourostack/ouro-ui#170 does, so an
+    # actions/cache step added here would compress exactly as the runner does (none uses one today).
+    # The runner's zstd needs the image's Ubuntu (24.04), so the job names that runner. setup-node's
+    # package cache is off: its path differs inside the container.
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
+      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
 
+      # In a container, the github.workspace and runner.temp contexts name the runner's paths, not
+      # the container's, so the paths the steps share are set from the container's own variables.
+      - name: Point the shared paths into the container
+        run: |
+          {
+            echo "SPOONJOY_QA_CREDENTIALS=$GITHUB_WORKSPACE/.journeys/credentials.json"
+            echo "SPOONJOY_CF_REQUEST_COUNTER=--import $GITHUB_WORKSPACE/scripts/count-cloudflare-requests.mjs"
+            echo "SPOONJOY_CF_REQUEST_LOG=$RUNNER_TEMP/cloudflare-requests.log"
+          } >> "$GITHUB_ENV"
+
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+          cache: ""
+
+      # The image has no jq, which the seed and the Worker tail summary use.
+      - name: Install jq
+        run: node scripts/install-jq.mjs
 
       - name: Require Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: |
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
             echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required. Journeys fail closed."
@@ -155,8 +178,11 @@ jobs:
           node scripts/warning-gate.ts -- corepack enable
           node scripts/warning-gate.ts -- corepack prepare pnpm@10.28.1 --activate
 
+      # Without install scripts: the only one allowed (pnpm-workspace.yaml) builds better-sqlite3
+      # from source, which needs make and a C++ compiler the image lacks, and only the unit tests
+      # use it. The root postinstall is "prisma generate", which the next step runs.
       - name: Install dependencies
-        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile
+        run: node scripts/warning-gate.ts -- pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate Prisma client
         run: node scripts/warning-gate.ts -- pnpm prisma:generate
@@ -170,9 +196,6 @@ jobs:
       # so the check happens before any password reaches QA.
       - name: Typecheck the journeys
         run: node scripts/warning-gate.ts -- pnpm exec tsc -p tsconfig.e2e.json
-
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium webkit
 
       # The QA preflight checks the static config and the generated build against the shared QA
       # identity (Worker, URL, D1, R2, rate limits, CSP, PostHog) before anything is created.
@@ -194,24 +217,21 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: node scripts/qa-run-scope.mjs prepare
 
       - name: Migrate this run's QA database
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: pnpm run qa:migrate
 
       - name: Deploy this build to this run's QA Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: node scripts/qa-run-scope.mjs deploy
 
       # Secrets set, no pending migration, /health up, and every file in build/client/assets served
@@ -221,8 +241,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: node scripts/qa-run-scope.mjs verify
 
       # Workers-side evidence for every run: stream the QA Worker's invocation log while the
@@ -235,8 +254,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: |
           mkdir -p .worker-tail
           # A tail whose connection drops is reconnected, at most 5 times, so one dropped socket
@@ -260,8 +278,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: |
           mkdir -p .journeys
           pnpm run seed:qa:kitchen -- --credentials-out "$SPOONJOY_QA_CREDENTIALS"
@@ -407,8 +424,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: pnpm run seed:qa:kitchen -- --rotate
 
       - name: Clean up disposable QA data
@@ -418,8 +434,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: node scripts/warning-gate.ts -- pnpm run cleanup:remote:qa:apply
 
       - name: Remove credentials and session files
@@ -505,8 +520,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NODE_OPTIONS: --import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs
-          SPOONJOY_CF_REQUEST_LOG: ${{ runner.temp }}/cloudflare-requests.log
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: node scripts/qa-run-scope.mjs teardown
 
       # Every Cloudflare step above logs its API requests (scripts/count-cloudflare-requests.mjs),
@@ -514,7 +528,7 @@ jobs:
       - name: Report Cloudflare API requests
         if: always()
         continue-on-error: true
-        run: node scripts/count-cloudflare-requests.mjs summary "$RUNNER_TEMP/cloudflare-requests.log" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: node scripts/count-cloudflare-requests.mjs summary "$SPOONJOY_CF_REQUEST_LOG" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # The shared QA Worker (spoonjoy-v2-qa, D1 spoonjoy-qa) mirrors main: native journeys and the
   # QA Image Cover Smoke workflow run against it (both create their own accounts by signing up,

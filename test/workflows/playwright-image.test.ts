@@ -1,0 +1,184 @@
+// Every job that runs a browser runs in Playwright's image, so it installs nothing from Ubuntu's
+// mirror, whose downloads can stall for a whole job. The image is pinned by digest, at the version
+// package.json pins for Playwright, on the runner whose Ubuntu matches it.
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
+import { PLAYWRIGHT_CONTAINER, PLAYWRIGHT_RUNNER } from "../../scripts/deployment-preflight";
+
+const ROOT = resolve(__dirname, "../..");
+const WORKFLOWS = join(ROOT, ".github/workflows");
+const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+  devDependencies?: Record<string, string>;
+  dependencies?: Record<string, string>;
+};
+
+type Step = { name?: string; uses?: string; run?: string; with?: Record<string, unknown> };
+type Job = { "runs-on"?: string; container?: { image?: string; options?: string }; steps?: Step[] };
+
+const workflows = readdirSync(WORKFLOWS)
+  .filter((file) => file.endsWith(".yml"))
+  .map((file) => {
+    const text = readFileSync(join(WORKFLOWS, file), "utf8");
+    return { file, text, jobs: (parse(text) as { jobs: Record<string, Job> }).jobs };
+  });
+
+// The jobs that launch Chromium or WebKit, but build-storybook and the production deploy (below).
+const BROWSER_JOBS = [
+  ["ci.yml", "e2e"],
+  ["journeys.yml", "journeys"],
+  ["mcp-oauth-canary.yml", "canary"],
+  ["qa-image-cover-smoke.yml", "smoke"],
+] as const;
+
+// The production deploy stays on the runner: its release-source validation calls the GitHub CLI
+// (scripts/workflow-security.mjs validate-production-deploy-source), which the image does not have,
+// and a release must not depend on a tool installed into the job.
+const RUNNER_BROWSER_JOBS = [["production-deploy.yml", "deploy"]] as const;
+
+// Checked by running the pinned image as user 1001. Commands the moved jobs' steps, and the scripts
+// they run, may call; anything else must be installed by the job first (jq, by scripts/install-jq.mjs).
+const IMAGE_COMMANDS = new Set([
+  "bash", "sh", "node", "npx", "corepack", "pnpm", "git", "curl", "python3", "setsid", "nohup", "zstd", "tar", "gzip",
+  "xvfb-run", "sed", "grep", "cat", "tail", "head", "mkdir", "rm", "mv", "cp", "kill", "sleep", "seq", "wc", "tee",
+  "printf", "echo", "env", "test", "chmod", "sha256sum", "date", "tr", "cut", "sort", "uniq", "find", "xargs",
+]);
+// Not in the image.
+const MISSING_FROM_IMAGE = ["gh", "jq", "unzip", "make", "gcc", "g++", "sudo", "apt", "apt-get", "dpkg"];
+
+// build-storybook runs the installed Ouro UI tests, whose swipe-actions rounding fails with the
+// image's fonts until the installed copy has ourostack/ouro-ui#170's fix (halves rounded away
+// from zero), so it stays on the runner until then.
+const SWIPE_ACTIONS_TEST = join(ROOT, "app/components/ouro/swipe-actions/swipe-actions.test.tsx");
+const swipeRoundingFixed = readFileSync(SWIPE_ACTIONS_TEST, "utf8")
+  .includes("const hundredths = (value: number) => (Math.sign(value) * Math.round(Math.abs(value) * 100)) / 100;");
+
+function job(file: string, name: string): Job {
+  const found = workflows.find((workflow) => workflow.file === file)?.jobs[name];
+  if (!found) throw new Error(`Missing job ${file} ${name}`);
+  return found;
+}
+
+function pinnedPlaywrightVersion(): string {
+  const all = { ...packageJson.dependencies, ...packageJson.devDependencies };
+  expect(all.playwright).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(all["@playwright/test"]).toBe(all.playwright);
+  return all.playwright!;
+}
+
+describe("Playwright's image for every browser job", () => {
+  it("is pinned by digest, at the Playwright version package.json pins", () => {
+    expect(PLAYWRIGHT_CONTAINER.image).toMatch(/^mcr\.microsoft\.com\/playwright@sha256:[0-9a-f]{64}$/);
+    expect(PLAYWRIGHT_RUNNER).toBe("ubuntu-24.04");
+    const tag = `v${pinnedPlaywrightVersion()}-noble`;
+    for (const [file] of BROWSER_JOBS) {
+      const { text } = workflows.find((workflow) => workflow.file === file)!;
+      const imageLines = text.split("\n").filter((line) => line.includes("mcr.microsoft.com/playwright"));
+      expect(imageLines.length, file).toBeGreaterThan(0);
+      for (const line of imageLines) {
+        // The digest is what runs; the tag beside it says which release it is, and must follow
+        // package.json.
+        expect(line.trim(), file).toBe(`image: ${PLAYWRIGHT_CONTAINER.image} # ${tag}`);
+      }
+    }
+  });
+
+  it.each(BROWSER_JOBS)("runs %s %s in it, on its Ubuntu, with the runner's zstd", (file, name) => {
+    const browserJob = job(file, name);
+    expect(browserJob["runs-on"]).toBe(PLAYWRIGHT_RUNNER);
+    expect(browserJob.container).toEqual(PLAYWRIGHT_CONTAINER);
+  });
+
+  it.each(BROWSER_JOBS)("installs no system package or browser in %s %s, and keeps setup-node's cache off", (file, name) => {
+    const steps = job(file, name).steps ?? [];
+    for (const step of steps) {
+      expect(step.run ?? "", step.name).not.toMatch(/\bapt(?:-get)?\b|\bsudo\b|\bdpkg\b|playwright install/);
+      if (step.uses?.startsWith("actions/setup-node@")) expect(step.with?.cache, step.name).toBe("");
+    }
+  });
+
+  // The image has no make or C++ compiler, which better-sqlite3's build needs (only the unit
+  // tests use it), so install scripts are off; the root postinstall's prisma generate runs as its
+  // own step after the install.
+  it.each(BROWSER_JOBS)("installs %s %s's packages without install scripts, then generates the Prisma client", (file, name) => {
+    const runs = (job(file, name).steps ?? []).map((step) => step.run ?? "");
+    const installs = runs.map((run, index) => [run, index] as const).filter(([run]) => /\bpnpm install\b/.test(run));
+    expect(installs).toHaveLength(1);
+    const [install, at] = installs[0];
+    expect(install).toMatch(/pnpm install --frozen-lockfile --ignore-scripts$/);
+    expect(runs.slice(at + 1).some((run) => /^(?:node scripts\/warning-gate\.ts -- )?pnpm prisma:generate$/.test(run.trim()))).toBe(true);
+  });
+
+  it.each(BROWSER_JOBS)("names no runner path in %s %s, which the container does not have", (file, name) => {
+    const text = JSON.stringify(job(file, name));
+    expect(text).not.toMatch(/\$\{\{\s*(?:github\.workspace|runner\.temp|runner\.tool_cache)\s*\}\}/);
+  });
+
+  it("is the only image, and only browser jobs use it", () => {
+    const containerJobs = workflows.flatMap(({ file, jobs }) =>
+      Object.entries(jobs).filter(([, candidate]) => candidate.container).map(([name]) => `${file} ${name}`));
+    expect(containerJobs.sort()).toEqual(BROWSER_JOBS.map(([file, name]) => `${file} ${name}`).sort());
+  });
+
+  it("keeps build-storybook on the runner only until the installed swipe-actions test has the rounding fix", () => {
+    const storybook = job("storybook.yml", "build-storybook");
+    if (swipeRoundingFixed) {
+      // Time to move it: add it to BROWSER_JOBS and give it the image.
+      expect(storybook.container, "build-storybook can run in Playwright's image now").toEqual(PLAYWRIGHT_CONTAINER);
+    } else {
+      expect(storybook.container).toBeUndefined();
+      const installs = (storybook.steps ?? []).filter((step) => /playwright install/.test(step.run ?? ""));
+      expect(installs.map((step) => step.run?.trim())).toEqual(["pnpm exec playwright install --with-deps chromium webkit"]);
+    }
+  });
+
+  it.each(RUNNER_BROWSER_JOBS)("keeps %s %s on the runner", (file, name) => {
+    expect(job(file, name).container).toBeUndefined();
+    expect(job(file, name)["runs-on"]).toBe("ubuntu-latest");
+    expect(readFileSync(join(ROOT, "scripts/workflow-security.mjs"), "utf8")).toMatch(/run\("gh", \[/);
+  });
+
+  it.each(BROWSER_JOBS)("calls nothing in %s %s that the image lacks, but jq after installing it", (file, name) => {
+    const steps = job(file, name).steps ?? [];
+    const jqInstalledAt = steps.findIndex((step) => step.run?.trim() === "node scripts/install-jq.mjs");
+    steps.forEach((step, index) => {
+      const run = step.run ?? "";
+      for (const command of MISSING_FROM_IMAGE) {
+        if (command === "jq" && jqInstalledAt !== -1 && index > jqInstalledAt) continue;
+        const escaped = command.replace(/[+]/g, "\\+");
+        expect(run, `${step.name ?? run.slice(0, 40)} calls ${command}`).not.toMatch(new RegExp(`(?:^|[\\s;|&(\`$])${escaped}(?=\\s|$)`, "m"));
+      }
+    });
+    // The scripts these steps run spawn only commands the image has. workflow-security.mjs calls gh
+    // in the modes that look up runs; the moved jobs use only validate-ci-invocation, which does not.
+    const scripts = [...new Set(steps.flatMap((step) => [...(step.run ?? "").matchAll(/node (scripts\/[\w./-]+\.(?:mjs|ts))/g)].map((match) => match[1])))];
+    for (const script of scripts) {
+      const source = readFileSync(join(ROOT, script), "utf8");
+      const spawned = [...source.matchAll(/\b(?:spawn|spawnSync|execFile|execFileSync|run)\(\s*["']([\w.+-]+)["']/g)].map((match) => match[1]);
+      for (const command of spawned) {
+        if (script === "scripts/workflow-security.mjs" && command === "gh") continue;
+        expect(IMAGE_COMMANDS.has(command), `${script} spawns ${command}`).toBe(true);
+      }
+    }
+    for (const step of steps) {
+      const mode = /node scripts\/workflow-security\.mjs ([\w-]+)/.exec(step.run ?? "")?.[1];
+      if (mode) expect(mode).toBe("validate-ci-invocation");
+    }
+    const security = readFileSync(join(ROOT, "scripts/workflow-security.mjs"), "utf8");
+    const validateCi = security.slice(security.indexOf("async function validateCiInvocation"));
+    expect(validateCi.slice(0, validateCi.indexOf("\n}\n"))).not.toMatch(/run\("gh"|spawn/);
+  });
+
+  it("leaves no other job anywhere installing a browser or a system package", () => {
+    for (const { file, jobs } of workflows) {
+      for (const [name, candidate] of Object.entries(jobs)) {
+        if (file === "storybook.yml" && name === "build-storybook" && !swipeRoundingFixed) continue;
+        if (RUNNER_BROWSER_JOBS.some(([runnerFile, runnerJob]) => runnerFile === file && runnerJob === name)) continue;
+        for (const step of candidate.steps ?? []) {
+          expect(step.run ?? "", `${file} ${name} ${step.name ?? ""}`).not.toMatch(/\bapt(?:-get)?\s+install\b|playwright install/);
+        }
+      }
+    }
+  });
+});
