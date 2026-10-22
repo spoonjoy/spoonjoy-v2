@@ -10,45 +10,48 @@ export interface NetworkFailureResult {
   error: string;
   errorCode: "network_failure";
   retryable: true;
+  // The submitted fields, when the intent is idempotent (the same request applied twice leaves the
+  // same result), for the page to send once more as a new request (useResendLostSubmission).
+  resend: Record<string, string> | null;
 }
 
-// fetch rejects with a TypeError only when no response arrived. A server error reaches the client
-// as a plain Error (React Router sanitizes it) or an error response, never as a TypeError.
+// fetch rejects with a TypeError when no response arrived, with one of these messages: Chrome's,
+// Safari's, Firefox's, and the reason WebKit on Linux gave in Journeys run 39838941793. A TypeError
+// alone is not enough: under `react-router dev` a server error keeps its class and message, so a
+// TypeError thrown by the action reaches the client as a TypeError, and that is an answer.
+const FETCH_FAILURE_MESSAGES = new Set([
+  "Failed to fetch",
+  "Load failed",
+  "NetworkError when attempting to fetch resource.",
+]);
+const WEBKIT_LINUX_TLS_FAILURE = "Peer failed to perform TLS handshake";
+
 export function isNetworkFailure(error: unknown): boolean {
-  return error instanceof TypeError;
+  return error instanceof TypeError &&
+    (FETCH_FAILURE_MESSAGES.has(error.message) || error.message.startsWith(WEBKIT_LINUX_TLS_FAILURE));
 }
 
 export function isNetworkFailureResult(value: unknown): value is NetworkFailureResult {
   return typeof value === "object" && value !== null && (value as { errorCode?: unknown }).errorCode === "network_failure";
 }
 
-export const NETWORK_RETRY_DELAY_MS = 300;
-
-const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+export const NETWORK_RESEND_DELAY_MS = 300;
 
 /**
- * Runs a route's server action from its clientAction. A submission that got no answer is sent once
- * more when `retry` says the intent is idempotent (the same request applied twice leaves the same
- * result). If that fails too, or the intent is not idempotent, it returns a NetworkFailureResult
- * the page shows where the cook acted, instead of throwing to the error boundary.
+ * Runs a route's server action from its clientAction. A submission that got no answer returns a
+ * NetworkFailureResult the page shows where the cook acted, instead of throwing to the error
+ * boundary. It is not sent again here: React Router's serverAction reads the submission's request
+ * body, so a second call on the same request finds it used. The page sends `resend` again instead.
  */
-export async function submitWithNetworkRetry<T>(
+export async function submitOrReportLostRequest<T>(
   serverAction: () => Promise<T>,
-  { intent, retry, sleep = defaultSleep }: { intent: string | null; retry: boolean; sleep?: (ms: number) => Promise<void> },
+  { intent, resend }: { intent: string | null; resend: Record<string, string> | null },
 ): Promise<T | NetworkFailureResult> {
   try {
     return await serverAction();
   } catch (error) {
     if (!isNetworkFailure(error)) throw error;
-    if (retry) {
-      await sleep(NETWORK_RETRY_DELAY_MS);
-      try {
-        return await serverAction();
-      } catch (retryError) {
-        if (!isNetworkFailure(retryError)) throw retryError;
-      }
-    }
-    return { intent, error: NETWORK_FAILURE_MESSAGE, errorCode: "network_failure", retryable: true };
+    return { intent, error: NETWORK_FAILURE_MESSAGE, errorCode: "network_failure", retryable: true, resend };
   }
 }
 

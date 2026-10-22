@@ -1965,8 +1965,12 @@ describe("Cookbooks $id Route", () => {
       describe("when a submission gets no answer", () => {
         const noAnswer = () => new TypeError("Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer");
 
-        function renderWithClientAction(serverAction: () => Promise<unknown>) {
+        // serverAction as React Router runs it: it reads the submission's request body (single
+        // fetch's createRequestInit), so a second call on the same request finds the body used.
+        // `respond` sees each body that was sent and answers or loses it.
+        function renderWithClientAction(respond: (body: string) => Promise<unknown>) {
           let loads = 0;
+          const sent: string[] = [];
           const Stub = createTestRoutesStub([
             {
               path: "/cookbooks/:id",
@@ -1976,7 +1980,14 @@ describe("Cookbooks $id Route", () => {
                 return renameData;
               },
               action: ((args: { request: Request; params: Record<string, string> }) =>
-                clientAction({ ...args, serverAction } as never)) as never,
+                clientAction({
+                  ...args,
+                  serverAction: async () => {
+                    const body = await args.request.text();
+                    sent.push(body);
+                    return respond(body);
+                  },
+                } as never)) as never,
               shouldRevalidate: shouldRevalidate as never,
             },
           ]);
@@ -1985,27 +1996,29 @@ describe("Cookbooks $id Route", () => {
               <Stub initialEntries={["/cookbooks/cookbook-1"]} />
             </ToastProvider>,
           );
-          return { loads: () => loads };
+          return { loads: () => loads, sent };
         }
 
-        it("sends a rename once more and closes the editor when that one is answered", async () => {
-          const serverAction = vi.fn()
+        it("sends the same rename once more, as a new request, and closes the editor when that one is answered", async () => {
+          const respond = vi.fn()
             .mockRejectedValueOnce(noAnswer())
             .mockResolvedValueOnce({ success: true, intent: "updateTitle" });
-          renderWithClientAction(serverAction);
+          const { sent } = renderWithClientAction(respond);
 
           const input = await openTitleEditor();
           fireEvent.change(input, { target: { value: "Renamed Title" } });
           fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
           expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
-          expect(serverAction).toHaveBeenCalledTimes(2);
+          // Byte for byte the same body, so the journeys' console gate pairs the two requests.
+          expect(sent).toEqual(["intent=updateTitle&title=Renamed+Title", "intent=updateTitle&title=Renamed+Title"]);
           expect(screen.queryByRole("heading", { name: "Something went wrong." })).not.toBeInTheDocument();
+          expect(screen.queryByText(/couldn't be reached/)).not.toBeInTheDocument();
         });
 
         it("keeps the editor open, with what the cook typed and the field described by the reason, when no try is answered", async () => {
-          const serverAction = vi.fn().mockRejectedValue(noAnswer());
-          const { loads } = renderWithClientAction(serverAction);
+          const respond = vi.fn().mockRejectedValue(noAnswer());
+          const { loads, sent } = renderWithClientAction(respond);
 
           const input = await openTitleEditor();
           const loadsBeforeSave = loads();
@@ -2018,31 +2031,69 @@ describe("Cookbooks $id Route", () => {
           expect(field).toHaveValue("Renamed Title");
           expect(field).toHaveAttribute("aria-invalid", "true");
           expect(field).toHaveAccessibleDescription(reason);
-          expect(serverAction).toHaveBeenCalledTimes(2);
+          expect(sent).toHaveLength(2);
           // Reloading the page's data would fail the same way, so it is not reloaded.
           expect(loads()).toBe(loadsBeforeSave);
         });
 
-        it("sends a submission without an intent only once", async () => {
+        it("sends a later Save again after one that was lost twice", async () => {
+          const respond = vi.fn()
+            .mockRejectedValueOnce(noAnswer())
+            .mockRejectedValueOnce(noAnswer())
+            .mockRejectedValueOnce(noAnswer())
+            .mockResolvedValueOnce({ success: true, intent: "updateTitle" });
+          const { sent } = renderWithClientAction(respond);
+
+          const input = await openTitleEditor();
+          fireEvent.change(input, { target: { value: "Renamed Title" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+          expect(await screen.findByText(/couldn't be reached/)).toBeInTheDocument();
+
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+          expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
+          expect(sent).toHaveLength(4);
+        });
+
+        // Pins IDEMPOTENT_INTENTS: adding a recipe that is already in the cookbook keeps one copy,
+        // so it is offered for sending again, as is a rename; removing a recipe and deleting are not.
+        it.each([
+          ["addRecipe", { intent: "addRecipe", recipeId: "recipe-1" }],
+          ["updateTitle", { intent: "updateTitle", title: "Renamed" }],
+          ["removeRecipe", null],
+          ["delete", null],
+        ])("answers a lost %s with %j to send again", async (intent, resend) => {
+          const body = new URLSearchParams({ intent, ...(intent === "addRecipe" ? { recipeId: "recipe-1" } : {}), ...(intent === "updateTitle" ? { title: "Renamed" } : {}) });
+          const request = new Request("https://spoonjoy.test/cookbooks/cookbook-1", { method: "POST", body });
           const serverAction = vi.fn().mockRejectedValue(noAnswer());
-          const request = new Request("https://spoonjoy.test/cookbooks/cookbook-1", { method: "POST", body: new FormData() });
-          await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toMatchObject({
-            intent: null,
+          await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toEqual({
+            intent,
+            error: "Spoonjoy couldn't be reached. Check your connection and try again.",
             errorCode: "network_failure",
+            retryable: true,
+            resend,
           });
           expect(serverAction).toHaveBeenCalledTimes(1);
         });
 
-        it("never sends a delete twice, and says why it did not happen while the page stays", async () => {
+        it("offers nothing to send again for a submission without an intent", async () => {
           const serverAction = vi.fn().mockRejectedValue(noAnswer());
-          renderWithClientAction(serverAction);
+          const request = new Request("https://spoonjoy.test/cookbooks/cookbook-1", { method: "POST", body: new FormData() });
+          await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toMatchObject({
+            intent: null,
+            resend: null,
+          });
+        });
+
+        it("never sends a delete twice, and says why it did not happen while the page stays", async () => {
+          const respond = vi.fn().mockRejectedValue(noAnswer());
+          const { sent } = renderWithClientAction(respond);
 
           await openOwnerTools();
           fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
           fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
           expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't be reached/ })).toBeInTheDocument();
-          expect(serverAction).toHaveBeenCalledTimes(1);
+          expect(sent).toEqual(["intent=delete"]);
           await waitFor(() => {
             expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
           });
