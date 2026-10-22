@@ -2660,7 +2660,9 @@
         "badge",
         "button",
         "checkbox",
+        "choice-card",
         "collapsible",
+        "copy-button",
         "empty",
         "file-field",
         "heading",
@@ -2680,7 +2682,13 @@
         "checkbox": [
           "app/routes/developers.playground.tsx"
         ],
+        "choice-card": [
+          "app/routes/developers.playground.tsx"
+        ],
         "collapsible": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "copy-button": [
           "app/routes/developers.playground.tsx"
         ],
         "empty": [

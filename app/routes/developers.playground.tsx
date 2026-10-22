@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLoaderData } from "react-router";
 import { usePostHog } from "~/lib/use-posthog";
-import { Braces, CheckCircle2, Clipboard, KeyRound, Play, RefreshCw, Search, Terminal, XCircle } from "lucide-react";
+import { Braces, CheckCircle2, KeyRound, Play, RefreshCw, Search, Terminal, XCircle } from "lucide-react";
 import {
   API_V1_PLAYGROUND_MANIFEST,
   type ApiV1PlaygroundManifest,
@@ -23,6 +23,8 @@ import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/button";
 import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
+import { CopyButton } from "~/components/ouro/copy-button/copy-button";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
@@ -534,10 +536,6 @@ function bodyHasClientMutationId(bodyText: string) {
   }
 }
 
-async function copyText(value: string) {
-  await navigator.clipboard?.writeText(value);
-}
-
 function bytesToBase64Url(bytes: Uint8Array) {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -558,31 +556,6 @@ export function generateOauthState(cryptoLike: Pick<Crypto, "getRandomValues"> =
 export async function pkceS256Challenge(verifier: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   return bytesToBase64Url(new Uint8Array(digest));
-}
-
-// TODO(ouro-hx: copy-button): Copying with a "Copied" confirmation becomes HX's copy button once it ships.
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
-  async function handleCopy() {
-    try {
-      await copyText(value);
-      setStatus("copied");
-    } catch {
-      setStatus("failed");
-    }
-    window.setTimeout(() => setStatus("idle"), 1600);
-  }
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      <Button plain size="sm" startIcon={Clipboard} onClick={() => void handleCopy()}>
-        {label}
-      </Button>
-      <span className="sr-only" aria-live="polite">
-        {status === "copied" ? `Copied ${label}` : status === "failed" ? `Could not copy ${label}` : ""}
-      </span>
-    </span>
-  );
 }
 
 export default function DeveloperPlayground() {
@@ -700,11 +673,11 @@ export default function DeveloperPlayground() {
     return modes.includes(current) ? current : defaultAuthModeFor(operation, isAuthenticated);
   }
 
-  function selectOperation(id: string, options: { focusBuilder?: boolean } = {}) {
+  function selectOperation(id: string) {
     const operation = operations.find((candidate) => candidate.id === id)!;
     setSelectedId(id);
     setAuthMode((current) => nextAuthModeFor(operation, current));
-    focusSelectedOperation.current = Boolean(options.focusBuilder);
+    focusSelectedOperation.current = false;
     setConfirmedRisk(false);
     setResponse(null);
     capturePlaygroundTelemetry(
@@ -979,7 +952,7 @@ export default function DeveloperPlayground() {
             {absoluteSpecUrl(selectedSurface.url, requestOrigin)}
           </p>
           <div className="flex flex-wrap gap-2">
-            <CopyButton value={absoluteSpecUrl(selectedSurface.url, requestOrigin)} label="Copy import URL" />
+            <CopyButton variant="plain" value={absoluteSpecUrl(selectedSurface.url, requestOrigin)} label="Copy import URL" />
             <Button href={selectedSurface.url} plain>
               <Braces data-slot="icon" aria-hidden="true" />
               Open spec
@@ -1196,7 +1169,7 @@ export default function DeveloperPlayground() {
                   <Button plain startIcon={KeyRound} onClick={() => void generatePkce()}>
                     Generate PKCE + state
                   </Button>
-                  {pkceVerifier ? <CopyButton value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
+                  {pkceVerifier ? <CopyButton variant="plain" value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
                 </div>
                 {pkceVerifier ? (
                   <pre tabIndex={-1} aria-label="PKCE and state bundle" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3 font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
@@ -1230,7 +1203,7 @@ export default function DeveloperPlayground() {
                         Fresh mutation id
                       </Button>
                     ) : null}
-                    <CopyButton value={bodyText} label="Copy body" />
+                    <CopyButton variant="plain" value={bodyText} label="Copy body" />
                   </span>
                 </span>
                 {selected.requestBody.examples.length > 1 ? (
@@ -1296,8 +1269,8 @@ export default function DeveloperPlayground() {
                 <code className="rounded-sm border border-[var(--sj-border)] bg-[var(--sj-flour)] px-0.5 text-sm font-medium text-[var(--sj-ink)] sm:text-[0.8125rem]">{path}</code>
               </p>
               <div className="flex flex-wrap gap-2">
-                <CopyButton value={path} label="Copy path" />
-                <CopyButton value={curl} label={authMode === "session" ? "Copy fetch" : "Copy curl"} />
+                <CopyButton variant="plain" value={path} label="Copy path" />
+                <CopyButton variant="plain" value={curl} label={authMode === "session" ? "Copy fetch" : "Copy curl"} />
               </div>
               <pre tabIndex={-1} aria-label={authMode === "session" ? "Generated browser fetch snippet" : "Generated curl command"} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                 {curl}
@@ -1362,7 +1335,7 @@ export default function DeveloperPlayground() {
               <CookbookSectionTitle className="my-0 text-[var(--sj-on-photo)]">Response</CookbookSectionTitle>
               {response ? (
                 <div className="flex flex-wrap items-center gap-3">
-                  <CopyButton value={response.body} label="Copy response" />
+                  <CopyButton variant="plain" value={response.body} label="Copy response" />
                   <span className="inline-flex items-center gap-2 font-sj-ui text-sm font-semibold">
                     {response.status >= 200 && response.status < 300 ? (
                       <CheckCircle2 className="size-4 text-[var(--sj-on-photo-warm)]" aria-hidden="true" />
@@ -1402,7 +1375,7 @@ export default function DeveloperPlayground() {
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
 	                  {response.secrets.map((secret, index) => (
-	                    <CopyButton key={`${secret.label}-${index}`} value={secret.value} label={`Copy hidden ${secret.label} value`} />
+	                    <CopyButton key={`${secret.label}-${index}`} variant="plain" value={secret.value} label={`Copy hidden ${secret.label} value`} />
 	                  ))}
                   <Button plain size="sm" onClick={() => setResponse(null)}>
                     Clear response
@@ -1429,36 +1402,27 @@ export default function DeveloperPlayground() {
             <Empty title="No operations match this surface and search." />
           ) : null}
           {operationGroups.map((group) => (
-            <div key={group.tag} className="grid gap-2">
-              <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">{group.tag}</p>
-              {/* TODO(ouro-hx: choice-card): Picking an operation becomes HX's choice card (a radio group of cards) once it ships. */}
-              {group.operations.map((operation) => (
-                <button
-                  key={operation.id}
-                  type="button"
-                  aria-label={`${operation.method} ${operation.path}: ${operation.label}`}
-                  aria-pressed={operation.id === selected.id}
-	                  onClick={() => selectOperation(operation.id, { focusBuilder: true })}
-                  className={`grid gap-2 border p-4 text-left transition ${
-                    operation.id === selected.id
-                      ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))]"
-                      : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] hover:border-[var(--sj-border-strong)]"
-                  }`}
-                >
-                  <span className="flex items-start justify-between gap-2">
-                    <span className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">{operation.label}</span>
-                    <Badge tone={methodColor(operation.method)} variant="soft">
-                      {operation.method}
-                    </Badge>
+            <ChoiceCard
+              key={group.tag}
+              legend={group.tag}
+              columns={2}
+              value={group.operations.some((operation) => operation.id === selected.id) ? selected.id : ""}
+              onValueChange={(id) => selectOperation(id)}
+              items={group.operations.map((operation) => ({
+                value: operation.id,
+                label: operation.label,
+                description: (
+                  <span className="grid gap-2">
+                    <span className="break-words font-mono text-xs/5">{operation.path}</span>
+                    <span className="flex flex-wrap gap-2">
+                      <Badge tone={methodColor(operation.method)} variant="soft">{operation.method}</Badge>
+                      <Badge tone={riskColor(operation.risk)} variant="soft">{operation.risk}</Badge>
+                      {operation.credentialModes.map((mode) => <Badge key={mode} variant="soft">{mode}</Badge>)}
+                    </span>
                   </span>
-                  <span className="break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">{operation.path}</span>
-                  <span className="flex flex-wrap gap-2">
-                    <Badge tone={riskColor(operation.risk)} variant="soft">{operation.risk}</Badge>
-                    {operation.credentialModes.map((mode) => <Badge key={mode} variant="soft">{mode}</Badge>)}
-                  </span>
-                </button>
-              ))}
-            </div>
+                ),
+              }))}
+            />
           ))}
         </section>
       </form>
@@ -1478,7 +1442,7 @@ export default function DeveloperPlayground() {
               {scenario.sample}
             </pre>
             <div>
-	              <CopyButton value={scenario.sample} label={`Copy ${scenario.title} sample`} />
+	              <CopyButton variant="plain" value={scenario.sample} label={`Copy ${scenario.title} sample`} />
             </div>
           </article>
         ))}
@@ -1499,7 +1463,7 @@ export default function DeveloperPlayground() {
               {flow.sample}
             </pre>
             <div>
-	              <CopyButton value={flow.sample} label={`Copy ${flow.title} sample`} />
+	              <CopyButton variant="plain" value={flow.sample} label={`Copy ${flow.title} sample`} />
             </div>
           </article>
         ))}
