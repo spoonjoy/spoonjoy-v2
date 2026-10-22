@@ -146,7 +146,7 @@ function validQaImageCoverSmokeWorkflow(): string {
     "        run: |",
     "          corepack enable",
     "          corepack prepare pnpm@10.28.1 --activate",
-    "      - run: pnpm install --frozen-lockfile",
+    "      - run: pnpm install --frozen-lockfile --ignore-scripts",
     "        if: steps.cloudflare.outputs.ready == 'true'",
     "      - run: pnpm prisma:generate",
     "        if: steps.cloudflare.outputs.ready == 'true'",

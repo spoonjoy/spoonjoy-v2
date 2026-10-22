@@ -48,8 +48,11 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.28.1 --activate
       
+      # Without install scripts: the only one allowed (pnpm-workspace.yaml) builds better-sqlite3
+      # from source, which needs make and a C++ compiler the image lacks, and only the unit tests
+      # use it. The root postinstall is "prisma generate", which the next step runs.
       - name: 📥 Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
       
       - name: 🔧 Generate Prisma client
         run: pnpm prisma:generate

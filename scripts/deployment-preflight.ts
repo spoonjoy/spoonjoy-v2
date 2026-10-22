@@ -580,7 +580,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
       `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
     ),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile --ignore-scripts`),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
     commandStepSignature(
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
@@ -985,7 +985,7 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
     name: "Activate pnpm",
     run: `corepack enable\ncorepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate\n`,
   },
-  { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
+  { name: "Install dependencies", run: "pnpm install --frozen-lockfile --ignore-scripts" },
   { name: "Generate Prisma client", run: "pnpm prisma:generate" },
   {
     name: "Deploy staged release to Cloudflare Workers",
@@ -1557,7 +1557,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       }
 
       if (
-        run === "pnpm install --frozen-lockfile" &&
+        run === "pnpm install --frozen-lockfile --ignore-scripts" &&
         stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.install = stepStart;

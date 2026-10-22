@@ -78,6 +78,18 @@ describe("Playwright's image for every browser job", () => {
     }
   });
 
+  // The image has no make or C++ compiler, which better-sqlite3's build needs (only the unit
+  // tests use it), so install scripts are off; the root postinstall's prisma generate runs as its
+  // own step after the install.
+  it.each(BROWSER_JOBS)("installs %s %s's packages without install scripts, then generates the Prisma client", (file, name) => {
+    const runs = (job(file, name).steps ?? []).map((step) => step.run ?? "");
+    const installs = runs.map((run, index) => [run, index] as const).filter(([run]) => /\bpnpm install\b/.test(run));
+    expect(installs).toHaveLength(1);
+    const [install, at] = installs[0];
+    expect(install).toMatch(/pnpm install --frozen-lockfile --ignore-scripts$/);
+    expect(runs.slice(at + 1).some((run) => /^(?:node scripts\/warning-gate\.ts -- )?pnpm prisma:generate$/.test(run.trim()))).toBe(true);
+  });
+
   it.each(BROWSER_JOBS)("names no runner path in %s %s, which the container does not have", (file, name) => {
     const text = JSON.stringify(job(file, name));
     expect(text).not.toMatch(/\$\{\{\s*(?:github\.workspace|runner\.temp|runner\.tool_cache)\s*\}\}/);
