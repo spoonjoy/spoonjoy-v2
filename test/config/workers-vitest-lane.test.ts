@@ -209,7 +209,7 @@ jobs:
       "@vitest/coverage-v8",
       "@vitest/ui",
     ]) {
-      expect(packageJson.devDependencies?.[dependency]).toBe("4.1.11");
+      expect(packageJson.devDependencies?.[dependency]).toBe("4.1.12");
     }
     expect(packageJson.devDependencies?.["@cloudflare/vitest-pool-workers"]).toBe("0.18.6");
     expect(packageJson.scripts?.["test:workers"]).toBe(
