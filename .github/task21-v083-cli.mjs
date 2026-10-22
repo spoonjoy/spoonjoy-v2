@@ -849,20 +849,8 @@ if (mode === "classify") {
     assert.deepEqual(receipt.after, expected, "CLI output must match the qualified public tag");
     writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
   } else {
+    // The census and the source rule are HX kits now (ouro-census, ouro-source-rules), pinned above
+    // like every other installed file, so nothing in Spoonjoy copies HX's selectors any more.
     assert.deepEqual(receipt.before, expected, "Strict proof must consume the actual qualified CLI output");
-    // HX keeps interactiveSelector and censusExclusions in its repository-only test/controls.ts,
-    // which no registry item installs; Spoonjoy's census copies both, so compare with the tag.
-    const response = await fetch(`https://raw.githubusercontent.com/ourostack/ouro-ui/${tagCommit}/test/controls.ts`);
-    assert.equal(response.status, 200, "HX test/controls.ts at the tag");
-    const constants = (source) => ["interactiveSelector", "censusExclusions"].map((name) => {
-      const match = source.match(new RegExp(`export const ${name}(?:: [^=]+)? =\\s*([^;]+);`));
-      assert.ok(match, `${name} is declared`);
-      return match[1].trim();
-    });
-    const hx = constants(await response.text());
-    receipt.censusSelectors = hx;
-    writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
-    assert.deepEqual(constants(readFileSync("e2e/journeys/support/hx-census.ts", "utf8")), hx,
-      "The census copies HX interactiveSelector and censusExclusions exactly");
   }
 }
