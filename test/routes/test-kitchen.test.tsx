@@ -64,6 +64,11 @@ describe("Test Kitchen", () => {
     render(page());
 
     expect(screen.getByRole("heading", { level: 1, name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
+    // It promises what this test shows: no account, and progress kept in this browser, saved by no
+    // request of the page's own. Analytics may still record the visit, so it doesn't promise that
+    // nothing leaves the browser.
+    expect(screen.getByText(/^A real Spoonjoy recipe page, open to everyone\. Nothing here needs an account, and your progress stays in this browser\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing you do leaves this browser/i)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: TEST_KITCHEN.recipe.title })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "What to try" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Make it yours: sign up" })).toHaveAttribute("href", "/signup");

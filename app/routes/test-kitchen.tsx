@@ -29,7 +29,7 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const INTRO = claim("A real Spoonjoy recipe page, open to everyone. Nothing here needs an account, and nothing you do leaves this browser.", {
+const INTRO = claim("A real Spoonjoy recipe page, open to everyone. Nothing here needs an account, and your progress stays in this browser.", {
   source: { test: "test/routes/test-kitchen.test.tsx::Test Kitchen > opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own" },
   verify: [
     { testExists: "test/routes/test-kitchen.test.tsx::Test Kitchen > opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own" },
