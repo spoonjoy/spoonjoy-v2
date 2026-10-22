@@ -24,14 +24,28 @@ const workflows = readdirSync(WORKFLOWS)
     return { file, text, jobs: (parse(text) as { jobs: Record<string, Job> }).jobs };
   });
 
-// The jobs that launch Chromium or WebKit, but build-storybook (below).
+// The jobs that launch Chromium or WebKit, but build-storybook and the production deploy (below).
 const BROWSER_JOBS = [
   ["ci.yml", "e2e"],
   ["journeys.yml", "journeys"],
-  ["production-deploy.yml", "deploy"],
   ["mcp-oauth-canary.yml", "canary"],
   ["qa-image-cover-smoke.yml", "smoke"],
 ] as const;
+
+// The production deploy stays on the runner: its release-source validation calls the GitHub CLI
+// (scripts/workflow-security.mjs validate-production-deploy-source), which the image does not have,
+// and a release must not depend on a tool installed into the job.
+const RUNNER_BROWSER_JOBS = [["production-deploy.yml", "deploy"]] as const;
+
+// Checked by running the pinned image as user 1001. Commands the moved jobs' steps, and the scripts
+// they run, may call; anything else must be installed by the job first (jq, by scripts/install-jq.mjs).
+const IMAGE_COMMANDS = new Set([
+  "bash", "sh", "node", "npx", "corepack", "pnpm", "git", "curl", "python3", "setsid", "nohup", "zstd", "tar", "gzip",
+  "xvfb-run", "sed", "grep", "cat", "tail", "head", "mkdir", "rm", "mv", "cp", "kill", "sleep", "seq", "wc", "tee",
+  "printf", "echo", "env", "test", "chmod", "sha256sum", "date", "tr", "cut", "sort", "uniq", "find", "xargs",
+]);
+// Not in the image.
+const MISSING_FROM_IMAGE = ["gh", "jq", "unzip", "make", "gcc", "g++", "sudo", "apt", "apt-get", "dpkg"];
 
 // build-storybook runs the installed Ouro UI tests, whose swipe-actions rounding fails with the
 // image's fonts until the installed copy has ourostack/ouro-ui#170's fix (halves rounded away
@@ -119,10 +133,48 @@ describe("Playwright's image for every browser job", () => {
     }
   });
 
+  it.each(RUNNER_BROWSER_JOBS)("keeps %s %s on the runner", (file, name) => {
+    expect(job(file, name).container).toBeUndefined();
+    expect(job(file, name)["runs-on"]).toBe("ubuntu-latest");
+    expect(readFileSync(join(ROOT, "scripts/workflow-security.mjs"), "utf8")).toMatch(/run\("gh", \[/);
+  });
+
+  it.each(BROWSER_JOBS)("calls nothing in %s %s that the image lacks, but jq after installing it", (file, name) => {
+    const steps = job(file, name).steps ?? [];
+    const jqInstalledAt = steps.findIndex((step) => step.run?.trim() === "node scripts/install-jq.mjs");
+    steps.forEach((step, index) => {
+      const run = step.run ?? "";
+      for (const command of MISSING_FROM_IMAGE) {
+        if (command === "jq" && jqInstalledAt !== -1 && index > jqInstalledAt) continue;
+        const escaped = command.replace(/[+]/g, "\\+");
+        expect(run, `${step.name ?? run.slice(0, 40)} calls ${command}`).not.toMatch(new RegExp(`(?:^|[\\s;|&(\`$])${escaped}(?=\\s|$)`, "m"));
+      }
+    });
+    // The scripts these steps run spawn only commands the image has. workflow-security.mjs calls gh
+    // in the modes that look up runs; the moved jobs use only validate-ci-invocation, which does not.
+    const scripts = [...new Set(steps.flatMap((step) => [...(step.run ?? "").matchAll(/node (scripts\/[\w./-]+\.(?:mjs|ts))/g)].map((match) => match[1])))];
+    for (const script of scripts) {
+      const source = readFileSync(join(ROOT, script), "utf8");
+      const spawned = [...source.matchAll(/\b(?:spawn|spawnSync|execFile|execFileSync|run)\(\s*["']([\w.+-]+)["']/g)].map((match) => match[1]);
+      for (const command of spawned) {
+        if (script === "scripts/workflow-security.mjs" && command === "gh") continue;
+        expect(IMAGE_COMMANDS.has(command), `${script} spawns ${command}`).toBe(true);
+      }
+    }
+    for (const step of steps) {
+      const mode = /node scripts\/workflow-security\.mjs ([\w-]+)/.exec(step.run ?? "")?.[1];
+      if (mode) expect(mode).toBe("validate-ci-invocation");
+    }
+    const security = readFileSync(join(ROOT, "scripts/workflow-security.mjs"), "utf8");
+    const validateCi = security.slice(security.indexOf("async function validateCiInvocation"));
+    expect(validateCi.slice(0, validateCi.indexOf("\n}\n"))).not.toMatch(/run\("gh"|spawn/);
+  });
+
   it("leaves no other job anywhere installing a browser or a system package", () => {
     for (const { file, jobs } of workflows) {
       for (const [name, candidate] of Object.entries(jobs)) {
         if (file === "storybook.yml" && name === "build-storybook" && !swipeRoundingFixed) continue;
+        if (RUNNER_BROWSER_JOBS.some(([runnerFile, runnerJob]) => runnerFile === file && runnerJob === name)) continue;
         for (const step of candidate.steps ?? []) {
           expect(step.run ?? "", `${file} ${name} ${step.name ?? ""}`).not.toMatch(/\bapt(?:-get)?\s+install\b|playwright install/);
         }

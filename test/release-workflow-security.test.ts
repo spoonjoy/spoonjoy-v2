@@ -125,7 +125,7 @@ describe("production release provenance", () => {
     const setup = stepNames.indexOf("Setup Node.js");
     const deploy = stepNames.indexOf("Deploy staged release to Cloudflare Workers");
     const record = stepNames.indexOf("Record release source");
-    expect([checkout, validation, setup, deploy, record]).toEqual([0, 3, 4, 8, 9]);
+    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 8, 9]);
   });
 
   it("freezes the deploy step inventory and security-sensitive shell bodies", () => {
@@ -138,12 +138,12 @@ describe("production release provenance", () => {
     ).toEqual([
       "Checkout approved source SHA",
       "Checkout trusted rollback tooling",
-      "Install jq",
       "Validate release source",
       "Setup Node.js",
       "Activate pnpm",
       "Install dependencies",
       "Generate Prisma client",
+      "Install Playwright Chromium",
       "Deploy staged release to Cloudflare Workers",
       "Record release source",
       "Ensure release artifact exists",

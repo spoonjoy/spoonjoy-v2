@@ -20,9 +20,10 @@ jobs:
     # Runs in Playwright's image, at the version package.json pins, by digest
     # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
     # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
-    # runner's own zstd is lent to the image so actions/cache uses the same compression as the runner,
-    # which needs the image's Ubuntu (24.04), so the job names that runner. setup-node's package cache
-    # is off: its path differs inside the container.
+    # image ships zstd; the runner's own is mounted over it, as ourostack/ouro-ui#170 does, so an
+    # actions/cache step added here would compress exactly as the runner does (none uses one today).
+    # The runner's zstd needs the image's Ubuntu (24.04), so the job names that runner. setup-node's
+    # package cache is off: its path differs inside the container.
     runs-on: ubuntu-24.04
     container:
       image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble

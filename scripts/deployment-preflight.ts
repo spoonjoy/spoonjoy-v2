@@ -163,9 +163,10 @@ const STORYBOOK_REQUIRED_JOB_NAME =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
-// The jobs that run a browser run in Playwright's image, pinned by digest at the version
-// package.json pins (test/workflows/playwright-image.test.ts), on the runner whose Ubuntu matches
-// the image, which lends the image its zstd. setup-node's package cache is off there.
+// e2e, like the other browser jobs that can, runs in Playwright's image, pinned by digest at the
+// version package.json pins (test/workflows/playwright-image.test.ts), on the runner whose Ubuntu
+// matches the image, with the runner's zstd mounted over the image's. setup-node's package cache is
+// off there.
 export const PLAYWRIGHT_RUNNER = "ubuntu-24.04";
 export const PLAYWRIGHT_CONTAINER = Object.freeze({
   image: "mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f",
@@ -187,12 +188,12 @@ const PROTOCOL_V1_BOUNDARY_MARKER = "workers/cook-session-protocol-v1-boundary";
 const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Checkout approved source SHA",
   "Checkout trusted rollback tooling",
-  "Install jq",
   "Validate release source",
   "Setup Node.js",
   "Activate pnpm",
   "Install dependencies",
   "Generate Prisma client",
+  "Install Playwright Chromium",
   "Deploy staged release to Cloudflare Workers",
   "Record release source",
   "Ensure release artifact exists",
@@ -963,7 +964,6 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
       "persist-credentials": false,
     },
   },
-  { name: "Install jq", run: "node scripts/install-jq.mjs" },
   {
     name: "Validate release source",
     env: {
@@ -979,14 +979,15 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
   {
     name: "Setup Node.js",
     uses: PINNED_SETUP_NODE_ACTION,
-    with: CONTAINER_SETUP_NODE_WITH,
+    with: { "node-version": "22" },
   },
   {
     name: "Activate pnpm",
     run: `corepack enable\ncorepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate\n`,
   },
-  { name: "Install dependencies", run: "pnpm install --frozen-lockfile --ignore-scripts" },
+  { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
   { name: "Generate Prisma client", run: "pnpm prisma:generate" },
+  { name: "Install Playwright Chromium", run: "pnpm exec playwright install --with-deps chromium" },
   {
     name: "Deploy staged release to Cloudflare Workers",
     env: {
@@ -1075,7 +1076,7 @@ function productionDeployStepsAreCanonical(
     steps.some((step, index) => step.name !== EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES[index])
   ) return false;
 
-  const validation = steps[3];
+  const validation = steps[2];
   const validationEnv = objectRecord(validation.env);
   if (
     !exactObjectKeys(validation, ["name", "env", "run"]) ||
@@ -1109,7 +1110,7 @@ function productionDeployStepsAreCanonical(
   ) return false;
 
   return steps.every((step, index) => (
-    index === 3 ||
+    index === 2 ||
     index === 10 ||
     JSON.stringify(step) === JSON.stringify(PRODUCTION_DEPLOY_STEPS[index])
   ));
@@ -1167,14 +1168,13 @@ export function parsedProductionWorkflowIsCanonical(workflow: string): boolean {
   const deploy = objectRecord(jobs.deploy);
   const report = objectRecord(jobs["report-canary"]);
   if (
-    !exactObjectKeys(deploy, ["name", "needs", "if", "runs-on", "container", "timeout-minutes", "environment", "outputs", "env", "steps"]) ||
-    !exactWorkflowRecord(deploy.container, PLAYWRIGHT_CONTAINER) ||
+    !exactObjectKeys(deploy, ["name", "needs", "if", "runs-on", "timeout-minutes", "environment", "outputs", "env", "steps"]) ||
     !exactWorkflowRecord(deploy.outputs, PRODUCTION_DEPLOY_JOB_OUTPUTS) ||
     deploy.name !== "deploy" ||
     deploy.needs !== "release-target" ||
     !exactWorkflowRecord(deploy.env, PRODUCTION_DEPLOY_JOB_ENV) ||
     deploy.if !== PRODUCTION_DEPLOY_RELEASE_CONDITION ||
-    deploy["runs-on"] !== PLAYWRIGHT_RUNNER ||
+    deploy["runs-on"] !== "ubuntu-latest" ||
     deploy["timeout-minutes"] !== 40 ||
     deploy.environment !== "production" ||
     !exactObjectKeys(report, ["name", "if", "needs", "runs-on", "timeout-minutes", "permissions", "steps"]) ||

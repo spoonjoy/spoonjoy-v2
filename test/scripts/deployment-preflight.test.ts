@@ -4051,7 +4051,7 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
   });
 
-  // e2e and the production deploy run in Playwright's image (test/workflows/playwright-image.test.ts).
+  // e2e runs in Playwright's image (test/workflows/playwright-image.test.ts).
   const PLAYWRIGHT_IMAGE_LINE =
     "      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble";
   const CONTAINER_OPTIONS_LINE = "      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro";
@@ -4084,17 +4084,6 @@ describe("deployment preflight", () => {
       "      - name: 🎭 Install Playwright Browsers\n        run: node scripts/warning-gate.ts -- pnpm exec playwright install --with-deps chromium\n\n      - name: 🗄️ Apply D1 migrations\n",
     );
     expect(validateDeploymentConfig(apt).errors.map((entry) => entry.name)).toContain("CI workflow");
-  });
-
-  it.each([
-    ["another image", PLAYWRIGHT_IMAGE_LINE, "      image: mcr.microsoft.com/playwright:v1.64.0-noble"],
-    ["no container", `    container:\n${PLAYWRIGHT_IMAGE_LINE}\n${CONTAINER_OPTIONS_LINE}\n`, ""],
-    ["a browser install instead of jq", "        run: node scripts/install-jq.mjs", "        run: pnpm exec playwright install --with-deps chromium"],
-  ])("refuses the production deploy with %s", (_case, expected, replacement) => {
-    const inputs = validInputs();
-    inputs.productionDeployWorkflow = replaceRequired(inputs.productionDeployWorkflow, expected, replacement);
-
-    expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("production deploy workflow");
   });
 
   it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {
