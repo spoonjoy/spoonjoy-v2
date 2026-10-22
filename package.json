@@ -2,6 +2,10 @@
   "name": "spoonjoy-v2",
   "version": "1.0.0",
   "description": "Spoonjoy recipe management platform rebuilt with React Router v7 on Cloudflare",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spoonjoy/spoonjoy-v2.git"
+  },
   "type": "module",
   "packageManager": "pnpm@10.28.1",
   "engines": {
@@ -75,6 +79,8 @@
     "cleanup:production": "node scripts/cleanup-local-qa-data.mjs --target-env production",
     "check:journeys": "node scripts/check-journey-rules.mjs e2e/journeys --census e2e/journeys/support/hx-census.ts --routes app/routes.ts",
     "hx:source-rules": "node scripts/ouro-source-rules.mjs",
+    "claims:check": "node app/lib/ouro/claims-check.mjs check",
+    "claims:pr": "node scripts/claims-pr.mjs",
     "test:journeys": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts",
     "test:journeys:census": "SPOONJOY_JOURNEYS_REPORT_DIR=hx-census-report SPOONJOY_JOURNEYS_RESULTS_DIR=hx-census-test-results node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts e2e/journeys/hx-census.journey.ts",
     "test:journeys:after-census": "node scripts/warning-gate.ts -- pnpm exec playwright test -c playwright.journeys.config.ts --no-deps --project iphone-webkit --project desktop-chrome --grep-invert @ouro-census",

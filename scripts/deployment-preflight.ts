@@ -474,6 +474,10 @@ const CI_CHANGED_TESTS_COMMAND =
 // lanes. On pull requests it also ratchets against the base commit (the merge commit's first parent, as for unit-changed's tests).
 const CI_HX_SOURCE_RULES_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run hx:source-rules`;
 const CI_HX_SOURCE_RULES_RATCHET_COMMAND = `${CI_HX_SOURCE_RULES_COMMAND} --base "$(git rev-parse HEAD^1)"`;
+// HX's claims checker: every claim in the merge queue and on main, and on a pull request also the
+// ratchet and its title and body (scripts/claims-pr.mjs).
+const CI_CLAIMS_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:check`;
+const CI_CLAIMS_PR_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run claims:pr`;
 
 const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
   ["advisory", [
@@ -527,6 +531,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature(CI_HX_SOURCE_RULES_COMMAND),
+    commandStepSignature(CI_CLAIMS_COMMAND),
     commandStepSignature("pnpm run verify:clean:test:coverage"),
     commandStepSignature("pnpm run verify:clean:test:mcp-sdk-python"),
     commandStepSignature("pnpm run verify:clean:build"),
@@ -551,6 +556,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature("pnpm run verify:clean:generated-contract"),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"`),
     commandStepSignature(CI_HX_SOURCE_RULES_RATCHET_COMMAND),
+    commandStepSignature(CI_CLAIMS_PR_COMMAND),
     commandStepSignature(CI_CHANGED_TESTS_COMMAND),
     commandStepSignature(CI_DISPOSABLE_CLEANUP_COMMAND),
   ]],

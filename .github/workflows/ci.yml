@@ -221,6 +221,13 @@ jobs:
         if: github.event_name != 'pull_request'
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules
 
+      # Each factual sentence on Spoonjoy's surfaces (claims.config.json) carries its primary
+      # source and a check that still holds, checked with HX's lib-claims checker (AGENTS.md,
+      # "Claims").
+      - name: 🧾 Claims
+        if: github.event_name != 'pull_request'
+        run: node scripts/warning-gate.ts -- pnpm run claims:check
+
       - name: 🧪 Test & Coverage
         if: github.event_name != 'pull_request'
         run: pnpm run verify:clean:test:coverage
@@ -299,6 +306,12 @@ jobs:
       # the new baseline records why under allowedRegressions.
       - name: 🧭 HX source rule
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules --base "$(git rev-parse HEAD^1)"
+
+      # The claims ratchet against the base commit (an exemption claims.config.json adds needs a
+      # reason and a mention in the description), the title and body, and every claim, with the
+      # addresses this pull request adds fetched again (scripts/claims-pr.mjs).
+      - name: 🧾 Claims in this pull request
+        run: node scripts/warning-gate.ts -- pnpm run claims:pr
 
       # The base is the merge commit's first parent, which is exactly what this pull request is
       # merged onto, so the affected tests are always computed from history the checkout has.
