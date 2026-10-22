@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,10 +26,16 @@ const SNAPSHOT_NAME = "template.db";
 // global teardown would delete it while the parent's later worker processes still need it. A
 // nested run therefore makes a directory of its own and drops the inherited database path, and
 // a teardown only removes the directory its own process created.
+//
+// The directory's name carries the claiming process's pid (spoonjoy-vitest-db-<pid>-XXXXXX), so a
+// later run can tell a directory whose run was killed before its teardown (a SIGKILL, or a SIGTERM
+// Vitest does not handle) from one a live run still uses, and remove it: sweepStaleRunDbDirs.
+const RUN_DIR_PREFIX = "spoonjoy-vitest-db-";
+
 export function claimRunDbDir(
   env: NodeJS.ProcessEnv = process.env,
   pid: number = process.pid,
-  makeDir: () => string = () => mkdtempSync(join(tmpdir(), "spoonjoy-vitest-db-")),
+  makeDir: () => string = () => mkdtempSync(join(tmpdir(), `${RUN_DIR_PREFIX}${pid}-`)),
 ): string | undefined {
   if (env.SPOONJOY_TEST_DB_DIR === "") return undefined;
   if (env.SPOONJOY_TEST_DB_DIR && env.SPOONJOY_TEST_DB_DIR_OWNER === String(pid)) return env.SPOONJOY_TEST_DB_DIR;
@@ -52,6 +58,65 @@ export function releaseRunDbDir(
   remove(dir);
   delete env.SPOONJOY_TEST_DB_DIR;
   delete env.SPOONJOY_TEST_DB_DIR_OWNER;
+}
+
+// The global teardown removes the run's directory, but a run that ends another way skips it.
+// Releasing on "exit" too covers a run that ends through process.exit before its teardown (a
+// startup error, or Ctrl-C, which Vitest turns into an exit). The listener is added once per
+// process, however many times watch mode re-evaluates the config.
+const RELEASE_ON_EXIT = Symbol.for("spoonjoy.vitest-db.release-on-exit");
+
+export function releaseRunDbDirOnExit(
+  proc: Pick<NodeJS.Process, "once"> & { [RELEASE_ON_EXIT]?: true } = process,
+  release: () => void = () => releaseRunDbDir(),
+): void {
+  if (proc[RELEASE_ON_EXIT]) return;
+  proc[RELEASE_ON_EXIT] = true;
+  proc.once("exit", release);
+}
+
+export interface SweepIo {
+  list(root: string): string[];
+  alive(pid: number): boolean;
+  modifiedMs(path: string): number;
+  remove(path: string): void;
+}
+
+// Directories named before the pid was recorded (spoonjoy-vitest-db-XXXXXX) cannot name their
+// owner; one untouched for a day belongs to no run still going.
+const UNNAMED_OWNER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+// Whether a process with this pid is running. EPERM means it is, under another user.
+export function processAlive(pid: number, kill: (pid: number, signal: 0) => unknown = process.kill): boolean {
+  try {
+    kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+const fsSweepIo: SweepIo = {
+  list: (root) => readdirSync(root),
+  alive: (pid) => processAlive(pid),
+  modifiedMs: (path) => statSync(path).mtimeMs,
+  remove: (path) => rmSync(path, { recursive: true, force: true }),
+};
+
+// Removes the run directories left in `root` by runs that ended without their teardown: those whose
+// owning process has gone, and pid-less ones untouched for a day. Returns what it removed.
+export function sweepStaleRunDbDirs(root: string = tmpdir(), io: SweepIo = fsSweepIo, now: number = Date.now()): string[] {
+  const removed: string[] = [];
+  for (const name of io.list(root)) {
+    if (!name.startsWith(RUN_DIR_PREFIX)) continue;
+    const path = join(root, name);
+    const owner = /^spoonjoy-vitest-db-(\d+)-[^-]+$/.exec(name);
+    const stale = owner ? !io.alive(Number(owner[1])) : now - io.modifiedMs(path) > UNNAMED_OWNER_MAX_AGE_MS;
+    if (!stale) continue;
+    io.remove(path);
+    removed.push(path);
+  }
+  return removed;
 }
 
 // The global setup takes one consistent snapshot of prisma/test.db into the run directory (the
