@@ -232,6 +232,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -246,6 +247,9 @@
           "app/routes/login.tsx"
         ],
         "link": [
+          "app/routes/login.tsx"
+        ],
+        "separator": [
           "app/routes/login.tsx"
         ],
         "text": [
@@ -302,6 +306,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -316,6 +321,9 @@
           "app/routes/signup.tsx"
         ],
         "link": [
+          "app/routes/signup.tsx"
+        ],
+        "separator": [
           "app/routes/signup.tsx"
         ],
         "text": [
@@ -904,6 +912,7 @@
         "heading",
         "inspector",
         "number-field",
+        "page-header",
         "pagination",
         "switch",
         "text"
@@ -929,6 +938,9 @@
         ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",
+          "app/routes/test-kitchen.tsx"
+        ],
+        "page-header": [
           "app/routes/test-kitchen.tsx"
         ],
         "pagination": [

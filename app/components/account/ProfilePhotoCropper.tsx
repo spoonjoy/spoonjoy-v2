@@ -13,7 +13,7 @@ interface ProfilePhotoCropperProps {
   outputSize?: number;
 }
 
-// TODO(ouro-hx: image-cropper): Cropping a photo becomes HX's image cropper once it ships.
+// TODO(ouro-hx: image-cropper, spoonjoy/spoonjoy-v2#570): Cropping a photo becomes HX's ImageCropper in #570.
 export function ProfilePhotoCropper({ file, onConfirm, onCancel, outputSize = 512 }: ProfilePhotoCropperProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);

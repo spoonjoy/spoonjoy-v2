@@ -465,8 +465,8 @@ function commandStepSignature(...commands: string[]): string {
   return `run:${commands.join("\u0000")}`;
 }
 
-// unit-changed's base is the merge commit's first parent, read from the checkout, never from the
-// event payload, so it is always in the job's shallow history.
+// unit-changed's base is the merge commit's first parent, read from the checkout (fetch-depth 2),
+// never from the event payload or a later fetch, so it is always in the job's shallow history.
 const CI_CHANGED_TESTS_COMMAND =
   'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed';
 
@@ -554,7 +554,6 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
     commandStepSignature("pnpm run verify:clean:typecheck"),
     commandStepSignature("pnpm run verify:clean:generated-contract"),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"`),
     commandStepSignature(CI_HX_SOURCE_RULES_RATCHET_COMMAND),
     commandStepSignature(CI_CLAIMS_PR_COMMAND),
     commandStepSignature(CI_CHANGED_TESTS_COMMAND),
@@ -806,6 +805,8 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
             !exactObjectKeys(step, ["uses", "with"]) ||
             !exactWorkflowRecord(withValues, {
               ref: "${{ env.CI_SOURCE_SHA }}",
+              // unit-changed checks out the merge commit with its parents, so its base is in the checkout.
+              ...(jobName === "unit-changed" ? { "fetch-depth": 2 } : {}),
               "persist-credentials": false,
             })
           ) return false;
