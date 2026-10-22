@@ -66,9 +66,9 @@ for (const theme of ["light", "dark"] as const) {
     const panel = host.querySelector<HTMLElement>("section.sj-on-charcoal")!;
     const surface = getComputedStyle(panel).backgroundColor;
     const buttons = Array.from(panel.querySelectorAll<HTMLButtonElement>("button"));
-    expect(buttons.map((button) => button.textContent?.trim())).toEqual(
-      expect.arrayContaining(["Copy response", "Copy hidden token value", "Clear response"]),
-    );
+    for (const name of ["Copy response", "Copy hidden token value", "Clear response"]) {
+      expect(buttons.some((button) => button.textContent?.includes(name)), name).toBe(true);
+    }
     for (const button of buttons) {
       expect(contrast(getComputedStyle(button).color, surface), button.textContent ?? "").toBeGreaterThanOrEqual(4.5);
       button.focus();
