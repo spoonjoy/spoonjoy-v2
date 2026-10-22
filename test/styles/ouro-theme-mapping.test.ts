@@ -21,7 +21,7 @@ const LIGHT = block(":root", SPOONJOY_VARIABLE);
 const DARK = { ...LIGHT, ...block(".dark", SPOONJOY_VARIABLE) };
 const MAPPING = block(":root,\n.dark", /(--[\w-]+):\s*([^;]+);/g);
 
-const TAB_BAR = block('[data-ouro="tab-bar"]', /(--[\w-]+):\s*([^;]+);/g);
+const TAB_BAR = block(".sj-tab-bar", /(--[\w-]+):\s*([^;]+);/g);
 
 // A variable's colour in a theme, following var() references through the mapping and the palette,
 // and mixing a color-mix(in srgb, …) channel by channel.

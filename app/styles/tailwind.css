@@ -158,10 +158,11 @@
 
 /* Spoonjoy's phone tab bar stays solid charcoal under photo-white text in both themes. HX TabBar
    draws its surface from --popover and its tabs from the muted and accent pairs, so those are
-   rebound for the bar alone. Unselected tabs take a solid mix rather than the translucent
+   rebound for Spoonjoy's bar alone (MobileNav gives it the sj-tab-bar class, so HX's own TabBar
+   tests keep the global tokens). Unselected tabs take a solid mix rather than the translucent
    --sj-on-photo-soft, whose overlapping icon strokes would show as seams. Its labels take the UI
    face, like every other control. */
-[data-ouro="tab-bar"] {
+.sj-tab-bar {
   font-family: var(--font-sj-ui);
   --popover: var(--sj-photo-charcoal);
   --foreground: var(--sj-on-photo);
