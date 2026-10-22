@@ -37,7 +37,7 @@ function ingredient(page: Page, name: string) {
 
 // Establish the initial synced state before checking deletion and its cache cleanup.
 async function expectCookProgressSynced(page: Page) {
-  await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+  await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
 }
 
 async function openMaintenance(page: Page) {

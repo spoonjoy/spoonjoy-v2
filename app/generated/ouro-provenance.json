@@ -1527,7 +1527,6 @@
         "app/components/navigation/mobile-nav.tsx",
         "app/components/navigation/quick-actions.tsx",
         "app/components/navigation/recipes-section-nav.tsx",
-        "app/components/recipe/CookSyncStatusLine.tsx",
         "app/components/recipe/CookTimers.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/components/recipe/ForkRecipeButton.tsx",
@@ -1555,6 +1554,7 @@
         "app/lib/background-task.server.ts",
         "app/lib/chef-avatar.ts",
         "app/lib/cook-session-sync.ts",
+        "app/lib/cook-sync-status.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cookbook-membership-compat.server.ts",
         "app/lib/cooked-at.ts",
@@ -1640,6 +1640,7 @@
         "relative-time",
         "show-more",
         "spinner",
+        "sync-status",
         "text",
         "text-area",
         "text-field",
@@ -1728,6 +1729,10 @@
         ],
         "spinner": [
           "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "sync-status": [
+          "app/components/recipe/RecipeHeader.tsx",
+          "app/lib/cook-sync-status.ts"
         ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",

@@ -41,7 +41,7 @@ function kitchenHeading(page: Page) {
 }
 
 function syncStatus(page: Page) {
-  return page.getByTestId("cook-sync-status");
+  return page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])");
 }
 
 // Home, then Lemon Herb Rice through its link, so the recipe has an in-app page before it.

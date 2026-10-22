@@ -29,7 +29,7 @@ async function openLemonRice(page: Page) {
   await page.goto(LEMON_RICE);
   await waitForHydration(page);
   await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
-  await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+  await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
   await expectNoHydrationErrors(page);
 }
 
@@ -51,7 +51,7 @@ test.describe("Cook progress across devices", () => {
     await page.getByRole("button", { name: "Increase scale" }).click();
     await expect(scaleDisplay).toHaveValue("1.25");
     await checkedAndScaled;
-    await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+    await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
     await expectAccessible();
 
     // Browser B: a separate context with its own storage. In Playwright Test, browser.newContext()
@@ -68,7 +68,7 @@ test.describe("Cook progress across devices", () => {
       await expect(otherPage.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.25");
       await otherPage.reload();
       await waitForHydration(otherPage);
-      await expect(otherPage.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+      await expect(otherPage.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
       await expect(jasmineRice(otherPage)).toHaveAttribute("aria-checked", "true");
 
       // B clears the jasmine rice, the account answers without it, and it stays cleared after B reloads.
@@ -79,7 +79,7 @@ test.describe("Cook progress across devices", () => {
       await cleared;
       await otherPage.reload();
       await waitForHydration(otherPage);
-      await expect(otherPage.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+      await expect(otherPage.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
       await expect(jasmineRice(otherPage)).toHaveAttribute("aria-checked", "false");
     } catch (error) {
       throw appendConsoleIssues(error, otherConsole.issues);
@@ -91,7 +91,7 @@ test.describe("Cook progress across devices", () => {
 
     // Browser A, reloaded, shows B's change: the jasmine rice is clear and the scale is kept.
     await verifyAfterReload(async () => {
-      await expect(page.getByTestId("cook-sync-status")).toHaveText("Progress synced");
+      await expect(page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])")).toHaveText("Progress synced");
       await expect(jasmineRice(page)).toHaveAttribute("aria-checked", "false");
       await expect(scaleDisplay).toHaveValue("1.25");
     });

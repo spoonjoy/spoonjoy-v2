@@ -10,7 +10,8 @@ import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
 import type { CookSyncStatus } from '~/lib/cook-session-sync'
-import { CookSyncStatusLine } from './CookSyncStatusLine'
+import { SyncStatus } from '~/components/ouro/sync-status/sync-status'
+import { cookSyncStatusProps } from '~/lib/cook-sync-status'
 import { HERO_IMAGE_PROPS } from '~/lib/image-loading'
 
 function normalizeCoverPlaceholderLabel(label: string) {
@@ -216,7 +217,9 @@ export function RecipeHeader({
                 }}
               />
             </div>
-            {progressSyncStatus ? <CookSyncStatusLine status={progressSyncStatus} /> : null}
+            {progressSyncStatus ? (
+              <SyncStatus className="mt-3" data-testid="cook-sync-status" {...cookSyncStatusProps(progressSyncStatus)} />
+            ) : null}
           </div>
         </div>
       </div>
