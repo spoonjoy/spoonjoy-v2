@@ -62,6 +62,17 @@ describe('RecipeGrid', () => {
     const link = screen.getByRole('link', { name: 'Lemon Pasta' })
     expect(link).toHaveAttribute('href', '/recipes/r-1')
     expect(screen.getByRole('list', { name: 'Recipes' })).toContainElement(link)
+    // The section's heading already says "Recipes"; the list is named for screen readers only.
+    expect(screen.getAllByText('Recipes')).toHaveLength(1)
+  })
+
+  it('separates the rows of a growing list, as the divided list does', () => {
+    renderWithRouter(<RecipeGrid recipes={recipes} totalCount={55} loadMore={{
+      hasMore: true, loading: false, href: '/users/ari?after=r-2', onShowMore: vi.fn(),
+    }} />)
+    for (const name of [/Lemon Pasta/, /Spiced Chickpea Bowl/]) {
+      expect(screen.getByRole('link', { name }).closest('[data-ouro="item"]')).toHaveClass('border')
+    }
   })
 
   it('renders placeholder when image is missing', () => {

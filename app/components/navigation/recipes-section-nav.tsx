@@ -13,7 +13,7 @@ const sections = [
   { href: "/recipes", label: "Everyone" },
 ];
 
-// TODO(ouro-hx: tabs link mode): The three lists become HX Tabs over links once Tabs can be links (ourostack/ouro-ui#128).
+// TODO(ouro-hx: tabs link mode, ourostack/ouro-ui#128): The three lists become HX Tabs over links once Tabs can be links.
 export function RecipesSectionNav({ className }: { className?: string }) {
   const { pathname } = useLocation();
 

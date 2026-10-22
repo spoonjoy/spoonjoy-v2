@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { Request as UndiciRequest } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import routes from "~/routes";
@@ -1036,6 +1036,12 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     expect(await screen.findByText("Secret values hidden in response body")).toBeInTheDocument();
+    // The Response panel is charcoal; its HX controls take photo-white tokens from the panel.
+    const panel = screen.getByRole("region", { name: "Response" });
+    expect(panel).toHaveClass("sj-on-charcoal");
+    for (const name of ["Copy response", "Clear response", /^Copy hidden .+ value$/]) {
+      for (const button of within(panel).getAllByRole("button", { name })) expect(panel).toContainElement(button);
+    }
     expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");
     fireEvent.click(screen.getByRole("button", { name: "Clear response" }));
     expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");

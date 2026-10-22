@@ -1456,6 +1456,7 @@
         "file-field",
         "form",
         "image-field",
+        "item-group",
         "link",
         "page-header",
         "reorderable",
@@ -1488,6 +1489,9 @@
         ],
         "image-field": [
           "app/components/recipe/RecipeBuilder.tsx"
+        ],
+        "item-group": [
+          "app/components/recipe/StepList.tsx"
         ],
         "link": [
           "app/components/recipe/RecipeImportPanel.tsx",
@@ -1855,6 +1859,7 @@
         "file-field",
         "form",
         "image-field",
+        "item-group",
         "link",
         "page-header",
         "reorderable",
@@ -1889,6 +1894,9 @@
         ],
         "image-field": [
           "app/components/recipe/RecipeBuilder.tsx"
+        ],
+        "item-group": [
+          "app/components/recipe/StepList.tsx"
         ],
         "link": [
           "app/components/recipe/RecipeImportPanel.tsx",

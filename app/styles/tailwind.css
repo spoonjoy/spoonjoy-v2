@@ -173,6 +173,15 @@
   --ring: var(--sj-on-photo);
 }
 
+/* A charcoal panel (the developer playground's Response) under photo-white text: HX controls in it
+   take their text, border and focus ring from these tokens, so a plain button isn't charcoal on
+   charcoal. */
+.sj-on-charcoal {
+  --foreground: var(--sj-on-photo);
+  --border: var(--sj-photo-line);
+  --ring: var(--sj-on-photo);
+}
+
 /* Spoonjoy's primary action palette is not its brass text-link palette. Bind the
    released solid Button to our already contrast-qualified action tokens without
    changing Ouro's source or the inherited root provider. Its generic disabled
