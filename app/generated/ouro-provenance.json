@@ -16,7 +16,6 @@
       "app/components/navigation/quick-actions.tsx",
       "app/components/navigation/recipes-section-nav.tsx",
       "app/components/oauth.tsx",
-      "app/components/pwa/InstallPromptCard.tsx",
       "app/components/spoonjoy-logo.tsx",
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
@@ -46,7 +45,6 @@
       "app/lib/openai-client.server.ts",
       "app/lib/openai-error.server.ts",
       "app/lib/push-client.ts",
-      "app/lib/pwa-install.ts",
       "app/lib/qa-error-logs.server.ts",
       "app/lib/rate-limit.server.ts",
       "app/lib/route-platform.server.ts",
@@ -57,6 +55,7 @@
     "components": [
       "button",
       "color-scheme-toggle",
+      "install-prompt",
       "link",
       "navbar",
       "page-header",
@@ -71,6 +70,9 @@
         "app/components/button.tsx"
       ],
       "color-scheme-toggle": [
+        "app/root.tsx"
+      ],
+      "install-prompt": [
         "app/root.tsx"
       ],
       "link": [

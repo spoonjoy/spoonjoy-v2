@@ -32,11 +32,11 @@ import { RouteProgress } from "~/components/ouro/route-progress/route-progress";
 import { SkipLink } from "~/components/ouro/skip-link/skip-link";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 import { Link } from "~/components/ouro/link/link";
+import { InstallPrompt } from "~/components/ouro/install-prompt/install-prompt";
 import { Navbar } from "~/components/ouro/navbar/navbar";
 import { Popover } from "~/components/ouro/popover/popover";
 import { Text } from "~/components/ouro/text/text";
 import { MobileNav, MobileNavToaster, DockContextProvider } from "~/components/navigation";
-import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/button";
 import { OAuthButtonGroup } from "~/components/oauth";
 import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
@@ -235,7 +235,14 @@ export default function App() {
         </main>
       </div>
       <MobileNav isAuthenticated={!!userId} />
-      <InstallPromptCard />
+      {/* Floats above the phone's tab bar (MobileNav): its bottom margin, max(1rem, safe-area inset),
+          plus its 4rem height and a gap. Keeps Spoonjoy's earlier dismissal key, so a "Not now" stands. */}
+      <InstallPrompt
+        title="Install Spoonjoy"
+        description="Add Spoonjoy to your home screen for faster access and a more native feel."
+        storageKey="spoonjoy.pwa-install.dismissed-at"
+        className="fixed inset-x-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] z-40 mx-auto max-w-md print:hidden"
+      />
       <MobileNavToaster isAuthenticated={!!userId} />
     </DockContextProvider>
   );
