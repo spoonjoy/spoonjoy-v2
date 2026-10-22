@@ -9,14 +9,9 @@ import { Toaster } from "~/components/ouro/toast/toaster";
 import { data } from "react-router";
 import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 
-vi.mock("~/components/navigation", async () => {
-  const actual = await vi.importActual<typeof import("~/components/navigation")>(
-    "~/components/navigation",
-  );
-  return {
-    ...actual,
-    shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-  };
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
 });
 
 import { loader, action } from "~/routes/recipes.$id";

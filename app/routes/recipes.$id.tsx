@@ -41,7 +41,9 @@ import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
+import { useDockSuppressed } from "~/components/navigation";
+import { ShareButton } from "~/components/ouro/share-button/share-button";
+import type { ShareResult } from "~/lib/ouro/share";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { confirmCookSessionRecipeDeletion } from "~/hooks/use-cook-session-sync";
 import { getCookProgressStorageKey, useRouteCookController } from "~/hooks/use-route-cook-controller";
@@ -289,23 +291,16 @@ export default function RecipeDetail() {
     };
   }, [activeCoverProcessing?.coverId, revalidator]);
 
-  const handleShare = useCallback(async () => {
-    /* istanbul ignore next -- @preserve browser share API */
-    const result = await shareContent({
-      title: recipe.title,
-      text: recipe.description ?? `Check out this recipe: ${recipe.title}`,
-      url: typeof window !== "undefined" ? window.location.href : `/recipes/${recipe.id}`,
-    });
-
+  const handleShared = useCallback((result: ShareResult) => {
     /* istanbul ignore next -- @preserve PostHog client-only analytics */
     if (posthog) {
       posthog.capture("recipe_shared", {
         recipe_id: recipe.id,
-        share_method: result.method,
-        share_success: result.success,
+        share_method: result === "shared" ? "native" : "clipboard",
+        share_success: result === "shared" || result === "copied",
       });
     }
-  }, [recipe.id, recipe.title, recipe.description, posthog]);
+  }, [recipe.id, posthog]);
 
   // State for Save modal (bottom sheet)
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -424,9 +419,13 @@ export default function RecipeDetail() {
         <Button plain onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
           {addToListLabel}
         </Button>
-        <Button plain onClick={handleShare} data-testid="recipe-header-share-action">
-          Share
-        </Button>
+        <ShareButton
+          variant="plain"
+          data-testid="recipe-header-share-action"
+          title={recipe.title}
+          text={recipe.description ?? `Check out this recipe: ${recipe.title}`}
+          onShare={handleShared}
+        />
         {isOwner ? (
           <Button href={`/recipes/${recipe.id}/edit`} plain data-testid="recipe-header-edit-action">
             Edit

@@ -14,7 +14,7 @@ import { listImageProps } from "~/lib/image-loading";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
-import { shareContent } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
 
 export function absoluteKitchenUrl(path: string) {
   if (typeof window === "undefined") {
@@ -38,14 +38,14 @@ export function KitchenHome({
   const displayRecipes = recipes;
   const heading = isOwner ? "My Kitchen" : `${chefDisplayName(kitchenUser.username)}'s Kitchen`;
   const handleShareRecipe = async (recipe: KitchenRecipe) => {
-    await shareContent({
+    await share({
       title: recipe.title,
       text: recipe.description ?? `Open this Spoonjoy recipe: ${recipe.title}`,
       url: absoluteKitchenUrl(`/recipes/${recipe.id}`),
     });
   };
   const handleShareCookbook = async (cookbook: KitchenCookbook) => {
-    await shareContent({
+    await share({
       title: cookbook.title,
       text: `${cookbook.title} has ${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"} on Spoonjoy.`,
       url: absoluteKitchenUrl(`/cookbooks/${cookbook.id}`),

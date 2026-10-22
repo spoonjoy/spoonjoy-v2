@@ -10,13 +10,17 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { data as routerData, redirect } from "react-router";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
+import { useDockSuppressed } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
 import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", () => ({
-  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
   useDockSuppressed: vi.fn(),
 }));
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
+});
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -89,7 +93,7 @@ describe("Cookbooks $id Route", () => {
   let cookbookId: string;
 
   beforeEach(async () => {
-    vi.mocked(shareContent).mockClear();
+    vi.mocked(share).mockClear();
     vi.mocked(useDockSuppressed).mockClear();
     await cleanupDatabase();
     const email = faker.internet.email();
@@ -1308,7 +1312,7 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
       fireEvent.click(screen.getByRole("button", { name: "Share" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith({
+        expect(vi.mocked(share)).toHaveBeenCalledWith({
           title: "My Test Cookbook",
           text: "My Test Cookbook by testchef on Spoonjoy.",
           url: "https://spoonjoy.app/cookbooks/cookbook-1",

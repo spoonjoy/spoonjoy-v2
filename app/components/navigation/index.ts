@@ -9,11 +9,7 @@ export {
   type DockContextProviderProps,
 } from './dock-context'
 export {
-  shareContent,
-  isNativeShareSupported,
   addToShoppingList,
-  type ShareOptions,
-  type ShareResult,
   type AddToListOptions,
   type AddToListResult,
 } from './quick-actions'

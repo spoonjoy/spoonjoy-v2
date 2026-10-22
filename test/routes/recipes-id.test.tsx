@@ -7,15 +7,13 @@ import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
 import { Toaster } from "~/components/ouro/toast/toaster";
 
-vi.mock("~/components/navigation", async () => {
-  const actual = await vi.importActual<typeof import("~/components/navigation")>("~/components/navigation");
-  return {
-    ...actual,
-    shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-  };
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
 });
 
-import { DockContextProvider, MobileNav, shareContent } from "~/components/navigation";
+import { DockContextProvider, MobileNav } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
 import {
   loader,
   action,
@@ -2920,7 +2918,7 @@ describe("Recipes $id Route", () => {
         fireEvent.click(screen.getByTestId("recipe-header-share-action"));
       });
 
-      expect(vi.mocked(shareContent)).toHaveBeenCalledWith(
+      expect(vi.mocked(share)).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Shareable Recipe",
           text: "Worth sharing",

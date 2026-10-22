@@ -110,11 +110,6 @@
         "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/KitchenHome.tsx",
         "app/components/cookbook/page.tsx",
-        "app/components/navigation/dock-context.tsx",
-        "app/components/navigation/index.ts",
-        "app/components/navigation/mobile-nav.tsx",
-        "app/components/navigation/quick-actions.tsx",
-        "app/components/navigation/recipes-section-nav.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
@@ -159,8 +154,7 @@
         "heading",
         "item",
         "item-group",
-        "text",
-        "toaster"
+        "text"
       ],
       "renders": {
         "avatar": [
@@ -189,9 +183,6 @@
         ],
         "text": [
           "app/components/cookbook/KitchenHome.tsx"
-        ],
-        "toaster": [
-          "app/components/navigation/mobile-nav.tsx"
         ]
       }
     },
@@ -1638,6 +1629,7 @@
         "page-header",
         "pagination",
         "relative-time",
+        "share-button",
         "show-more",
         "spinner",
         "sync-status",
@@ -1723,6 +1715,9 @@
         ],
         "relative-time": [
           "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "share-button": [
+          "app/routes/recipes.$id.tsx"
         ],
         "show-more": [
           "app/components/recipe/SpoonsStrip.tsx"
@@ -2354,6 +2349,7 @@
         "link",
         "native-select",
         "page-header",
+        "share-button",
         "text",
         "text-field",
         "toaster"
@@ -2387,6 +2383,9 @@
           "app/routes/cookbooks.$id.tsx"
         ],
         "page-header": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "share-button": [
           "app/routes/cookbooks.$id.tsx"
         ],
         "text": [

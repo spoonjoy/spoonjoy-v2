@@ -88,7 +88,8 @@ import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
+import { useDockSuppressed } from "~/components/navigation";
+import { ShareButton } from "~/components/ouro/share-button/share-button";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -401,14 +402,6 @@ export default function CookbookDetail() {
     setIsEditingTitle(false);
   };
 
-  const handleShare = async () => {
-    await shareContent({
-      title: cookbook.title,
-      text: `${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`,
-      url: canonicalUrl,
-    });
-  };
-
   return (
     <CookbookPage>
       <div className="mx-auto max-w-5xl">
@@ -416,9 +409,12 @@ export default function CookbookDetail() {
           <Link href="/cookbooks" tone="secondary">
             ← Back to cookbooks
           </Link>
-          <Button type="button" plain onClick={handleShare}>
-            Share
-          </Button>
+          <ShareButton
+            variant="plain"
+            url={canonicalUrl}
+            title={cookbook.title}
+            text={`${cookbook.title} by ${cookbook.author.username} on Spoonjoy.`}
+          />
         </div>
 
         <div className="grid gap-8 border-b border-[var(--sj-border-strong)] pb-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
