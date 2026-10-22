@@ -884,6 +884,7 @@
         "heading",
         "inspector",
         "number-field",
+        "page-header",
         "pagination",
         "switch",
         "text"
@@ -909,6 +910,9 @@
         ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",
+          "app/routes/test-kitchen.tsx"
+        ],
+        "page-header": [
           "app/routes/test-kitchen.tsx"
         ],
         "pagination": [

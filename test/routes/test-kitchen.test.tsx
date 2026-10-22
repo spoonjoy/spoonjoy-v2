@@ -69,6 +69,11 @@ describe("Test Kitchen", () => {
     // nothing leaves the browser.
     expect(screen.getByText(/^A real Spoonjoy recipe page, open to everyone\. Nothing here needs an account, and your progress stays in this browser\.$/)).toBeInTheDocument();
     expect(screen.queryByText(/nothing you do leaves this browser/i)).not.toBeInTheDocument();
+    // HX's PageHeader heads the page: its title, eyebrow, description and the sign-up action.
+    const header = screen.getByRole("heading", { level: 1, name: "Spoonjoy Test Kitchen" }).closest('[data-ouro="page-header"]');
+    expect(header).not.toBeNull();
+    expect(header).toHaveTextContent("Try Spoonjoy");
+    expect(within(header as HTMLElement).getByRole("link", { name: "Make it yours: sign up" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: TEST_KITCHEN.recipe.title })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "What to try" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Make it yours: sign up" })).toHaveAttribute("href", "/signup");
