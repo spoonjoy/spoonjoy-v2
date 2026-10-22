@@ -560,7 +560,7 @@ export async function pkceS256Challenge(verifier: string) {
   return bytesToBase64Url(new Uint8Array(digest));
 }
 
-// TODO(ouro-hx: copy-button): Copying with a "Copied" confirmation becomes HX's copy button once it ships.
+// TODO(ouro-hx: copy-button, spoonjoy/spoonjoy-v2#570): Copying with a "Copied" confirmation becomes HX's CopyButton in #570.
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   async function handleCopy() {
@@ -582,6 +582,69 @@ function CopyButton({ value, label }: { value: string; label: string }) {
         {status === "copied" ? `Copied ${label}` : status === "failed" ? `Could not copy ${label}` : ""}
       </span>
     </span>
+  );
+}
+
+/** The latest response, on a charcoal panel whose HX controls take photo-white tokens (`sj-on-charcoal`). */
+export function ResponsePanel({ response, onClear }: { response: PlaygroundResponse | null; onClear: () => void }) {
+  return (
+    <section aria-label="Response" className="sj-on-charcoal border border-[var(--sj-border-strong)] bg-[var(--sj-photo-charcoal)] p-5 text-[var(--sj-on-photo)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <CookbookSectionTitle className="my-0 text-[var(--sj-on-photo)]">Response</CookbookSectionTitle>
+        {response ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <CopyButton value={response.body} label="Copy response" />
+            <span className="inline-flex items-center gap-2 font-sj-ui text-sm font-semibold">
+              {response.status >= 200 && response.status < 300 ? (
+                <CheckCircle2 className="size-4 text-[var(--sj-on-photo-warm)]" aria-hidden="true" />
+              ) : (
+                <XCircle className="size-4 text-[var(--sj-tomato)]" aria-hidden="true" />
+              )}
+              {response.status} {response.statusText}
+            </span>
+          </div>
+        ) : null}
+        </div>
+        <p className="sr-only" aria-live="polite">
+          {response ? `Response ${response.status} ${response.statusText}${response.requestId ? `, request id ${response.requestId}` : ""}` : ""}
+        </p>
+        {response?.requestId ? (
+        <p className="mt-3 font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">Request ID: {response.requestId}</p>
+      ) : null}
+      {response?.headers.length ? (
+        <div className="mt-3 grid gap-1">
+          {response.headers.map((header) => (
+            <p key={`${header.name}-${header.value}`} className="break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+              {header.name}: {header.value}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {response?.method && response.path ? (
+        <p className="mt-2 break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+          {response.method} {response.path}
+          {" - "}{response.elapsedMs} ms
+        </p>
+      ) : null}
+      {response?.secrets?.length ? (
+        <div className="mt-4 border border-[var(--sj-on-photo-muted)] p-3">
+          <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-on-photo-warm)]">
+            Secret values hidden in response body
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+              {response.secrets.map((secret, index) => (
+                <CopyButton key={`${secret.label}-${index}`} value={secret.value} label={`Copy hidden ${secret.label} value`} />
+              ))}
+            <Button plain size="sm" onClick={onClear}>
+              Clear response
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      <pre tabIndex={-1} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+        {response ? response.body : "No response yet."}
+      </pre>
+    </section>
   );
 }
 
@@ -1355,63 +1418,7 @@ export default function DeveloperPlayground() {
             </div>
           </div>
 
-	          <section className="border border-[var(--sj-border-strong)] bg-[var(--sj-photo-charcoal)] p-5 text-[var(--sj-on-photo)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CookbookSectionTitle className="my-0 text-[var(--sj-on-photo)]">Response</CookbookSectionTitle>
-              {response ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <CopyButton value={response.body} label="Copy response" />
-                  <span className="inline-flex items-center gap-2 font-sj-ui text-sm font-semibold">
-                    {response.status >= 200 && response.status < 300 ? (
-                      <CheckCircle2 className="size-4 text-[var(--sj-on-photo-warm)]" aria-hidden="true" />
-                    ) : (
-                      <XCircle className="size-4 text-[var(--sj-tomato)]" aria-hidden="true" />
-                    )}
-                    {response.status} {response.statusText}
-                  </span>
-                </div>
-              ) : null}
-	            </div>
-	            <p className="sr-only" aria-live="polite">
-	              {response ? `Response ${response.status} ${response.statusText}${response.requestId ? `, request id ${response.requestId}` : ""}` : ""}
-	            </p>
-	            {response?.requestId ? (
-              <p className="mt-3 font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">Request ID: {response.requestId}</p>
-            ) : null}
-            {response?.headers.length ? (
-              <div className="mt-3 grid gap-1">
-                {response.headers.map((header) => (
-                  <p key={`${header.name}-${header.value}`} className="break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-                    {header.name}: {header.value}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-            {response?.method && response.path ? (
-              <p className="mt-2 break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-                {response.method} {response.path}
-                {" - "}{response.elapsedMs} ms
-              </p>
-            ) : null}
-            {response?.secrets?.length ? (
-              <div className="mt-4 border border-[var(--sj-on-photo-muted)] p-3">
-                <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-on-photo-warm)]">
-                  Secret values hidden in response body
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-	                  {response.secrets.map((secret, index) => (
-	                    <CopyButton key={`${secret.label}-${index}`} value={secret.value} label={`Copy hidden ${secret.label} value`} />
-	                  ))}
-                  <Button plain size="sm" onClick={() => setResponse(null)}>
-                    Clear response
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-            <pre tabIndex={-1} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-              {response ? response.body : "No response yet."}
-            </pre>
-          </section>
+          <ResponsePanel response={response} onClear={() => setResponse(null)} />
         </section>
 
         <section aria-label="Operations" className="grid content-start gap-5 pr-1 xl:max-h-[46rem] xl:overflow-y-auto">
@@ -1429,7 +1436,7 @@ export default function DeveloperPlayground() {
           {operationGroups.map((group) => (
             <div key={group.tag} className="grid gap-2">
               <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">{group.tag}</p>
-              {/* TODO(ouro-hx: choice-card): Picking an operation becomes HX's choice card (a radio group of cards) once it ships. */}
+              {/* TODO(ouro-hx: choice-card, spoonjoy/spoonjoy-v2#570): Picking an operation becomes HX's ChoiceCard (a radio group of cards) in #570. */}
               {group.operations.map((operation) => (
                 <button
                   key={operation.id}

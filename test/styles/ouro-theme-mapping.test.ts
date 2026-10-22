@@ -22,6 +22,7 @@ const DARK = { ...LIGHT, ...block(".dark", SPOONJOY_VARIABLE) };
 const MAPPING = block(":root,\n.dark", /(--[\w-]+):\s*([^;]+);/g);
 
 const TAB_BAR = block(".sj-tab-bar", /(--[\w-]+):\s*([^;]+);/g);
+const ON_CHARCOAL = block(".sj-on-charcoal", /(--[\w-]+):\s*([^;]+);/g);
 
 // A variable's colour in a theme, following var() references through the mapping and the palette,
 // and mixing a color-mix(in srgb, …) channel by channel.
@@ -110,6 +111,14 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     });
   });
 
+  it("rebinds HX controls on a charcoal panel to photo-white, through tokens alone", () => {
+    expect(ON_CHARCOAL).toEqual({
+      "--foreground": "var(--sj-on-photo)",
+      "--border": "var(--sj-photo-line)",
+      "--ring": "var(--sj-on-photo)",
+    });
+  });
+
   it("declares the mapping after the .dark palette, so it wins over ouro-base's defaults there", () => {
     expect(CSS.indexOf(":root,\n.dark {")).toBeGreaterThan(CSS.indexOf(".dark {"));
   });
@@ -129,5 +138,10 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
         expect(contrast(color(theme, text, TAB_BAR), color(theme, surface, TAB_BAR))).toBeGreaterThanOrEqual(4.5);
       });
     }
+    it(`passes 4.5:1 for a control's text on a charcoal panel, and 3:1 for its focus ring, in the ${themeName} theme`, () => {
+      const panel = color(theme, "--sj-photo-charcoal");
+      expect(contrast(color(theme, "--foreground", ON_CHARCOAL), panel)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(color(theme, "--ring", ON_CHARCOAL), panel)).toBeGreaterThanOrEqual(3);
+    });
   }
 });
