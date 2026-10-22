@@ -21,10 +21,11 @@
 // since QA's CSP would block that) lives in support/axe.ts and is shared with the explore
 // suite, which records every violation instead of failing.
 import { test as base, expect } from "@playwright/test";
-import type { ConsoleMessage, Page } from "@playwright/test";
+import type { ConsoleMessage, Page, Request } from "@playwright/test";
 import { runAxe } from "./axe";
 import { redactUrl, redactUrlsInText } from "./redact";
 import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
+import { RequestLedger, isTransportFailureLog } from "./recovered-requests";
 
 const FAILING_IMPACTS = new Set(["serious", "critical"]);
 
@@ -150,7 +151,7 @@ function assertConsoleExpectationsMet(issues: ConsoleIssue[], expectations: Expe
 
 export interface ConsoleWatcher {
   /** Collected so far; read after the page under test is done with, right before disposing. */
-  issues: ConsoleIssue[];
+  readonly issues: ConsoleIssue[];
   /** Detaches this watcher's listeners. Call once the page is no longer needed. */
   dispose(): void;
 }
@@ -170,31 +171,44 @@ export interface ConsoleWatcher {
  * other data that shouldn't end up verbatim in a test failure message or CI log.
  */
 export function watchConsole(page: Page): ConsoleWatcher {
-  const issues: ConsoleIssue[] = [];
+  const collected: Array<{ issue: ConsoleIssue; url?: string }> = [];
+  const requests = new RequestLedger();
 
   const onConsole = (message: ConsoleMessage) => {
     if (message.type() !== "error") return;
     const text = redactUrlsInText(message.text());
     if (isAllowed(text)) return;
     const url = message.location().url;
-    issues.push({ text, location: url ? redactUrl(url) : undefined });
+    collected.push({ issue: { text, location: url ? redactUrl(url) : undefined }, url: url || undefined });
   };
   const onPageError = (error: Error) => {
     // Not an app error: see support/webkit-noise.ts.
     if (isWebKitCancelledSameOriginFetch(error, process.env.SPOONJOY_JOURNEYS_BASE_URL)) return;
     const text = redactUrlsInText(error.message);
     if (isAllowed(text)) return;
-    issues.push({ text });
+    collected.push({ issue: { text } });
   };
+  const onRequestFailed = (request: Request) => requests.failed(request);
+  const onRequestFinished = (request: Request) => requests.answered(request);
 
   page.on("console", onConsole);
   page.on("pageerror", onPageError);
+  page.on("requestfailed", onRequestFailed);
+  page.on("requestfinished", onRequestFinished);
 
   return {
-    issues,
+    // A lost request the page sent again and got an answer to is not an issue (see
+    // support/recovered-requests.ts). Read at the end, once the second request has finished.
+    get issues() {
+      return collected
+        .filter(({ issue, url }) => !(url && isTransportFailureLog(issue.text) && requests.recovered(url)))
+        .map(({ issue }) => issue);
+    },
     dispose() {
       page.off("console", onConsole);
       page.off("pageerror", onPageError);
+      page.off("requestfailed", onRequestFailed);
+      page.off("requestfinished", onRequestFinished);
     },
   };
 }

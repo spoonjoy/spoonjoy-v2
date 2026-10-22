@@ -1,6 +1,6 @@
 import type { Route } from "./+types/cookbooks.$id";
 import { chefDisplayName } from "~/lib/username";
-import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext } from "react-router";
+import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext, type ShouldRevalidateFunctionArgs } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -93,6 +93,7 @@ import {
 } from "~/lib/cookbook-membership-compat.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
+import { revalidateUnlessNetworkFailure, submitWithNetworkRetry } from "~/lib/network-failure";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -184,6 +185,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (unavailable) return unavailable;
     throw error;
   }
+}
+
+// The intents that leave the same result when applied twice: a rename sets a fixed title, and
+// adding a recipe that is already in the cookbook keeps one copy. Only these are sent again when
+// a submission got no answer; a delete or a removal is not.
+const IDEMPOTENT_INTENTS = new Set(["updateTitle", "addRecipe"]);
+
+export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
+  const intent = (await request.clone().formData()).get("intent");
+  const name = typeof intent === "string" ? intent : null;
+  return submitWithNetworkRetry(serverAction, { intent: name, retry: name !== null && IDEMPOTENT_INTENTS.has(name) });
+}
+
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessNetworkFailure(args, args.defaultShouldRevalidate);
 }
 
 async function handleCookbookAction(

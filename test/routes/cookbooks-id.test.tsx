@@ -3,7 +3,7 @@ import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { createTestRoutesStub, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
-import { loader, action, meta } from "~/routes/cookbooks.$id";
+import { loader, action, meta, clientAction, shouldRevalidate } from "~/routes/cookbooks.$id";
 import CookbookDetail from "~/routes/cookbooks.$id";
 import { createUser } from "~/lib/auth.server";
 import { sessionStorage } from "~/lib/session.server";
@@ -1957,6 +1957,97 @@ describe("Cookbooks $id Route", () => {
         expect(await screen.findByText(/Spoonjoy couldn't save that just now\./)).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+      });
+
+      // Journeys run 39838941793: the second Save's request got no answer (WebKit's TLS handshake
+      // to the server was reset), and the whole page became the root error boundary, so the title
+      // field and what the cook typed were gone.
+      describe("when a submission gets no answer", () => {
+        const noAnswer = () => new TypeError("Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer");
+
+        function renderWithClientAction(serverAction: () => Promise<unknown>) {
+          let loads = 0;
+          const Stub = createTestRoutesStub([
+            {
+              path: "/cookbooks/:id",
+              Component: CookbookDetail,
+              loader: () => {
+                loads += 1;
+                return renameData;
+              },
+              action: ((args: { request: Request; params: Record<string, string> }) =>
+                clientAction({ ...args, serverAction } as never)) as never,
+              shouldRevalidate: shouldRevalidate as never,
+            },
+          ]);
+          render(
+            <ToastProvider>
+              <Stub initialEntries={["/cookbooks/cookbook-1"]} />
+            </ToastProvider>,
+          );
+          return { loads: () => loads };
+        }
+
+        it("sends a rename once more and closes the editor when that one is answered", async () => {
+          const serverAction = vi.fn()
+            .mockRejectedValueOnce(noAnswer())
+            .mockResolvedValueOnce({ success: true, intent: "updateTitle" });
+          renderWithClientAction(serverAction);
+
+          const input = await openTitleEditor();
+          fireEvent.change(input, { target: { value: "Renamed Title" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+          expect(await screen.findByRole("dialog", { name: "Cookbook renamed." })).toBeInTheDocument();
+          expect(serverAction).toHaveBeenCalledTimes(2);
+          expect(screen.queryByRole("heading", { name: "Something went wrong." })).not.toBeInTheDocument();
+        });
+
+        it("keeps the editor open, with what the cook typed and the field described by the reason, when no try is answered", async () => {
+          const serverAction = vi.fn().mockRejectedValue(noAnswer());
+          const { loads } = renderWithClientAction(serverAction);
+
+          const input = await openTitleEditor();
+          const loadsBeforeSave = loads();
+          fireEvent.change(input, { target: { value: "Renamed Title" } });
+          fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+          const reason = "Spoonjoy couldn't be reached. Check your connection and try again.";
+          expect(await screen.findByText(reason)).toBeInTheDocument();
+          const field = screen.getByRole("textbox", { name: "Cookbook title" });
+          expect(field).toHaveValue("Renamed Title");
+          expect(field).toHaveAttribute("aria-invalid", "true");
+          expect(field).toHaveAccessibleDescription(reason);
+          expect(serverAction).toHaveBeenCalledTimes(2);
+          // Reloading the page's data would fail the same way, so it is not reloaded.
+          expect(loads()).toBe(loadsBeforeSave);
+        });
+
+        it("sends a submission without an intent only once", async () => {
+          const serverAction = vi.fn().mockRejectedValue(noAnswer());
+          const request = new Request("https://spoonjoy.test/cookbooks/cookbook-1", { method: "POST", body: new FormData() });
+          await expect(clientAction({ request, params: { id: "cookbook-1" }, serverAction } as never)).resolves.toMatchObject({
+            intent: null,
+            errorCode: "network_failure",
+          });
+          expect(serverAction).toHaveBeenCalledTimes(1);
+        });
+
+        it("never sends a delete twice, and says why it did not happen while the page stays", async () => {
+          const serverAction = vi.fn().mockRejectedValue(noAnswer());
+          renderWithClientAction(serverAction);
+
+          await openOwnerTools();
+          fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
+          fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
+
+          expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't be reached/ })).toBeInTheDocument();
+          expect(serverAction).toHaveBeenCalledTimes(1);
+          await waitFor(() => {
+            expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
+          });
+          expect(screen.getByRole("heading", { name: "Original Title", level: 1 })).toBeInTheDocument();
+        });
       });
 
       it("says so when deleting could not be saved because the database was briefly unavailable", async () => {
