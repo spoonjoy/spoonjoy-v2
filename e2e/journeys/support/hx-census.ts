@@ -6,7 +6,8 @@
 //
 // A journey enrolled in the census must be 100% HX: every control it shows carries a
 // data-ouro-control marker naming an installed HX component. An unenrolled journey is measured, and
-// its unmarked count may only fall (`pnpm census:update` refuses a rise).
+// its unmarked count may only fall (`pnpm census:update` refuses a rise). Every journey below is
+// enrolled: Spoonjoy's census counts no unmarked control on either project.
 //
 // Every state starts from a fresh load of the journey's path, so a state never depends on another.
 // Actions only open things: they never submit, save or confirm, so the personas' data is never
@@ -85,18 +86,17 @@ function editStep(page: Page, stepNum: number) {
  */
 export const census: Journey[] = [
   // Home, sign-in and the public pages.
-  { id: "home-signed-out", enrolled: false, persona: "signed-out", path: "/", states: [DEFAULT] },
-  { id: "home-chef", enrolled: false, persona: "chef", path: "/", states: [DEFAULT] },
-  { id: "home-newbie", enrolled: false, persona: "newbie", path: "/", states: [DEFAULT] },
-  { id: "sign-in", enrolled: false, persona: "signed-out", path: "/login", states: [DEFAULT] },
-  { id: "sign-up", enrolled: false, persona: "signed-out", path: "/signup", states: [DEFAULT] },
-  { id: "log-out", enrolled: false, persona: "chef", path: "/logout", states: [DEFAULT] },
-  { id: "privacy", enrolled: false, persona: "signed-out", path: "/privacy", states: [DEFAULT] },
-  { id: "terms", enrolled: false, persona: "signed-out", path: "/terms", states: [DEFAULT] },
-  // The Test Kitchen's own controls are all HX; it enrolls once the site header around it is too.
+  { id: "home-signed-out", enrolled: true, persona: "signed-out", path: "/", states: [DEFAULT] },
+  { id: "home-chef", enrolled: true, persona: "chef", path: "/", states: [DEFAULT] },
+  { id: "home-newbie", enrolled: true, persona: "newbie", path: "/", states: [DEFAULT] },
+  { id: "sign-in", enrolled: true, persona: "signed-out", path: "/login", states: [DEFAULT] },
+  { id: "sign-up", enrolled: true, persona: "signed-out", path: "/signup", states: [DEFAULT] },
+  { id: "log-out", enrolled: true, persona: "chef", path: "/logout", states: [DEFAULT] },
+  { id: "privacy", enrolled: true, persona: "signed-out", path: "/privacy", states: [DEFAULT] },
+  { id: "terms", enrolled: true, persona: "signed-out", path: "/terms", states: [DEFAULT] },
   {
     id: "test-kitchen",
-    enrolled: false,
+    enrolled: true,
     persona: "signed-out",
     path: "/test-kitchen",
     states: [
@@ -117,14 +117,14 @@ export const census: Journey[] = [
       },
     ],
   },
-  { id: "account-deleted", enrolled: false, persona: "signed-out", path: "/account/deleted", states: [DEFAULT] },
-  { id: "not-found", enrolled: false, persona: "signed-out", path: "/hx-census-page-that-does-not-exist", status: 404, states: [DEFAULT] },
+  { id: "account-deleted", enrolled: true, persona: "signed-out", path: "/account/deleted", states: [DEFAULT] },
+  { id: "not-found", enrolled: true, persona: "signed-out", path: "/hx-census-page-that-does-not-exist", status: 404, states: [DEFAULT] },
 
   // Recipes.
-  { id: "recipes", enrolled: false, persona: "signed-out", path: "/recipes", states: [DEFAULT] },
+  { id: "recipes", enrolled: true, persona: "signed-out", path: "/recipes", states: [DEFAULT] },
   {
     id: "recipe-signed-out",
-    enrolled: false,
+    enrolled: true,
     persona: "signed-out",
     path: LEMON_RICE,
     states: [
@@ -142,7 +142,7 @@ export const census: Journey[] = [
   },
   {
     id: "recipe-owner",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: LEMON_RICE,
     states: [
@@ -176,7 +176,7 @@ export const census: Journey[] = [
   },
   {
     id: "recipe-friend",
-    enrolled: false,
+    enrolled: true,
     persona: "friend",
     path: LEMON_RICE,
     states: [
@@ -189,7 +189,7 @@ export const census: Journey[] = [
   },
   {
     id: "recipe-new",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: "/recipes/new",
     states: [
@@ -200,7 +200,7 @@ export const census: Journey[] = [
   },
   {
     id: "recipe-edit",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: `${LEMON_RICE}/edit`,
     states: [
@@ -213,14 +213,14 @@ export const census: Journey[] = [
   },
   {
     id: "step-new",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: `${LEMON_RICE}/steps/new`,
     states: [DEFAULT, { id: "uses-output-open", action: openUsesOutput }],
   },
   {
     id: "step-edit",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: `${LEMON_RICE}/steps/${LEMON_RICE_STEP_1}/edit`,
     states: [
@@ -244,21 +244,21 @@ export const census: Journey[] = [
   {
     // Step 3 uses step 1's output, so its "Uses output from" select has steps to offer.
     id: "step-edit-uses-output",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: `${LEMON_RICE}/steps/${LEMON_RICE_STEP_3}/edit`,
     states: [DEFAULT, { id: "uses-output-open", action: openUsesOutput }],
   },
-  { id: "my-recipes", enrolled: false, persona: "chef", path: "/my-recipes", states: [DEFAULT] },
-  { id: "saved-recipes", enrolled: false, persona: "chef", path: "/saved-recipes", states: [DEFAULT] },
+  { id: "my-recipes", enrolled: true, persona: "chef", path: "/my-recipes", states: [DEFAULT] },
+  { id: "saved-recipes", enrolled: true, persona: "chef", path: "/saved-recipes", states: [DEFAULT] },
 
   // Cookbooks.
-  { id: "cookbooks", enrolled: false, persona: "chef", path: "/cookbooks", states: [DEFAULT] },
-  { id: "cookbooks-newbie", enrolled: false, persona: "newbie", path: "/cookbooks", states: [DEFAULT] },
-  { id: "cookbook-new", enrolled: false, persona: "chef", path: "/cookbooks/new", states: [DEFAULT] },
+  { id: "cookbooks", enrolled: true, persona: "chef", path: "/cookbooks", states: [DEFAULT] },
+  { id: "cookbooks-newbie", enrolled: true, persona: "newbie", path: "/cookbooks", states: [DEFAULT] },
+  { id: "cookbook-new", enrolled: true, persona: "chef", path: "/cookbooks/new", states: [DEFAULT] },
   {
     id: "cookbook",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: WEEKNIGHT,
     states: [
@@ -284,7 +284,7 @@ export const census: Journey[] = [
   // Shopping list (the chef's seeded list: jasmine rice, lemon, parsley).
   {
     id: "shopping-list",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: "/shopping-list",
     states: [
@@ -310,24 +310,24 @@ export const census: Journey[] = [
       },
     ],
   },
-  { id: "shopping-list-newbie", enrolled: false, persona: "newbie", path: "/shopping-list", states: [DEFAULT] },
+  { id: "shopping-list-newbie", enrolled: true, persona: "newbie", path: "/shopping-list", states: [DEFAULT] },
 
   // Search and people.
   // An empty search browses the 30 most recent things, which include this run's scratch users
   // (codex_e2e_s_<run token>_<n>); a query that matches nothing measures the page without them.
-  { id: "search-no-results", enrolled: false, persona: "chef", path: "/search?q=hxcensusnomatch", states: [DEFAULT] },
-  { id: "search-results", enrolled: false, persona: "chef", path: "/search?q=lemon", states: [DEFAULT] },
+  { id: "search-no-results", enrolled: true, persona: "chef", path: "/search?q=hxcensusnomatch", states: [DEFAULT] },
+  { id: "search-results", enrolled: true, persona: "chef", path: "/search?q=lemon", states: [DEFAULT] },
   // /chefs is the signed-in chef's own page (signed out it redirects to sign-in).
-  { id: "chefs", enrolled: false, persona: "chef", path: "/chefs", states: [DEFAULT] },
-  { id: "chef-profile", enrolled: false, persona: "signed-out", path: CHEF_PROFILE, states: [DEFAULT] },
-  { id: "chef-profile-own", enrolled: false, persona: "chef", path: CHEF_PROFILE, states: [DEFAULT] },
-  { id: "fellow-chefs", enrolled: false, persona: "signed-out", path: `${CHEF_PROFILE}/fellow-chefs`, states: [DEFAULT] },
-  { id: "kitchen-visitors", enrolled: false, persona: "signed-out", path: `${CHEF_PROFILE}/kitchen-visitors`, states: [DEFAULT] },
+  { id: "chefs", enrolled: true, persona: "chef", path: "/chefs", states: [DEFAULT] },
+  { id: "chef-profile", enrolled: true, persona: "signed-out", path: CHEF_PROFILE, states: [DEFAULT] },
+  { id: "chef-profile-own", enrolled: true, persona: "chef", path: CHEF_PROFILE, states: [DEFAULT] },
+  { id: "fellow-chefs", enrolled: true, persona: "signed-out", path: `${CHEF_PROFILE}/fellow-chefs`, states: [DEFAULT] },
+  { id: "kitchen-visitors", enrolled: true, persona: "signed-out", path: `${CHEF_PROFILE}/kitchen-visitors`, states: [DEFAULT] },
 
   // Account.
   {
     id: "account-settings",
-    enrolled: false,
+    enrolled: true,
     persona: "chef",
     path: "/account/settings",
     states: [
@@ -355,15 +355,15 @@ export const census: Journey[] = [
   },
 
   // Developers, agents and OAuth.
-  { id: "developers", enrolled: false, persona: "signed-out", path: "/developers", states: [DEFAULT] },
-  { id: "developers-playground", enrolled: false, persona: "signed-out", path: "/developers/playground", states: [DEFAULT] },
-  { id: "mcp", enrolled: false, persona: "signed-out", path: "/mcp", states: [DEFAULT] },
-  { id: "agent-connect", enrolled: false, persona: "chef", path: "/agent/connect", states: [DEFAULT] },
+  { id: "developers", enrolled: true, persona: "signed-out", path: "/developers", states: [DEFAULT] },
+  { id: "developers-playground", enrolled: true, persona: "signed-out", path: "/developers/playground", states: [DEFAULT] },
+  { id: "mcp", enrolled: true, persona: "signed-out", path: "/mcp", states: [DEFAULT] },
+  { id: "agent-connect", enrolled: true, persona: "chef", path: "/agent/connect", states: [DEFAULT] },
   // No pending request is seeded, so this is the page for a request that does not exist.
-  { id: "agent-connect-request", enrolled: false, persona: "chef", path: "/agent/connect/hx-census-no-such-request", states: [DEFAULT] },
+  { id: "agent-connect-request", enrolled: true, persona: "chef", path: "/agent/connect/hx-census-no-such-request", states: [DEFAULT] },
   // Without a client the page explains that the request is invalid.
-  { id: "oauth-authorize", enrolled: false, persona: "chef", path: "/oauth/authorize", states: [DEFAULT] },
-  { id: "oauth-callback", enrolled: false, persona: "signed-out", path: "/oauth/callback", states: [DEFAULT] },
+  { id: "oauth-authorize", enrolled: true, persona: "chef", path: "/oauth/authorize", states: [DEFAULT] },
+  { id: "oauth-callback", enrolled: true, persona: "signed-out", path: "/oauth/callback", states: [DEFAULT] },
 ];
 
 /** The stored session for a census persona; signed-out journeys start with no cookies. */
