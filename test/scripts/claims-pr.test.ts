@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { expectConsoleError } from "../warning-policy";
 import { CHECKER, defaultDeps, isCliEntry, main, pullRequestText, runCliIfEntry, STEPS } from "../../scripts/claims-pr.mjs";
 
 const event = { pull_request: { title: "Adopt Ouro HX v1.2.0", body: "It installs 3 items.[^n]" } };
@@ -109,13 +110,11 @@ describe("the command line", () => {
     const exitCode = process.exitCode;
     const eventPath = process.env.GITHUB_EVENT_PATH;
     delete process.env.GITHUB_EVENT_PATH;
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    expectConsoleError("claims-pr: GITHUB_EVENT_PATH is not set; run it in a pull_request workflow.");
     try {
       expect(runCliIfEntry({ moduleUrl: "file:///repo/scripts/claims-pr.mjs", argv1: "/repo/scripts/claims-pr.mjs" })).toBe(true);
       expect(process.exitCode).toBe(2);
-      expect(error).toHaveBeenCalledWith("claims-pr: GITHUB_EVENT_PATH is not set; run it in a pull_request workflow.");
     } finally {
-      error.mockRestore();
       if (eventPath !== undefined) process.env.GITHUB_EVENT_PATH = eventPath;
       process.exitCode = exitCode;
     }

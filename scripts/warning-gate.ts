@@ -18,6 +18,7 @@ export const PNPM_TRANSIENT_FETCH_RETRY_PATTERN =
 //   touchStep: the touchStart at (100, 100) took 1831ms. Steps: +828ms asked Chromium: …. Watches: …. Node's event loop ran up to 46ms late.
 // It is timing evidence, not a warning: the command did what it was asked. Only that exact shape,
 // from the kit's own commands, is tolerated; a touch that fails throws and fails its test anyway.
+// HX may stop printing it as a warning (ourostack/ouro-ui#177).
 export const OURO_SLOW_TOUCH_TRACE_PATTERN =
   /^touch(?:Step|Drag): the touch(?:Start|Move|End) at \(-?\d+, -?\d+\) took \d+ms\. Steps: .+\. Watches: .*\. Node's event loop ran up to \d+ms late\.$/;
 
