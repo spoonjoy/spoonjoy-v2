@@ -23,7 +23,7 @@ function CurrentRootLayoutBehavior({ userId }: { userId: string | null }) {
         <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
           <nav data-testid="desktop-navbar">Desktop Navbar</nav>
         </header>
-        <main className="sj-desktop-surface sj-mobile-surface grow pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0">
+        <main className="sj-desktop-surface sj-mobile-surface grow">
           <div data-testid="outlet">Page Content</div>
         </main>
       </div>
@@ -50,10 +50,9 @@ describe('Root layout responsive behavior', () => {
       )
 
       // the phone tab bar should be present for authenticated users
-      // MobileNav wraps the phone tab bar which has role="navigation" and lg:hidden class
-      const navigations = screen.getAllByRole('navigation')
-      const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
-      expect(mobileNav).toBeInTheDocument()
+      // MobileNav renders HX TabBar, whose root hides it from the lg breakpoint
+      const mobileNav = screen.getByRole('navigation', { name: 'Spoonjoy navigation' }).closest('[data-ouro="tab-bar"]')
+      expect(mobileNav).toHaveClass('lg:hidden')
     })
 
     it('renders the phone tab bar on mobile for unauthenticated users', () => {
@@ -65,9 +64,8 @@ describe('Root layout responsive behavior', () => {
 
       // the phone tab bar should also be present for unauthenticated users
       // This test should FAIL initially because current root.tsx only renders MobileNav for authenticated users
-      const navigations = screen.getAllByRole('navigation')
-      const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
-      expect(mobileNav).toBeInTheDocument()
+      const mobileNav = screen.getByRole('navigation', { name: 'Spoonjoy navigation' }).closest('[data-ouro="tab-bar"]')
+      expect(mobileNav).toHaveClass('lg:hidden')
     })
 
     it('shows authenticated nav items in the phone tab bar for authenticated users', () => {
@@ -90,10 +88,9 @@ describe('Root layout responsive behavior', () => {
         </MemoryRouter>
       )
 
-      const navigations = screen.getAllByRole('navigation')
-      const mobileNav = navigations.find(nav => nav.className.includes('lg:hidden'))
+      const mobileNav = screen.getByRole('navigation', { name: 'Spoonjoy navigation' }).closest('[data-ouro="tab-bar"]')
 
-      expect(mobileNav).toBeInTheDocument()
+      expect(mobileNav).toHaveClass('lg:hidden')
       const tabBar = screen.getByRole('navigation', { name: 'Spoonjoy navigation' })
       expect(within(tabBar).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/')
       expect(within(tabBar).getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
@@ -154,7 +151,7 @@ describe('Root layout responsive behavior', () => {
   })
 
   describe('content bottom padding for the phone tab bar clearance', () => {
-    it('content has correct bottom padding on mobile for the phone tab bar clearance', () => {
+    it('leaves the clearance to HX TabBar, which reserves its own room after the page', () => {
       const { container } = render(
         <MemoryRouter>
           <CurrentRootLayoutBehavior userId="test-user" />
@@ -163,7 +160,8 @@ describe('Root layout responsive behavior', () => {
 
       const mobileContentWrapper = container.querySelector('main.sj-mobile-surface')
       expect(mobileContentWrapper).toBeInTheDocument()
-      expect(mobileContentWrapper?.className).toContain('pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]')
+      expect(mobileContentWrapper?.className).not.toContain('pb-[')
+      expect(container.querySelector('[data-ouro="tab-bar"]')).toBeInTheDocument()
     })
 
     it('content padding wrapper contains the Outlet content', () => {

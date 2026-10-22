@@ -33,7 +33,7 @@ describe("MobileNav signed in", () => {
   it("is a phone-only bar of four labeled tabs plus Search in its own circle", () => {
     renderAt("/");
 
-    expect(tabBar()).toHaveClass("lg:hidden");
+    expect(tabBar().closest('[data-ouro="tab-bar"]')).toHaveClass("lg:hidden");
     expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
     expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/my-recipes");
@@ -107,11 +107,10 @@ describe("MobileNav signed in", () => {
     expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
   });
 
-  it("draws the bar and the search circle on solid charcoal", () => {
+  it("draws the bar and the search circle on one solid surface, which tailwind.css turns charcoal", () => {
     renderAt("/");
-    expect(within(tabBar()).getByRole("list")).toHaveClass("bg-[var(--sj-photo-charcoal)]");
-    expect(screen.getByRole("link", { name: "Search" })).toHaveClass("bg-[var(--sj-photo-charcoal)]");
     for (const element of [within(tabBar()).getByRole("list"), screen.getByRole("link", { name: "Search" })]) {
+      expect(element).toHaveClass("bg-popover");
       expect(element.className).not.toMatch(/backdrop-blur|\/9\d\b/);
     }
   });

@@ -22,7 +22,7 @@ const defaultValue: DockContextValue = {
   isSuppressed: false,
 };
 
-// TODO(ouro-hx: tab-bar): What the dock reserves under the tab bar moves into HX's tab bar once it ships.
+// Whether a page hides the phone's tab bar, such as a cookbook while its title is being edited.
 export const DockContext = createContext<DockContextValue>(defaultValue);
 
 export interface DockContextProviderProps {

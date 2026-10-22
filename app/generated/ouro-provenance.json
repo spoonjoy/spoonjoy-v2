@@ -62,6 +62,7 @@
       "popover",
       "route-progress",
       "skip-link",
+      "tab-bar",
       "text",
       "toaster"
     ],
@@ -93,6 +94,9 @@
       ],
       "skip-link": [
         "app/root.tsx"
+      ],
+      "tab-bar": [
+        "app/components/navigation/mobile-nav.tsx"
       ],
       "text": [
         "app/root.tsx"
@@ -1091,6 +1095,7 @@
         "link",
         "page-header",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1113,6 +1118,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx"
@@ -1180,6 +1188,7 @@
         "link",
         "page-header",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1205,6 +1214,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx",
@@ -1331,6 +1343,7 @@
         "heading",
         "item",
         "show-more",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1350,6 +1363,9 @@
         ],
         "show-more": [
           "app/routes/recipes._index.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/recipes._index.tsx"
@@ -1635,6 +1651,7 @@
         "show-more",
         "spinner",
         "sync-status",
+        "tab-bar",
         "text",
         "text-area",
         "text-field",
@@ -1730,6 +1747,9 @@
         "sync-status": [
           "app/components/recipe/RecipeHeader.tsx",
           "app/lib/cook-sync-status.ts"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",
@@ -2198,6 +2218,7 @@
         "link",
         "page-header",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -2223,6 +2244,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks._index.tsx",
@@ -2352,6 +2376,7 @@
         "native-select",
         "page-header",
         "share-button",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -2389,6 +2414,9 @@
         ],
         "share-button": [
           "app/routes/cookbooks.$id.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks.$id.tsx"
