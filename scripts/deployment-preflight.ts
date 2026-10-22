@@ -183,6 +183,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Activate pnpm",
   "Install dependencies",
   "Generate Prisma client",
+  "Bound apt's network waits",
   "Install Playwright Chromium",
   "Deploy staged release to Cloudflare Workers",
   "Record release source",
@@ -983,6 +984,10 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
   },
   { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
   { name: "Generate Prisma client", run: "pnpm prisma:generate" },
+  {
+    name: "Bound apt's network waits",
+    run: `printf 'Acquire::http::Timeout "20";\\nAcquire::https::Timeout "20";\\nAcquire::Retries "3";\\n' | sudo tee /etc/apt/apt.conf.d/99spoonjoy-timeouts`,
+  },
   { name: "Install Playwright Chromium", run: "pnpm exec playwright install --with-deps chromium" },
   {
     name: "Deploy staged release to Cloudflare Workers",
@@ -1090,7 +1095,8 @@ function productionDeployStepsAreCanonical(
     !runHasExecutableFragment(validation.run, PRODUCTION_VALIDATION_COMMAND)
   ) return false;
 
-  const artifact = steps[10];
+  const artifactIndex = EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES.indexOf("Ensure release artifact exists");
+  const artifact = steps[artifactIndex];
   if (
     !exactObjectKeys(artifact, ["name", "if", "env", "run"]) ||
     artifact.if !== "always()" ||
@@ -1107,7 +1113,7 @@ function productionDeployStepsAreCanonical(
 
   return steps.every((step, index) => (
     index === 2 ||
-    index === 10 ||
+    index === artifactIndex ||
     JSON.stringify(step) === JSON.stringify(PRODUCTION_DEPLOY_STEPS[index])
   ));
 }

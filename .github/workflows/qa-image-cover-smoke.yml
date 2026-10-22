@@ -75,6 +75,12 @@ jobs:
 
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      # A stalled Ubuntu mirror once held a Playwright system-package install until its job ran out of
+      # time. Bound apt's waits, so a dead mirror fails over within a minute.
+      - name: Bound apt's network waits
+        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
+        run: printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' | sudo tee /etc/apt/apt.conf.d/99spoonjoy-timeouts
+
       - name: Install Playwright Chromium
         if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
         run: pnpm exec playwright install --with-deps chromium
