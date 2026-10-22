@@ -80,6 +80,69 @@ describe("cook-mode timers", () => {
     expect(document.title).toBe("Pasta Night");
   });
 
+  it("keeps ringing every 2.5 s after a timer is up, until it is dismissed", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta]} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Dismiss" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(3);
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("stops ringing two minutes after a timer is up, when nobody dismisses it", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const { unmount } = render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta]} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    const rings = vibrate.mock.calls.length;
+    // The first alert, then one every 2.5 s for the two minutes after.
+    expect(rings).toBe(1 + 120_000 / 2_500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(rings);
+
+    // A page opened after the two minutes shows the timer up, and stays quiet.
+    unmount();
+    render(<CookTimerTray timers={[pasta]} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(document.title).toBe("Time's up: Step 1 · Boil pasta");
+    expect(vibrate).toHaveBeenCalledTimes(rings);
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
   it("alerts from the tray when no step timer shows the timer", async () => {
     const vibrate = vi.fn(() => true);
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });

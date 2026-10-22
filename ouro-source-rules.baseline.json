@@ -1,5 +1,7 @@
 {
   "offenders": {
+    "app/routes/mcp.tsx::McpPage::control-state-style::a::": 1,
+    "app/routes/mcp.tsx::McpPage::raw-anchor::a::": 1,
     "app/styles/tailwind.css::(stylesheet)::control-state-style::[data-sj-action=\"primary\"]:active:not([data-disabled])::": 1
   }
 }

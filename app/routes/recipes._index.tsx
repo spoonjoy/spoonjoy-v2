@@ -206,6 +206,8 @@ function RecipeRow({
   return (
     <Item
       as="article"
+      // HX ShowMore lists rows without lines between them, so each row is outlined.
+      variant="outline"
       href={`/recipes/${recipe.id}`}
       title={recipe.title}
       description={

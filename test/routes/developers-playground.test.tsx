@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { Request as UndiciRequest } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import routes from "~/routes";
@@ -49,8 +49,36 @@ async function signedInPlaygroundData() {
   } as any);
 }
 
+// The operations the flow tests use. A flow renders these as HX ChoiceCards rather than the whole
+// API's, so it stays quick; "renders all operations…" renders the full manifest.
+const FLOW_OPERATIONS = [
+  "GET /api/v1",
+  "GET /api/v1/recipes",
+  "GET /api/v1/search",
+  "GET /api/v1/recipes/{id}",
+  "GET /api/v1/cookbooks/{id}",
+  "POST /api/v1/recipes/{id}/image",
+  "POST /api/v1/me/photo",
+  "GET /api/v1/shopping-list",
+  "PATCH /api/v1/shopping-list/items/{itemId}",
+  "DELETE /api/v1/shopping-list/items/{itemId}",
+  "POST /api/v1/tokens",
+  "DELETE /api/v1/tokens/{credentialId}",
+  "GET /oauth/authorize",
+  "POST /oauth/token",
+  "POST /mcp",
+];
+
+/** The loader's data with only `operationIds` in its manifest. */
+async function playgroundData(operationIds: readonly string[] = FLOW_OPERATIONS, data?: PlaygroundLoaderData) {
+  const full = data ?? await loader();
+  const operations = full.manifest.operations.filter((operation) => operationIds.includes(operation.id));
+  expect(operations.map((operation) => operation.id).sort()).toEqual([...operationIds].sort());
+  return { ...full, manifest: { ...full.manifest, operations } } as PlaygroundLoaderData;
+}
+
 async function renderPlayground(data?: PlaygroundLoaderData) {
-  const resolvedData = data ?? await loader();
+  const resolvedData = data ?? await playgroundData();
   const Stub = createTestRoutesStub([
     { path: "/developers/playground", Component: DeveloperPlayground, loader: () => resolvedData },
     { path: "/login", Component: () => null },
@@ -67,9 +95,7 @@ function mockApiResponse(body: unknown, init?: ResponseInit) {
   });
 }
 
-// The playground renders every operation as an HX ChoiceCard, so a test that walks a whole flow
-// takes a couple of seconds here and more on a loaded CI runner.
-describe("/developers/playground", { timeout: 20_000 }, () => {
+describe("/developers/playground", () => {
   afterEach(async () => {
     vi.useRealTimers();
     // HX ChoiceCard and fields settle their highlight and validity a tick after a click; let that
@@ -274,7 +300,8 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
   });
 
   it("captures safe playground view, surface, operation, and auth-mode telemetry from generated metadata", async () => {
-    await renderPlayground();
+    const data = await playgroundData();
+    await renderPlayground(data);
 
     await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
       "spoonjoy.developer.playground.viewed",
@@ -282,7 +309,7 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
         page: "api_playground",
         auth_status: "anonymous",
         surface: "full",
-        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.length,
+        operation_count: data.manifest.operations.length,
         operation_id: "GET /api/v1/recipes",
         operation_group: "Recipes",
         method: "GET",
@@ -294,7 +321,7 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
       "spoonjoy.developer.playground.surface_selected",
       expect.objectContaining({
         surface: "connector",
-        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.profiles.includes("connector")).length,
+        operation_count: data.manifest.operations.filter((operation) => operation.profiles.includes("connector")).length,
       }),
     );
 
@@ -439,8 +466,10 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await renderPlayground();
+    // The full manifest: every operation renders.
+    await renderPlayground(await loader());
     expect(await screen.findByRole("heading", { name: "Spoonjoy API Playground" })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio").filter((radio) => radio.closest("fieldset"))).toHaveLength(PLAYGROUND_OPERATIONS.length);
     expect(screen.getByRole("radio", { name: /Create a bearer credential/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Remove a shopping-list item/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "All APIs" })).toHaveAttribute("aria-checked", "true");
@@ -709,7 +738,7 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
   it("uses the first generated operation when a custom manifest has no recipe list", async () => {
     const manifestWithoutDefaultRecipe = {
       ...API_V1_PLAYGROUND_MANIFEST,
-      operations: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.id !== "GET /api/v1/recipes"),
+      operations: (await playgroundData()).manifest.operations.filter((operation) => operation.id !== "GET /api/v1/recipes"),
     };
 
     await renderPlayground({
@@ -1036,10 +1065,16 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     expect(await screen.findByText("Secret values hidden in response body")).toBeInTheDocument();
+    // The Response panel is charcoal; its HX controls take photo-white tokens from the panel.
+    const panel = screen.getByRole("region", { name: "Response" });
+    expect(panel).toHaveClass("sj-on-charcoal");
+    for (const name of ["Copy response", "Clear response", /^Copy hidden .+ value$/]) {
+      for (const button of within(panel).getAllByRole("button", { name })) expect(panel).toContainElement(button);
+    }
     expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");
     fireEvent.click(screen.getByRole("button", { name: "Clear response" }));
     expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");
-  }, 10000);
+  });
 
   it("renders portable curl for bearer mode and body requests", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
@@ -1320,7 +1355,7 @@ describe("/developers/playground", { timeout: 20_000 }, () => {
   it("reports when a custom manifest omits the OAuth token operation", async () => {
     const manifestWithoutToken = {
       ...API_V1_PLAYGROUND_MANIFEST,
-      operations: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.id !== "POST /oauth/token"),
+      operations: (await playgroundData()).manifest.operations.filter((operation) => operation.id !== "POST /oauth/token"),
     };
     await renderPlayground({
       manifest: manifestWithoutToken,

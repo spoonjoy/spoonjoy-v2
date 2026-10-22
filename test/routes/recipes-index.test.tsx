@@ -425,6 +425,10 @@ describe("Recipes Index Route", () => {
 
     const third = await screen.findByRole("link", { name: "Third Soup" });
     expect(third.closest('[data-ouro="item"]')).toBeInTheDocument();
+    // HX ShowMore lists rows without lines between them, so each row is an outlined Item.
+    for (const name of ["First Soup", "Second Soup", "Third Soup"]) {
+      expect(screen.getByRole("link", { name }).closest('[data-ouro="item"]')).toHaveClass("border");
+    }
     expect(screen.getByRole("link", { name: "First Soup" })).toBeInTheDocument();
     await waitFor(() => expect(third).toHaveFocus());
     expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 3 recipes");

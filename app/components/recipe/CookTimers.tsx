@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Timer } from "~/components/ouro/timer/timer";
 import { alertDone } from "~/components/ouro/timer/timer-styles";
 import { TimerTray } from "~/components/ouro/timer/timer-tray";
+import { buzz, chime } from "~/lib/ouro/feedback";
 import { useTimer, type TimerDoneEvent } from "~/lib/ouro/use-timer";
 import type { CookTimer } from "~/lib/cook-timers";
 
@@ -15,6 +16,9 @@ const LABELS = {
 const DONE = "Time's up";
 /** A finished timer notifies only when it ended a moment ago, not when a page opens long after. */
 const FRESH_MS = 60_000;
+/** A finished timer rings again this often, until it is dismissed or {@link RING_FOR_MS} pass. */
+const RING_EVERY_MS = 2_500;
+const RING_FOR_MS = 2 * 60_000;
 
 /** The current step's timer, inside the cook-mode step page. */
 export function CookStepTimer({ timer }: { timer: CookTimer | undefined }) {
@@ -82,17 +86,17 @@ export function CookTimerTray({
  * tab is in the background.
  */
 function CookTimerAlerts({ timers }: { timers: readonly CookTimer[] }) {
-  const [finished, setFinished] = useState<ReadonlyMap<string, string>>(new Map());
-  const report = useCallback((timer: CookTimer, done: boolean) => {
+  const [finished, setFinished] = useState<ReadonlyMap<string, { label: string; endedAt: number }>>(new Map());
+  const report = useCallback((timer: CookTimer, endedAt: number | null) => {
     setFinished((current) => {
-      if (current.has(timer.timerId) === done) return current;
+      if (current.get(timer.timerId)?.endedAt === (endedAt ?? undefined)) return current;
       const next = new Map(current);
-      if (done) next.set(timer.timerId, timer.label);
+      if (endedAt !== null) next.set(timer.timerId, { label: timer.label, endedAt });
       else next.delete(timer.timerId);
       return next;
     });
   }, []);
-  const labels = [...finished.values()].join("; ");
+  const labels = [...finished.values()].map((timer) => timer.label).join("; ");
   useEffect(() => {
     if (!labels) return;
     const previousTitle = document.title;
@@ -101,6 +105,24 @@ function CookTimerAlerts({ timers }: { timers: readonly CookTimer[] }) {
       document.title = previousTitle;
     };
   }, [labels]);
+  // TODO(ouro-hx: timer alert until dismissed, ourostack/ouro-ui#179): HX Timer keeps alerting
+  // until it is dismissed. Until then its one chime and buzz ring again from here, every 2.5 s,
+  // until the cook dismisses the timer or two minutes pass, as Spoonjoy's own alarm did.
+  const lastEnded = Math.max(0, ...[...finished.values()].map((timer) => timer.endedAt));
+  useEffect(() => {
+    if (!lastEnded) return;
+    const until = lastEnded + RING_FOR_MS;
+    if (Date.now() >= until) return;
+    const ring = window.setInterval(() => {
+      if (Date.now() > until) {
+        window.clearInterval(ring);
+        return;
+      }
+      void chime();
+      buzz();
+    }, RING_EVERY_MS);
+    return () => window.clearInterval(ring);
+  }, [lastEnded]);
   return (
     <>
       {timers.map((timer) => (
@@ -110,16 +132,16 @@ function CookTimerAlerts({ timers }: { timers: readonly CookTimer[] }) {
   );
 }
 
-function CookTimerWatch({ timer, onFinished }: { timer: CookTimer; onFinished: (timer: CookTimer, done: boolean) => void }) {
+function CookTimerWatch({ timer, onFinished }: { timer: CookTimer; onFinished: (timer: CookTimer, endedAt: number | null) => void }) {
   const onDone = (event: TimerDoneEvent) => {
     // A watcher is a fallback view, as the tray is: when it is the first to hear the timer end,
     // no Timer or tray on the page alerts, so it gives HX's alert itself.
     alertDone(timer.label, DONE, event, false);
     notifyTimeUp(timer.label, event);
   };
-  const { status } = useTimer({ duration: timer.duration, timerId: timer.timerId, fallback: true, onDone });
+  const { status, endedAt } = useTimer({ duration: timer.duration, timerId: timer.timerId, fallback: true, onDone });
   const done = status === "done";
-  useEffect(() => onFinished(timer, done), [timer, done, onFinished]);
+  useEffect(() => onFinished(timer, done ? endedAt : null), [timer, done, endedAt, onFinished]);
   return null;
 }
 
