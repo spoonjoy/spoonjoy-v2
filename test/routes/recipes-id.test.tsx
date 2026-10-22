@@ -4350,16 +4350,19 @@ describe("Recipes $id Route", () => {
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
       expect(within(history).getByText("Current")).toBeInTheDocument();
-      expect(within(history).getByText("Original photo")).toBeInTheDocument();
-      expect(within(history).getByText("Editorial photo")).toBeInTheDocument();
-      expect(within(history).getByText("Imported photo")).toBeInTheDocument();
-      expect(within(history).queryByText("No cover selected")).toBeNull();
+      const savedCovers = within(history).getByRole("group", { name: "Saved covers" });
+      expect(within(savedCovers).getByText("Original photo")).toBeInTheDocument();
+      expect(within(savedCovers).getByText("Editorial photo")).toBeInTheDocument();
+      expect(within(savedCovers).getByText("Imported photo")).toBeInTheDocument();
+      const activeCover = within(history).getByRole("group", { name: "Active cover" });
+      expect(within(activeCover).getByRole("radio", { name: "Editorial photo" })).toBeChecked();
       expect(screen.getByRole("heading", { name: "Photos" })).toBeInTheDocument();
       expect(screen.getByText("Add cover photo")).toBeInTheDocument();
       expect(screen.getByRole("checkbox", { name: "Also log this as a cook" })).toBeChecked();
       expect(screen.getByRole("checkbox", { name: "Make a styled cover" })).toBeChecked();
 
-      await user.click(within(history).getByRole("button", { name: "Use Imported photo cover" }));
+      await user.click(within(activeCover).getByRole("radio", { name: "Imported photo" }));
+      await user.click(within(history).getByRole("button", { name: "Use this cover" }));
       await waitFor(() => {
         expect(submittedIntents).toContainEqual({
           intent: "setRecipeCover",
@@ -4369,7 +4372,8 @@ describe("Recipes $id Route", () => {
         });
       });
 
-      await user.click(within(history).getByRole("button", { name: "Set no cover" }));
+      await user.click(within(activeCover).getByRole("radio", { name: "No cover" }));
+      await user.click(within(history).getByRole("button", { name: "Use this cover" }));
       await waitFor(() => {
         expect(submittedIntents).toContainEqual({
           intent: "setRecipeNoCover",

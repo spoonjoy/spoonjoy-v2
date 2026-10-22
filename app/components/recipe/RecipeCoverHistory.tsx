@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Form } from "react-router";
 import { Button } from "~/components/button";
+import { ChoiceCard, type ChoiceCardItem } from "~/components/ouro/choice-card/choice-card";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { useActionWriteToken } from "~/hooks/use-write-token";
 import { normalizeRequiredCoverProvenanceLabel } from "~/components/recipe/CoverProvenanceBadge";
@@ -79,7 +81,62 @@ function createdDateLabel(value: string) {
 /** The cover jobs this panel starts; each resubmit of one makes one cover and one job. */
 const COVER_JOB_INTENTS = ["generateRecipeCoverPlaceholder", "regenerateRecipeCover", "createCoverFromSpoon"] as const;
 
-// TODO(ouro-hx: choice-card): Choosing among cover images becomes HX's choice card (a radio group of cards with media) once it ships.
+const NO_COVER = "none";
+
+/** The choice's value for one variant of one cover. */
+function choiceValue(coverId: string, variant: RecipeCoverHistoryVariant["variant"]) {
+  return `${coverId}:${variant}`;
+}
+
+/**
+ * The active cover, chosen with HX ChoiceCard: a card for each variant a cover can show, and
+ * No cover. Use this cover posts the existing setRecipeCover or setRecipeNoCover intent.
+ */
+function ActiveCoverChoice({ covers }: { covers: RecipeCoverHistoryItem[] }) {
+  const choices: ChoiceCardItem[] = covers.filter(coverCanActivate).flatMap((cover) =>
+    cover.variants.map((variant) => ({
+      value: choiceValue(cover.id, variant.variant),
+      label: normalizeRequiredCoverProvenanceLabel(variant.provenanceLabel),
+      description: `${variantName(variant.variant)}, ${createdDateLabel(cover.createdAt)}`,
+      media: <img src={variant.imageUrl} alt="" loading="lazy" decoding="async" />,
+    })),
+  );
+  const activeCover = covers.find((cover) => cover.isActive && cover.status !== "archived" && !cover.archivedAt);
+  const activeVariant = activeCover?.variants.find((variant) => variant.isActive);
+  const current = activeCover && activeVariant ? choiceValue(activeCover.id, activeVariant.variant) : NO_COVER;
+  const [chosen, setChosen] = useState(current);
+  const [coverId, variant] = chosen.split(":");
+
+  return (
+    <Form method="post" className="grid justify-items-start gap-3">
+      {chosen === NO_COVER ? (
+        <>
+          <input type="hidden" name="intent" value="setRecipeNoCover" />
+          <input type="hidden" name="confirmNoCover" value="true" />
+        </>
+      ) : (
+        <>
+          <input type="hidden" name="intent" value="setRecipeCover" />
+          <input type="hidden" name="coverId" value={coverId} />
+          <input type="hidden" name="variant" value={variant} />
+        </>
+      )}
+      <ChoiceCard
+        legend="Active cover"
+        description="The photo at the top of the recipe."
+        items={[...choices, { value: NO_COVER, label: "No cover", description: "The recipe shows without a photo." }]}
+        value={chosen}
+        onValueChange={setChosen}
+        columns={3}
+        className="w-full"
+      />
+      <Button type="submit" plain disabled={chosen === current}>
+        Use this cover
+      </Button>
+    </Form>
+  );
+}
+
 export function RecipeCoverHistory({
   covers,
   spoonImages = [],
@@ -88,9 +145,11 @@ export function RecipeCoverHistory({
   spoonImages?: RecipeCoverSpoonImage[];
 }) {
   const coverToken = useActionWriteToken(COVER_JOB_INTENTS);
-  const hasCurrentCover = covers.some((cover) =>
-    cover.isActive && cover.status !== "archived" && !cover.archivedAt
-  );
+  // Remounts the choice when the saved cover changes, so it starts from what is now current.
+  const currentKey = covers
+    .filter((cover) => cover.isActive)
+    .map((cover) => `${cover.id}:${cover.activeVariant}:${cover.status}:${cover.archivedAt ?? ""}`)
+    .join(",");
 
   return (
     <section
@@ -110,25 +169,9 @@ export function RecipeCoverHistory({
             Choose the active cover, regenerate variants, or retire old candidates.
           </p>
         </div>
-        <Form method="post">
-          <input type="hidden" name="intent" value="setRecipeNoCover" />
-          <input type="hidden" name="confirmNoCover" value="true" />
-          <Button type="submit" plain>
-            Set no cover
-          </Button>
-        </Form>
       </div>
 
-      {!hasCurrentCover ? (
-        <div className="flex items-center justify-between gap-3 border-y border-[var(--sj-border)] py-3">
-          <span className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-            No cover selected
-          </span>
-          <span className="font-sj-ui text-xs uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">
-            Current setting
-          </span>
-        </div>
-      ) : null}
+      <ActiveCoverChoice key={currentKey} covers={covers} />
 
       <Form method="post" className="grid gap-3 border-b border-[var(--sj-border)] pb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <input type="hidden" name="intent" value="generateRecipeCoverPlaceholder" />
@@ -150,7 +193,7 @@ export function RecipeCoverHistory({
           No saved covers yet.
         </p>
       ) : (
-        <div className="divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]">
+        <div role="group" aria-label="Saved covers" className="divide-y divide-[var(--sj-border)] border-y border-[var(--sj-border)]">
           {covers.map((cover) => {
             const failedAttempt = failedAttemptLabel(cover);
             const thumbnail = failedAttempt ? undefined : cover.variants[0]?.imageUrl;
@@ -237,20 +280,7 @@ export function RecipeCoverHistory({
                               <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-brass)]">
                                 Active variant
                               </span>
-                            ) : canActivate ? (
-                              <Form method="post" className="shrink-0">
-                                <input type="hidden" name="intent" value="setRecipeCover" />
-                                <input type="hidden" name="coverId" value={cover.id} />
-                                <input type="hidden" name="variant" value={variant.variant} />
-                                <Button
-                                  type="submit"
-                                  plain
-                                  aria-label={`Use ${provenanceLabel} cover`}
-                                >
-                                  Use
-                                </Button>
-                              </Form>
-                            ) : (
+                            ) : canActivate ? null : (
                               <span className="shrink-0 font-sj-ui text-xs font-semibold text-[var(--sj-ink-soft)]">
                                 Unavailable
                               </span>

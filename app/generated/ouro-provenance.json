@@ -1631,6 +1631,7 @@
         "button",
         "checkbox",
         "checklist",
+        "choice-card",
         "collapsible",
         "confirm-dialog",
         "dialog",
@@ -1678,6 +1679,9 @@
         ],
         "checklist": [
           "app/components/recipe/IngredientList.tsx"
+        ],
+        "choice-card": [
+          "app/components/recipe/RecipeCoverHistory.tsx"
         ],
         "collapsible": [
           "app/routes/recipes.$id.tsx"
