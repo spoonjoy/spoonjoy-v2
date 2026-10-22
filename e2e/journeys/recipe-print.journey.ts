@@ -28,7 +28,7 @@ test.describe("Printing a recipe", () => {
     await expect(page.getByTestId("recipe-cooks")).toBeHidden();
     await expect(page.getByText("Tap ingredients as you go", { exact: true })).toBeHidden();
     await expect(page.locator('#steps [data-ouro="checklist"]').first()).toBeHidden();
-    await expect(page.locator(".sj-skip-link")).toBeHidden();
+    await expect(page.getByRole("link", { name: "Skip to main content" })).toBeHidden();
     // The printed page, for review: the whole recipe as print media lays it out.
     await testInfo.attach("printed-recipe", {
       body: await page.screenshot({ fullPage: true, animations: "disabled" }),

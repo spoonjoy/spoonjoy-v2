@@ -26,6 +26,8 @@ import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
 import { ThemeProvider } from "~/components/theme-provider";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
+import { RouteProgress } from "~/components/ouro/route-progress/route-progress";
+import { SkipLink } from "~/components/ouro/skip-link/skip-link";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 import { ThemeToggle } from "~/components/theme-toggle";
 import { Link } from "~/components/ouro/link/link";
@@ -37,7 +39,6 @@ import { InstallPromptCard } from "~/components/pwa/InstallPromptCard";
 import { Button } from "~/components/button";
 import { OAuthButtonGroup } from "~/components/oauth";
 import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
-import { SkipLink } from "~/components/navigation/skip-link";
 import { RouteErrorContent } from "~/components/errors/route-error";
 import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
@@ -176,6 +177,7 @@ export function AppNavbar({
 export default function App() {
   const { userId, oauthProviders } = useLoaderData<typeof loader>();
   const location = useLocation();
+  const navigation = useNavigation();
   const posthog = usePostHog();
 
   // Apply storage schema migration after hydration (client-side only)
@@ -214,7 +216,7 @@ export default function App() {
 
   return (
     <DockContextProvider>
-      <RouteTransitionIndicator />
+      <RouteProgress active={navigation.state !== "idle"} />
       <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
         {userId ? null : <PhoneBrandBar />}
         <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
@@ -235,28 +237,6 @@ export default function App() {
       <InstallPromptCard />
       <MobileNavToaster isAuthenticated={!!userId} />
     </DockContextProvider>
-  );
-}
-
-// TODO(ouro-hx: route-progress): The bar that shows a navigation in progress becomes HX's route progress once it ships.
-/**
- * Thin top-of-page brass bar that appears while React Router is loading a new
- * route or submitting a form. One global affordance covers every action that
- * used to feel "frozen" between click and response — Fork, Log-cook, account
- * settings, shopping-list submits, cookbook deletes — without each having to
- * wire its own pending UI. Disappears the moment navigation returns to idle.
- */
-function RouteTransitionIndicator() {
-  const navigation = useNavigation();
-  const isActive = navigation.state !== "idle";
-  if (!isActive) return null;
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-label="Loading"
-      className="sj-route-progress pointer-events-none fixed inset-x-0 top-0 z-50 h-[2px] motion-reduce:animate-none"
-    />
   );
 }
 

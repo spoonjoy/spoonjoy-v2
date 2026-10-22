@@ -228,10 +228,8 @@
     --sj-shadow-soft: none;
   }
 
-  /* Navigation, the skip link and floating notices are screen controls with nothing to say on paper. */
-  .sj-skip-link,
-  .sj-desktop-topbar,
-  .sj-route-progress {
+  /* Navigation is screen chrome with nothing to say on paper. */
+  .sj-desktop-topbar {
     display: none !important;
   }
 
@@ -579,66 +577,6 @@ body:has(#cook) .sj-mobile-surface {
   box-shadow: var(--sj-shadow);
 }
 
-/* Skip-to-content link. Rendered by Layout in root.tsx as the first focusable
- * element so the very first Tab press jumps a keyboard / SR user past the
- * desktop nav and mobile dock straight to <main id="main">.
- *
- * Until it has focus it is visually hidden (clipped to a 1px box) rather than
- * parked off-screen above the top edge: a fixed element at a negative top still
- * paints in a full-page screenshot of a scrolled page, and screen readers still
- * read a clipped link. With focus it shows at the top-left corner. */
-.sj-skip-link {
-  position: fixed;
-  top: 0;
-  left: 0.5rem;
-  z-index: 100;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  background: var(--sj-charcoal);
-  color: var(--sj-bone);
-  font-family: var(--font-sj-ui);
-  font-weight: 600;
-  text-decoration: underline;
-  border-radius: 0 0 var(--sj-radius-small) var(--sj-radius-small);
-}
-
-.sj-skip-link:focus,
-.sj-skip-link:focus-visible {
-  width: auto;
-  height: auto;
-  padding: 0.5rem 1rem;
-  overflow: visible;
-  clip-path: none;
-  outline: 2px solid var(--sj-brass);
-  outline-offset: 2px;
-}
-
-/* Indeterminate progress bar — a thin brass sweep across the top of the page
- * while React Router is navigating or submitting. Rendered by
- * <RouteTransitionIndicator> in root.tsx. Honors reduced-motion via the
- * global override below. */
-.sj-route-progress {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--sj-brass) 30%,
-    var(--sj-brass) 60%,
-    transparent 100%
-  );
-  background-size: 50% 100%;
-  background-repeat: no-repeat;
-  animation: sj-route-progress 1.1s ease-in-out infinite;
-}
-
-@keyframes sj-route-progress {
-  0% { background-position: -50% 0; }
-  100% { background-position: 150% 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   /* Ouro UI subtrees ([data-ouro]) are left out: they honour reduced motion themselves, dropping
      transform motion and keeping a short opacity fade. */
@@ -653,13 +591,6 @@ body:has(#cook) .sj-mobile-surface {
 
   .sj-hover-lift:hover {
     transform: none;
-  }
-
-  /* For users who prefer reduced motion, show the progress affordance as a
-   * static brass strip — still visible, just not animated. */
-  .sj-route-progress {
-    background: var(--sj-brass);
-    animation: none;
   }
 }
 

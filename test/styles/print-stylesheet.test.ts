@@ -69,13 +69,7 @@ describe("print stylesheet", () => {
     const hidden = rules
       .filter((rule) => /display:\s*none/.test(rule.toString()))
       .flatMap((rule) => rule.selectors);
-    expect(hidden).toEqual(
-      expect.arrayContaining([
-        ".sj-skip-link",
-        ".sj-desktop-topbar",
-        ".sj-route-progress",
-      ]),
-    );
+    expect(hidden).toEqual(expect.arrayContaining([".sj-desktop-topbar"]));
   });
 
   it("prints the masthead as one column without the screen-height minimum", () => {

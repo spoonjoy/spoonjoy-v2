@@ -15,7 +15,6 @@
       "app/components/navigation/phone-brand-bar.tsx",
       "app/components/navigation/quick-actions.tsx",
       "app/components/navigation/recipes-section-nav.tsx",
-      "app/components/navigation/skip-link.tsx",
       "app/components/oauth.tsx",
       "app/components/pwa/InstallPromptCard.tsx",
       "app/components/spoonjoy-logo.tsx",
@@ -62,6 +61,8 @@
       "link",
       "navbar",
       "popover",
+      "route-progress",
+      "skip-link",
       "text",
       "toaster"
     ],
@@ -77,6 +78,12 @@
         "app/root.tsx"
       ],
       "popover": [
+        "app/root.tsx"
+      ],
+      "route-progress": [
+        "app/root.tsx"
+      ],
+      "skip-link": [
         "app/root.tsx"
       ],
       "text": [
