@@ -19,8 +19,6 @@
       "app/components/oauth.tsx",
       "app/components/pwa/InstallPromptCard.tsx",
       "app/components/spoonjoy-logo.tsx",
-      "app/components/theme-provider.tsx",
-      "app/components/theme-toggle.tsx",
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
       "app/hooks/use-unsaved-form-guard.ts",
@@ -59,15 +57,20 @@
     ],
     "components": [
       "button",
+      "color-scheme-toggle",
       "link",
       "navbar",
       "popover",
+      "tab-bar",
       "text",
       "toaster"
     ],
     "renders": {
       "button": [
         "app/components/button.tsx"
+      ],
+      "color-scheme-toggle": [
+        "app/root.tsx"
       ],
       "link": [
         "app/components/navigation/phone-brand-bar.tsx",
@@ -78,6 +81,9 @@
       ],
       "popover": [
         "app/root.tsx"
+      ],
+      "tab-bar": [
+        "app/components/navigation/mobile-nav.tsx"
       ],
       "text": [
         "app/components/errors/route-error.tsx",
@@ -147,6 +153,7 @@
         "heading",
         "item",
         "item-group",
+        "tab-bar",
         "text",
         "toaster"
       ],
@@ -174,6 +181,9 @@
         ],
         "item-group": [
           "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/components/cookbook/KitchenHome.tsx"
@@ -227,6 +237,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -242,6 +253,9 @@
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
+          "app/routes/login.tsx"
+        ],
+        "separator": [
           "app/routes/login.tsx"
         ],
         "text": [
@@ -298,6 +312,7 @@
         "button",
         "form",
         "link",
+        "separator",
         "text",
         "text-field"
       ],
@@ -313,6 +328,9 @@
         ],
         "link": [
           "app/components/auth/auth-page.tsx",
+          "app/routes/signup.tsx"
+        ],
+        "separator": [
           "app/routes/signup.tsx"
         ],
         "text": [
@@ -910,6 +928,7 @@
         "heading",
         "inspector",
         "number-field",
+        "page-header",
         "pagination",
         "switch",
         "text"
@@ -935,6 +954,9 @@
         ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",
+          "app/routes/test-kitchen.tsx"
+        ],
+        "page-header": [
           "app/routes/test-kitchen.tsx"
         ],
         "pagination": [
@@ -1061,6 +1083,7 @@
         "item-group",
         "link",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1080,6 +1103,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx"
@@ -1146,6 +1172,7 @@
         "item-group",
         "link",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1167,6 +1194,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx",
@@ -1287,6 +1317,7 @@
         "heading",
         "item",
         "show-more",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1306,6 +1337,9 @@
         ],
         "show-more": [
           "app/routes/recipes._index.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/recipes._index.tsx"
@@ -1589,6 +1623,7 @@
         "pagination",
         "show-more",
         "spinner",
+        "tab-bar",
         "text",
         "text-area",
         "text-field",
@@ -1668,6 +1703,9 @@
         ],
         "spinner": [
           "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",
@@ -2119,6 +2157,7 @@
         "item-group",
         "link",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -2140,6 +2179,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks._index.tsx",
@@ -2267,6 +2309,7 @@
         "item-group",
         "link",
         "native-select",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -2298,6 +2341,9 @@
         ],
         "native-select": [
           "app/routes/cookbooks.$id.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks.$id.tsx"

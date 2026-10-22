@@ -1,8 +1,8 @@
 // The tab bar on iPhone (chef session). It is navigation only and the same on every page: Kitchen,
 // Recipes, Cookbooks and Shopping as four equal tabs, each an icon over its label, and Search in its
 // own circle. The tab that owns the page is marked current. The bar is solid, so no page text shows
-// through, every target is at least 44 px, and the page's bottom padding clears it, so the last
-// control on a page never sits under it (R-M3-4). What the old dock's drawer held now lives on the
+// through, every target is at least 44 px, and HX TabBar's room at the end of the page clears it,
+// so the last control on a page never sits under it (R-M3-4). What the old dock's drawer held now lives on the
 // pages: the Recipes switch (Mine, Saved, Everyone), Chefs on the Kitchen page, and Log out in
 // Account settings.
 //
@@ -67,8 +67,8 @@ async function backgroundAlpha(locator: Locator): Promise<number> {
   });
 }
 
-// Scrolled to the very bottom, main's bottom padding covers everything from the tab bar's top edge
-// to the bottom of the screen, and the last focusable thing in main ends above the tab bar.
+// Scrolled to the very bottom, the tab bar's room at the end of the page covers everything from the
+// bar's top edge to the bottom of the screen, and the last focusable thing in main ends above it.
 async function expectDockClearsMain(page: Page, path: string): Promise<void> {
   const dock = page.getByRole("navigation", { name: "Spoonjoy navigation" });
   const main = page.locator("main#main");
@@ -82,8 +82,9 @@ async function expectDockClearsMain(page: Page, path: string): Promise<void> {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error("The iPhone project always sets a viewport.");
   const dockBox = await boxOf(dock, `${path} dock`);
-  const paddingBottom = await main.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingBottom));
-  expect(paddingBottom, `${path}: main's bottom padding against the dock's top edge`).toBeGreaterThanOrEqual(viewport.height - dockBox.y);
+  const room = await boxOf(page.locator('[data-ouro="tab-bar"]'), `${path} tab bar's room`);
+  expect(room.y, `${path}: top of the tab bar's room against the dock's top edge`).toBeLessThanOrEqual(dockBox.y);
+  expect(room.y + room.height, `${path}: the tab bar's room reaches the bottom of the screen`).toBeGreaterThanOrEqual(viewport.height - 1);
 
   const lastBox = await boxOf(main.locator(FOCUSABLE).filter({ visible: true }).last(), `${path} last focusable element in main`);
   expect(lastBox.y + lastBox.height, `${path}: bottom edge of the last focusable element in main`).toBeLessThanOrEqual(dockBox.y);

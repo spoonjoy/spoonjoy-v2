@@ -3,11 +3,12 @@ import { useState } from "react";
 import { useLoaderData, useSearchParams } from "react-router";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
 import { SCALE_RANGE } from "~/components/cook/cook-controller";
-import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { AspectRatio } from "~/components/ouro/aspect-ratio/aspect-ratio";
 import { Button } from "~/components/ouro/button/button";
 import { Inspector } from "~/components/ouro/inspector/inspector";
 import { NumberField } from "~/components/ouro/number-field/number-field";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Switch } from "~/components/ouro/switch/switch";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
@@ -29,7 +30,7 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const INTRO = claim("A real Spoonjoy recipe page, open to everyone. Nothing here needs an account, and nothing you do leaves this browser.", {
+const INTRO = claim("A real Spoonjoy recipe page, open to everyone. Nothing here needs an account, and your progress stays in this browser.", {
   source: { test: "test/routes/test-kitchen.test.tsx::Test Kitchen > opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own" },
   verify: [
     { testExists: "test/routes/test-kitchen.test.tsx::Test Kitchen > opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own" },
@@ -92,13 +93,14 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow="Try Spoonjoy"
         title="Spoonjoy Test Kitchen"
-        action={<Button href="/signup">Make it yours: sign up</Button>}
-      >
-        <Text tone="muted">{INTRO}</Text>
-      </CookbookHeader>
+        description={INTRO}
+        actions={<Button href="/signup">Make it yours: sign up</Button>}
+        size="lg"
+        divider
+      />
 
       <section aria-labelledby="test-kitchen-try" className="mt-8 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
         <div>

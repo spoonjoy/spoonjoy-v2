@@ -1,5 +1,6 @@
 const STORAGE_SCHEMA_VERSION_KEY = 'spoonjoy-storage-schema-version'
-const THEME_STORAGE_KEY = 'spoonjoy-theme'
+/** Where HX's colour scheme keeps the reader's choice; the storage migration keeps it. */
+export const THEME_STORAGE_KEY = 'spoonjoy-theme'
 
 // Bump this when client-side persisted state changes incompatibly.
 export const APP_STORAGE_SCHEMA_VERSION = '2026-02-17.1'

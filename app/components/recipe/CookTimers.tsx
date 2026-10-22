@@ -37,7 +37,7 @@ function durationLabel(view: CookTimerView): string {
   return `${rounded} min timer`;
 }
 
-// TODO(ouro-hx: timer, timer-tray, lib-use-timer): A step's countdown and the tray of running timers become HX's timer and timer tray once they ship.
+// TODO(ouro-hx: timer, timer-tray, lib-use-timer, spoonjoy/spoonjoy-v2#570): A step's countdown and the tray of running timers become HX's Timer and TimerTray in #570.
 // The current step's timer, inside the cook-mode step page.
 export function CookStepTimer({ stepNum, controller }: { stepNum: number; controller: CookTimersController }) {
   const entry = controller.timers.get(stepNum);

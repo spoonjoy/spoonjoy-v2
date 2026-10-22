@@ -156,6 +156,23 @@
   --font-heading: var(--font-sj-display);
 }
 
+/* Spoonjoy's phone tab bar stays solid charcoal under photo-white text in both themes. HX TabBar
+   draws its surface from --popover and its tabs from the muted and accent pairs, so those are
+   rebound for Spoonjoy's bar alone (MobileNav gives it the sj-tab-bar class, so HX's own TabBar
+   tests keep the global tokens). Unselected tabs take a solid mix rather than the translucent
+   --sj-on-photo-soft, whose overlapping icon strokes would show as seams. Its labels take the UI
+   face, like every other control. */
+.sj-tab-bar {
+  font-family: var(--font-sj-ui);
+  --popover: var(--sj-photo-charcoal);
+  --foreground: var(--sj-on-photo);
+  --muted-foreground: color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal));
+  --accent: color-mix(in srgb, var(--sj-on-photo) 14%, var(--sj-photo-charcoal));
+  --accent-foreground: var(--sj-on-photo);
+  --border: var(--sj-photo-line);
+  --ring: var(--sj-on-photo);
+}
+
 /* Spoonjoy's primary action palette is not its brass text-link palette. Bind the
    released solid Button to our already contrast-qualified action tokens without
    changing Ouro's source or the inherited root provider. Its generic disabled
@@ -314,15 +331,10 @@ select {
 }
 
 /*
- * Colours fade only while the theme is switching.
- *
- * The theme provider sets data-theme-switching on <html> for a moment around each
- * theme change (never for reduced-motion users), and only then does the page fade
- * between themes. Outside that window nothing transitions globally, so a control whose
- * colours show its state (checked, pressed, selected) changes instantly instead of
- * passing through low-contrast mid-fade colours. These rules are unlayered, so they win
- * over Tailwind's layered transition utilities, exactly as the old always-on theme fade
- * did; they have zero specificity, so unlayered component rules with a class selector
+ * Nothing transitions globally, so a control whose colours show its state (checked, pressed,
+ * selected) changes instantly instead of passing through low-contrast mid-fade colours, and a
+ * colour-scheme switch is instant too. The rule is unlayered, so it wins over Tailwind's layered
+ * transition utilities; it has zero specificity, so unlayered component rules with a class selector
  * (such as .sj-hover-lift) still set their own transitions.
  */
 /* Ouro UI subtrees ([data-ouro], on each dialog, sheet and button root) are left out: they animate
@@ -332,20 +344,10 @@ select {
   transition: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  :where(html[data-theme-switching], html[data-theme-switching] *) {
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  :where(html[data-theme-switching] :is(input, textarea, select, button)) {
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.15s ease-in-out;
-  }
-}
-
 /* Controls whose colours show their state (pressed view buttons, filter chips, checkboxes) switch
-   instantly instead of fading with the theme rules above: mid-fade, their text and background
-   pass through near-identical greys (axe measured 1.19:1 to 2.87:1 on the shopping list's view
-   buttons right after a tap). Unlayered like the rules above, and more specific, so it wins. */
+   instantly: mid-fade, their text and background pass through near-identical greys (axe measured
+   1.19:1 to 2.87:1 on the shopping list's view buttons right after a tap). Unlayered like the reset
+   above, and more specific, so it also wins over a component rule's transition. */
 .sj-instant-state {
   transition: none;
 }
