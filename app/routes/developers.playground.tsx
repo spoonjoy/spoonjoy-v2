@@ -22,8 +22,8 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/button";
-import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
 type PlaygroundSurface = "full" | "connector" | "sdk";
@@ -947,17 +947,19 @@ export default function DeveloperPlayground() {
 
   return (
     <CookbookPage className="sj-developer-playground">
-      <CookbookHeader eyebrow={`API ${manifest.version}`} title="Spoonjoy API Playground" action={(
+      <PageHeader
+        eyebrow={`API ${manifest.version}`}
+        title="Spoonjoy API Playground"
+        size="lg"
+        divider
+        description="Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for private, scoped, and mutating calls."
+        actions={(
         <Button href="/api" plain>
           <Terminal data-slot="icon" aria-hidden="true" />
           Docs
         </Button>
-      )}>
-        <Text tone="muted" size="lg" className="leading-8">
-          Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for
-          private, scoped, and mutating calls.
-        </Text>
-      </CookbookHeader>
+      )}
+      />
 
       <section className="grid gap-4 border-y border-[var(--sj-border-strong)] py-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)]">
         <div className="grid gap-3">

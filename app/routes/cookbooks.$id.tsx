@@ -84,7 +84,8 @@ import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { toast } from "~/lib/ouro/toast";
-import { CookbookPage, CookbookHeader, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { shareContent, useDockSuppressed } from "~/components/navigation";
@@ -421,18 +422,19 @@ export default function CookbookDetail() {
         </div>
 
         <div className="grid gap-8 border-b border-[var(--sj-border-strong)] pb-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
-          <CookbookHeader
+          <PageHeader
             eyebrow="Cookbook"
             title={cookbook.title}
-            ruled={false}
-          >
-            <Text tone="muted" className="m-0">
-              By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
-              <span>
-                {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
-              </span>
-            </Text>
-          </CookbookHeader>
+            size="lg"
+            description={(
+              <>
+                By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
+                <span>
+                  {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
+                </span>
+              </>
+            )}
+          />
           <CookbookCoverArt
             title={cookbook.title}
             recipeCount={cookbook.recipes.length}

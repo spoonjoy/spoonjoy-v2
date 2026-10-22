@@ -24,7 +24,8 @@ import {
 import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 /**
  * Remote MCP connector endpoint (Streamable HTTP, `application/json`).
@@ -167,10 +168,10 @@ export default function McpPage() {
   return (
     <CookbookPage>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10">
-        <CookbookHeader
+        <PageHeader
           eyebrow="Remote connector"
           title="Spoonjoy MCP"
-          action={(
+          actions={(
             <>
               <Button href="/api" plain startIcon={Braces}>
                 Developer Platform
@@ -180,12 +181,10 @@ export default function McpPage() {
               </Button>
             </>
           )}
-        >
-          <p>
-            Spoonjoy MCP gives an authorized agent tools for kitchen work that is too detailed for ordinary app clicks:
-            creating recipes, importing from messy sources, reshaping cookbooks, and updating your shopping list.
-          </p>
-        </CookbookHeader>
+          size="lg"
+          divider
+          description="Spoonjoy MCP gives an authorized agent tools for kitchen work that is too detailed for ordinary app clicks: creating recipes, importing from messy sources, reshaping cookbooks, and updating your shopping list."
+        />
 
         <section className="min-w-0 border-y border-[var(--sj-border-strong)] py-5" aria-labelledby="mcp-tldr">
           <p id="mcp-tldr" className="sj-eyebrow">TL;DR</p>

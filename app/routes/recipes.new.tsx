@@ -4,8 +4,8 @@ import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/ro
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import {
   validateTitle,
@@ -434,15 +434,14 @@ export default function NewRecipe() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow="New recipe"
         title="Write the version future-you can actually cook."
-        action={<Link href="/recipes" className="inline-flex min-h-11 items-center">← Back to recipes</Link>}
-      >
-        <Text tone="muted">
-          Bring in a recipe you already have, or start with the story and the photo and shape the method into steps.
-        </Text>
-      </CookbookHeader>
+        actions={<Link href="/recipes" className="inline-flex min-h-11 items-center">← Back to recipes</Link>}
+        size="lg"
+        divider
+        description="Bring in a recipe you already have, or start with the story and the photo and shape the method into steps."
+      />
 
       <div className="mt-8 max-w-5xl">
         <RecipeImportPanel result={actionData?.importResult} />

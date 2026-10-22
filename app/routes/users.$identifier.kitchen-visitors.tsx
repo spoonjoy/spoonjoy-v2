@@ -10,7 +10,8 @@ import {
   type FellowChefRow,
 } from "~/lib/fellow-chefs.server";
 import { FellowChefList } from "~/components/users/FellowChefList";
-import { CookbookPage, CookbookHeader } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { formatRelativeTime } from "~/lib/time";
 
 interface SerializedFellowChefRow extends Omit<FellowChefRow, "latestInteractionAt"> {
@@ -131,13 +132,13 @@ export default function KitchenVisitorsPage() {
   return (
     <CookbookPage>
       <section className="mx-auto max-w-3xl">
-        <CookbookHeader eyebrow="Chef profile" title="Kitchen visitors">
-        <Heading level={2} size="sm" className="leading-6">
-          {viewerIsOwner
-            ? "Chefs who've engaged with your recipes"
-            : `Chefs who've engaged with ${profileUsername}'s recipes`}
-        </Heading>
-        </CookbookHeader>
+        <PageHeader eyebrow="Chef profile" title="Kitchen visitors" size="lg" divider>
+          <Heading level={2} size="sm" className="leading-6">
+            {viewerIsOwner
+              ? "Chefs who've engaged with your recipes"
+              : `Chefs who've engaged with ${profileUsername}'s recipes`}
+          </Heading>
+        </PageHeader>
 
         <div className="mt-6">
           <FellowChefList label="Kitchen visitors" rows={renderRows} emptyStateText={emptyStateText} />

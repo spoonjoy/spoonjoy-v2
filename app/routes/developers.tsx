@@ -21,7 +21,8 @@ import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 const DEVELOPER_SCOPES = [
   "public:read",
@@ -534,7 +535,13 @@ export default function Developers() {
 
   return (
     <CookbookPage className="sj-developer-page">
-      <CookbookHeader eyebrow="API v1" title="Spoonjoy Developer Platform" action={(
+      <PageHeader
+        eyebrow="API v1"
+        title="Spoonjoy Developer Platform"
+        size="lg"
+        divider
+        description="Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private shopping-list state, recipe-cover management, token management, or delegated access."
+        actions={(
         <div className="flex flex-wrap gap-2">
           <Button href="/api/playground">
             <Play data-slot="icon" aria-hidden="true" />
@@ -553,12 +560,8 @@ export default function Developers() {
             Connector spec
           </Button>
         </div>
-      )}>
-        <Text tone="muted" size="lg" className="leading-8">
-          Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private
-          shopping-list state, recipe-cover management, token management, or delegated access.
-        </Text>
-      </CookbookHeader>
+      )}
+      />
 
       <section className="grid gap-4 border-b border-[var(--sj-border-strong)] py-6 md:grid-cols-4">
         {[

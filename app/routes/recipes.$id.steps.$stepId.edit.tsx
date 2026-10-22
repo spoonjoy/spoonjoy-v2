@@ -28,7 +28,8 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { toast } from "~/lib/ouro/toast";
-import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
@@ -711,13 +712,14 @@ export default function EditStep() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow={`Step ${step.stepNum}`}
         title="Edit Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
-      >
-        <Text tone="muted">Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
-      </CookbookHeader>
+        actions={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        size="lg"
+        divider
+        description={`Keep the method for ${recipe.title} easy to follow in the kitchen.`}
+      />
 
       <div className="mt-8 max-w-4xl">
         <Form method="post" errors={formErrors} render={<updateFetcher.Form />} className="sj-form-section gap-6">

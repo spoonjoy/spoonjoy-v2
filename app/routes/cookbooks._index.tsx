@@ -5,7 +5,8 @@ import { Button } from "~/components/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readCookbookListFromD1, readCookbookListWithPrisma } from "~/lib/collection-reads.server";
@@ -60,18 +61,19 @@ export default function CookbooksIndexRedirect() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow="My Kitchen"
         title="Cookbooks"
-        action={(
+        actions={(
           <Button href="/cookbooks/new">
             <Plus data-slot="icon" className="size-4" />
             New cookbook
           </Button>
         )}
-      >
-        Cookbooks you built and saved in your kitchen.
-      </CookbookHeader>
+        size="lg"
+        divider
+        description="Cookbooks you built and saved in your kitchen."
+      />
 
       <DrawerSearch label="Search cookbooks" query={query} placeholder="weeknight, holidays, pasta" />
 

@@ -12,7 +12,8 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
-import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import {
@@ -464,13 +465,14 @@ export default function NewStep() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow={`Step ${nextStepNum}`}
         title="Add Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
-      >
-        <Text tone="muted">Write the next bit of method for {recipe.title}.</Text>
-      </CookbookHeader>
+        actions={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        size="lg"
+        divider
+        description={`Write the next bit of method for ${recipe.title}.`}
+      />
 
       <div className="mt-8 max-w-4xl">
         {/* The save's messages land on the fields by name; "general" shows at the top of the form. */}

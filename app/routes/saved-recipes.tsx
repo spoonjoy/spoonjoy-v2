@@ -5,7 +5,8 @@ import { Button } from "~/components/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import {
@@ -62,9 +63,13 @@ export default function SavedRecipes() {
   return (
     <CookbookPage>
       <RecipesSectionNav />
-      <CookbookHeader eyebrow="My Kitchen" title="Saved Recipes">
-        Recipes you saved into your cookbooks.
-      </CookbookHeader>
+      <PageHeader
+        eyebrow="My Kitchen"
+        title="Saved Recipes"
+        size="lg"
+        divider
+        description="Recipes you saved into your cookbooks."
+      />
 
       <DrawerSearch label="Search saved recipes" query={query} placeholder="cookbook, chef, ingredient" />
 

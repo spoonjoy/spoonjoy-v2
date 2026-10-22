@@ -1,6 +1,7 @@
 import type { Route } from "./+types/terms";
 import type { ReactNode } from "react";
-import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
@@ -27,9 +28,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function Terms() {
   return (
     <CookbookPage>
-      <CookbookHeader eyebrow="Spoonjoy" title="Terms of Service">
-        <Text tone="muted">Last updated {LAST_UPDATED}.</Text>
-      </CookbookHeader>
+      <PageHeader
+        eyebrow="Spoonjoy"
+        title="Terms of Service"
+        size="lg"
+        divider
+        description={`Last updated ${LAST_UPDATED}.`}
+      />
 
       <div className="mt-6 max-w-2xl">
         <Text tone="muted">

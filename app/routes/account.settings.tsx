@@ -20,7 +20,8 @@ import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { AccountDataSection } from "~/components/account/AccountDataSection";
-import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export function meta({}: Route.MetaArgs) {
@@ -136,10 +137,10 @@ export default function AccountSettings() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      <CookbookHeader
+      <PageHeader
         eyebrow="Kitchen identity"
         title="Account settings"
-        action={(
+        actions={(
           // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
           // so it works before the page hydrates and the next page loads fresh.
           <RouterForm method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
@@ -149,11 +150,10 @@ export default function AccountSettings() {
             </Button>
           </RouterForm>
         )}
-      >
-        <Text tone="muted" className="mt-4 max-w-2xl leading-7">
-          Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
-        </Text>
-      </CookbookHeader>
+        size="lg"
+        divider
+        description="Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents."
+      />
 
       <OAuthError error={oauthError} className="mt-4" />
 

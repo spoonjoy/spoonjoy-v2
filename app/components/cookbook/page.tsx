@@ -15,39 +15,6 @@ export function CookbookPage({
   );
 }
 
-// TODO(ouro-hx: page-header): A page's title area with its eyebrow, actions and media becomes HX's page header once it ships.
-export function CookbookHeader({
-  eyebrow,
-  title,
-  children,
-  action,
-  ruled = true,
-}: {
-  eyebrow: string;
-  title: string;
-  children?: ReactNode;
-  action?: ReactNode;
-  ruled?: boolean;
-}) {
-  return (
-    <header
-      className={clsx(
-        ruled ? "sj-rule-block" : null,
-        "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end",
-      )}
-    >
-      <div className="min-w-0">
-        <p className="sj-eyebrow">{eyebrow}</p>
-        <h1 className="font-sj-display mt-2 max-w-5xl text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] sm:text-5xl/12 lg:text-6xl/14">
-          {title}
-        </h1>
-        {children ? <div className="mt-3 max-w-2xl text-base/7 text-[var(--sj-ink-soft)]">{children}</div> : null}
-      </div>
-      {action ? <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">{action}</div> : null}
-    </header>
-  );
-}
-
 export function CookbookSectionTitle({
   children,
   className,

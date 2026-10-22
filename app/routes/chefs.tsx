@@ -5,7 +5,8 @@ import { Users } from "lucide-react";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
 import { chefActivity, chefRef } from "~/lib/chef-activity.server";
@@ -46,9 +47,13 @@ export default function Chefs() {
 
   return (
     <CookbookPage>
-      <CookbookHeader eyebrow="My Kitchen" title="Chefs">
-        Fellow chefs, chefs using your recipes, and the latest private activity around your kitchen.
-      </CookbookHeader>
+      <PageHeader
+        eyebrow="My Kitchen"
+        title="Chefs"
+        size="lg"
+        divider
+        description="Fellow chefs, chefs using your recipes, and the latest private activity around your kitchen."
+      />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <ChefList title="Fellow Chefs" rows={fellowChefs.rows} empty="No fellow chefs yet." />

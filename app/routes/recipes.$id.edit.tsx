@@ -14,7 +14,8 @@ import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { requireUserId } from "~/lib/session.server";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Link } from "~/components/ouro/link/link";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import { ImportedRecipeNotice } from "~/components/recipe/RecipeImportPanel";
 import {
@@ -619,10 +620,12 @@ export default function EditRecipe() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow="Edit recipe"
         title="Edit Recipe"
-        action={<Link href={`/recipes/${recipe.id}`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        actions={<Link href={`/recipes/${recipe.id}`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        size="lg"
+        divider
       />
 
       {imported ? <ImportedRecipeNotice sourceUrl={recipe.sourceUrl} /> : null}

@@ -1,6 +1,7 @@
 import type { Route } from "./+types/privacy";
 import type { ReactNode } from "react";
-import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
@@ -27,9 +28,13 @@ function Section({ id, title, children }: { id?: string; title: string; children
 export default function Privacy() {
   return (
     <CookbookPage>
-      <CookbookHeader eyebrow="Spoonjoy" title="Privacy Policy">
-        <Text tone="muted">Last updated {LAST_UPDATED}.</Text>
-      </CookbookHeader>
+      <PageHeader
+        eyebrow="Spoonjoy"
+        title="Privacy Policy"
+        size="lg"
+        divider
+        description={`Last updated ${LAST_UPDATED}.`}
+      />
 
       <div className="mt-6 max-w-2xl">
         <Text tone="muted">

@@ -8,7 +8,8 @@ import { Pagination } from "~/components/ouro/pagination/pagination";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import {
   normalizeMyRecipesPage,
   normalizeMyRecipesQuery,
@@ -96,18 +97,19 @@ export default function MyRecipes() {
   return (
     <CookbookPage>
       <RecipesSectionNav />
-      <CookbookHeader
+      <PageHeader
         eyebrow="My Kitchen"
         title="My Recipes"
-        action={(
+        actions={(
           <Button href="/recipes/new">
             <Plus data-slot="icon" className="size-4" />
             Create recipe
           </Button>
         )}
-      >
-        Recipes you wrote and keep in your kitchen.
-      </CookbookHeader>
+        size="lg"
+        divider
+        description="Recipes you wrote and keep in your kitchen."
+      />
 
       <DrawerSearch label="Search my recipes" query={query} placeholder="sumac, beans, serves 4" />
 
