@@ -1431,6 +1431,7 @@
         "fieldset",
         "file-field",
         "form",
+        "item-group",
         "link",
         "reorderable",
         "segmented-control",
@@ -1463,6 +1464,9 @@
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
           "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "item-group": [
+          "app/components/recipe/StepList.tsx"
         ],
         "link": [
           "app/components/recipe/RecipeImportPanel.tsx",
@@ -1805,6 +1809,7 @@
         "fieldset",
         "file-field",
         "form",
+        "item-group",
         "link",
         "reorderable",
         "segmented-control",
@@ -1838,6 +1843,9 @@
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
           "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "item-group": [
+          "app/components/recipe/StepList.tsx"
         ],
         "link": [
           "app/components/recipe/RecipeImportPanel.tsx",

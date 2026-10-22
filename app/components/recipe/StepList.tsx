@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import { Button } from '~/components/button'
 import { Link } from '~/components/ouro/link/link'
 import { ConfirmDialog } from '~/components/ouro/dialog/confirm-dialog'
+import { ItemGroup } from '~/components/ouro/item/item-group'
 import { Reorderable } from '~/components/ouro/reorderable/reorderable'
 import { StepEditorCard, type StepData } from './StepEditorCard'
 
@@ -113,33 +114,38 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
     [steps, onChange]
   )
 
+  const stepItems = steps.map((step) => ({
+    id: step.id,
+    label: `Step ${step.stepNum}`,
+    content: (
+      <StepEditorCard
+        stepNumber={step.stepNum}
+        step={step}
+        recipeId={recipeId}
+        onSave={(data) => handleStepSave(step.id, data)}
+        onChange={(data) => handleStepSave(step.id, data)}
+        onRemove={() => handleRemoveStep(step.id)}
+        disabled={disabled}
+        autoFocusInstructions={newlyAddedStepId === step.id}
+        onFocused={() => handleFocused(step.id)}
+      />
+    ),
+  }))
+
   return (
     <div>
       {steps.length === 0 ? (
         <p className="mb-4 text-sm text-[var(--sj-ink-soft)]">No steps yet. Add your first step below.</p>
       ) : (
-        <Reorderable
-          label="Steps"
-          className="mb-4"
-          onReorder={handleReorder}
-          items={steps.map((step) => ({
-            id: step.id,
-            label: `Step ${step.stepNum}`,
-            content: (
-              <StepEditorCard
-                stepNumber={step.stepNum}
-                step={step}
-                recipeId={recipeId}
-                onSave={(data) => handleStepSave(step.id, data)}
-                onChange={(data) => handleStepSave(step.id, data)}
-                onRemove={() => handleRemoveStep(step.id)}
-                disabled={disabled}
-                autoFocusInstructions={newlyAddedStepId === step.id}
-                onFocused={() => handleFocused(step.id)}
-              />
-            ),
-          }))}
-        />
+        // TODO(ouro-hx: reorderable disabled, ourostack/ouro-ui#185): HX Reorderable's own disabled
+        // state. Until then a save in flight shows the steps as a plain list, with no handles.
+        disabled ? (
+          <ItemGroup aria-label="Steps" variant="plain" ordered className="mb-4">
+            {stepItems.map((item) => <div key={item.id}>{item.content}</div>)}
+          </ItemGroup>
+        ) : (
+          <Reorderable label="Steps" className="mb-4" onReorder={handleReorder} items={stepItems} />
+        )
       )}
 
       {/* Use Link for existing recipes (edit mode), Button for new recipes (create mode) */}
