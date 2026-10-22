@@ -216,7 +216,7 @@ jobs:
         run: pnpm run verify:clean:generated-contract
 
       # Hand-rolled controls in app code may only fall: the scan must equal
-      # test/scripts/hx-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
+      # ouro-source-rules.baseline.json (see AGENTS.md, "The HX source rule").
       - name: 🧭 HX source rule
         if: github.event_name != 'pull_request'
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules
@@ -295,8 +295,7 @@ jobs:
       - name: 📥 Fetch the pull request's base commit
         run: node scripts/warning-gate.ts -- git fetch --quiet --no-tags --deepen=1 origin "$CI_SOURCE_SHA"
 
-      # Runs on every pull request (`vitest --changed` skips the rule's own test when only app code
-      # changes) and ratchets: no fingerprint may rise against the base commit's baseline unless
+      # Runs on every pull request and ratchets: no fingerprint may rise against the base commit's baseline unless
       # the new baseline records why under allowedRegressions.
       - name: 🧭 HX source rule
         run: node scripts/warning-gate.ts -- pnpm run hx:source-rules --base "$(git rev-parse HEAD^1)"

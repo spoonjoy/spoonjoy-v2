@@ -1,0 +1,5 @@
+{
+  "src": "app",
+  "exclude": ["app/lib/generated/"],
+  "hookPrefix": "sj"
+}

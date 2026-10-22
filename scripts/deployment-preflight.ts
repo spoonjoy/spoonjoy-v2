@@ -470,9 +470,8 @@ function commandStepSignature(...commands: string[]): string {
 const CI_CHANGED_TESTS_COMMAND =
   'SPOONJOY_CHANGED_SINCE="$(git rev-parse HEAD^1)" pnpm run verify:clean:test:changed';
 
-// The HX source rule (scripts/hx-source-rules.mjs) runs in both unit lanes: vitest --changed skips
-// its test when only the app code it scans changes. On pull requests it also ratchets against the
-// base commit (the merge commit's first parent, as for unit-changed's tests).
+// The HX source rule (HX's ouro-source-rules kit, scripts/ouro-source-rules.mjs) runs in both unit
+// lanes. On pull requests it also ratchets against the base commit (the merge commit's first parent, as for unit-changed's tests).
 const CI_HX_SOURCE_RULES_COMMAND = `${WARNING_GATE_COMMAND_PREFIX}pnpm run hx:source-rules`;
 const CI_HX_SOURCE_RULES_RATCHET_COMMAND = `${CI_HX_SOURCE_RULES_COMMAND} --base "$(git rev-parse HEAD^1)"`;
 
