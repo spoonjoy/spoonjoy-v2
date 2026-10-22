@@ -1,36 +1,10 @@
 {
-  "allowedRegressions": [
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::",
-      "count": 1,
-      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::aria-label=Search",
-      "count": 1,
-      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::",
-      "count": 1,
-      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
-    },
-    {
-      "fingerprint": "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::aria-label=Search",
-      "count": 1,
-      "reason": "The tab bar links moved out of the deleted AppLink wrapper into mobile-nav; they become HX TabBar items when ouro-ui#121 ships (TODO(ouro-hx: tab-bar))."
-    }
-  ],
   "offenders": {
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
     "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
     "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::raw-input::input::type=file,name=photo": 1,
     "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::uses-hand-rolled-control::app/components/account/ProfilePhotoCropper#ProfilePhotoCropper::": 1,
     "app/components/auth/auth-page.tsx::AuthPage::raw-anchor::a::": 3,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::control-state-style::react-router.Link::aria-label=Search": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::": 1,
-    "app/components/navigation/mobile-nav.tsx::MobileNav::raw-anchor::react-router.Link::aria-label=Search": 1,
     "app/components/navigation/phone-brand-bar.tsx::PhoneBrandBar::raw-anchor::react-router.Link::": 1,
     "app/components/navigation/skip-link.tsx::SkipLink::raw-anchor::a::": 1,
     "app/components/pwa/InstallPromptCard.tsx::InstallPromptCard::raw-button::button::type=button,aria-label=Dismiss install prompt": 1,
@@ -81,7 +55,6 @@
     "app/components/recipe/StepList.tsx::StepReorderItem::plain-element-handler::li::": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::raw-button::button::type=button,aria-label=Drag to reorder": 1,
     "app/components/recipe/StepList.tsx::StepReorderItem::uses-hand-rolled-control::app/components/recipe/StepEditorCard#StepEditorCard::": 1,
-    "app/root.tsx::App::uses-hand-rolled-control::app/components/navigation/mobile-nav#MobileNav::": 1,
     "app/root.tsx::App::uses-hand-rolled-control::app/components/navigation/phone-brand-bar#PhoneBrandBar::": 1,
     "app/root.tsx::App::uses-hand-rolled-control::app/components/pwa/InstallPromptCard#InstallPromptCard::": 1,
     "app/root.tsx::Layout::uses-hand-rolled-control::app/components/navigation/skip-link#SkipLink::": 1,

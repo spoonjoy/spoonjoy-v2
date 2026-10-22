@@ -61,6 +61,7 @@
       "link",
       "navbar",
       "popover",
+      "tab-bar",
       "text",
       "toaster"
     ],
@@ -79,6 +80,9 @@
       ],
       "popover": [
         "app/root.tsx"
+      ],
+      "tab-bar": [
+        "app/components/navigation/mobile-nav.tsx"
       ],
       "text": [
         "app/components/errors/route-error.tsx",
@@ -147,6 +151,7 @@
         "heading",
         "item",
         "item-group",
+        "tab-bar",
         "text",
         "toaster"
       ],
@@ -171,6 +176,9 @@
         ],
         "item-group": [
           "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/components/cookbook/KitchenHome.tsx"
@@ -1042,6 +1050,7 @@
         "item-group",
         "link",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1061,6 +1070,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx"
@@ -1127,6 +1139,7 @@
         "item-group",
         "link",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1148,6 +1161,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx",
@@ -1267,6 +1283,7 @@
         "heading",
         "item",
         "show-more",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -1283,6 +1300,9 @@
         ],
         "show-more": [
           "app/routes/recipes._index.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/recipes._index.tsx"
@@ -1547,6 +1567,7 @@
         "link",
         "number-field",
         "pagination",
+        "tab-bar",
         "text",
         "text-area",
         "text-field",
@@ -1597,6 +1618,9 @@
         ],
         "pagination": [
           "app/components/cook/RecipeCookView.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",
@@ -2032,6 +2056,7 @@
         "item-group",
         "link",
         "pagination",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -2053,6 +2078,9 @@
         ],
         "pagination": [
           "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks._index.tsx",
@@ -2179,6 +2207,7 @@
         "item-group",
         "link",
         "native-select",
+        "tab-bar",
         "text",
         "text-field",
         "toaster"
@@ -2207,6 +2236,9 @@
         ],
         "native-select": [
           "app/routes/cookbooks.$id.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks.$id.tsx"

@@ -156,6 +156,22 @@
   --font-heading: var(--font-sj-display);
 }
 
+/* Spoonjoy's phone tab bar stays solid charcoal under photo-white text in both themes. HX TabBar
+   draws its surface from --popover and its tabs from the muted and accent pairs, so those are
+   rebound for the bar alone. Unselected tabs take a solid mix rather than the translucent
+   --sj-on-photo-soft, whose overlapping icon strokes would show as seams. Its labels take the UI
+   face, like every other control. */
+[data-ouro="tab-bar"] {
+  font-family: var(--font-sj-ui);
+  --popover: var(--sj-photo-charcoal);
+  --foreground: var(--sj-on-photo);
+  --muted-foreground: color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal));
+  --accent: color-mix(in srgb, var(--sj-on-photo) 14%, var(--sj-photo-charcoal));
+  --accent-foreground: var(--sj-on-photo);
+  --border: var(--sj-photo-line);
+  --ring: var(--sj-on-photo);
+}
+
 /* Spoonjoy's primary action palette is not its brass text-link palette. Bind the
    released solid Button to our already contrast-qualified action tokens without
    changing Ouro's source or the inherited root provider. Its generic disabled
