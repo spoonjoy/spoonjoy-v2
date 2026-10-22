@@ -61,6 +61,8 @@ export function RecipeGrid({
       <Item
         key={recipe.id}
         as="article"
+        // HX ShowMore lists rows without lines between them, so a growing list outlines each row.
+        variant={loadMore ? 'outline' : undefined}
         href={`/recipes/${recipe.id}`}
         title={recipe.title}
         description={recipe.description || meta ? (
@@ -100,7 +102,7 @@ export function RecipeGrid({
           noMoreLabel={`Showing ${recipes.length} recipes`}
         />
       ) : (
-        <ItemGroup label="Recipes" variant="divided">{rows}</ItemGroup>
+        <ItemGroup aria-label="Recipes" variant="divided">{rows}</ItemGroup>
       )}
     </section>
   )
