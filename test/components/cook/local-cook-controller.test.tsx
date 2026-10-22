@@ -53,7 +53,7 @@ describe("useLocalCookController", () => {
     expect(result.current.activeStepIndex).toBe(0);
     expect(result.current.scaleFactor).toBe(1);
     expect(result.current.cookMode).toBe(false);
-    expect(result.current.timers.timers.get(2)?.durationSeconds).toBe(15 * 60);
+    expect(result.current.timers.find((timer) => timer.stepNum === 2)?.duration).toBe(15 * 60);
   });
 
   it("labels an untitled step's timer with nothing but its number", () => {
@@ -63,7 +63,7 @@ describe("useLocalCookController", () => {
     };
     const { result } = renderHook(() => useLocalCookController(untitled));
 
-    expect(result.current.timers.timers.get(2)?.label).toBe("");
+    expect(result.current.timers.find((timer) => timer.stepNum === 2)?.label).toBe("Step 2");
   });
 
   it("keeps the step inside the recipe", () => {
@@ -83,7 +83,7 @@ describe("useLocalCookController", () => {
     expect(result.current.cookMode).toBe(false);
   });
 
-  it("keeps progress, scale and timers in memory only", () => {
+  it("keeps progress and scale in memory only, and scopes its timers to this controller", () => {
     const { result } = renderHook(() => useLocalCookController(RECIPE));
     const [ingredientId] = Array.from(RECIPE.ingredientsByStep.values()).flat().map((ingredient) => ingredient.id);
     const [stepOutputId] = Array.from(RECIPE.stepOutputUsesByStep.values()).flat().map((reference) => reference.id);
@@ -95,17 +95,15 @@ describe("useLocalCookController", () => {
       result.current.setScale(2);
       result.current.goToStep(1);
     });
-    act(() => result.current.timers.start(2));
 
     expect(result.current.cookMode).toBe(true);
     expect(result.current.checkedIngredientIds.has(ingredientId)).toBe(true);
     expect(result.current.checkedStepOutputIds.has(stepOutputId)).toBe(true);
     expect(result.current.scaleFactor).toBe(2);
-    expect(result.current.timers.active.map((entry) => entry.stepNum)).toEqual([2]);
+    expect(result.current.timers.map((timer) => timer.timerId)).toEqual([`spoonjoy-cook-timer:local:${RECIPE.id}:2`]);
     expect(setItem).not.toHaveBeenCalled();
     expect(window.localStorage.length).toBe(0);
 
-    act(() => result.current.timers.clear(2));
     act(() => result.current.exitCookMode());
     expect(result.current.cookMode).toBe(false);
     expect(setItem).not.toHaveBeenCalled();

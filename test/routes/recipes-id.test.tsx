@@ -3484,8 +3484,8 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByTestId("recipe-header-cook-action"));
 
       const cookMode = await screen.findByTestId("cook-mode-panel");
-      expect(within(cookMode).getByText("5 min timer")).toBeInTheDocument();
-      expect(within(cookMode).getByText("05:00")).toBeInTheDocument();
+      expect(within(cookMode).getByText(/· 5 min$/)).toBeInTheDocument();
+      expect(within(cookMode).getByText("5:00")).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Start timer" }));
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Pause timer" }));
@@ -3494,7 +3494,7 @@ describe("Recipes $id Route", () => {
       expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
       await user.click(within(cookMode).getByRole("button", { name: "Cancel timer" }));
       expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
-      expect(within(cookMode).getByText("05:00")).toBeInTheDocument();
+      expect(within(cookMode).getByText("5:00")).toBeInTheDocument();
       await exitCookMode(cookMode);
       await settleBrowserTasks();
     });
@@ -3585,7 +3585,7 @@ describe("Recipes $id Route", () => {
         await user.click(screen.getByTestId("recipe-header-cook-action"));
 
         const cookMode = await screen.findByTestId("cook-mode-panel");
-        expect(within(cookMode).getByText("1 min timer")).toBeInTheDocument();
+        expect(within(cookMode).getByText(/· 1 min$/)).toBeInTheDocument();
         await settleBrowserTasks();
         vi.useFakeTimers();
         fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
@@ -3593,13 +3593,13 @@ describe("Recipes $id Route", () => {
           await vi.advanceTimersByTimeAsync(60_000);
         });
 
-        expect(within(cookMode).getByText("00:00")).toBeInTheDocument();
+        expect(within(cookMode).getByText("0:00")).toBeInTheDocument();
         expect(within(cookMode).getByText("Time's up")).toBeInTheDocument();
-        expect(within(cookMode).getByRole("button", { name: "Stop alarm" })).toBeInTheDocument();
+        expect(within(cookMode).getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
         expect(within(cookMode).getByRole("button", { name: "Restart timer" })).toBeInTheDocument();
 
         fireEvent.click(within(cookMode).getByRole("button", { name: "Restart timer" }));
-        expect(within(cookMode).getByText("01:00")).toBeInTheDocument();
+        expect(within(cookMode).getByText("1:00")).toBeInTheDocument();
         expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
         await act(async () => {
           fireEvent.click(within(cookMode).getByRole("button", { name: "Pause timer" }));
@@ -3643,24 +3643,24 @@ describe("Recipes $id Route", () => {
         await act(async () => {
           await vi.advanceTimersByTimeAsync(3_000);
         });
-        expect(within(cookMode).getByText("09:57")).toBeInTheDocument();
+        expect(within(cookMode).getByText("9:57")).toBeInTheDocument();
 
         fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
         const tray = within(cookMode).getByTestId("cook-timer-tray");
-        expect(within(tray).getByText("Step 1 · Boil pasta")).toBeInTheDocument();
+        expect(within(tray).getByText("Step 1 · Boil pasta", { selector: "p" })).toBeInTheDocument();
         await act(async () => {
           await vi.advanceTimersByTimeAsync(2_000);
         });
-        expect(within(tray).getByText("09:55")).toBeInTheDocument();
+        expect(within(tray).getByText("9:55")).toBeInTheDocument();
 
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Go to step 1" }));
+        fireEvent.click(within(tray).getByRole("link", { name: "Go to Step 1 · Boil pasta" }));
         expect(within(cookMode).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
-        expect(within(cookMode).getByText("09:55")).toBeInTheDocument();
-        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        expect(within(cookMode).getByText("9:55")).toBeInTheDocument();
+        expect(within(within(cookMode).getByTestId("cook-timer-tray")).queryAllByRole("listitem")).toHaveLength(0);
 
         fireEvent.click(within(cookMode).getByRole("button", { name: "Next step" }));
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Cancel timer for step 1" }));
-        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        fireEvent.click(within(within(cookMode).getByTestId("cook-timer-tray")).getByRole("button", { name: /^Cancel timer/ }));
+        expect(within(within(cookMode).getByTestId("cook-timer-tray")).queryAllByRole("listitem")).toHaveLength(0);
         fireEvent.click(within(cookMode).getByRole("button", { name: "Previous step" }));
         expect(within(cookMode).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
         expect(within(cookMode).getByText("10:00")).toBeInTheDocument();
@@ -3708,11 +3708,10 @@ describe("Recipes $id Route", () => {
         });
         const tray = within(cookMode).getByTestId("cook-timer-tray");
         expect(within(tray).getByText("Time's up")).toBeInTheDocument();
-        expect(screen.getByTestId("cook-timer-announcement")).toHaveTextContent("Time's up: Step 1");
         expect(vibrate).toHaveBeenCalled();
         expect(document.title).toContain("Time's up: Step 1");
-        fireEvent.click(within(cookMode).getByRole("button", { name: "Stop alarm for step 1" }));
-        expect(within(cookMode).queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+        fireEvent.click(within(tray).getByRole("button", { name: /^Dismiss/ }));
+        expect(within(tray).queryAllByRole("listitem")).toHaveLength(0);
         expect(document.title).not.toContain("Time's up");
 
         fireEvent.click(within(cookMode).getByRole("button", { name: "Start timer" }));
@@ -3722,9 +3721,9 @@ describe("Recipes $id Route", () => {
       }
       await exitCookMode(cookMode);
       const pageTray = await screen.findByTestId("cook-timer-tray");
-      expect(within(pageTray).getByText("Step 2 · Shape")).toBeInTheDocument();
-      fireEvent.click(within(pageTray).getByRole("button", { name: "Cancel timer for step 2" }));
-      expect(screen.queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
+      expect(within(pageTray).getByText("Step 2 · Shape", { selector: "p" })).toBeInTheDocument();
+      fireEvent.click(within(pageTray).getByRole("button", { name: /^Cancel timer/ }));
+      expect(within(screen.getByTestId("cook-timer-tray")).queryAllByRole("listitem")).toHaveLength(0);
     });
 
     describe("cook mode history", () => {
@@ -4433,7 +4432,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Processing Cover Recipe" });
       expect(screen.getByAltText("Photo of Processing Cover Recipe")).toHaveAttribute("src", "/photos/raw-spoon.jpg");
       expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
-      expect(screen.getByRole("status")).toHaveTextContent("Styling cover");
+      expect(within(screen.getByTestId("recipe-image")).getByRole("status")).toHaveTextContent("Styling cover");
 
       await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();

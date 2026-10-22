@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CookController, CookRecipe } from "~/components/cook/cook-controller";
 import { clampStepIndex, toggledId } from "~/components/cook/cook-controller";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
-import type { CookTimersController } from "~/hooks/use-cook-timers";
+import { Timer } from "~/components/ouro/timer/timer";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const ALIASES: Array<[string, string]> = [
@@ -52,10 +52,6 @@ function isRouterPackage(specifier: string): boolean {
   return /^(?:react-router|@react-router\/)/.test(specifier);
 }
 
-function idleTimers(): CookTimersController {
-  return { timers: new Map(), active: [], announcement: "", start: vi.fn(), pause: vi.fn(), resume: vi.fn(), clear: vi.fn() };
-}
-
 function fakeController(recipe: CookRecipe, overrides: Partial<CookController> = {}): CookController {
   return {
     recipe,
@@ -64,7 +60,7 @@ function fakeController(recipe: CookRecipe, overrides: Partial<CookController> =
     activeStepIndex: 0,
     scaleFactor: 1,
     cookMode: false,
-    timers: idleTimers(),
+    timers: [],
     toggleIngredient: vi.fn(),
     toggleStepOutput: vi.fn(),
     setScale: vi.fn(),
@@ -133,23 +129,21 @@ describe("RecipeCookView", () => {
 
   it("asks the controller to go to the step a timer belongs to", async () => {
     const goToStep = vi.fn();
-    const timers = idleTimers();
-    const entry: CookTimersController["active"][number] = {
-      stepNum: 2,
-      label: "Butter",
-      durationSeconds: 120,
-      stored: { status: "paused", durationSeconds: 120, remainingMs: 60_000 },
-      ringing: false,
-    };
-    timers.active = [entry];
-    timers.timers = new Map([[2, entry]]);
-    render(<RecipeCookView controller={fakeController(BARE_RECIPE, { cookMode: true, goToStep, timers })} />);
+    const timers = [{ stepNum: 2, label: "Step 2 · Butter", duration: 120, timerId: "recipe-cook-view:2" }];
+    render(
+      <>
+        <Timer label="Step 2 · Butter" duration={120} timerId="recipe-cook-view:2" />
+        <RecipeCookView controller={fakeController(BARE_RECIPE, { cookMode: true, goToStep, timers })} />
+      </>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
     const panel = screen.getByTestId("cook-mode-panel");
     expect(within(panel).getAllByText("No checklist items")).toHaveLength(2);
     expect(within(panel).getByText("No ingredients to check on this step.")).toBeInTheDocument();
-    await userEvent.click(within(panel).getByRole("button", { name: "Go to step 2" }));
+    await userEvent.click(within(panel).getByRole("link", { name: "Go to Step 2 · Butter" }));
     expect(goToStep).toHaveBeenCalledWith(1);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
   });
 });
 

@@ -7,7 +7,7 @@ import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
 import { IngredientList, type Ingredient, type StepReference } from "~/components/recipe/IngredientList";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
-import type { CookTimersController } from "~/hooks/use-cook-timers";
+import type { CookTimer } from "~/lib/cook-timers";
 import {
   SCALE_RANGE,
   clampStepIndex,
@@ -138,7 +138,7 @@ function CookModePanel({
   onScaleChange: (value: number) => void;
   onStepSelect: (index: number) => void;
   onExit: () => void;
-  timers: CookTimersController;
+  timers: readonly CookTimer[];
   onGoToStepNum: (stepNum: number) => void;
 }) {
   const stepTitle = step.stepTitle ?? `Step ${step.stepNum}`;
@@ -180,7 +180,7 @@ function CookModePanel({
           </Button>
         </header>
 
-        <CookTimerTray controller={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
+        <CookTimerTray timers={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
 
         <div
           data-testid="cook-mode-pager"
@@ -202,7 +202,7 @@ function CookModePanel({
             <p className="text-base/6 text-[var(--sj-ink-soft)] mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
               {step.description}
             </p>
-            <CookStepTimer stepNum={step.stepNum} controller={timers} />
+            <CookStepTimer timer={timers.find((timer) => timer.stepNum === step.stepNum)} />
           </article>
 
           {/* A <div>, not <aside>: this ingredient checklist and scale selector are core

@@ -903,7 +903,6 @@
       "file": "app/routes/test-kitchen.tsx",
       "sources": [
         "app/routes/test-kitchen.tsx",
-        "app/components/button.tsx",
         "app/components/cook/RecipeCookView.tsx",
         "app/components/cook/cook-controller.ts",
         "app/components/cookbook/page.tsx",
@@ -911,9 +910,7 @@
         "app/components/recipe/IngredientList.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
-        "app/hooks/use-cook-timers.ts",
         "app/lib/build-info.server.ts",
-        "app/lib/cook-alarm.client.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cook/local-cook-controller.ts",
         "app/lib/ingredient-affordances.ts",
@@ -933,14 +930,15 @@
         "page-header",
         "pagination",
         "switch",
-        "text"
+        "text",
+        "timer",
+        "timer-tray"
       ],
       "renders": {
         "aspect-ratio": [
           "app/routes/test-kitchen.tsx"
         ],
         "button": [
-          "app/components/button.tsx",
           "app/components/cook/RecipeCookView.tsx",
           "app/components/recipe/StepsSectionHeading.tsx",
           "app/routes/test-kitchen.tsx"
@@ -970,6 +968,12 @@
         "text": [
           "app/components/cook/RecipeCookView.tsx",
           "app/routes/test-kitchen.tsx"
+        ],
+        "timer": [
+          "app/components/recipe/CookTimers.tsx"
+        ],
+        "timer-tray": [
+          "app/components/recipe/CookTimers.tsx"
         ]
       }
     },
@@ -1529,7 +1533,6 @@
         "app/components/recipe/StepsSectionHeading.tsx",
         "app/hooks/use-back-navigation.ts",
         "app/hooks/use-cook-session-sync.ts",
-        "app/hooks/use-cook-timers.ts",
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-route-cook-controller.ts",
         "app/hooks/use-screen-wake-lock.ts",
@@ -1541,7 +1544,6 @@
         "app/lib/api-idempotency.server.ts",
         "app/lib/background-task.server.ts",
         "app/lib/chef-avatar.ts",
-        "app/lib/cook-alarm.client.ts",
         "app/lib/cook-session-sync.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cookbook-membership-compat.server.ts",
@@ -1630,6 +1632,8 @@
         "text",
         "text-area",
         "text-field",
+        "timer",
+        "timer-tray",
         "toaster",
         "toggle"
       ],
@@ -1727,6 +1731,12 @@
           "app/components/recipe/RecipePhotoStudio.tsx",
           "app/components/recipe/SpoonDialog.tsx",
           "app/routes/recipes.$id.tsx"
+        ],
+        "timer": [
+          "app/components/recipe/CookTimers.tsx"
+        ],
+        "timer-tray": [
+          "app/components/recipe/CookTimers.tsx"
         ],
         "toaster": [
           "app/components/navigation/mobile-nav.tsx"

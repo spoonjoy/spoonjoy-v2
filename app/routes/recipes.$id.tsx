@@ -579,15 +579,11 @@ export default function RecipeDetail() {
 
   return (
     <div className="sj-page pb-24">
-      {cookController.timers.active.length > 0 ? (
-        <div className="sticky top-0 z-20 bg-[var(--sj-page)]">
-          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-            <CookTimerTray controller={cookController.timers} />
-          </div>
+      <div className="sticky top-0 z-20 bg-[var(--sj-page)]">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <CookTimerTray timers={cookController.timers} />
         </div>
-      ) : (
-        <CookTimerTray controller={cookController.timers} />
-      )}
+      </div>
       {/* Recipe Header with prominent image */}
       <RecipeHeader
         title={recipe.title}

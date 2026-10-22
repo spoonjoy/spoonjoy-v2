@@ -1,7 +1,7 @@
 import type { Ingredient, StepReference } from "~/components/recipe/IngredientList";
-import type { CookTimersController } from "~/hooks/use-cook-timers";
+import type { CookTimer } from "~/lib/cook-timers";
 
-export type { Ingredient, StepReference, CookTimersController };
+export type { Ingredient, StepReference, CookTimer };
 
 /** One step as cook mode shows it. */
 export interface CookModeStep {
@@ -35,7 +35,8 @@ export interface CookController {
   scaleFactor: number;
   /** Cook mode is open; never true for a recipe without steps. */
   cookMode: boolean;
-  timers: CookTimersController;
+  /** Every step's timer, for the steps with a duration. */
+  timers: readonly CookTimer[];
   toggleIngredient(id: string): void;
   toggleStepOutput(id: string): void;
   setScale(value: number): void;

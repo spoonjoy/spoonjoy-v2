@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CookController, CookRecipe } from "~/components/cook/cook-controller";
 import { clampStepIndex, toggledId } from "~/components/cook/cook-controller";
-import { useCookTimers } from "~/hooks/use-cook-timers";
+import { cookTimers } from "~/lib/cook-timers";
 
 /** A cook's progress through one recipe, as a page without an account keeps it. */
 export interface CookProgress {
@@ -21,9 +21,10 @@ export interface CookProgressStorage {
 
 /**
  * A cook controller held in React state, for pages without a signed-in cook. With no `storage`
- * nothing is kept and closing the page forgets it. With `storage`, saved progress is read once
+ * no progress is kept and closing the page forgets it. With `storage`, saved progress is read once
  * the page has hydrated (so the server render and the first client render agree), and every
- * change after that is written back.
+ * change after that is written back. Step timers are HX timers either way, kept under their
+ * timerId so they carry on through a reload.
  */
 export function useLocalCookController(recipe: CookRecipe, storage?: CookProgressStorage): CookController {
   const [checkedIngredientIds, setCheckedIngredientIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -59,11 +60,7 @@ export function useLocalCookController(recipe: CookRecipe, storage?: CookProgres
     });
   }, [storage, restored, recipe.id, checkedIngredientIds, checkedStepOutputIds, activeStepIndex, scaleFactor]);
 
-  const timerSteps = useMemo(
-    () => recipe.steps.map((step) => ({ stepNum: step.stepNum, label: step.stepTitle ?? "", durationMinutes: step.duration })),
-    [recipe.steps],
-  );
-  const timers = useCookTimers(recipe.id, timerSteps, { persist: false });
+  const timers = useMemo(() => cookTimers(`local:${recipe.id}`, recipe.steps), [recipe.id, recipe.steps]);
 
   return {
     recipe,

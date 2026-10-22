@@ -256,7 +256,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       const panel = page.getByTestId("cook-mode-panel");
       const stepTimer = panel.getByTestId("cook-mode-timer");
       const tray = panel.getByRole("region", { name: "Running timers" });
-      const riceTimer = tray.getByTestId("cook-timer-tray-item-1");
+      const riceTimer = tray.getByRole("listitem").filter({ hasText: "Step 1 · Cook the rice" });
 
       await openLemonRiceDirectly(page);
       // The reload below must find cook mode on step 2, so wait for the account to save that step.
@@ -264,7 +264,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await page.getByRole("link", { name: "Cook mode", exact: true }).click();
       await expect(panel).toContainText("Step 1 of 3");
       // Step 1 ("Cook the rice") is seeded with a 15 minute timer.
-      await expect(stepTimer).toContainText("15 min timer");
+      await expect(stepTimer).toContainText("Step 1 · Cook the rice · 15 min");
       await stepTimer.getByRole("button", { name: "Start timer", exact: true }).click();
       await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
       await expect(stepTimer).toContainText("14:5");
@@ -292,7 +292,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
         await expect(riceTimer).toContainText("14:");
       });
 
-      await riceTimer.getByRole("button", { name: "Go to step 1", exact: true }).click();
+      await riceTimer.getByRole("link", { name: "Go to Step 1 · Cook the rice", exact: true }).click();
       await expect(panel).toContainText("Step 1 of 3");
       await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
       await stepTimer.getByRole("button", { name: "Cancel timer", exact: true }).click();
