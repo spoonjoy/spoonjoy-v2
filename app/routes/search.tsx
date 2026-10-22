@@ -1,4 +1,5 @@
 import type { Route } from "./+types/search";
+import { useCallback, useId } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
 import { Button } from "~/components/button";
@@ -93,28 +94,35 @@ function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: 
   const coverProvenanceLabel = typeof result.metadata.coverProvenanceLabel === "string"
     ? result.metadata.coverProvenanceLabel
     : null;
+  const id = useId();
+  const isPrivate = result.type === "shopping-list-item";
+  // The link is named by the card's visible type, Private mark, title and byline, so a screen
+  // reader hears what a sighted reader sees first and voice control can say any of it (product
+  // audit 2026-10-09, finding 19; WCAG 2.5.3). The title is the result's heading.
+  // TODO(ouro-hx: item description, ourostack/ouro-ui#183): HX Item describes its link by its
+  // description; until then the link's ref points aria-describedby at the cover note and the
+  // matching text, which describe the result rather than name it.
+  const describeLink = useCallback((link: HTMLAnchorElement | null) => {
+    link?.setAttribute("aria-describedby", `${id}-cover ${id}-snippet`);
+  }, [id]);
   return (
     <Item
       as="article"
       href={result.href}
-      // The type leads the title, so the link says what kind of result it is (product audit
-      // 2026-10-09, finding 19).
-      title={<><Badge variant="outline">{RESULT_LABELS[result.type]}</Badge> {result.title}</>}
-      description={
+      linkRef={describeLink}
+      title={
         <>
-          <Text size="sm">{result.subtitle}</Text>
-          <Text size="sm" lines={2}>{result.snippet}</Text>
+          <Badge variant="outline">{RESULT_LABELS[result.type]}</Badge>
+          {isPrivate ? <> <Badge variant="outline">Private</Badge></> : null}{" "}
+          <Heading level={2} size="md" className="inline">{result.title}</Heading>{" "}
+          <Text size="sm" className="block">{result.subtitle}</Text>
         </>
       }
+      description={<Text id={`${id}-snippet`} size="sm" lines={2}>{result.snippet}</Text>}
       media={result.imageUrl ? <img src={result.imageUrl} alt="" {...imageProps} /> : <Icon />}
       mediaSize={result.imageUrl ? "lg" : "icon"}
       mediaAbove={result.imageUrl ? "sm" : undefined}
-      actions={
-        <>
-          {result.type === "shopping-list-item" ? <Badge variant="outline">Private</Badge> : null}
-          <CoverProvenanceBadge label={coverProvenanceLabel} />
-        </>
-      }
+      actions={<span id={`${id}-cover`} className="contents"><CoverProvenanceBadge label={coverProvenanceLabel} /></span>}
       stackBelow="sm"
     />
   );

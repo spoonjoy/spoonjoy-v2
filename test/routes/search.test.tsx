@@ -337,17 +337,18 @@ describe("Search Route", () => {
       expect(screen.getByText("4 results")).toBeInTheDocument();
       expect(screen.getByText("Editorial photo")).toBeInTheDocument();
       expect(container.querySelector('img[src="https://example.com/tomato.jpg"]')).toBeInTheDocument();
-      // Each result is an HX Item whose link is named by the result's type and title (finding 19).
-      const recipeLink = screen.getByRole("link", { name: "Recipe Tomato Sauce" });
+      // Each result link is named by the card's type, title and byline (finding 19), and described
+      // by its cover note and matching text.
+      const recipeLink = screen.getByRole("link", { name: "Recipe Tomato Sauce Recipe by chef-ari" });
       expect(recipeLink).toHaveAttribute("href", "/recipes/recipe-1");
+      expect(recipeLink).not.toHaveAttribute("aria-label");
+      expect(recipeLink).toHaveAccessibleDescription("Editorial photo tomato basil simmer");
       expect(screen.getByRole("list", { name: "Results" })).toContainElement(recipeLink);
-      expect(recipeLink.closest('[data-ouro="item"]')).toHaveTextContent("Recipe by chef-ari");
-      expect(recipeLink.closest('[data-ouro="item"]')).toHaveTextContent("tomato basil simmer");
-      expect(screen.getByRole("link", { name: "Cookbook Sunday Sauces" })).toHaveAttribute("href", "/cookbooks/cookbook-1");
-      expect(screen.getByRole("link", { name: "Chef chef-ari" })).toHaveAttribute("href", "/users/chef-ari");
-      const listLink = screen.getByRole("link", { name: "Shopping List tomato paste" });
-      expect(listLink).toHaveAttribute("href", "/shopping-list");
-      expect(listLink.closest('[data-ouro="item"]')).toHaveTextContent("Private");
+      // The title is the result's heading, as before.
+      expect(screen.getByRole("heading", { level: 2, name: "Tomato Sauce" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /^Cookbook Sunday Sauces Cookbook by chef-ari$/ })).toHaveAttribute("href", "/cookbooks/cookbook-1");
+      expect(screen.getByRole("link", { name: /^Chef chef-ari Chef kitchen/ })).toHaveAttribute("href", "/users/chef-ari");
+      expect(screen.getByRole("link", { name: /^Shopping List Private tomato paste Shopping list item for chef-ari/ })).toHaveAttribute("href", "/shopping-list");
     });
 
     it("renders the unauthenticated private-shopping prompt", async () => {

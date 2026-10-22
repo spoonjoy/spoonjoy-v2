@@ -178,8 +178,13 @@ for (const theme of ["light", "dark"] as const) {
       expect(actual.fontSize).toBe(width >= 1024 ? "84px" : width >= 640 ? "72px" : "48px");
       measurements.push({ width, title: actual });
     }
+    // The result is an HX Item; its title is the result's <h2>, inside the link that it names with
+    // the type and the byline.
     expect(resultLink.closest('[data-ouro="item"]')).not.toBeNull();
-    expect(resultLink.textContent).toBe("Recipe Tomato soup for a crowded table");
+    const resultTitle = resultLink.querySelector("h2")!;
+    expect(resultTitle.tagName).toBe("H2");
+    expect(resultTitle.textContent).toBe("Tomato soup for a crowded table");
+    expect(resultLink.textContent).toMatch(/^Recipe\s*Tomato soup for a crowded table\s*By chef$/);
     await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
