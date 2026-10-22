@@ -183,6 +183,7 @@ const EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES = [
   "Activate pnpm",
   "Install dependencies",
   "Generate Prisma client",
+  "Bound apt's network waits",
   "Install Playwright Chromium",
   "Deploy staged release to Cloudflare Workers",
   "Record release source",
@@ -454,6 +455,9 @@ const CI_INVOCATION_VALIDATION_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}node scripts/workflow-security.mjs validate-ci-invocation`;
 const CI_DISPOSABLE_CLEANUP_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}pnpm run cleanup:local:apply`;
+// A stalled Ubuntu mirror once held CI's browser package install past its job's time limit; apt's
+// waits are bounded first, so a dead mirror fails over within a minute.
+const PLAYWRIGHT_APT_TIMEOUTS_COMMAND = `sudo sh -c 'printf "%s\\n" "Acquire::http::Timeout \\"20\\";" "Acquire::https::Timeout \\"20\\";" "Acquire::Retries \\"3\\";" > /etc/apt/apt.conf.d/99spoonjoy-timeouts'`;
 const PLAYWRIGHT_MAN_DB_PRESEED_COMMAND =
   `sudo sh -c 'printf "%s\\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'`;
 const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
@@ -581,6 +585,7 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
     ),
     commandStepSignature(
+      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_TIMEOUTS_COMMAND}`,
       `${WARNING_GATE_COMMAND_PREFIX}sudo apt-get update`,
       `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_MAN_DB_PRESEED_COMMAND}`,
       `${WARNING_GATE_COMMAND_PREFIX}sudo touch /var/lib/man-db/auto-update`,
@@ -979,6 +984,10 @@ const PRODUCTION_DEPLOY_STEPS: readonly Record<string, unknown>[] = [
   },
   { name: "Install dependencies", run: "pnpm install --frozen-lockfile" },
   { name: "Generate Prisma client", run: "pnpm prisma:generate" },
+  {
+    name: "Bound apt's network waits",
+    run: `printf 'Acquire::http::Timeout "20";\\nAcquire::https::Timeout "20";\\nAcquire::Retries "3";\\n' | sudo tee /etc/apt/apt.conf.d/99spoonjoy-timeouts`,
+  },
   { name: "Install Playwright Chromium", run: "pnpm exec playwright install --with-deps chromium" },
   {
     name: "Deploy staged release to Cloudflare Workers",
@@ -1086,7 +1095,8 @@ function productionDeployStepsAreCanonical(
     !runHasExecutableFragment(validation.run, PRODUCTION_VALIDATION_COMMAND)
   ) return false;
 
-  const artifact = steps[10];
+  const artifactIndex = EXPECTED_PRODUCTION_DEPLOY_STEP_NAMES.indexOf("Ensure release artifact exists");
+  const artifact = steps[artifactIndex];
   if (
     !exactObjectKeys(artifact, ["name", "if", "env", "run"]) ||
     artifact.if !== "always()" ||
@@ -1103,7 +1113,7 @@ function productionDeployStepsAreCanonical(
 
   return steps.every((step, index) => (
     index === 2 ||
-    index === 10 ||
+    index === artifactIndex ||
     JSON.stringify(step) === JSON.stringify(PRODUCTION_DEPLOY_STEPS[index])
   ));
 }

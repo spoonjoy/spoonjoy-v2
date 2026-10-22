@@ -125,7 +125,7 @@ describe("production release provenance", () => {
     const setup = stepNames.indexOf("Setup Node.js");
     const deploy = stepNames.indexOf("Deploy staged release to Cloudflare Workers");
     const record = stepNames.indexOf("Record release source");
-    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 8, 9]);
+    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 9, 10]);
   });
 
   it("freezes the deploy step inventory and security-sensitive shell bodies", () => {
@@ -143,6 +143,7 @@ describe("production release provenance", () => {
       "Activate pnpm",
       "Install dependencies",
       "Generate Prisma client",
+      "Bound apt's network waits",
       "Install Playwright Chromium",
       "Deploy staged release to Cloudflare Workers",
       "Record release source",
@@ -472,6 +473,7 @@ describe("CI warning suppression at source", () => {
     expect(ci).toContain([
       "      - name: 🎭 Install Playwright Browsers",
       "        run: |",
+      "          node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"Acquire::http::Timeout \\\"20\\\";\" \"Acquire::https::Timeout \\\"20\\\";\" \"Acquire::Retries \\\"3\\\";\" > /etc/apt/apt.conf.d/99spoonjoy-timeouts'",
       "          node scripts/warning-gate.ts -- sudo apt-get update",
       "          node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
       "          node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update",

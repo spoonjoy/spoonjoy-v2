@@ -47,6 +47,11 @@ jobs:
       - name: 📚 Build Storybook
         run: pnpm build-storybook
 
+      # A stalled Ubuntu mirror once held a Playwright system-package install for 29 minutes and
+      # ran the job out of time. Bound apt's waits, so a dead mirror fails over within a minute.
+      - name: Bound apt's network waits
+        run: printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' | sudo tee /etc/apt/apt.conf.d/99spoonjoy-timeouts
+
       # Ouro UI (app/components/ouro, installed from its shadcn registry) ships its own tests. They
       # run here, beside the Storybook they use, on every pull request, merge-queue run and push to
       # main: the Vitest browser tests in Chromium, WebKit and a touch phone with 100% coverage of
