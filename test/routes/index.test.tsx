@@ -498,8 +498,7 @@ describe("Kitchen Index Route", () => {
         expect.stringContaining("Newest Without Cover"),
         expect.stringContaining("Older With Cover"),
       ]);
-      expect(rows[0]).toHaveTextContent("01");
-      expect(rows[1]).toHaveTextContent("02");
+      expect(within(index).getByRole("list", { name: "Recipe index" }).tagName).toBe("OL");
       expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
       expect(screen.queryByText("Recently Updated")).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Open Recipe" })).not.toBeInTheDocument();
@@ -602,7 +601,8 @@ describe("Kitchen Index Route", () => {
         }));
       });
 
-      const styles = container.querySelectorAll("[style]");
+      // HX components set their own custom properties (Text's line clamp); the app sets none.
+      const styles = container.querySelectorAll("[style]:not([data-ouro])");
       expect(styles.length).toBe(0);
     });
 

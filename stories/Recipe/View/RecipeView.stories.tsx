@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '../../../app/components/button'
-import { Text } from '../../../app/components/text'
+import { Text } from '../../../app/components/ouro/text/text'
 import { RecipeHeader } from '../../../app/components/recipe/RecipeHeader'
 import { StepCard } from '../../../app/components/recipe/StepCard'
 import { StepsSectionHeading } from '../../../app/components/recipe/StepsSectionHeading'
@@ -163,7 +163,7 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
 
         {recipe.steps.length === 0 ? (
           <div className="sj-card rounded-[var(--sj-radius-surface)] p-8 text-center">
-            <Text className="mb-4">No steps added yet</Text>
+            <Text tone="muted" className="mb-4">No steps added yet</Text>
             {isOwner ? <Button href={`/recipes/${recipe.id}/edit`}>Add steps</Button> : null}
           </div>
         ) : (

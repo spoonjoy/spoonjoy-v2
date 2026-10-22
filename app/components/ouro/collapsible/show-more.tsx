@@ -14,7 +14,12 @@ import {
   textClass,
 } from "~/components/ouro/collapsible/collapsible-styles";
 
-/** Props every ShowMore takes. */
+/**
+ * Props every ShowMore takes.
+ *
+ * @claim "Props every ShowMore takes" registry/ouro/components/ouro/collapsible/show-more.tsx verify:fileLine(registry/ouro/components/ouro/collapsible/show-more.tsx, /export\sinterface\sShowMoreListProps\sextends\sShowMoreBaseProps/)
+ * @claim "Props every ShowMore takes" registry/ouro/components/ouro/collapsible/show-more.tsx verify:fileLine(registry/ouro/components/ouro/collapsible/show-more.tsx, /export\stype\sShowMoreLinesProps\s=\sShowMoreBaseProps\s&/)
+ */
 export interface ShowMoreBaseProps {
   /** The button's text while there is more to show. Translate it here. @default "Show more" */
   showMoreLabel?: string | undefined;
@@ -32,13 +37,25 @@ export interface ShowMoreBaseProps {
 export type ShowMoreLinesProps = ShowMoreBaseProps & {
   /** How many lines show while collapsed. The button appears only when the text is longer. */
   lines: number;
-  /** The text. Screen readers always read all of it. */
+  /**
+   * The text. Screen readers always read all of it.
+   *
+   * @claim "Screen readers always read all of" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with lines > keeps the full text for screen readers and in server HTML)
+   */
   children: ReactNode;
-  /** The button's text while everything shows. Translate it here. @default "Show less" */
+  /**
+   * The button's text while everything shows. Translate it here. @default "Show less"
+   *
+   * @claim "The button's text while everything shows" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items > takes translated labels)
+   */
   showLessLabel?: string | undefined;
   /** List modes only: not with `lines`. */
   items?: never;
-  /** Only with `items` and no `onShowMore`. */
+  /**
+   * Only with `items` and no `onShowMore`.
+   *
+   * @claim "Only with `items` and no `onShowMore`" registry/ouro/components/ouro/collapsible/show-more.test-d.ts verify:fileLine(registry/ouro/components/ouro/collapsible/show-more.test-d.ts, /initialCount:\s3;\sonShowMore:\s\(\)\s=>\svoid;\shasMore:\strue\s\}>\(\)\.not\.toExtend/)
+   */
   initialCount?: never;
   /** List modes only: not with `lines`. */
   ordered?: never;
@@ -63,6 +80,9 @@ export interface ShowMoreListProps extends ShowMoreBaseProps {
   /**
    * Every item, in order. Each renders in its own list item; give elements a `key`. With
    * `onShowMore`, append each new page here.
+   * @claim "Every item, in order" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items > shows initialCount items and an ordered list with ordered)
+   * @claim "Each renders in its own list" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items > shows initialCount items and an ordered list with ordered)
+   * @claim "With `onShowMore`, append each new page" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items a Server Component passed > knows an appended page from a replaced list, and focuses the first new item)
    */
   items: readonly ReactNode[];
   /** Renders an `<ol>`, for a ranked or numbered list. @default false (`<ul>`) */
@@ -77,7 +97,11 @@ export interface ShowMoreListProps extends ShowMoreBaseProps {
 export type ShowMoreItemsProps = ShowMoreListProps & {
   /** How many items show while collapsed. @default 5 */
   initialCount?: number | undefined;
-  /** The button's text while everything shows. Translate it here. @default "Show less" */
+  /**
+   * The button's text while everything shows. Translate it here. @default "Show less"
+   *
+   * @claim "The button's text while everything shows" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items > takes translated labels)
+   */
   showLessLabel?: string | undefined;
   /** Only for a list that loads more: with `items`, without `initialCount` or `lines`. */
   onShowMore?: never;
@@ -109,18 +133,31 @@ export type ShowMoreLoadProps = ShowMoreListProps & {
    * What screen readers hear after each page, from the number of items now shown. Name the
    * items and translate it here: `(count) => \`Showing ${count} recipes\``.
    * @default (count) => `Showing ${count} items`
+   * @claim "What screen readers hear after each" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore announcements > says how many items show after each page, through a polite status region)
    */
   loadedLabel?: ((count: number) => string) | undefined;
-  /** What screen readers hear when a page comes back empty and there is no more. Translate it here. @default "No more items" */
+  /**
+   * What screen readers hear when a page comes back empty and there is no more. Translate it here. @default "No more items"
+   *
+   * @claim "What screen readers hear when a" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore announcements > says there are no more items when a later page comes back empty, in the words of noMoreLabel)
+   */
   noMoreLabel?: string | undefined;
   /**
    * The next page's URL, so the button is a link that works before JavaScript loads. With
    * JavaScript, pressing it calls `onShowMore` instead.
    */
   href?: string | undefined;
-  /** Only with `items` and no `onShowMore`. */
+  /**
+   * Only with `items` and no `onShowMore`.
+   *
+   * @claim "Only with `items` and no `onShowMore`" registry/ouro/components/ouro/collapsible/show-more.test-d.ts verify:fileLine(registry/ouro/components/ouro/collapsible/show-more.test-d.ts, /initialCount:\s3;\sonShowMore:\s\(\)\s=>\svoid;\shasMore:\strue\s\}>\(\)\.not\.toExtend/)
+   */
   initialCount?: never;
-  /** A list that loads more never shrinks, so it has no "Show less". */
+  /**
+   * A list that loads more never shrinks, so it has no "Show less".
+   *
+   * @claim "A list that loads more never" registry/ouro/components/ouro/collapsible/show-more.test-d.ts verify:fileLine(registry/ouro/components/ouro/collapsible/show-more.test-d.ts, /showLessLabel:\s"Less"\s\}>\(\)\.not\.toExtend/)
+   */
   showLessLabel?: never;
 };
 
@@ -144,6 +181,7 @@ const EMPTY = Symbol("empty");
 /**
  * What stays the same for an item across renders: an element's key, or a text or number item
  * itself. An element without a key is a new object every render, so it has none (null).
+ * @claim "An element without a key is" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items a Server Component passed > keys each row by its item's own key, so a row keeps its node when the order changes)
  */
 function identity(item: ReactNode): unknown {
   // An item a Server Component passed can be a lazy wrapper, a new object on every payload.
@@ -178,6 +216,7 @@ const isCount = (value: unknown): value is number => typeof value === "number" &
  * <ShowMore items={reviews.map((review) => <Review key={review.id} {...review} />)} initialCount={3} />
  * <ShowMore lines={3}>{recipe.description}</ShowMore>
  * <ShowMore items={rows} hasMore={Boolean(nextCursor)} loading={loading} onShowMore={loadNext} href={nextHref} />
+ * @claim "ShowMore draws the list itself: put" registry/ouro/components/ouro/collapsible/show-more.test.tsx verify:testExists(registry/ouro/components/ouro/collapsible/show-more.test.tsx::ShowMore with items > lets app layout classes win and keys rows by their own keys)
  */
 export function ShowMore(props: ShowMoreProps): JSX.Element {
   const { showMoreLabel = "Show more", className, ref, maxLines, limit } = props;
@@ -262,7 +301,7 @@ function ShowMoreText({
         {children}
       </div>
       {overflowing && (
-        <Button variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" onClick={() => setExpanded(!expanded)}>
+        <Button variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" data-ouro-control="show-more" data-ouro-part="toggle" onClick={() => setExpanded(!expanded)}>
           {expanded ? showLessLabel : showMoreLabel}
         </Button>
       )}
@@ -363,7 +402,7 @@ function ShowMoreList(props: (ShowMoreItemsProps | ShowMoreLoadProps) & { showMo
       variant="plain"
       size="sm"
       className="-ms-(--ouro-button-px)"
-      data-ouro-show-more-toggle=""
+      data-ouro-show-more-toggle="" data-ouro-control="show-more" data-ouro-part="toggle"
       loading={loading}
       loadingLabel={load.loadingLabel}
       onClick={press}
@@ -372,7 +411,7 @@ function ShowMoreList(props: (ShowMoreItemsProps | ShowMoreLoadProps) & { showMo
       {showMoreLabel}
     </Button>
   ) : (
-    <Button ref={buttonRef as Ref<HTMLButtonElement>} variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" onClick={press}>
+    <Button ref={buttonRef as Ref<HTMLButtonElement>} variant="plain" size="sm" className="-ms-(--ouro-button-px)" data-ouro-show-more-toggle="" data-ouro-control="show-more" data-ouro-part="toggle" onClick={press}>
       {expanded ? showLessLabel : showMoreLabel}
     </Button>
   );

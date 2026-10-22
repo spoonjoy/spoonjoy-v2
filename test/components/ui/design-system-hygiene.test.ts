@@ -35,15 +35,38 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// All265 installed files were individually matched to the qualified v1.0.2 public
-// manifest at 22f0b72388250d475bf8a34c60f8a164a0c3e932, reversing ONLY the CLI alias
-// transformation. This digest is of the TAG'S selected sorted (path, SHA256) pairs,
-// not a blanket path-prefix trust rule or a hash regenerated from arbitrary app edits.
-const publishedPaths = new Set(listTextFiles(["app/components/ouro", "app/lib/ouro"]));
+// Every file the HX CLI installs, with the SHA-256 of the v1.2.0 tag's bytes (tag commit
+// 96542d72b60b436dd6a60447d888a4c9e9d5edf7), whatever its extension or folder: components, lib
+// modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
+// (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
+// below pins the map itself, so neither an installed file nor its recorded hash can change here.
+const installed = JSON.parse(readSourceFile(".github/ouro-hx-installed.json")) as {
+  tag: string;
+  tagCommit: string;
+  files: Record<string, string>;
+};
+const installedFiles = Object.keys(installed.files).sort();
+// Spoonjoy's own files inside the folders HX installs into.
+const SPOONJOY_FILES_IN_HX_FOLDERS = ["e2e/ouro-census/census.baseline.json"];
+const HX_FOLDERS = ["app/components/ouro", "app/lib/ouro", "e2e/ouro", "e2e/ouro-census"];
+const publishedPaths = new Set(installedFiles);
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+// The CLI rewrites HX's registry aliases to the app's; this reverses only that.
 const normalizedRegistrySource = (source: string) => source
   .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
   .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/");
+function listAllFiles(dirs: string[]): string[] {
+  const found: string[] = [];
+  function walk(relativeDir: string) {
+    for (const entry of readdirSync(resolve(process.cwd(), relativeDir))) {
+      const relativePath = `${relativeDir}/${entry}`;
+      if (statSync(resolve(process.cwd(), relativePath)).isDirectory()) walk(relativePath);
+      else found.push(relativePath);
+    }
+  }
+  dirs.forEach(walk);
+  return found;
+}
 function hasAppTrackingViolation(file: string, source: string) {
   return !publishedPaths.has(file) && source.includes("tracking-[-");
 }
@@ -52,12 +75,22 @@ describe("Spoonjoy UI design-system hygiene", () => {
   it("does not ship or hide the retired Catalyst source directory", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/ui"))).toBe(false);
   });
-  it("exempts only the exact unmodified installed public registry inventory", () => {
-    const pairs = [...publishedPaths].sort().map((file) => [
-      file, sha256(normalizedRegistrySource(readSourceFile(file))),
-    ]);
-    expect(pairs).toHaveLength(265);
-    expect(sha256(JSON.stringify(pairs))).toBe("ca799f79b090f2587fd41aac94252414418775122d32e10fbac8310093b8adbf");
+  it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
+    expect(installed.tag).toBe("v1.2.0");
+    expect(installedFiles).toHaveLength(547);
+    expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
+      .toBe("0483e65796100b0cc2fb58ac2abb34c2abd5e04120fc36b724e68f94c47b0a8f");
+    const actual = Object.fromEntries(installedFiles.map((file) => [
+      file,
+      existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,
+    ]));
+    expect(actual).toEqual(installed.files);
+  });
+
+  it("keeps no unpinned file in the folders HX installs into", () => {
+    const unpinned = listAllFiles(HX_FOLDERS)
+      .filter((file) => !publishedPaths.has(file) && !SPOONJOY_FILES_IN_HX_FOLDERS.includes(file));
+    expect(unpinned).toEqual([]);
   });
 
   it("rejects prohibited app-authored tracking even under a registry-looking prefix", () => {

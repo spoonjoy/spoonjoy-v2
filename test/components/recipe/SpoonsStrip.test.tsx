@@ -82,18 +82,10 @@ describe("SpoonsStrip", () => {
     expect(link).toHaveAttribute("href", "/users/alice");
   });
 
-  it("truncates long notes and exposes an expand toggle", async () => {
+  it("keeps a long note whole for screen readers inside HX ShowMore", () => {
     const longNote = "a".repeat(220);
     renderWithRouter(<SpoonsStrip spoons={[makeSpoon({ note: longNote })]} />);
-    const toggle = screen.getByRole("button", { name: /show more/i });
-    expect(toggle).toBeInTheDocument();
-    // truncated by default
-    expect(screen.queryByText(longNote)).toBeNull();
-    await userEvent.click(toggle);
-    expect(screen.getByText(longNote)).toBeInTheDocument();
-    const collapse = screen.getByRole("button", { name: /show less/i });
-    await userEvent.click(collapse);
-    expect(screen.queryByText(longNote)).toBeNull();
+    expect(screen.getByText(longNote).closest('[data-ouro="show-more"]')).not.toBeNull();
   });
 
   it("when showRecipe=true renders the recipe title and a link to /recipes/<id>", () => {
@@ -276,8 +268,8 @@ describe("SpoonsStrip", () => {
       </>,
     );
     const times = document.querySelectorAll("time");
-    // One in the full row; the compact row has one for phones and one for wider screens.
-    expect(times).toHaveLength(3);
+    // One in each row's actions.
+    expect(times).toHaveLength(2);
     for (const time of times) {
       expect(time).toHaveTextContent("3 hr ago");
       expect(time).toHaveAttribute("datetime", cookedAt);

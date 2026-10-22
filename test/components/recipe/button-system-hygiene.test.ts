@@ -9,8 +9,6 @@ const RECIPE_BUTTON_SURFACE_FILES = [
   'app/components/recipe/ParsedIngredientRow.tsx',
   'app/components/recipe/IngredientParseInput.tsx',
   'app/components/recipe/RecipeImageUpload.tsx',
-  'app/components/recipe/StepDependencySelector.tsx',
-  'app/components/recipe/SaveToCookbookDropdown.tsx',
 ]
 
 const THEME_FILE = 'app/styles/tailwind.css'

@@ -1,4 +1,4 @@
-export { MobileNav } from './mobile-nav'
+export { MobileNav, MobileNavToaster } from './mobile-nav'
 export { RecipesSectionNav } from './recipes-section-nav'
 export {
   DockContext,

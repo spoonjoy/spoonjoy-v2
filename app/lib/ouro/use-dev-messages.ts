@@ -21,6 +21,7 @@ export type DevWarning = readonly [problem: string, fix: string] | false | undef
  *     ? () => [isLoading !== undefined && ["isLoading is not a prop", "<Button loading>"]]
  *     : undefined,
  * );
+ * @claim "`collect` returns the messages for the" registry/ouro/lib/ouro/use-dev-messages.test.tsx verify:testExists(registry/ouro/lib/ouro/use-dev-messages.test.tsx::useDevWarnings > logs each message a component collects once per instance, after render)
  */
 export function useDevWarnings(component: string, collect: (() => DevWarning[]) | undefined): void {
   const key = useRef({});

@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { Button } from "~/components/button";
 import {
   PWA_INSTALL_DISMISSED_STORAGE_KEY,
@@ -49,6 +50,7 @@ interface UseInstallPromptResult {
   dismiss: () => void;
 }
 
+// TODO(ouro-hx: install-prompt, lib-use-install-prompt, spoonjoy/spoonjoy-v2#570): The install-the-app prompt and its hook become HX's InstallPrompt and useInstallPrompt in #570.
 export function useInstallPrompt(opts: UseInstallPromptOptions): UseInstallPromptResult {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEventLike | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -149,27 +151,9 @@ export function InstallPromptCard(props: { options?: UseInstallPromptOptions }) 
             Add Spoonjoy to your home screen for faster access and a more native feel.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss install prompt"
-          className="rounded-full p-1 text-[var(--sj-ink-muted)] hover:text-[var(--sj-tomato)]"
-        >
-          {/* Lightweight X glyph; avoid pulling in icon dep just for this. */}
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-            className="h-4 w-4"
-          >
-            <path
-              d="M4 4l8 8M12 4l-8 8"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        <Button plain aria-label="Dismiss install prompt" onClick={dismiss}>
+          <X />
+        </Button>
       </div>
       <div className="flex justify-end gap-2 px-4 pb-4">
         <Button plain onClick={dismiss}>

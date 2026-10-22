@@ -8,7 +8,11 @@ export type FormErrors = Record<string, ErrorMessages | null | undefined>;
 /** A read-only display projection for Form and EditSheet; mutable raw `FormErrors` remain valid inputs. */
 export type ReadonlyFormErrors = Readonly<Record<string, ReadonlyErrorMessages | null | undefined>>;
 
-/** An accepted-answer key, compared with `Object.is`. Advance it on acceptance, never submit start. */
+/**
+ * An accepted-answer key, compared with `Object.is`. Advance it on acceptance, never submit start.
+ *
+ * @claim "Advance it on acceptance, never submit" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > answer-bearing errors > keeps a cached answer cleared for key zero, including rebuilt sources, and restores once for its next acceptance key)
+ */
 export type FormErrorKey = string | number | bigint | boolean | symbol | object;
 
 declare const errorValueBrand: unique symbol;
@@ -16,7 +20,7 @@ declare const errorValueBrand: unique symbol;
 /**
  * A read-only message snapshot with private, in-memory answer identity. Create it with
  * `formErrors`; JSON, spread, structured cloning and server-component transport retain
- * only the messages, not its identity. Reconstruct it beside Form in each environment.
+ * only the messages, not its identity. Reconstruct it beside Form on the server and in the browser.
  * Array containers are snapshotted and frozen; React elements are retained, not cloned.
  * React nodes are render inputs, not a promise that arbitrary node graphs JSON-serialize.
  * Snapshot arrays are readonly, so use this type or `ReadonlyFormErrors`, not a mutable
@@ -25,7 +29,11 @@ declare const errorValueBrand: unique symbol;
  */
 export type FormErrorValue = ReadonlyFormErrors & { readonly [errorValueBrand]: true };
 
-/** The private identity decoded by Form; tokens never retain source objects. @internal */
+/**
+ * The private identity decoded by Form; tokens never retain source objects. @internal
+ *
+ * @claim "The private identity decoded by Form" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > interns object keys without retaining the key payload and lets the key override source identity)
+ */
 export type FormErrorIdentity = { readonly kind: "answer" | "key" | "none"; readonly value: FormErrorKey | undefined };
 
 const values = new WeakMap<object, FormErrorIdentity>();
@@ -68,6 +76,10 @@ const isObject = (value: unknown): value is object => (typeof value === "object"
  * @example
  * // Reused payload: acceptance.key changes on completed acceptance, not while pending.
  * <Form errors={formErrors(acceptance.data, acceptance.data.errors, { key: acceptance.key })} />
+ * @claim "`, `false`, `NaN` and signed zero; an explicitly" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > uses Object.is for keys, including negative zero, without a global scalar intern table)
+ * @claim "`, `false`, `NaN` and signed zero; an explicitly" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > decodes null, undefined and ordinary records as raw absence, not answer-bearing values)
+ * @claim "No source properties are read or" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > retains empty selected values without treating them as answers or accessing source properties)
+ * @claim "No source properties are read or" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > interns object keys without retaining the key payload and lets the key override source identity)
  */
 export function formErrors(answer: object | null | undefined, messages?: ReadonlyFormErrors | null): FormErrorValue;
 export function formErrors(answer: unknown, messages: ReadonlyFormErrors | null | undefined, options: { key: FormErrorKey }): FormErrorValue;
@@ -104,7 +116,11 @@ export function formErrors(answer: unknown, messages?: ReadonlyFormErrors | null
   return Object.freeze(snapshot) as FormErrorValue;
 }
 
-/** Reads metadata without accessing any payload property; a copied record has none. @internal */
+/**
+ * Reads metadata without accessing any payload property; a copied record has none. @internal
+ *
+ * @claim "Reads metadata without accessing any payload" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > snapshots records and array containers without cloning React nodes or freezing caller data)
+ */
 export function formErrorIdentity(value: ReadonlyFormErrors | null | undefined): FormErrorIdentity | undefined {
   return value === null || value === undefined ? undefined : values.get(value);
 }

@@ -10,10 +10,10 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Form as RouterForm, useNavigation } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "~/components/button";
-import { Field } from "~/components/ouro/field/field";
-import { FieldControl } from "~/components/ouro/field/field-parts";
+import { FileField } from "~/components/ouro/file-field/file-field";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
+import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { formErrors } from "~/lib/ouro/form-answer";
@@ -31,10 +31,10 @@ const URL_MAX_LENGTH = 2048;
 // Listing the types (not image/*) makes iPhones hand over a JPEG instead of a HEIC photo.
 const PHOTO_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 
-const KIND_OPTIONS: Array<{ kind: RecipeImportKind; label: string }> = [
-  { kind: "link", label: "From a link" },
-  { kind: "text", label: "Paste text" },
-  { kind: "photo", label: "From a photo" },
+const KIND_OPTIONS: Array<{ value: RecipeImportKind; label: string }> = [
+  { value: "link", label: "From a link" },
+  { value: "text", label: "Paste text" },
+  { value: "photo", label: "From a photo" },
 ];
 
 const FIELD_NAME: Record<RecipeImportKind, string> = { link: "url", text: "text", photo: "photo" };
@@ -89,28 +89,14 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
         Spoonjoy reads it into steps and ingredients, then opens it in the editor so you can check it over.
       </p>
 
-      <div
-        className="mt-6 grid max-w-xl grid-cols-3 border-y border-[var(--sj-border)] font-sj-ui text-xs font-bold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]"
-        role="group"
-        aria-label="How to bring the recipe in"
-      >
-        {KIND_OPTIONS.map((option) => (
-          <button
-            key={option.kind}
-            type="button"
-            onClick={() => setKind(option.kind)}
-            aria-pressed={kind === option.kind}
-            className={[
-              "sj-instant-state min-h-11 px-3 first:text-left last:text-right",
-              kind === option.kind
-                ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                : "bg-transparent hover:text-[var(--sj-ink)]",
-            ].join(" ")}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="How to bring the recipe in"
+        hideLabel
+        items={KIND_OPTIONS}
+        value={kind}
+        onValueChange={(value) => setKind(value as RecipeImportKind)}
+        className="mt-6 max-w-xl"
+      />
 
       <Form
         // Each way in is its own form, so coming back to one shows its answer without taking focus.
@@ -140,20 +126,15 @@ export function RecipeImportPanel({ result }: { result?: RecipeImportActionData 
             description="Any recipe page, or a YouTube or TikTok video with the recipe in its description."
           />
         ) : kind === "photo" ? (
-          <Field
+          <FileField
             key="photo"
             label="Recipe photo"
             name="photo"
+            accept={PHOTO_ACCEPT}
             required
             disabled={pending}
             description="A recipe card, a cookbook page or a screenshot, with the whole recipe in frame. Spoonjoy reads the title, ingredients and steps from it."
-          >
-            <FieldControl
-              type="file"
-              accept={PHOTO_ACCEPT}
-              render={<input className="file:me-3 file:h-full file:cursor-pointer file:border-0 file:bg-transparent file:p-0 file:font-semibold file:text-[var(--sj-ink)]" />}
-            />
-          </Field>
+          />
         ) : (
           <TextArea
             key="text"

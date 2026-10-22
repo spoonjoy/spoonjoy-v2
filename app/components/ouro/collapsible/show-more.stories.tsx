@@ -65,7 +65,7 @@ export const Playground: Story = {};
 
 /** A list cut to its first four, and a description cut to three lines. */
 export const InContext: Story = {
-  parameters: { screenshot: { name: "show-more" } },
+  parameters: { mode: "lines", screenshot: { name: "show-more" } },
   render: (args) => (
     <Surface>
       <ShowMore lines={3}>
@@ -78,6 +78,7 @@ export const InContext: Story = {
 
 /** Pages from the server: Show more loads three more and moves focus to the first new one. */
 export const LoadMore: Story = {
+  parameters: { mode: "load" },
   render: function Render() {
     const [count, setCount] = useState(3);
     const [loading, setLoading] = useState(false);

@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 
+// TODO(ouro-hx: skip-link, spoonjoy/spoonjoy-v2#570): Replaced by HX's SkipLink in #570; until then this is the one hand-rolled skip link.
 /**
  * "Skip to main content" link. It keeps `href="#main"` for no-JS, but with JS a plain click moves
  * focus to the main landmark without adding a `#main` history entry, so Back after skipping

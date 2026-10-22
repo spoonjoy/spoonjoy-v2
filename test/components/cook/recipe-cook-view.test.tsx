@@ -94,7 +94,7 @@ describe("RecipeCookView", () => {
     expect(modules).toContain("app/components/cook/cook-controller.ts");
     expect(modules).toContain("app/components/recipe/IngredientList.tsx");
     // Two imports away: the walk follows the view's imports' imports.
-    expect(modules).toContain("app/components/shopping/checklist-row.tsx");
+    expect(modules).toContain("app/components/ouro/checklist/checklist.tsx");
     expect(packages).toContain("react");
     expect(Array.from(packages).filter(isRouterPackage)).toEqual([]);
   });

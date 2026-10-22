@@ -13,7 +13,12 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 /** An icon component, such as one from `lucide-react` or `@heroicons/react`. */
 export type BadgeIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
-/** Props shared by every kind of Badge (`href` makes a link, `onClick` a button). */
+/**
+ * Props shared by every kind of Badge (`href` makes a link, `onClick` a button).
+ *
+ * @claim "Props shared by every kind of" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > renders a button with onClick, with a touch target and press feedback)
+ * @claim "Props shared by every kind of" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > renders a link with href through the provider's linkComponent)
+ */
 export interface BadgeBaseProps {
   /**
    * Color role from the theme, named after its token. `secondary` is a quiet neutral
@@ -49,7 +54,7 @@ export interface BadgeBaseProps {
   onClick?: MouseEventHandler<HTMLElement> | undefined;
   /** Icon before the label. Pass the component, not an element: `icon={CheckIcon}`. */
   icon?: BadgeIcon | undefined;
-  /** The label: a word or two, or a count. */
+  /** The label: a short word, or a count. */
   children: ReactNode;
   /** Layout only: margins, grid placement (`ms-2`). Appearance classes warn in development; use `tone` and `variant`. */
   className?: string | undefined;
@@ -66,9 +71,15 @@ export type BadgeLinkModeProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, k
    * Where the link goes. Internal paths render through `OuroProvider`'s
    * `linkComponent` (your router's link); absolute URLs render as a plain `<a>`, and
    * with `target="_blank"` always get `rel="noopener noreferrer"`.
+   * @claim "Internal paths render through `OuroProvider`'s `linkComponent`" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > renders an absolute URL as a plain <a> with a safe rel in a new tab)
+   * @claim "Internal paths render through `OuroProvider`'s `linkComponent`" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > renders a link with href through the provider's linkComponent)
    */
   href: string;
-  /** Links have no `type`. Remove `href` and pass `onClick` for a button. */
+  /**
+   * Links have no `type`. Remove `href` and pass `onClick` for a button.
+   *
+   * @claim "Links have no `type`" registry/ouro/components/ouro/badge/badge.tsx verify:fileLine(registry/ouro/components/ouro/badge/badge.tsx, /^\s+type\?:\snever;/)
+   */
   type?: never;
   /** A link cannot be disabled. Remove `href` and pass `onClick` for a button. */
   disabled?: never;
@@ -84,7 +95,12 @@ export type BadgeButtonModeProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>,
   ref?: Ref<HTMLButtonElement & HTMLSpanElement> | undefined;
 };
 
-/** The HTML attributes every kind of Badge passes through, outside the mode union so the editor keeps their hover docs. */
+/**
+ * The HTML attributes every kind of Badge passes through, outside the mode union so the editor keeps their hover docs.
+ *
+ * @claim "The HTML attributes every kind of" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > passes aria-pressed through for a filter badge)
+ * @claim "The HTML attributes every kind of" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge development messages > keeps button attributes off a static badge)
+ */
 type BadgeCommonProps = Omit<HTMLAttributes<HTMLElement>, keyof BadgeBaseProps> & BadgeBaseProps;
 
 /** A Badge with `href`: a link that looks like a badge, such as a tag that opens its list. */
@@ -175,6 +191,7 @@ function badgeHint(token: string): string {
  * <Badge tone="success" variant="soft">Published</Badge>
  * <Badge href="/tags/vegan">Vegan</Badge>
  * <Badge onClick={toggle} aria-pressed={active}>Quick</Badge>
+ * @claim "With `href` it becomes a link" registry/ouro/components/ouro/badge/badge.test.tsx verify:testExists(registry/ouro/components/ouro/badge/badge.test.tsx::Badge > renders a button with onClick, with a touch target and press feedback)
  */
 export function Badge(props: BadgeProps): JSX.Element {
   const {
@@ -239,7 +256,7 @@ export function Badge(props: BadgeProps): JSX.Element {
   if (rest.href !== undefined) {
     const { type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<BadgeLinkProps, keyof BadgeBaseProps>;
     return (
-      <RouterLink {...anchorProps} onClick={onClick} data-ouro="badge" className={cn(base, interactive, look, className)}>
+      <RouterLink data-ouro-control="badge" data-ouro-part="root" {...anchorProps} onClick={onClick} data-ouro="badge" className={cn(base, interactive, look, className)}>
         <TouchTarget />
         {content}
       </RouterLink>
@@ -248,7 +265,7 @@ export function Badge(props: BadgeProps): JSX.Element {
   const { ref, type = "button", disabled, ...buttonProps } = rest as Omit<BadgeButtonProps, keyof BadgeBaseProps>;
   if (onClick !== undefined) {
     return (
-      <BaseButton {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" className={cn(base, interactive, look, className)}>
+      <BaseButton data-ouro-control="badge" data-ouro-part="root" {...buttonProps} onClick={onClick} disabled={disabled} ref={ref as Ref<HTMLElement> | undefined} type={type} data-ouro="badge" className={cn(base, interactive, look, className)}>
         <TouchTarget />
         {content}
       </BaseButton>

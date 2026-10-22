@@ -38,7 +38,7 @@ const viewportClass =
 const popupClass =
   "relative box-border flex w-full max-h-full min-h-0 flex-col outline-none " +
   "rounded-xl bg-popover text-popover-foreground " +
-  "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_16px_48px_rgb(0_0_0/0.18)] " +
+  "ring-1 ring-border/60 shadow-(--shadow-xl) " +
   "[transition:transform_var(--ouro-duration-slow)_var(--ouro-ease-out),opacity_var(--ouro-duration-slow)_var(--ouro-ease-out)] " +
   "data-starting-style:[transform:scale(0.96)] data-starting-style:opacity-0 " +
   "data-ending-style:[transform:scale(0.96)] data-ending-style:opacity-0 " +
@@ -98,6 +98,7 @@ export function DialogRoot(props: BaseDialog.Root.Props): JSX.Element {
  * cannot dismiss. It shares every other part with `DialogRoot`.
  *
  * @internal For `ConfirmDialog`; apps use `ConfirmDialog`.
+ * @claim "It shares every other part with" registry/ouro/components/ouro/dialog/dialog-parts.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog-parts.tsx, /export\sfunction\sAlertDialogRoot/)
  */
 export function AlertDialogRoot(props: AlertDialog.Root.Props): JSX.Element {
   return (
@@ -110,7 +111,7 @@ export function AlertDialogRoot(props: AlertDialog.Root.Props): JSX.Element {
 /** Part: the button that opens the dialog. Pass your button as `render={<Button>Open</Button>}`. */
 export function DialogTrigger(props: BaseDialog.Trigger.Props): JSX.Element {
   useDialogPart("DialogTrigger", "…");
-  return <BaseDialog.Trigger {...props} />;
+  return <BaseDialog.Trigger {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "dialog", "data-ouro-part": "trigger" } : {})} {...props} />;
 }
 
 /**
@@ -118,6 +119,8 @@ export function DialogTrigger(props: BaseDialog.Trigger.Props): JSX.Element {
  * `--ouro-layer` z-index (50 by default, from ouro-base.css). If your app has fixed
  * bars above z-50, raise it in a `:root` rule of your own after the Ouro tokens, outside
  * any `@layer`: `:root { --ouro-layer: 60; }`. Don't edit the line shadcn wrote; `shadcn add` resets it.
+ * @claim "Part: moves the dialog to the" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "Part: moves the dialog to the" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  */
 export function DialogPortal(props: Omit<BaseDialog.Portal.Props, "className">): JSX.Element {
   useDialogPart("DialogPortal", "…");
@@ -146,13 +149,19 @@ export function DialogViewport(props: Omit<BaseDialog.Viewport.Props, "className
 /** Props for {@link DialogPopup}. `className` is for layout only (margins, width). */
 export type DialogPopupProps = Omit<BaseDialog.Popup.Props, "className"> & {
   className?: string | undefined;
-  /** Maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. @default "md" */
+  /**
+   * Maximum width: `sm` 24rem, `md` 32rem, `lg` 40rem. @default "md"
+   *
+   * @claim "Maximum width: `sm` 24rem, `md` 32rem" registry/ouro/components/ouro/dialog/dialog-parts.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog-parts.tsx, /const\spopupSizes\s=\s\{\ssm:\s"max-w-\[24rem\]",\smd:\s"max-w-\[32rem\]",\slg:\s"max-w-\[40rem\]"\s\}/)
+   */
   size?: DialogSize | (string & { 'Use "sm", "md" or "lg"': never }) | undefined;
 };
 
 /**
  * Part: the dialog panel. It scales up from 0.96 and fades in over 300ms, and scales and
  * fades out in 200ms; reduced motion keeps only the fade.
+ * @claim "It scales up from 0.96 and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::motion > scales from 0.96 on the ease-out token and fades, entering in 300ms and leaving in 200ms)
+ * @claim "It scales up from 0.96 and" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::motion > drops the scale under reduced motion and keeps the fade)
  */
 export function DialogPopup({ size: sizeProp = "md", ...props }: DialogPopupProps): JSX.Element {
   // A size that is not one of Ouro UI's (a type error) warns and renders md.
@@ -201,7 +210,11 @@ export type DialogTitleProps = Omit<BaseDialog.Title.Props, "className"> & {
   visuallyHidden?: boolean | undefined;
 };
 
-/** Part: the dialog's title, which names it. Every dialog needs one. */
+/**
+ * Part: the dialog's title, which names it. Every dialog needs one.
+ *
+ * @claim "Every dialog needs one" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:fileLine(registry/ouro/components/ouro/dialog/dialog.test.tsx, /warns\swhen\sthe\stitle\sis\smissing/)
+ */
 export function DialogTitle({ visuallyHidden, ...props }: DialogTitleProps): JSX.Element {
   useDialogPart("DialogTitle", "<DialogTitle>…</DialogTitle>…");
   return (
@@ -211,7 +224,7 @@ export function DialogTitle({ visuallyHidden, ...props }: DialogTitleProps): JSX
       className={
         visuallyHidden
           ? "sr-only"
-          : "m-0 text-lg leading-6 font-semibold text-balance text-popover-foreground"
+          : "m-0 font-[family-name:var(--font-heading,inherit)] text-lg leading-6 font-semibold text-balance text-popover-foreground"
       }
     />
   );
@@ -248,6 +261,8 @@ export function DialogContent({ className, ref, ...props }: DialogContentProps):
   );
   return (
     <div
+      data-ouro-control="dialog"
+      data-ouro-part="content"
       {...props}
       ref={scrollRef}
       data-ouro-dialog-content=""
@@ -277,5 +292,5 @@ export function DialogFooter(props: Omit<JSX.IntrinsicElements["div"], "classNam
 /** Part: closes the dialog. Pass your button as `render={<Button>Done</Button>}`. */
 export function DialogClose(props: BaseDialog.Close.Props): JSX.Element {
   useDialogPart("DialogClose", "<DialogTitle>…</DialogTitle><DialogFooter><DialogClose>…</DialogClose></DialogFooter>");
-  return <BaseDialog.Close {...props} />;
+  return <BaseDialog.Close {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "dialog", "data-ouro-part": "close" } : {})} {...props} />;
 }

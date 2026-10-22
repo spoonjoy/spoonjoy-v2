@@ -61,6 +61,8 @@ export interface ButtonBaseProps {
    * density from the `sm` breakpoint (640px). shadcn's `default` is `md`; for an
    * icon-only button, pass the icon as children and an `aria-label`. Any other
    * string is a type error whose message names the fix. @default "md"
+   * @claim "Each size is taller on phones" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::appearance > orders sizes sm < md < lg)
+   * @claim "Each size is taller on phones" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::className > lets the app's height and padding win at desktop widths too)
    */
   size?:
     | "sm"
@@ -92,6 +94,8 @@ export interface ButtonBaseProps {
    * Layout only: margins, width, grid placement (`mt-4`, `col-span-2`). Your
    * classes always win over Ouro UI's. Appearance classes warn in development;
    * use `tone`, `variant` and `size` instead.
+   * @claim "Your classes always win over Ouro" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::className > lets app layout classes win over library styles)
+   * @claim "Your classes always win over Ouro" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::className > lets the app's height and padding win at desktop widths too)
    */
   className?: string | undefined;
 
@@ -116,9 +120,14 @@ export type ButtonLinkProps = ButtonBaseProps &
      * absolute URLs render as a plain `<a>`. An absolute URL with
      * `target="_blank"` always gets `rel="noopener noreferrer"`, merged with
      * any `rel` you pass.
+     * @claim "`, merged with any `rel` you pass." registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::link branch > merges an explicit rel with noopener noreferrer on an external _blank link)
      */
     href: string;
-    /** Links have no `type`. Remove `href` to make a submit button: `<Button type="submit">`. */
+    /**
+     * Links have no `type`. Remove `href` to make a submit button: `<Button type="submit">`.
+     *
+     * @claim "Links have no `type`" registry/ouro/components/ouro/button/button.test-d.ts verify:fileLine(registry/ouro/components/ouro/button/button.test-d.ts, /\{\schildren:\s"Go";\shref:\s"\/x";\stype:\s"submit"\s\}>\(\)\.not\.toExtend<ButtonProps>/)
+     */
     type?: never;
     /** A link cannot be disabled. Remove `href` to render a disabled button, or don't render the link. */
     disabled?: never;
@@ -133,6 +142,7 @@ export type ButtonButtonProps = ButtonBaseProps &
     /**
      * The button's role in a form: `submit` sends it, `reset` clears it.
      * @default "button" (never submits a form by accident)
+     * @claim "never submits a form by accident" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::button branch > renders a native button with type=button and data-ouro)
      */
     type?: "button" | "submit" | "reset" | (string & { 'Use "button", "submit" or "reset"; for looks use tone and variant': never }) | undefined;
     ref?: Ref<HTMLButtonElement> | undefined;
@@ -174,7 +184,9 @@ const sizes = {
 // `soft` is the tone at low opacity behind text in the tone, the pattern shadcn uses for
 // destructive, with the text mixed 20% toward the foreground so it keeps 4.5:1 on the
 // tint under shadcn's stock values too (plain `text-destructive` there is 3.97:1). `secondary` is shadcn's: a quiet surface (`bg-secondary`) with its own
-// foreground, so its outline and plain text are the page's foreground.
+// foreground, so its outline and plain text are the page's foreground. The primary outline's
+// text is the foreground too, as in shadcn, where --primary is a fill color: a theme whose primary
+// only just reaches 4.5:1 on its page loses it on any tinted surface around the button.
 const looks = {
   solid: {
     primary: "border-transparent bg-primary text-primary-foreground",
@@ -191,7 +203,7 @@ const looks = {
     warning: "border-transparent bg-warning/10 text-[color-mix(in_oklab,var(--warning)_80%,var(--foreground))] contrast-more:border-current",
   },
   outline: {
-    primary: "border-primary/45 bg-transparent text-primary",
+    primary: "border-primary/45 bg-transparent text-foreground",
     secondary: "border-border bg-transparent text-foreground",
     destructive: "border-destructive/45 bg-transparent text-destructive",
     success: "border-success/45 bg-transparent text-success",
@@ -277,6 +289,9 @@ const preventDefault = (event: MouseEvent) => event.preventDefault();
  * <Button onClick={save} loading={saving}>Save</Button>
  * <Button href="/recipes/new" startIcon={PlusIcon}>New recipe</Button>
  * <Button tone="destructive" variant="soft" type="submit">Delete</Button>
+ * @claim "The obvious name for any action" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::press feedback > scales to --ouro-press-scale while pressed)
+ * @claim "The obvious name for any action" registry/ouro/components/ouro/button/button.touch.test.tsx verify:fileLine(registry/ouro/components/ouro/button/button.touch.test.tsx, /44px hit area on a coarse pointer/)
+ * @claim "The obvious name for any action" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::loading > sets aria-busy, disables without losing focus, and keeps the width within 1px)
  */
 export function Button(props: ButtonProps): JSX.Element {
   const {
@@ -375,6 +390,8 @@ export function Button(props: ButtonProps): JSX.Element {
     const { onClick, type: _type, disabled: _disabled, ...anchorProps } = rest as Omit<ButtonLinkProps, keyof ButtonBaseProps>;
     return (
       <RouterLink
+        data-ouro-control="button"
+        data-ouro-part="root"
         {...anchorProps}
         onClick={loading ? preventDefault : onClick}
         onAuxClick={loading ? preventDefault : anchorProps.onAuxClick}
@@ -396,6 +413,8 @@ export function Button(props: ButtonProps): JSX.Element {
   const type = buttonTypes.includes(typeProp as (typeof buttonTypes)[number]) ? (typeProp as (typeof buttonTypes)[number]) : "button";
   return (
     <BaseButton
+      data-ouro-control="button"
+      data-ouro-part="root"
       {...buttonProps}
       ref={ref as Ref<HTMLElement> | undefined}
       type={type}

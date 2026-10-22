@@ -23,6 +23,7 @@ export function isExternalHref(href: string): boolean {
  * `rel` with `noopener` and `noreferrer` added once each, keeping the caller's tokens.
  *
  * @internal
+ * @claim "`rel` with `noopener` and `noreferrer` added" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link > keeps the app's rel tokens with external)
  */
 export function safeRel(rel: string | undefined): string {
   const tokens = new Set((rel ?? "").split(/\s+/).filter(Boolean));
@@ -43,6 +44,7 @@ export type RouterLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "hre
  * always gets `rel="noopener noreferrer"`, merged with any `rel` passed.
  *
  * @internal Shared by Button and Link; apps use those.
+ * @claim "`, merged with any `rel` passed." registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::link branch > merges an explicit rel with noopener noreferrer on an external _blank link)
  */
 export function RouterLink({ href, target, rel, ...props }: RouterLinkProps): JSX.Element {
   const { linkComponent } = useOuro();

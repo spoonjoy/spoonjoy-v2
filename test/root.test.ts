@@ -11,9 +11,8 @@ describe("root.tsx safe area and dock clearance", () => {
     expect(source).toContain('<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />');
   });
 
-  it("pads main by the dock's bottom margin, its 4.25rem height and a 1rem gap", () => {
-    expect(source).toContain("pb-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] lg:pb-0");
-    expect(source).not.toContain("pb-[calc(5rem+env(safe-area-inset-bottom))]");
+  it("leaves the phone tab bar's clearance to HX TabBar, which reserves it below the page", () => {
+    expect(source).not.toMatch(/<main[^>]*pb-\[/);
   });
 });
 

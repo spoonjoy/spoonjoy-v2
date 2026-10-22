@@ -1,11 +1,23 @@
-import type { ComponentProps, ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { Pagination, type PaginationProps } from "~/components/ouro/pagination/pagination";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
+
+/** An element's fill as it shows: none when it is the colour behind it, as forced colours make most fills. */
+function shownFill(element: Element): string {
+  const fill = getComputedStyle(element).backgroundColor;
+  if (fill === "transparent" || /rgba\(.*,\s*0\)$/.test(fill)) return "none";
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const color = getComputedStyle(node).backgroundColor;
+    if (color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(color)) return fill === color ? "none" : fill;
+  }
+  return fill === "rgb(255, 255, 255)" ? "none" : fill;
+}
+
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -46,6 +58,48 @@ afterEach(async () => {
 const href = (target: number) => `/recipes?page=${target}`;
 
 describe("Pagination", () => {
+  it("keeps each page's edge under forced colours, which drop its fill", async () => {
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      for (const props of [{ href }, { onPageChange: () => {} }]) {
+        await render(<Pagination page={3} pageCount={5} {...props} />);
+        const other = [...document.querySelectorAll('[aria-label="Page 2"]')].at(-1)!;
+        expect(parseFloat(getComputedStyle(other).borderTopWidth)).toBeGreaterThan(0);
+        expect(getComputedStyle(other).borderTopStyle).toBe("solid");
+      }
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("fills the current page so it stands apart from the rest", async () => {
+    for (const props of [{ href }, { onPageChange: () => {} }]) {
+      await render(<Pagination page={3} pageCount={5} {...props} />);
+      const look = (name: string) => {
+        const element = [...document.querySelectorAll(`[aria-label="${name}"]`)].at(-1)!;
+        return `${getComputedStyle(element).backgroundColor} ${getComputedStyle(element).color}`;
+      };
+      expect(look("Page 3")).not.toBe(look("Page 2"));
+    }
+  });
+
+  it("tells the current page from the rest under forced colours, which drop its fill", async () => {
+    for (const props of [{ href }, { onPageChange: () => {} }]) {
+      // Forced colours first: switched after the render, a transition would still be easing.
+      await commands.emulateMedia({ forcedColors: "active" });
+      await render(<Pagination page={3} pageCount={5} {...props} />);
+      try {
+        const look = (name: string) => {
+          const element = [...document.querySelectorAll(`[aria-label="${name}"]`)].at(-1)!;
+          return `${shownFill(element)} ${getComputedStyle(element).color} ${getComputedStyle(element).borderTopStyle}`;
+        };
+        expect(look("Page 3")).not.toBe(look("Page 2"));
+      } finally {
+        await commands.emulateMedia({ forcedColors: "none" });
+      }
+    }
+  });
+
   it("renders a labelled nav of plain links, with the current page marked", async () => {
     const { nav } = await render(<Pagination page={3} pageCount={5} href={href} />);
     expect(nav.tagName).toBe("NAV");
@@ -126,10 +180,31 @@ describe("Pagination", () => {
     expect(onPageChange).toHaveBeenLastCalledWith(3);
   });
 
-  it("disables the Previous and Next buttons at the ends", async () => {
-    await render(<Pagination page={1} pageCount={1} onPageChange={() => {}} />);
-    await expect.element(page.getByRole("button", { name: "Previous" })).toBeDisabled();
-    await expect.element(page.getByRole("button", { name: "Next" })).toBeDisabled();
+  it("disables the Previous and Next buttons at the ends, and they do nothing", async () => {
+    const onPageChange = vi.fn();
+    await render(<Pagination page={1} pageCount={1} onPageChange={onPageChange} />);
+    for (const name of ["Previous", "Next"]) {
+      const button = page.getByRole("button", { name });
+      await expect.element(button).toHaveAttribute("aria-disabled", "true");
+      // Playwright waits for an enabled button before it clicks; force the press a person can still make.
+      await userEvent.click(button, { force: true });
+    }
+    expect(onPageChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps focus on Previous when it takes the reader to the first page, where it is disabled", async () => {
+    function Paged() {
+      const [current, setCurrent] = useState(2);
+      return <Pagination page={current} pageCount={5} onPageChange={setCurrent} />;
+    }
+    await render(<Paged />);
+    const previous = page.getByRole("button", { name: "Previous" });
+    // From the keyboard: WebKit on a Mac does not focus a button it clicks.
+    (previous.element() as HTMLElement).focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.element(previous).toHaveAttribute("aria-disabled", "true");
+    // A disabled button would drop focus to the page; a button that says it is disabled keeps it.
+    expect(document.activeElement).toBe(previous.element());
   });
 
   it("takes every visible and spoken string as a prop", async () => {

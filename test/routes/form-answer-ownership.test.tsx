@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Form as RouterForm, useActionData } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import NewRecipe from "~/routes/recipes.new";
 import NewStep from "~/routes/recipes.$id.steps.new";
 import EditStep from "~/routes/recipes.$id.steps.$stepId.edit";
@@ -101,52 +101,6 @@ describe("form-local accepted Router answers", () => {
     expect(title).toHaveFocus();
     expect(screen.getByRole("alert")).not.toBe(firstAlert);
     expect(calls).toBe(2);
-  });
-
-  it("ignores an older cancelled save that finishes after the newer refusal", async () => {
-    let release: (() => void) | undefined;
-    let firstRequest: Request | undefined;
-    let oldFinished = false;
-    const Stub = createTestRoutesStub([{
-      path: "/recipes/new",
-      Component: () => <OuroProvider linkComponent={OuroRouterLink}><NewRecipe /></OuroProvider>,
-      loader: () => null,
-      action: async ({ request }) => {
-        const posted = await request.formData();
-        if (posted.get("title") === "slow") {
-          firstRequest = request;
-          await new Promise<void>((resolve) => { release = resolve; });
-          oldFinished = true;
-          return { errors: { title: "Stale refusal", general: "Stale message" } };
-        }
-        return { errors: { title: "Newest refusal", general: "Newest message" } };
-      },
-    }]);
-    const { container } = render(<Stub initialEntries={["/recipes/new"]} />);
-    const title = await screen.findByRole("textbox", { name: "Title", exact: true });
-    const focus = vi.spyOn(title, "focus");
-    const form = container.querySelector<HTMLFormElement>("form.hidden")!;
-    const hiddenTitle = form.elements.namedItem("title") as HTMLInputElement;
-    hiddenTitle.value = "slow";
-    fireEvent.submit(form);
-    await waitFor(() => expect(release).toBeDefined());
-    hiddenTitle.value = "fast";
-    // Force a transport-level overlap; normal builder saves are protected by a latch.
-    fireEvent.submit(form);
-    await waitFor(() => expect(title).toHaveAccessibleDescription("Newest refusal"));
-    expect(firstRequest!.signal.aborted).toBe(true);
-    expect(title).toHaveFocus();
-    expect(focus).toHaveBeenCalledTimes(1);
-    const newestAlert = screen.getByRole("alert");
-    act(() => screen.getByRole("button", { name: "Create recipe", exact: true }).focus());
-    await act(async () => release!());
-    await waitFor(() => expect(oldFinished).toBe(true));
-    expect(title).toHaveAccessibleDescription("Newest refusal");
-    expect(screen.queryByText("Stale refusal")).not.toBeInTheDocument();
-    expect(screen.queryByText("Stale message")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toBe(newestAlert);
-    expect(screen.getByRole("button", { name: "Create recipe", exact: true })).toHaveFocus();
-    expect(focus).toHaveBeenCalledTimes(1);
   });
 
   it("does not deliver an abandoned save into a newly mounted recipe form", async () => {

@@ -1,11 +1,15 @@
 import type { Route } from "./+types/search";
-import { useId } from "react";
+import { useCallback, useId } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
 import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
-import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Heading } from "~/components/ouro/text/heading";
+import { Badge } from "~/components/ouro/badge/badge";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
+import { Link } from "~/components/ouro/link/link";
+import { TextField } from "~/components/ouro/text-field/text-field";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -43,13 +47,6 @@ const RESULT_LABELS: Record<SearchEntityType, string> = {
   cookbook: "Cookbook",
   chef: "Chef",
   "shopping-list-item": "Shopping List",
-};
-
-const RESULT_TONES: Record<SearchEntityType, string> = {
-  recipe: "sj-result-tone-recipe",
-  cookbook: "sj-result-tone-cookbook",
-  chef: "sj-result-tone-chef",
-  "shopping-list-item": "sj-result-tone-shopping-list-item",
 };
 
 const RESULT_ICONS = {
@@ -95,52 +92,40 @@ function resultCountLabel(count: number) {
 
 function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: ImageLoadingProps }) {
   const Icon = RESULT_ICONS[result.type];
-  const displayImageUrl = result.imageUrl && result.imageUrl.length > 0 ? result.imageUrl : undefined;
   const coverProvenanceLabel = typeof result.metadata.coverProvenanceLabel === "string"
     ? result.metadata.coverProvenanceLabel
     : null;
-  // The link is named by the card's visible type, title and byline, so a screen reader hears what a
-  // sighted reader sees first and voice control can say any of it; a title-only aria-label hid the
-  // byline (product audit 2026-10-09, finding 19; WCAG 2.5.3). The cover note and the matching text
-  // describe the link rather than name it, so the name stays short enough to hear in a list.
   const id = useId();
   const isPrivate = result.type === "shopping-list-item";
-  const nameIds = [`${id}-type`, ...(isPrivate ? [`${id}-private`] : []), `${id}-title`, `${id}-subtitle`];
+  // The link is named by the card's visible type, Private mark, title and byline, so a screen
+  // reader hears what a sighted reader sees first and voice control can say any of it (product
+  // audit 2026-10-09, finding 19; WCAG 2.5.3). The title is the result's heading.
+  // TODO(ouro-hx: item description, ourostack/ouro-ui#183): HX Item describes its link by its
+  // description; until then the link's ref points aria-describedby at the cover note and the
+  // matching text, which describe the result rather than name it.
+  const describeLink = useCallback((link: HTMLAnchorElement | null) => {
+    link?.setAttribute("aria-describedby", `${id}-cover ${id}-snippet`);
+  }, [id]);
   return (
-    <Link
+    <Item
+      as="article"
       href={result.href}
-      aria-labelledby={nameIds.join(" ")}
-      aria-describedby={`${id}-cover ${id}-snippet`}
-      className="group grid gap-4 border-t border-[var(--sj-border)] py-5 no-underline transition hover:border-[var(--sj-border-strong)] sm:grid-cols-[7rem_minmax(0,1fr)]"
-    >
-      <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[var(--sj-flour)] sm:aspect-square">
-        {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" {...imageProps} className="h-full w-full object-cover transition group-hover:scale-105" />
-        ) : (
-          <Icon className="size-5" aria-hidden="true" />
-        )}
-      </div>
-      <div className="min-w-0 self-center">
-        <div className="flex flex-wrap items-center gap-2">
-          <span id={`${id}-type`} className={`font-sj-ui rounded-[var(--sj-radius-control)] border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] ${RESULT_TONES[result.type]}`}>
-            {RESULT_LABELS[result.type]}
-          </span>
-          {isPrivate ? (
-            <span id={`${id}-private`} className="font-sj-ui rounded-[var(--sj-radius-control)] border border-[var(--sj-border)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-              Private
-            </span>
-          ) : null}
-          <span id={`${id}-cover`} className="contents">
-            <CoverProvenanceBadge label={coverProvenanceLabel} />
-          </span>
-        </div>
-        <h2 id={`${id}-title`} className="font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]">
-          {result.title}
-        </h2>
-        <Text id={`${id}-subtitle`} size="sm" className="mt-1">{result.subtitle}</Text>
-        <Text id={`${id}-snippet`} size="sm" className="mt-3 line-clamp-2 leading-6">{result.snippet}</Text>
-      </div>
-    </Link>
+      linkRef={describeLink}
+      title={
+        <>
+          <Badge variant="outline">{RESULT_LABELS[result.type]}</Badge>
+          {isPrivate ? <> <Badge variant="outline">Private</Badge></> : null}{" "}
+          <Heading level={2} size="md" className="inline">{result.title}</Heading>{" "}
+          <Text size="sm" className="block">{result.subtitle}</Text>
+        </>
+      }
+      description={<Text id={`${id}-snippet`} size="sm" lines={2}>{result.snippet}</Text>}
+      media={result.imageUrl ? <img src={result.imageUrl} alt="" {...imageProps} /> : <Icon />}
+      mediaSize={result.imageUrl ? "lg" : "icon"}
+      mediaAbove={result.imageUrl ? "sm" : undefined}
+      actions={<span id={`${id}-cover`} className="contents"><CoverProvenanceBadge label={coverProvenanceLabel} /></span>}
+      stackBelow="sm"
+    />
   );
 }
 
@@ -171,29 +156,21 @@ export default function Search() {
             </h1>
             <Form method="get" role="search" className="mt-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <input type="hidden" name="scope" value={scope} />
-              <label className="sr-only" htmlFor="search-query">Search terms</label>
-              <div className="flex h-[4.5rem] items-center rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-5">
-                <SearchIcon className="mr-3 size-5 shrink-0 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-                <input
-                  ref={searchInputRef}
-                  id="search-query"
-                  type="search"
-                  name="q"
-                  defaultValue={query}
-                  // Off, so a document-level Back does not restore stale typed text over the
-                  // server-rendered query (the browser skips form restoration for these fields).
-                  autoComplete="off"
-                  placeholder="tomato basil"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  className="font-sj-display h-full w-full border-0 bg-transparent text-3xl/9 text-[var(--sj-ink)] outline-none placeholder:text-[var(--sj-ink-soft)]"
-                />
-              </div>
-              <Button type="submit" className="h-11">Search</Button>
+              <TextField
+                ref={searchInputRef}
+                type="search"
+                name="q"
+                label="Search terms"
+                hideLabel
+                defaultValue={query}
+                // Off, so a document-level Back does not restore stale typed text over the
+                // server-rendered query (the browser skips form restoration for these fields).
+                autoComplete="off"
+                placeholder="tomato basil"
+                startAdornment={<SearchIcon />}
+                size="lg"
+              />
+              <Button type="submit">Search</Button>
             </Form>
           </div>
 
@@ -227,8 +204,9 @@ export default function Search() {
               that would nest inside <main> and fail landmark-complementary-is-top-level. <nav>
               has no such top-level restriction, and it's the correct role for this: an in-page
               menu of links that switch the search scope. */}
+          {/* TODO(ouro-hx: tabs link mode, ourostack/ouro-ui#128): The scope switcher becomes HX Tabs over links once Tabs can be links. */}
           <nav aria-label="Search scope" className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
-            <Subheading level={2} size="lg">{SCOPE_LABELS[scope]}</Subheading>
+            <Heading level={2} size="lg">{SCOPE_LABELS[scope]}</Heading>
             <p className="text-base/6 text-[var(--sj-ink-soft)] mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</p>
             <div className="mt-5 grid gap-0">
               {SEARCH_SCOPES.map((searchScope) => {
@@ -240,14 +218,10 @@ export default function Search() {
                   <Link
                     key={searchScope}
                     href={`/search?${params.toString()}`}
-                    className={[
-                      "flex justify-between border-b border-[var(--sj-border)] py-3 no-underline transition",
-                      scope === searchScope
-                        ? "text-[var(--sj-ink)]"
-                        : "text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)]",
-                    ].join(" ")}
+                    tone="secondary"
+                    aria-current={scope === searchScope ? "page" : undefined}
                   >
-                    <span>{SCOPE_LABELS[searchScope]}</span>
+                    {SCOPE_LABELS[searchScope]}
                   </Link>
                 );
               })}
@@ -261,8 +235,8 @@ export default function Search() {
           <section aria-label="Search results">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <Subheading level={2} size="xl">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Subheading>
-                <Text size="sm" className="mt-1">{resultCountLabel(results.length)}</Text>
+                <Heading level={2} size="xl">{hasQuery ? `Results for "${query.trim()}"` : "Recently searchable"}</Heading>
+                <Text tone="muted" size="sm" className="mt-1">{resultCountLabel(results.length)}</Text>
               </div>
             </div>
 
@@ -274,21 +248,21 @@ export default function Search() {
 
             {!hasQuery ? (
               <div className="mb-4 border-y border-dashed border-[var(--sj-border-strong)] py-4">
-                <Text size="sm" className="leading-6">
+                <Text tone="muted" size="sm" className="leading-6">
                   Try searching by ingredient, step wording, cookbook theme, chef username, or shopping list category.
                 </Text>
               </div>
             ) : null}
 
             {results.length > 0 ? (
-              <div className="grid gap-3">
+              <ItemGroup aria-label="Results" variant="divided">
                 {results.map((result, index) => (
                   <ResultCard key={`${result.type}:${result.id}`} result={result} imageProps={listImageProps(index)} />
                 ))}
-              </div>
+              </ItemGroup>
             ) : (
               <RuledEmptyState title="No matches yet">
-                <Text className="mx-auto mt-2 max-w-xl">
+                <Text tone="muted" className="mx-auto mt-2 max-w-xl">
                   Broaden the scope, try an ingredient, or search for a chef username.
                 </Text>
               </RuledEmptyState>

@@ -7,12 +7,11 @@ import type { AccountSettingsLoaderData } from "~/lib/account-settings.server";
 import { act } from "~/lib/ouro/testing/act";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { Button } from "~/components/button";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
 import { StepOutputUseDisplay } from "~/components/StepOutputUseDisplay";
-import { BioCard } from "~/components/pantry/BioCard";
 import Index from "~/routes/_index";
 import RecipesIndex from "~/routes/recipes._index";
 import AccountSettings from "~/routes/account.settings";
@@ -49,7 +48,7 @@ async function mount(Component: ComponentType, data: unknown = {}, path = "/", l
   }], { initialEntries: [path] });
   const root = createRoot(host);
   await act(async () => {
-    root.render(<OuroProvider linkComponent={OuroRouterLink}><ToastProvider><RouterProvider router={router} /></ToastProvider></OuroProvider>);
+    root.render(<OuroProvider linkComponent={OuroRouterLink}><><RouterProvider router={router} /><Toaster /></></OuroProvider>);
   });
   dispose = async () => {
     await act(async () => root.unmount());
@@ -125,7 +124,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
   });
   try {
     await expect.poll(() => host.querySelector('a[href="/recipes/a"]')).toBeTruthy();
-    expect(getComputedStyle(host.querySelector('a[href="/recipes/a"]')!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(host.querySelector('a[href="/recipes/a"]')!.closest('[data-ouro="item"]')!).borderBottomWidth).toBe("1px");
     const more = Array.from(host.querySelectorAll("a")).find((link) => link.textContent?.includes("Show more recipes"))!;
     expect(more.getAttribute("href")).toBe("/recipes?after=a");
     await userEvent.dblClick(more);
@@ -134,7 +133,7 @@ it("actual recipe Router/ShowMore holds one request, preserves rows/count and fo
     await act(async () => release());
     await expect.poll(() => host.querySelector('a[href="/recipes/b"]')).toBeTruthy();
     await expect.poll(() => document.activeElement).toBe(host.querySelector('a[href="/recipes/b"]'));
-    expect(getComputedStyle(host.querySelector('a[href="/recipes/b"]')!).borderBottomWidth).toBe("1px");
+    expect(getComputedStyle(host.querySelector('a[href="/recipes/b"]')!.closest('[data-ouro="item"]')!).borderBottomWidth).toBe("1px");
     expect(host.querySelector('a[href="/recipes/a"]')).not.toBeNull();
     expect(host.querySelector("[data-ouro-show-more-status]")!.textContent).toBe("Showing 2 recipes");
     expect(more.isConnected).toBe(false);
@@ -160,7 +159,7 @@ for (const theme of ["light", "dark"] as const) {
     await annotate(`T21_KITCHEN_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
-  it(`${theme}: actual search hero and hover-colored result title retain delivered typography/semantics`, async ({ annotate }) => {
+  it(`${theme}: actual search hero keeps its delivered display scale, and a result is an HX Item named by type and title`, async ({ annotate }) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     const result: SearchResult = {
       type: "recipe", id: "type-proof", ownerId: "chef", ownerUsername: "chef",
@@ -172,37 +171,35 @@ for (const theme of ["light", "dark"] as const) {
     await expect.poll(() => host.querySelector("h1")).toBeTruthy();
     const title = host.querySelector("h1")!;
     const resultLink = host.querySelector<HTMLAnchorElement>('a[href="/recipes/type-proof"]')!;
-    const resultTitle = resultLink.querySelector("h2")!;
-    const subheading = "font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]";
     const measurements = [];
     for (const width of widths) {
       await page.viewport(width, 900);
       const actual = compareDelivered(title, `${heading} mt-3 text-5xl/12 sm:text-7xl/18 lg:text-[84px] lg:leading-[1.05]`);
       expect(actual.fontSize).toBe(width >= 1024 ? "84px" : width >= 640 ? "72px" : "48px");
-      measurements.push({ width, title: actual, resultTitle: compareDelivered(resultTitle, `${subheading} mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]`) });
+      measurements.push({ width, title: actual });
     }
-    await userEvent.hover(resultLink);
-    const hovered = compareDelivered(resultTitle, `${subheading} mt-2 line-clamp-2 text-2xl/8 group-hover:text-[var(--sj-tomato)]`);
-    expect(resultLink.getAttribute("aria-labelledby")!.split(" ")).toContain(resultTitle.id);
+    // The result is an HX Item; its title is the result's <h2>, inside the link that it names with
+    // the type and the byline.
+    expect(resultLink.closest('[data-ouro="item"]')).not.toBeNull();
+    const resultTitle = resultLink.querySelector("h2")!;
     expect(resultTitle.tagName).toBe("H2");
-    await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements, hovered })}`);
+    expect(resultTitle.textContent).toBe("Tomato soup for a crowded table");
+    expect(resultLink.textContent).toMatch(/^Recipe\s*Tomato soup for a crowded table\s*By chef$/);
+    await annotate(`T21_SEARCH_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
 
-  it(`${theme}: the two unsupported 14px branded metadata headings keep their levels, ink and actual size`, async ({ annotate }) => {
+  it(`${theme}: the 14px branded step-output heading keeps its level, ink and actual size`, async ({ annotate }) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    const host = await mount(() => <main className="sj-page"><StepOutputUseDisplay usingSteps={[{ id: "use-1", outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }]} /><BioCard name="Chef Rowan" bio="A practical kitchen." recipeCount={2} cookbookCount={1} /></main>);
+    const host = await mount(() => <main className="sj-page"><StepOutputUseDisplay usingSteps={[{ id: "use-1", outputStepNum: 1, outputOfStep: { stepNum: 1, stepTitle: "Prep" } }]} /></main>);
     await expect.poll(() => host.querySelector("h4")).toBeTruthy();
     const output = host.querySelector("h4")!;
-    const snapshot = Array.from(host.querySelectorAll("h3")).find((node) => node.textContent?.includes("Kitchen Snapshot"))!;
     const base = "font-sj-display text-base/7 font-semibold tracking-normal text-[var(--sj-ink)]";
     const measurements = [];
     for (const width of [390, 640, 1024]) {
       await page.viewport(width, 900);
       const outputs = compareDelivered(output, `${base} m-0 mb-3 text-sm uppercase text-[var(--sj-ink-soft)]`);
-      const kitchen = compareDelivered(snapshot, `${base} text-sm`);
       expect(outputs.fontSize).toBe("14px");
-      expect(kitchen.fontSize).toBe("14px");
-      measurements.push({ width, outputs, kitchen });
+      measurements.push({ width, outputs });
     }
     await annotate(`T21_METADATA_TYPE ${JSON.stringify({ theme, measurements })}`);
   });

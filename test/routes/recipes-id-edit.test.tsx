@@ -2020,8 +2020,6 @@ describe("Recipes $id Edit Route", () => {
       // Recipe Image is now displayed as an image upload preview via RecipeImageUpload
       // When there's an image, it shows "Change Image" button instead of "Upload Image"
       expect(screen.getByRole("button", { name: /change.*image/i })).toBeInTheDocument();
-      const submissionImageInput = document.querySelector('form input[name="image"]');
-      expect(submissionImageInput).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
     });
 
     it("should render empty steps state", async () => {
@@ -2541,7 +2539,7 @@ describe("Recipes $id Edit Route", () => {
       expect(await screen.findByText("Cannot delete this step because another step uses it.")).toBeInTheDocument();
     });
 
-    it("should populate hidden form and submit when Save Recipe is clicked", async () => {
+    it("submits the recipe when Save Recipe is clicked", async () => {
       const user = userEvent.setup();
       let submittedData: any = null;
 

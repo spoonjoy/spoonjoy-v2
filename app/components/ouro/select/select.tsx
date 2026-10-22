@@ -16,17 +16,24 @@ import {
   triggerClass,
   type SelectOptions,
 } from "~/components/ouro/select/select-styles";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMediaQuery } from "~/lib/ouro/use-media-query";
 
 export type { SelectOption, SelectOptionGroup, SelectOptions } from "~/components/ouro/select/select-styles";
 
-/** Props every Select takes, whether it picks one value or several. */
+/**
+ * Props every Select takes, whether it picks one value or several.
+ *
+ * @claim "Props every Select takes, whether it" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > picks several values with multiple, as a string array)
+ * @claim "Props every Select takes, whether it" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > chooses an option, shows its label and submits its value)
+ */
 export interface SelectBaseProps {
   /**
    * What the select is for, shown above it and read as its name. Required: every control
    * needs a name. To hide it visually, keep it and add `hideLabel`. On phones it also heads the list.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/select/select.test-d.ts verify:fileLine(registry/ouro/components/ouro/select/select.test-d.ts, /expectTypeOf<\{\soptions:\stypeof\scourses\s\}>\(\)\.not\.toExtend<SelectProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the select's name. */
@@ -44,7 +51,11 @@ export interface SelectBaseProps {
   disabled?: boolean | undefined;
   /** The value can be seen but not changed. */
   readOnly?: boolean | undefined;
-  /** The form field name the value submits under. With `multiple`, each value submits under it. */
+  /**
+   * The form field name the value submits under. With `multiple`, each value submits under it.
+   *
+   * @claim "With `multiple`, each value submits under" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > posts one entry per chosen value under its name with multiple, for formData.getAll)
+   */
   name?: string | undefined;
   /** Shown in the trigger while nothing is chosen: `"Choose a course"`. It is not a label. */
   placeholder?: string | undefined;
@@ -92,11 +103,20 @@ export interface SelectBaseProps {
 export type SelectSingleProps = SelectBaseProps & {
   /** Pick several values: the list stays open while the user chooses, and the value is a `string[]` instead of `string | null`. */
   multiple?: false | undefined;
-  /** The chosen value, when you control it: a `string`, or `null` for none; with `multiple`, a `string[]`. */
+  /**
+   * The chosen value, when you control it: a `string`, or `null` for none; with `multiple`, a `string[]`.
+   *
+   * @claim "The chosen value, when you control" registry/ouro/components/ouro/select/select.test-d.ts verify:fileLine(registry/ouro/components/ouro/select/select.test-d.ts, /\{\slabel:\s"Tags";\smultiple:\strue;\svalue:\s"quick"\s\}>\(\)\.not\.toExtend<SelectProps>/)
+   */
   value?: string | null | undefined;
   /** The value chosen at first, when the select keeps its own state: a `string` or `null`; with `multiple`, a `string[]`. */
   defaultValue?: string | null | undefined;
-  /** Called with the new value when the user chooses an option: a `string` or `null`; with `multiple`, every chosen value as a `string[]`. */
+  /**
+   * Called with the new value when the user chooses an option: a `string` or `null`; with `multiple`, every chosen value as a `string[]`.
+   *
+   * @claim "Called with the new value when" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > chooses an option, shows its label and submits its value)
+   * @claim "Called with the new value when" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > picks several values with multiple, as a string array)
+   */
   onValueChange?: ((value: string | null) => void) | undefined;
 };
 
@@ -104,11 +124,20 @@ export type SelectSingleProps = SelectBaseProps & {
 export type SelectMultipleProps = SelectBaseProps & {
   /** Pick several values: the list stays open while the user chooses, and the value is a `string[]` instead of `string | null`. */
   multiple: true;
-  /** The chosen value, when you control it: a `string`, or `null` for none; with `multiple`, a `string[]`. */
+  /**
+   * The chosen value, when you control it: a `string`, or `null` for none; with `multiple`, a `string[]`.
+   *
+   * @claim "The chosen value, when you control" registry/ouro/components/ouro/select/select.test-d.ts verify:fileLine(registry/ouro/components/ouro/select/select.test-d.ts, /\{\slabel:\s"Tags";\smultiple:\strue;\svalue:\s"quick"\s\}>\(\)\.not\.toExtend<SelectProps>/)
+   */
   value?: string[] | undefined;
   /** The value chosen at first, when the select keeps its own state: a `string` or `null`; with `multiple`, a `string[]`. */
   defaultValue?: string[] | undefined;
-  /** Called with the new value when the user chooses an option: a `string` or `null`; with `multiple`, every chosen value as a `string[]`. */
+  /**
+   * Called with the new value when the user chooses an option: a `string` or `null`; with `multiple`, every chosen value as a `string[]`.
+   *
+   * @claim "Called with the new value when" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > chooses an option, shows its label and submits its value)
+   * @claim "Called with the new value when" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > picks several values with multiple, as a string array)
+   */
   onValueChange?: ((value: string[]) => void) | undefined;
 };
 
@@ -117,8 +146,14 @@ export type SelectProps = SelectSingleProps | SelectMultipleProps;
 
 /** Field's messages and root name Select; its label is a `<div>` that names the trigger. */
 const owner = { name: "Select", data: "select", nativeLabel: false as const };
+/** Marks the hidden input Base UI submits the value with. */
+const markInput = controlRef("select", "hidden-input");
 
-/** A chevron pointing up and down, drawn in the muted text color at 16px. */
+/**
+ * A chevron pointing up and down, drawn in the muted text color at 16px.
+ *
+ * @claim "A chevron pointing up and down" registry/ouro/components/ouro/select/select.tsx verify:fileLine(registry/ouro/components/ouro/select/select.tsx, /viewBox="0\s0\s16\s16"\sfill="none"\sstroke="currentColor"/)
+ */
 function ChevronIcon(): JSX.Element {
   return (
     <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -168,9 +203,12 @@ function SelectControl({
       readOnly={readOnly}
       autoComplete={autoComplete}
       form={formId}
+      inputRef={markInput}
     >
       <BaseSelect.Trigger
         ref={ref}
+        data-ouro-control="select"
+        data-ouro-part="trigger"
         className={triggerClass}
         aria-labelledby={field.labelId}
         aria-describedby={field.describedBy}
@@ -254,6 +292,7 @@ function SelectControl({
  *   error={errors?.course}
  * />
  * <Select label="Tags" name="tags" multiple defaultValue={["quick"]} options={tags} />
+ * @claim "A `multiple` Select posts one entry" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > posts one entry per chosen value under its name with multiple, for formData.getAll)
  */
 export function Select(props: SelectProps): JSX.Element {
   const {

@@ -2,16 +2,15 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router";
 import { expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { ToastProvider, useToast } from "~/components/feedback/toast";
 import { DockContextProvider, useDockSuppressed } from "~/components/navigation/dock-context";
-import { MobileNav } from "~/components/navigation/mobile-nav";
+import { MobileNav, MobileNavToaster } from "~/components/navigation/mobile-nav";
 import { act } from "~/lib/ouro/testing/act";
+import { toast } from "~/lib/ouro/toast";
 import { rotate } from "~/lib/ouro/testing/rotate";
 
 function FeedbackTrigger() {
-  const { showToast } = useToast();
   return (
-    <button onClick={() => showToast({ message: "Dock clearance measurement", durationMs: 0 })}>
+    <button onClick={() => toast("Dock clearance measurement", { duration: 0 })}>
       Measure feedback
     </button>
   );
@@ -50,17 +49,13 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  // Auth is the same root-loader signal passed to MobileNav. Before the app
-  // integration this extra spread input is ignored, leaving the real regression.
-  const feedbackProps = { isAuthenticated: scenario.authenticated };
   try {
     await act(async () => root.render(
       <MemoryRouter initialEntries={[scenario.path]}>
         <DockContextProvider>
-          <ToastProvider {...feedbackProps}>
-            <SuppressedPage suppressed={scenario.suppressed} />
-            <MobileNav isAuthenticated={scenario.authenticated} />
-          </ToastProvider>
+          <SuppressedPage suppressed={scenario.suppressed} />
+          <MobileNav isAuthenticated={scenario.authenticated} />
+          <MobileNavToaster isAuthenticated={scenario.authenticated} />
         </DockContextProvider>
       </MemoryRouter>,
     ));
@@ -72,7 +67,7 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
     }).toBe(true);
     const toastBox = toast()!.getBoundingClientRect();
     expect(toast()!.checkVisibility()).toBe(true);
-    const nav = document.querySelector<HTMLElement>('[data-testid="mobile-tab-bar"]');
+    const nav = document.querySelector<HTMLElement>('nav[aria-label="Spoonjoy navigation"]');
     const navBox = nav?.getBoundingClientRect();
     const links = nav ? [...nav.querySelectorAll("a")] : [];
     expect(toastBox.width).toBeGreaterThan(0);
@@ -122,6 +117,7 @@ it(`clears actual dock without unused clearance: ${scenario.width} ${scenario.pa
       expect(scenario.direction === "rtl" ? toastBox.left : innerWidth - toastBox.right).toBe(24);
     }
   } finally {
+    toast.dismiss();
     await act(async () => root.unmount());
     host.remove();
     document.documentElement.dir = originalDirection;

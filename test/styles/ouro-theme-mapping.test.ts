@@ -21,12 +21,25 @@ const LIGHT = block(":root", SPOONJOY_VARIABLE);
 const DARK = { ...LIGHT, ...block(".dark", SPOONJOY_VARIABLE) };
 const MAPPING = block(":root,\n.dark", /(--[\w-]+):\s*([^;]+);/g);
 
-// A variable's colour in a theme, following var() references through the mapping and the palette.
-function color(theme: Record<string, string>, name: string): string {
-  const value = MAPPING[name] ?? theme[name];
+const TAB_BAR = block(".sj-tab-bar", /(--[\w-]+):\s*([^;]+);/g);
+const ON_CHARCOAL = block(".sj-on-charcoal", /(--[\w-]+):\s*([^;]+);/g);
+
+// A variable's colour in a theme, following var() references through the mapping and the palette,
+// and mixing a color-mix(in srgb, …) channel by channel.
+function color(theme: Record<string, string>, name: string, mapping = MAPPING): string {
+  const value = mapping[name] ?? MAPPING[name] ?? theme[name];
   expect(value, `${name} is declared`).toBeDefined();
   const reference = /^var\((--[\w-]+)\)$/.exec(value);
-  if (reference) return color(theme, reference[1]);
+  if (reference) return color(theme, reference[1], mapping);
+  const mix = /^color-mix\(in srgb, var\((--[\w-]+)\) (\d+)%, var\((--[\w-]+)\)\)$/.exec(value);
+  if (mix) {
+    const [a, b] = [color(theme, mix[1], mapping), color(theme, mix[3], mapping)];
+    const weight = Number(mix[2]) / 100;
+    const channel = (hex: string, index: number) => Number.parseInt(hex.slice(index, index + 2), 16);
+    return `#${[1, 3, 5]
+      .map((index) => Math.round(channel(a, index) * weight + channel(b, index) * (1 - weight)).toString(16).padStart(2, "0"))
+      .join("")}`;
+  }
   expect(value, `${name} is a plain hex colour`).toMatch(/^#[0-9a-f]{6}$/i);
   return value;
 }
@@ -82,6 +95,27 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
       "--input": "var(--sj-border-strong)",
       "--ring": "var(--sj-brass)",
       "--radius": "var(--sj-radius-control)",
+      "--font-heading": "var(--font-sj-display)",
+    });
+  });
+
+  it("rebinds the phone tab bar alone to charcoal under photo-white text", () => {
+    expect(TAB_BAR).toEqual({
+      "--popover": "var(--sj-photo-charcoal)",
+      "--foreground": "var(--sj-on-photo)",
+      "--muted-foreground": "color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal))",
+      "--accent": "color-mix(in srgb, var(--sj-on-photo) 14%, var(--sj-photo-charcoal))",
+      "--accent-foreground": "var(--sj-on-photo)",
+      "--border": "var(--sj-photo-line)",
+      "--ring": "var(--sj-on-photo)",
+    });
+  });
+
+  it("rebinds HX controls on a charcoal panel to photo-white, through tokens alone", () => {
+    expect(ON_CHARCOAL).toEqual({
+      "--foreground": "var(--sj-on-photo)",
+      "--border": "var(--sj-photo-line)",
+      "--ring": "var(--sj-on-photo)",
     });
   });
 
@@ -95,5 +129,19 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
         expect(contrast(color(theme, text), color(theme, surface))).toBeGreaterThanOrEqual(4.5);
       });
     }
+    for (const [text, surface] of [
+      ["--muted-foreground", "--popover"],
+      ["--foreground", "--popover"],
+      ["--accent-foreground", "--accent"],
+    ] as const) {
+      it(`passes 4.5:1 for the tab bar's ${text} on ${surface} in the ${themeName} theme`, () => {
+        expect(contrast(color(theme, text, TAB_BAR), color(theme, surface, TAB_BAR))).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+    it(`passes 4.5:1 for a control's text on a charcoal panel, and 3:1 for its focus ring, in the ${themeName} theme`, () => {
+      const panel = color(theme, "--sj-photo-charcoal");
+      expect(contrast(color(theme, "--foreground", ON_CHARCOAL), panel)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(color(theme, "--ring", ON_CHARCOAL), panel)).toBeGreaterThanOrEqual(3);
+    });
   }
 });

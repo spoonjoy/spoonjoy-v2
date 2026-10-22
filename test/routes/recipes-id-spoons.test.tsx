@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub, findShownAlert, getShownAlert, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { data } from "react-router";
 import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 
@@ -165,9 +165,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -210,9 +210,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -256,9 +256,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -303,9 +303,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -342,9 +342,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -383,9 +383,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -421,9 +421,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
         action: async ({ request }: { request: Request }) => {
@@ -470,9 +470,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
         action: async ({ request }: { request: Request }) => {

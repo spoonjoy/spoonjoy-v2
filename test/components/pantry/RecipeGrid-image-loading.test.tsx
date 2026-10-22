@@ -10,7 +10,6 @@ function recipes(count: number): PantryRecipeCard[] {
     id: `r-${i}`,
     title: `Recipe ${i}`,
     coverImageUrl: `https://images.example.com/r-${i}.jpg`,
-    href: `/recipes/r-${i}`,
   }))
 }
 

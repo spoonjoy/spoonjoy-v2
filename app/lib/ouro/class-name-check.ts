@@ -12,7 +12,12 @@ const LAYOUT = /^(text-(wrap|nowrap|balance|pretty|ellipsis|clip)|border-(collap
 export interface ClassNameProblem {
   /** The offending class token, exactly as written. */
   token: string;
-  /** `align` for text alignment classes, `appearance` for everything else. */
+  /**
+   * `align` for text alignment classes, `appearance` for everything else.
+   *
+   * @claim "`align` for text alignment classes, `appearance`" registry/ouro/lib/ouro/class-name-check.test.tsx verify:testExists(registry/ouro/lib/ouro/class-name-check.test.tsx::useAppearanceClassNameCheck > points alignment classes to the alignHint, or to the parent)
+   * @claim "`align` for text alignment classes, `appearance`" registry/ouro/lib/ouro/class-name-check.test.tsx verify:testExists(registry/ouro/lib/ouro/class-name-check.test.tsx::useAppearanceClassNameCheck > does not warn for layout classes)
+   */
   kind: "align" | "appearance";
 }
 
@@ -65,6 +70,8 @@ export function findClassNameProblem(className: string | undefined): ClassNamePr
  * @param alignHint Exact code for alignment classes when the component has an
  * `align` prop, for example `align="center"`. Without it the message says
  * alignment is the parent's job.
+ * @claim "Runs in an effect, so it" registry/ouro/lib/ouro/class-name-check.test.tsx verify:testExists(registry/ouro/lib/ouro/class-name-check.test.tsx::useAppearanceClassNameCheck > never warns during server rendering)
+ * @claim "Runs in an effect, so it" registry/ouro/lib/ouro/class-name-check.test.tsx verify:testExists(registry/ouro/lib/ouro/class-name-check.test.tsx::useAppearanceClassNameCheck > warns once per instance, and again for another instance)
  */
 export function useAppearanceClassNameCheck(
   component: string,
