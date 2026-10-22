@@ -25,7 +25,16 @@ env:
 jobs:
   canary:
     name: canary
-    runs-on: ubuntu-latest
+    # Runs in Playwright's image, at the version package.json pins, by digest
+    # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
+    # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
+    # runner's own zstd is lent to the image so actions/cache uses the same compression as the runner,
+    # which needs the image's Ubuntu (24.04), so the job names that runner. setup-node's package cache
+    # is off: its path differs inside the container.
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
+      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
     timeout-minutes: 25
 
     steps:
@@ -50,6 +59,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
+          cache: ""
 
       - name: Activate pnpm
         if: steps.cloudflare.outputs.ready == 'true'
@@ -64,10 +74,6 @@ jobs:
       - name: Generate Prisma client
         if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm prisma:generate
-
-      - name: Install Playwright Chromium
-        if: steps.cloudflare.outputs.ready == 'true'
-        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run MCP OAuth canary
         id: mcp-canary

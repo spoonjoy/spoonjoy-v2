@@ -20,7 +20,16 @@ env:
 jobs:
   build-storybook:
     name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}
-    runs-on: ubuntu-latest
+    # Runs in Playwright's image, at the version package.json pins, by digest
+    # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
+    # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
+    # runner's own zstd is lent to the image so actions/cache uses the same compression as the runner,
+    # which needs the image's Ubuntu (24.04), so the job names that runner. setup-node's package cache
+    # is off: its path differs inside the container.
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
+      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
     permissions:
       contents: read
       deployments: write
@@ -32,6 +41,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+          cache: ""
 
       - name: 📦 Activate pnpm
         run: |
@@ -52,9 +62,6 @@ jobs:
       # main: the Vitest browser tests in Chromium, WebKit and a touch phone with 100% coverage of
       # the Ouro UI files (vitest.ouro.config.ts), then the Playwright specs in e2e/ouro against
       # the Storybook just built (playwright.ouro.config.ts). Both run under the warning policy.
-      - name: 🎭 Install Playwright browsers for Ouro UI
-        run: pnpm exec playwright install --with-deps chromium webkit
-
       - name: 🧪 Ouro UI browser tests and coverage
         run: pnpm run verify:clean:test:ouro
 

@@ -125,7 +125,7 @@ describe("production release provenance", () => {
     const setup = stepNames.indexOf("Setup Node.js");
     const deploy = stepNames.indexOf("Deploy staged release to Cloudflare Workers");
     const record = stepNames.indexOf("Record release source");
-    expect([checkout, validation, setup, deploy, record]).toEqual([0, 2, 3, 8, 9]);
+    expect([checkout, validation, setup, deploy, record]).toEqual([0, 3, 4, 8, 9]);
   });
 
   it("freezes the deploy step inventory and security-sensitive shell bodies", () => {
@@ -138,12 +138,12 @@ describe("production release provenance", () => {
     ).toEqual([
       "Checkout approved source SHA",
       "Checkout trusted rollback tooling",
+      "Install jq",
       "Validate release source",
       "Setup Node.js",
       "Activate pnpm",
       "Install dependencies",
       "Generate Prisma client",
-      "Install Playwright Chromium",
       "Deploy staged release to Cloudflare Workers",
       "Record release source",
       "Ensure release artifact exists",
@@ -468,22 +468,10 @@ describe("CI warning suppression at source", () => {
     expect(warningGate).not.toContain("Update available 6.19.2 -> 7.8.0");
   });
 
-  it("disables only the ephemeral runner's needrestart hook during gated Playwright setup", () => {
-    expect(ci).toContain([
-      "      - name: 🎭 Install Playwright Browsers",
-      "        run: |",
-      "          node scripts/warning-gate.ts -- sudo apt-get update",
-      "          node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
-      "          node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update",
-      "          node scripts/warning-gate.ts -- sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2",
-      "          node scripts/warning-gate.ts -- pnpm exec playwright install-deps --dry-run chromium",
-      "          node scripts/warning-gate.ts -- pnpm exec playwright install chromium",
-    ].join("\n"));
-    expect(ci.match(/NEEDRESTART_SUSPEND=1/g)).toHaveLength(1);
-    expect(ci.match(/man-db\/auto-update boolean true/g)).toHaveLength(1);
-    expect(ci.match(/sudo touch \/var\/lib\/man-db\/auto-update/g)).toHaveLength(1);
-    expect(ci).not.toMatch(/^\s*NEEDRESTART_SUSPEND:/m);
-    expect(ci).not.toMatch(/sudo[^\n]*(?:node|pnpm|corepack|node_modules|\.js)/);
+  // e2e runs in Playwright's image (test/workflows/playwright-image.test.ts), which has its
+  // browsers and their system packages, so canonical CI never installs a package or uses sudo.
+  it("installs no system package and uses no sudo in canonical CI", () => {
+    expect(ci).not.toMatch(/\bsudo\b|apt-get|NEEDRESTART|debconf|man-db|playwright install/);
   });
 
   it("routes every Corepack command in canonical CI through the warning gate", () => {
