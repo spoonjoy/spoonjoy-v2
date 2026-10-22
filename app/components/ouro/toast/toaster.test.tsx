@@ -9,6 +9,7 @@ import { springAt } from "~/lib/ouro/spring";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 import { holdFrames } from "~/lib/ouro/testing/frames";
+import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
 
 const chromiumOnly = it.skipIf(server.browser !== "chromium");
 
@@ -33,53 +34,48 @@ const showing = (message: string) => {
   return Boolean(item && !item.hasAttribute("data-ending-style"));
 };
 
+/**
+ * Waits on real frames until `read()` equals `expected`. Unlike expect.poll it never moves a fake
+ * clock on, so a test that took over the toasts' countdowns (`fakeClock`) decides alone when they run.
+ */
+async function until<T>(read: () => T, expected: T) {
+  const same = () => JSON.stringify(read()) === JSON.stringify(expected);
+  const deadline = performance.now() + 10_000;
+  while (!same() && performance.now() < deadline) await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(read()).toEqual(expected);
+}
+
+/**
+ * Takes over the toasts' countdowns (Date, setTimeout and clearTimeout), not animation frames, so a
+ * timed toast stays until the test moves the clock on (`advance`): a loaded runner can take longer
+ * than a toast's duration between two steps. The afterEach hook gives the real clock back.
+ */
+const fakeClock = () => vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+/** Moves the fake clock on by `ms`. */
+const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+
 /** Shows a toast inside act, so React commits it. */
 async function show(message: string, options?: ToastOptions) {
   await act(async () => {
     toast(message, options);
   });
-  await expect.poll(() => showing(message)).toBe(true);
+  await until(() => showing(message), true);
   const item = toastNamed(message)!;
   // Wait for it to finish sliding in, so a pointer lands where the test measured.
-  await expect.poll(() => item.getAnimations().length).toBe(0);
+  await until(() => item.getAnimations().length, 0);
   return item;
 }
 
 /** The toasts' messages, in page order. */
 const titles = () => toasts().map((item) => item.querySelector("[data-ouro-toast-title]")!.textContent);
 
-/** Records the text each live region exposes as it changes; text inside aria-hidden is not exposed. */
-function watchAnnouncements() {
-  const liveSelector = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
-  const changes: Array<{ region: Element; text: string }> = [];
-  const exposed = (node: Node) => {
-    const element = node instanceof Element ? node : node.parentElement;
-    return !element?.closest('[aria-hidden="true"]');
-  };
-  const observer = new MutationObserver((records) => {
-    for (const record of records) {
-      const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      const nodes = record.type === "characterData" ? [record.target] : [...record.addedNodes];
-      for (const node of nodes) {
-        // Text added inside a live region, or a live region added with its text.
-        const region = target?.closest(liveSelector) ?? (node instanceof Element ? (node.matches(liveSelector) ? node : node.querySelector(liveSelector)) : null);
-        const text = exposed(node) ? (node.textContent ?? "") : "";
-        if (region && text) changes.push({ region, text });
-      }
-    }
-  });
-  observer.observe(document.body, { subtree: true, childList: true, characterData: true });
-  const matching = (message: string) => changes.filter((change) => change.text.includes(message));
-  return { changes, matching, count: (message: string) => matching(message).length, stop: () => observer.disconnect() };
-}
-
 /** Waits until the toast is gone from the page. */
-const gone = (message: string) => expect.poll(() => toastNamed(message)).toBeUndefined();
+const gone = (message: string) => until(() => toastNamed(message) === undefined, true);
 
-/** Polls until `ms` milliseconds have passed: a condition, so a loaded runner just waits longer. */
+/** Waits on real frames until `ms` milliseconds have passed, leaving a fake clock where it is. */
 async function elapse(ms: number) {
-  const start = performance.now();
-  await expect.poll(() => performance.now() - start >= ms).toBe(true);
+  const end = performance.now() + ms;
+  while (performance.now() < end) await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
 let warn: ReturnType<typeof vi.spyOn>;
@@ -98,6 +94,7 @@ async function moveMouseAway() {
   corner.remove();
 }
 afterEach(async () => {
+  vi.useRealTimers();
   await act(async () => toast.dismiss());
   vi.restoreAllMocks();
   await act(async () => roots.splice(0).forEach((root) => root.unmount()));
@@ -311,7 +308,7 @@ describe("Toaster", () => {
   it("translates the region name and the dismiss button with label and closeLabel", async () => {
     await render(<Toaster label="Benachrichtigungen" closeLabel="Schließen" />);
     expect(viewport()!.getAttribute("aria-label")).toBe("Benachrichtigungen");
-    const item = await show("Gespeichert");
+    const item = await show("Gespeichert", { duration: 0 });
     expect(item.querySelector('button[aria-label="Schließen"]')).not.toBeNull();
   });
 
@@ -360,7 +357,7 @@ describe("Toaster", () => {
     const first = await render(<Toaster />);
     await first.unmount();
     await render(<Toaster />);
-    await show("Saved");
+    await show("Saved", { duration: 0 });
     expect(toasts()).toHaveLength(1);
   });
 
@@ -370,7 +367,7 @@ describe("Toaster", () => {
         <Toaster />
       </StrictMode>,
     );
-    await show("Saved");
+    await show("Saved", { duration: 0 });
     expect(toasts()).toHaveLength(1);
     expect(warnings()).toEqual([]);
   });
@@ -379,12 +376,14 @@ describe("Toaster", () => {
 describe("toast()", () => {
   it("shows a toast named by its message, with its description, and returns its id", async () => {
     await render(<Toaster />);
+    fakeClock();
     let id = "";
     await act(async () => {
       id = toast("Recipe saved", { description: "Find it in your cookbook." });
     });
     expect(id).toMatch(/^ouro-toast-\d+$/);
-    await expect.element(page.getByRole("dialog", { name: "Recipe saved" })).toBeVisible();
+    await until(() => showing("Recipe saved"), true);
+    expect(page.getByRole("dialog", { name: "Recipe saved" }).element()).toBeVisible();
     const item = toastNamed("Recipe saved")!;
     expect(item.getAttribute("aria-modal")).toBe("false");
     expect(item.querySelector("[data-ouro-toast-description]")!.textContent).toBe("Find it in your cookbook.");
@@ -409,6 +408,7 @@ describe("toast()", () => {
 
   it("defaults to secondary, and an unknown tone renders secondary and warns with the tone to use", async () => {
     await render(<Toaster />);
+    fakeClock();
     expect((await show("Plain")).getAttribute("data-tone")).toBe("secondary");
     const options = { tone: "error" } as unknown as ToastOptions;
     expect((await show("Failed", options)).getAttribute("data-tone")).toBe("secondary");
@@ -422,6 +422,7 @@ describe("toast()", () => {
 
   it("warns for Sonner's options and shortcuts, with the Ouro UI call, and still shows the toast", async () => {
     await render(<Toaster />);
+    fakeClock();
     const guessed = [
       { type: "success" },
       { variant: "error" },
@@ -443,7 +444,7 @@ describe("toast()", () => {
       shortcuts.warning("Careful");
       shortcuts.info("Heads up", { description: "More" });
     });
-    await expect.poll(() => toasts().length).toBeGreaterThanOrEqual(3);
+    await until(() => toasts().length >= 3, true);
     expect(warnings()).toEqual([
       '[ouro-ui] toast: type is not an option. Fix: toast("…", { tone: "success" }).',
       '[ouro-ui] toast: variant is not an option. Fix: toast("…", { tone: "destructive" }).',
@@ -457,7 +458,7 @@ describe("toast()", () => {
     ]);
     // The fourth waits for a slot.
     await act(async () => toast.dismiss(saved));
-    await expect.poll(() => toastNamed("Heads up")?.getAttribute("data-tone")).toBe("primary");
+    await until(() => toastNamed("Heads up")?.getAttribute("data-tone"), "primary");
   });
 
   it("runs the action, then dismisses the toast", async () => {
@@ -476,6 +477,68 @@ describe("toast()", () => {
     const item = await show("Saved", { duration: 0 });
     await userEvent.click(item.querySelector<HTMLElement>('button[aria-label="Dismiss"]')!);
     await gone("Saved");
+  });
+
+  it.each([
+    ["the next toast", ["Saved", "Copied"], () => toastNamed("Copied")?.contains(document.activeElement)],
+    // Not the page's last control (a footer link after the toasts in the page): where focus was before it entered the toasts.
+    ["the control focus came from when it was the last", ["Saved"], () => document.activeElement?.textContent === "Before"],
+  ])("hands focus to %s when its dismiss button closes it from the keyboard", async (_case, messages, focused) => {
+    await render(
+      <>
+        <button type="button">Before</button>
+        <Toaster />
+        <a href="#footer">Footer</a>
+      </>,
+    );
+    for (const message of messages) await show(message, { duration: 0 });
+    [...document.querySelectorAll("button")].find((button) => button.textContent === "Before")!.focus();
+    (toastNamed("Saved")!.querySelector<HTMLElement>('button[aria-label="Dismiss"]')!).focus();
+    await userEvent.keyboard("{Enter}");
+    await gone("Saved");
+    await expect.poll(focused).toBe(true);
+  });
+
+  // Chromium only: a press focuses a button there, not in WebKit.
+  it.skipIf(server.browser !== "chromium")("hands focus back to the control that showed the toasts when a press closes the last, after the toasts passed it along", async () => {
+    // As the conformance check uses the WithAction story: Undo closes its toast and shows another,
+    // which takes focus from it; that one's dismiss button then closes the last toast.
+    const Show = () => (
+      <button type="button" onClick={() => toast("Recipe deleted", { duration: 0, action: { label: "Undo", onClick: () => toast("Recipe restored", { duration: 0 }) } })}>
+        Delete recipe
+      </button>
+    );
+    await render(
+      <>
+        <Show />
+        <Toaster />
+        <a href="#footer">Footer</a>
+      </>,
+    );
+    await userEvent.click(page.getByRole("button", { name: "Delete recipe" }));
+    await expect.poll(() => toastNamed("Recipe deleted")).not.toBeUndefined();
+    await userEvent.click(page.getByRole("button", { name: "Undo" }));
+    await gone("Recipe deleted");
+    await expect.poll(() => toastNamed("Recipe restored")?.contains(document.activeElement)).toBe(true);
+    await userEvent.click(toastNamed("Recipe restored")!.querySelector<HTMLElement>('button[aria-label="Dismiss"]')!);
+    await gone("Recipe restored");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Delete recipe");
+  });
+
+  it("leaves focus on the page when the last toast goes and focus came from nowhere, rather than moving it to the page's last control", async () => {
+    await render(
+      <>
+        <Toaster />
+        <a href="#footer">Footer</a>
+      </>,
+    );
+    await show("Saved", { duration: 0 });
+    (document.activeElement as HTMLElement | null)?.blur();
+    (toastNamed("Saved")!.querySelector<HTMLElement>('button[aria-label="Dismiss"]')!).focus();
+    await userEvent.keyboard("{Enter}");
+    await gone("Saved");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("closes one toast with toast.dismiss(id), and all with toast.dismiss()", async () => {
@@ -506,20 +569,29 @@ describe("toast()", () => {
 
   it("keeps a toast that has an action until it is dismissed, unless duration is given", async () => {
     await render(<Toaster />);
+    fakeClock();
     await act(async () => {
       toast("Recipe deleted", { action: { label: "Undo", onClick: () => {} } });
       toast("Brief undo", { duration: 100, action: { label: "Undo", onClick: () => {} } });
       toast("Plain");
     });
+    await until(() => [showing("Brief undo"), showing("Plain")], [true, true]);
+    await advance(99);
+    expect(showing("Brief undo")).toBe(true);
+    await advance(1);
     await gone("Brief undo");
     // A toast with no action goes after the default 5s; the one with an action stays.
-    await expect.poll(() => toastNamed("Plain"), { timeout: 9000 }).toBeUndefined();
-    await elapse(300);
+    await advance(4899);
+    expect(showing("Plain")).toBe(true);
+    await advance(1);
+    await gone("Plain");
+    await advance(60_000);
     expect(showing("Recipe deleted")).toBe(true);
   });
 
   it("warns for a negative or NaN duration and uses the default", async () => {
     await render(<Toaster />);
+    fakeClock();
     await act(async () => {
       toast("Negative", { duration: -1 });
       toast("Not a number", { duration: Number.NaN });
@@ -528,32 +600,28 @@ describe("toast()", () => {
       '[ouro-ui] toast: duration: -1 is not a duration; use milliseconds, or 0 to keep the toast. Fix: toast("…", { duration: 5000 }).',
       '[ouro-ui] toast: duration: NaN is not a duration; use milliseconds, or 0 to keep the toast. Fix: toast("…", { duration: 5000 }).',
     ]);
-    await expect.poll(() => showing("Negative")).toBe(true);
-    await expect.poll(() => toastNamed("Negative"), { timeout: 8000 }).toBeUndefined();
-    await expect.poll(() => toastNamed("Not a number"), { timeout: 2000 }).toBeUndefined();
+    await until(() => [showing("Negative"), showing("Not a number")], [true, true]);
+    await advance(4999);
+    expect([showing("Negative"), showing("Not a number")]).toEqual([true, true]);
+    await advance(1);
+    await gone("Negative");
+    await gone("Not a number");
   });
 
   it("dismisses itself after duration; 0 and Infinity keep it", async () => {
     await render(<Toaster />);
-    // A 100ms toast can come and go between two polls on a loaded runner, so an observer
-    // records it: its callback runs as a microtask after React inserts the toast, before
-    // the dismiss timer can fire.
-    let shown = false;
-    const observer = new MutationObserver(() => {
-      shown ||= showing("Brief");
+    fakeClock();
+    await act(async () => {
+      toast("Kept", { duration: 0 });
+      toast("Kept forever", { duration: Infinity });
+      toast("Brief", { duration: 100 });
     });
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true });
-    try {
-      await act(async () => {
-        toast("Kept", { duration: 0 });
-        toast("Kept forever", { duration: Infinity });
-        toast("Brief", { duration: 100 });
-      });
-      await gone("Brief");
-    } finally {
-      observer.disconnect();
-    }
-    expect(shown).toBe(true);
+    await until(() => [showing("Kept"), showing("Kept forever"), showing("Brief")], [true, true, true]);
+    await advance(99);
+    expect(showing("Brief")).toBe(true);
+    await advance(1);
+    await gone("Brief");
+    await advance(60_000);
     expect(showing("Kept") && showing("Kept forever")).toBe(true);
   });
 
@@ -578,33 +646,37 @@ describe("toast()", () => {
       for (const n of [1, 2, 3]) ids.push(toast(`Kept ${n}`, { duration: 0 }));
     });
     const announced = watchAnnouncements();
+    fakeClock();
     await act(async () => {
       toast("Timed", { duration: 1500 });
     });
     // Longer than its duration: it is still waiting, unseen and unspoken, not expired.
-    await elapse(2000);
+    await advance(2000);
     expect(toastNamed("Timed")).toBeUndefined();
     expect(announced.count("Timed")).toBe(0);
     await act(async () => toast.dismiss(ids[0]));
-    await expect.poll(() => showing("Timed")).toBe(true);
-    const shownAt = performance.now();
+    await until(() => showing("Timed"), true);
+    await advance(1499);
+    expect(showing("Timed")).toBe(true);
+    await advance(1);
     await gone("Timed");
-    expect(performance.now() - shownAt).toBeGreaterThanOrEqual(1400);
     expect(announced.count("Timed")).toBe(1);
     announced.stop();
   });
 
   it("shows a timed toast for its full duration when three newer ones arrive, then shows the next", async () => {
     await render(<Toaster />);
+    fakeClock();
     await show("Timed first", { duration: 1500 });
-    const shownAt = performance.now();
     await act(async () => {
       for (const n of [2, 3, 4]) toast(`Toast ${n}`, { duration: 0 });
     });
-    await expect.poll(() => titles()).toEqual(["Toast 3", "Toast 2", "Timed first"]);
+    await until(titles, ["Toast 3", "Toast 2", "Timed first"]);
+    await advance(1499);
+    expect(showing("Timed first")).toBe(true);
+    await advance(1);
     await gone("Timed first");
-    expect(performance.now() - shownAt).toBeGreaterThanOrEqual(1400);
-    await expect.poll(() => titles()).toEqual(["Toast 4", "Toast 3", "Toast 2"]);
+    await until(titles, ["Toast 4", "Toast 3", "Toast 2"]);
   });
 
   it("dismisses a waiting toast by id, so it never shows", async () => {
@@ -727,6 +799,7 @@ describe("toast()", () => {
   it("is announced once: politely through the Notifications region, and a destructive toast assertively (Review Focus 5)", async () => {
     await render(<Toaster />);
     const announced = watchAnnouncements();
+    fakeClock();
     await act(async () => {
       toast("Recipe saved", { tone: "success", description: "In your cookbook." });
     });
@@ -736,9 +809,10 @@ describe("toast()", () => {
     await act(async () => {
       toast("Couldn't sync", { tone: "destructive", description: "Check your connection.", action: { label: "Retry", onClick: () => {} } });
     });
-    await expect.poll(() => toasts().length).toBe(3);
+    await until(() => toasts().length, 3);
     // Let height measurement and the enter transition run, which must not repeat the text.
     await elapse(400);
+    await advance(1000);
     announced.stop();
     expect(announced.count("Recipe saved")).toBe(1);
     expect(announced.count("Photo added")).toBe(1);
@@ -791,6 +865,7 @@ describe("toast()", () => {
   });
 
   it("warns when no Toaster mounts", async () => {
+    // real clock: with no Toaster, no toast shows or counts down; the check for one runs a little later.
     toast("Nobody sees this");
     toast("Nor this");
     await expect
@@ -829,6 +904,21 @@ describe("keyboard", () => {
 });
 
 describe("pausing", () => {
+  /**
+   * Shows a 3s toast on a fake Date/setTimeout clock and waits on real frames until it has slid
+   * in. A real countdown can run out during a busy WebKit's host round trip for the hover or key
+   * that pauses it, and expect.poll would advance the fake clock on each retry.
+   */
+  async function showOnFakeClock(message: string) {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    await act(async () => {
+      toast(message, { duration: 3000 });
+    });
+    const item = toastNamed(message)!;
+    while (item.getAnimations().length > 0) await new Promise((resolve) => requestAnimationFrame(resolve));
+    return item;
+  }
+
   it("pauses while the pointer is over the toasts, and resumes after", async () => {
     await render(
       <>
@@ -836,13 +926,22 @@ describe("pausing", () => {
         <Toaster />
       </>,
     );
-    const item = await show("Paused", { duration: 3000 });
-    await userEvent.hover(item);
-    await expect.poll(() => viewport()!.hasAttribute("data-expanded")).toBe(true);
-    await elapse(4000);
-    expect(showing("Paused")).toBe(true);
-    await userEvent.hover(page.getByRole("button", { name: "Elsewhere" }));
-    await gone("Paused");
+    try {
+      const item = await showOnFakeClock("Paused");
+      await userEvent.hover(item);
+      await expect.poll(() => viewport()!.hasAttribute("data-expanded")).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+      expect(showing("Paused")).toBe(true);
+      await userEvent.hover(page.getByRole("button", { name: "Elsewhere" }));
+      // It resumes with the whole 3s it had left when the pointer came.
+      await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+      expect(showing("Paused")).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(showing("Paused")).toBe(false);
+      await gone("Paused");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("pauses while a toast has keyboard focus; F6 moves focus to the toasts", async () => {
@@ -853,11 +952,15 @@ describe("pausing", () => {
       </>,
     );
     await userEvent.click(page.getByRole("button", { name: "Before" }));
-    await show("Focused", { duration: 3000 });
-    await userEvent.keyboard("{F6}");
-    await expect.poll(() => viewport()!.contains(document.activeElement)).toBe(true);
-    await elapse(4000);
-    expect(showing("Focused")).toBe(true);
+    try {
+      await showOnFakeClock("Focused");
+      await userEvent.keyboard("{F6}");
+      await expect.poll(() => viewport()!.contains(document.activeElement)).toBe(true);
+      await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+      expect(showing("Focused")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

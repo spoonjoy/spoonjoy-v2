@@ -2,7 +2,8 @@ import { ImageOff, Loader2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from '../navigation/app-link'
 import { Avatar } from '../ouro/avatar/avatar'
-import { ScaleSelector } from './ScaleSelector'
+import { NumberField } from '~/components/ouro/number-field/number-field'
+import { SCALE_RANGE } from '~/components/cook/cook-controller'
 import { scaleServingsText } from '~/lib/quantity'
 import { resolveChefAvatarUrl } from '~/lib/chef-avatar'
 import { CoverProvenanceBadge } from './CoverProvenanceBadge'
@@ -61,7 +62,7 @@ export interface RecipeHeaderProps {
  * Features:
  * - PROMINENT hero-style recipe image (or placeholder)
  * - Mobile-first design for kitchen use
- * - Integrated ScaleSelector with scaled servings text
+ * - The scale, as Ouro HX's NumberField, with the scaled servings under it
  * - Optional masthead actions for desktop and first-viewport clarity
  */
 // On paper the scale control is gone, so the printed page says what the quantities are for: the
@@ -208,10 +209,17 @@ export function RecipeHeader({
 
           <div className="mt-8 max-w-[43rem] print:hidden" data-testid="recipe-header-controls">
             <div className="sm:max-w-[26rem]">
-              <ScaleSelector
+              <NumberField
+                label="Scale"
+                description={scaledServings}
                 value={scaleFactor}
-                onChange={onScaleChange}
-                displayValue={scaledServings}
+                {...SCALE_RANGE}
+                format={{ maximumFractionDigits: 2 }}
+                decrementLabel="Decrease scale"
+                incrementLabel="Increase scale"
+                onValueChange={(next) => {
+                  if (next !== null) onScaleChange(next)
+                }}
               />
             </div>
             {progressSyncStatus ? <CookSyncStatusLine status={progressSyncStatus} /> : null}

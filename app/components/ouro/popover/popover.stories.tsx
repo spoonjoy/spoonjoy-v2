@@ -2,6 +2,15 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useRef, useState, type CSSProperties } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Popover } from "~/components/ouro/popover/popover";
+import {
+  PopoverClose,
+  PopoverPopup,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverRoot,
+  PopoverTitle,
+  PopoverTrigger,
+} from "~/components/ouro/popover/popover-parts";
 import { TextField } from "~/components/ouro/text-field/text-field";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
@@ -93,4 +102,22 @@ export const Controlled: Story = {
       </div>
     );
   },
+};
+
+/** Built from parts. A part given no `render` is a plain button of its own: here the trigger, and the close button screen readers reach. */
+export const Parts: Story = {
+  render: () => (
+    <PopoverRoot>
+      <PopoverTrigger>Share</PopoverTrigger>
+      <PopoverPortal>
+        <PopoverPositioner>
+          <PopoverPopup>
+            <PopoverTitle>Share recipe</PopoverTitle>
+            Anyone with the link can view it.
+            <PopoverClose>Close</PopoverClose>
+          </PopoverPopup>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </PopoverRoot>
+  ),
 };

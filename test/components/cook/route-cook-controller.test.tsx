@@ -94,8 +94,8 @@ describe("useRouteCookController", () => {
     render(inRecipeRoute(<RouteCookView />, `${RECIPE_PATH}#cook`));
 
     const panel = await screen.findByTestId("cook-mode-panel");
-    expect(within(panel).getByText("Step 2 of 3")).toBeInTheDocument();
-    expect(within(panel).getByTestId("scale-display")).toHaveTextContent("2×");
+    expect(within(panel).getAllByText("Step 2 of 3")[0]).toBeInTheDocument();
+    expect(within(panel).getByRole("textbox", { name: "Scale" })).toHaveValue("2");
   });
 
   it("server-renders with no progress, hydrates without a mismatch, then restores saved progress", async () => {

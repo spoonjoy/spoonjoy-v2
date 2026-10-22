@@ -3,6 +3,7 @@ import { useTheme } from './theme-provider'
 import * as Headless from '@headlessui/react'
 import clsx from 'clsx'
 
+// TODO(ouro-hx: color-scheme-toggle, spoonjoy/spoonjoy-v2#563): The light, dark and system control becomes HX's ColorSchemeToggle in #563.
 export function ThemeToggle() {
   const { setTheme, resolvedTheme } = useTheme()
 

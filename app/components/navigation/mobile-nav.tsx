@@ -115,6 +115,7 @@ export function useMobileNavEligibility(isAuthenticated: boolean) {
   return !isSuppressed && !shouldHideTabBar(pathname, isAuthenticated);
 }
 
+// TODO(ouro-hx: tab-bar, spoonjoy/spoonjoy-v2#563): The phone's bottom tab bar becomes HX's TabBar in #563.
 export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
   const { pathname } = useLocation();
   const isEligible = useMobileNavEligibility(isAuthenticated);

@@ -1,0 +1,42 @@
+{
+  "$comment": "Spoonjoy's claims (AGENTS.md, \"Claims\"): the surfaces HX's checker (app/lib/ouro/claims-check.mjs, from lib-claims) reads, what it lets through, and which CI job runs which tests. An entry a pull request adds needs a reason and a mention in its description (pnpm run claims:pr runs the ratchet).",
+  "surfaces": [
+    {
+      "match": "^(README|AGENTS)\\.md$",
+      "mode": "markdown"
+    },
+    {
+      "match": "^docs/building-with-ouro-hx\\.md$",
+      "mode": "markdown"
+    },
+    {
+      "match": "^app/lib/llms-txt\\.server\\.ts$|^app/routes/(test-kitchen\\.tsx|ouro-provenance\\[\\.\\]json\\.ts)$|^app/lib/(test-kitchen/[\\w-]+|ouro-provenance(\\.server)?)\\.ts$",
+      "exclude": "\\.test\\.",
+      "mode": "copy"
+    }
+  ],
+  "notLinted": [],
+  "generated": [],
+  "generators": [],
+  "allowed": [
+    {
+      "file": "app/lib/test-kitchen/content.ts",
+      "sentence": "Pat the chickpeas dry, toss them with the oil, paprika and salt, and roast at 220°C (425°F) until crisp and deep gold, shaking the tray once.",
+      "reason": "a step of the Test Kitchen's recipe: a cooking instruction, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/lib/test-kitchen/content.ts",
+      "sentence": "Spread the yogurt in two bowls, pile the hot chickpeas on top, then finish with lemon juice and flaky salt.",
+      "reason": "a step of the Test Kitchen's recipe: a cooking instruction, not a claim about Spoonjoy"
+    }
+  ],
+  "requiredTests": [
+    {
+      "match": "^test/(?!ouro/).*\\.test\\.tsx?$",
+      "job": "coverage",
+      "reason": "the coverage job runs every unit test under test/ with full coverage (pnpm run verify:clean:test:coverage, vitest.config.ts) in the merge queue before anything lands"
+    }
+  ],
+  "requiredChecks": ".github/required-checks.json",
+  "urlCache": "claims-urls.json"
+}

@@ -68,6 +68,12 @@
   --ouro-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ouro-duration-press: 160ms;
   --ouro-duration-sheet: 500ms;
+  --ouro-duration-draw: 240ms; /* a stroke drawn along its path: the checkbox tick, a checklist strike */
+  /* The shadow under a sheet, by the side it comes from: a hairline on its open edge and a soft shadow. */
+  --ouro-shadow-sheet-bottom: 0 -1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 -8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-top: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-left: 8px 0 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-right: -8px 0 32px rgb(0 0 0 / 0.12);
 }
 
 .dark {
@@ -227,23 +233,6 @@
     display: none !important;
   }
 
-  /* Ticked ingredients are this cook's progress, not part of the recipe: print every ingredient plain,
-   * without its tick box or strike-through. */
-  #steps .sj-checklist-box,
-  #steps .sj-checklist-strike {
-    display: none !important;
-  }
-
-  /* Without its box, a row is one column. Left at the screen's 2rem box column, the name and amount
-   * would be squeezed into it and the name would print at no width at all. */
-  #steps .sj-checklist-row {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  #steps .sj-checklist-name {
-    color: var(--sj-ink) !important;
-  }
-
   /* The rules below are unlayered, so they beat Tailwind's layered utilities at every breakpoint. A
    * print: utility can lose to a component class (.sj-eyebrow sets display) or to an lg: utility,
    * and a desktop-width print still matches lg. */
@@ -322,7 +311,9 @@ body {
   color: var(--sj-ink);
 }
 
-button,
+/* Controls use the UI face, except HX SyncStatus's Retry, which sits inside its sentence and takes
+   the sentence's face so the line keeps one height whichever state it shows (ourostack/ouro-ui#178). */
+button:not([data-ouro-control="sync-status"]),
 input,
 textarea,
 select {
@@ -619,27 +610,6 @@ body:has(#cook) .sj-mobile-surface {
   inset: 0;
   pointer-events: none;
   background: linear-gradient(180deg, transparent 34%, var(--sj-photo-shade));
-}
-
-@keyframes sj-checklist-strike-draw {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.sj-checklist-strike {
-  transform-origin: left center;
-  animation: sj-checklist-strike-draw 220ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sj-checklist-strike {
-    animation: none;
-    transform: scaleX(1);
-  }
 }
 
 .sj-on-photo {

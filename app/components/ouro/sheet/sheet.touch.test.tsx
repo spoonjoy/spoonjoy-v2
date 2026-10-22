@@ -75,6 +75,18 @@ async function tapNow(element: Element) {
   await commands.touchStep({ type: "touchEnd" });
 }
 
+/**
+ * Stops the sheet where it stands, and resolves once it has stopped. `pause()` on a running
+ * animation is itself pending: the animation runs on until the next frame, which takes the
+ * hold time, so a read straight after `pause()` is a frame early (about 0.8px at 60 fps here,
+ * and more on a slow runner, whose frames are longer). Waiting for `ready` reads where it stopped.
+ */
+async function freeze(sheet: HTMLElement) {
+  const animations = sheet.getAnimations();
+  for (const animation of animations) animation.pause();
+  await Promise.all(animations.map((animation) => animation.ready));
+}
+
 /** Keeps the finger still until it has no velocity left. */
 async function restFinger() {
   const since = performance.now();
@@ -98,7 +110,7 @@ async function releaseAndFreeze(sheet: HTMLElement, dx: number, dy: number, from
     await commands.touchStep({ type: "touchEnd" });
   }
   await expect.poll(() => sheet.getAnimations().length).toBeGreaterThan(0);
-  for (const animation of sheet.getAnimations()) animation.pause();
+  await freeze(sheet);
   return translation(sheet);
 }
 
@@ -143,7 +155,7 @@ describe("Sheet on a phone", () => {
     await commands.tap('[data-ouro="button"]');
     await expect.poll(() => (popup()?.getAnimations().length ?? 0) > 0 && !popup()!.hasAttribute("data-starting-style")).toBe(true);
     const sheet = popup()!;
-    for (const animation of sheet.getAnimations()) animation.pause();
+    await freeze(sheet);
     const frozen = translation(sheet).y;
     expect(frozen).toBeGreaterThan(40);
     const [x, y] = grip(sheet);

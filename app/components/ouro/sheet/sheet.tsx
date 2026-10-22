@@ -24,7 +24,11 @@ export type { SheetSide, SheetSnapPoint } from "~/components/ouro/sheet/sheet-pa
 
 /** Props shared by both ways of opening a Sheet. */
 export interface SheetBaseProps {
-  /** Names the sheet for screen readers and shows at its top. Always required; hide it with `hideTitle`. */
+  /**
+   * Names the sheet for screen readers and shows at its top. Always required; hide it with `hideTitle`.
+   *
+   * @claim "Always required; hide it with `hideTitle`" registry/ouro/components/ouro/sheet/sheet.test-d.ts verify:fileLine(registry/ouro/components/ouro/sheet/sheet.test-d.ts, /\{\strigger:\sReactElement;\schildren:\s"Body"\s\}>\(\)\.not\.toExtend<SheetProps>/)
+   */
   title: string;
   /** Hides the title visually. It still names the dialog for screen readers. */
   hideTitle?: boolean | undefined;
@@ -32,6 +36,7 @@ export interface SheetBaseProps {
    * The label of the sheet's close button. The button is the last control in the
    * sheet, hidden until it has keyboard focus, so screen-reader users on phones
    * (who have no Escape key) can always close the sheet. @default "Close"
+   * @claim "The button is the last control" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::close control > renders a Close button last in the sheet, hidden until keyboard focus, that closes it)
    */
   closeLabel?: string | undefined;
   /** A short line under the title, read out when the sheet opens. */
@@ -42,6 +47,8 @@ export interface SheetBaseProps {
    * Heights a bottom or top sheet rests at, smallest first: fractions of the
    * viewport (`0.5`), `px` or `rem`. `snapPoints={[0.5, 1]}` opens at half
    * height and drags up to full. Without snap points the sheet fits its content.
+   * @claim "Heights a bottom or top sheet" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > opens at the first snap point, as a fraction of the viewport)
+   * @claim "Heights a bottom or top sheet" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > gives a top sheet with snap points the full height less the gap, and fits a top sheet without them)
    */
   snapPoints?: SheetSnapPoint[] | undefined;
   /** The body. It scrolls when it is taller than the sheet. */
@@ -121,6 +128,12 @@ export type SheetProps = SheetWithTriggerProps | SheetControlledProps;
  * <Sheet title="Filters" open={open} onOpenChange={setOpen} snapPoints={[0.5, 1]}>
  *   <FilterForm />
  * </Sheet>
+ * @claim "It stacks above the page at" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet stacking above the app's fixed bars > stays above a fixed app bar at the same level: a tie, which the portal wins as the last child of body)
+ * @claim "It stacks above the page at" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
+ * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded axe finds nothing)
+ * @claim "To close the sheet from an" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::footer > renders footer as the actions row after the body, and closes from an action wrapped in SheetClose)
+ * @claim "To close the sheet from an" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::close control > takes its label from closeLabel and closes a controlled sheet through onOpenChange)
  */
 export function Sheet(props: SheetProps): JSX.Element {
   const {
@@ -195,6 +208,7 @@ export function Sheet(props: SheetProps): JSX.Element {
 /**
  * The close button: always present for screen readers (a phone has no Escape key),
  * hidden from view until it has keyboard focus, then shown at the top corner.
+ * @claim "The close button: always present for" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::close control > renders a Close button last in the sheet, hidden until keyboard focus, that closes it)
  */
 const closeClass =
   "sr-only focus-visible:top-3 focus-visible:end-3 focus-visible:z-1 focus-visible:m-0 focus-visible:size-auto " +
@@ -233,6 +247,8 @@ export interface SheetFrameProps {
  * message names the component the app wrote.
  *
  * @internal Shared with `Dialog`; apps use `Sheet`.
+ * @claim "The sheet's markup, without prop checks" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet dev messages > throws the exact fix when open comes without onOpenChange)
+ * @claim "The sheet's markup, without prop checks" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog parts > renders an md DialogPopup for a size that is not one of Ouro UI's, and warns once with the fix)
  */
 export function SheetFrame({
   title,

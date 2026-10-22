@@ -7,14 +7,29 @@ import { devThrow } from "~/lib/ouro/dev";
 import { RouterLink } from "~/lib/ouro/router-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
-/** Props shared by every kind of Pagination (`href` or `onPageChange`, `pageCount` or `hasNextPage`). */
+/**
+ * Props shared by every kind of Pagination (`href` or `onPageChange`, `pageCount` or `hasNextPage`).
+ *
+ * @claim "Props shared by every kind of" registry/ouro/components/ouro/pagination/pagination.test-d.ts verify:fileLine(registry/ouro/components/ouro/pagination/pagination.test-d.ts, /expectTypeOf<\{\spage:\s1;\spageCount:\s12;\shref:\s"\?page=\{page\}"\s\}>\(\)\.toExtend<PaginationProps>/)
+ * @claim "Props shared by every kind of" registry/ouro/components/ouro/pagination/pagination.test-d.ts verify:fileLine(registry/ouro/components/ouro/pagination/pagination.test-d.ts, /expectTypeOf<\{\spage:\s1;\spageCount:\s12;\sonPageChange:/)
+ */
 export interface PaginationBaseProps {
-  /** The current page, counting from 1. */
+  /**
+   * The current page, counting from 1.
+   *
+   * @claim "The current page, counting from 1" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > renders a labelled nav of plain links, with the current page marked)
+   */
   page: number;
   /**
    * How many pages show on each side of the current one before a gap ("1 … 4 5 6 … 12" is
    * `1`). The list keeps the same number of cells on every page, so Next never moves.
    * @default 1
+   * @claim "How many pages show on each" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap after the first pages near the start)
+   * @claim "How many pages show on each" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap on both sides in the middle)
+   * @claim "How many pages show on each" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap before the last pages near the end)
+   * @claim "The list keeps the same number" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap after the first pages near the start)
+   * @claim "The list keeps the same number" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap on both sides in the middle)
+   * @claim "The list keeps the same number" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap before the last pages near the end)
    */
   siblings?: number | undefined;
   /** Names the navigation for screen readers. @default "Pagination" */
@@ -23,18 +38,28 @@ export interface PaginationBaseProps {
   previousLabel?: string | undefined;
   /** The text of the link to the page after. @default "Next" */
   nextLabel?: string | undefined;
-  /** What a screen reader calls each page number; `{page}` is the number. @default "Page {page}" */
+  /**
+   * What a screen reader calls each page number; `{page}` is the number. @default "Page {page}"
+   *
+   * @claim "What a screen reader calls each" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > takes every visible and spoken string as a prop)
+   */
   pageLabel?: string | undefined;
   /**
    * The text between Previous and Next below 640px, where the page numbers do not fit;
    * `{page}` and `{pageCount}` are the numbers. @default "Page {page} of {pageCount}"
+   * @claim "The text between Previous and Next" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows only Previous, the summary and Next below 640px)
+   * @claim "The text between Previous and Next" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > builds hrefs from a string with {page}, which a Server Component can pass)
    */
   summaryLabel?: string | undefined;
   /** Layout only: margins, width, grid placement (`mt-6`). Appearance classes warn in development. */
   className?: string | undefined;
   ref?: Ref<HTMLElement> | undefined;
 
-  /** Not a prop. Ouro UI uses `page`, counting from 1: `<Pagination page={1} pageCount={12}>`. */
+  /**
+   * Not a prop. Ouro UI uses `page`, counting from 1: `<Pagination page={1} pageCount={12}>`.
+   *
+   * @claim "Ouro UI uses `page`, counting from" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > renders a labelled nav of plain links, with the current page marked)
+   */
   currentPage?: { "Use <Pagination page={1} pageCount={12}>": never };
   /** Not a prop. Ouro UI uses `pageCount`: `<Pagination page={1} pageCount={12}>`. */
   totalPages?: { "Use <Pagination page={1} pageCount={12}>": never };
@@ -65,7 +90,11 @@ export interface PaginationPagerProps {
   hasNextPage?: boolean | undefined;
 }
 
-/** A Pagination of links: every page has its own address, so it works before JavaScript loads. */
+/**
+ * A Pagination of links: every page has its own address, so it works before JavaScript loads.
+ *
+ * @claim "A Pagination of links: every page" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > works with no JavaScript: the server HTML holds every link)
+ */
 export type PaginationLinkProps = PaginationBaseProps & {
   /**
    * The address of a page: a string with `{page}` (`href="/recipes?page={page}"`, which a
@@ -96,11 +125,15 @@ export type PaginationProps = (PaginationLinkProps | PaginationButtonProps) & (P
 // A cell: 44px with 16px text on a coarse pointer at every width, 36px with 14px text with a fine one.
 const cell =
   "press relative m-0 box-border inline-flex h-11 min-w-11 pointer-fine:h-9 pointer-fine:min-w-9 items-center justify-center gap-1 " +
-  "rounded-md border-0 bg-transparent px-2 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-foreground no-underline " +
+  "rounded-md border-0 forced-colors:border forced-colors:border-solid bg-transparent px-2 font-[inherit] text-base pointer-fine:text-sm leading-5 font-medium text-foreground no-underline " +
   "tabular-nums select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
 const live = "cursor-pointer pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground motion-safe:active:scale-(--ouro-press-scale)";
-const currentCell = "aria-[current=page]:bg-secondary aria-[current=page]:text-secondary-foreground";
+// Forced colours drop the fill, so the current page takes the system's highlight pair, kept as it
+// is (Chromium paints even a system colour behind a link in the canvas colour otherwise).
+const currentCell =
+  "aria-[current=page]:bg-secondary aria-[current=page]:text-secondary-foreground " +
+  "forced-colors:aria-[current=page]:forced-color-adjust-none forced-colors:aria-[current=page]:bg-[Highlight] forced-colors:aria-[current=page]:text-[HighlightText]";
 const off = "cursor-not-allowed opacity-50";
 
 function fill(template: string, page: number, pageCount?: number): string {
@@ -112,6 +145,9 @@ function fill(template: string, page: number, pageCount?: number): string {
  * The cells of the page list: page numbers, and `0` for a gap. Every page of a long list
  * gets the same number of cells (first, last, the current page with its siblings, two gaps
  * or the pages they would hide), so a gap never stands for a single page.
+ * @claim "Every page of a long list" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap after the first pages near the start)
+ * @claim "Every page of a long list" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap before the last pages near the end)
+ * @claim "Every page of a long list" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows a gap on both sides in the middle)
  */
 function cells(page: number, pageCount: number, siblings: number): number[] {
   const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, index) => from + index);
@@ -148,6 +184,9 @@ function Chevron({ back }: { back?: boolean }): JSX.Element {
  * <Pagination page={3} pageCount={12} href="/recipes?page={page}" />
  * <Pagination page={page} pageCount={12} onPageChange={setPage} />
  * <Pagination page={page} hasNextPage={rows.length > pageSize} href="?page={page}" />
+ * @claim "Below 640px the numbers give way" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > shows only Previous, the summary and Next below 640px)
+ * @claim "With `href` every page is a" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination > works with no JavaScript: the server HTML holds every link)
+ * @claim "With `href` every page is a" registry/ouro/components/ouro/pagination/pagination.test.tsx verify:testExists(registry/ouro/components/ouro/pagination/pagination.test.tsx::Pagination without a page count > pages in place with onPageChange)
  */
 export function Pagination(props: PaginationProps): JSX.Element {
   const {
@@ -245,8 +284,10 @@ export function Pagination(props: PaginationProps): JSX.Element {
         </RouterLink>
       );
     }
+    // A button at an end says it is disabled rather than being disabled, so it keeps focus when
+    // a press takes the reader there (a disabled button would drop focus to the page).
     return (
-      <button {...attributes} type="button" disabled={!enabled} onClick={() => onPageChange!(target)} className={cn(cell, enabled ? live : off, classes)}>
+      <button {...attributes} type="button" aria-disabled={enabled ? undefined : true} onClick={enabled ? () => onPageChange!(target) : undefined} className={cn(cell, enabled ? live : off, classes)}>
         {children}
       </button>
     );
@@ -259,7 +300,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
           {control(
             page - 1,
             page > 1,
-            { "data-ouro-pagination-previous": "", rel: href !== undefined && page > 1 ? "prev" : undefined },
+            { "data-ouro-pagination-previous": "", "data-ouro-control": "pagination", "data-ouro-part": "previous", rel: href !== undefined && page > 1 ? "prev" : undefined },
             "px-3",
             <>
               <Chevron back />
@@ -286,7 +327,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
               {control(
                 target,
                 true,
-                { "data-ouro-pagination-page": "", "aria-label": fill(pageLabel, target, pageCount), "aria-current": target === page ? "page" : undefined },
+                { "data-ouro-pagination-page": "", "data-ouro-control": "pagination", "data-ouro-part": "page", "aria-label": fill(pageLabel, target, pageCount), "aria-current": target === page ? "page" : undefined },
                 currentCell,
                 target,
               )}
@@ -297,7 +338,7 @@ export function Pagination(props: PaginationProps): JSX.Element {
           {control(
             page + 1,
             hasNext,
-            { "data-ouro-pagination-next": "", rel: href !== undefined && hasNext ? "next" : undefined },
+            { "data-ouro-pagination-next": "", "data-ouro-control": "pagination", "data-ouro-part": "next", rel: href !== undefined && hasNext ? "next" : undefined },
             "px-3",
             <>
               {nextLabel}

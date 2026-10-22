@@ -36,6 +36,7 @@ export interface CheckboxGroupOwnProps {
   /**
    * What is wrong, from your server action or client check, shown under the choices; every
    * box gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
+   * @claim "What is wrong, from your server" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > marks the boxes invalid with error)
    */
   error?: ReadonlyErrorMessages | undefined;
   /**
@@ -43,6 +44,8 @@ export interface CheckboxGroupOwnProps {
    * `requiredLabel` for screen readers), and the browser shows `requiredMessage` until one is
    * checked. HTML has no native "at least one" rule for checkboxes, so this check runs only
    * once the page has hydrated: your server action must still check it.
+   * @claim "rule for checkboxes, so this check runs only" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > required marks the legend and blocks submit until a box is checked)
+   * @claim "rule for checkboxes, so this check runs only" https://html.spec.whatwg.org/multipage/input.html#checkbox-state-(type=checkbox) verify:urlOk(https://html.spec.whatwg.org/multipage/input.html#checkbox-state-(type=checkbox))
    */
   required?: boolean | undefined;
   /** What the browser says when `required` and nothing is checked. Translate it here. @default "Choose at least one." */
@@ -50,17 +53,30 @@ export interface CheckboxGroupOwnProps {
   /**
    * What screen readers hear after the legend when `required`, since no box can carry
    * `aria-required`; the asterisk is what shows. Translate it here. @default "(required)"
+   * @claim "What screen readers hear after the" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > announces required in the group's name, since no box carries aria-required)
    */
   requiredLabel?: string | undefined;
-  /** Disables every box and fades the group. */
+  /**
+   * Disables every box and fades the group.
+   *
+   * @claim "Disables every box and fades the" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > disables every box with disabled)
+   */
   disabled?: boolean | undefined;
-  /** The form field name every checked box submits under, once per checked value. */
+  /**
+   * The form field name every checked box submits under, once per checked value.
+   *
+   * @claim "The form field name every checked" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > submits name=value for each checked box)
+   */
   name?: string | undefined;
   /** The checked values, for a controlled group; pair it with `onValueChange`. */
   value?: string[] | undefined;
   /** The values checked at first, for an uncontrolled group. */
   defaultValue?: string[] | undefined;
-  /** Called with every checked value, in the order they were checked, when one is checked or unchecked. */
+  /**
+   * Called with every checked value, in the order they were checked, when one is checked or unchecked.
+   *
+   * @claim "Called with every checked value, in" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > keeps the group's value: defaultValue, toggling with Space and clicks, and onValueChange)
+   */
   onValueChange?: ((value: string[]) => void) | undefined;
   /**
    * Layout only: margins, width, grid placement (`mt-4`, `col-span-2`). Appearance classes
@@ -97,13 +113,21 @@ export interface CheckboxGroupOwnProps {
 export type CheckboxGroupProps = CheckboxGroupOwnProps &
   (
     | {
-        /** The choices, one box each, in order. */
+        /**
+         * The choices, one box each, in order.
+         *
+         * @claim "The choices, one box each, in" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > submits name=value for each checked box)
+         */
         options: CheckboxGroupOption[];
         /** Not with `options`: pass the choices one way. */
         children?: never;
       }
     | {
-        /** The choices as `Checkbox` elements, each with a `value`, for a layout `options` cannot express. */
+        /**
+         * The choices as `Checkbox` elements, each with a `value`, for a layout `options` cannot express.
+         *
+         * @claim "The choices as `Checkbox` elements, each" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > lays out the choices in a column, 20px apart on touch-sized screens)
+         */
         children: ReactNode;
         /** Not with children: pass the choices one way. */
         options?: never;
@@ -179,6 +203,7 @@ function Choices(props: {
  *     { value: "mint", label: "Mint" },
  *   ]}
  * />
+ * @claim "`value` is the list of checked" registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox-group.test.tsx::CheckboxGroup > submits name=value for each checked box)
  */
 export function CheckboxGroup(props: CheckboxGroupProps): JSX.Element {
   const {
