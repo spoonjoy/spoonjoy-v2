@@ -6,8 +6,9 @@
 //
 // A journey enrolled in the census must be 100% HX: every control it shows carries a
 // data-ouro-control marker naming an installed HX component. An unenrolled journey is measured, and
-// its unmarked count may only fall (`pnpm census:update` refuses a rise). Every journey below is
-// enrolled: Spoonjoy's census counts no unmarked control on either project.
+// its unmarked count may only fall (`pnpm census:update` refuses a rise). Every journey below but
+// mcp is enrolled: Spoonjoy's census counts one unmarked control on either project, the MCP page's
+// plain link to its protected-resource metadata.
 //
 // Every state starts from a fresh load of the journey's path, so a state never depends on another.
 // Actions only open things: they never submit, save or confirm, so the personas' data is never
@@ -357,7 +358,9 @@ export const census: Journey[] = [
   // Developers, agents and OAuth.
   { id: "developers", enrolled: true, persona: "signed-out", path: "/developers", states: [DEFAULT] },
   { id: "developers-playground", enrolled: true, persona: "signed-out", path: "/developers/playground", states: [DEFAULT] },
-  { id: "mcp", enrolled: true, persona: "signed-out", path: "/mcp", states: [DEFAULT] },
+  // The protected-resource metadata link is a plain <a>, so a click loads the JSON document.
+  // TODO(ouro-hx: link document navigation, ourostack/ouro-ui#184): enrol mcp again on HX Link.
+  { id: "mcp", enrolled: false, persona: "signed-out", path: "/mcp", states: [DEFAULT] },
   { id: "agent-connect", enrolled: true, persona: "chef", path: "/agent/connect", states: [DEFAULT] },
   // No pending request is seeded, so this is the page for a request that does not exist.
   { id: "agent-connect-request", enrolled: true, persona: "chef", path: "/agent/connect/hx-census-no-such-request", states: [DEFAULT] },
