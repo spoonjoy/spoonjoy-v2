@@ -51,7 +51,7 @@ describe("dependency advisory refresh contract", () => {
       "brace-expansion@2": "2.1.7",
       "brace-expansion@5": "5.0.12",
       "defu": "6.1.5",
-      "dompurify": "3.4.16",
+      "dompurify": "3.4.17",
       "form-data": "4.0.6",
       "joi@17": "17.13.8",
       "js-yaml@3": "3.15.2",
