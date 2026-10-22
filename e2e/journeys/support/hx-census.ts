@@ -340,7 +340,7 @@ export const census: Journey[] = [
         },
       },
       {
-        // Choosing a photo opens the crop dialog; nothing is uploaded until "Save photo".
+        // Choosing a photo opens the crop dialog; nothing is uploaded until "Save".
         id: "crop-photo-dialog",
         action: async (page) => {
           const chooser = page.waitForEvent("filechooser");
@@ -348,7 +348,7 @@ export const census: Journey[] = [
           await (await chooser).setFiles(PHOTO_FIXTURE);
           const cropDialog = page.getByRole("dialog", { name: "Crop your photo" });
           await expect(cropDialog).toBeVisible();
-          await expect(cropDialog.getByRole("button", { name: "Save photo", exact: true })).toBeEnabled();
+          await expect(cropDialog.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
         },
       },
     ],
