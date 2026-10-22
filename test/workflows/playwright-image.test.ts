@@ -24,15 +24,21 @@ const workflows = readdirSync(WORKFLOWS)
     return { file, text, jobs: (parse(text) as { jobs: Record<string, Job> }).jobs };
   });
 
-// The jobs that launch Chromium or WebKit.
+// The jobs that launch Chromium or WebKit, but build-storybook (below).
 const BROWSER_JOBS = [
   ["ci.yml", "e2e"],
   ["journeys.yml", "journeys"],
-  ["storybook.yml", "build-storybook"],
   ["production-deploy.yml", "deploy"],
   ["mcp-oauth-canary.yml", "canary"],
   ["qa-image-cover-smoke.yml", "smoke"],
 ] as const;
+
+// build-storybook runs the installed Ouro UI tests, whose swipe-actions rounding fails with the
+// image's fonts until the installed copy has ourostack/ouro-ui#170's fix (halves rounded away
+// from zero), so it stays on the runner until then.
+const SWIPE_ACTIONS_TEST = join(ROOT, "app/components/ouro/swipe-actions/swipe-actions.test.tsx");
+const swipeRoundingFixed = readFileSync(SWIPE_ACTIONS_TEST, "utf8")
+  .includes("const hundredths = (value: number) => (Math.sign(value) * Math.round(Math.abs(value) * 100)) / 100;");
 
 function job(file: string, name: string): Job {
   const found = workflows.find((workflow) => workflow.file === file)?.jobs[name];
@@ -101,9 +107,22 @@ describe("Playwright's image for every browser job", () => {
     expect(containerJobs.sort()).toEqual(BROWSER_JOBS.map(([file, name]) => `${file} ${name}`).sort());
   });
 
-  it("leaves no job anywhere installing a browser or a system package", () => {
+  it("keeps build-storybook on the runner only until the installed swipe-actions test has the rounding fix", () => {
+    const storybook = job("storybook.yml", "build-storybook");
+    if (swipeRoundingFixed) {
+      // Time to move it: add it to BROWSER_JOBS and give it the image.
+      expect(storybook.container, "build-storybook can run in Playwright's image now").toEqual(PLAYWRIGHT_CONTAINER);
+    } else {
+      expect(storybook.container).toBeUndefined();
+      const installs = (storybook.steps ?? []).filter((step) => /playwright install/.test(step.run ?? ""));
+      expect(installs.map((step) => step.run?.trim())).toEqual(["pnpm exec playwright install --with-deps chromium webkit"]);
+    }
+  });
+
+  it("leaves no other job anywhere installing a browser or a system package", () => {
     for (const { file, jobs } of workflows) {
       for (const [name, candidate] of Object.entries(jobs)) {
+        if (file === "storybook.yml" && name === "build-storybook" && !swipeRoundingFixed) continue;
         for (const step of candidate.steps ?? []) {
           expect(step.run ?? "", `${file} ${name} ${step.name ?? ""}`).not.toMatch(/\bapt(?:-get)?\s+install\b|playwright install/);
         }
