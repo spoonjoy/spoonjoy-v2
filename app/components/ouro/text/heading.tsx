@@ -23,6 +23,7 @@ export interface HeadingProps extends Omit<HTMLAttributes<HTMLHeadingElement>, "
    * Visual size, independent of the level. `display` is the hero headline of a
    * landing page, tightly set and larger from the `sm` breakpoint: `<Heading level={1} size="display">`.
    * @default derived from `level` (1 is `2xl`, 2 is `xl`, 3 is `lg`, 4 is `md`, 5 and 6 are `sm`)
+   * @claim "derived from `level`" registry/ouro/components/ouro/text/heading.test.tsx verify:testExists(registry/ouro/components/ouro/text/heading.test.tsx::Heading > derives a smaller default size for deeper levels)
    */
   size?: HeadingSize | (string & { 'Use "sm", "md", "lg", "xl", "2xl" or, larger, "display"': never }) | undefined;
   /** Alignment in writing direction. @default inherited */

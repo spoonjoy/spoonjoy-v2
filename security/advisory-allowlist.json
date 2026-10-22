@@ -1,4 +1,21 @@
 {
   "policy": "Every advisory allowlist entry must name the vulnerability ID, exact package, exact version, ecosystem, human review reason, and future expiresOn date. Expired, malformed, broad, package-less, or version-less entries fail before the scanner runs.",
-  "allowedVulnerabilities": []
+  "allowedVulnerabilities": [
+    {
+      "id": "GHSA-qxg6-89mg-rqv8",
+      "packageName": "@vitest/mocker",
+      "version": "4.1.11",
+      "ecosystem": "npm",
+      "reason": "Tooling-only: @vitest/mocker is Vitest's test-time module mocker, never bundled into the app or the Worker. The advisory names 4.1.12 as the fix, but npm has no 4.1.12 (the newest 4.1 is 4.1.11, 2026-10-22); only Vitest 5.0.3 fixes it, a major upgrade that @cloudflare/vitest-pool-workers and Ouro HX's test kit must support first. The attack needs a malicious page to reach a running Vitest server; CI's runners are ephemeral and serve no other site. Remove this entry when Vitest 4.1.12 is published or Spoonjoy moves to Vitest 5.0.3.",
+      "expiresOn": "2026-11-05"
+    },
+    {
+      "id": "GHSA-xp26-3454-mjgp",
+      "packageName": "@vitest/mocker",
+      "version": "4.1.11",
+      "ecosystem": "npm",
+      "reason": "Tooling-only: @vitest/mocker is Vitest's test-time module mocker, never bundled into the app or the Worker. The advisory names 4.1.12 as the fix, but npm has no 4.1.12 (the newest 4.1 is 4.1.11, 2026-10-22); only Vitest 5.0.3 fixes it, a major upgrade that @cloudflare/vitest-pool-workers and Ouro HX's test kit must support first. The attack needs a malicious page to reach a running Vitest server; CI's runners are ephemeral and serve no other site. Remove this entry when Vitest 4.1.12 is published or Spoonjoy moves to Vitest 5.0.3.",
+      "expiresOn": "2026-11-05"
+    }
+  ]
 }

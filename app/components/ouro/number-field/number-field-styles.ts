@@ -11,6 +11,9 @@ export { groupClass, inputClass, scrubClass, stepperClass };
  * a variable.
  *
  * @internal
+ * @claim "The box around the steppers and" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.test.tsx::NumberField looks > uses a 16px font and a 44px box on narrow screens, stepping down with a mouse on wider screens)
+ * @claim "The box around the steppers and" registry/ouro/components/ouro/number-field/number-field.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.test.tsx::NumberField looks > outlines the box when the input has keyboard focus)
+ * @claim "The box around the steppers and" registry/ouro/components/ouro/number-field/number-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.touch.test.tsx::is 44px tall with 16px text, and its steppers have a 44px hit area, also on a landscape phone)
  */
 const groupClass =
   "relative m-0 box-border flex w-full min-w-0 items-stretch h-(--ouro-control-h) p-0 " +
@@ -37,6 +40,7 @@ const inputClass =
  * over 44px. Disabled at the limit.
  *
  * @internal
+ * @claim "On a touch screen its `TouchTarget`" registry/ouro/components/ouro/number-field/number-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/number-field/number-field.touch.test.tsx::is 44px tall with 16px text, and its steppers have a 44px hit area, also on a landscape phone)
  */
 const stepperClass =
   "press relative m-0 box-border flex aspect-square h-full shrink-0 items-center justify-center border-0 p-0 " +

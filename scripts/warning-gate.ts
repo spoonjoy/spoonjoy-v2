@@ -12,8 +12,17 @@ export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
 export const PNPM_TRANSIENT_FETCH_RETRY_PATTERN =
   /^WARN(?:  | {2})GET https:\/\/registry\.npmjs\.org\/[A-Za-z0-9@%._~\/+-]+ error \((?:ERR_PNPM_FETCH_(?:429|5\d\d)|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ERR_SOCKET_TIMEOUT)\)\. Will retry in \d+(?:\.\d+)? seconds?\. \d+ retr(?:y|ies) left\.$/;
 
+// Ouro HX's touch test kit (app/lib/ouro/testing/commands.ts) reports a touch command that
+// succeeded but took longer than a second on stderr, with what it waited for, so a slow CI frame
+// can be read from the log:
+//   touchStep: the touchStart at (100, 100) took 1831ms. Steps: +828ms asked Chromium: …. Watches: …. Node's event loop ran up to 46ms late.
+// It is timing evidence, not a warning: the command did what it was asked. Only that exact shape,
+// from the kit's own commands, is tolerated; a touch that fails throws and fails its test anyway.
+export const OURO_SLOW_TOUCH_TRACE_PATTERN =
+  /^touch(?:Step|Drag): the touch(?:Start|Move|End) at \(-?\d+, -?\d+\) took \d+ms\. Steps: .+\. Watches: .*\. Node's event loop ran up to \d+ms late\.$/;
+
 function isTolerableTransientRetry(text: string): boolean {
-  return PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(text);
+  return PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(text) || OURO_SLOW_TOUCH_TRACE_PATTERN.test(text);
 }
 
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;

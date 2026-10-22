@@ -42,6 +42,10 @@ const toggleBase =
  * phone keeps it too.
  *
  * @internal
+ * @claim "Phones keep 16px text and the" registry/ouro/components/ouro/toggle/toggle.touch.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.touch.test.tsx::keeps 44px toggles and 16px text on a landscape phone, past the sm breakpoint)
+ * @claim "Phones keep 16px text and the" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > is 44px tall on phones and steps down with a fine pointer from sm, per size)
+ * @claim "Height and padding read two variables" registry/ouro/components/ouro/toggle/toggle-styles.ts verify:fileLine(registry/ouro/components/ouro/toggle/toggle-styles.ts, /h-\(--ouro-toggle-h\)\spx-\(--ouro-toggle-px\)/)
+ * @claim "Height and padding read two variables" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle > lets app layout classes win)
  */
 const sizes = {
   sm:
@@ -73,6 +77,7 @@ const squareClass = "aspect-square px-0";
  * `plain` has no border until it is pressed; `outline` always has one, in the primary tone while pressed.
  *
  * @internal
+ * @claim "`plain` has no border until it" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > draws a border with variant outline)
  */
 const looks = {
   plain: "border-transparent bg-transparent text-foreground",

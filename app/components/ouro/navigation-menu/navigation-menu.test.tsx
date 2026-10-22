@@ -50,7 +50,14 @@ beforeEach(async () => {
 describe("NavigationMenu current-page marks", () => {
   afterEach(() => document.documentElement.removeAttribute("dir"));
 
-  function assertMark(current: Element, other: Element, direction: "ltr" | "rtl") {
+  /**
+   * The page link's mark, read once the link's own colour transitions have finished: a pointer
+   * that rested on the link (vitest's unhover leaves it at the body's centre, where the next test's
+   * menu may be) fades its hover background out over the press utility's 150 ms, and a read inside
+   * that fade sees the hover colour, not the mark.
+   */
+  async function assertMark(current: Element, other: Element, direction: "ltr" | "rtl") {
+    await Promise.allSettled(current.getAnimations().map((animation) => animation.finished));
     const marker = getComputedStyle(current, "::before");
     expect(marker.content).toBe('""');
     expect(parseFloat(marker.width)).toBe(2);
@@ -62,13 +69,23 @@ describe("NavigationMenu current-page marks", () => {
     expect(isTransparent(getComputedStyle(current).backgroundColor)).toBe(true);
   }
 
+  it("marks only the page link once a pointer that rested on it has moved to open a panel", async () => {
+    await render(<NavigationMenu label="Main" items={[{ label: "Pricing", href: "/pricing" }, { label: "Recipes", links: [{ label: "Browse", href: "/recipes" }] }]} currentPath="/pricing" />);
+    const pricing = page.getByRole("link", { name: "Pricing" }).element();
+    await userEvent.hover(pricing);
+    await Promise.allSettled(pricing.getAnimations().map((animation) => animation.finished));
+    expect(isTransparent(getComputedStyle(pricing).backgroundColor)).toBe(false);
+    await userEvent.click(page.getByRole("button", { name: "Recipes" }));
+    await expect.element(page.getByRole("link", { name: "Browse" })).toBeVisible();
+    await assertMark(pricing, page.getByRole("button", { name: "Recipes" }).element(), "ltr");
+  });
   for (const direction of ["ltr", "rtl"] as const) {
     it(`marks only the page link while a ${direction} panel is open`, async () => {
       document.documentElement.dir = direction;
       await render(<NavigationMenu label="Main" items={[{ label: "Pricing", href: "/pricing" }, { label: "Recipes", links: [{ label: "Browse", href: "/recipes" }] }]} currentPath="/pricing" />);
       await userEvent.click(page.getByRole("button", { name: "Recipes" }));
       await expect.element(page.getByRole("link", { name: "Browse" })).toBeVisible();
-      assertMark(page.getByRole("link", { name: "Pricing" }).element(), page.getByRole("button", { name: "Recipes" }).element(), direction);
+      await assertMark(page.getByRole("link", { name: "Pricing" }).element(), page.getByRole("button", { name: "Recipes" }).element(), direction);
     });
     it(`emphasizes its ${direction} current panel label instead of the description`, async () => {
       document.documentElement.dir = direction;
@@ -76,7 +93,7 @@ describe("NavigationMenu current-page marks", () => {
       await userEvent.click(page.getByRole("button", { name: "Recipes" }));
       const current = page.getByRole("link", { name: /^Drafts/ });
       await expect.element(current).toBeVisible();
-      assertMark(current.element(), page.getByRole("link", { name: "Browse" }).element(), direction);
+      await assertMark(current.element(), page.getByRole("link", { name: "Browse" }).element(), direction);
       const [label, description] = current.element().querySelectorAll("span");
       expect(getComputedStyle(label!).fontWeight).toBe("600");
       expect(getComputedStyle(description!).fontWeight).toBe("400");
@@ -120,6 +137,20 @@ async function settled() {
 }
 
 describe("NavigationMenu", () => {
+  it("keeps each trigger's and link's edge under forced colours, which drop their fill", async () => {
+    // Forced colours first: switched after the render, a transition would still be easing.
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      await render(<NavigationMenu label="Main" items={items} />);
+      for (const element of [page.getByRole("button", { name: "Recipes" }).element(), page.getByRole("link", { name: "Pricing" }).element()]) {
+        expect(parseFloat(getComputedStyle(element).borderTopWidth)).toBeGreaterThan(0);
+        expect(getComputedStyle(element).borderTopStyle).toBe("solid");
+      }
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("renders a named nav with a button for each panel and a link for each page", async () => {
     const { root } = await render(<NavigationMenu label="Main" items={items} />);
     expect(root.tagName).toBe("NAV");

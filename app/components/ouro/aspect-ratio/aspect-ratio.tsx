@@ -16,6 +16,8 @@ export interface AspectRatioOwnProps {
    * How an image or video fills the frame: `cover` crops it to fill, `contain` shows all of
    * it with bars.
    * @default "cover"
+   * @claim "How an image or video fills" registry/ouro/components/ouro/aspect-ratio/aspect-ratio.test.tsx verify:testExists(registry/ouro/components/ouro/aspect-ratio/aspect-ratio.test.tsx::AspectRatio > fills the frame with its media, cropped to cover)
+   * @claim "How an image or video fills" registry/ouro/components/ouro/aspect-ratio/aspect-ratio.test.tsx verify:testExists(registry/ouro/components/ouro/aspect-ratio/aspect-ratio.test.tsx::AspectRatio > letterboxes with fit=contain)
    */
   fit?: "cover" | "contain" | (string & { 'Use "cover" or "contain"': never }) | undefined;
   /**

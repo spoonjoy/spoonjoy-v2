@@ -23,6 +23,7 @@ export interface ToggleOwnProps {
   /**
    * What the toggle turns on, such as "Bold". It is the button's name and stays the same
    * while pressed: `aria-pressed` says whether it is on. Required: every toggle needs a name.
+   * @claim "Required: every toggle needs a name" registry/ouro/components/ouro/toggle/toggle.test-d.ts verify:fileLine(registry/ouro/components/ouro/toggle/toggle.test-d.ts, /expectTypeOf<\{\spressed:\strue\s\}>\(\)\.not\.toExtend<ToggleProps>/)
    */
   label: string;
   /**
@@ -43,12 +44,15 @@ export interface ToggleOwnProps {
    * `plain` has no border until pressed; `outline` always has one. Either way a pressed toggle
    * gets the primary tint. shadcn's `default` is `plain`.
    * @default "plain"
+   * @claim "`plain` has no border until pressed" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > draws a border with variant outline)
    */
   variant?: "plain" | "outline" | (string & { 'From shadcn? default is "plain"; use "plain" or "outline"': never }) | undefined;
   /**
    * Control size, as Button's: each is taller on phones and steps down to desktop density from
    * the `sm` breakpoint with a fine pointer. shadcn's `default` is `md`.
    * @default "md"
+   * @claim "Control size, as Button's: each is" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > is 44px tall on phones and steps down with a fine pointer from sm, per size)
+   * @claim "Control size, as Button's: each is" https://ui.shadcn.com/docs/components/toggle verify:urlOk(https://ui.shadcn.com/docs/components/toggle)
    */
   size?: "sm" | "md" | "lg" | (string & { 'From shadcn? default is "md"': never }) | undefined;
   /**
@@ -59,7 +63,12 @@ export interface ToggleOwnProps {
   /** The button element. */
   ref?: Ref<HTMLButtonElement> | undefined;
 
-  /** Not a prop. The label is a prop, so the toggle always has a name: `<Toggle label="Bold">`. */
+  /**
+   * Not a prop. The label is a prop, so the toggle always has a name: `<Toggle label="Bold">`.
+   *
+   * @claim "The label is a prop, so" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle > with hideLabel shows only the icon, in a square, and keeps the label as the name)
+   * @claim "The label is a prop, so" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle development messages > warns when the label is empty)
+   */
   children?: { 'Use <Toggle label="Bold">': never };
   /** Not a prop. Ouro UI uses `pressed`: `<Toggle pressed>`. */
   isPressed?: { 'Use <Toggle pressed>': never };
@@ -69,7 +78,11 @@ export interface ToggleOwnProps {
   defaultChecked?: { 'Use <Toggle defaultPressed>': never };
   /** Not a prop. Ouro UI uses `onPressedChange`: `<Toggle onPressedChange={(pressed) => ...}>`. */
   onCheckedChange?: { 'Use <Toggle onPressedChange={(pressed) => ...}>': never };
-  /** Not a prop: a button's change event never fires. Use `onPressedChange`: `<Toggle onPressedChange={(pressed) => ...}>`. */
+  /**
+   * Not a prop: a button's change event never fires. Use `onPressedChange`: `<Toggle onPressedChange={(pressed) => ...}>`.
+   *
+   * @claim "Not a prop: a button's change" registry/ouro/components/ouro/toggle/toggle.test-d.ts verify:fileLine(registry/ouro/components/ouro/toggle/toggle.test-d.ts, /\{\slabel:\s"Bold";\sonChange:\s\(\)\s=>\svoid\s\}>\(\)\.not\.toExtend<ToggleProps>/)
+   */
   onChange?: { 'Use <Toggle onPressedChange={(pressed) => ...}>': never };
   /** Not a prop. Ouro UI uses `pressed`: `<Toggle pressed>`. */
   selected?: { 'Use <Toggle pressed>': never };

@@ -53,7 +53,7 @@ export function useField(): FieldContextValue | null {
 
 /** The component a Field belongs to: its name in development messages and its `data-ouro` value. */
 export interface FieldOwner {
-  /** The component name development messages start with and show in each fix, such as `TextField`. */
+  /** The component name development messages start with and show in their fixes, such as `TextField`. */
   name: string;
   /** The root's `data-ouro` value, such as `text-field`. */
   data: string;
@@ -118,6 +118,7 @@ export type ReadonlyErrorMessages = ErrorMessage | readonly ErrorMessage[];
  * Accepts readonly inputs and returns a fresh mutable array, never the snapshot container.
  *
  * @internal
+ * @claim "Accepts readonly inputs and returns a" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > snapshots records and array containers without cloning React nodes or freezing caller data)
  */
 export function errorMessages(error: ReadonlyErrorMessages | null | undefined): ErrorMessage[] {
   const list: readonly unknown[] = Array.isArray(error) ? error : [error];
@@ -136,7 +137,11 @@ export function errorMessageKey(message: ErrorMessage, index: number): string {
 
 /** A form's server or client errors, by field name, as `Form` shares them with the fields inside it. */
 export interface FormErrorsValue {
-  /** The messages for each field name; a field shows its own when it has no `error` prop. */
+  /**
+   * The messages for each field name; a field shows its own when it has no `error` prop.
+   *
+   * @claim "The messages for each field name" registry/ouro/components/ouro/field/field.test.tsx verify:testExists(registry/ouro/components/ouro/field/field.test.tsx::Field wiring > shows a Base UI Form error for its name without an error prop)
+   */
   errors: Readonly<Record<string, ReadonlyErrorMessages | null | undefined>>;
   /** Drops one field's message, once the user changes that field. */
   clear: (name: string) => void;

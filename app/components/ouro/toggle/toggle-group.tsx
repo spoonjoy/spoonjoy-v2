@@ -36,22 +36,33 @@ export interface ToggleGroupItem {
 
 /** Props both modes of {@link ToggleGroup} take. */
 export interface ToggleGroupBaseProps {
-  /** Names the group ("Text style"). Shown above it unless `hideLabel` is set; screen readers always hear it. */
+  /**
+   * Names the group ("Text style"). Shown above it unless `hideLabel` is set; screen readers always hear it.
+   *
+   * @claim "Shown above it unless `hideLabel` is" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > hides the group label visually with hideLabel and keeps it as the name)
+   */
   label: string;
-  /** Hides the group's label visually; it still names the group. Most toolbars set it. */
+  /** Hides the group's label visually; it still names the group. Set it on a toolbar whose toggles say what it is. */
   hideLabel?: boolean | undefined;
   /** The toggles, in order. */
   items: readonly ToggleGroupItem[];
-  /** Disables every toggle. */
+  /**
+   * Disables every toggle.
+   *
+   * @claim "Disables every toggle" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > disables one item, or the whole group)
+   */
   disabled?: boolean | undefined;
   /**
    * `plain` toggles have no border until pressed; `outline` ones always have one. shadcn's `default` is `plain`.
    * @default "plain"
+   * @claim "`plain` toggles have no border until" registry/ouro/components/ouro/toggle/toggle.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle.test.tsx::Toggle looks > draws a border with variant outline)
+   * @claim "`plain` toggles have no border until" https://ui.shadcn.com/docs/components/toggle-group verify:urlOk(https://ui.shadcn.com/docs/components/toggle-group)
    */
   variant?: "plain" | "outline" | (string & { 'From shadcn? default is "plain"; use "plain" or "outline"': never }) | undefined;
   /**
    * Every toggle's size, as Button's. shadcn's `default` is `md`.
    * @default "md"
+   * @claim "Every toggle's size, as Button's. shadcn's" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > passes variant and size to every item)
    */
   size?: "sm" | "md" | "lg" | (string & { 'From shadcn? default is "md"': never }) | undefined;
   /** Layout only: margins, grid placement (`mt-4`). Appearance classes warn in development. */
@@ -69,11 +80,19 @@ export interface ToggleGroupBaseProps {
   children?: { 'Use <ToggleGroup items={[{ value: "bold", label: "Bold" }]}>': never };
 }
 
-/** One toggle pressed at a time, the default: the value is one item's value, or `null` for none. */
+/**
+ * One toggle pressed at a time, the default: the value is one item's value, or `null` for none.
+ *
+ * @claim "One toggle pressed at a time" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > presses one item at a time and reports the value, or null when none is pressed)
+ */
 export type ToggleGroupSingleProps = ToggleGroupBaseProps & {
   /** Allows several toggles pressed at once, and makes the value a list. */
   multiple?: false | undefined;
-  /** The pressed toggle's value, or `null` for none, when you control it. Pair it with `onValueChange`. */
+  /**
+   * The pressed toggle's value, or `null` for none, when you control it. Pair it with `onValueChange`.
+   *
+   * @claim "The pressed toggle's value, or `null`" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > presses one item at a time and reports the value, or null when none is pressed)
+   */
   value?: string | null | undefined;
   /** The toggle pressed first, when the group keeps its own state. @default null */
   defaultValue?: string | null | undefined;
@@ -138,6 +157,8 @@ function asList(value: string | null | readonly string[] | undefined): readonly 
  *   value={styles}
  *   onValueChange={setStyles}
  * />
+ * @claim "The arrow keys move between toggles" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > moves focus with the arrow keys and presses with Space)
+ * @claim "The arrow keys move between toggles" registry/ouro/components/ouro/toggle/toggle-group.test.tsx verify:testExists(registry/ouro/components/ouro/toggle/toggle-group.test.tsx::ToggleGroup > is a labeled group of toggle buttons)
  */
 export function ToggleGroup(props: ToggleGroupProps): JSX.Element {
   const {

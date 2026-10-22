@@ -18,6 +18,7 @@ export interface SpinnerOwnProps {
   /**
    * The spinner's size: 16px, 20px or 32px. To match running text, use `sm`.
    * @default "md"
+   * @claim "The spinner's size: 16px, 20px or" registry/ouro/components/ouro/spinner/spinner.test.tsx verify:testExists(registry/ouro/components/ouro/spinner/spinner.test.tsx::Spinner > sizes 16, 20 and 32px, md by default)
    */
   size?: "sm" | "md" | "lg" | (string & { 'Use "sm", "md" or "lg"': never }) | undefined;
   /**

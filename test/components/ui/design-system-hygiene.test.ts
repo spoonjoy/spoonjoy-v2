@@ -35,8 +35,8 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// All 348 installed files were individually matched to the qualified v1.1.0 public
-// manifest at f4043a76d8c35a5ed10e777c909526836baa03c5, reversing ONLY the CLI alias
+// All 464 installed files were individually matched to the qualified v1.2.0 public
+// manifest at 96542d72b60b436dd6a60447d888a4c9e9d5edf7, reversing ONLY the CLI alias
 // transformation. This digest is of the TAG'S selected sorted (path, SHA256) pairs,
 // not a blanket path-prefix trust rule or a hash regenerated from arbitrary app edits.
 const publishedPaths = new Set(listTextFiles(["app/components/ouro", "app/lib/ouro"]));
@@ -56,8 +56,8 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const pairs = [...publishedPaths].sort().map((file) => [
       file, sha256(normalizedRegistrySource(readSourceFile(file))),
     ]);
-    expect(pairs).toHaveLength(348);
-    expect(sha256(JSON.stringify(pairs))).toBe("92a85749b21d357e870c591189a00b89195f5d7ff0fb1cf31d0ddf2577d655e9");
+    expect(pairs).toHaveLength(464);
+    expect(sha256(JSON.stringify(pairs))).toBe("ddc5b6aeeb7551af91c21d5baa2dda4ecac3fab97cc3deb2b385445834eda7b6");
   });
 
   it("rejects prohibited app-authored tracking even under a registry-looking prefix", () => {

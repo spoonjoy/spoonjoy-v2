@@ -26,7 +26,7 @@ import { devThrow } from "~/lib/ouro/dev";
 
 const ChecklistContext = createContext(false);
 
-/** Marks the hidden input Base UI submits each box with. */
+/** Marks the hidden input that Base UI submits a box with. */
 const markInput = controlRef("checklist", "hidden-input");
 
 /** The className hint for the parts: their look comes from the theme. */
@@ -145,8 +145,8 @@ export function ChecklistItem(props: ChecklistItemProps): JSX.Element {
 }
 
 /**
- * A row with its phase, for `Checklist`, which lets rows enter and leave; `ChecklistItem` is
- * always present.
+ * A row with its phase, for `Checklist`, which lets rows enter and leave; `ChecklistItem` stays
+ * put.
  *
  * @internal
  */
