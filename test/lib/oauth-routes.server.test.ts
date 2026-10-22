@@ -389,6 +389,8 @@ describe("handleOAuthToken", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(typeof body.access_token).toBe("string");
     expect(typeof body.refresh_token).toBe("string");
+    expect(body.access_token).toMatch(/^sj_/);
+    expect(body.refresh_token).toMatch(/^ort_/);
     expect(body.token_type).toBe("Bearer");
     expect(body.expires_in).toBe(90 * 24 * 60 * 60);
     expect(body.scope).toBe("kitchen:read kitchen:write");
@@ -903,6 +905,29 @@ describe("loadOAuthAuthorize", () => {
     });
     expect((await db.oAuthConsentTransaction.findFirstOrThrow({ where: { userId } })).tokenHash)
       .not.toContain((result as { consentToken: string }).consentToken);
+  });
+
+  it("keeps only a registered client's name and redirect URIs, so the authorize request's scope is the grant", async () => {
+    const registered = await handleOAuthRegister(jsonPost({
+      redirect_uris: [redirectUri],
+      client_name: "Scoped App",
+      scope: "shopping_list:read",
+      client_uri: "https://scoped.example",
+      contacts: ["dev@example.com"],
+    }), db);
+    expect(registered.status).toBe(201);
+    const { client_id: registeredId } = await registered.json() as { client_id: string };
+    const row = await db.oAuthClient.findUniqueOrThrow({ where: { id: registeredId } });
+    expect(row).toMatchObject({ clientName: "Scoped App", redirectUris: redirectUri });
+    expect(JSON.stringify(row)).not.toMatch(/shopping_list|scoped\.example|dev@example/);
+
+    const cookie = await authedCookie(userId);
+    const result = await loadOAuthAuthorize(await authorizeGet({
+      ...await validQuery(),
+      client_id: registeredId,
+      scope: "kitchen:read account:read",
+    }, cookie), db, null);
+    expect(result).toMatchObject({ kind: "consent", scope: "kitchen:read account:read" });
   });
 
   it("does not create a consent transaction before authentication", async () => {

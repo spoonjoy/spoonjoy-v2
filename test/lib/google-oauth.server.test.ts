@@ -249,6 +249,13 @@ describe("google-oauth.server", () => {
       expect(scope).toContain("profile");
     });
 
+    it("asks Google for openid, email and basic profile and nothing more, on Google's own sign-in page", () => {
+      const url = createGoogleAuthorizationURL(mockConfig, mockRedirectUri, "test-state-123", "test-code-verifier-43-chars-long-minimum-length");
+
+      expect(url.origin).toBe("https://accounts.google.com");
+      expect(url.searchParams.get("scope")).toBe("openid email profile");
+    });
+
     it("should include all required scopes (openid, email, profile)", () => {
       const state = "test-state-123";
       const codeVerifier = "test-code-verifier-43-chars-long-minimum-length";

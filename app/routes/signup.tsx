@@ -98,7 +98,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (!password || password.length < 8) {
-    errors.password = claim("Password must be at least 8 characters", { source: { file: "app/routes/signup.tsx" }, verify: [{ fileLine: "app/routes/signup.tsx", pattern: "password\\.length < 8" }] });
+    errors.password = claim("Password must be at least 8 characters", { source: { test: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }, verify: [{ testExists: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }] });
   }
 
   if (password !== confirmPassword) {
@@ -216,7 +216,7 @@ export default function Signup() {
             name="password"
             autoComplete="new-password"
             required
-            description={claim("At least 8 characters.", { source: { file: "app/routes/signup.tsx" }, verify: [{ fileLine: "app/routes/signup.tsx", pattern: "password\\.length < 8" }] })}
+            description={claim("At least 8 characters.", { source: { test: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }, verify: [{ testExists: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }, { testExists: "test/routes/signup.test.tsx::Signup Route > form hints for people and password managers > shows the username and password rules before the first submit, and names each field for autofill" }] })}
           />
           <TextField
             label="Confirm password"

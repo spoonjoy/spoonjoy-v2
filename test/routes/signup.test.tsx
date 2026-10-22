@@ -203,6 +203,29 @@ describe("Signup Route", () => {
       expect(data.errors.password).toBe("Password must be at least 8 characters");
     });
 
+    it("refuses a 7-character password and creates the account with an 8-character one", async () => {
+      const signUp = async (password: string) => {
+        const formData = new FormData();
+        formData.set("email", `${faker.string.alphanumeric(10)}@example.com`);
+        formData.set("username", `chef_${faker.string.alphanumeric(10)}`);
+        formData.set("password", password);
+        formData.set("confirmPassword", password);
+        return action({
+          request: new Request("http://localhost:3000/signup", { method: "POST", body: formData }),
+          context: { cloudflare: { env: null } },
+          params: {},
+        } as any);
+      };
+
+      const { data, status } = extractResponseData(await signUp("1234567"));
+      expect(status).toBe(400);
+      expect(data.errors.password).toBe("Password must be at least 8 characters");
+
+      const accepted = await signUp("12345678");
+      expect(accepted).toBeInstanceOf(Response);
+      expect(accepted.status).toBe(302);
+    });
+
     it("should return validation errors for mismatched passwords", async () => {
       const formData = new FormData();
       formData.set("email", "test@example.com");

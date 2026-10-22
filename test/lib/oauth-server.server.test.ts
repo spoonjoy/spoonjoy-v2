@@ -60,6 +60,13 @@ describe("verifyPkceS256", () => {
     expect(await verifyPkceS256("short", await challengeFor("short"))).toBe(false);
   });
 
+  it("accepts verifiers of 43 and 128 characters and refuses 42 and 129", async () => {
+    for (const [length, accepted] of [[42, false], [43, true], [128, true], [129, false]] as const) {
+      const verifier = "a".repeat(length);
+      expect({ length, accepted: await verifyPkceS256(verifier, await challengeFor(verifier)) }).toEqual({ length, accepted });
+    }
+  });
+
   it("rejects empty inputs", async () => {
     expect(await verifyPkceS256("", "x")).toBe(false);
     expect(await verifyPkceS256("x", "")).toBe(false);
@@ -99,6 +106,12 @@ describe("normalizeScope", () => {
 
   it("rejects an unsupported scope", () => {
     expect(() => normalizeScope("kitchen:admin")).toThrow(OAuthError);
+  });
+
+  it("accepts account, kitchen and least-privilege public, recipe, cookbook and shopping-list scopes, and refuses offline_access", () => {
+    const scopes = "account:read account:write kitchen:read kitchen:write public:read recipes:read cookbooks:read shopping_list:read shopping_list:write";
+    expect(normalizeScope(scopes)).toBe(scopes);
+    expect(() => normalizeScope("kitchen:read offline_access")).toThrow(expect.objectContaining({ code: "invalid_scope" }));
   });
 });
 
@@ -639,6 +652,15 @@ describe("connector token issuance + rotation", () => {
     const credential = await db.apiCredential.findFirst({ where: { userId } });
     expect(credential?.expiresAt).toBeInstanceOf(Date);
     expect(credential?.oauthResource).toBeNull();
+  });
+
+  it("issues a generic OAuth access token that lasts 15 minutes", async () => {
+    const now = new Date("2026-10-09T12:00:00.000Z");
+    const tokens = await issueConnectorTokens(db, { userId, clientId, scope: "kitchen:read", resource: null, now });
+
+    expect(tokens.expiresIn).toBe(900);
+    await expect(db.apiCredential.findFirstOrThrow({ where: { userId } }))
+      .resolves.toMatchObject({ expiresAt: new Date("2026-10-09T12:15:00.000Z"), oauthResource: null });
   });
 
   it("uses a neutral credential name for an unnamed OAuth client", async () => {

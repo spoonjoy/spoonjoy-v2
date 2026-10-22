@@ -397,6 +397,41 @@ describe("Account settings - revocable sessions", () => {
       await expect(getUserId(pageRequest(thisBrowser))).resolves.toBeNull();
     });
 
+    it("refuses a new password under 8 characters and saves one of exactly 8, when changing or setting it", async () => {
+      const db = await getLocalDb();
+      const thisBrowser = cookiePair(await createUserSessionCookie(userId));
+      const savedHash = async () => (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { hashedPassword: true } })).hashedPassword!;
+
+      await expect(postAction(thisBrowser, {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "1234567",
+        confirmPassword: "1234567",
+      })).resolves.toMatchObject({ success: false, error: "password_too_short", message: "Password must be at least 8 characters" });
+      await expect(verifyPassword(PASSWORD, await savedHash())).resolves.toBe(true);
+
+      const changed = (await postAction(thisBrowser, {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "12345678",
+        confirmPassword: "12345678",
+      })) as unknown as DataResult;
+      expect(changed.data).toMatchObject({ success: true, intent: "changePassword" });
+      await expect(verifyPassword("12345678", await savedHash())).resolves.toBe(true);
+
+      const signedIn = cookiePair(changed.init.headers["Set-Cookie"]);
+      await db.oAuth.create({
+        data: { provider: "google", providerUserId: `google-${userId}`, providerUsername: "chef@gmail.com", userId },
+      });
+      await expect(postAction(signedIn, { intent: "removePassword", currentPassword: "12345678" }))
+        .resolves.toMatchObject({ success: true });
+      await expect(postAction(signedIn, { intent: "setPassword", newPassword: "1234567", confirmPassword: "1234567" }))
+        .resolves.toMatchObject({ success: false, message: "Password must be at least 8 characters" });
+      await expect(postAction(signedIn, { intent: "setPassword", newPassword: "12345678", confirmPassword: "12345678" }))
+        .resolves.toMatchObject({ success: true });
+      await expect(verifyPassword("12345678", await savedHash())).resolves.toBe(true);
+    });
+
     it("does not revoke sessions when the password change is rejected", async () => {
       const thisBrowser = cookiePair(await createUserSessionCookie(userId));
 

@@ -32,7 +32,7 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const PASSWORD_LENGTH_HINT = claim("Must be at least 8 characters", { source: { file: "app/lib/account-settings.server.ts" }, verify: [{ fileLine: "app/lib/account-settings.server.ts", pattern: "newPassword\\.length < 8" }] });
+const PASSWORD_LENGTH_HINT = claim("Must be at least 8 characters", { source: { test: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > action - change password > refuses a new password under 8 characters and saves one of exactly 8, when changing or setting it" }, verify: [{ testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > action - change password > refuses a new password under 8 characters and saves one of exactly 8, when changing or setting it" }] });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   return loadAccountSettings({ request, context });
@@ -204,7 +204,7 @@ export default function AccountSettings() {
               />
             ) : (
               <Text tone="muted" size="sm" className="leading-6">
-                {claim("To change your email, you need to have signed in within the last 10 minutes.", { source: { file: "app/lib/account-reauthentication.server.ts" }, verify: [{ fileLine: "app/lib/account-reauthentication.server.ts", pattern: "RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000" }] })}{" "}
+                {claim("To change your email, you need to have signed in within the last 10 minutes.", { source: { test: "test/routes/account-settings-email-reauth.test.tsx::Account settings - email change needs owner proof > lets a passwordless account change its email only within ten minutes of signing in" }, verify: [{ testExists: "test/routes/account-settings-email-reauth.test.tsx::Account settings - email change needs owner proof > lets a passwordless account change its email only within ten minutes of signing in" }, { fileLine: "app/lib/account-reauthentication.server.ts", pattern: "^export const RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000;$" }] })}{" "}
                 If it has been longer, sign in again first.
               </Text>
             )}

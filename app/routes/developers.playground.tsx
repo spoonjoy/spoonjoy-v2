@@ -28,7 +28,7 @@ import { CopyButton } from "~/components/ouro/copy-button/copy-button";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { claim } from "~/lib/ouro/claims";
 
-const GENERATED_FROM_OPENAPI = claim("Generated from the live v1 OpenAPI surface.", { source: { file: "scripts/generate-api-playground.ts" }, verify: [{ fileLine: "scripts/generate-api-playground.ts", pattern: "openapi" }] });
+const GENERATED_FROM_OPENAPI = claim("Generated from the live v1 OpenAPI surface.", { source: { test: "test/scripts/generate-api-playground.test.ts::generate-api-playground > derives every playground operation from the OpenAPI document" }, verify: [{ testExists: "test/scripts/generate-api-playground.test.ts::generate-api-playground > derives every playground operation from the OpenAPI document" }, { testExists: "test/scripts/generate-api-playground.test.ts::generate-api-playground > keeps the committed client manifest in sync with the generator output" }] });
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
 type PlaygroundSurface = "full" | "connector" | "sdk";
@@ -61,7 +61,7 @@ const AUTH_MODES: Array<{ id: PlaygroundAuthMode; label: string }> = [
 
 const SURFACES: Array<{ id: PlaygroundSurface; label: string; url: string; body: string }> = [
   { id: "full", label: "All APIs", url: "/api/v1/openapi.json", body: "Full docs and playground source of truth." },
-  { id: "connector", label: "Connector", url: "/api/v1/openapi.connector.json", body: claim("OpenAPI 3.0 REST profile for no-code importers.", { source: { file: "app/lib/api-v1-openapi.server.ts" }, verify: [{ fileLine: "app/lib/api-v1-openapi.server.ts", pattern: "openapi: \"3\\.0\\.3\"" }] }) },
+  { id: "connector", label: "Connector", url: "/api/v1/openapi.connector.json", body: claim("OpenAPI 3.0 REST profile for no-code importers.", { source: { test: "test/lib/api-v1-openapi.server.test.ts::API v1 OpenAPI document > publishes an OpenAPI 3.0 REST-only connector profile for no-code importers" }, verify: [{ testExists: "test/lib/api-v1-openapi.server.test.ts::API v1 OpenAPI document > publishes an OpenAPI 3.0 REST-only connector profile for no-code importers" }] }) },
   { id: "sdk", label: "SDK", url: "/api/v1/openapi.sdk.json", body: "REST plus OAuth and delegated approval bootstrap for generated SDKs." },
 ];
 const PKCE_SESSION_STORAGE_KEY = "spoonjoy.playground.pkce";

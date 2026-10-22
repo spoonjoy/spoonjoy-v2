@@ -223,6 +223,24 @@ describe("API v1 public cookbook reads", () => {
     );
   });
 
+  it("takes query over q and sends no ETag or Last-Modified", async () => {
+    const weeknight = await createCookbookFixture(db, "Api V1 Precedence Weeknight");
+    const brunch = await createCookbookFixture(db, "Api V1 Precedence Brunch");
+
+    const response = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/cookbooks?q=Brunch&query=Precedence%20Weeknight", {
+      headers: { "X-Request-Id": "req_cookbook_precedence" },
+    }) as unknown as Request, "cookbooks"));
+    const payload = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("ETag")).toBeNull();
+    expect(response.headers.get("Last-Modified")).toBeNull();
+    expect(payload.data.query).toBe("Precedence Weeknight");
+    const ids = payload.data.cookbooks.map((cookbook: { id: string }) => cookbook.id);
+    expect(ids).toContain(weeknight.cookbook.id);
+    expect(ids).not.toContain(brunch.cookbook.id);
+  });
+
   it("defaults blank cookbook queries, allows boundary limits, and handles zero active recipes", async () => {
     const emptyChef = await db.user.create({ data: createTestUser() });
     const emptyCookbook = await db.cookbook.create({

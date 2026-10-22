@@ -80,8 +80,8 @@ const protocolFacts = [
   ["Endpoint", "POST /mcp"],
   ["Transport", "Streamable HTTP, stateless"],
   ["Payload", "JSON-RPC initialize, tools/list, tools/call"],
-  ["Auth", claim("Authorization: Bearer on every request", { source: { test: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, verify: [{ testExists: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, { fileLine: "app/lib/mcp/http-mcp.server.ts", pattern: "EVERY request \\(including" }] })],
-  ["Streaming", claim("no SSE, no batching", { source: { file: "app/lib/mcp/http-mcp.server.ts" }, verify: [{ fileLine: "app/lib/mcp/http-mcp.server.ts", pattern: "each POST carries one" }, { fileLine: "app/lib/mcp/http-mcp.server.ts", pattern: "\\(no SSE\\)" }] })],
+  ["Auth", claim("Authorization: Bearer on every request", { source: { test: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > challenges an unauthenticated initialize with 401 + WWW-Authenticate" }, verify: [{ testExists: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > challenges an unauthenticated initialize with 401 + WWW-Authenticate" }, { testExists: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > challenges any unauthenticated request (tools/list)" }, { testExists: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }] })],
+  ["Streaming", claim("no SSE, no batching", { source: { test: "test/routes/mcp.test.ts::/mcp route > returns explicit JSON instead of landing HTML for protocol GET" }, verify: [{ testExists: "test/routes/mcp.test.ts::/mcp route > returns explicit JSON instead of landing HTML for protocol GET" }, { testExists: "test/lib/mcp/http-mcp-protocol.server.test.ts::MCP HTTP protocol boundary fixtures > rejects protocol GET Accept %s without returning landing HTML" }, { testExists: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > preserves legacy HTTP semantics for an invalid JSON-RPC %s" }] })],
 ] as const;
 
 const taskGradient = [
@@ -228,7 +228,7 @@ export default function McpPage() {
             </h2>
             <p className="mt-3 max-w-3xl text-base/7 text-[var(--sj-ink-soft)]">
               Visiting this URL shows setup help. MCP is not a better way to browse Spoonjoy; it is the bridge for
-              agent work where reading, transforming, and writing structured kitchen data belong together. {claim("MCP clients send JSON-RPC to the same URL with POST; every request, including initialize, needs a valid bearer token or an OAuth access token bound to this resource.", { source: { test: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, verify: [{ testExists: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, { testExists: "test/routes/mcp.test.ts::/mcp route > accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere" }] })}
+              agent work where reading, transforming, and writing structured kitchen data belong together. {claim("MCP clients send JSON-RPC to the same URL with POST; every request, including initialize, needs a valid bearer token or an OAuth access token bound to this resource.", { source: { test: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, verify: [{ testExists: "test/routes/mcp.test.ts::/mcp route > challenges an unauthenticated request via the action" }, { testExists: "test/routes/mcp.test.ts::/mcp route > accepts OAuth tokens bound to /mcp and rejects tokens bound elsewhere" }, { testExists: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > challenges an unauthenticated initialize with 401 + WWW-Authenticate" }, { testExists: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > rejects non-POST with 405" }, { testExists: "test/routes/mcp.test.ts::/mcp route > handles initialize + tools/list + a tools/call end to end when authenticated" }] })}
             </p>
             <div className="mt-6">
               <CodeBlock>{endpoint}</CodeBlock>
@@ -257,7 +257,7 @@ export default function McpPage() {
             })}
           </div>
           <p className="mt-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
-            {claim("MCP deliberately has no arbitrary URL import tool.", { source: { file: "app/lib/mcp/spoonjoy-tools.server.ts" }, verify: [{ fileLine: "app/lib/mcp/spoonjoy-tools.server.ts", pattern: "MCP_EXCLUDED_TOOLS = new Set" }, { fileLine: "app/lib/mcp/spoonjoy-tools.server.ts", pattern: "^  \"import_recipe_from_url\",$" }] })} For imports, let the agent read the source you provide and
+            {claim("MCP deliberately has no arbitrary URL import tool.", { source: { test: "test/lib/mcp/spoonjoy-tools.server.test.ts::spoonjoy MCP tools > excludes import_recipe_from_url from the MCP surface and rejects calling it" }, verify: [{ testExists: "test/lib/mcp/spoonjoy-tools.server.test.ts::spoonjoy MCP tools > excludes import_recipe_from_url from the MCP surface and rejects calling it" }] })} For imports, let the agent read the source you provide and
             create structured Spoonjoy data through <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">create_recipe</code>.
             AI cover generation also stays out of MCP. For broader REST and OpenAPI access, use the{" "}
             <Link href="/api">API guide</Link>.

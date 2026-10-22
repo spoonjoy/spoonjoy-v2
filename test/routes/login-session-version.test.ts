@@ -61,4 +61,31 @@ describe("Login action session version", () => {
     await expect(getSessionIdentity(signedIn)).resolves.toEqual({ userId: created.id, sessionVersion: 0 });
     await expect(getUserId(signedIn)).resolves.toBeNull();
   });
+
+  it("signs a password login in with an HttpOnly session cookie, not an API token", async () => {
+    const db = await getLocalDb();
+    const password = "testPassword123";
+    const created = await createUser(db, faker.internet.email(), `chef_${faker.string.alphanumeric(10)}`, password);
+
+    const response = await action({
+      request: new UndiciRequest("http://localhost:3000/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ identifier: created.username, password }).toString(),
+      }),
+      context: { cloudflare: { env: null } },
+      params: {},
+    } as any) as Response;
+
+    expect(response.status).toBe(302);
+    const cookie = response.headers.get("Set-Cookie") ?? "";
+    expect(cookie).toMatch(/HttpOnly/i);
+    const signedIn = new UndiciRequest("http://localhost:3000/recipes", {
+      headers: { Cookie: cookie.split(";")[0] },
+    }) as unknown as Request;
+    await expect(getUserId(signedIn)).resolves.toBe(created.id);
+    expect(cookie).not.toMatch(/sj_/);
+    expect(response.headers.get("Location")).not.toMatch(/sj_|access_token/);
+    await expect(db.apiCredential.count({ where: { userId: created.id } })).resolves.toBe(0);
+  });
 });

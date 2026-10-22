@@ -16,6 +16,7 @@ import {
 	  retryAfterSecondsFromError,
 	} from "~/lib/api-v1.server";
 import { API_V1_DISCOVERY_DATA, API_V1_ERROR_STATUS } from "~/lib/api-v1-contract.server";
+import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { createTestUser } from "../utils";
@@ -359,6 +360,8 @@ describe("/api/v1 shell", () => {
     expect(response.headers.get("Access-Control-Allow-Headers")).toBe("Authorization, Content-Type, X-Request-Id, X-Client-Mutation-Id");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, PATCH, PUT, DELETE, OPTIONS");
     expect(response.headers.get("Access-Control-Expose-Headers")).toBe("X-Request-Id, Retry-After");
+    // A wildcard origin without Allow-Credentials keeps browsers from sending session cookies cross-origin.
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
     expect(response.headers.has("Content-Type")).toBe(false);
     expect(await response.text()).toBe("");
   });
@@ -501,6 +504,31 @@ describe("/api/v1 shell", () => {
       requestId: "req_empty_json",
       error: { code: "authentication_required", status: 401 },
     });
+  });
+
+  it("has no tenant, admin, inventory, meal-plan, unit, webhook, batch or recipe-export endpoints, published or hidden", async () => {
+    const published = Object.keys(buildApiV1OpenApiDocument().paths);
+    expect(published.filter((path) => /tenant|admin|employee|org|inventory|meal|unit|densit|webhook|hook|subscription|batch/i.test(path))).toEqual([]);
+    expect(published.filter((path) => /export/i.test(path))).toEqual(["/api/v1/me/export"]);
+
+    const futurePaths = [
+      "tenants", "admin", "org/export", "exports", "inventory", "meal-plans", "units", "densities",
+      "webhooks", "hooks", "subscriptions", "batch", "recipes/export", "recipes/recipe-1/export",
+    ];
+    for (const path of futurePaths) {
+      for (const [handler, method] of [[loader, "GET"], [action, "POST"]] as const) {
+        const response = await handler(routeArgs(new UndiciRequest(`http://localhost/api/v1/${path}`, {
+          method,
+          headers: { "X-Request-Id": "req_future" },
+        }) as unknown as Request, path));
+        // recipes/export is read as recipes/{id}, which has no POST.
+        const refused = method === "POST" && path === "recipes/export"
+          ? { status: 405, code: "method_not_allowed" }
+          : { status: 404, code: "not_found" };
+        expect({ path, method, status: response.status }).toEqual({ path, method, status: refused.status });
+        await expect(readJson(response)).resolves.toMatchObject({ ok: false, error: refused });
+      }
+    }
   });
 
   it("exports the full v1 error status map", () => {

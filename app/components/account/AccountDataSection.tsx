@@ -88,7 +88,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
               ) : needsFreshSignIn ? null : (
                 // Neutral guidance before any attempt; a failed attempt's message replaces it.
                 <Text tone="muted" size="sm">
-                  {claim("Your account has no password, so you need to have signed in within the last 10 minutes.", { source: { file: "app/lib/account-reauthentication.server.ts" }, verify: [{ fileLine: "app/lib/account-reauthentication.server.ts", pattern: "RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000" }] })}{" "}
+                  {claim("Your account has no password, so you need to have signed in within the last 10 minutes.", { source: { test: "test/routes/account-settings-deletion.test.tsx::Account settings - delete account > lets a passwordless account delete only within ten minutes of signing in" }, verify: [{ testExists: "test/routes/account-settings-deletion.test.tsx::Account settings - delete account > lets a passwordless account delete only within ten minutes of signing in" }, { fileLine: "app/lib/account-reauthentication.server.ts", pattern: "^export const RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000;$" }] })}{" "}
                   If it has been longer, sign in again first.
                 </Text>
               )}

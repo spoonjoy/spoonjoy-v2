@@ -1393,6 +1393,28 @@ describe("API v1 OpenAPI document", () => {
       });
   });
 
+  it("configures the connector as a public PKCE client with token, refresh and revoke URLs, polling instead of webhooks", () => {
+    const profile = buildApiV1ConnectorOpenApiDocument()["x-connector-profile"];
+
+    expect(profile.oauth).toEqual({
+      registrationUrl: "https://spoonjoy.app/oauth/register",
+      authorizationUrl: "https://spoonjoy.app/oauth/authorize",
+      tokenUrl: "https://spoonjoy.app/oauth/token",
+      revokeUrl: "https://spoonjoy.app/oauth/revoke",
+      refreshUrl: "https://spoonjoy.app/oauth/token",
+      pkce: true,
+      tokenEndpointAuthMethod: "none",
+      "x-pkce": true,
+      "x-token-endpoint-auth-method": "none",
+    });
+    expect(profile.triggers).toEqual([expect.objectContaining({ path: "/api/v1/shopping-list/sync", polling: true })]);
+    expect(profile.unavailable).toContain("webhooks, REST Hooks, SSE, and event subscriptions");
+    expect(buildApiV1OpenApiDocument().components.securitySchemes.oauth2.flows.authorizationCode).toMatchObject({
+      authorizationUrl: "https://spoonjoy.app/oauth/authorize",
+      tokenUrl: "https://spoonjoy.app/oauth/token",
+    });
+  });
+
   it("publishes an OpenAPI 3.0 REST-only connector profile for no-code importers", () => {
     const connector = buildApiV1ConnectorOpenApiDocument();
     const previewConnector = buildApiV1ConnectorOpenApiDocument({ serverUrl: "https://preview.example" });

@@ -333,7 +333,7 @@ export default function OAuthAuthorize() {
         </Text>
       ) : null}
       <Text tone="muted" className="mt-4">
-        This connection stays active while {appName} keeps using it. {claim("It ends when you disconnect it, sign out everywhere, or leave it unused for 180 days.", { source: { file: "app/lib/oauth-server.server.ts" }, verify: [{ fileLine: "app/lib/oauth-server.server.ts", pattern: "OAUTH_REFRESH_TOKEN_TTL_SECONDS = 180 \\* 24 \\* 60 \\* 60" }] })}
+        This connection stays active while {appName} keeps using it. {claim("It ends when you disconnect it, sign out everywhere, or leave it unused for 180 days.", { source: { test: "test/routes/account-settings.test.tsx::Account Settings Route > action - API and app access > disconnects an OAuth app by revoking refresh and live access credentials" }, verify: [{ testExists: "test/routes/account-settings.test.tsx::Account Settings Route > action - API and app access > disconnects an OAuth app by revoking refresh and live access credentials" }, { testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > bearer credentials > sign out everywhere revokes API tokens, agent tokens, OAuth and MCP connections, unused codes and approved agent requests" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > refuses a refresh token 180 days after it was issued and ends the connection" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > gives every rotation a fresh 180-day window, so an active client stays connected" }] })}
       </Text>
 
       <Collapsible title="Connection details" className="mt-5">

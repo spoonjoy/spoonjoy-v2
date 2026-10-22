@@ -40,7 +40,7 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
       label="Profile photo"
       hideLabel
       alt="Profile photo"
-      description={claim("JPG, PNG, GIF, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024" }] })}
+      description={claim("JPG, PNG, GIF, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "^export const PROFILE_IMAGE_TYPES = \\[\"image/jpeg\", \"image/png\", \"image/gif\", \"image/webp\"\\] as const;$" }, { fileLine: "app/lib/recipe-image.ts", pattern: "^export const IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024;$" }, { fileLine: "app/components/account/ProfilePhotoField.tsx", pattern: "accept=\\{PROFILE_IMAGE_ACCEPT\\}" }] })}
       src={resolveChefAvatarUrl(savedPhotoUrl)}
       accept={PROFILE_IMAGE_ACCEPT}
       maxSize={IMAGE_MAX_FILE_SIZE}

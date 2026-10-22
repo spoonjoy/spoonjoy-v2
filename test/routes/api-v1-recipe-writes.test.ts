@@ -1068,6 +1068,30 @@ describe("API v1 recipe write mutations", () => {
     expectErrorEnvelope(await readJson(response), "req_recipe_delete_already_deleted", "not_found", 404);
   });
 
+  it("replays a fork by clientMutationId without forking twice", async () => {
+    const owner = await db.user.create({ data: createTestUser() });
+    const forker = await db.user.create({ data: createTestUser() });
+    const source = await createRecipeGraph(db, owner.id, { title: "Replayed Fork Source" });
+    const token = await createApiCredential(db, forker.id, "Fork replay writer", { scopes: ["kitchen:write"] });
+    const body = { clientMutationId: "recipe-fork-replay", title: "Replayed Fork" };
+    const fork = (requestId: string) => action(routeArgs(
+      mutationRequest("POST", `recipes/${source.id}/fork`, token.token, requestId, body),
+      `recipes/${source.id}/fork`,
+    ));
+
+    const first = await fork("req_recipe_fork_first");
+    const firstPayload = await readJson(first);
+    const replay = await fork("req_recipe_fork_replay");
+    const replayPayload = await readJson(replay);
+
+    expect(first.status).toBe(201);
+    expectMutationShape(firstPayload.data.mutation, "recipe-fork-replay", false);
+    expect(replay.status).toBe(201);
+    expectMutationShape(replayPayload.data.mutation, "recipe-fork-replay", true);
+    expect(replayPayload.data.recipe.id).toBe(firstPayload.data.recipe.id);
+    await expect(db.recipe.count({ where: { chefId: forker.id, sourceRecipeId: source.id } })).resolves.toBe(1);
+  });
+
   it("forks recipes with source graph, title suffixing, cover copy, and notification side effects", async () => {
     const owner = await db.user.create({ data: createTestUser() });
     const forker = await db.user.create({ data: createTestUser() });

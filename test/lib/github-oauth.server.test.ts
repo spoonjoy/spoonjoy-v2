@@ -79,6 +79,13 @@ describe("github-oauth.server", () => {
     expect(url.searchParams.get("scope")).toContain("user:email");
   });
 
+  it("asks GitHub for its basic profile and email scopes and nothing more, on GitHub's own sign-in page", () => {
+    const url = createGitHubAuthorizationURL(config, redirectUri, "state-123");
+
+    expect(url.origin).toBe("https://github.com");
+    expect(url.searchParams.get("scope")).toBe("read:user user:email");
+  });
+
   it("rejects missing state and missing code before contacting GitHub", async () => {
     await expect(verifyGitHubCallback(config, redirectUri, callbackData({ state: "" }))).resolves.toMatchObject({
       success: false,

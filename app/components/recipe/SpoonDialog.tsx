@@ -131,7 +131,7 @@ export function SpoonDialog({
             name="photo"
             accept={FOOD_IMAGE_ACCEPT}
             maxSize={IMAGE_MAX_FILE_SIZE}
-            description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024" }] })}
+            description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "^export const FOOD_IMAGE_TYPES = \\[\"image/jpeg\", \"image/png\", \"image/webp\"\\] as const;$" }, { fileLine: "app/lib/recipe-image.ts", pattern: "^export const IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024;$" }, { fileLine: "app/components/recipe/SpoonDialog.tsx", pattern: "accept=\\{FOOD_IMAGE_ACCEPT\\}" }] })}
             rejectMessage={(rejection) =>
               rejection.reason === "size" ? FOOD_IMAGE_SIZE_MESSAGE : FOOD_IMAGE_TYPE_MESSAGE
             }
