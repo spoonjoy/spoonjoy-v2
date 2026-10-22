@@ -9,7 +9,6 @@ const STORIES_DIR = path.join(__dirname, '../stories')
 const curatedRootStories = new Set([
   'AppFoundation.stories.tsx',
   'MobileNav.stories.tsx',
-  'ProfilePhotoCropper.stories.tsx',
   'SpoonjoyLogo.stories.tsx',
 ])
 
@@ -66,6 +65,7 @@ const removedStaleFiles = [
   'Text.stories.tsx',
   'Textarea.stories.tsx',
   'ThemeToggle.stories.tsx',
+  'ProfilePhotoCropper.stories.tsx',
   'UseRecipeDockActions.stories.tsx',
   'ValidationError.stories.tsx',
 ]
