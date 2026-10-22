@@ -6159,7 +6159,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"15 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"16 components\" [inspector/list] in group \"X-ray\"",
           "count": 1
         },
         {
@@ -6248,7 +6248,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 14
+          "count": 15
         },
         {
           "identity": "link \"Cookbooks\" [-/-] in navigation \"Main navigation\"",
@@ -10981,7 +10981,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"15 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"16 components\" [inspector/list] in group \"X-ray\"",
           "count": 1
         },
         {
@@ -11062,7 +11062,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 14
+          "count": 15
         },
         {
           "identity": "link \"Home\" [-/-] in navigation \"Spoonjoy navigation\"",
