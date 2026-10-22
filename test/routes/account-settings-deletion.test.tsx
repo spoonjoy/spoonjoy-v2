@@ -14,6 +14,12 @@ import { DELETE_ACCOUNT_REAUTH_REDIRECT } from "~/lib/account-settings.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { sqliteD1, type SqliteD1 } from "../helpers/sqlite-d1";
 
+// HX's image field under Profile photo keeps its own status region; these are the page's.
+function pageStatuses(): HTMLElement[] {
+  return screen.queryAllByRole("status").filter((element) => !element.closest('[data-testid="profile-photo-section"]'));
+}
+
+
 const mocked = vi.hoisted(() => ({ db: null as PrismaClientType | null }));
 
 vi.mock("~/lib/route-platform.server", async (importOriginal) => ({
@@ -279,7 +285,7 @@ describe("Account settings - Your data section", () => {
     expect(screen.getByLabelText("Type your username, ada, to confirm")).toHaveValue("ada");
     expect(posted).toEqual([{ intent: "deleteAccount", confirmUsername: "ada", password: "nope" }]);
     // The error shows in the form, not in the page banner.
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(pageStatuses()).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Sign in again" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));

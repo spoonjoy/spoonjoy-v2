@@ -2492,7 +2492,6 @@
       "sources": [
         "app/routes/account.settings.tsx",
         "app/components/account/AccountDataSection.tsx",
-        "app/components/account/ProfilePhotoCropper.tsx",
         "app/components/account/ProfilePhotoField.tsx",
         "app/components/auth/AddPasskeyButton.tsx",
         "app/components/button.tsx",
@@ -2527,7 +2526,6 @@
         "app/lib/email.ts",
         "app/lib/env.server.ts",
         "app/lib/gemini-text.server.ts",
-        "app/lib/image-crop.ts",
         "app/lib/image-storage.server.ts",
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
@@ -2553,12 +2551,12 @@
         "app/lib/webauthn.server.ts"
       ],
       "components": [
-        "avatar",
         "button",
         "checkbox",
         "dialog",
         "fieldset",
         "form",
+        "image-field",
         "link",
         "page-header",
         "switch",
@@ -2566,9 +2564,6 @@
         "text-field"
       ],
       "renders": {
-        "avatar": [
-          "app/components/account/ProfilePhotoField.tsx"
-        ],
         "button": [
           "app/components/button.tsx"
         ],
@@ -2576,7 +2571,6 @@
           "app/routes/account.settings.tsx"
         ],
         "dialog": [
-          "app/components/account/ProfilePhotoCropper.tsx",
           "app/components/notifications-section.tsx"
         ],
         "fieldset": [
@@ -2585,6 +2579,9 @@
         "form": [
           "app/components/account/AccountDataSection.tsx",
           "app/routes/account.settings.tsx"
+        ],
+        "image-field": [
+          "app/components/account/ProfilePhotoField.tsx"
         ],
         "link": [
           "app/components/account/AccountDataSection.tsx"
@@ -2597,7 +2594,6 @@
         ],
         "text": [
           "app/components/account/AccountDataSection.tsx",
-          "app/components/account/ProfilePhotoField.tsx",
           "app/components/auth/AddPasskeyButton.tsx",
           "app/components/notifications-section.tsx",
           "app/routes/account.settings.tsx"

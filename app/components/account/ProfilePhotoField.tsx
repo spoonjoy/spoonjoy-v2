@@ -1,103 +1,56 @@
-import { useRef, useState } from "react";
-import { Form, useActionData, useSubmit } from "react-router";
-import { Avatar } from "~/components/ouro/avatar/avatar";
-import { Button } from "~/components/button";
-import { Text } from "~/components/ouro/text/text";
+import { useActionData, useSubmit } from "react-router";
+import { ImageField } from "~/components/ouro/image-field/image-field";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
-import { ProfilePhotoCropper } from "~/components/account/ProfilePhotoCropper";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
-import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_ACCEPT, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
+import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_ACCEPT } from "~/lib/recipe-image";
 
-// TODO(ouro-hx: image-field): Picking a photo with a preview becomes HX's image field once it ships.
+/**
+ * The chef's profile photo on Account settings: HX's image field, round and cropped, which saves a
+ * chosen photo as soon as it is cropped and removes the saved one, each as its own form post.
+ */
 export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
   const actionData = useActionData<AccountSettingsActionResult>();
   const submit = useSubmit();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [cropFile, setCropFile] = useState<File | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const savedPhotoUrl = actionData?.photoUrl || photoUrl;
 
-  const currentPhotoUrl = resolveChefAvatarUrl(actionData?.photoUrl || photoUrl);
-  const buttonText = photoUrl ? "Change photo" : "Upload photo";
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    /* istanbul ignore next -- @preserve native file input onChange only fires with a selected file */
+  const upload = (file: File | null) => {
+    // A chosen photo is posted at once, so taking it back out of the field only clears its preview.
     if (!file) return;
-
-    if (!(PROFILE_IMAGE_TYPES as readonly string[]).includes(file.type)) {
-      setValidationError("Please upload an image file");
-      event.target.value = "";
-      return;
-    }
-
-    if (file.size > IMAGE_MAX_FILE_SIZE) {
-      setValidationError("Photo must be less than 5MB");
-      event.target.value = "";
-      return;
-    }
-
-    setValidationError(null);
-    setCropFile(file);
-  };
-
-  const handleConfirm = (blob: Blob) => {
     const formData = new FormData();
     formData.append("intent", "uploadPhoto");
-    formData.append("photo", new File([blob], "avatar.jpg", { type: blob.type || "image/jpeg" }));
+    formData.append("photo", file);
     submit(formData, { method: "post", encType: "multipart/form-data" });
-    setCropFile(null);
   };
 
-  const handleCancel = () => {
-    setCropFile(null);
-    /* istanbul ignore next -- @preserve the input ref is always populated while the field is mounted */
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+  const remove = () => {
+    const formData = new FormData();
+    formData.append("intent", "removePhoto");
+    submit(formData, { method: "post" });
   };
 
   // Only this field's own upload errors belong here; the page banner shows every other form's.
-  const errorMessage = validationError ?? (actionData?.intent === "uploadPhoto" && actionData.error ? actionData.message : null);
+  const error = actionData?.intent === "uploadPhoto" && actionData.error ? actionData.message : undefined;
 
   return (
-    <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
-      <Avatar
-        name="Profile photo"
-        src={currentPhotoUrl}
-        alt="Profile photo"
-        size="3xl"
-      />
-      <div className="flex-1 space-y-4">
-        <div className="flex flex-wrap gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            name="photo"
-            accept={PROFILE_IMAGE_ACCEPT}
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <Button type="button" plain onClick={handleUploadClick}>
-            {buttonText}
-          </Button>
-          {photoUrl && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="removePhoto" />
-              <Button type="submit" variant="destructive">
-                Remove photo
-              </Button>
-            </Form>
-          )}
-        </div>
-        {errorMessage && <Text size="sm" tone="destructive">{errorMessage}</Text>}
-        <Text tone="muted" size="sm">JPG, PNG, GIF, or WebP. 5 MB max.</Text>
-      </div>
-
-      {cropFile && <ProfilePhotoCropper file={cropFile} onConfirm={handleConfirm} onCancel={handleCancel} />}
-    </div>
+    <ImageField
+      // A new saved photo starts the field afresh, showing the saved photo instead of the chosen file.
+      key={savedPhotoUrl ?? "none"}
+      className="mt-4 max-w-48"
+      label="Profile photo"
+      hideLabel
+      alt="Profile photo"
+      description="JPG, PNG, GIF, or WebP. 5 MB max."
+      src={resolveChefAvatarUrl(savedPhotoUrl)}
+      accept={PROFILE_IMAGE_ACCEPT}
+      maxSize={IMAGE_MAX_FILE_SIZE}
+      shape="circle"
+      crop={{ title: "Crop your photo", outputWidth: 512 }}
+      // The field always shows a photo, the default avatar until the chef saves one.
+      changeLabel={savedPhotoUrl ? "Change photo" : "Upload photo"}
+      removeLabel="Remove photo"
+      error={error}
+      onFileChange={upload}
+      onRemove={photoUrl ? remove : undefined}
+    />
   );
 }
