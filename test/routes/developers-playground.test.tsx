@@ -67,7 +67,9 @@ function mockApiResponse(body: unknown, init?: ResponseInit) {
   });
 }
 
-describe("/developers/playground", () => {
+// The playground renders every operation as an HX ChoiceCard, so a test that walks a whole flow
+// takes a couple of seconds here and more on a loaded CI runner.
+describe("/developers/playground", { timeout: 20_000 }, () => {
   afterEach(async () => {
     vi.useRealTimers();
     // HX ChoiceCard and fields settle their highlight and validity a tick after a click; let that
