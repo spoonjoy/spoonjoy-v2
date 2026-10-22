@@ -32,8 +32,9 @@ const test = journeyTest.extend<{ notFoundDocument: void }>({
 
 // Playwright reads a hook's first parameter for the fixtures it asks for and accepts only an object
 // pattern there; the kit's beforeAll names it `_fixtures`, which Playwright refuses before any test
-// runs. This hands the kit a test whose beforeAll gives Playwright the pattern it wants. Its tests
-// are declared through this file too (the apply trap), which is where Playwright then finds them.
+// runs (ourostack/ouro-ui#175). This hands the kit a test whose beforeAll gives Playwright the
+// pattern it wants. Its tests are declared through this file too (the apply trap), which is where
+// Playwright then finds them.
 const censusTest = new Proxy(test, {
   apply(target, thisArg, args) {
     return Reflect.apply(target, thisArg, args);

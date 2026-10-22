@@ -312,7 +312,7 @@ body {
 }
 
 /* Controls use the UI face, except HX SyncStatus's Retry, which sits inside its sentence and takes
-   the sentence's face so the line keeps one height whichever state it shows. */
+   the sentence's face so the line keeps one height whichever state it shows (ourostack/ouro-ui#178). */
 button:not([data-ouro-control="sync-status"]),
 input,
 textarea,
