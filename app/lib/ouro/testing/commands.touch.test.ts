@@ -210,12 +210,11 @@ test("the kit waits for the frame under a pointer-events: none overlay, where th
   await expect(commands.touchStep({ type: "touchStart", x: 100, y: 350 })).rejects.toThrow(refused(100, 350));
 });
 
+// The kit can never watch this frame, so a kit that waited for it would refuse the touch.
 test("the kit does not wait for a pointer-events: none iframe, which the touch passes through", async () => {
   const frame = await unwatchableFrame(300);
   frame.style.pointerEvents = "none";
-  const started = performance.now();
   expect(await tapAt(window, 100, 350)).toEqual(["touchstart", "touchend"]);
-  expect(performance.now() - started).toBeLessThan(1000);
 });
 
 test("on a page zoomed and panned by touch, the kit waits for the frame where the touch lands", async () => {
@@ -360,19 +359,88 @@ test.each(["open", "closed"] as const)("touches reach an iframe in a %s shadow r
   expect(await tapAt(window, 100, 50)).toEqual(["touchstart", "touchend"]);
 });
 
-test("touches reach a cross-origin iframe, and a cross-origin iframe does not hold up touches elsewhere", async () => {
-  // Another origin of the same Vitest server: the page's host name swapped for its IP address.
-  const other = new URL(location.href);
-  other.hostname = other.hostname === "localhost" ? "127.0.0.1" : "localhost";
-  const frame = await frameAt(document.body, 300, { src: `${other.origin}/?touch-kit-cross-origin` });
+// That a frame like this holds up no touch elsewhere is checked without a browser, where a wall
+// clock times the kit alone (scripts/touch-kit-frames.test.mjs): here, Vitest's Node process runs
+// other test files' work, which can stall it for seconds (a slow touch's log says how late it ran).
+test("touches reach a cross-origin iframe, and the page around it", async () => {
+  // A sandboxed frame has an opaque origin, cross-origin to this page, and the touch project runs it
+  // in a process of its own (--site-per-process). Its document runs no script. Nothing is fetched
+  // from the server either, where an app's Vite would answer another path with its own index.html
+  // and its code.
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-scripts");
+  Object.assign(frame.style, { position: "absolute", top: "300px", left: "0", width: "300px", height: "100px", border: "0" });
+  frame.srcdoc = "<body style='margin:0'><div style='height:100px'></div></body>";
   const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+  document.body.append(frame);
+  nodes.push(frame);
   await loaded;
-  const started = performance.now();
+  expect(() => frame.contentWindow!.document).toThrow();
   expect(await tapAt(window, 100, 50)).toEqual(["touchstart", "touchend"]);
-  expect(performance.now() - started).toBeLessThan(1000);
   // Inside it, no listener of this page can see the touch; the kit's own watcher must.
   await commands.touchStep({ type: "touchStart", x: 100, y: 350 });
   await commands.touchStep({ type: "touchEnd" });
+});
+
+/**
+ * A sandboxed frame at `top`: an opaque origin, cross-origin to this page, which the touch project
+ * runs in a process of its own (`--site-per-process`). `busy(ms)` keeps its thread busy for that
+ * long. `report()` resolves with what the frame saw of the kit and of the touch: when the kit's
+ * watcher was set on its window, and the timestamp of each touchstart (when it was sent), both on
+ * the frame's own clock.
+ */
+async function busyFrame(top: number) {
+  const script = `
+    let watcher, armed = [];
+    Object.defineProperty(window, "__ouroTouch", { configurable: true, get: () => watcher, set: (value) => { watcher = value; armed.push(performance.now()); } });
+    const sent = [];
+    addEventListener("touchstart", (event) => sent.push(event.timeStamp), true);
+    onmessage = (event) => {
+      if (event.data === "report") parent.postMessage({ armed, sent }, "*");
+      else { const end = performance.now() + event.data; while (performance.now() < end); }
+    };`;
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-scripts");
+  Object.assign(frame.style, { position: "absolute", top: `${top}px`, left: "0", width: "300px", height: "100px", border: "0" });
+  frame.srcdoc = `<body style='margin:0'><div style='height:100px'></div><script>${script}</script></body>`;
+  const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+  document.body.append(frame);
+  nodes.push(frame);
+  await loaded;
+  const busy = (ms: number) => frame.contentWindow!.postMessage(ms, "*");
+  const report = () =>
+    new Promise<{ armed: number[]; sent: number[] }>((resolve) => {
+      const listener = (event: MessageEvent) => {
+        if (event.source !== frame.contentWindow) return;
+        removeEventListener("message", listener);
+        resolve(event.data as { armed: number[]; sent: number[] });
+      };
+      addEventListener("message", listener);
+      frame.contentWindow!.postMessage("report", "*");
+    });
+  return { frame, busy, report };
+}
+
+// The time a busy frame could add is checked without a browser (scripts/touch-kit-frames.test.mjs).
+test("a touch elsewhere is handled while a cross-origin frame is busy, also while the kit tidies up after it", async () => {
+  const { busy } = await busyFrame(300);
+  // Busy from the moment the touch arrives, after its watch has started there, for longer than the
+  // kit's 1-second limit for tidying a frame up.
+  addEventListener("touchstart", () => busy(1500), { once: true, capture: true });
+  expect(await tapAt(window, 100, 50)).toEqual(["touchstart", "touchend"]);
+  expect(await tapAt(window, 100, 50)).toEqual(["touchstart", "touchend"]);
+});
+
+test("a touchstart into a busy cross-origin frame is sent only once that frame's watcher is armed for it", async () => {
+  const { busy, report } = await busyFrame(300);
+  busy(1500);
+  await commands.touchStep({ type: "touchStart", x: 100, y: 350 });
+  await commands.touchStep({ type: "touchEnd" });
+  const { armed, sent } = await report();
+  expect(sent).toHaveLength(1);
+  // The kit armed a watcher in the frame before it sent the touch, not only the page's around it.
+  expect(armed.length).toBeGreaterThan(0);
+  expect(armed[0]!).toBeLessThanOrEqual(sent[0]!);
 });
 
 // A check that the command never hangs, not of what it does: whether the frame's empty document
@@ -409,6 +477,21 @@ test("a touch into an iframe added just before it is handled", async () => {
     await commands.touchStep({ type: "touchStart", x: 100, y: 100 });
     await commands.touchStep({ type: "touchEnd" });
     expect(seen).toEqual(["touchstart"]);
+    frame.remove();
+  }
+});
+
+// The same smoke test for a frame in another process, where only that frame's own watcher can
+// say it is armed: the touch must wait until Playwright lists the frame, not go out while only the
+// test's own frame is watched (scripts/touch-kit-frames.test.mjs checks that case exactly).
+test("a touch into a cross-origin iframe added just before it is handled", async () => {
+  for (let index = 0; index < 10; index++) {
+    const { frame, report } = await busyFrame(300);
+    await commands.touchStep({ type: "touchStart", x: 100, y: 350 });
+    await commands.touchStep({ type: "touchEnd" });
+    const { armed, sent } = await report();
+    expect(sent).toHaveLength(1);
+    expect(armed[0]!).toBeLessThanOrEqual(sent[0]!);
     frame.remove();
   }
 });

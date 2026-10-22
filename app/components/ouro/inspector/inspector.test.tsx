@@ -483,8 +483,8 @@ describe("Inspector", () => {
     const copy = page.getByRole("button", { name: "Copy link" }).element();
     await expect.poll(() => tags().some((tag) => tag.textContent === "dialog")).toBe(true);
     await expect.poll(() => document.getAnimations().filter((animation) => animation.playState === "running").length).toBe(0);
-    const outline = outlines()[tags().findIndex((tag, index) => tag.textContent === "button" && outlines()[index] && onTarget(outlines()[index]!, copy))];
-    expect(outline).toBeDefined();
+    // The outlines follow on the inspector's next frame, which a loaded runner can draw late.
+    await expect.poll(() => tags().some((tag, index) => tag.textContent === "button" && outlines()[index] !== undefined && onTarget(outlines()[index]!, copy))).toBe(true);
     // The outlines are above the dialog, so its components show theirs.
     expect(Number(getComputedStyle(layer()!).zIndex)).toBeGreaterThan(Number(getComputedStyle(document.querySelector('[data-ouro="dialog-portal"]')!).zIndex));
   }, 15_000);

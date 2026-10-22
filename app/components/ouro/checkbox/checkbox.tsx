@@ -16,6 +16,7 @@ export interface CheckboxProps {
   /**
    * What checking it means, shown to the right of the box and read as its name. Required:
    * every control needs a name. To hide it visually, keep it and add `hideLabel`.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/checkbox/checkbox.test-d.ts verify:fileLine(registry/ouro/components/ouro/checkbox/checkbox.test-d.ts, /\{\schecked:\strue\s\}>\(\)\.not\.toExtend<CheckboxProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the checkbox's name. */
@@ -54,6 +55,7 @@ export interface CheckboxProps {
    * clear it in `onCheckedChange`, as in
    * `<Checkbox indeterminate={some} checked={all} onCheckedChange={toggleAll}>`. The box
    * submits only while `checked`.
+   * @claim "box does when some of its items are" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox > announces the indeterminate state as mixed and shows a dash)
    */
   indeterminate?: boolean | undefined;
   /** Shows the state but ignores clicks and keys, unlike `disabled`, which also fades it. */

@@ -26,12 +26,8 @@ const coverageInclude = [
   "scripts/run-with-warning-policy.mjs",
   "scripts/e2e-run-cleanup.mjs",
   "scripts/check-journey-rules.mjs",
-  "scripts/hx-source-rules.mjs",
   "scripts/generate-ouro-provenance.mjs",
-  "scripts/hx-census.mjs",
-  "scripts/hx-census-update.mjs",
-  "scripts/hx-census-merge.mjs",
-  "scripts/hx-census-compare.mjs",
+  "scripts/claims-pr.mjs",
   "scripts/sanitize-journey-traces.mjs",
   "scripts/count-cloudflare-requests.mjs",
   "scripts/qa-run-scope.mjs",
@@ -93,6 +89,19 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
+    // `--changed` follows imports only. These files reach tests another way (setup, the database,
+    // the lockfile, TypeScript settings), so a change to any of them reruns every test.
+    forceRerunTriggers: [
+      "**/package.json/**",
+      "**/{vitest,vite}.config.*/**",
+      "pnpm-lock.yaml",
+      "tsconfig*.json",
+      "test/setup.ts",
+      "test/support/**",
+      "prisma/schema.prisma",
+      "migrations/**",
+      "scripts/test-changed.mjs",
+    ],
     exclude: [
       "**/node_modules/**",
       "**/e2e/**",

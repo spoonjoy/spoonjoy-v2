@@ -19,15 +19,15 @@ describe("dependency advisory refresh contract", () => {
       "react-router": "7.18.2",
     });
     expect(packageJson.devDependencies).toMatchObject({
-      "@storybook/addon-a11y": "10.2.10",
-      "@storybook/addon-docs": "10.2.10",
-      "@storybook/addon-onboarding": "10.2.10",
-      "@storybook/addon-themes": "10.2.10",
-      "@storybook/addon-vitest": "10.2.10",
-      "@storybook/react-vite": "10.2.10",
+      "@storybook/addon-a11y": "10.6.2",
+      "@storybook/addon-docs": "10.6.2",
+      "@storybook/addon-onboarding": "10.6.2",
+      "@storybook/addon-themes": "10.6.2",
+      "@storybook/addon-vitest": "10.6.2",
+      "@storybook/react-vite": "10.6.2",
       "happy-dom": "20.8.9",
-      "storybook": "10.2.10",
-      "vite": "7.3.5",
+      "storybook": "10.6.2",
+      "vite": "7.3.7",
     });
   });
 

@@ -70,3 +70,16 @@ export const InContext: Story = {
     </Surface>
   ),
 };
+
+/** "or" between two ways to sign in. */
+export const Labelled: Story = {
+  render: () => (
+    <Surface>
+      <Button variant="outline" tone="secondary" fullWidth>
+        Continue with a passkey
+      </Button>
+      <Separator label="or" />
+      <Button fullWidth>Continue with email</Button>
+    </Surface>
+  ),
+};

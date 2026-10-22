@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
+  OURO_SLOW_TOUCH_TRACE_PATTERN,
   PNPM_TRANSIENT_FETCH_RETRY_PATTERN,
   findUnexpectedDiagnosticOutput,
   findUnexpectedWarnings,
@@ -336,6 +337,30 @@ describe("warning gate", () => {
     ].map((line, index) => [index + 1, line] as const))("tolerates transient retry notice %i", (_case, line) => {
       expect(findUnexpectedWarnings(`${line}\n`)).toEqual([]);
       expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+  });
+
+  describe("Ouro HX's slow-touch trace", () => {
+    // The shape of the line Storybook run 39763027229's test:ouro printed when a cold browser's first touch took 1.8s.
+    const trace =
+      "touchStep: the touchStart at (100, 100) took 1831ms. Steps: +828ms asked Chromium: layout 256ms, hit test 61ms, node 243ms, watcher 81ms, frame id 0ms, released 185ms; +828ms the frame at the point: true, http://localhost:63316/?sessionId=1; +1831ms handled. Watches: http://localhost:63316/?sessionId=1 answered at +828ms. Node's event loop ran up to 46ms late.";
+
+    it.each([
+      trace,
+      "touchDrag: the touchEnd at (260, 100) took 1204ms. Steps: +3ms sent. Watches: about:srcdoc had not answered. Node's event loop ran up to 12ms late.",
+    ])("tolerates the kit's trace of a touch that succeeded slowly: %s", (line) => {
+      expect(OURO_SLOW_TOUCH_TRACE_PATTERN.test(line)).toBe(true);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+
+    it.each([
+      ["another command's line", trace.replace(/^touchStep/, "pointerPress")],
+      ["a touch that did not finish", "touchStep: the page did not handle the touchEnd at (260, 100) within 5000ms."],
+      ["extra text after the trace", `${trace} Also: something broke`],
+      ["a warning that mentions a slow touch", "Warning: touchStep: the touchStart at (100, 100) took 1831ms."],
+    ])("still fails %s", (_label, line) => {
+      expect(OURO_SLOW_TOUCH_TRACE_PATTERN.test(line)).toBe(false);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([line]);
     });
   });
 

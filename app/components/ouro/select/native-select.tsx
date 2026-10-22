@@ -30,6 +30,7 @@ export interface NativeSelectOwnProps {
   /**
    * What the select is for, shown above it and read as its name. Required: every control
    * needs a name. To hide it visually, keep it and add `hideLabel`.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/select/native-select.test-d.ts verify:fileLine(registry/ouro/components/ouro/select/native-select.test-d.ts, /expectTypeOf<\{\sname:\s"country"\s\}>\(\)\.not\.toExtend<NativeSelectProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the select's name. */
@@ -67,7 +68,11 @@ export interface NativeSelectOwnProps {
   /** The select element. */
   ref?: Ref<HTMLSelectElement> | undefined;
 
-  /** Not supported. A native multiple select is hard to use; use `<Select multiple>`. */
+  /**
+   * Not supported by NativeSelect. A native multiple select is hard to use; use `<Select multiple>`.
+   *
+   * @claim "Not supported by NativeSelect" registry/ouro/components/ouro/select/native-select.test-d.ts verify:fileLine(registry/ouro/components/ouro/select/native-select.test-d.ts, /expectTypeOf<\{\slabel:\s"Tags";\smultiple:\strue\s\}>\(\)\.not\.toExtend<NativeSelectProps>/)
+   */
   multiple?: { 'Use <Select multiple>': never };
   /** Not a prop. For several values use `<Select multiple>`. */
   isMulti?: { 'Use <Select multiple>': never };
@@ -102,6 +107,9 @@ const owner = { name: "NativeSelect", data: "native-select" };
  * The select: Field's control look (44px tall with a 16px font on phones, so iOS does not
  * zoom; 36px and 14px from `sm` with a fine pointer), with room for the chevron at the end.
  * The placeholder option shows muted while it is chosen.
+ * @claim "The select: Field's control look (44px" registry/ouro/components/ouro/select/select.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.test.tsx::Select > is 36px tall with a fine pointer from sm up, with 32px options)
+ * @claim "The select: Field's control look (44px" registry/ouro/components/ouro/select/native-select.test.tsx verify:testExists(registry/ouro/components/ouro/select/native-select.test.tsx::NativeSelect > is 36px tall with a fine pointer from sm up)
+ * @claim "The select: Field's control look (44px" registry/ouro/components/ouro/select/select.touch.test.tsx verify:testExists(registry/ouro/components/ouro/select/select.touch.test.tsx::keeps 44px controls and 16px text on a landscape phone, where the list opens by the trigger)
  */
 const selectClass =
   "m-0 box-border block w-full min-w-0 h-(--ouro-control-h) ps-3 pe-9 py-0 appearance-none " +

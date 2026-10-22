@@ -11,6 +11,7 @@ import { NumberField } from "~/components/ouro/number-field/number-field";
 import { Switch } from "~/components/ouro/switch/switch";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
+import { claim } from "~/lib/ouro/claims";
 import { useLocalCookController } from "~/lib/cook/local-cook-controller";
 import { sourceHrefFor, type PageProvenance } from "~/lib/ouro-provenance";
 import { pageProvenance } from "~/lib/ouro-provenance.server";
@@ -27,6 +28,14 @@ export function meta({}: Route.MetaArgs) {
     },
   ];
 }
+
+const INTRO = claim("A real Spoonjoy recipe page, open to everyone. Nothing here needs an account, and nothing you do leaves this browser.", {
+  source: { test: "test/routes/test-kitchen.test.tsx::Test Kitchen > opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own" },
+  verify: [
+    { testExists: "test/routes/test-kitchen.test.tsx::Test Kitchen > opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own" },
+    { testExists: "test/routes/test-kitchen.test.tsx::Test Kitchen > keeps a visitor's ticks in this browser" },
+  ],
+});
 
 const WHAT_TO_TRY = [
   "Tick off the first step's ingredients. Your progress stays in this browser.",
@@ -88,9 +97,7 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
         title="Spoonjoy Test Kitchen"
         action={<Button href="/signup">Make it yours: sign up</Button>}
       >
-        <Text tone="muted">
-          A real Spoonjoy recipe page, open to everyone. Nothing here needs an account, and nothing you do leaves this browser.
-        </Text>
+        <Text tone="muted">{INTRO}</Text>
       </CookbookHeader>
 
       <section aria-labelledby="test-kitchen-try" className="mt-8 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
@@ -103,7 +110,7 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
         <div className="grid gap-4 md:justify-items-end">
           <Switch
             label="X-ray"
-            description="Outline every Ouro HX component, with links to its docs and source."
+            description="Outlines the Ouro HX components on this page, with links to their docs and source."
             checked={xray}
             onCheckedChange={onXrayChange}
           />

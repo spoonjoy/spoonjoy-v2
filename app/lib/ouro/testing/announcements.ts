@@ -14,11 +14,21 @@ interface Announcement {
 
 /** What `watchAnnouncements` has seen so far. */
 interface AnnouncementWatch {
-  /** Every announcement since the watch started, in order. */
+  /**
+   * Every announcement since the watch started, in order.
+   *
+   * @claim "Every announcement since the watch started" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::records the text each live region exposes, polite and assertive, once per change)
+   * @claim "Every announcement since the watch started" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::counts text replaced in place in a status region, not the text it was added with)
+   */
   changes: Announcement[];
   /** The announcements whose text includes `text`. */
   matching(text: string): Announcement[];
-  /** How many announcements include `text`: 1 means a screen reader heard it once. */
+  /**
+   * How many announcements include `text`: 1 means a screen reader heard it once.
+   *
+   * @claim "How many announcements include `text`: 1" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::records the text each live region exposes, polite and assertive, once per change)
+   * @claim "How many announcements include `text`: 1" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::counts a change in an existing status region once, its exposed text only)
+   */
   count(text: string): number;
   /** Stops watching; `changes` keeps what was seen. */
   stop(): void;
@@ -26,13 +36,23 @@ interface AnnouncementWatch {
 
 const liveSelector = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
 
-/** Whether a node is exposed to assistive tech: no `aria-hidden="true"` on it or around it. */
+/**
+ * Whether a node is exposed to assistive tech: no `aria-hidden="true"` on it or around it.
+ *
+ * @claim "Whether a node is exposed to" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::records the text each live region exposes, polite and assertive, once per change)
+ * @claim "Whether a node is exposed to" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::leaves out text under aria-hidden, text outside a live region and changes after stop)
+ */
 function exposed(node: Node): boolean {
   const element = node instanceof Element ? node : node.parentElement;
   return !element?.closest('[aria-hidden="true"]');
 }
 
-/** The live region a node's text belongs to, or null when there is none or `aria-live="off"` comes first. */
+/**
+ * The live region a node's text belongs to, or null when there is none or `aria-live="off"` comes first.
+ *
+ * @claim "The live region a node's text" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::leaves out text under aria-hidden, text outside a live region and changes after stop)
+ * @claim "The live region a node's text" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::records the text each live region exposes, polite and assertive, once per change)
+ */
 function regionOf(element: Element | null): Element | null {
   for (let node = element; node; node = node.parentElement) {
     if (node.getAttribute("aria-live") === "off") return null;
@@ -87,6 +107,8 @@ function exposedText(root: Node): Text[] {
  * await expect.poll(() => announcements.count("Saved")).toBe(1);
  * expect(announcements.matching("Saved")[0]!.region.getAttribute("role")).toBe("status");
  * announcements.stop();
+ * @claim "Records what live regions announce from" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::records the text each live region exposes, polite and assertive, once per change)
+ * @claim "Records what live regions announce from" registry/ouro/lib/ouro/testing/announcements.test.tsx verify:testExists(registry/ouro/lib/ouro/testing/announcements.test.tsx::counts text replaced in place in a status region, not the text it was added with)
  */
 function watchAnnouncements(): AnnouncementWatch {
   const changes: Announcement[] = [];

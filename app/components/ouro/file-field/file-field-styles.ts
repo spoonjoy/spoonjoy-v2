@@ -9,6 +9,9 @@ export { acceptProblem, fileKey, formatSize, listClass, matchesAccept, nameClass
  * over it, outlined while the input inside it has keyboard focus. It fades with the field.
  *
  * @internal
+ * @claim "The drop zone: a dashed box" registry/ouro/components/ouro/file-field/file-field.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.test.tsx::FileField > outlines the zone while the input has keyboard focus)
+ * @claim "The drop zone: a dashed box" registry/ouro/components/ouro/file-field/file-field.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.test.tsx::FileField > highlights the zone while files are dragged over it)
+ * @claim "The drop zone: a dashed box" registry/ouro/components/ouro/file-field/file-field.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.test.tsx::FileField > is a labeled native file input inside a drop zone, on the Field contract)
  */
 const zoneClass =
   "relative m-0 box-border flex min-h-11 w-full min-w-0 cursor-pointer flex-col items-center justify-center gap-1 px-4 py-6 " +
@@ -23,6 +26,7 @@ const zoneClass =
  * The text in the zone: 16px on phones, 14px from `sm` with a fine pointer.
  *
  * @internal
+ * @claim "The text in the zone: 16px" registry/ouro/components/ouro/file-field/file-field.touch.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.touch.test.tsx::keeps 16px prompt text and a remove button with a 44px hit area on a landscape phone)
  */
 const promptClass = "m-0 text-base leading-6 sm:pointer-fine:text-sm sm:pointer-fine:leading-5 [&_svg]:mx-auto [&_svg]:mb-1 [&_svg]:size-6";
 
@@ -30,6 +34,7 @@ const promptClass = "m-0 text-base leading-6 sm:pointer-fine:text-sm sm:pointer-
  * The chosen files, one row each.
  *
  * @internal
+ * @claim "The chosen files, one row each" registry/ouro/components/ouro/file-field/file-field.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.test.tsx::FileField > takes chosen files and lists them, with a preview for images)
  */
 const listClass = "m-0 grid list-none gap-2 p-0";
 
@@ -69,6 +74,7 @@ function fileKey(file: File): string {
  * (`image/png`) or a family (`image/*`). An empty list accepts everything.
  *
  * @internal
+ * @claim "An empty list accepts everything" registry/ouro/components/ouro/file-field/file-field.test.tsx verify:testExists(registry/ouro/components/ouro/file-field/file-field.test.tsx::FileField > rejects files that do not match accept or exceed maxSize, and reports them)
  */
 function matchesAccept(file: File, accept: string | undefined): boolean {
   const tokens = (accept ?? "")

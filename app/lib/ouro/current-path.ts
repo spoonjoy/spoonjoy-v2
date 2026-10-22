@@ -1,6 +1,10 @@
 export { currentHref };
 
-/** The path of an `href` or a pathname: no query, no hash, no trailing slash (the root stays `/`). */
+/**
+ * The path of an `href` or a pathname: no query, no hash, no trailing slash (the root stays `/`).
+ *
+ * @claim "The path of an `href` or" registry/ouro/lib/ouro/current-path.test.ts verify:testExists(registry/ouro/lib/ouro/current-path.test.ts::currentHref > matches the same path, ignoring a trailing slash, a query and a hash)
+ */
 function pathOf(href: string): string {
   const path = href.replace(/[?#].*$/, "").replace(/\/+$/, "");
   return path === "" ? "/" : path;
@@ -15,6 +19,7 @@ function pathOf(href: string): string {
  * @internal Shared by Navbar, Sidebar and NavigationMenu; apps pass `currentPath`.
  * @example
  * currentHref(["/", "/recipes", "/settings"], "/recipes/12"); // "/recipes"
+ * @claim "Returns `undefined` when none matches or" registry/ouro/lib/ouro/current-path.test.ts verify:testExists(registry/ouro/lib/ouro/current-path.test.ts::currentHref > returns nothing without a current path)
  */
 function currentHref(hrefs: readonly string[], currentPath: string | undefined): string | undefined {
   if (currentPath === undefined) return undefined;

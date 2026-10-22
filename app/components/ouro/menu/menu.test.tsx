@@ -24,6 +24,16 @@ import { act } from "~/lib/ouro/testing/act";
 import { isTransparent } from "~/lib/ouro/testing/color";
 import { axeExclude } from "~/lib/ouro/testing/axe";
 
+/** The colour behind an element: the nearest background around it that is not transparent. */
+function behind(element: Element): string {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const color = getComputedStyle(node).backgroundColor;
+    if (color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(color)) return color;
+  }
+  return "rgb(255, 255, 255)";
+}
+
+
 // Runs in Chromium and WebKit.
 
 const roots: Root[] = [];
@@ -61,6 +71,20 @@ const trigger = () => document.querySelector<HTMLElement>('[data-ouro="button"]'
 
 describe("Menu current-page forced colors", () => {
   afterEach(() => document.documentElement.removeAttribute("dir"));
+  /** The highlighted item's fill against its popup's, under forced colours, which paint plain fills in the canvas colour. */
+  const highlightShows = (highlighted: Element) => getComputedStyle(highlighted).backgroundColor !== behind(highlighted);
+
+  it("shows the highlighted item in the system's highlight colours, where its fill is dropped", async () => {
+    await render(<Menu trigger={<Button>Account</Button>}><MenuItem onClick={() => {}}>Edit</MenuItem><MenuItem onClick={() => {}}>Duplicate</MenuItem></Menu>);
+    trigger().focus();
+    await userEvent.keyboard("{Enter}");
+    const edit = page.getByRole("menuitem", { name: "Edit", exact: true });
+    await expect.element(edit).toHaveAttribute("data-highlighted");
+    await commands.emulateMedia({ forcedColors: "active" });
+    expect(highlightShows(edit.element())).toBe(true);
+    expect(getComputedStyle(edit.element()).color).not.toBe(getComputedStyle(page.getByRole("menuitem", { name: "Duplicate", exact: true }).element()).color);
+  });
+
   for (const direction of ["ltr", "rtl"] as const) {
     it(`keeps its ${direction} start-edge mark visible in the system palette`, async () => {
       document.documentElement.dir = direction;
@@ -774,6 +798,16 @@ describe("MenuBar", () => {
   it("gives its triggers a 32px row with a fine pointer", async () => {
     await renderBar();
     expect(Math.round(barTrigger("File").element().getBoundingClientRect().height)).toBe(32);
+  });
+
+  it("opens each menu as a bottom sheet below 640px", async () => {
+    await page.viewport(390, 844);
+    await renderBar();
+    await userEvent.click(barTrigger("Edit"));
+    const element = await settled();
+    expect(element.getAttribute("data-ouro-presentation")).toBe("sheet");
+    expect(Math.round(element.getBoundingClientRect().bottom)).toBe(innerHeight);
+    expect(Math.round(element.getBoundingClientRect().width)).toBe(innerWidth);
   });
 });
 

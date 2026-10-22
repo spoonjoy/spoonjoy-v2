@@ -122,6 +122,25 @@ describe("Alert", () => {
     await expect.poll(() => document.activeElement?.textContent).toBe(target);
   });
 
+  it("hands focus to what replaces it when its action removes it", async () => {
+    function Retry() {
+      const [failed, setFailed] = useState(true);
+      return (
+        <div>
+          {failed ? (
+            <Alert tone="destructive" title="Couldn't save" action={<Button size="sm" onClick={() => setFailed(false)}>Try again</Button>} />
+          ) : (
+            <Button onClick={() => setFailed(true)}>Show the error again</Button>
+          )}
+        </div>
+      );
+    }
+    await render(<Retry />);
+    (page.getByRole("button", { name: "Try again" }).element() as HTMLElement).focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => document.activeElement?.textContent).toBe("Show the error again");
+  });
+
   it("lets focus fall back to the page when nothing else can take it", async () => {
     function Lone() {
       const [open, setOpen] = useState(true);

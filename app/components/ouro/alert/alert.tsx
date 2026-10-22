@@ -1,10 +1,12 @@
 "use client";
 
-import type { ComponentType, HTMLAttributes, JSX, MouseEvent, ReactNode, Ref, SVGProps } from "react";
+import type { ComponentType, HTMLAttributes, JSX, ReactNode, Ref, SVGProps } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { fontFor, toneFor } from "~/lib/ouro/appearance-hints";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
+import { useFocusHandoff } from "~/lib/ouro/focus-handoff";
+import { useMergedRef } from "~/lib/ouro/refs";
 import { toneWarning, type ToneName } from "~/lib/ouro/tones";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
@@ -16,6 +18,7 @@ export interface AlertOwnProps {
   /**
    * What happened, in a few words: "Recipe saved", "Couldn't save". Required, so every
    * alert says what it is about.
+   * @claim "Required, so every alert says what" registry/ouro/components/ouro/alert/alert.test-d.ts verify:fileLine(registry/ouro/components/ouro/alert/alert.test-d.ts, /title is required/)
    */
   title: ReactNode;
   /** More detail, or what to do next, under the title. */
@@ -48,6 +51,8 @@ export interface AlertOwnProps {
   /**
    * The icon at the start, as a component: `icon={WifiOffIcon}`. Each tone has its own
    * by default; `null` shows none.
+   * @claim "Each tone has its own by" registry/ouro/components/ouro/alert/alert.test.tsx verify:testExists(registry/ouro/components/ouro/alert/alert.test.tsx::Alert > takes an icon component, or none)
+   * @claim "Each tone has its own by" registry/ouro/components/ouro/alert/alert.test.tsx verify:testExists(registry/ouro/components/ouro/alert/alert.test.tsx::Alert > gives every tone a distinct look)
    */
   icon?: AlertIcon | null | undefined;
   /** Layout only: margins, width, grid placement (`mt-4`). Appearance classes warn in development; use `tone`. */
@@ -152,21 +157,6 @@ function CloseIcon(props: SVGProps<SVGSVGElement>): JSX.Element {
   );
 }
 
-const focusable =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/**
- * Where focus goes when an alert is dismissed: the next control after it, where the reader
- * would continue, or else the last one before it.
- */
-function focusTarget(alert: Element): HTMLElement | undefined {
-  const candidates = [...document.querySelectorAll<HTMLElement>(focusable)].filter(
-    (element) => !alert.contains(element) && element.getClientRects().length > 0,
-  );
-  const after = candidates.find((element) => alert.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
-  return after ?? candidates.filter((element) => alert.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING).at(-1);
-}
-
 function alertHint(token: string): string {
   if (/^text-(xs|sm|base|lg|xl|\dxl)$/.test(token)) return `remove "${token}"; Alert sets its own size`;
   if (token.startsWith("font-")) return fontFor("Alert", token);
@@ -188,9 +178,8 @@ function toneFromSeverity(value: unknown): ToneName {
  * button when you pass `onDismiss`. Destructive and warning alerts are spoken at once
  * (`role="alert"`); the others politely (`role="status"`).
  *
- * In and around forms, Alert is the component for a message that belongs to no field and
- * to no form as a whole: a reorder or a deletion the server refused, a step that could not
- * be parsed. Render it where the action was taken, with `action` for the way out.
+ * In and around forms, use Alert for a message that belongs to neither a field nor the form
+ * as a whole: a reorder or a deletion the server refused, a step that could not be parsed. Render it where the action was taken, with `action` for the way out.
  *
  * Use `Toast` instead for a brief message that disappears by itself, `ConfirmDialog` to
  * ask before a destructive action, and `Field`'s `error` for a message about one field.
@@ -226,8 +215,12 @@ export function Alert(props: AlertProps): JSX.Element {
     status,
     onClose,
     children,
+    ref,
     ...rest
   } = props;
+  // When the alert leaves while it holds focus (its dismiss button, or an action that removes it),
+  // focus goes to what now stands where it stood: the next control, or the last one before it.
+  const merged = useMergedRef(ref, useFocusHandoff<HTMLDivElement>());
   // A tone that is not one of Ouro UI's (a type error) warns and renders the default.
   const tone = Object.hasOwn(tones, toneProp) ? (toneProp as ToneName) : "secondary";
   useAppearanceClassNameCheck(
@@ -256,6 +249,7 @@ export function Alert(props: AlertProps): JSX.Element {
   return (
     <div
       {...rest}
+      ref={merged}
       role={urgent.has(tone) ? "alert" : "status"}
       data-ouro="alert"
       data-tone={tone}
@@ -289,15 +283,7 @@ export function Alert(props: AlertProps): JSX.Element {
           aria-label={dismissLabel}
           data-ouro-control="alert"
           data-ouro-part="dismiss"
-          onClick={(event: MouseEvent<HTMLButtonElement>) => {
-            const button = event.currentTarget;
-            const target = focusTarget(button.closest('[data-ouro="alert"]')!);
-            onDismiss();
-            // Once the app has removed the alert, the close button's focus would fall to <body>.
-            requestAnimationFrame(() => {
-              if (!button.isConnected && (document.activeElement === null || document.activeElement === document.body)) target?.focus();
-            });
-          }}
+          onClick={() => onDismiss()}
           className="-my-1.5 -me-2 w-(--ouro-button-h) px-0"
         >
           <CloseIcon aria-hidden="true" className="size-4" />
