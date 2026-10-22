@@ -1,9 +1,12 @@
 import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/button";
-import { Link } from "~/components/navigation/app-link";
-import { Subheading } from "~/components/heading";
-import { Text } from "~/components/text";
+import { Card } from "~/components/ouro/card/card";
+import { Empty } from "~/components/ouro/empty/empty";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
+import { Heading } from "~/components/ouro/text/heading";
+import { Text } from "~/components/ouro/text/text";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { CookbookPage } from "~/components/cookbook/page";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
@@ -11,7 +14,7 @@ import { listImageProps } from "~/lib/image-loading";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { formatServingsLabel } from "~/lib/quantity";
-import { shareContent } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
 
 export function absoluteKitchenUrl(path: string) {
   if (typeof window === "undefined") {
@@ -35,14 +38,14 @@ export function KitchenHome({
   const displayRecipes = recipes;
   const heading = isOwner ? "My Kitchen" : `${chefDisplayName(kitchenUser.username)}'s Kitchen`;
   const handleShareRecipe = async (recipe: KitchenRecipe) => {
-    await shareContent({
+    await share({
       title: recipe.title,
       text: recipe.description ?? `Open this Spoonjoy recipe: ${recipe.title}`,
       url: absoluteKitchenUrl(`/recipes/${recipe.id}`),
     });
   };
   const handleShareCookbook = async (cookbook: KitchenCookbook) => {
-    await shareContent({
+    await share({
       title: cookbook.title,
       text: `${cookbook.title} has ${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"} on Spoonjoy.`,
       url: absoluteKitchenUrl(`/cookbooks/${cookbook.id}`),
@@ -63,7 +66,7 @@ export function KitchenHome({
             <div className="mt-5 lg:mt-0">
               <p className="font-sj-ui text-sm font-semibold tracking-[0.01em] text-[var(--sj-brass)]">@{kitchenUser.username}</p>
               <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-3 text-5xl/12 sm:text-6xl/14 lg:text-7xl/16">{heading}</h1>
-              <Text size="sm" className="mt-2">
+              <Text tone="muted" size="sm" className="mt-2">
                 {displayRecipes.length} {displayRecipes.length === 1 ? "recipe" : "recipes"} and {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
             </div>
@@ -73,24 +76,12 @@ export function KitchenHome({
             {isOwner ? (
               <>
                 {/* Desktop reaches Chefs from its top navigation; a phone reaches it here. */}
-                <Button href="/chefs" plain className="lg:hidden">
-                  <Users data-slot="icon" className="size-4" />
-                  Chefs
-                </Button>
-                <Button href="/account/settings" plain aria-label="Kitchen settings">
-                  <Settings data-slot="icon" className="size-4" />
-                  Settings
-                </Button>
-                <Button href="/recipes/new">
-                  <Plus data-slot="icon" className="size-4" />
-                  Create recipe
-                </Button>
+                <Button href="/chefs" plain startIcon={Users} className="lg:hidden">Chefs</Button>
+                <Button href="/account/settings" plain startIcon={Settings} aria-label="Kitchen settings">Settings</Button>
+                <Button href="/recipes/new" startIcon={Plus}>Create recipe</Button>
               </>
             ) : (
-              <Button href="/search" plain>
-                <SearchIcon data-slot="icon" className="size-4" />
-                Search recipes
-              </Button>
+              <Button href="/search" plain startIcon={SearchIcon}>Search recipes</Button>
             )}
           </div>
         </header>
@@ -137,103 +128,78 @@ function RecipeIndex({
   onShare: (recipe: KitchenRecipe) => void;
 }) {
   return (
-    // The kitchen's table of contents: every recipe, newest update first, numbered like a
-    // cookbook's contents page, with nothing held out as a lead. A <section aria-labelledby>,
-    // not <aside>: root.tsx already wraps every route in a <main> landmark, so a complementary
-    // landmark here would nest inside it and fail landmark-complementary-is-top-level.
+    // The kitchen's table of contents: every recipe, newest update first, as an ordered list. A
+    // <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a <main>
+    // landmark, so a complementary landmark here would nest inside it.
     <section aria-labelledby="recipe-index-heading">
-      <div className="flex items-end justify-between gap-4 border-b border-[var(--sj-border-strong)] pb-3">
-        <div>
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Contents</p>
-          <Subheading id="recipe-index-heading" level={2} size="xl" className="mt-1">Recipe index</Subheading>
-        </div>
-        {isOwner && recipes.length > 0 ? <Link href="/recipes/new" className="font-sj-ui inline-flex min-h-11 items-center text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)] no-underline hover:text-[var(--sj-ink)]">New +</Link> : null}
+      <div className="mb-2 flex items-end justify-between gap-4">
+        <Heading id="recipe-index-heading" level={2} size="xl">Recipe index</Heading>
+        {isOwner && recipes.length > 0 ? <Button href="/recipes/new" plain startIcon={Plus}>New recipe</Button> : null}
       </div>
 
-      {recipes.length > 0 ? (
-        // Columns, not grid rows, so the numbers run down the first column and on into the second.
-        <div className="lg:columns-2 lg:gap-x-12">
-          {recipes.map((recipe, index) => (
-            <RecipeIndexRow key={recipe.id} recipe={recipe} ordinal={index + 1} onShare={onShare} />
-          ))}
-        </div>
-      ) : (
-        <div className="border-b border-dashed border-[var(--sj-border-strong)] py-10">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(18rem,0.55fr)] lg:items-center">
-            <div className="flex aspect-[16/10] items-center justify-center bg-[color-mix(in_srgb,var(--sj-flour)_58%,transparent)]">
-              <ChefHat className="size-10 text-[var(--sj-brass)]" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Recipes</p>
-              <Subheading level={2} size="2xl" className="mt-3 leading-9">Create your first recipe</Subheading>
-              <Text className="mt-3 max-w-md">
-                Capture the dish you make most often, the family classic everyone asks about, or the weeknight save you never want to lose.
-              </Text>
-              {isOwner ? (
-                <div className="mt-6">
-                  <Button href="/recipes/new">
-                    <Plus data-slot="icon" className="size-4" />
-                    Create first recipe
-                  </Button>
-                </div>
-              ) : (
-                <Text size="sm" className="mt-6">No public recipes yet.</Text>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <ItemGroup
+        aria-labelledby="recipe-index-heading"
+        ordered
+        variant="divided"
+        empty={
+          <Empty
+            title="Create your first recipe"
+            headingLevel={3}
+            icon={<ChefHat />}
+            description="Capture the dish you make again and again, the family classic people ask about, or the weeknight save you want to keep."
+            action={isOwner
+              ? <Button href="/recipes/new" startIcon={Plus}>Create first recipe</Button>
+              : <Text tone="muted" size="sm">No public recipes yet.</Text>}
+          />
+        }
+      >
+        {recipes.map((recipe, index) => (
+          <RecipeIndexRow key={recipe.id} recipe={recipe} index={index} onShare={onShare} />
+        ))}
+      </ItemGroup>
     </section>
   );
 }
 
 function RecipeIndexRow({
   recipe,
-  ordinal,
+  index,
   onShare,
 }: {
   recipe: KitchenRecipe;
-  ordinal: number;
+  index: number;
   onShare: (recipe: KitchenRecipe) => void;
 }) {
   const servingsLabel = formatServingsLabel(recipe.servings);
-  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0 ? recipe.coverImageUrl : undefined;
 
   return (
-    <article className="relative break-inside-avoid border-b border-[var(--sj-border)]">
-      <Link href={`/recipes/${recipe.id}`} className="group grid grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-3 py-4 pr-12 no-underline sm:grid-cols-[2.5rem_5.5rem_minmax(0,1fr)] sm:gap-4">
-        <div className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
-          {String(ordinal).padStart(2, "0")}
-        </div>
-        <span className="sj-photo-tile block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))] sm:aspect-square">
-          {displayImageUrl ? (
-            <img src={displayImageUrl} alt="" {...listImageProps(ordinal - 1)} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center bg-[var(--sj-photo-charcoal)] text-[var(--sj-on-photo-muted)]">
-              <ChefHat className="size-5" aria-hidden="true" />
-            </span>
-          )}
+    <Item
+      as="article"
+      href={`/recipes/${recipe.id}`}
+      title={recipe.title}
+      description={recipe.description || servingsLabel ? (
+        <>
+          {recipe.description ? <Text lines={2}>{recipe.description}</Text> : null}
+          {servingsLabel ? <Text size="sm">{servingsLabel}</Text> : null}
+        </>
+      ) : undefined}
+      media={recipe.coverImageUrl ? (
+        <img src={recipe.coverImageUrl} alt="" {...listImageProps(index)} />
+      ) : (
+        <span className="flex items-center justify-center bg-[var(--sj-photo-charcoal)] text-[var(--sj-on-photo-muted)]">
+          <ChefHat className="size-5" aria-hidden="true" />
         </span>
-        <div className="min-w-0 self-center">
-          <h3 className="font-sj-display line-clamp-2 text-2xl/7 font-extrabold text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)]">
-            {recipe.title}
-          </h3>
-          <CoverProvenanceBadge label={recipe.coverProvenanceLabel} className="mt-2" />
-          {recipe.description ? <p className="mt-1 line-clamp-2 text-sm/5 text-[var(--sj-ink-soft)]">{recipe.description}</p> : null}
-          {servingsLabel ? (
-            <p className="font-sj-ui mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)]">{servingsLabel}</p>
-          ) : null}
-        </div>
-      </Link>
-      <button
-        type="button"
-        aria-label={`Share ${recipe.title}`}
-        onClick={() => onShare(recipe)}
-        className="absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-tomato)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-      >
-        <Share2 className="size-4" aria-hidden="true" />
-      </button>
-    </article>
+      )}
+      mediaSize="md"
+      actions={
+        <>
+          <CoverProvenanceBadge label={recipe.coverProvenanceLabel} />
+          <Button plain aria-label={`Share ${recipe.title}`} onClick={() => onShare(recipe)}>
+            <Share2 />
+          </Button>
+        </>
+      }
+    />
   );
 }
 
@@ -247,12 +213,9 @@ function CookbookShelf({
   onShare: (cookbook: KitchenCookbook) => void;
 }) {
   return (
-    <section aria-label="Cookbooks" className="mt-12 border-t border-[var(--sj-border-strong)] pt-7">
+    <section aria-labelledby="cookbook-shelf-heading" className="mt-12">
       <div className="mb-5 flex items-end justify-between gap-4">
-        <div>
-          <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">Cookbooks</p>
-          <Subheading level={2} size="xl" className="mt-1">Cookbooks</Subheading>
-        </div>
+        <Heading id="cookbook-shelf-heading" level={2} size="xl">Cookbooks</Heading>
         {isOwner ? <Button href="/cookbooks/new" plain>New cookbook</Button> : null}
       </div>
 
@@ -263,18 +226,14 @@ function CookbookShelf({
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 border-y border-dashed border-[var(--sj-border-strong)] py-7 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
-          <BookOpen className="size-8 text-[var(--sj-action)]" aria-hidden="true" />
-          <div>
-            <Subheading level={3} size="xl">{isOwner ? "Build your first cookbook" : "No public cookbooks yet."}</Subheading>
-            <Text className="mt-1 max-w-2xl">
-              {isOwner
-                ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows with every good meal."
-                : "This kitchen has not published a cookbook yet."}
-            </Text>
-          </div>
-          {isOwner ? <Button href="/cookbooks/new">Create first cookbook</Button> : null}
-        </div>
+        <Empty
+          title={isOwner ? "Build your first cookbook" : "No public cookbooks yet."}
+          icon={<BookOpen />}
+          description={isOwner
+            ? "Group recipes into a holiday menu, a weeknight rotation, or a family collection that grows meal by meal."
+            : "This kitchen has not published a cookbook yet."}
+          action={isOwner ? <Button href="/cookbooks/new">Create first cookbook</Button> : undefined}
+        />
       )}
     </section>
   );
@@ -287,30 +246,32 @@ function CookbookCover({
   cookbook: KitchenCookbook;
   onShare: (cookbook: KitchenCookbook) => void;
 }) {
-  const recipeImages = cookbook.recipes.map((item) => ({
-    coverImageUrl: item.recipe.coverImageUrl,
-    title: item.recipe.title,
-    coverProvenanceLabel: item.recipe.coverProvenanceLabel,
-  }));
-
   return (
-    <article className="relative w-52 shrink-0">
-      <Link href={`/cookbooks/${cookbook.id}`} className="group block no-underline">
+    <Card
+      as="article"
+      href={`/cookbooks/${cookbook.id}`}
+      title={cookbook.title}
+      description={`${cookbook._count.recipes} ${cookbook._count.recipes === 1 ? "recipe" : "recipes"}`}
+      size="sm"
+      className="w-52 shrink-0"
+      media={
         <CookbookCoverArt
           title={cookbook.title}
           recipeCount={cookbook._count.recipes}
-          recipeImages={recipeImages}
-          className="w-full transition group-hover:-translate-y-0.5 group-hover:border-[var(--sj-brass)]"
+          recipeImages={cookbook.recipes.map((item) => ({
+            coverImageUrl: item.recipe.coverImageUrl,
+            title: item.recipe.title,
+            coverProvenanceLabel: item.recipe.coverProvenanceLabel,
+          }))}
+          titleAsHeading={false}
+          className="w-full border-0 shadow-none"
         />
-      </Link>
-      <button
-        type="button"
-        aria-label={`Share ${cookbook.title}`}
-        onClick={() => onShare(cookbook)}
-        className="absolute right-2 top-2 z-10 grid size-11 place-items-center bg-[color-mix(in_srgb,var(--sj-charcoal)_72%,transparent)] text-[var(--sj-paper)] transition hover:bg-[var(--sj-charcoal)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-      >
-        <Share2 className="size-4" aria-hidden="true" />
-      </button>
-    </article>
+      }
+      action={
+        <Button plain aria-label={`Share ${cookbook.title}`} onClick={() => onShare(cookbook)}>
+          <Share2 />
+        </Button>
+      }
+    />
   );
 }

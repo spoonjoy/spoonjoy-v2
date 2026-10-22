@@ -81,9 +81,9 @@ test.describe("Round trips on iPhone", () => {
     const cardText = await firstListed.innerText();
     await firstListed.click();
     await expect(page).toHaveURL(pathUrl(firstHref!));
+    // The URL can change before the recipe page renders, so wait until the heading is the card's recipe.
     const recipeTitle = page.getByRole("heading", { level: 1 });
-    await expect(recipeTitle).toBeVisible();
-    expect(cardText).toContain((await recipeTitle.innerText()).trim());
+    await expect.poll(async () => cardText.includes((await recipeTitle.innerText()).trim())).toBe(true);
     await expectAccessible();
 
     await recipeBack.click();

@@ -586,6 +586,29 @@ describe("Popover dev messages", () => {
 });
 
 describe("Popover parts", () => {
+  it("mark the buttons they render as the popover's, and leave a rendered Button its own marker", async () => {
+    await render(
+      <PopoverRoot>
+        <PopoverTrigger>Share</PopoverTrigger>
+        <PopoverTrigger render={<Button>Send</Button>} />
+        <PopoverPortal>
+          <PopoverPositioner>
+            <PopoverPopup>
+              <PopoverTitle>Parts</PopoverTitle>
+              <PopoverClose>Close</PopoverClose>
+              <PopoverClose render={<Button>Done</Button>} />
+            </PopoverPopup>
+          </PopoverPositioner>
+        </PopoverPortal>
+      </PopoverRoot>,
+    );
+    const marks = () => [...document.querySelectorAll("button")].map((element) => `${element.getAttribute("data-ouro-control")}/${element.getAttribute("data-ouro-part")}`);
+    expect(marks()).toEqual(["popover/trigger", "button/root"]);
+    await userEvent.click(page.getByRole("button", { name: "Share" }));
+    await expect.element(page.getByRole("dialog", { name: "Parts" })).toBeVisible();
+    expect(marks()).toEqual(["popover/trigger", "button/root", "popover/close", "button/root"]);
+  });
+
   it("compose into a working popover", async () => {
     await render(
       <PopoverRoot>

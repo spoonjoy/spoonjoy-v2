@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { radiusFor, sizeFor, toneFor } from "~/lib/ouro/appearance-hints";
+import { fontFor, isWeight, radiusFor, sizeFor, toneFor } from "~/lib/ouro/appearance-hints";
 
 describe("toneFor", () => {
   it.each([
@@ -41,4 +41,16 @@ describe("radiusFor", () => {
   ])("maps %s to a %s theme radius", (token, value) =>
     expect(radiusFor(token)).toBe(`:root { --radius: ${value} }`),
   );
+});
+
+describe("fontFor", () => {
+  it.each(["font-bold", "font-thin", "font-black"])("treats %s as a weight the component sets", (token) => {
+    expect(isWeight(token)).toBe(true);
+    expect(fontFor("Button", token)).toBe(`remove "${token}"; Button sets its own weight`);
+  });
+
+  it("moves a family class to a parent", () => {
+    expect(isWeight("font-mono")).toBe(false);
+    expect(fontFor("Button", "font-mono")).toBe('<div className="font-mono"><Button /></div>');
+  });
 });

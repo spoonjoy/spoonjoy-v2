@@ -8,7 +8,8 @@ import { isValidEmail, normalizeEmail } from "~/lib/email";
 import { createUserSession, getUserId, sanitizeSessionRedirect } from "~/lib/session.server";
 import { enforceAuthRateLimit } from "~/lib/rate-limit.server";
 import { normalizeUsername, USERNAME_HINT, usernameFormatError } from "~/lib/username";
-import { OAuthButtonGroup, OAuthDivider, OAuthError } from "~/components/oauth";
+import { OAuthButtonGroup, OAuthError } from "~/components/oauth";
+import { Separator } from "~/components/ouro/separator/separator";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
 import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthPage } from "~/components/auth/auth-page";
@@ -16,8 +17,9 @@ import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Button } from "~/components/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
+import { claim } from "~/lib/ouro/claims";
 
 interface ActionData {
   errors?: {
@@ -96,7 +98,7 @@ export async function action({ request, context }: Route.ActionArgs) {
   }
 
   if (!password || password.length < 8) {
-    errors.password = "Password must be at least 8 characters";
+    errors.password = claim("Password must be at least 8 characters", { source: { test: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }, verify: [{ testExists: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }] });
   }
 
   if (password !== confirmPassword) {
@@ -174,7 +176,7 @@ export default function Signup() {
         {oauthProviders.length > 0 && (
           <>
             <OAuthButtonGroup providers={oauthProviders} redirectTo={redirectTo} className="mt-8" />
-            <OAuthDivider className="my-6" />
+            <Separator label="or" className="my-6" data-testid="oauth-separator" />
           </>
         )}
 
@@ -214,7 +216,7 @@ export default function Signup() {
             name="password"
             autoComplete="new-password"
             required
-            description="At least 8 characters."
+            description={claim("At least 8 characters.", { source: { test: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }, verify: [{ testExists: "test/routes/signup.test.tsx::Signup Route > action > refuses a 7-character password and creates the account with an 8-character one" }, { testExists: "test/routes/signup.test.tsx::Signup Route > form hints for people and password managers > shows the username and password rules before the first submit, and names each field for autofill" }] })}
           />
           <TextField
             label="Confirm password"
@@ -229,7 +231,7 @@ export default function Signup() {
           </Button>
         </Form>
 
-        <Text align="center" className="mt-6">
+        <Text tone="muted" align="center" className="mt-6">
           Already have an account?{" "}
           <Link href={redirectTo ? `/login?redirectTo=${encodeURIComponent(redirectTo)}` : "/login"}>Log in</Link>
         </Text>

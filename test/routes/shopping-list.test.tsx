@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { cleanup, act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { createTestRoutesStub, requiredLabel } from "../utils";
@@ -750,7 +751,7 @@ describe("Shopping List Routes", () => {
       expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
     });
 
-    it("should render checked items with checkmark and completed-row strike", async () => {
+    it("should render checked items as checked rows of an Ouro HX checklist", async () => {
       const mockData = {
         shoppingList: {
           id: "list-1",
@@ -777,10 +778,10 @@ describe("Shopping List Routes", () => {
 
       render(<Stub initialEntries={["/shopping-list"]} />);
 
-      // Checked item should have checkmark
-      expect(await screen.findByText("✓")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: "sugar" })).toHaveAttribute("aria-checked", "true");
-      expect(screen.getByTestId("checklist-row-strike")).toHaveClass("right-0");
+      const sugar = await screen.findByRole("checkbox", { name: "sugar" });
+      expect(sugar).toHaveAttribute("aria-checked", "true");
+      expect(sugar).toHaveAttribute("data-ouro-control", "checklist");
+      expect(sugar).toHaveAccessibleDescription("1 cup");
     });
 
     it("should render unchecked items without checkmark", async () => {
@@ -845,7 +846,7 @@ describe("Shopping List Routes", () => {
       expect(await screen.findByText("pepper")).toBeInTheDocument();
     });
 
-    it("should not show inline remove buttons for each item", async () => {
+    it("offers each item's delete through its swipe actions menu, not an inline button", async () => {
       const mockData = {
         shoppingList: {
           id: "list-1",
@@ -880,9 +881,9 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("garlic")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Remove garlic" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Remove onion" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Remove garlic" })).toBeNull();
       expect(screen.getByRole("button", { name: "Actions for garlic" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Actions for onion" })).toBeInTheDocument();
     });
 
     it("should not render per-item category badge chips", async () => {
@@ -964,19 +965,23 @@ describe("Shopping List Routes", () => {
       render(<Stub initialEntries={["/shopping-list"]} />);
 
       expect(await screen.findByText("chicken thigh")).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Protein" }));
+      const aisles = screen.getByRole("radiogroup", { name: "Aisle" });
+      fireEvent.click(within(aisles).getByRole("radio", { name: "Protein" }));
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "Protein" })).toHaveClass("bg-[var(--sj-ink)]");
+        expect(within(aisles).getByRole("radio", { name: "Protein" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.queryByText("milk")).not.toBeInTheDocument();
       });
 
-      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove chicken thigh" })); });
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Actions for chicken thigh" }));
+      await user.click(await screen.findByRole("menuitem", { name: "Delete chicken thigh" }));
       await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Remove" })); });
 
       await waitFor(() => {
-        expect(screen.queryByRole("button", { name: "Protein" })).not.toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "all" })).toHaveClass("bg-[var(--sj-ink)]");
+        expect(within(aisles).queryByRole("radio", { name: "Protein" })).not.toBeInTheDocument();
+        expect(within(aisles).getByRole("radio", { name: "All aisles" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByText("milk")).toBeInTheDocument();
       });
       await waitFor(() => expect(screen.getByRole("heading", { name: "Shopping list" })).toHaveFocus());
@@ -1170,9 +1175,8 @@ describe("Shopping List Routes", () => {
       // Wait for content to load
       await screen.findByText("eggs");
 
-      const toggleButton = screen.getByRole("checkbox", { name: "eggs" });
-      expect(toggleButton).toBeInTheDocument();
-      expect(toggleButton).toHaveClass("min-h-11");
+      const eggs = screen.getByRole("checkbox", { name: "eggs" });
+      expect(eggs.closest('[role="group"]')).toHaveAttribute("data-ouro", "checklist");
     });
   });
 
@@ -1211,7 +1215,7 @@ describe("Shopping List Routes", () => {
 
       // Dialog should be open
       expect(await screen.findByText("Start fresh?")).toBeInTheDocument();
-      expect(screen.getByText(/All items will be cleared/)).toBeInTheDocument();
+      expect(screen.getByText(/This clears your shopping list/)).toBeInTheDocument();
 
       // Click confirm button
       const confirmButton = screen.getByRole("button", { name: "Clear all" });

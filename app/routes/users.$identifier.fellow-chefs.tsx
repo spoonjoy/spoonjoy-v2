@@ -1,6 +1,6 @@
 import type { Route } from "./+types/users.$identifier.fellow-chefs";
 import { redirect, useLoaderData } from "react-router";
-import { Subheading } from "~/components/heading";
+import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
@@ -10,12 +10,11 @@ import {
   type FellowChefRow,
 } from "~/lib/fellow-chefs.server";
 import { FellowChefList } from "~/components/users/FellowChefList";
-import { CookbookPage, CookbookHeader } from "~/components/cookbook/page";
-import { formatRelativeTime } from "~/lib/time";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 interface SerializedFellowChefRow extends Omit<FellowChefRow, "latestInteractionAt"> {
   latestInteractionAt: string;
-  latestInteractionLabel: string;
 }
 
 interface FellowChefsLoaderData {
@@ -94,7 +93,6 @@ export async function loader({
     limit: pageSize,
     offset,
   });
-  const renderedAt = Date.now();
 
   return {
     profileUsername: profileUser.username,
@@ -102,7 +100,6 @@ export async function loader({
     rows: result.rows.map((row) => ({
       ...row,
       latestInteractionAt: row.latestInteractionAt.toISOString(),
-      latestInteractionLabel: formatRelativeTime(row.latestInteractionAt, renderedAt),
     })),
     total: result.total,
     page,
@@ -131,14 +128,14 @@ export default function FellowChefsPage() {
   return (
     <CookbookPage>
       <section className="mx-auto max-w-3xl">
-        <CookbookHeader eyebrow="Chef profile" title="Fellow chefs">
-        <Subheading level={2} size="sm" className="leading-6">
-          {viewerIsOwner ? "Your kitchen network" : `${profileUsername}'s kitchen network`}
-        </Subheading>
-        </CookbookHeader>
+        <PageHeader eyebrow="Chef profile" title="Fellow chefs" size="lg" divider>
+          <Heading level={2} size="sm" className="leading-6">
+            {viewerIsOwner ? "Your kitchen network" : `${profileUsername}'s kitchen network`}
+          </Heading>
+        </PageHeader>
 
         <div className="mt-6">
-          <FellowChefList rows={renderRows} emptyStateText={emptyStateText} />
+          <FellowChefList label="Fellow chefs" rows={renderRows} emptyStateText={emptyStateText} />
         </div>
 
         {(hasPrev || hasNext) && (

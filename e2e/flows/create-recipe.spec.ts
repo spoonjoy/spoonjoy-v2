@@ -71,7 +71,7 @@ test.describe('Create recipe flow', () => {
     await expect(page.getByRole('heading', { name: uniqueTitle })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('disposable user can reorder draft recipe steps by dragging the step handle', async ({ page }) => {
+  test('disposable user can reorder draft recipe steps by dragging the HX Reorderable handle', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 2400 });
     await page.goto('/recipes/new');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10_000 });
@@ -100,7 +100,7 @@ test.describe('Create recipe flow', () => {
       return boxes.length === 2 && boxes[1].top >= boxes[0].bottom;
     }).toBe(true);
 
-    const dragHandles = page.getByRole('button', { name: /drag to reorder/i });
+    const dragHandles = page.getByRole('button', { name: /^Reorder Step / });
     const source = await dragHandles.nth(1).boundingBox();
     const target = await dragHandles.nth(0).boundingBox();
     expect(source).not.toBeNull();

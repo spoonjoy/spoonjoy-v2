@@ -16,15 +16,14 @@
  * - Character limits on inputs
  */
 
-import { useState, useEffect, useRef, type FormEvent } from 'react'
+import { useState, useEffect, useRef, type DragEvent, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { Button } from '~/components/button'
-import { Fieldset } from '~/components/ouro/field/fieldset'
 import { Form } from '~/components/ouro/form/form'
+import { ImageField, type ImageFieldRejection } from '~/components/ouro/image-field/image-field'
 import { TextArea } from '~/components/ouro/text-field/text-area'
 import { TextField } from '~/components/ouro/text-field/text-field'
 import { useFormErrors } from '~/hooks/use-form-errors'
 import { StepList } from './StepList'
-import { RecipeImageUpload } from './RecipeImageUpload'
 import { Loader2 } from 'lucide-react'
 import type { StepData } from './StepEditorCard'
 import {
@@ -32,6 +31,13 @@ import {
   DESCRIPTION_MAX_LENGTH,
   SERVINGS_MAX_LENGTH,
 } from '~/lib/validation'
+import {
+  FOOD_IMAGE_ACCEPT,
+  FOOD_IMAGE_TYPE_MESSAGE,
+  IMAGE_MAX_FILE_SIZE,
+  RECIPE_IMAGE_SIZE_MESSAGE,
+} from '~/lib/recipe-image'
+import { claim } from "~/lib/ouro/claims";
 
 export interface RecipeBuilderData {
   id?: string
@@ -64,6 +70,12 @@ export interface RecipeBuilderProps {
   showSteps?: boolean
 }
 
+function recipeImageRejection(reason: ImageFieldRejection, file: File): string {
+  if (reason === 'size') return RECIPE_IMAGE_SIZE_MESSAGE
+  if (reason === 'unreadable') return `${file.name} could not be opened as a photo.`
+  return file.type === 'image/gif' ? FOOD_IMAGE_TYPE_MESSAGE : `Invalid image type. ${FOOD_IMAGE_TYPE_MESSAGE}`
+}
+
 // The fields of the recipe details form. The image and steps errors show beside their own controls.
 const DETAIL_FIELDS = ['title', 'description', 'servings'] as const
 
@@ -86,6 +98,7 @@ export function RecipeBuilder({
 
   // Combine disabled and loading for isDisabled
   const isDisabled = disabled || loading
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // The title, description and servings fields are uncontrolled, and saving
   // reads them from the DOM. They are server-rendered, and a controlled `value`
@@ -102,23 +115,13 @@ export function RecipeBuilder({
     setTitle(titleRef.current!.value)
   }, [])
 
-  // Image state
+  // Image state: the photo just chosen (HX ImageField shows it), and whether the saved one was removed
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [clearImage, setClearImage] = useState(false)
 
   // Steps state
   const [steps, setSteps] = useState<StepData[]>(recipe?.steps ?? [])
   const lastSaveRequestSignal = useRef(saveRequestSignal)
-
-  // Cleanup preview URL on unmount
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl)
-      }
-    }
-  }, [previewUrl])
 
   // Derive recipe ID (for edit mode or generate temp ID for create mode)
   const recipeId = recipe?.id ?? 'new-recipe'
@@ -157,37 +160,19 @@ export function RecipeBuilder({
     onCancel?.()
   }
 
-  const handleImageSelect = (file: File) => {
+  // Removing a photo just chosen goes back to the saved one (onFileChange(null)); removing the
+  // saved one clears it on save.
+  const handleImageChange = (file: File | null) => {
     setImageFile(file)
-    setClearImage(false)
-    // Create preview URL for display
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-    }
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
   }
 
-  const handleImageClear = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-      setPreviewUrl(null)
-    }
-    setImageFile(null)
+  const handleImageRemove = () => {
     setClearImage(true)
   }
 
-  // Determine which image URL to display
-  const getDisplayImageUrl = () => {
-    if (previewUrl) return previewUrl
-    if (clearImage) return ''
-    return recipe?.coverImageUrl || ''
-  }
-
-  const displayImageUrl = getDisplayImageUrl()
+  const savedImageUrl = clearImage ? null : recipe?.coverImageUrl || null
 
   const isSaveDisabled = isDisabled || !title.trim()
-  const imageUploadStatus = imageFile ? 'Uploading image...' : 'Saving recipe...'
 
   return (
     <div className="space-y-8">
@@ -238,17 +223,31 @@ export function RecipeBuilder({
             maxLength={SERVINGS_MAX_LENGTH}
             disabled={isDisabled}
           />
-          <Fieldset legend="Recipe image">
-            <RecipeImageUpload
-              coverImageUrl={displayImageUrl}
-              onFileSelect={handleImageSelect}
-              onClear={handleImageClear}
-              disabled={isDisabled}
-              loading={loading}
-              loadingLabel={imageUploadStatus}
-              error={errors?.image}
-            />
-          </Fieldset>
+          <ImageDropZone input={imageInputRef} disabled={isDisabled}>
+          <ImageField
+            ref={imageInputRef}
+            label="Recipe image"
+            description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "^export const FOOD_IMAGE_TYPES = \\[\"image/jpeg\", \"image/png\", \"image/webp\"\\] as const;$" }, { fileLine: "app/lib/recipe-image.ts", pattern: "^export const IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024;$" }, { fileLine: "app/components/recipe/RecipeBuilder.tsx", pattern: "accept=\\{FOOD_IMAGE_ACCEPT\\}" }] })}
+            src={savedImageUrl}
+            alt={recipe?.title ? `Photo of ${recipe.title}` : 'Recipe photo'}
+            accept={FOOD_IMAGE_ACCEPT}
+            maxSize={IMAGE_MAX_FILE_SIZE}
+            aspect={16 / 9}
+            rejectMessage={recipeImageRejection}
+            chooseLabel="Upload image"
+            changeLabel="Change image"
+            removeLabel="Remove image"
+            onFileChange={handleImageChange}
+            onRemove={savedImageUrl ? handleImageRemove : undefined}
+            disabled={isDisabled}
+            error={errors?.image}
+          />
+          </ImageDropZone>
+          {loading ? (
+            <p role="status" className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+              {imageFile ? 'Uploading image...' : 'Saving recipe...'}
+            </p>
+          ) : null}
         </Form>
       </fieldset>
 
@@ -302,6 +301,44 @@ export function RecipeBuilder({
           {recipe ? 'Save recipe' : 'Create recipe'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+// TODO(ouro-hx: image-field drop, ourostack/ouro-ui#186): HX ImageField takes a dropped image, as
+// FileField does. Until then this zone hands a dropped file to the field's own input, which checks
+// and shows it as it does a chosen one.
+function ImageDropZone({ input, disabled, children }: { input: RefObject<HTMLInputElement | null>; disabled: boolean; children: ReactNode }) {
+  const [over, setOver] = useState(false)
+  const carriesFiles = (event: DragEvent) => !disabled && Array.from(event.dataTransfer.types).includes('Files')
+  return (
+    <div
+      data-drop-zone=""
+      data-drag-active={over ? '' : undefined}
+      className="rounded-[var(--sj-radius-surface)] outline-2 outline-offset-4 outline-transparent outline-dashed data-drag-active:outline-[var(--sj-brass)]"
+      onDragEnter={(event) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        setOver(true)
+      }}
+      onDragOver={(event) => {
+        if (carriesFiles(event)) event.preventDefault()
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false)
+      }}
+      onDrop={(event) => {
+        setOver(false)
+        const file = event.dataTransfer.files[0]
+        if (!carriesFiles(event) || !file || !input.current) return
+        event.preventDefault()
+        const transfer = new DataTransfer()
+        transfer.items.add(file)
+        input.current.files = transfer.files
+        input.current.dispatchEvent(new Event('change', { bubbles: true }))
+      }}
+    >
+      {children}
     </div>
   )
 }

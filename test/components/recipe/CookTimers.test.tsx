@@ -1,21 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
-import type { CookTimerEntry, CookTimersController } from "~/hooks/use-cook-timers";
-
-function controller(entries: CookTimerEntry[], announcement = ""): CookTimersController {
-  return {
-    timers: new Map(entries.map((entry) => [entry.stepNum, entry])),
-    active: entries.filter((entry) => entry.stored !== null),
-    announcement,
-    start: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    clear: vi.fn(),
-  };
-}
+import { CookStepTimer, CookTimerTray, notifyTimeUp } from "~/components/recipe/CookTimers";
+import { cookTimers } from "~/lib/cook-timers";
 
 const NOW = 5_000_000;
+const [pasta, sauce] = cookTimers("cook-timers-test", [
+  { stepNum: 1, stepTitle: "Boil pasta", duration: 1 },
+  { stepNum: 2, stepTitle: "Make sauce", duration: 2 },
+]);
+
+function setNotification(value: unknown) {
+  Object.defineProperty(window, "Notification", { configurable: true, writable: true, value });
+}
+
+function setVisibility(state: DocumentVisibilityState) {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+}
 
 describe("cook-mode timers", () => {
   beforeEach(() => {
@@ -24,106 +24,164 @@ describe("cook-mode timers", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
+    Reflect.deleteProperty(window, "Notification");
+    Reflect.deleteProperty(document, "visibilityState");
   });
 
   it("renders nothing for a step without a timer", () => {
-    const { container } = render(<CookStepTimer stepNum={4} controller={controller([])} />);
+    const { container } = render(<CookStepTimer timer={undefined} />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("offers Start on an idle step and labels fractional minutes", () => {
-    const timers = controller([{ stepNum: 1, label: "", durationSeconds: 90, stored: null, ringing: false }]);
-    render(<CookStepTimer stepNum={1} controller={timers} />);
-    expect(screen.getByText("1.5 min timer")).toBeInTheDocument();
-    expect(screen.getByText("01:30")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
-    expect(timers.start).toHaveBeenCalledWith(1);
-  });
-
-  it("counts down a running timer from its end time and offers Pause and Cancel", () => {
-    const timers = controller([
-      { stepNum: 1, label: "Boil", durationSeconds: 600, stored: { status: "running", durationSeconds: 600, endsAt: NOW + 600_000 }, ringing: false },
-    ]);
-    render(<CookStepTimer stepNum={1} controller={timers} />);
-    expect(screen.getByText("10:00")).toBeInTheDocument();
-    act(() => {
-      vi.advanceTimersByTime(61_000);
-    });
-    expect(screen.getByText("08:59")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Pause timer" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel timer" }));
-    expect(timers.pause).toHaveBeenCalledWith(1);
-    expect(timers.clear).toHaveBeenCalledWith(1);
-  });
-
-  it("offers Resume on a paused timer", () => {
-    const timers = controller([
-      { stepNum: 2, label: "", durationSeconds: 60, stored: { status: "paused", durationSeconds: 60, remainingMs: 30_000 }, ringing: false },
-    ]);
-    render(<CookStepTimer stepNum={2} controller={timers} />);
-    expect(screen.getByText("00:30")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Resume timer" }));
-    expect(timers.resume).toHaveBeenCalledWith(2);
-  });
-
-  it.each([
-    [true, "Stop alarm"],
-    [false, "Dismiss"],
-  ])("shows Time's up on a finished timer (ringing %s) with %s and Restart", (ringing, action) => {
-    const timers = controller([
-      { stepNum: 3, label: "", durationSeconds: 60, stored: { status: "done", durationSeconds: 60, endedAt: NOW }, ringing },
-    ]);
-    render(<CookStepTimer stepNum={3} controller={timers} />);
-    const timer = screen.getByTestId("cook-mode-timer");
-    expect(timer).toHaveAttribute("data-status", "done");
-    expect(within(timer).getByText("Time's up")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: action }));
-    fireEvent.click(screen.getByRole("button", { name: "Restart timer" }));
-    expect(timers.clear).toHaveBeenCalledWith(3);
-    expect(timers.start).toHaveBeenCalledWith(3);
-  });
-
-  it("lists the other steps' timers, skipping the one in view", () => {
+  it("runs a step's timer with Spoonjoy's words, and the tray follows it on another step", () => {
     const onGoToStep = vi.fn();
-    const timers = controller(
-      [
-        { stepNum: 1, label: "Boil pasta", durationSeconds: 600, stored: { status: "running", durationSeconds: 600, endsAt: NOW + 300_000 }, ringing: false },
-        { stepNum: 2, label: "", durationSeconds: 60, stored: { status: "paused", durationSeconds: 60, remainingMs: 20_000 }, ringing: false },
-        { stepNum: 3, label: "Rest", durationSeconds: 60, stored: { status: "done", durationSeconds: 60, endedAt: NOW }, ringing: true },
-        { stepNum: 4, label: "Bake", durationSeconds: 60, stored: { status: "done", durationSeconds: 60, endedAt: NOW - 999_999 }, ringing: false },
-        { stepNum: 5, label: "Here", durationSeconds: 60, stored: { status: "running", durationSeconds: 60, endsAt: NOW + 5_000 }, ringing: false },
-      ],
-      "Time's up: Step 3, Rest",
+    render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta, sauce]} currentStepNum={2} onGoToStep={onGoToStep} />
+      </>,
     );
-    render(<CookTimerTray controller={timers} currentStepNum={5} onGoToStep={onGoToStep} />);
-    const tray = screen.getByRole("region", { name: "Running timers" });
-    expect(within(tray).queryByText(/Here/)).not.toBeInTheDocument();
-    expect(within(tray).getByText("Step 1 · Boil pasta")).toBeInTheDocument();
-    expect(within(tray).getByText("05:00")).toBeInTheDocument();
-    expect(within(tray).getByText("Step 2")).toBeInTheDocument();
-    expect(within(tray).getByText("00:20 paused")).toBeInTheDocument();
-    expect(within(tray).getAllByText("Time's up")).toHaveLength(2);
-    expect(screen.getByTestId("cook-timer-announcement")).toHaveTextContent("Time's up: Step 3, Rest");
+    const step = screen.getByTestId("cook-mode-timer");
+    expect(step).toHaveTextContent("Step 1 · Boil pasta · 1 min");
+    fireEvent.click(within(step).getByRole("button", { name: "Start timer" }));
+    expect(within(step).getByRole("button", { name: "Pause timer" })).toBeInTheDocument();
 
-    fireEvent.click(within(tray).getByRole("button", { name: "Go to step 1" }));
-    fireEvent.click(within(tray).getByRole("button", { name: "Cancel timer for step 2" }));
-    fireEvent.click(within(tray).getByRole("button", { name: "Stop alarm for step 3" }));
-    fireEvent.click(within(tray).getByRole("button", { name: "Dismiss timer for step 4" }));
+    const tray = screen.getByRole("region", { name: "Running timers" });
+    expect(within(tray).getAllByRole("listitem")).toHaveLength(1);
+    // Clicking the tray anywhere but its link does nothing; its link opens the step.
+    fireEvent.click(within(tray).getByText("Step 1 · Boil pasta", { selector: "p" }));
+    expect(onGoToStep).not.toHaveBeenCalled();
+    fireEvent.click(within(tray).getByRole("link", { name: "Go to Step 1 · Boil pasta" }));
     expect(onGoToStep).toHaveBeenCalledWith(1);
-    expect(timers.clear.mock.calls).toEqual([[2], [3], [4]]);
   });
 
-  it("shows only the live announcement when no other timer is active, and no step links without a handler", () => {
-    const { rerender } = render(<CookTimerTray controller={controller([])} />);
-    expect(screen.queryByTestId("cook-timer-tray")).not.toBeInTheDocument();
-    expect(screen.getByTestId("cook-timer-announcement")).toBeEmptyDOMElement();
-    rerender(
-      <CookTimerTray
-        controller={controller([
-          { stepNum: 1, label: "", durationSeconds: 60, stored: { status: "running", durationSeconds: 60, endsAt: NOW + 1_000 }, ringing: false },
-        ])}
-      />,
+  it("lists a timer without a link on the recipe page, and says Time's up in the tab title until it is dismissed", async () => {
+    document.title = "Pasta Night";
+    render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta]} />
+      </>,
     );
-    expect(screen.queryByRole("button", { name: /Go to step/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    const tray = screen.getByRole("region", { name: "Running timers" });
+    expect(within(tray).queryByRole("link")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(document.title).toBe("Time's up: Step 1 · Boil pasta");
+
+    fireEvent.click(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Dismiss" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(document.title).toBe("Pasta Night");
+  });
+
+  it("keeps ringing every 2.5 s after a timer is up, until it is dismissed", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta]} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Dismiss" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(3);
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("stops ringing two minutes after a timer is up, when nobody dismisses it", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const { unmount } = render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta]} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    const rings = vibrate.mock.calls.length;
+    // The first alert, then one every 2.5 s for the two minutes after.
+    expect(rings).toBe(1 + 120_000 / 2_500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(rings);
+
+    // A page opened after the two minutes shows the timer up, and stays quiet.
+    unmount();
+    render(<CookTimerTray timers={[pasta]} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(document.title).toBe("Time's up: Step 1 · Boil pasta");
+    expect(vibrate).toHaveBeenCalledTimes(rings);
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("alerts from the tray when no step timer shows the timer", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    const { unmount } = render(<CookStepTimer timer={sauce} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    unmount();
+    render(<CookTimerTray timers={[sauce]} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(121_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    Reflect.deleteProperty(navigator, "vibrate");
+  });
+
+  it("notifies a cook who allowed notifications while the tab is in the background, once and only while fresh", () => {
+    const Notification = Object.assign(vi.fn(), { permission: "granted" });
+    setNotification(Notification);
+    setVisibility("hidden");
+
+    notifyTimeUp("Step 2", { first: true, endedAt: NOW });
+    expect(Notification).toHaveBeenCalledWith("Time's up", { body: "Step 2", tag: "spoonjoy-cook-timer" });
+
+    notifyTimeUp("Step 2", { first: false, endedAt: NOW });
+    notifyTimeUp("Step 2", { first: true, endedAt: NOW - 61_000 });
+    setVisibility("visible");
+    notifyTimeUp("Step 2", { first: true, endedAt: NOW });
+    setVisibility("hidden");
+    Notification.permission = "default";
+    notifyTimeUp("Step 2", { first: true, endedAt: NOW });
+    setNotification(undefined);
+    notifyTimeUp("Step 2", { first: true, endedAt: NOW });
+    expect(Notification).toHaveBeenCalledTimes(1);
+  });
+
+  it("tolerates a notification constructor that throws", () => {
+    setNotification(Object.assign(vi.fn(function Throws() {
+      throw new TypeError("Illegal constructor");
+    }), { permission: "granted" }));
+    setVisibility("hidden");
+    expect(() => notifyTimeUp("Step 1", { first: true, endedAt: NOW })).not.toThrow();
   });
 });

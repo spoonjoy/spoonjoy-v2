@@ -1,0 +1,512 @@
+{
+  "$comment": "Spoonjoy's claims (AGENTS.md, \"Claims\"): the surfaces HX's checker (app/lib/ouro/claims-check.mjs, from lib-claims) reads, what it lets through, and which CI job runs which tests. An entry a pull request adds needs a reason and a mention in its description (pnpm run claims:pr runs the ratchet).",
+  "surfaces": [
+    {
+      "match": "^(README|AGENTS)\\.md$",
+      "mode": "markdown"
+    },
+    {
+      "match": "^docs/building-with-ouro-hx\\.md$",
+      "mode": "markdown"
+    },
+    {
+      "match": "^app/lib/llms-txt\\.server\\.ts$|^app/routes/(test-kitchen\\.tsx|ouro-provenance\\[\\.\\]json\\.ts)$|^app/lib/(test-kitchen/[\\w-]+|ouro-provenance(\\.server)?)\\.ts$",
+      "exclude": "\\.test\\.",
+      "mode": "copy"
+    },
+    {
+      "match": "^app/(routes|components)/(?!ouro/).*\\.tsx$",
+      "exclude": "\\.test\\.|\\.stories\\.",
+      "mode": "copy"
+    }
+  ],
+  "notLinted": [],
+  "generated": [],
+  "generators": [],
+  "allowed": [
+    {
+      "file": "app/lib/test-kitchen/content.ts",
+      "sentence": "Pat the chickpeas dry, toss them with the oil, paprika and salt, and roast at 220\u00b0C (425\u00b0F) until crisp and deep gold, shaking the tray once.",
+      "reason": "a step of the Test Kitchen's recipe: a cooking instruction, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/lib/test-kitchen/content.ts",
+      "sentence": "Spread the yogurt in two bowls, pile the hot chickpeas on top, then finish with lemon juice and flaky salt.",
+      "reason": "a step of the Test Kitchen's recipe: a cooking instruction, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/components/cook/RecipeCookView.tsx",
+      "sentence": "No steps added yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/cook/RecipeCookView.tsx",
+      "sentence": "No checklist items",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/cook/RecipeCookView.tsx",
+      "sentence": "No ingredients to check on this step.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/cookbook/KitchenHome.tsx",
+      "sentence": "No public recipes yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/cookbook/KitchenHome.tsx",
+      "sentence": "No public cookbooks yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/pantry/RecipeGrid.tsx",
+      "sentence": "No recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/IngredientParseInput.tsx",
+      "sentence": "No response",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/ParsedIngredientList.tsx",
+      "sentence": "No ingredients parsed yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeBuilder.tsx",
+      "sentence": "e.g., 4 servings",
+      "reason": "a placeholder's example of what to type, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeCoverHistory.tsx",
+      "sentence": "No cover",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeCoverHistory.tsx",
+      "sentence": "No saved covers yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeCoverHistory.tsx",
+      "sentence": "No image",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeCoverHistory.tsx",
+      "sentence": "No image was made.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeCoverHistory.tsx",
+      "sentence": "No usable image variants.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/RecipeCoverHistory.tsx",
+      "sentence": "Archive and set no cover",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/SpoonsStrip.tsx",
+      "sentence": "No cooks yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/StepEditorCard.tsx",
+      "sentence": "No ingredients added yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/recipe/StepList.tsx",
+      "sentence": "No steps yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/account.settings.tsx",
+      "sentence": "No scopes",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/account.settings.tsx",
+      "sentence": "No active bearer credentials.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/account.settings.tsx",
+      "sentence": "No active OAuth app connections.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/account.settings.tsx",
+      "sentence": "Sign out everywhere",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/account.settings.tsx",
+      "sentence": "Confirm sign out everywhere",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/chefs.tsx",
+      "sentence": "No fellow chefs yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/chefs.tsx",
+      "sentence": "No one has used your recipes yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/chefs.tsx",
+      "sentence": "No chef activity yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/cookbooks.$id.tsx",
+      "sentence": "No recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/cookbooks._index.tsx",
+      "sentence": "No matching cookbooks",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/cookbooks._index.tsx",
+      "sentence": "No cookbooks yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.playground.tsx",
+      "sentence": "All APIs",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.playground.tsx",
+      "sentence": "No response yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.playground.tsx",
+      "sentence": "No operations match this surface and search.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.playground.tsx",
+      "sentence": "Not in v1 yet",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "No token required",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "No token: signed-in browser",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "No third-party password-token API",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "No-code connector profile",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Not in v1 yet",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "API v1 REST response shape",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/my-recipes.tsx",
+      "sentence": "No matching recipes",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/my-recipes.tsx",
+      "sentence": "No recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.edit.tsx",
+      "sentence": "No steps yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.steps.$stepId.edit.tsx",
+      "sentence": "There are no ingredients to add.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.steps.$stepId.edit.tsx",
+      "sentence": "No previous steps available",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.steps.$stepId.edit.tsx",
+      "sentence": "No ingredients added yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.steps.new.tsx",
+      "sentence": "No previous steps available",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.steps.new.tsx",
+      "sentence": "No ingredients added yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes.$id.tsx",
+      "sentence": "No cookbooks yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes._index.tsx",
+      "sentence": "All public recipes",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes._index.tsx",
+      "sentence": "No matching recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes._index.tsx",
+      "sentence": "That's every recipe",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes._index.tsx",
+      "sentence": "No public recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/recipes._index.tsx",
+      "sentence": "Back to the newest",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/saved-recipes.tsx",
+      "sentence": "No matching saved recipes",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/saved-recipes.tsx",
+      "sentence": "No saved recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/search.tsx",
+      "sentence": "No matches yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/shopping-list.tsx",
+      "sentence": "All aisles",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/shopping-list.tsx",
+      "sentence": "e.g., 2 lbs chicken breast or a dozen eggs",
+      "reason": "a placeholder's example of what to type, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/users.$identifier.kitchen-visitors.tsx",
+      "sentence": "No one has cooked, forked, or saved your recipes yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/users.$identifier.kitchen-visitors.tsx",
+      "sentence": "No one has cooked, forked, or saved @${profileUsername}'s recipes yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/users.$identifier.tsx",
+      "sentence": "That's every recipe",
+      "reason": "a control's or a section's label, naming what it does or shows, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/users.$identifier.tsx",
+      "sentence": "No recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/users.$identifier.tsx",
+      "sentence": "No public recipes yet",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/users.$identifier.tsx",
+      "sentence": "No cookbooks yet.",
+      "reason": "an empty state: the page shows it only while the list or field it names is empty, so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/auth/AddPasskeyButton.tsx",
+      "sentence": "This browser doesn't support passkeys.",
+      "reason": "a message for a state this page detected and is showing (an unsupported browser feature, an expired link, a disallowed option), so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/notifications-section.tsx",
+      "sentence": "Not supported on this browser (\u00a7).",
+      "reason": "a message for a state this page detected and is showing (an unsupported browser feature, an expired link, a disallowed option), so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/components/oauth.tsx",
+      "sentence": "That OAuth callback method is not supported.",
+      "reason": "a message for a state this page detected and is showing (an unsupported browser feature, an expired link, a disallowed option), so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/agent.connect.$requestId.tsx",
+      "sentence": "1 minute ago",
+      "reason": "a relative time label for how long ago the request was made, worked out from its timestamp, not a claim about Spoonjoy"
+    },
+    {
+      "file": "app/routes/agent.connect.$requestId.tsx",
+      "sentence": "This Spoonjoy connection link is no longer available.",
+      "reason": "a message for a state this page detected and is showing (an unsupported browser feature, an expired link, a disallowed option), so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.playground.tsx",
+      "sentence": "This operation does not support the selected auth mode.",
+      "reason": "a message for a state this page detected and is showing (an unsupported browser feature, an expired link, a disallowed option), so it describes what is on screen, not Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.playground.tsx",
+      "sentence": "If a private request returns 401, sign in and come back to the same operation.",
+      "reason": "an instruction for what to do after a 401 answer; the number is the HTTP status it names"
+    },
+    {
+      "file": "app/routes/privacy.tsx",
+      "sentence": "Every recipe you create, its covers and photos, your cookbooks, the cooks you log (with their notes and photos), your username, and your profile photo can be seen by anyone, signed in or not, and can show up in search.",
+      "reason": "a commitment of Spoonjoy's legal policy, which the operator owns and approves as policy text; it is not a property of the code a check could read"
+    },
+    {
+      "file": "app/routes/privacy.tsx",
+      "sentence": "We never ask an assistant for your Spoonjoy password.",
+      "reason": "a commitment of Spoonjoy's legal policy, which the operator owns and approves as policy text; it is not a property of the code a check could read"
+    },
+    {
+      "file": "app/routes/privacy.tsx",
+      "sentence": "Spoonjoy is not directed to children under 13, and we do not knowingly collect personal information from them.",
+      "reason": "a commitment of Spoonjoy's legal policy, which the operator owns and approves as policy text; it is not a property of the code a check could read"
+    },
+    {
+      "file": "app/routes/terms.tsx",
+      "sentence": "You are responsible for tokens and authorizations you issue; revoke them from account settings if they are no longer needed.",
+      "reason": "a commitment of Spoonjoy's legal policy, which the operator owns and approves as policy text; it is not a property of the code a check could read"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "for private shopping-list calls, not for every public recipe request.",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Playground auth: Session Generated operation: POST /api/v1/tokens Use the returned sj_... secret only in an external client or Bearer-mode test.",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "POST /api/tools/start_agent_connection -> verificationUri + verificationUriComplete + authorizationUrl + userCode + deviceCode + expiresIn: 600 POST /api/tools/poll_agent_connection -> status: pending | approved | denied | expired | claimed Approved response -> token: sj_... + credential metadata, including scopes and expiresAt",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "POST /oauth/register Response: { \"client_id\": \"cm_client_id_from_register\" } GET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&response_type=code&scope=shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256 POST /oauth/token Content-Type: application/x-www-form-urlencoded",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "grant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Log requestId or X-Request-Id for support.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Native clients persist access_token and refresh_token in Keychain, never persist the password, replace the stored refresh token atomically, and run single-flight refresh when concurrent requests hit 401.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Every cached record carries accountId, environment, schemaVersion, fetchedAt, lastValidatedAt, sourceEndpoint, and a server revision marker such as cursor, etag, updatedAt, or a tombstone token.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Retry network timeouts, 429, and 5xx responses with the same mutation id.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Register once per app install or environment, persist client_id, and do not register on every launch.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "POST /oauth/register { \"client_name\": \"Spoonjoy Apple\", \"redirect_uris\": [\"https://spoonjoy.app/oauth/callback\"], \"token_endpoint_auth_method\": \"none\" }",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "GET /oauth/authorize?...&state=client_state&code_challenge=pkce_s256&scope=shopping_list:read+shopping_list:write",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "POST /oauth/token grant_type=authorization_code&client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fspoonjoy.app%2Foauth%2Fcallback&code=oac_...&code_verifier=pkce_verifier_...",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "GET /api/v1/shopping-list/sync?limit=50",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "POST /api/v1/recipes/import Authorization: Bearer sj_... { \"clientMutationId\": \"extension:recipe-import:...\", \"source\": { \"type\": \"url\", \"url\": \"https://example.com/recipe\" } }",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "const item = { sourceRowId: \"row-42\", name: \"Eggs\", quantity: 12, unit: \"Each\" } clientMutationId = `extension:${sha256(recipeUrl)}:${item.sourceRowId}:${bodyHash}` POST /api/v1/shopping-list/items Authorization: Bearer sj_... { \"clientMutationId\": \"extension:...\", \"name\": \"Eggs\", \"quantity\": 12, \"unit\": \"Each\" }",
+      "reason": "a request or code example shown as a sample, not a claim about Spoonjoy; the API facts it illustrates are claimed in the reference beside it"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Omit cursor on the first sync, then store data.nextCursor after applying every item and tombstone.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    },
+    {
+      "file": "app/routes/developers.tsx",
+      "sentence": "Respect Retry-After and never store authenticated bearer responses in caches.default.",
+      "reason": "guidance for client authors (what their client should do), not a property of Spoonjoy"
+    }
+  ],
+  "requiredTests": [
+    {
+      "match": "^test/(?!ouro/).*\\.test\\.tsx?$",
+      "job": "coverage",
+      "reason": "the coverage job runs every unit test under test/ with full coverage (pnpm run verify:clean:test:coverage, vitest.config.ts) in the merge queue before anything lands"
+    }
+  ],
+  "requiredChecks": ".github/required-checks.json",
+  "urlCache": "claims-urls.json"
+}

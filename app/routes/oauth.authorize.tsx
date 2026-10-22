@@ -27,11 +27,14 @@ import {
   userAgentFamily,
 } from "~/lib/analytics-server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
-import { Heading } from "~/components/heading";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
+import { DescriptionList } from "~/components/ouro/description-list/description-list";
+import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
+import { claim } from "~/lib/ouro/claims";
 
 // Per-IP throttle on the OAuth 2.1 authorize endpoint — applied to both the
 // loader (consent screen / login-gate redirect) and the action (Approve/Deny).
@@ -274,8 +277,8 @@ export default function OAuthAuthorize() {
         <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
           Kitchen connection
         </p>
-        <Heading className="mt-3">Connection problem</Heading>
-        <Text className="mt-4" role="alert">
+        <Heading level={1} size="xl" className="mt-3">Connection problem</Heading>
+        <Text tone="muted" className="mt-4" role="alert">
           {view.message}
         </Text>
       </ConnectorConsentShell>
@@ -302,13 +305,13 @@ export default function OAuthAuthorize() {
       </p>
       <div className="mt-4 border-y border-[var(--sj-border)] py-4" role="alert">
         <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Unverified app</p>
-        <Text className="mt-1">
+        <Text tone="muted" className="mt-1">
           Sends you back to <span className="break-all font-semibold text-[var(--sj-ink)]">{redirectOrigin}</span>.
           Approve only if you recognize this site and started the connection.
         </Text>
       </div>
-      <Heading className="mt-3">Connect {appName} to Spoonjoy</Heading>
-      <Text className="mt-4 leading-7">
+      <Heading level={1} size="xl" className="mt-3">Connect {appName} to Spoonjoy</Heading>
+      <Text tone="muted" className="mt-4 leading-7">
         {appName} wants access to your Spoonjoy kitchen.
       </Text>
 
@@ -325,34 +328,23 @@ export default function OAuthAuthorize() {
       </div>
 
       {kitchenWarning ? (
-        <Text className="mt-4" role="alert">
+        <Text tone="muted" className="mt-4" role="alert">
           {kitchenWarning}
         </Text>
       ) : null}
-      <Text className="mt-4">
-        This connection stays active while {appName} keeps using it. It ends when you disconnect it, sign out
-        everywhere, or leave it unused for 180 days.
+      <Text tone="muted" className="mt-4">
+        This connection stays active while {appName} keeps using it. {claim("It ends when you disconnect it, sign out everywhere, or leave it unused for 180 days.", { source: { test: "test/routes/account-settings.test.tsx::Account Settings Route > action - API and app access > disconnects an OAuth app by revoking refresh and live access credentials" }, verify: [{ testExists: "test/routes/account-settings.test.tsx::Account Settings Route > action - API and app access > disconnects an OAuth app by revoking refresh and live access credentials" }, { testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > bearer credentials > sign out everywhere revokes API tokens, agent tokens, OAuth and MCP connections, unused codes and approved agent requests" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > refuses a refresh token 180 days after it was issued and ends the connection" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > gives every rotation a fresh 180-day window, so an active client stays connected" }] })}
       </Text>
 
-      <details className="mt-5 border-y border-[var(--sj-border)] py-4 text-sm text-[var(--sj-ink)]">
-        <summary className="cursor-default font-sj-ui font-semibold text-[var(--sj-ink)]">
-          Connection details
-        </summary>
-        <dl className="mt-4 space-y-3">
-          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt className="font-semibold">Redirect origin</dt>
-            <dd className="break-words">{redirectOrigin}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt className="font-semibold">Client id</dt>
-            <dd className="break-all font-mono text-xs">{view.params.clientId}</dd>
-          </div>
-          <div className="grid gap-1 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <dt className="font-semibold">Resource</dt>
-            <dd className="break-words">{resourceLabel}</dd>
-          </div>
-        </dl>
-      </details>
+      <Collapsible title="Connection details" className="mt-5">
+        <DescriptionList
+          items={[
+            { term: "Redirect origin", details: redirectOrigin },
+            { term: "Client id", details: view.params.clientId },
+            { term: "Resource", details: resourceLabel },
+          ]}
+        />
+      </Collapsible>
 
       <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
         <form method="post">

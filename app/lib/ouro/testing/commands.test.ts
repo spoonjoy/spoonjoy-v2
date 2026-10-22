@@ -9,6 +9,26 @@ test("emulateMedia switches reduced motion and color scheme", async () => {
   expect(matchMedia("(prefers-reduced-motion: reduce)").matches).toBe(false);
 });
 
+test.skipIf(server.browser !== "chromium")("emulateMedia returns once forced colours have settled, past any transition the switch started", async () => {
+  // A fill with a transition (the `press` utility's) eases to the forced value: read at once,
+  // it is a colour between the two, which no rule set.
+  const style = document.createElement("style");
+  style.textContent = ".settle-box{width:40px;height:40px;background-color:rgb(255,0,0);transition:background-color 300ms linear}@media (forced-colors:active){.settle-box{background-color:Highlight}}";
+  const box = document.createElement("div");
+  box.className = "settle-box";
+  document.head.append(style);
+  document.body.append(box);
+  try {
+    expect(getComputedStyle(box).backgroundColor).toBe("rgb(255, 0, 0)");
+    await commands.emulateMedia({ forcedColors: "active" });
+    expect(document.getAnimations().filter((animation) => animation.playState === "running")).toHaveLength(0);
+  } finally {
+    await commands.emulateMedia({ forcedColors: "none" });
+    box.remove();
+    style.remove();
+  }
+});
+
 test.skipIf(server.browser !== "chromium")("drag command sends mouse down, moves and up", async () => {
   // Chromium only: WebKit drag is covered by the video feel check (plan Task 5).
   const events: string[] = [];

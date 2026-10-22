@@ -5,18 +5,13 @@ import userEvent from "@testing-library/user-event";
 import { faker } from "@faker-js/faker";
 import { createTestRoutesStub, findShownAlert, getShownAlert, queryShownAlert } from "../utils";
 import { db } from "~/lib/db.server";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { data } from "react-router";
 import { D1_WRITE_UNAVAILABLE_MESSAGE } from "~/lib/d1-write-retry.server";
 
-vi.mock("~/components/navigation", async () => {
-  const actual = await vi.importActual<typeof import("~/components/navigation")>(
-    "~/components/navigation",
-  );
-  return {
-    ...actual,
-    shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-  };
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
 });
 
 import { loader, action } from "~/routes/recipes.$id";
@@ -114,9 +109,6 @@ describe("Recipes $id route — spoons + provenance", () => {
     const { data } = extractResponseData(response);
     expect(data.spoons).toHaveLength(1);
     expect(data.spoons[0].note).toBe("first");
-    // The cooks' relative times are measured from this, on the server and in the browser alike.
-    expect(data.renderedAt).toBeGreaterThanOrEqual(Date.parse(data.spoons[0].cookedAt));
-    expect(data.renderedAt).toBeLessThanOrEqual(Date.now());
     expect(data.isOriginCookCandidate).toBe(true);
     expect(data.coverImageUrl).toBeNull();
   });
@@ -165,9 +157,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -210,9 +202,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -256,9 +248,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -269,8 +261,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     });
   });
 
-  it("measures each cook's time from the loader's render time, not the browser's clock", async () => {
-    const renderedAt = Date.parse("2025-05-01T15:00:30Z");
+  it("says how long ago each cook was, in a <time> carrying the exact instant", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2025-05-01T15:00:30Z"));
     const mockData = {
       recipe: {
         id: "r1",
@@ -297,15 +289,14 @@ describe("Recipes $id route — spoons + provenance", () => {
         },
       ],
       isOriginCookCandidate: false,
-      renderedAt,
     };
     const Stub = createTestRoutesStub([
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -314,7 +305,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     await waitFor(() => {
       expect(screen.getByText("three hours back")).toBeInTheDocument();
     });
-    const cookedAt = screen.getByText("3 hr ago");
+    const cookedAt = screen.getByText("3 hours ago");
+    clock.mockRestore();
     expect(cookedAt.tagName).toBe("TIME");
     expect(cookedAt).toHaveAttribute("datetime", "2025-05-01T12:00:00.000Z");
   });
@@ -342,9 +334,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -383,9 +375,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
       },
@@ -421,9 +413,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
         action: async ({ request }: { request: Request }) => {
@@ -470,9 +462,9 @@ describe("Recipes $id route — spoons + provenance", () => {
       {
         path: "/recipes/:id",
         Component: () => (
-          <ToastProvider>
+          <>
             <RecipeDetail />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => mockData,
         action: async ({ request }: { request: Request }) => {

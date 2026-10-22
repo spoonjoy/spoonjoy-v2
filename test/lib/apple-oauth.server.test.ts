@@ -247,6 +247,13 @@ not-base64-@@@
       expect(url.searchParams.get("response_mode")).toBe("form_post");
     });
 
+    it("asks Apple for name and email and nothing more, on Apple's own sign-in page", () => {
+      const url = createAppleAuthorizationURL(mockConfig, mockRedirectUri, "test-state-123");
+
+      expect(url.origin).toBe("https://appleid.apple.com");
+      expect(url.searchParams.get("scope")).toBe("name email");
+    });
+
     it("should request email scope", () => {
       const state = "test-state-123";
       const url = createAppleAuthorizationURL(mockConfig, mockRedirectUri, state);

@@ -23,6 +23,12 @@ import { approveAgentConnectionRequest, pollAgentConnection, startAgentConnectio
 import { revokeAllAccountAccess } from "~/lib/account-revocation.server";
 import { sqliteD1 } from "../helpers/sqlite-d1";
 
+// HX's image field under Profile photo keeps its own status region; these are the page's.
+function pageStatuses(): HTMLElement[] {
+  return screen.queryAllByRole("status").filter((element) => !element.closest('[data-testid="profile-photo-section"]'));
+}
+
+
 async function pkceChallenge(verifier: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
   return btoa(String.fromCharCode(...digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -391,6 +397,41 @@ describe("Account settings - revocable sessions", () => {
       await expect(getUserId(pageRequest(thisBrowser))).resolves.toBeNull();
     });
 
+    it("refuses a new password under 8 characters and saves one of exactly 8, when changing or setting it", async () => {
+      const db = await getLocalDb();
+      const thisBrowser = cookiePair(await createUserSessionCookie(userId));
+      const savedHash = async () => (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { hashedPassword: true } })).hashedPassword!;
+
+      await expect(postAction(thisBrowser, {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "1234567",
+        confirmPassword: "1234567",
+      })).resolves.toMatchObject({ success: false, error: "password_too_short", message: "Password must be at least 8 characters" });
+      await expect(verifyPassword(PASSWORD, await savedHash())).resolves.toBe(true);
+
+      const changed = (await postAction(thisBrowser, {
+        intent: "changePassword",
+        currentPassword: PASSWORD,
+        newPassword: "12345678",
+        confirmPassword: "12345678",
+      })) as unknown as DataResult;
+      expect(changed.data).toMatchObject({ success: true, intent: "changePassword" });
+      await expect(verifyPassword("12345678", await savedHash())).resolves.toBe(true);
+
+      const signedIn = cookiePair(changed.init.headers["Set-Cookie"]);
+      await db.oAuth.create({
+        data: { provider: "google", providerUserId: `google-${userId}`, providerUsername: "chef@gmail.com", userId },
+      });
+      await expect(postAction(signedIn, { intent: "removePassword", currentPassword: "12345678" }))
+        .resolves.toMatchObject({ success: true });
+      await expect(postAction(signedIn, { intent: "setPassword", newPassword: "1234567", confirmPassword: "1234567" }))
+        .resolves.toMatchObject({ success: false, message: "Password must be at least 8 characters" });
+      await expect(postAction(signedIn, { intent: "setPassword", newPassword: "12345678", confirmPassword: "12345678" }))
+        .resolves.toMatchObject({ success: true });
+      await expect(verifyPassword("12345678", await savedHash())).resolves.toBe(true);
+    });
+
     it("does not revoke sessions when the password change is rejected", async () => {
       const thisBrowser = cookiePair(await createUserSessionCookie(userId));
 
@@ -510,7 +551,7 @@ describe("Account settings - revocable sessions", () => {
         await answer;
       });
       await waitFor(() => expect(screen.queryByLabelText("New password")).not.toBeInTheDocument());
-      expect(screen.getByRole("status")).toHaveTextContent("Your password has been changed.");
+      expect(pageStatuses()[0]).toHaveTextContent("Your password has been changed.");
       expect(screen.getByRole("button", { name: "Change password" })).toBeEnabled();
     });
 

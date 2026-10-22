@@ -18,7 +18,12 @@ export interface FieldsetProps {
   hideLegend?: boolean | undefined;
   /** Supporting text under the legend, read after it through `aria-describedby`. */
   description?: ReactNode | undefined;
-  /** Disables every native control and every `Field` inside it, and fades the legend. */
+  /**
+   * Disables every native control and every `Field` inside it, and fades the legend.
+   *
+   * @claim "Disables every native control and every" registry/ouro/components/ouro/field/fieldset.test.tsx verify:testExists(registry/ouro/components/ouro/field/fieldset.test.tsx::Fieldset > disables every nested control with disabled)
+   * @claim "Disables every native control and every" registry/ouro/components/ouro/field/fieldset.test.tsx verify:testExists(registry/ouro/components/ouro/field/fieldset.test.tsx::Fieldset > disables a Base UI control in a FieldRoot, which is not a native control)
+   */
   disabled?: boolean | undefined;
   /** The fields and controls in the group. */
   children: ReactNode;
@@ -44,6 +49,8 @@ export interface FieldsetProps {
  *   <Field label="Street" name="street"><FieldControl autoComplete="street-address" /></Field>
  *   <Field label="City" name="city"><FieldControl autoComplete="address-level2" /></Field>
  * </Fieldset>
+ * @claim "`disabled` disables every native control and" registry/ouro/components/ouro/field/fieldset.test.tsx verify:testExists(registry/ouro/components/ouro/field/fieldset.test.tsx::Fieldset > disables every nested control with disabled)
+ * @claim "`disabled` disables every native control and" registry/ouro/components/ouro/field/fieldset.test.tsx verify:testExists(registry/ouro/components/ouro/field/fieldset.test.tsx::Fieldset > disables a Base UI control in a FieldRoot, which is not a native control)
  */
 export function Fieldset(props: FieldsetProps): JSX.Element {
   const { legend, hideLegend, description, disabled, children, className, label } = props;

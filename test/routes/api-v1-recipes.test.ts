@@ -138,6 +138,33 @@ describe("API v1 public recipe reads", () => {
     expect(payload.data.recipes.map((recipe: { id: string }) => recipe.id)).not.toContain(second.recipe.id);
   });
 
+  it("takes query over q, pages with cursor, nextCursor and hasMore, and sends no ETag or Last-Modified", async () => {
+    await createRecipeFixture(db, "Api V1 Precedence Noodle One");
+    await createRecipeFixture(db, "Api V1 Precedence Noodle Two");
+    await createRecipeFixture(db, "Api V1 Precedence Soup");
+
+    const first = await loader(routeArgs(new UndiciRequest("http://localhost/api/v1/recipes?q=Soup&query=Precedence%20Noodle&limit=1", {
+      headers: { "X-Request-Id": "req_recipe_precedence" },
+    }) as unknown as Request, "recipes"));
+    const firstPayload = await readJson(first);
+
+    expect(first.status).toBe(200);
+    expect(first.headers.get("ETag")).toBeNull();
+    expect(first.headers.get("Last-Modified")).toBeNull();
+    expect(firstPayload.data).toMatchObject({ query: "Precedence Noodle", limit: 1, cursor: null, hasMore: true, nextCursor: expect.any(String) });
+    expect(firstPayload.data.recipes.map((recipe: { title: string }) => recipe.title)).toEqual([expect.stringContaining("Precedence Noodle")]);
+
+    const next = await loader(routeArgs(new UndiciRequest(
+      `http://localhost/api/v1/recipes?q=Soup&query=Precedence%20Noodle&limit=1&cursor=${encodeURIComponent(firstPayload.data.nextCursor)}`,
+      { headers: { "X-Request-Id": "req_recipe_precedence_next" } },
+    ) as unknown as Request, "recipes"));
+    const nextPayload = await readJson(next);
+
+    expect(nextPayload.data).toMatchObject({ query: "Precedence Noodle", cursor: firstPayload.data.nextCursor, hasMore: false, nextCursor: null });
+    expect(nextPayload.data.recipes.map((recipe: { title: string }) => recipe.title)).toEqual([expect.stringContaining("Precedence Noodle")]);
+    expect(nextPayload.data.recipes[0].id).not.toBe(firstPayload.data.recipes[0].id);
+  });
+
   it("defaults blank recipe queries and validates list limit boundaries", async () => {
     const fixture = await createRecipeFixture(db, "Api V1 Blank Query");
 

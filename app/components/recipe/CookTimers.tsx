@@ -1,206 +1,159 @@
-import { useEffect, useState } from "react";
-import { BellRing, TimerReset } from "lucide-react";
-import { Button } from "~/components/button";
-import type { CookTimerEntry, CookTimersController } from "~/hooks/use-cook-timers";
-import { formatTimerSeconds, remainingSeconds } from "~/lib/cook-timers";
+import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { Timer } from "~/components/ouro/timer/timer";
+import { alertDone } from "~/components/ouro/timer/timer-styles";
+import { TimerTray } from "~/components/ouro/timer/timer-tray";
+import { buzz, chime } from "~/lib/ouro/feedback";
+import { useTimer, type TimerDoneEvent } from "~/lib/ouro/use-timer";
+import type { CookTimer } from "~/lib/cook-timers";
 
-const TICK_MS = 250;
+const LABELS = {
+  start: "Start timer",
+  pause: "Pause timer",
+  resume: "Resume timer",
+  cancel: "Cancel timer",
+  restart: "Restart timer",
+};
+const DONE = "Time's up";
+/** A finished timer notifies only when it ended a moment ago, not when a page opens long after. */
+const FRESH_MS = 60_000;
+/** A finished timer rings again this often, until it is dismissed or {@link RING_FOR_MS} pass. */
+const RING_EVERY_MS = 2_500;
+const RING_FOR_MS = 2 * 60_000;
 
-type CookTimerStatus = "idle" | "running" | "paused" | "done";
-
-interface CookTimerView extends CookTimerEntry {
-  status: CookTimerStatus;
-  remainingSeconds: number;
-}
-
-// The countdown ticks here, in the small timer components, rather than re-rendering the whole
-// recipe page several times a second.
-function useTimerViews(entries: CookTimerEntry[]): CookTimerView[] {
-  const [now, setNow] = useState(() => Date.now());
-  const running = entries.some((entry) => entry.stored?.status === "running");
-  useEffect(() => {
-    setNow(Date.now());
-    if (!running) return;
-    const intervalId = window.setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => window.clearInterval(intervalId);
-  }, [running]);
-  return entries.map((entry) => ({
-    ...entry,
-    status: entry.stored ? entry.stored.status : "idle",
-    remainingSeconds: entry.stored ? remainingSeconds(entry.stored, now) : entry.durationSeconds,
-  }));
-}
-
-function durationLabel(view: CookTimerView): string {
-  const minutes = view.durationSeconds / 60;
-  const rounded = Number.isInteger(minutes) ? minutes : Number(minutes.toFixed(1));
-  return `${rounded} min timer`;
-}
-
-// The current step's timer, inside the cook-mode step page.
-export function CookStepTimer({ stepNum, controller }: { stepNum: number; controller: CookTimersController }) {
-  const entry = controller.timers.get(stepNum);
-  return entry ? <StepTimer entry={entry} controller={controller} /> : null;
-}
-
-function StepTimer({ entry, controller }: { entry: CookTimerEntry; controller: CookTimersController }) {
-  const [view] = useTimerViews([entry]);
-  const stepNum = entry.stepNum;
-
-  const isDone = view.status === "done";
+/** The current step's timer, inside the cook-mode step page. */
+export function CookStepTimer({ timer }: { timer: CookTimer | undefined }) {
+  if (!timer) return null;
   return (
-    <div
+    <Timer
       data-testid="cook-mode-timer"
-      data-status={view.status}
-      className={`mt-6 flex flex-col gap-4 border-y py-4 sm:flex-row sm:items-center sm:justify-between ${
-        view.ringing ? "border-[var(--sj-tomato)]" : "border-[var(--sj-border)]"
-      }`}
-    >
-      <div>
-        <p
-          className={`font-sj-ui text-xs font-bold uppercase tracking-[0.18em] ${
-            isDone ? "text-[var(--sj-tomato)]" : "text-[var(--sj-brass)]"
-          }`}
-        >
-          {isDone ? "Time's up" : durationLabel(view)}
-        </p>
-        <p
-          className={`font-sj-display mt-2 text-4xl/10 font-semibold tabular-nums ${
-            isDone ? "text-[var(--sj-tomato)]" : "text-[var(--sj-ink)]"
-          }`}
-        >
-          {formatTimerSeconds(view.remainingSeconds)}
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:flex">
-        {view.status === "idle" ? (
-          <Button type="button" className="col-span-2" onClick={() => controller.start(stepNum)}>
-            Start timer
-          </Button>
-        ) : null}
-        {view.status === "running" ? (
-          <Button type="button" onClick={() => controller.pause(stepNum)}>
-            Pause timer
-          </Button>
-        ) : null}
-        {view.status === "paused" ? (
-          <Button type="button" onClick={() => controller.resume(stepNum)}>
-            Resume timer
-          </Button>
-        ) : null}
-        {view.status === "running" || view.status === "paused" ? (
-          <Button type="button" plain onClick={() => controller.clear(stepNum)}>
-            Cancel timer
-          </Button>
-        ) : null}
-        {isDone ? (
-          <>
-            <Button type="button" variant="destructive" onClick={() => controller.clear(stepNum)}>
-              {view.ringing ? "Stop alarm" : "Dismiss"}
-            </Button>
-            <Button type="button" plain onClick={() => controller.start(stepNum)}>
-              Restart timer
-            </Button>
-          </>
-        ) : null}
-      </div>
-    </div>
+      className="mt-6"
+      label={timer.label}
+      duration={timer.duration}
+      timerId={timer.timerId}
+      labels={LABELS}
+    />
   );
 }
 
-// Every running, paused or finished timer that is not on the step in view, so a cook who moves on
-// can still see (and stop) the pasta timer from step 1.
+/**
+ * Every running, paused or finished timer that is not on the step in view, so a cook who moves on
+ * can still see (and stop) the pasta timer from step 1. In cook mode its "Go to" opens that
+ * step; on the recipe page the tray has no link.
+ */
 export function CookTimerTray({
-  controller,
+  timers,
   currentStepNum,
   onGoToStep,
 }: {
-  controller: CookTimersController;
+  timers: readonly CookTimer[];
   currentStepNum?: number;
   onGoToStep?: (stepNum: number) => void;
 }) {
-  const others = useTimerViews(controller.active.filter((entry) => entry.stepNum !== currentStepNum));
-
+  // The tray's "Go to" is a link to #step-N; cook mode shows steps one at a time, so the click
+  // opens the step instead of following the link.
+  const goToStep = onGoToStep
+    ? (event: MouseEvent<HTMLElement>) => {
+        const link = (event.target as Element).closest<HTMLAnchorElement>('a[href*="#step-"]');
+        if (!link) return;
+        event.preventDefault();
+        onGoToStep(Number(link.hash.slice("#step-".length)));
+      }
+    : undefined;
   return (
     <>
-      {/* Always mounted so screen readers hear "Time's up" even when the timer is on another step. */}
-      <p className="sr-only" aria-live="assertive" aria-atomic="true" data-testid="cook-timer-announcement">
-        {controller.announcement}
-      </p>
-      {others.length > 0 ? (
-        <section
-          aria-label="Running timers"
-          data-testid="cook-timer-tray"
-          className="shrink-0 border-b border-[var(--sj-border)] py-2"
-        >
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {others.map((view) => (
-              <li
-                key={view.stepNum}
-                data-testid={`cook-timer-tray-item-${view.stepNum}`}
-                className={`flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--sj-radius-surface)] border px-3 py-2 ${
-                  view.ringing
-                    ? "border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_12%,var(--sj-panel-solid))]"
-                    : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)]"
-                }`}
-              >
-                {view.status === "done" ? (
-                  <BellRing aria-hidden="true" className="size-5 shrink-0 text-[var(--sj-tomato)]" />
-                ) : (
-                  <TimerReset aria-hidden="true" className="size-5 shrink-0 text-[var(--sj-brass)]" />
-                )}
-                {/* A floor on the text's width makes the buttons wrap below it on a phone, instead of
-                    squeezing "Time's up" onto two lines and cutting off the step. */}
-                <div className="min-w-48 flex-1">
-                  <p className="font-sj-ui m-0 truncate text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
-                    Step {view.stepNum}{view.label ? ` · ${view.label}` : ""}
-                  </p>
-                  <p
-                    className={`font-sj-display m-0 text-2xl/7 font-semibold tabular-nums ${
-                      view.status === "done" ? "text-[var(--sj-tomato)]" : "text-[var(--sj-ink)]"
-                    }`}
-                  >
-                    {view.status === "done"
-                      ? "Time's up"
-                      : `${formatTimerSeconds(view.remainingSeconds)}${view.status === "paused" ? " paused" : ""}`}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  {onGoToStep ? (
-                    <Button
-                      type="button"
-                      plain
-                      aria-label={`Go to step ${view.stepNum}`}
-                      onClick={() => onGoToStep(view.stepNum)}
-                    >
-                      Go to step
-                    </Button>
-                  ) : null}
-                  {view.status === "done" ? (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      aria-label={`${view.ringing ? "Stop alarm" : "Dismiss timer"} for step ${view.stepNum}`}
-                      onClick={() => controller.clear(view.stepNum)}
-                    >
-                      {view.ringing ? "Stop alarm" : "Dismiss"}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      plain
-                      aria-label={`Cancel timer for step ${view.stepNum}`}
-                      onClick={() => controller.clear(view.stepNum)}
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <TimerTray
+        data-testid="cook-timer-tray"
+        label="Running timers"
+        labels={LABELS}
+        onClickCapture={goToStep}
+        timers={timers
+          .filter((timer) => timer.stepNum !== currentStepNum)
+          .map((timer) => ({
+            timerId: timer.timerId,
+            label: timer.label,
+            duration: timer.duration,
+            href: onGoToStep ? `#step-${timer.stepNum}` : undefined,
+          }))}
+      />
+      <CookTimerAlerts timers={timers} />
     </>
   );
+}
+
+/**
+ * What a cook sees and hears from across the room while a timer is up: the tab's title says so
+ * until the timer is dismissed, and a cook who already allowed notifications gets one while the
+ * tab is in the background.
+ */
+function CookTimerAlerts({ timers }: { timers: readonly CookTimer[] }) {
+  const [finished, setFinished] = useState<ReadonlyMap<string, { label: string; endedAt: number }>>(new Map());
+  const report = useCallback((timer: CookTimer, endedAt: number | null) => {
+    setFinished((current) => {
+      if (current.get(timer.timerId)?.endedAt === (endedAt ?? undefined)) return current;
+      const next = new Map(current);
+      if (endedAt !== null) next.set(timer.timerId, { label: timer.label, endedAt });
+      else next.delete(timer.timerId);
+      return next;
+    });
+  }, []);
+  const labels = [...finished.values()].map((timer) => timer.label).join("; ");
+  useEffect(() => {
+    if (!labels) return;
+    const previousTitle = document.title;
+    document.title = `${DONE}: ${labels}`;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [labels]);
+  // TODO(ouro-hx: timer alert until dismissed, ourostack/ouro-ui#179): HX Timer keeps alerting
+  // until it is dismissed. Until then its one chime and buzz ring again from here, every 2.5 s,
+  // until the cook dismisses the timer or two minutes pass, as Spoonjoy's own alarm did.
+  const lastEnded = Math.max(0, ...[...finished.values()].map((timer) => timer.endedAt));
+  useEffect(() => {
+    if (!lastEnded) return;
+    const until = lastEnded + RING_FOR_MS;
+    if (Date.now() >= until) return;
+    const ring = window.setInterval(() => {
+      if (Date.now() > until) {
+        window.clearInterval(ring);
+        return;
+      }
+      void chime();
+      buzz();
+    }, RING_EVERY_MS);
+    return () => window.clearInterval(ring);
+  }, [lastEnded]);
+  return (
+    <>
+      {timers.map((timer) => (
+        <CookTimerWatch key={timer.timerId} timer={timer} onFinished={report} />
+      ))}
+    </>
+  );
+}
+
+function CookTimerWatch({ timer, onFinished }: { timer: CookTimer; onFinished: (timer: CookTimer, endedAt: number | null) => void }) {
+  const onDone = (event: TimerDoneEvent) => {
+    // A watcher is a fallback view, as the tray is: when it is the first to hear the timer end,
+    // no Timer or tray on the page alerts, so it gives HX's alert itself.
+    alertDone(timer.label, DONE, event, false);
+    notifyTimeUp(timer.label, event);
+  };
+  const { status, endedAt } = useTimer({ duration: timer.duration, timerId: timer.timerId, fallback: true, onDone });
+  const done = status === "done";
+  useEffect(() => onFinished(timer, done ? endedAt : null), [timer, done, endedAt, onFinished]);
+  return null;
+}
+
+/** A system notification for a timer that just ended, while the tab is in the background. */
+export function notifyTimeUp(label: string, event: TimerDoneEvent) {
+  if (!event.first || Date.now() - event.endedAt > FRESH_MS) return;
+  // Only notify when the cook already allowed notifications; never prompt from a timer.
+  if (typeof window.Notification !== "function" || window.Notification.permission !== "granted") return;
+  if (document.visibilityState !== "hidden") return;
+  try {
+    new window.Notification(DONE, { body: label, tag: "spoonjoy-cook-timer" });
+  } catch {
+    // Some browsers only allow notifications from a service worker.
+  }
 }

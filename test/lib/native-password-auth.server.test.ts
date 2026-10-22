@@ -58,6 +58,7 @@ describe("native username/password sign-in API", () => {
     expect(response.status).toBe(201);
     expect(response.headers.get("Cache-Control")).toContain("no-store");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    expect(response.headers.get("Set-Cookie")).toBeNull();
     expect(json).toMatchObject({
       ok: true,
       requestId: "req_native_password",

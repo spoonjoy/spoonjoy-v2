@@ -18,7 +18,8 @@ test.describe("Printing a recipe", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "Steps", exact: true })).toBeVisible();
     await expect(page.getByText("Simmer rice in stock until tender.", { exact: true })).toBeVisible();
-    await expect(page.getByText("jasmine rice", { exact: true })).toBeVisible();
+    // On paper each ingredient is a plain line with its amount, not the cook's checklist.
+    await expect(page.getByTestId("step-print-ingredients").first()).toContainText("jasmine rice");
     await expect(page.getByTestId("recipe-print-source")).toContainText(LEMON_RICE);
 
     await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeHidden();
@@ -26,8 +27,8 @@ test.describe("Printing a recipe", () => {
     await expect(page.getByTestId("recipe-header-controls")).toBeHidden();
     await expect(page.getByTestId("recipe-cooks")).toBeHidden();
     await expect(page.getByText("Tap ingredients as you go", { exact: true })).toBeHidden();
-    await expect(page.locator("#steps .sj-checklist-box").first()).toBeHidden();
-    await expect(page.locator(".sj-skip-link")).toBeHidden();
+    await expect(page.locator('#steps [data-ouro="checklist"]').first()).toBeHidden();
+    await expect(page.getByRole("link", { name: "Skip to main content" })).toBeHidden();
     // The printed page, for review: the whole recipe as print media lays it out.
     await testInfo.attach("printed-recipe", {
       body: await page.screenshot({ fullPage: true, animations: "disabled" }),
@@ -38,5 +39,7 @@ test.describe("Printing a recipe", () => {
     await page.emulateMedia({ media: "screen" });
     await expect(page.getByTestId("recipe-header-controls")).toBeVisible();
     await expect(page.getByTestId("recipe-print-source")).toBeHidden();
+    await expect(page.getByTestId("step-print-ingredients").first()).toBeHidden();
+    await expect(page.getByRole("checkbox", { name: "jasmine rice", exact: true })).toBeVisible();
   });
 });

@@ -1,11 +1,12 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form as RouterForm, useNavigation } from "react-router";
-import { ImagePlus, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Dialog } from "~/components/ouro/dialog/dialog";
 import { Button } from "../button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
+import { FileField } from "~/components/ouro/file-field/file-field";
 import { Form, type ReadonlyFormErrors } from "~/components/ouro/form/form";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -13,20 +14,10 @@ import {
   FOOD_IMAGE_ACCEPT,
   FOOD_IMAGE_SIZE_MESSAGE,
   FOOD_IMAGE_TYPE_MESSAGE,
-  FOOD_IMAGE_TYPES,
   IMAGE_MAX_FILE_SIZE,
 } from "~/lib/recipe-image";
 import { localDateTimeToIso } from "~/lib/cooked-at";
-
-function validateClientFile(file: File): string | null {
-  if (!(FOOD_IMAGE_TYPES as readonly string[]).includes(file.type)) {
-    return FOOD_IMAGE_TYPE_MESSAGE;
-  }
-  if (file.size > IMAGE_MAX_FILE_SIZE) {
-    return FOOD_IMAGE_SIZE_MESSAGE;
-  }
-  return null;
-}
+import { claim } from "~/lib/ouro/claims";
 
 /* istanbul ignore next -- @preserve backdrop closes are intentionally ignored while a post is in flight */
 function ignoreCloseWhilePosting() {}
@@ -49,10 +40,6 @@ export function SpoonDialog({
   coverPromptMode = "none",
   errors: formErrors,
 }: SpoonDialogProps) {
-  const photoId = useId();
-  const photoHintId = useId();
-  const photoStatusId = useId();
-  const photoErrorId = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const submitInFlightRef = useRef(false);
   const navigation = useNavigation();
@@ -60,7 +47,6 @@ export function SpoonDialog({
   const [nextTime, setNextTime] = useState("");
   const [cookedAt, setCookedAt] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoError, setPhotoError] = useState<string | null>(null);
   const [useAsRecipeCover, setUseAsRecipeCover] = useState(false);
   const [submitStarted, setSubmitStarted] = useState(false);
   // One cook per opening of the dialog: a resubmit (after the server could not save it, or a
@@ -78,7 +64,6 @@ export function SpoonDialog({
       setNextTime("");
       setCookedAt("");
       setPhotoFile(null);
-      setPhotoError(null);
       setUseAsRecipeCover(false);
       setSubmitStarted(false);
       submitInFlightRef.current = false;
@@ -103,33 +88,14 @@ export function SpoonDialog({
     navigation.formData?.get("intent") === "createSpoon";
   const isPosting = submitStarted || isRouterPostingSpoon;
   const hasContent = note.trim() !== "" || nextTime.trim() !== "" || photoFile !== null;
-  const hasValidContent = hasContent && photoError === null;
-  const canSubmit = hasValidContent && !isPosting;
+  const canSubmit = hasContent && !isPosting;
   const submitStatus = photoFile ? "Uploading photo..." : "Saving spoon...";
   const dialogOnClose = isPosting ? ignoreCloseWhilePosting : onClose;
   const showFirstPhotoCoverPrompt = coverPromptMode === "first-photo";
   const showCoverOptIn = coverPromptMode === "optional-update" && photoFile !== null;
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    if (!file) {
-      setPhotoFile(null);
-      setPhotoError(null);
-      return;
-    }
-    const validation = validateClientFile(file);
-    if (validation) {
-      setPhotoError(validation);
-      setPhotoFile(null);
-      event.currentTarget.value = "";
-      return;
-    }
-    setPhotoError(null);
-    setPhotoFile(file);
-  }
-
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    if (!hasValidContent || submitInFlightRef.current) {
+    if (!hasContent || submitInFlightRef.current) {
       event.preventDefault();
       return;
     }
@@ -160,48 +126,18 @@ export function SpoonDialog({
               Add a photo to create the recipe cover
             </p>
           ) : null}
-          {/* The photo picker is Spoonjoy's own control (a tile), so its label and error are plain
-              elements, styled like Ouro UI's field label. */}
-          <div className="grid gap-2">
-            <label htmlFor={photoId} className="justify-self-start font-sj-ui text-sm/5 font-medium text-[var(--sj-ink)] select-none">
-              Photo
-            </label>
-            <label
-              data-testid="spoon-photo-picker"
-              className="group flex min-h-24 cursor-pointer items-center gap-4 rounded-[var(--sj-radius-surface)] border border-[var(--sj-border-strong)] bg-[var(--sj-field)] px-4 py-4 transition hover:border-[var(--sj-ink)] hover:bg-[var(--sj-panel-solid)]"
-            >
-              <input
-                id={photoId}
-                name="photo"
-                type="file"
-                accept={FOOD_IMAGE_ACCEPT}
-                data-max-size={IMAGE_MAX_FILE_SIZE}
-                aria-describedby={`${photoHintId} ${photoStatusId}${photoError ? ` ${photoErrorId}` : ""}`}
-                onChange={handleFileChange}
-                disabled={isPosting}
-                className="peer sr-only"
-              />
-              <span className="grid size-12 shrink-0 place-items-center rounded-[var(--sj-radius-small)] bg-[var(--sj-ink)] text-[var(--sj-paper)] transition group-hover:bg-[var(--sj-action-deep)] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-[var(--sj-brass)]">
-                <ImagePlus className="size-5" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block font-sj-ui text-base font-semibold leading-6 text-[var(--sj-ink)]">
-                  Add photo
-                </span>
-                <span id={photoStatusId} className="block truncate font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]">
-                  {photoFile ? photoFile.name : "No photo yet"}
-                </span>
-                <span id={photoHintId} className="block font-sj-ui text-sm leading-6 text-[var(--sj-ink-soft)]">
-                  JPG, PNG, or WebP. 5 MB max.
-                </span>
-              </span>
-            </label>
-            {photoError ? (
-              <p id={photoErrorId} role="alert" className="m-0 text-sm/5 text-[var(--sj-tomato)]">
-                {photoError}
-              </p>
-            ) : null}
-          </div>
+          <FileField
+            label="Photo"
+            name="photo"
+            accept={FOOD_IMAGE_ACCEPT}
+            maxSize={IMAGE_MAX_FILE_SIZE}
+            description={claim("JPG, PNG, or WebP. 5 MB max.", { source: { file: "app/lib/recipe-image.ts" }, verify: [{ fileLine: "app/lib/recipe-image.ts", pattern: "^export const FOOD_IMAGE_TYPES = \\[\"image/jpeg\", \"image/png\", \"image/webp\"\\] as const;$" }, { fileLine: "app/lib/recipe-image.ts", pattern: "^export const IMAGE_MAX_FILE_SIZE = 5 \\* 1024 \\* 1024;$" }, { fileLine: "app/components/recipe/SpoonDialog.tsx", pattern: "accept=\\{FOOD_IMAGE_ACCEPT\\}" }] })}
+            rejectMessage={(rejection) =>
+              rejection.reason === "size" ? FOOD_IMAGE_SIZE_MESSAGE : FOOD_IMAGE_TYPE_MESSAGE
+            }
+            onFilesChange={(files) => setPhotoFile(files[0] ?? null)}
+            disabled={isPosting}
+          />
           {showCoverOptIn ? (
             <Checkbox
               label="Use this photo as recipe cover"

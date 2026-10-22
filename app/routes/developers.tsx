@@ -19,8 +19,11 @@ import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
-import { Text } from "~/components/text";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ouro/text/text";
+import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { claim } from "~/lib/ouro/claims";
 
 const DEVELOPER_SCOPES = [
   "public:read",
@@ -87,27 +90,27 @@ type DevelopersLoaderData = {
 const authModels = [
   {
     title: "Spoonjoy session",
-    body: "Best for the playground and same-origin browser clients. Sign in once; your login is the credential for private API calls.",
+    body: "For the playground and same-origin browser clients. Sign in once; your login is the credential for private API calls.",
     icon: LogIn,
   },
   {
     title: "Bearer credentials",
-    body: "Best only when a client runs outside the Spoonjoy browser session. The token API is exposed as part of the generated surface.",
+    body: "For a client that runs outside the Spoonjoy browser session. The token API is exposed as part of the generated surface.",
     icon: KeyRound,
   },
   {
     title: "OAuth/PKCE apps",
-    body: "Best for third-party apps. Dynamic registration, authorize, and token routes are exposed for delegated consent.",
+    body: "For third-party apps. Dynamic registration, authorize, and token routes are exposed for delegated consent.",
     icon: ShieldCheck,
   },
   {
     title: "MCP clients",
-    body: "Best for assistant-style clients that need a tool connection instead of raw REST calls.",
+    body: "For assistant-style clients that need a tool connection instead of raw REST calls.",
     icon: LinkIcon,
   },
   {
     title: "Delegated and device-style authorization",
-    body: "Best for clients that need a chef to approve access from a constrained device or external runtime.",
+    body: "For clients that need a chef to approve access from a constrained device or external runtime.",
     icon: Activity,
   },
 ] as const;
@@ -118,7 +121,7 @@ const clientProfiles = [
   { title: "CLI/script clients", href: "#terminal-quickstart", body: "Use bearer credentials, curl, and OpenAPI JSON only when the script cannot share a Spoonjoy session." },
   { title: "Browser clients", href: "#auth-implementation", body: "Use same-origin Session only inside spoonjoy.app. Extensions and third-party browser apps use OAuth/PKCE." },
   { title: "Agent clients", href: "#oauth-and-delegated-flows", body: "Use MCP or delegated connection endpoints when a chef needs to approve an assistant-style runtime." },
-  { title: "Enterprise clients", href: "#current-api-boundary", body: "API v1 is individual delegated access today; there are no tenant, admin, employee, or org-export APIs yet." },
+  { title: "Enterprise clients", href: "#current-api-boundary", body: "API v1 is individual delegated access today; tenant, admin, employee and org-export APIs are future work." },
 ] as const;
 
 const terminalQuickstart = [
@@ -166,25 +169,25 @@ const externalGuideSteps = [
   {
     title: "Read the public Chef graph",
     scope: "No token required",
-    body: "Start with GET /api/v1/recipes and GET /api/v1/cookbooks. Public graph reads do not require Authorization: Bearer, and the OpenAPI contract is available at /api/v1/openapi.json.",
+    body: claim("Start with GET /api/v1/recipes and GET /api/v1/cookbooks. Public graph reads do not require Authorization: Bearer, and the OpenAPI contract is available at /api/v1/openapi.json.", { source: { test: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, verify: [{ testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, { testExists: "test/routes/api-v1-cookbooks.test.ts::API v1 public cookbook reads > searches public cookbooks anonymously with query alias and limit behavior" }, { testExists: "test/routes/api-v1-openapi.test.ts::GET /api/v1/openapi.json > serves the generated OpenAPI document directly with v1 headers" }] }),
     sample: "curl 'https://spoonjoy.app/api/v1/recipes?query=pasta&limit=20'\ncurl 'https://spoonjoy.app/api/v1/cookbooks?limit=20'",
   },
   {
     title: "Use your Spoonjoy session",
     scope: "Requires login",
-    body: "Sign into Spoonjoy, open the playground, and leave auth on Session. There is no token to mint or paste for playground calls; the browser sends your normal Spoonjoy session cookie, and private endpoints treat that as the authenticated chef.",
+    body: claim("Sign into Spoonjoy, open the playground, and leave auth on Session. There is no token to mint or paste for playground calls; the browser sends your normal Spoonjoy session cookie, and private endpoints treat that as the authenticated chef.", { source: { test: "test/routes/developers-playground.test.tsx::/developers/playground > sends generated JSON-body operations with session auth by default" }, verify: [{ testExists: "test/routes/developers-playground.test.tsx::/developers/playground > sends generated JSON-body operations with session auth by default" }, { testExists: "test/routes/api-v1-tokens.test.ts::API v1 personal token metadata > creates session tokens with requested and default scopes and never stores the secret" }] }),
     sample: "https://spoonjoy.app/api/playground",
   },
   {
     title: "Use bearer only outside the session",
     scope: "External clients",
-    body: "Bearer mode is for clients that cannot use the logged-in Spoonjoy browser session. The generated POST /api/v1/tokens operation is available in the playground because it is part of API v1, not because private playground calls need a separate token.",
+    body: claim("Bearer mode is for clients that cannot use the logged-in Spoonjoy browser session. The generated POST /api/v1/tokens operation is available in the playground because it is part of API v1, not because private playground calls need a separate token.", { source: { test: "test/scripts/generate-api-playground.test.ts::generate-api-playground > derives every playground operation from the OpenAPI document" }, verify: [{ testExists: "test/scripts/generate-api-playground.test.ts::generate-api-playground > derives every playground operation from the OpenAPI document" }, { testExists: "test/routes/developers-playground.test.tsx::/developers/playground > sends generated JSON-body operations with session auth by default" }] }),
     sample: "Playground auth: Session\nGenerated operation: POST /api/v1/tokens\nUse the returned sj_... secret only in an external client or Bearer-mode test.",
   },
   {
     title: "Bootstrap the native offline cache",
     scope: "Requires account:read kitchen:read",
-    body: "First-party Spoonjoy Apple clients use GET /api/v1/me/sync as the cursor sync feed that restores the signed-in chef's profile, owned recipes, owned cookbooks, and shopping-list item tombstones into the native account/environment/schema cache boundary. Store nextCursor only after applying the whole page.",
+    body: claim("First-party Spoonjoy Apple clients use GET /api/v1/me/sync as the cursor sync feed that restores the signed-in chef's profile, owned recipes, owned cookbooks, and shopping-list item tombstones into the native account/environment/schema cache boundary. Store nextCursor only after applying the whole page.", { source: { test: "test/routes/api-v1-native-sync.test.ts::API v1 native account sync > returns a private first-party native bootstrap feed for the signed-in chef" }, verify: [{ testExists: "test/routes/api-v1-native-sync.test.ts::API v1 native account sync > returns a private first-party native bootstrap feed for the signed-in chef" }, { testExists: "test/routes/api-v1-native-sync.test.ts::API v1 native account sync > returns durable recipe and cookbook delete tombstones for native offline caches" }, { testExists: "test/routes/api-v1-native-sync.test.ts::API v1 native account sync > supports opaque cursor paging for native sync bootstrap" }] }),
     sample: "curl -fsS 'https://spoonjoy.app/api/v1/me/sync?limit=20' \\\n  -H 'Authorization: Bearer sj_first_party_native_token'",
   },
   {
@@ -223,7 +226,7 @@ const externalGuideSteps = [
   {
     title: "Manage owner recipe covers",
     scope: "Requires kitchen:write",
-    body: "Recipe cover management endpoints let native clients list cover candidates and spoon photo sources, activate a cover variant, set an explicit no-cover state, archive a candidate with replacement or confirmed no-cover, regenerate editorial imagery, and create a cover from a spoon photo. These operations are owner-scoped to the authenticated chef's recipes.",
+    body: claim("Recipe cover management endpoints let native clients list cover candidates and spoon photo sources, activate a cover variant, set an explicit no-cover state, archive a candidate with replacement or confirmed no-cover, regenerate editorial imagery, and create a cover from a spoon photo. These operations are owner-scoped to the authenticated chef's recipes.", { source: { test: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > lists active cover candidates and spoon photo sources for the owner" }, verify: [{ testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > lists active cover candidates and spoon photo sources for the owner" }, { testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > activates cover variants idempotently and rejects conflicting replays" }, { testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > sets an explicit no-cover state only after destructive confirmation" }, { testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > archives active covers with replacement or no-cover confirmation" }, { testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > creates covers from spoon photos and regenerates editorial variants through waitUntil" }, { testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > requires kitchen write scope and owner access for cover management" }] }),
     sample: [
       "GET /api/v1/recipes/{id}/covers",
       "PATCH /api/v1/recipes/{id}/covers",
@@ -266,19 +269,19 @@ const tokenAcquisitionPaths = [
   {
     title: "Personal token: signed-in chef creates one",
     mode: "Direct token",
-    body: "For a script, device, or developer-owned client, the chef signs in first and runs POST /api/v1/tokens from Session auth, such as through the generated playground. An existing bearer credential with tokens:write can also create another token, but never with broader scopes than it already has. Spoonjoy returns the raw sj_... secret once; save it outside browser bundles.",
+    body: claim("For a script, device, or developer-owned client, the chef signs in first and runs POST /api/v1/tokens from Session auth, such as through the generated playground. An existing bearer credential with tokens:write can also create another token, but never with broader scopes than it already has. Spoonjoy returns the raw sj_... secret once; save it outside browser bundles.", { source: { test: "test/routes/api-v1-tokens.test.ts::API v1 personal token metadata > creates session tokens with requested and default scopes and never stores the secret" }, verify: [{ testExists: "test/routes/api-v1-tokens.test.ts::API v1 personal token metadata > creates session tokens with requested and default scopes and never stores the secret" }, { testExists: "test/routes/api-v1-tokens.test.ts::API v1 personal token metadata > caps bearer-created token scopes and rejects scope escalation" }, { testExists: "test/routes/api-v1-tokens.test.ts::API v1 personal token metadata > lists credential metadata for session and tokens:read bearer callers" }] }),
     sample: "POST /api/v1/tokens\nAuth: Session cookie or Bearer sj_... with tokens:write\nBody: { \"name\": \"Kitchen script\", \"scopes\": [\"recipes:read\", \"cookbooks:read\", \"shopping_list:read\", \"shopping_list:write\"] }\nResponse: { \"ok\": true, \"data\": { \"token\": \"sj_...\", \"credential\": { \"id\": \"cred_...\", \"scopes\": [...] } } }",
   },
   {
     title: "Delegated token: OAuth/PKCE",
     mode: "Third-party",
-    body: "For a third-party app, register a public client and redirect the chef to /oauth/authorize. If they are not signed in, Spoonjoy routes them through /login and the full auth surface before consent. The client never handles the chef's password. The client exchanges the authorization code at /oauth/token for an sj_... access_token plus rotating refresh_token.",
+    body: claim("For a third-party app, register a public client and redirect the chef to /oauth/authorize. If they are not signed in, Spoonjoy routes them through /login and the full auth surface before consent. The client never handles the chef's password. The client exchanges the authorization code at /oauth/token for an sj_... access_token plus rotating refresh_token.", { source: { test: "test/lib/oauth-routes.server.test.ts::handleOAuthRegister > registers a client" }, verify: [{ testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthRegister > registers a client" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthAuthorizeAction > redirects to login when not authenticated" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > exchanges a valid code for access + refresh tokens" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > exchanges a refresh token for a rotated pair and rejects the old one" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > rejects an unsupported grant type" }] }),
     sample: "POST /oauth/register -> client_id: cm_client_id_from_register\nGET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=...&response_type=code&scope=shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256\nPOST /oauth/token -> access_token: sj_...\nPOST /oauth/revoke -> revoke refresh_token and matching live OAuth access credentials",
   },
   {
     title: "First-party native token: Spoonjoy Apple app sign-in",
     mode: "Native Apple",
-    body: "Spoonjoy's own native Apple app can exchange either a native Sign in with Apple credential or a Spoonjoy username/password credential for the app's rotating token session. This is a first-party app bootstrap path, not OAuth grant_type=password, and native clients must never persist the password after the request completes. The password endpoint is online-only, rate limited with Spoonjoy's dedicated auth limiter, returns no session cookie, and does not publish wildcard browser CORS headers.",
+    body: claim("Spoonjoy's own native Apple app can exchange either a native Sign in with Apple credential or a Spoonjoy username/password credential for the app's rotating token session. This is a first-party app bootstrap path, not OAuth grant_type=password, and native clients must never persist the password after the request completes. Never queue the password request for later. The password endpoint is rate limited with Spoonjoy's dedicated auth limiter, returns no session cookie, and does not publish wildcard browser CORS headers.", { source: { test: "test/lib/apple-native-auth.server.test.ts::native Sign in with Apple API > verifies a native Apple identity token and issues Spoonjoy tokens" }, verify: [{ testExists: "test/lib/apple-native-auth.server.test.ts::native Sign in with Apple API > verifies a native Apple identity token and issues Spoonjoy tokens" }, { testExists: "test/lib/native-password-auth.server.test.ts::native username/password sign-in API > exchanges first-party native email/password credentials for Spoonjoy app tokens" }, { testExists: "test/lib/native-password-auth.server.test.ts::native username/password sign-in API > maps method and dedicated auth rate-limit failures to API errors" }, { testExists: "test/lib/native-password-auth.server.test.ts::native username/password sign-in API > does not publish permissive browser CORS preflight headers for the password token surface" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > rejects an unsupported grant type" }] }),
     sample: 'POST /api/v1/auth/password/native\nContent-Type: application/json\nBody: { "emailOrUsername": "ari@spoonjoy.app", "password": "correct horse battery staple" }\nResponse: access_token sj_... + refresh_token ort_...',
   },
   {
@@ -290,7 +293,7 @@ const tokenAcquisitionPaths = [
   {
     title: "No third-party password-token API",
     mode: "Security",
-    body: "Spoonjoy does not support an OAuth password grant or third-party API endpoint where a client trades a chef's password for a token. Browser email/password login creates a session cookie, not an API token. The only password-to-token exception is Spoonjoy's own native Apple app endpoint, which exists so the first-party app can sign in without shoving chefs through the website. Third-party clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.",
+    body: claim("Spoonjoy does not support an OAuth password grant or third-party API endpoint where a client trades a chef's password for a token. Browser email/password login creates a session cookie, not an API token. The only password-to-token exception is Spoonjoy's own native Apple app endpoint, which exists so the first-party app can sign in without shoving chefs through the website. Third-party clients should use OAuth/PKCE or delegated approval so Spoonjoy, not the client, handles password, passkey, and provider login.", { source: { test: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > rejects an unsupported grant type" }, verify: [{ testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > rejects an unsupported grant type" }, { testExists: "test/routes/login-session-version.test.ts::Login action session version > signs a password login in with an HttpOnly session cookie, not an API token" }, { testExists: "test/lib/native-password-auth.server.test.ts::native username/password sign-in API > exchanges first-party native email/password credentials for Spoonjoy app tokens" }] }),
     sample: "Do not implement: grant_type=password\nUse instead for third parties: OAuth/PKCE or delegated approval link",
   },
 ] as const;
@@ -311,7 +314,7 @@ const authImplementationSteps = [
   {
     title: "OAuth/PKCE app",
     mode: "Delegated",
-    body: "Register a public client with token_endpoint_auth_method: none and no client secret, redirect the chef through consent, then exchange the single-use 60-second code with a form-encoded POST /oauth/token request. Registration accepts common RFC 7591/OIDC metadata, but Spoonjoy stores only client_name and exact redirect_uris today. Client names are self-asserted and appear as unverified on consent; names are limited to 80 Unicode code points, control and bidirectional formatting characters are rejected, and redirect URIs must be unique. Reserved integration names require their canonical singleton callback. Optional scope metadata can be validated at registration, but the authorize request scope is the grant. Use a 43-128 character high-entropy PKCE verifier, S256 code challenge, and state. If the chef is not signed in, Spoonjoy routes them through /login first, where password, passkey, and configured Google, GitHub, or Apple sign-in all return to consent. OAuth accepts account scopes, kitchen scopes, and least-privilege public, recipe, cookbook, and shopping-list scopes. Generic OAuth access tokens last 15 minutes (expires_in: 900). MCP-bound access tokens last 90 days (expires_in: 7776000). The refresh_token rotates on every refresh grant and is accepted for 180 days after it was issued; a refresh token replayed more than 60 seconds after its rotation revokes the whole connection, and POST /oauth/revoke disconnects the stored refresh token plus live OAuth access credentials for that client/resource.",
+    body: claim("Register a public client with token_endpoint_auth_method: none and no client secret, redirect the chef through consent, then exchange the single-use 60-second code with a form-encoded POST /oauth/token request. Registration accepts common RFC 7591/OIDC metadata, but Spoonjoy stores only client_name and exact redirect_uris today. Client names are self-asserted and appear as unverified on consent; names are limited to 80 Unicode code points, control and bidirectional formatting characters are rejected, and redirect URIs must be unique. Reserved integration names require their canonical singleton callback. Optional scope metadata can be validated at registration, but the authorize request scope is the grant. Use a 43-128 character high-entropy PKCE verifier, S256 code challenge, and state. If the chef is not signed in, Spoonjoy routes them through /login first, where password, passkey, and configured Google, GitHub, or Apple sign-in all return to consent. OAuth accepts account scopes, kitchen scopes, and least-privilege public, recipe, cookbook, and shopping-list scopes. Generic OAuth access tokens last 15 minutes (expires_in: 900). MCP-bound access tokens last 90 days (expires_in: 7776000). The refresh_token rotates on every refresh grant and is accepted for 180 days after it was issued; a refresh token replayed more than 60 seconds after its rotation revokes the whole connection, and POST /oauth/revoke disconnects the stored refresh token plus live OAuth access credentials for that client/resource.", { source: { test: "test/lib/oauth-routes.server.test.ts::handleOAuthRegister > registers a client" }, verify: [{ testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthRegister > registers a client" }, { testExists: "test/lib/oauth-server.server.test.ts::authorization code lifecycle > rejects a code replayed after use" }, { testExists: "test/lib/oauth-server.server.test.ts::authorization code lifecycle > rejects an expired code" }, { fileLine: "app/lib/oauth-server.server.ts", pattern: "^const AUTH_CODE_TTL_SECONDS = 60;$" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > rejects a body that is not form-encoded" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthRegister > accepts and ignores standard RFC 7591 metadata Spoonjoy does not store" }, { testExists: "test/lib/oauth-routes.server.test.ts::loadOAuthAuthorize > keeps only a registered client's name and redirect URIs, so the authorize request's scope is the grant" }, { testExists: "test/routes/oauth-authorize.test.tsx::oauth.authorize route > renders a simple consent screen with scopes and working forms" }, { testExists: "test/lib/oauth-server.server.test.ts::OAuth client registration > enforces the 80 Unicode-code-point client-name boundary without splitting emoji" }, { testExists: "test/lib/oauth-server.server.test.ts::OAuth client registration > rejects client names containing prohibited control or bidi character %#" }, { testExists: "test/lib/oauth-server.server.test.ts::OAuth client registration > rejects duplicate redirect URIs, including a duplicated canonical callback" }, { testExists: "test/lib/oauth-server.server.test.ts::OAuth client registration > rejects reserved name %s with a noncanonical redirect set" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthRegister > rejects unsupported auth methods, grants, response types, and scopes" }, { testExists: "test/lib/oauth-server.server.test.ts::verifyPkceS256 > accepts verifiers of 43 and 128 characters and refuses 42 and 129" }, { testExists: "test/lib/oauth-server.server.test.ts::verifyPkceS256 > rejects a mismatched verifier" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthAuthorizeAction > rejects a missing state before minting a code" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthAuthorizeAction > redirects to login when not authenticated" }, { testExists: "test/routes/login.test.tsx::Login Route > action > forces a full document load when password login continues OAuth consent" }, { testExists: "test/routes/login.test.tsx::Login Route > component > OAuth buttons > carries redirectTo in each OAuth link so login returns to the connector" }, { testExists: "test/components/auth/PasskeySignInButton.test.tsx::PasskeySignInButton > authenticates and navigates to the returned redirect" }, { testExists: "test/lib/oauth-server.server.test.ts::normalizeScope > accepts account, kitchen and least-privilege public, recipe, cookbook and shopping-list scopes, and refuses offline_access" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > issues a generic OAuth access token that lasts 15 minutes" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > issues a 90-day MCP access token plus a 180-day refresh token" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > rotates a refresh token, revoking the old one" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > refuses a refresh token 180 days after it was issued and ends the connection" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > revokes the whole connection when a rotated refresh token is replayed after the grace window" }, { testExists: "test/lib/oauth-server.server.test.ts::connector token issuance + rotation > refresh token reuse and expiry > treats a replay exactly at the end of the grace window as a race, and one second later as reuse" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > revokes a refresh token for native and extension disconnect flows" }] }),
     sample: "POST /oauth/register\nResponse: { \"client_id\": \"cm_client_id_from_register\" }\nGET /oauth/authorize?client_id=cm_client_id_from_register&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&response_type=code&scope=shopping_list%3Aread+shopping_list%3Awrite&state=...&code_challenge=...&code_challenge_method=S256\nPOST /oauth/token\nContent-Type: application/x-www-form-urlencoded\n\ngrant_type=authorization_code&client_id=...&redirect_uri=https%3A%2F%2Fexample.com%2Foauth%2Fcallback&code=...&code_verifier=...\n\nPOST /oauth/revoke\ntoken=ort_...&client_id=cm_client_id_from_register&token_type_hint=refresh_token",
   },
   {
@@ -332,10 +335,10 @@ const guideSteps = [
 const nativeDogfoodChecklist = [
   "For unsigned local dogfood, run pnpm native:dogfood:api with DATABASE_URL and SPOONJOY_FORCE_SQLITE_LOCAL_DB=1 so DB-backed native auth/sync use the same API dispatcher without the Cloudflare local dev Prisma hang.",
   "From the Apple repo, pass SPOONJOY_WEB_REPO or --web-repo to scripts/verify-native-password-dogfood.sh; it clones the prepared local test DB, seeds a disposable username/password account, proves bad credentials return 401, then drives /api/v1/auth/password/native and /api/v1/me/sync from the Swift client.",
-  "Spoonjoy Apple sign-in is first-party native auth, not an OAuth web bounce: local dogfood uses /api/v1/auth/password/native and production-shaped Apple identity tokens use /api/v1/auth/apple/native.",
+  claim("Spoonjoy Apple sign-in is first-party native auth, not an OAuth web bounce: local dogfood uses /api/v1/auth/password/native and production-shaped Apple identity tokens use /api/v1/auth/apple/native.", { source: { test: "test/lib/native-password-auth.server.test.ts::native username/password sign-in API > accepts username/password credentials for local native dogfooding" }, verify: [{ testExists: "test/lib/native-password-auth.server.test.ts::native username/password sign-in API > accepts username/password credentials for local native dogfooding" }, { testExists: "test/lib/apple-native-auth.server.test.ts::native Sign in with Apple API > verifies a native Apple identity token and issues Spoonjoy tokens" }] }),
   "Enable applinks:spoonjoy.app on the Apple targets so spoonjoy.app links route into the correct native surface; spoonjoy:// is for app navigation and deep links.",
   "Native clients persist access_token and refresh_token in Keychain, never persist the password, replace the stored refresh token atomically, and run single-flight refresh when concurrent requests hit 401.",
-  "decode Spoonjoy REST envelopes for /api/v1 resources: ok, requestId, data on success and ok, requestId, error on failure.",
+  claim("decode Spoonjoy REST envelopes for /api/v1 resources: ok, requestId, data on success and ok, requestId, error on failure.", { source: { test: "test/routes/api-v1-shell.test.ts::/api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers" }, verify: [{ testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns stable envelopes for unknown endpoints, unsupported methods, and malformed JSON" }, { testExists: "test/lib/api-v1-openapi.server.test.ts::API v1 OpenAPI document > uses response examples whose status and envelope shape match each response" }] }),
 ] as const;
 
 const nativeDogfoodSample = [
@@ -393,9 +396,9 @@ const syncSafetyRows = [
   ["Cursor", "Use the returned nextCursor as the next request cursor after applying every item in the page durably. Treat it as opaque; ISO timestamps are accepted only as a bootstrap convenience."],
   ["Tombstones", "Sync includes deleted rows with deletedAt so offline clients can remove local items."],
   ["Pagination", "Use limit from 1 to 50 for small payloads. hasMore: true means continue with the returned nextCursor; webhooks, REST Hooks, SSE, and event subscriptions are not available yet."],
-  ["Idempotent owner mutations", "clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for account profile, profile photo, notification preferences, APNs device registration/revocation, recipe create, update, delete, fork, step editing, import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact request values for that mutation id."],
+  ["Idempotent owner mutations", claim("clientMutationId is scoped to the chef, retained for 24 hours, and bound to method, path, and body hash for account profile, profile photo, notification preferences, APNs device registration/revocation, recipe create, update, delete, fork, step editing, import, cookbook writes, shopping-list writes, recipe spoon writes, and recipe-cover writes. Persist and retry the exact request values for that mutation id.", { source: { test: "test/lib/api-idempotency.server.test.ts::API idempotency helpers > derives client keys for bearer, session, and bearer principals missing credential ids" }, verify: [{ testExists: "test/lib/api-idempotency.server.test.ts::API idempotency helpers > derives client keys for bearer, session, and bearer principals missing credential ids" }, { fileLine: "app/lib/api-idempotency.server.ts", pattern: "^export const IDEMPOTENCY_TTL_MS = 24 \\* 60 \\* 60 \\* 1000;$" }, { testExists: "test/lib/api-idempotency.server.test.ts::API idempotency helpers > deletes expired rows for the same key before reservation so keys can be reused" }, { testExists: "test/lib/api-idempotency.server.test.ts::API idempotency helpers > canonicalizes request hashes across object key order and request fields" }, { testExists: "test/lib/api-idempotency.server.test.ts::API idempotency helpers > reports conflicts for reused keys with different operation or request hash" }, { testExists: "test/routes/api-v1-account-settings.test.ts::API v1 native account settings > replays idempotent native account mutations and rejects body conflicts" }, { testExists: "test/routes/api-v1-recipe-writes.test.ts::API v1 recipe write mutations > creates a recipe graph with exact mutation envelope and replay semantics" }, { testExists: "test/routes/api-v1-recipe-writes.test.ts::API v1 recipe write mutations > rejects recipe idempotency conflicts across bodies, paths, and operations" }, { testExists: "test/routes/api-v1-recipe-writes.test.ts::API v1 recipe write mutations > soft deletes owned recipes with tombstone response, owner checks, and idempotent replay" }, { testExists: "test/routes/api-v1-recipe-writes.test.ts::API v1 recipe write mutations > replays a fork by clientMutationId without forking twice" }, { testExists: "test/routes/api-v1-recipe-steps.test.ts::API v1 recipe step and dependency mutations > creates, updates, replays, and deletes steps while returning dependency-aware recipe graphs" }, { testExists: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > checks idempotency conflicts before provider/import work" }, { testExists: "test/routes/api-v1-cookbooks.test.ts::API v1 public cookbook reads > creates owner cookbooks with kitchen write scope and idempotent replay" }, { testExists: "test/routes/api-v1-shopping-mutations.test.ts::API v1 shopping-list mutations > replays exact idempotent responses and rejects key conflicts" }, { testExists: "test/routes/api-v1-recipe-spoons.test.ts::API v1 recipe spoons > creates spoons idempotently and applies cover activation rules for owner spoon photos" }, { testExists: "test/routes/api-v1-recipe-covers.test.ts::API v1 recipe cover management > activates cover variants idempotently and rejects conflicting replays" }] })],
   ["Replay", "Retry the same request with the same clientMutationId after a timeout; Spoonjoy returns the recorded response with mutation.replayed: true."],
-  ["Conflict", "Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict."],
+  ["Conflict", claim("Reusing the same clientMutationId for a different method, path, or body returns 409 idempotency_conflict.", { source: { test: "test/routes/api-v1-recipe-writes.test.ts::API v1 recipe write mutations > rejects recipe idempotency conflicts across bodies, paths, and operations" }, verify: [{ testExists: "test/routes/api-v1-recipe-writes.test.ts::API v1 recipe write mutations > rejects recipe idempotency conflicts across bodies, paths, and operations" }, { testExists: "test/lib/api-idempotency.server.test.ts::API idempotency helpers > reports conflicts for reused keys with different operation or request hash" }] })],
   ["Retries", "Retry network timeouts, 429, and 5xx responses with the same mutation id. Refresh or reconnect on 401. Do not retry validation, scope, or idempotency conflicts unchanged."],
 ] as const;
 
@@ -427,14 +430,14 @@ const scenarioQuickstarts = [
   {
     title: "No-code connector profile",
     mode: "Zapier + Make",
-    body: "Import /api/v1/openapi.connector.json for an OpenAPI 3.0 REST-only profile. Configure OAuth as public client, no client secret, PKCE S256, authorization URL /oauth/authorize, token and refresh URL /oauth/token, revoke URL /oauth/revoke. API v1 has no webhooks yet; expose shopping-list sync as a polling trigger.",
+    body: claim("Import /api/v1/openapi.connector.json for an OpenAPI 3.0 REST-only profile. Configure OAuth as public client, no client secret, PKCE S256, authorization URL /oauth/authorize, token and refresh URL /oauth/token, revoke URL /oauth/revoke. API v1 has no webhooks yet; expose shopping-list sync as a polling trigger.", { source: { test: "test/lib/api-v1-openapi.server.test.ts::API v1 OpenAPI document > configures the connector as a public PKCE client with token, refresh and revoke URLs, polling instead of webhooks" }, verify: [{ testExists: "test/lib/api-v1-openapi.server.test.ts::API v1 OpenAPI document > configures the connector as a public PKCE client with token, refresh and revoke URLs, polling instead of webhooks" }, { testExists: "test/lib/api-v1-openapi.server.test.ts::API v1 OpenAPI document > publishes an OpenAPI 3.0 REST-only connector profile for no-code importers" }, { testExists: "test/routes/api-v1-openapi.test.ts::GET /api/v1/openapi.json > serves generated SDK and connector profiles directly with v1 headers" }] }),
     sample: "Trigger: New, updated, or removed shopping-list item\n1. GET /api/v1/shopping-list/sync?limit=50\n2. Sort returned rows by updatedAt descending for the no-code platform.\n3. Dedupe events by id:updatedAt so changed items are not suppressed.\n4. Treat deletedAt rows as removals or filtered tombstones.\n5. Persist nextCursor only after the run succeeds.",
   },
   {
     title: "Public BI snapshot export",
     mode: "Reporting",
     body: "Public recipe/cookbook lists use createdAt/id cursor walks. They are not repeatable snapshot guarantees or updatedAt incremental exports, and they do not include deletion tombstones; restart a full crawl when you need to catch public edits or removals. Preserve attribution, respect Retry-After, and do not treat public JSON as a photo-copying or commercial republication license.",
-    sample: "snapshot_resource recipes recipes recipes.ndjson\nsnapshot_resource cookbooks cookbooks cookbooks.ndjson\n\nGET /api/v1/recipes?limit=50\nGET /api/v1/cookbooks?limit=50\nGET /api/v1/recipes?cursor=v1.cursor_from_nextCursor&limit=50\n\nAnonymous public responses may include Cache-Control: public, max-age=60, stale-while-revalidate=300 but not ETag or Last-Modified.",
+    sample: claim("snapshot_resource recipes recipes recipes.ndjson\nsnapshot_resource cookbooks cookbooks cookbooks.ndjson\n\nGET /api/v1/recipes?limit=50\nGET /api/v1/cookbooks?limit=50\nGET /api/v1/recipes?cursor=v1.cursor_from_nextCursor&limit=50\n\nAnonymous public responses may include Cache-Control: public, max-age=60, stale-while-revalidate=300 but not ETag or Last-Modified.", { source: { test: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, verify: [{ testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, { testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > takes query over q, pages with cursor, nextCursor and hasMore, and sends no ETag or Last-Modified" }, { testExists: "test/routes/api-v1-cookbooks.test.ts::API v1 public cookbook reads > takes query over q and sends no ETag or Last-Modified" }] }),
   },
   {
     title: "Recipe blog embeds",
@@ -499,9 +502,9 @@ function SectionShell({ title, children }: { title: string; children: ReactNode 
   return (
     <section id={sectionId(title)} className="scroll-mt-6 border-t border-[var(--sj-border-strong)] py-8">
       <CookbookSectionTitle className="my-0">
-        <a href={`#${sectionId(title)}`} className="underline decoration-transparent underline-offset-4 hover:decoration-[var(--sj-brass)]">
+        <Link href={`#${sectionId(title)}`} tone="secondary">
           {title}
-        </a>
+        </Link>
       </CookbookSectionTitle>
       <div className="mt-5">{children}</div>
     </section>
@@ -533,7 +536,13 @@ export default function Developers() {
 
   return (
     <CookbookPage className="sj-developer-page">
-      <CookbookHeader eyebrow="API v1" title="Spoonjoy Developer Platform" action={(
+      <PageHeader
+        eyebrow="API v1"
+        title="Spoonjoy Developer Platform"
+        size="lg"
+        divider
+        description="Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private shopping-list state, recipe-cover management, token management, or delegated access."
+        actions={(
         <div className="flex flex-wrap gap-2">
           <Button href="/api/playground">
             <Play data-slot="icon" aria-hidden="true" />
@@ -552,12 +561,8 @@ export default function Developers() {
             Connector spec
           </Button>
         </div>
-      )}>
-        <Text size="lg" className="leading-8">
-          Build clients on Spoonjoy's public-by-default Chef graph, then add scoped auth only when a workflow needs private
-          shopping-list state, recipe-cover management, token management, or delegated access.
-        </Text>
-      </CookbookHeader>
+      )}
+      />
 
       <section className="grid gap-4 border-b border-[var(--sj-border-strong)] py-6 md:grid-cols-4">
         {[
@@ -575,13 +580,9 @@ export default function Developers() {
 
       <nav aria-label="Developer guide sections" className="flex flex-wrap gap-2 border-b border-[var(--sj-border-strong)] py-4">
         {guideSections.map((section) => (
-          <a
-            key={section}
-            href={`#${sectionId(section)}`}
-            className="inline-flex min-h-9 items-center border border-[var(--sj-border)] px-3 font-sj-ui text-xs font-bold text-[var(--sj-ink)] underline decoration-transparent underline-offset-4 hover:border-[var(--sj-border-strong)] hover:decoration-[var(--sj-brass)]"
-          >
+          <Button key={section} href={`#${sectionId(section)}`} plain size="sm">
             {section}
-          </a>
+          </Button>
         ))}
       </nav>
 
@@ -592,7 +593,7 @@ export default function Developers() {
               curl + jq
             </p>
             <h3 className="mt-2 font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">First successful calls</h3>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Anonymous public reads work immediately. For the first external token, use delegated approval: the client shows an approval URL, the chef signs into Spoonjoy, and polling returns a one-time-display bearer token.
             </Text>
           </div>
@@ -615,14 +616,14 @@ export default function Developers() {
             <ul className="mt-3 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
               {currentCapabilities.notYetAvailable.map((item) => <li key={item}>- {item}</li>)}
             </ul>
-            <Text className="mt-3">
-              Corporate tenant/admin APIs, inventory, meal plans, full exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are not in API v1 yet; they are future API surface, not hidden current endpoints.
+            <Text tone="muted" className="mt-3">
+              {claim("Corporate tenant/admin APIs, inventory, meal plans, organization exports, canonical unit conversion, webhooks, REST Hooks, batch mutations, and recipe export endpoints are not in API v1 yet; they are future API surface, not hidden current endpoints.", { source: { test: "test/routes/api-v1-shell.test.ts::/api/v1 shell > has no tenant, admin, inventory, meal-plan, unit, webhook, batch or recipe-export endpoints, published or hidden" }, verify: [{ testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > has no tenant, admin, inventory, meal-plan, unit, webhook, batch or recipe-export endpoints, published or hidden" }] })}
             </Text>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Delegated approval helper endpoints under /api/tools/* are part of the current public connection flow. Other legacy app-only /api/* routes are not the external contract.
             </Text>
-            <Text className="mt-3">
-              Legacy /api/* routes reject OAuth access tokens that are audience-bound to /mcp. New external REST clients should use /api/v1/*.
+            <Text tone="muted" className="mt-3">
+              {claim("Legacy /api/* routes reject OAuth access tokens that are audience-bound to /mcp. New external REST clients should use /api/v1/*.", { source: { test: "test/routes/api.test.ts::Spoonjoy REST API route > rejects MCP audience-bound OAuth tokens on the legacy REST surface" }, verify: [{ testExists: "test/routes/api.test.ts::Spoonjoy REST API route > rejects MCP audience-bound OAuth tokens on the legacy REST surface" }] })}
             </Text>
           </div>
         </div>
@@ -639,12 +640,9 @@ export default function Developers() {
                 <li key={profile.title} className="flex gap-3 text-sm/6 text-[var(--sj-ink-soft)]">
                   <span className="mt-2 size-1.5 shrink-0 rounded-full bg-[var(--sj-brass)]" aria-hidden="true" />
                   <span>
-                    <a
-                      href={profile.href}
-                      className="font-sj-ui font-bold text-[var(--sj-ink)] underline decoration-[var(--sj-brass)] underline-offset-4"
-                    >
+                    <Link href={profile.href} tone="secondary">
                       {profile.title}
-                    </a>
+                    </Link>
                     : {profile.body}
                   </span>
                 </li>
@@ -681,7 +679,7 @@ export default function Developers() {
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">
               Native Apple
             </p>
-            <Text className="mt-3">
+            <Text tone="muted" className="mt-3">
               Spoonjoy Apple dogfoods the public REST and OAuth contracts with a real HTTPS universal-link redirect, Keychain-backed token storage, and the same offline sync rules as in-app UI, Siri, and Shortcuts.
             </Text>
             <ul className="mt-4 grid gap-2 text-sm/6 text-[var(--sj-ink-soft)]">
@@ -746,8 +744,8 @@ export default function Developers() {
         <div className="grid gap-4 md:grid-cols-2">
           <article className="border-y border-[var(--sj-border)] py-5">
             <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">API v1 REST response shape</h3>
-            <Text className="mt-2">
-              /api/v1 REST resources return ok, requestId, and data or error fields. Raw OpenAPI documents are the exception.
+            <Text tone="muted" className="mt-2">
+              {claim("/api/v1 REST resources return ok, requestId, and data or error fields. Raw OpenAPI documents are the exception.", { source: { test: "test/routes/api-v1-shell.test.ts::/api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers" }, verify: [{ testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > serves the exact discovery envelope with request IDs and CORS headers" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns stable envelopes for unknown endpoints, unsupported methods, and malformed JSON" }, { testExists: "test/routes/api-v1-openapi.test.ts::GET /api/v1/openapi.json > serves the generated OpenAPI document directly with v1 headers" }] })}
             </Text>
             <pre className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
               {`{ "ok": true, "requestId": "req_example", "data": {} }\n{ "ok": false, "requestId": "req_example", "error": { "code": "invalid_token", "status": 401 } }`}
@@ -755,8 +753,8 @@ export default function Developers() {
           </article>
           <article className="border-y border-[var(--sj-border)] py-5">
             <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Protocol exceptions</h3>
-            <Text className="mt-2">
-              OAuth endpoints use OAuth token/error JSON except 429 rate limits, delegated /api/tools/* helpers use the legacy helper envelope, and /mcp uses JSON-RPC result/error objects.
+            <Text tone="muted" className="mt-2">
+              {claim("OAuth endpoints use OAuth token/error JSON except 429 rate limits, delegated /api/tools/* helpers use the legacy helper envelope, and /mcp uses JSON-RPC result/error objects.", { source: { test: "test/routes/oauth-token-formats.test.ts::/oauth/token response formats > answers a refused grant with OAuth error JSON, not Spoonjoy's API envelope" }, verify: [{ testExists: "test/routes/oauth-token-formats.test.ts::/oauth/token response formats > answers a refused grant with OAuth error JSON, not Spoonjoy's API envelope" }, { testExists: "test/routes/oauth-token-formats.test.ts::/oauth/token response formats > answers a rate-limited request with Spoonjoy's 429 body and Retry-After instead of an OAuth error" }, { testExists: "test/routes/api.test.ts::Spoonjoy REST API route > exposes generic tool calls without allowing unauthenticated ownerEmail writes" }, { testExists: "test/routes/api.test.ts::Spoonjoy REST API route > returns structured REST errors" }, { testExists: "test/routes/mcp.test.ts::/mcp route > handles initialize + tools/list + a tools/call end to end when authenticated" }, { testExists: "test/lib/mcp/http-mcp.server.test.ts::handleMcpHttpRequest > returns a JSON-RPC parse error for an invalid (authenticated) body" }] })}
             </Text>
             <pre className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
               {`OAuth: { "access_token": "sj_...", "refresh_token": "ort_..." }\nAgent helper: { "ok": true, "data": { "status": "pending" } }\nMCP: { "jsonrpc": "2.0", "result": {} }`}
@@ -766,13 +764,12 @@ export default function Developers() {
       </SectionShell>
 
       <SectionShell title="OAuth And Delegated Flows">
-        <Text className="mb-5">
-          Browser clients may call /oauth/register, /oauth/token, and /oauth/revoke cross-origin; those endpoints answer OPTIONS with CORS headers.
-          Cookie-authenticated API mutations remain same-origin session calls and should never rely on copied cookies in external clients.
-        </Text>
-        <Text className="mb-5">
-          Do not request `offline_access` in OAuth authorize. OAuth clients can request account scopes, kitchen scopes, or least-privilege public, recipe, cookbook, and shopping-list scopes; refresh tokens are returned by the authorization-code flow.
-        </Text>
+        <Text tone="muted" className="mb-5">
+          {claim("Browser clients may call /oauth/register, /oauth/token, and /oauth/revoke cross-origin; those endpoints answer OPTIONS with CORS headers. Cookie-authenticated API mutations remain same-origin session calls and should never rely on copied cookies in external clients.", { source: { test: "test/routes/oauth-cors.test.ts::OAuth route CORS > preflights dynamic registration without touching storage" }, verify: [{ testExists: "test/routes/oauth-cors.test.ts::OAuth route CORS > preflights dynamic registration without touching storage" }, { testExists: "test/routes/oauth-cors.test.ts::OAuth route CORS > preflights token exchange without returning an unexpected server error" }, { testExists: "test/routes/oauth-cors.test.ts::OAuth route CORS > preflights refresh-token revocation" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > handles CORS preflight for any v1 path" }] })}
+            </Text>
+        <Text tone="muted" className="mb-5">
+          {claim("Do not request `offline_access` in OAuth authorize. OAuth clients can request account scopes, kitchen scopes, or least-privilege public, recipe, cookbook, and shopping-list scopes; refresh tokens are returned by the authorization-code flow.", { source: { test: "test/lib/oauth-server.server.test.ts::normalizeScope > accepts account, kitchen and least-privilege public, recipe, cookbook and shopping-list scopes, and refuses offline_access" }, verify: [{ testExists: "test/lib/oauth-server.server.test.ts::normalizeScope > accepts account, kitchen and least-privilege public, recipe, cookbook and shopping-list scopes, and refuses offline_access" }, { testExists: "test/lib/oauth-routes.server.test.ts::handleOAuthToken > exchanges a valid code for access + refresh tokens" }] })}
+            </Text>
         <div className="grid gap-4">
           {authFlows.map((flow) => (
             <article
@@ -809,10 +806,10 @@ export default function Developers() {
             </div>
           ))}
         </div>
-        <Text className="mt-4">
+        <Text tone="muted" className="mt-4">
           OAuth clients may request the delegated scopes above directly. Token-management scopes remain personal-token or Session-only and are not granted by OAuth.
         </Text>
-        <Text className="mt-3">
+        <Text tone="muted" className="mt-3">
           Blank OAuth authorize scope defaults to kitchen:read. Omitted delegated approval scopes default to shopping_list:read shopping_list:write. Omit resource for REST OAuth apps. Use resource=https://spoonjoy.app/mcp only for MCP OAuth; resource-bound MCP tokens are rejected by REST API v1. OAuth kitchen scopes do not grant tokens:read or tokens:write.
         </Text>
       </SectionShell>
@@ -842,7 +839,7 @@ export default function Developers() {
       </SectionShell>
 
       <SectionShell title="Offline Product Contract">
-        <Text className="mb-5">
+        <Text tone="muted" className="mb-5">
           Native clients treat offline as product behavior. They restore cached reads only inside the account/environment/schema boundary, preserve freshness metadata, apply tombstones before advancing cursors, and queue only safe product mutations.
         </Text>
         <div className="grid gap-3">
@@ -919,27 +916,25 @@ export default function Developers() {
             <article key={title} className="border-y border-[var(--sj-border)] py-5">
               <Icon className="size-5 text-[var(--sj-brass)]" aria-hidden="true" />
               <h3 className="mt-3 font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">{title}</h3>
-              <Text className="mt-2">{body}</Text>
+              <Text tone="muted" className="mt-2">{body}</Text>
             </article>
           ))}
         </div>
       </SectionShell>
 
       <SectionShell title="Sync And Safety">
-        <Text className="mb-5">
-          Recipe and cookbook lists are public catalog search endpoints today. The query parameter wins when both query and q are supplied;
-          lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Native owner sync lives at /api/v1/me/sync and includes owned recipe/cookbook delete tombstones.
-        </Text>
-        <Text className="mb-5">
-          Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Store nextCursor after applying each native sync or shopping-list sync batch and retry mutations with stable clientMutationId values.
-        </Text>
-        <Text className="mb-5">
-          Recipe ingredient quantities, units, servings, temperatures, and timers are original author data in API v1. Units are free-form display strings,
-          not a canonical conversion model; there is no /api/v1/units registry or density table yet.
-        </Text>
-        <Text className="mb-5">
-          API v1 is rate limited by IP and credential before authentication work. Rate-limited responses return 429 and Retry-After; configured limits are edge abuse protection, not a globally precise quota meter.
-        </Text>
+        <Text tone="muted" className="mb-5">
+          {claim("Recipe and cookbook lists are public catalog search endpoints today. The query parameter wins when both query and q are supplied; lists include cursor, nextCursor, hasMore, cover images, canonicalUrl, and attribution fields. Native owner sync lives at /api/v1/me/sync and includes owned recipe/cookbook delete tombstones.", { source: { test: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, verify: [{ testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, { testExists: "test/routes/api-v1-cookbooks.test.ts::API v1 public cookbook reads > searches public cookbooks anonymously with query alias and limit behavior" }, { testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > takes query over q, pages with cursor, nextCursor and hasMore, and sends no ETag or Last-Modified" }, { testExists: "test/routes/api-v1-cookbooks.test.ts::API v1 public cookbook reads > takes query over q and sends no ETag or Last-Modified" }, { testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > uses explicit active covers and exposes provenance for recipe list and detail" }, { testExists: "test/routes/api-v1-native-sync.test.ts::API v1 native account sync > returns durable recipe and cookbook delete tombstones for native offline caches" }] })}
+            </Text>
+        <Text tone="muted" className="mb-5">
+          {claim("Recipe import is an authenticated native app and automation surface at /api/v1/recipes/import. Store nextCursor after applying each native sync or shopping-list sync batch and retry mutations with stable clientMutationId values.", { source: { test: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > rejects malformed source payloads and enforces bearer kitchen write scope" }, verify: [{ testExists: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > rejects malformed source payloads and enforces bearer kitchen write scope" }, { testExists: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > registers POST /api/v1/recipes/import with kitchen write scope" }] })}
+            </Text>
+        <Text tone="muted" className="mb-5">
+          {claim("Recipe ingredient quantities, units, servings, and step durations are original author data in API v1. Units are free-form display strings, not a canonical conversion model; there is no /api/v1/units registry or density table yet.", { source: { test: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success" }, verify: [{ testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > returns recipe detail with steps, ingredients, cookbook links, and scoped bearer success" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > has no tenant, admin, inventory, meal-plan, unit, webhook, batch or recipe-export endpoints, published or hidden" }] })}
+            </Text>
+        <Text tone="muted" className="mb-5">
+          {claim("API v1 is rate limited by IP and credential before authentication work. Rate-limited responses return 429 and Retry-After; configured limits are edge abuse protection, not a globally precise quota meter.", { source: { test: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns the v1 error envelope and Retry-After when the rate limiter denies a request before auth" }, verify: [{ testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns the v1 error envelope and Retry-After when the rate limiter denies a request before auth" }, { testExists: "test/lib/rate-limit.server.test.ts::enforceRateLimit > uses the IP limiter when no token is present" }, { testExists: "test/lib/rate-limit.server.test.ts::enforceRateLimit > uses the IP guard and token limiter when both token and limiter are present" }] })}
+            </Text>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
           <div className="grid gap-3">
             {syncSafetyRows.map(([label, body]) => (
@@ -964,15 +959,15 @@ export default function Developers() {
       <SectionShell title="Client Starting Points">
         <div className="grid gap-4 md:grid-cols-3">
           {[
-            ["Public catalog", "GET /api/v1/recipes and GET /api/v1/cookbooks need no token.", BookOpen],
-            ["Recipe import", "POST /api/v1/recipes/import uses kitchen:write plus a stable clientMutationId.", Braces],
+            ["Public catalog", claim("GET /api/v1/recipes and GET /api/v1/cookbooks need no token.", { source: { test: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, verify: [{ testExists: "test/routes/api-v1-recipes.test.ts::API v1 public recipe reads > searches public recipes anonymously with query alias and limit behavior" }, { testExists: "test/routes/api-v1-cookbooks.test.ts::API v1 public cookbook reads > searches public cookbooks anonymously with query alias and limit behavior" }] }), BookOpen],
+            ["Recipe import", claim("POST /api/v1/recipes/import uses kitchen:write plus a stable clientMutationId.", { source: { test: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > rejects malformed source payloads and enforces bearer kitchen write scope" }, verify: [{ testExists: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > rejects malformed source payloads and enforces bearer kitchen write scope" }, { testExists: "test/routes/api-v1-recipe-import.test.ts::API v1 recipe import > checks idempotency conflicts before provider/import work" }] }), Braces],
             ["Private list", "Use shopping-list read and write scopes for pantry-style clients.", RefreshCw],
-            ["Machine errors", "Every v1 error returns ok false, requestId, code, message, and status.", Braces],
+            ["Machine errors", claim("Every v1 error returns ok false, requestId, code, message, and status.", { source: { test: "test/routes/api-v1-shell.test.ts::/api/v1 shell > serializes error details and internal fallback errors" }, verify: [{ testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > serializes error details and internal fallback errors" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns the v1 error envelope and Retry-After when the rate limiter denies a request before auth" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns invalid_token for optional-auth routes when a bad bearer is present" }, { testExists: "test/routes/api-v1-shell.test.ts::/api/v1 shell > returns stable envelopes for unknown endpoints, unsupported methods, and malformed JSON" }] }), Braces],
           ].map(([title, body, Icon]) => (
             <article key={title as string} className="border-t border-[var(--sj-border)] pt-4">
               <Icon className="size-5 text-[var(--sj-brass)]" aria-hidden="true" />
               <h3 className="mt-3 font-sj-display text-xl/7 font-semibold text-[var(--sj-ink)]">{title as string}</h3>
-              <Text className="mt-1">{body as string}</Text>
+              <Text tone="muted" className="mt-1">{body as string}</Text>
             </article>
           ))}
         </div>

@@ -1,68 +1,8 @@
 /**
  * Quick Actions - Helper utilities for common contextual actions
  * 
- * Provides share functionality (native share API with clipboard fallback)
- * and shopping list integration.
+ * Shopping list integration. Sharing is HX's ShareButton and lib-share.
  */
-
-export interface ShareOptions {
-  /** Title to share */
-  title: string
-  /** Text/description to share */
-  text?: string
-  /** URL to share */
-  url: string
-}
-
-export interface ShareResult {
-  /** Whether share was successful */
-  success: boolean
-  /** Method used: 'native' | 'clipboard' */
-  method: 'native' | 'clipboard'
-}
-
-/**
- * Check if native share is supported
- */
-export function isNativeShareSupported(): boolean {
-  if (typeof navigator === 'undefined') return false
-  return typeof navigator.share === 'function'
-}
-
-/**
- * Share content using native share API or clipboard fallback
- * 
- * @param options - Share options
- * @returns Promise resolving to share result
- */
-export async function shareContent(options: ShareOptions): Promise<ShareResult> {
-  const { title, text, url } = options
-
-  // Try native share first
-  if (isNativeShareSupported()) {
-    try {
-      await navigator.share({
-        title,
-        text,
-        url,
-      })
-      return { success: true, method: 'native' }
-    } catch (error) {
-      // User cancellation/share failure is expected; silently fall back to clipboard.
-    }
-  }
-
-  // Fall back to clipboard
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(url)
-      return { success: true, method: 'clipboard' }
-    }
-    return { success: false, method: 'clipboard' }
-  } catch {
-    return { success: false, method: 'clipboard' }
-  }
-}
 
 export interface AddToListOptions {
   /** Recipe ID to add */

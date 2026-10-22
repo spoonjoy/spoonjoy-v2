@@ -9,7 +9,7 @@ import {
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
 import { LogOut } from "lucide-react";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
@@ -20,8 +20,10 @@ import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { AccountDataSection } from "~/components/account/AccountDataSection";
-import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
+import { claim } from "~/lib/ouro/claims";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -29,6 +31,8 @@ export function meta({}: Route.MetaArgs) {
     { name: "description", content: "Manage your Spoonjoy account settings." },
   ];
 }
+
+const PASSWORD_LENGTH_HINT = claim("Must be at least 8 characters", { source: { test: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > action - change password > refuses a new password under 8 characters and saves one of exactly 8, when changing or setting it" }, verify: [{ testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > action - change password > refuses a new password under 8 characters and saves one of exactly 8, when changing or setting it" }] });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   return loadAccountSettings({ request, context });
@@ -136,10 +140,10 @@ export default function AccountSettings() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      <CookbookHeader
+      <PageHeader
         eyebrow="Kitchen identity"
         title="Account settings"
-        action={(
+        actions={(
           // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
           // so it works before the page hydrates and the next page loads fresh.
           <RouterForm method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
@@ -149,11 +153,10 @@ export default function AccountSettings() {
             </Button>
           </RouterForm>
         )}
-      >
-        <Text className="mt-4 max-w-2xl leading-7">
-          Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
-        </Text>
-      </CookbookHeader>
+        size="lg"
+        divider
+        description="Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents."
+      />
 
       <OAuthError error={oauthError} className="mt-4" />
 
@@ -183,7 +186,7 @@ export default function AccountSettings() {
             </Button>
         ) : null}
       >
-        <Text>The email and username attached to your kitchen.</Text>
+        <Text tone="muted">The email and username attached to your kitchen.</Text>
         {isEditing ? (
           <Form method="post" errors={userInfoErrors} render={<RouterForm />} className="mt-4 gap-4">
             <input type="hidden" name="intent" value="updateUserInfo" />
@@ -200,9 +203,9 @@ export default function AccountSettings() {
                 autoComplete="current-password"
               />
             ) : (
-              <Text size="sm" className="leading-6">
-                To change your email, you need to have signed in within the last 10 minutes. If it has been longer,
-                sign in again first.
+              <Text tone="muted" size="sm" className="leading-6">
+                {claim("To change your email, you need to have signed in within the last 10 minutes.", { source: { test: "test/routes/account-settings-email-reauth.test.tsx::Account settings - email change needs owner proof > lets a passwordless account change its email only within ten minutes of signing in" }, verify: [{ testExists: "test/routes/account-settings-email-reauth.test.tsx::Account settings - email change needs owner proof > lets a passwordless account change its email only within ten minutes of signing in" }, { fileLine: "app/lib/account-reauthentication.server.ts", pattern: "^export const RECENT_SIGN_IN_WINDOW_MS = 10 \\* 60 \\* 1000;$" }] })}{" "}
+                If it has been longer, sign in again first.
               </Text>
             )}
             <div className="flex flex-wrap gap-3">
@@ -226,11 +229,11 @@ export default function AccountSettings() {
         ) : null}
         {!isEditing && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="border-y border-[var(--sj-border)] py-4"><Text>
+            <div className="border-y border-[var(--sj-border)] py-4"><Text tone="muted">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
               {user.email}
             </Text></div>
-            <div className="border-y border-[var(--sj-border)] py-4"><Text>
+            <div className="border-y border-[var(--sj-border)] py-4"><Text tone="muted">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Username</span>
               {user.username}
             </Text></div>
@@ -241,13 +244,13 @@ export default function AccountSettings() {
 
       {/* Profile Photo Section */}
       <SettingsPanel testId="profile-photo-section" title="Profile photo">
-        <Text className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
+        <Text tone="muted" className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
         <ProfilePhotoField photoUrl={user.photoUrl} />
       </SettingsPanel>
 
       {/* OAuth Providers Section */}
       <SettingsPanel testId="oauth-providers-section" title="Connected accounts">
-        <Text className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
+        <Text tone="muted" className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
 
         {/* Warning when can't unlink */}
         {!canUnlinkOAuth && user.oauthAccounts.length > 0 && (
@@ -277,7 +280,7 @@ export default function AccountSettings() {
                           {capitalizeProvider(provider)}
                         </strong></Text>
                       )}
-                      <Text size="sm">{account!.providerUsername}</Text>
+                      <Text tone="muted" size="sm">{account!.providerUsername}</Text>
                     </>
                   ) : (
                     <Text tone="default"><strong className="font-medium">
@@ -288,7 +291,7 @@ export default function AccountSettings() {
                 {isLinked ? (
                   isShowingUnlinkConfirm ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Text size="sm">Are you sure?</Text>
+                      <Text tone="muted" size="sm">Are you sure?</Text>
                       <RouterForm method="post" className="inline">
                         <input type="hidden" name="intent" value="unlinkOAuth" />
                         <input type="hidden" name="provider" value={provider} />
@@ -339,7 +342,7 @@ export default function AccountSettings() {
       </SettingsPanel>
 
       <SettingsPanel testId="api-access-section" title="API and app access">
-        <Text className="mt-1">
+        <Text tone="muted" className="mt-1">
           Revoke personal, delegated, and OAuth app access without exposing token secrets.
         </Text>
 
@@ -357,7 +360,7 @@ export default function AccountSettings() {
                   >
                     <div className="min-w-0">
                       <Text tone="default"><strong className="font-medium">{credential.name}</strong></Text>
-                      <Text size="sm" className="break-words">
+                      <Text tone="muted" size="sm" className="break-words">
                         {credential.tokenPrefix}... · {credential.scopes.join(", ") || "No scopes"}
                       </Text>
                       <p className="text-base/6 text-[var(--sj-ink-soft)] text-xs">
@@ -377,7 +380,7 @@ export default function AccountSettings() {
                 ))}
               </div>
             ) : (
-              <Text size="sm" className="mt-2">No active bearer credentials.</Text>
+              <Text tone="muted" size="sm" className="mt-2">No active bearer credentials.</Text>
             )}
           </div>
 
@@ -396,7 +399,7 @@ export default function AccountSettings() {
                     >
                       <div className="min-w-0">
                         <Text tone="default"><strong className="font-medium">{appName}</strong></Text>
-                        <Text size="sm" className="break-words">
+                        <Text tone="muted" size="sm" className="break-words">
                           {connection.resource || "REST API"} · {connection.scopes.join(", ") || "No scopes"}
                         </Text>
                         <p className="text-base/6 text-[var(--sj-ink-soft)] break-words text-xs">Issued by {connection.issuer}</p>
@@ -421,7 +424,7 @@ export default function AccountSettings() {
                 })}
               </div>
             ) : (
-              <Text size="sm" className="mt-2">No active OAuth app connections.</Text>
+              <Text tone="muted" size="sm" className="mt-2">No active OAuth app connections.</Text>
             )}
           </div>
         </div>
@@ -429,7 +432,7 @@ export default function AccountSettings() {
 
       {/* Passkeys Section */}
       <SettingsPanel testId="passkeys-section" title="Passkeys">
-        <Text className="mt-1">
+        <Text tone="muted" className="mt-1">
           Sign in without a password using your device's biometrics or a security key.
         </Text>
 
@@ -474,12 +477,12 @@ export default function AccountSettings() {
                       <div>
                         <Text tone="default"><strong className="font-medium">{label}</strong></Text>
                         {passkey.createdAt && (
-                          <Text size="sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
+                          <Text tone="muted" size="sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
                         )}
                       </div>
                       {isConfirming ? (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Text size="sm">Are you sure?</Text>
+                          <Text tone="muted" size="sm">Are you sure?</Text>
                           <RouterForm method="post" className="inline">
                             <input type="hidden" name="intent" value="removePasskey" />
                             <input type="hidden" name="credentialId" value={passkey.id} />
@@ -531,7 +534,7 @@ export default function AccountSettings() {
 
       {/* Password Section */}
       <SettingsPanel testId="password-section" title="Password">
-        <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
+        <Text tone="muted" className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
         {passwordAnswer?.success && passwordAnswer.message ? (
           <div role="status" className="mt-4 text-sm text-[var(--sj-herb)]">{passwordAnswer.message}</div>
         ) : null}
@@ -543,7 +546,7 @@ export default function AccountSettings() {
                 <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                 <TextField
                   label="New password"
-                  description="Must be at least 8 characters"
+                  description={PASSWORD_LENGTH_HINT}
                   type="password"
                   name="newPassword"
                   autoComplete="new-password"
@@ -568,7 +571,7 @@ export default function AccountSettings() {
               </Form>
             ) : passwordFormState === "removeConfirm" ? (
               <div className="space-y-4">
-                <Text>Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
+                <Text tone="muted">Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
                 <RouterForm method="post" className="grid gap-4">
                   <input type="hidden" name="intent" value="removePassword" />
                   <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
@@ -600,7 +603,7 @@ export default function AccountSettings() {
                 <input type="hidden" name="intent" value="setPassword" />
                 <TextField
                   label="New password"
-                  description="Must be at least 8 characters"
+                  description={PASSWORD_LENGTH_HINT}
                   type="password"
                   name="newPassword"
                   autoComplete="new-password"
@@ -617,7 +620,7 @@ export default function AccountSettings() {
               </Form>
             ) : (
               <div>
-                <Text className="mb-4">
+                <Text tone="muted" className="mb-4">
                   You don't have a password set. Set one to enable email/password login.
                 </Text>
                 <Button type="button" plain onClick={() => openPasswordForm("set")}>
@@ -630,13 +633,13 @@ export default function AccountSettings() {
 
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="sign-out-everywhere">
           <Text tone="default"><strong className="font-medium">Sign out everywhere</strong></Text>
-          <Text size="sm" className="mt-1">
-            Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app,
-            agent and API token, including Claude. You stay signed in here; reconnect what you still use afterwards.
+          <Text tone="muted" size="sm" className="mt-1">
+            {claim("Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app, agent and API token, including Claude.", { source: { test: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > bearer credentials > sign out everywhere revokes API tokens, agent tokens, OAuth and MCP connections, unused codes and approved agent requests" }, verify: [{ testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > bearer credentials > sign out everywhere revokes API tokens, agent tokens, OAuth and MCP connections, unused codes and approved agent requests" }, { testExists: "test/routes/account-settings-sessions.test.tsx::Account settings - revocable sessions > action - sign out everywhere > revokes every existing session and re-issues this browser's session at the new version" }] })}{" "}
+            You stay signed in here; reconnect what you still use afterwards.
           </Text>
           {isConfirmingSignOutEverywhere ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Text size="sm">Are you sure?</Text>
+              <Text tone="muted" size="sm">Are you sure?</Text>
               <RouterForm method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
                 <input type="hidden" name="intent" value="signOutEverywhere" />
                 <Button type="submit" variant="destructive" aria-label="Confirm sign out everywhere">

@@ -222,48 +222,6 @@ describe("Search Route", () => {
       expect((screen.getByLabelText("Search terms") as HTMLInputElement).value).toBe("half typed");
     });
 
-    it("submits the search form when Enter is pressed in the search field", async () => {
-      const requestSubmit = vi
-        .spyOn(HTMLFormElement.prototype, "requestSubmit")
-        .mockImplementation(() => {});
-      const Stub = createTestRoutesStub([
-        {
-          path: "/search",
-          Component: Search,
-          loader: () => ({ query: "", scope: "all", isAuthenticated: false, results: [] }),
-        },
-      ]);
-
-      try {
-        render(<Stub initialEntries={["/search"]} />);
-        fireEvent.keyDown(await screen.findByRole("searchbox"), { key: "Enter" });
-        expect(requestSubmit).toHaveBeenCalledTimes(1);
-      } finally {
-        requestSubmit.mockRestore();
-      }
-    });
-
-    it("does not submit the search form for ordinary typing keys", async () => {
-      const requestSubmit = vi
-        .spyOn(HTMLFormElement.prototype, "requestSubmit")
-        .mockImplementation(() => {});
-      const Stub = createTestRoutesStub([
-        {
-          path: "/search",
-          Component: Search,
-          loader: () => ({ query: "", scope: "all", isAuthenticated: false, results: [] }),
-        },
-      ]);
-
-      try {
-        render(<Stub initialEntries={["/search"]} />);
-        fireEvent.keyDown(await screen.findByRole("searchbox"), { key: "t" });
-        expect(requestSubmit).not.toHaveBeenCalled();
-      } finally {
-        requestSubmit.mockRestore();
-      }
-    });
-
     it("renders recipe, cookbook, chef, and private shopping-list result cards", async () => {
       const Stub = createTestRoutesStub([
         {
@@ -343,6 +301,9 @@ describe("Search Route", () => {
       expect(recipeLink).toHaveAttribute("href", "/recipes/recipe-1");
       expect(recipeLink).not.toHaveAttribute("aria-label");
       expect(recipeLink).toHaveAccessibleDescription("Editorial photo tomato basil simmer");
+      expect(screen.getByRole("list", { name: "Results" })).toContainElement(recipeLink);
+      // The title is the result's heading, as before.
+      expect(screen.getByRole("heading", { level: 2, name: "Tomato Sauce" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Cookbook Sunday Sauces Cookbook by chef-ari$/ })).toHaveAttribute("href", "/cookbooks/cookbook-1");
       expect(screen.getByRole("link", { name: /^Chef chef-ari Chef kitchen/ })).toHaveAttribute("href", "/users/chef-ari");
       expect(screen.getByRole("link", { name: /^Shopping List Private tomato paste Shopping list item for chef-ari/ })).toHaveAttribute("href", "/shopping-list");

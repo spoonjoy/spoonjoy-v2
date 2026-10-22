@@ -2,7 +2,7 @@
 
 import { Autocomplete as BaseAutocomplete } from "@base-ui/react/autocomplete";
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode, type Ref, type RefCallback, type RefObject } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
@@ -12,6 +12,7 @@ import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { usePickerSheet } from "~/lib/ouro/use-sheet-presentation";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { useMergedRef } from "~/lib/ouro/refs";
 import {
   chipClass,
@@ -36,11 +37,16 @@ import {
  */
 export type ComboboxItem = string | { value: string; label: string; disabled?: boolean | undefined };
 
-/** Props every Combobox takes, whatever it picks. */
+/**
+ * Props every Combobox takes, whatever it picks.
+ *
+ * @claim "Props every Combobox takes, whatever it" registry/ouro/components/ouro/combobox/combobox.test-d.ts verify:fileLine(registry/ouro/components/ouro/combobox/combobox.test-d.ts, /expectTypeOf<\{\slabel:\s"Herb";\sitems:\s\["Basil",\s"Dill"\]\s\}>\(\)\.toExtend<ComboboxProps>/)
+ */
 export interface ComboboxBaseProps {
   /**
    * What the field is for, shown above it and read as its name. Required: every control
    * needs a name. To hide it visually, keep it and add `hideLabel`. A placeholder is not a label.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/combobox/combobox.test-d.ts verify:fileLine(registry/ouro/components/ouro/combobox/combobox.test-d.ts, /expectTypeOf<\{\sitems:\sstring\[\]\s\}>\(\)\.not\.toExtend<ComboboxProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the field's name. */
@@ -245,10 +251,39 @@ interface ControlProps {
 
 /** Field's messages and root name Combobox. */
 const owner = { name: "Combobox", data: "combobox" };
+/** Marks the hidden input Base UI submits a picked value with. */
+const markInput = controlRef("combobox", "hidden-input");
+
+/**
+ * A callback ref that marks the visually hidden Dismiss button Base UI adds for screen readers
+ * while the list is open, beside the input and beside the popup. Base UI takes neither props
+ * nor a ref for it, so the marker goes on whenever one appears under the element.
+ */
+function dismissMarker(item: string, part: string): RefCallback<HTMLElement> {
+  return (element) => {
+    const mark = () => {
+      for (const dismiss of element!.querySelectorAll('span[role="button"]:not([data-base-ui-focus-guard])')) {
+        dismiss.setAttribute("data-ouro-control", item);
+        dismiss.setAttribute("data-ouro-part", part);
+      }
+    };
+    mark();
+    const observer = new MutationObserver(mark);
+    observer.observe(element!, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  };
+}
+const markDismiss = dismissMarker("combobox", "dismiss");
+const markPopupDismiss = dismissMarker("combobox", "popup-dismiss");
 
 const toOption = (item: ComboboxItem): Option => (typeof item === "string" ? { value: item, label: item } : item);
 
-/** Icons drawn in the text color at 16px, like the other Ouro icons. */
+/**
+ * Icons drawn in the text color at 16px, like the other Ouro icons.
+ *
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /viewBox="0\s0\s16\s16"/)
+ * @claim "Icons drawn in the text color" registry/ouro/components/ouro/combobox/combobox.tsx verify:fileLine(registry/ouro/components/ouro/combobox/combobox.tsx, /\[&_svg\]:size-4/)
+ */
 function Icon({ children }: { children: ReactNode }): JSX.Element {
   return (
     <svg
@@ -299,6 +334,8 @@ const ChevronIcon = () => (
  * <Combobox label="Tags" name="tags" multiple items={tags} defaultValue={["Quick"]} />
  * <Combobox label="Recipe" items={results} loading={searching} onInputChange={search} />
  * <Combobox label="Cuisine" name="cuisine" allowCustomValue items={["Italian", "Thai"]} />
+ * @claim "On a phone (below 640px with" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > is a button in the field that opens a sheet titled with the label)
+ * @claim "On a phone (below 640px with" registry/ouro/components/ouro/combobox/combobox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/combobox/combobox.touch.test.tsx::Combobox on a phone > clears a single pick with a clear button beside the field, by tap or from the keyboard)
  */
 export function Combobox(props: ComboboxProps): JSX.Element {
   const {
@@ -484,7 +521,7 @@ function ListBody({
 function Popup({ loading, children }: { loading: boolean | undefined; children: ReactNode }): JSX.Element {
   return (
     <BaseCombobox.Portal data-ouro="combobox-portal" className="relative isolate z-(--ouro-layer)">
-      <BaseCombobox.Positioner sideOffset={4} className="outline-none">
+      <BaseCombobox.Positioner ref={markPopupDismiss} sideOffset={4} className="outline-none">
         <BaseCombobox.Popup data-ouro="combobox-popup" aria-busy={loading || undefined} className={popupClass}>
           {children}
         </BaseCombobox.Popup>
@@ -504,7 +541,7 @@ function EndButtons({ clearLabel }: { clearLabel: string }): JSX.Element {
     <span className={endSlotClass}>
       <BaseCombobox.Clear
         render={
-          <Button variant="plain" tone="secondary" size="sm" data-ouro-combobox-clear="" className="aspect-square px-0">
+          <Button variant="plain" tone="secondary" size="sm" data-ouro-combobox-clear="" data-ouro-control="combobox" data-ouro-part="clear" className="aspect-square px-0">
             <CrossIcon />
             <span className="sr-only">{clearLabel}</span>
           </Button>
@@ -583,7 +620,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
   const showEmpty = !onInputChange || text !== "";
 
   const renderItem = (option: Option) => (
-    <BaseCombobox.Item key={option.value} value={option} disabled={option.disabled} className={itemClass}>
+    <BaseCombobox.Item key={option.value} value={option} disabled={option.disabled} data-ouro-control="combobox" data-ouro-part="option" className={itemClass}>
       <BaseCombobox.ItemIndicator className="col-start-1 flex">
         <Icon>
           <path d="M3.5 8.5 6.5 11.5 12.5 4.5" />
@@ -607,6 +644,8 @@ function ComboboxControl(props: ControlProps): JSX.Element {
     <BaseCombobox.Input
       {...extra}
       ref={setInputRef}
+      data-ouro-control="combobox"
+      data-ouro-part="input"
       placeholder={placeholder}
       aria-describedby={sheet ? undefined : field.describedBy}
       {...(invalid && !sheet ? { "aria-invalid": true } : {})}
@@ -626,6 +665,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
         if (details.reason !== "item-press") onInputChange?.(next);
       }}
       required={required}
+      inputRef={markInput}
       openOnInputClick
       open={open}
       onOpenChange={(next: boolean, details: { reason: string }) => {
@@ -649,6 +689,8 @@ function ComboboxControl(props: ControlProps): JSX.Element {
             aria-describedby={field.describedBy}
             {...(invalid ? { "aria-invalid": true } : {})}
             data-ouro-combobox-trigger=""
+            data-ouro-control="combobox"
+            data-ouro-part="trigger"
             className={triggerClass}
             // With an inline list there is no Base UI popup for the trigger to open: it opens the sheet.
             onClick={() => setOpen(true)}
@@ -670,7 +712,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
               className={sheetClearClass}
               onClick={() => triggerRef.current?.focus()}
               render={
-                <Button variant="plain" tone="secondary" size="sm" className="aspect-square px-0">
+                <Button variant="plain" tone="secondary" size="sm" data-ouro-control="combobox" data-ouro-part="clear" className="aspect-square px-0">
                   <CrossIcon />
                   <span className="sr-only">{clearLabel}</span>
                 </Button>
@@ -689,14 +731,14 @@ function ComboboxControl(props: ControlProps): JSX.Element {
             finalFocus={triggerRef}
             footer={
               multiple ? (
-                <Button fullWidth onClick={() => setOpen(false)}>
+                <Button fullWidth data-ouro-control="combobox" data-ouro-part="done" onClick={() => setOpen(false)}>
                   {doneLabel}
                 </Button>
               ) : undefined
             }
           >
             <div data-ouro-combobox-search="" className={sheetInputClass}>
-              <div data-ouro-input-group="" className={groupClass}>
+              <div ref={markDismiss} data-ouro-input-group="" className={groupClass}>
                 {input(inputClass, { "aria-label": label })}
               </div>
             </div>
@@ -705,7 +747,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
         </div>
       ) : (
         <>
-          <BaseCombobox.InputGroup data-ouro-input-group="" className={multiple ? chipsGroupClass : groupClass}>
+          <BaseCombobox.InputGroup ref={markDismiss} data-ouro-input-group="" className={multiple ? chipsGroupClass : groupClass}>
             {multiple ? (
               <BaseCombobox.Chips className="contents">
                 <BaseCombobox.Value>
@@ -714,7 +756,7 @@ function ComboboxControl(props: ControlProps): JSX.Element {
                       {picked.map((option) => (
                         <BaseCombobox.Chip key={option.value} data-ouro-combobox-chip="" className={chipClass}>
                           <span>{option.label}</span>
-                          <BaseCombobox.ChipRemove data-ouro-combobox-chip-remove="" className={chipRemoveClass}>
+                          <BaseCombobox.ChipRemove data-ouro-combobox-chip-remove="" data-ouro-control="combobox" data-ouro-part="chip-remove" className={chipRemoveClass}>
                             <TouchTarget />
                             <CrossIcon />
                             <span className="sr-only">{removeLabel(option.label)}</span>
@@ -754,6 +796,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
   return (
     <BaseAutocomplete.Root
       items={suggestions}
+      inputRef={markInput}
       itemToStringValue={(option: Option) => option.label}
       filter={onInputChange ? null : undefined}
       required={required}
@@ -765,9 +808,11 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
         if (details.reason !== "item-press") onInputChange?.(next);
       }}
     >
-      <BaseAutocomplete.InputGroup data-ouro-input-group="" className={groupClass}>
+      <BaseAutocomplete.InputGroup ref={markDismiss} data-ouro-input-group="" className={groupClass}>
         <BaseAutocomplete.Input
           ref={setInputRef}
+          data-ouro-control="combobox"
+          data-ouro-part="input"
           placeholder={placeholder}
           aria-describedby={field.describedBy}
           {...(invalid ? { "aria-invalid": true } : {})}
@@ -783,7 +828,7 @@ function AutocompleteControl(props: ControlProps): JSX.Element {
           showEmpty={!onInputChange || value !== ""}
           className={listClass}
           renderItem={(option) => (
-            <BaseAutocomplete.Item key={option.value} value={option} disabled={option.disabled} className={itemClass}>
+            <BaseAutocomplete.Item key={option.value} value={option} disabled={option.disabled} data-ouro-control="combobox" data-ouro-part="option" className={itemClass}>
               <span className="col-start-2">{option.label}</span>
             </BaseAutocomplete.Item>
           )}

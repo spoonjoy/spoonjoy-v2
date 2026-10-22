@@ -79,6 +79,25 @@ describe("auth.server", () => {
       expect(user).not.toHaveProperty("hashedPassword");
     });
 
+    it("stores the password only as a salted bcrypt hash, different for the same password", async () => {
+      const password = "testPassword123";
+      const first = await createUser(db, faker.internet.email(), `chef_${faker.string.alphanumeric(10)}`, password);
+      const second = await createUser(db, faker.internet.email(), `chef_${faker.string.alphanumeric(10)}`, password);
+
+      const rows = await db.user.findMany({
+        where: { id: { in: [first.id, second.id] } },
+        select: { hashedPassword: true, salt: true },
+      });
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.hashedPassword).toMatch(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/);
+        expect(row.hashedPassword).not.toContain(password);
+        expect(row.salt).not.toContain(password);
+        await expect(bcrypt.compare(password, row.hashedPassword!)).resolves.toBe(true);
+      }
+      expect(rows[0]!.hashedPassword).not.toBe(rows[1]!.hashedPassword);
+    });
+
     it("should lowercase email when creating user", async () => {
       const email = "TEST@EXAMPLE.COM";
       const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);

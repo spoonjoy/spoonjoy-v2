@@ -151,31 +151,6 @@ describe('StepEditorCard', () => {
       expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument()
     })
 
-    it('renders move up button when onMoveUp is provided', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      expect(screen.getByRole('button', { name: /move up/i })).toBeInTheDocument()
-    })
-
-    it('renders move down button when onMoveDown is provided', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveDown: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      expect(screen.getByRole('button', { name: /move down/i })).toBeInTheDocument()
-    })
-
-    it('does not render move buttons when not provided', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      expect(screen.queryByRole('button', { name: /move up/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument()
-    })
   })
 
   describe('ingredient input toggle', () => {
@@ -349,25 +324,6 @@ describe('StepEditorCard', () => {
       expect(onRemove).toHaveBeenCalledTimes(1)
     })
 
-    it('calls onMoveUp when move up clicked', async () => {
-      const onMoveUp = vi.fn()
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), { onMoveUp })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      await userEvent.click(screen.getByRole('button', { name: /move up/i }))
-
-      expect(onMoveUp).toHaveBeenCalledTimes(1)
-    })
-
-    it('calls onMoveDown when move down clicked', async () => {
-      const onMoveDown = vi.fn()
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), { onMoveDown })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      await userEvent.click(screen.getByRole('button', { name: /move down/i }))
-
-      expect(onMoveDown).toHaveBeenCalledTimes(1)
-    })
   })
 
   describe('edit mode', () => {
@@ -503,26 +459,6 @@ describe('StepEditorCard', () => {
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       expect(screen.getByRole('switch')).toHaveAttribute('data-disabled')
-    })
-
-    it('disables move up button when disabled', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        disabled: true,
-        onMoveUp: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      expect(screen.getByRole('button', { name: /move up/i })).toBeDisabled()
-    })
-
-    it('disables move down button when disabled', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        disabled: true,
-        onMoveDown: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      expect(screen.getByRole('button', { name: /move down/i })).toBeDisabled()
     })
 
     it('does not call onSave when disabled', async () => {
@@ -691,10 +627,7 @@ describe('StepEditorCard', () => {
 
   describe('keyboard interaction', () => {
     it('supports Tab navigation through all interactive elements', async () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: vi.fn(),
-        onMoveDown: vi.fn(),
-      })
+      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       // Tab through elements
@@ -807,10 +740,7 @@ describe('StepEditorCard', () => {
     })
 
     it('all buttons in step card are keyboard accessible (no tabindex=-1)', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: vi.fn(),
-        onMoveDown: vi.fn(),
-      })
+      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       const buttons = screen.getAllByRole('button')
@@ -872,35 +802,12 @@ describe('StepEditorCard', () => {
       expectCoarsePointerTouchTarget(removeButton)
     })
 
-    it('move up button renders a coarse-pointer touch target', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      const moveUpButton = screen.getByRole('button', { name: /move up/i })
-      expectCoarsePointerTouchTarget(moveUpButton)
-    })
-
-    it('move down button renders a coarse-pointer touch target', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveDown: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      const moveDownButton = screen.getByRole('button', { name: /move down/i })
-      expectCoarsePointerTouchTarget(moveDownButton)
-    })
-
     it('all action buttons render coarse-pointer touch targets', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: vi.fn(),
-        onMoveDown: vi.fn(),
-      })
+      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }))
       render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
 
       const buttons = screen.getAllByRole('button')
-      expect(buttons).toHaveLength(4)
+      expect(buttons).toHaveLength(2)
 
       buttons.forEach((button) => {
         expectCoarsePointerTouchTarget(button)
@@ -1141,46 +1048,6 @@ describe('StepEditorCard', () => {
           ingredients: [{ quantity: 1, unit: 'tsp', ingredientName: 'salt' }],
         })
       )
-    })
-  })
-
-  describe('move handlers not provided', () => {
-    it('does not render move up button when onMoveUp is not provided', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: undefined,
-        onMoveDown: vi.fn(),
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      // Move up button should not be rendered when onMoveUp is not provided
-      expect(screen.queryByRole('button', { name: /move up/i })).not.toBeInTheDocument()
-      // Move down button should still be rendered
-      expect(screen.getByRole('button', { name: /move down/i })).toBeInTheDocument()
-    })
-
-    it('does not render move down button when onMoveDown is not provided', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: vi.fn(),
-        onMoveDown: undefined,
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      // Move down button should not be rendered when onMoveDown is not provided
-      expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument()
-      // Move up button should still be rendered
-      expect(screen.getByRole('button', { name: /move up/i })).toBeInTheDocument()
-    })
-
-    it('does not render either move button when both handlers are not provided', () => {
-      const Wrapper = createTestWrapper(async () => ({ parsedIngredients: [] }), {
-        onMoveUp: undefined,
-        onMoveDown: undefined,
-      })
-      render(<Wrapper initialEntries={['/recipes/recipe-1/steps/edit']} />)
-
-      // Neither move button should be rendered
-      expect(screen.queryByRole('button', { name: /move up/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument()
     })
   })
 })

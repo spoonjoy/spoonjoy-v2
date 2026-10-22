@@ -68,6 +68,12 @@
   --ouro-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ouro-duration-press: 160ms;
   --ouro-duration-sheet: 500ms;
+  --ouro-duration-draw: 240ms; /* a stroke drawn along its path: the checkbox tick, a checklist strike */
+  /* The shadow under a sheet, by the side it comes from: a hairline on its open edge and a soft shadow. */
+  --ouro-shadow-sheet-bottom: 0 -1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 -8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-top: 0 1px 0 color-mix(in oklab, var(--border) 60%, transparent), 0 8px 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-left: 8px 0 32px rgb(0 0 0 / 0.12);
+  --ouro-shadow-sheet-right: -8px 0 32px rgb(0 0 0 / 0.12);
 }
 
 .dark {
@@ -146,6 +152,34 @@
   --input: var(--sj-border-strong);
   --ring: var(--sj-brass);
   --radius: var(--sj-radius-control);
+  /* HX Heading's typeface: Spoonjoy's display serif for every heading. */
+  --font-heading: var(--font-sj-display);
+}
+
+/* Spoonjoy's phone tab bar stays solid charcoal under photo-white text in both themes. HX TabBar
+   draws its surface from --popover and its tabs from the muted and accent pairs, so those are
+   rebound for Spoonjoy's bar alone (MobileNav gives it the sj-tab-bar class, so HX's own TabBar
+   tests keep the global tokens). Unselected tabs take a solid mix rather than the translucent
+   --sj-on-photo-soft, whose overlapping icon strokes would show as seams. Its labels take the UI
+   face, like every other control. */
+.sj-tab-bar {
+  font-family: var(--font-sj-ui);
+  --popover: var(--sj-photo-charcoal);
+  --foreground: var(--sj-on-photo);
+  --muted-foreground: color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal));
+  --accent: color-mix(in srgb, var(--sj-on-photo) 14%, var(--sj-photo-charcoal));
+  --accent-foreground: var(--sj-on-photo);
+  --border: var(--sj-photo-line);
+  --ring: var(--sj-on-photo);
+}
+
+/* A charcoal panel (the developer playground's Response) under photo-white text: HX controls in it
+   take their text, border and focus ring from these tokens, so a plain button isn't charcoal on
+   charcoal. */
+.sj-on-charcoal {
+  --foreground: var(--sj-on-photo);
+  --border: var(--sj-photo-line);
+  --ring: var(--sj-on-photo);
 }
 
 /* Spoonjoy's primary action palette is not its brass text-link palette. Bind the
@@ -220,28 +254,9 @@
     --sj-shadow-soft: none;
   }
 
-  /* Navigation, the skip link and floating notices are screen controls with nothing to say on paper. */
-  .sj-skip-link,
-  .sj-desktop-topbar,
-  .sj-route-progress {
+  /* Navigation is screen chrome with nothing to say on paper. */
+  .sj-desktop-topbar {
     display: none !important;
-  }
-
-  /* Ticked ingredients are this cook's progress, not part of the recipe: print every ingredient plain,
-   * without its tick box or strike-through. */
-  #steps .sj-checklist-box,
-  #steps .sj-checklist-strike {
-    display: none !important;
-  }
-
-  /* Without its box, a row is one column. Left at the screen's 2rem box column, the name and amount
-   * would be squeezed into it and the name would print at no width at all. */
-  #steps .sj-checklist-row {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  #steps .sj-checklist-name {
-    color: var(--sj-ink) !important;
   }
 
   /* The rules below are unlayered, so they beat Tailwind's layered utilities at every breakpoint. A
@@ -286,15 +301,6 @@
   }
 }
 
-/* Toaster.className targets its body-portaled viewport, not the app-shell sibling.
-   Match MobileNav's lg/print visibility and main's safe-area + dock + gap policy.
-   Only viewport layout changes; Ouro retains all toast appearance and motion. */
-@media screen and (width < 64rem) {
-  .sj-toast-above-dock {
-    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 5.25rem);
-  }
-}
-
 html {
   background: var(--sj-page);
   /* Below 1024px the phone tab bar is fixed to the bottom of the screen. Scrolling something into
@@ -322,7 +328,9 @@ body {
   color: var(--sj-ink);
 }
 
-button,
+/* Controls use the UI face, except HX SyncStatus's Retry, which sits inside its sentence and takes
+   the sentence's face so the line keeps one height whichever state it shows (ourostack/ouro-ui#178). */
+button:not([data-ouro-control="sync-status"]),
 input,
 textarea,
 select {
@@ -330,15 +338,10 @@ select {
 }
 
 /*
- * Colours fade only while the theme is switching.
- *
- * The theme provider sets data-theme-switching on <html> for a moment around each
- * theme change (never for reduced-motion users), and only then does the page fade
- * between themes. Outside that window nothing transitions globally, so a control whose
- * colours show its state (checked, pressed, selected) changes instantly instead of
- * passing through low-contrast mid-fade colours. These rules are unlayered, so they win
- * over Tailwind's layered transition utilities, exactly as the old always-on theme fade
- * did; they have zero specificity, so unlayered component rules with a class selector
+ * Nothing transitions globally, so a control whose colours show its state (checked, pressed,
+ * selected) changes instantly instead of passing through low-contrast mid-fade colours, and a
+ * colour-scheme switch is instant too. The rule is unlayered, so it wins over Tailwind's layered
+ * transition utilities; it has zero specificity, so unlayered component rules with a class selector
  * (such as .sj-hover-lift) still set their own transitions.
  */
 /* Ouro UI subtrees ([data-ouro], on each dialog, sheet and button root) are left out: they animate
@@ -348,20 +351,10 @@ select {
   transition: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  :where(html[data-theme-switching], html[data-theme-switching] *) {
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  :where(html[data-theme-switching] :is(input, textarea, select, button)) {
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.15s ease-in-out;
-  }
-}
-
 /* Controls whose colours show their state (pressed view buttons, filter chips, checkboxes) switch
-   instantly instead of fading with the theme rules above: mid-fade, their text and background
-   pass through near-identical greys (axe measured 1.19:1 to 2.87:1 on the shopping list's view
-   buttons right after a tap). Unlayered like the rules above, and more specific, so it wins. */
+   instantly: mid-fade, their text and background pass through near-identical greys (axe measured
+   1.19:1 to 2.87:1 on the shopping list's view buttons right after a tap). Unlayered like the reset
+   above, and more specific, so it also wins over a component rule's transition. */
 .sj-instant-state {
   transition: none;
 }
@@ -437,95 +430,6 @@ body:has(#cook) .sj-mobile-surface {
   .sj-page-frame {
     padding: 2rem 2.5rem 3rem;
   }
-}
-
-.sj-desktop-topbar {
-  border-bottom: 1px solid var(--sj-border-strong);
-  background: color-mix(in srgb, var(--sj-page) 96%, transparent);
-}
-
-.sj-desktop-nav {
-  margin-inline: auto;
-  display: grid;
-  min-height: 4.75rem;
-  width: min(100%, 94rem);
-  grid-template-columns: minmax(12rem, 1fr) auto minmax(12rem, 1fr);
-  align-items: center;
-  gap: 2rem;
-  padding-inline: 2.5rem;
-  font-family: var(--font-sj-ui);
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.sj-desktop-brand,
-.sj-desktop-nav-link {
-  color: var(--sj-ink);
-  text-decoration: none;
-}
-
-.sj-desktop-brand {
-  display: inline-flex;
-  min-height: 2.75rem;
-  width: fit-content;
-  align-items: center;
-  gap: 1rem;
-}
-
-.sj-desktop-brand-logo {
-  display: block;
-  color: var(--sj-ink);
-}
-
-.sj-desktop-brand-word {
-  font-family: var(--font-sj-display);
-  font-size: 1.08rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.sj-desktop-nav-link {
-  position: relative;
-  display: inline-flex;
-  min-height: 2.75rem;
-  min-width: 2.75rem;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  padding-inline: 0;
-  color: var(--sj-ink-soft);
-  font: inherit;
-  cursor: pointer;
-}
-
-.sj-desktop-nav-link:hover,
-.sj-desktop-nav-link[data-current="true"] {
-  color: var(--sj-ink);
-}
-
-.sj-desktop-nav-link[data-current="true"]::after {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0.15rem;
-  height: 1px;
-  content: "";
-  background: var(--sj-ink);
-}
-
-.sj-desktop-nav-center,
-.sj-desktop-nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 1.65rem;
-}
-
-.sj-desktop-nav-center {
-  justify-content: center;
-}
-
-.sj-desktop-nav-actions {
-  justify-content: flex-end;
 }
 
 .sj-rule-block {
@@ -621,27 +525,6 @@ body:has(#cook) .sj-mobile-surface {
   background: linear-gradient(180deg, transparent 34%, var(--sj-photo-shade));
 }
 
-@keyframes sj-checklist-strike-draw {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-.sj-checklist-strike {
-  transform-origin: left center;
-  animation: sj-checklist-strike-draw 220ms ease-out both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sj-checklist-strike {
-    animation: none;
-    transform: scaleX(1);
-  }
-}
-
 .sj-on-photo {
   color: var(--sj-on-photo);
 }
@@ -656,30 +539,6 @@ body:has(#cook) .sj-mobile-surface {
 
 .sj-on-photo-warm {
   color: var(--sj-on-photo-warm);
-}
-
-.sj-result-tone-recipe {
-  border-color: color-mix(in srgb, var(--sj-brass) 46%, var(--sj-border));
-  background: color-mix(in srgb, var(--sj-brass) 10%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
-.sj-result-tone-cookbook {
-  border-color: color-mix(in srgb, var(--sj-herb) 48%, var(--sj-border));
-  background: color-mix(in srgb, var(--sj-herb) 10%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
-.sj-result-tone-chef {
-  border-color: var(--sj-border-strong);
-  background: color-mix(in srgb, var(--sj-charcoal) 6%, var(--sj-panel-solid));
-  color: var(--sj-ink);
-}
-
-.sj-result-tone-shopping-list-item {
-  border-color: color-mix(in srgb, var(--sj-tomato) 42%, var(--sj-border));
-  background: color-mix(in srgb, var(--sj-tomato) 9%, var(--sj-panel-solid));
-  color: var(--sj-ink);
 }
 
 .sj-receipt {
@@ -731,66 +590,6 @@ body:has(#cook) .sj-mobile-surface {
   box-shadow: var(--sj-shadow);
 }
 
-/* Skip-to-content link. Rendered by Layout in root.tsx as the first focusable
- * element so the very first Tab press jumps a keyboard / SR user past the
- * desktop nav and mobile dock straight to <main id="main">.
- *
- * Until it has focus it is visually hidden (clipped to a 1px box) rather than
- * parked off-screen above the top edge: a fixed element at a negative top still
- * paints in a full-page screenshot of a scrolled page, and screen readers still
- * read a clipped link. With focus it shows at the top-left corner. */
-.sj-skip-link {
-  position: fixed;
-  top: 0;
-  left: 0.5rem;
-  z-index: 100;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  background: var(--sj-charcoal);
-  color: var(--sj-bone);
-  font-family: var(--font-sj-ui);
-  font-weight: 600;
-  text-decoration: underline;
-  border-radius: 0 0 var(--sj-radius-small) var(--sj-radius-small);
-}
-
-.sj-skip-link:focus,
-.sj-skip-link:focus-visible {
-  width: auto;
-  height: auto;
-  padding: 0.5rem 1rem;
-  overflow: visible;
-  clip-path: none;
-  outline: 2px solid var(--sj-brass);
-  outline-offset: 2px;
-}
-
-/* Indeterminate progress bar — a thin brass sweep across the top of the page
- * while React Router is navigating or submitting. Rendered by
- * <RouteTransitionIndicator> in root.tsx. Honors reduced-motion via the
- * global override below. */
-.sj-route-progress {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--sj-brass) 30%,
-    var(--sj-brass) 60%,
-    transparent 100%
-  );
-  background-size: 50% 100%;
-  background-repeat: no-repeat;
-  animation: sj-route-progress 1.1s ease-in-out infinite;
-}
-
-@keyframes sj-route-progress {
-  0% { background-position: -50% 0; }
-  100% { background-position: 150% 0; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   /* Ouro UI subtrees ([data-ouro]) are left out: they honour reduced motion themselves, dropping
      transform motion and keeping a short opacity fade. */
@@ -805,13 +604,6 @@ body:has(#cook) .sj-mobile-surface {
 
   .sj-hover-lift:hover {
     transform: none;
-  }
-
-  /* For users who prefer reduced motion, show the progress affordance as a
-   * static brass strip — still visible, just not animated. */
-  .sj-route-progress {
-    background: var(--sj-brass);
-    animation: none;
   }
 }
 

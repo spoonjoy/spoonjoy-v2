@@ -183,6 +183,32 @@ describe("Switch", () => {
   });
 });
 
+describe("Switch right to left", () => {
+  afterEach(() => document.documentElement.removeAttribute("dir"));
+
+  it("keeps its thumb inside the track, at the start when off and the end when on, in a right-to-left page", async () => {
+    document.documentElement.dir = "rtl";
+    await commands.emulateMedia({ reducedMotion: "reduce" });
+    try {
+      const view = await render(<Switch label="Notifications" />);
+      const inside = () => {
+        const track = view.track.getBoundingClientRect();
+        const thumb = view.thumb.getBoundingClientRect();
+        return thumb.left >= track.left - 0.5 && thumb.right <= track.right + 0.5;
+      };
+      expect(inside()).toBe(true);
+      const offRight = view.thumb.getBoundingClientRect().right;
+      expect(offRight).toBeGreaterThan(view.track.getBoundingClientRect().right - view.thumb.getBoundingClientRect().width - 4);
+      await userEvent.click(view.track);
+      await expect.poll(() => view.track.getAttribute("aria-checked")).toBe("true");
+      await expect.poll(inside).toBe(true);
+      expect(view.thumb.getBoundingClientRect().left).toBeLessThan(view.track.getBoundingClientRect().left + 4);
+    } finally {
+      await commands.emulateMedia({ reducedMotion: "no-preference" });
+    }
+  });
+});
+
 describe("Switch in a Form", () => {
   it("shows a Form error for its name without blocking the form, and drops it once flipped", async () => {
     const { host, track } = await render(

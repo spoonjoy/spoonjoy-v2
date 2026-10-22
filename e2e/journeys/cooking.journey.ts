@@ -23,7 +23,10 @@ const LEMON_RICE_ID = "qa-kitchen-recipe-lemon-rice";
 const LEMON_RICE = `/recipes/${LEMON_RICE_ID}`;
 // The seeded ingredient id (scripts/seed-qa-kitchen.mjs: <recipe id>-ingredient-<step>-<slug>).
 const JASMINE_RICE_ID = `${LEMON_RICE_ID}-ingredient-1-jasmine-rice`;
-const JASMINE_RICE_QUANTITY = `ingredient-quantity-${JASMINE_RICE_ID}`;
+// A checklist row's amount is the end of its checkbox's description (its aisle comes first).
+function amount(text: string) {
+  return new RegExp(`(^| )${text}$`);
+}
 // The recipe with no hash: cook mode closed.
 const LEMON_RICE_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}$`);
 const LEMON_RICE_COOK_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}#cook$`);
@@ -38,7 +41,7 @@ function kitchenHeading(page: Page) {
 }
 
 function syncStatus(page: Page) {
-  return page.getByTestId("cook-sync-status");
+  return page.getByTestId("cook-sync-status").locator("p:not([aria-hidden])");
 }
 
 // Home, then Lemon Herb Rice through its link, so the recipe has an in-app page before it.
@@ -93,11 +96,11 @@ async function savePageScreenshot(page: Page, testInfo: TestInfo, name: string) 
 // Two presses of "Increase scale": 1× -> 1.25× -> 1.5×.
 async function scaleToOneAndAHalf(page: Page) {
   const increase = page.getByRole("button", { name: "Increase scale" });
-  const display = page.getByTestId("scale-display");
+  const display = page.getByRole("textbox", { name: "Scale", exact: true });
   await increase.click();
-  await expect(display).toHaveText("1.25×");
+  await expect(display).toHaveValue("1.25");
   await increase.click();
-  await expect(display).toHaveText("1.5×");
+  await expect(display).toHaveValue("1.5");
 }
 
 test.describe("Cooking Lemon Herb Rice", () => {
@@ -112,32 +115,31 @@ test.describe("Cooking Lemon Herb Rice", () => {
 
     test("the checklist and scale persist across a reload and a visit elsewhere @mutates", async ({ page, verifyAfterReload, expectAccessible }) => {
       const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
-      const jasmineRiceQuantity = page.getByTestId(JASMINE_RICE_QUANTITY);
-      const scaleDisplay = page.getByTestId("scale-display");
+      const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
 
       await openLemonRiceDirectly(page);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
-      await expect(jasmineRiceQuantity).toHaveText("1 cup");
+      await expect(jasmineRice).toHaveAccessibleDescription(amount("1 cup"));
 
       const saved = cookProgressSaved(page, LEMON_RICE_ID, (progress) =>
         progress.scaleFactor === 1.5 && progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
       await jasmineRice.click();
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
       await scaleToOneAndAHalf(page);
-      await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
+      await expect(jasmineRice).toHaveAccessibleDescription(amount("1 ½ cups"));
       await saved;
 
       await verifyAfterReload(async () => {
-        await expect(scaleDisplay).toHaveText("1.5×");
+        await expect(scaleDisplay).toHaveValue("1.5");
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-        await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
+        await expect(jasmineRice).toHaveAccessibleDescription(amount("1 ½ cups"));
       });
 
       // Somewhere else and back to the recipe through the app: the progress is still there.
       await openLemonRiceFromSearch(page);
-      await expect(scaleDisplay).toHaveText("1.5×");
+      await expect(scaleDisplay).toHaveValue("1.5");
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-      await expect(jasmineRiceQuantity).toHaveText("1 ½ cups");
+      await expect(jasmineRice).toHaveAccessibleDescription(amount("1 ½ cups"));
       await expectAccessible();
     });
 
@@ -214,7 +216,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toContainText("Step 1 of 3");
       await expect(page.getByRole("region", { name: "Cook the rice", exact: true })).toBeVisible();
       // Step 1's quantities follow the scale, and the checklist carries over.
-      await expect(panel.getByTestId(JASMINE_RICE_QUANTITY)).toHaveText("1 ½ cups");
+      await expect(panel.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAccessibleDescription(amount("1 ½ cups"));
       await expect(panel.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAttribute("aria-checked", "true");
       // Nothing covers the step controls on a phone (R-M2-5): the tab bar is hidden in cook mode.
       await expect(page.getByRole("navigation", { name: "Spoonjoy navigation" })).toBeHidden();
@@ -233,13 +235,13 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(panel).toBeHidden();
       await expect(page).toHaveURL(LEMON_RICE_URL);
       await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-      await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
+      await expect(page.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.5");
       // The account keeps the current step by its id, so it survives the steps being reordered.
       expect((await saved).activeStepId).toBe(`${LEMON_RICE_ID}-step-3`);
 
       await verifyAfterReload(async () => {
         await expect(jasmineRice).toHaveAttribute("aria-checked", "true");
-        await expect(page.getByTestId("scale-display")).toHaveText("1.5×");
+        await expect(page.getByRole("textbox", { name: "Scale", exact: true })).toHaveValue("1.5");
       });
 
       // The current step is part of the saved progress: cook mode reopens on step 3.
@@ -254,7 +256,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       const panel = page.getByTestId("cook-mode-panel");
       const stepTimer = panel.getByTestId("cook-mode-timer");
       const tray = panel.getByRole("region", { name: "Running timers" });
-      const riceTimer = tray.getByTestId("cook-timer-tray-item-1");
+      const riceTimer = tray.getByRole("listitem").filter({ hasText: "Step 1 · Cook the rice" });
 
       await openLemonRiceDirectly(page);
       // The reload below must find cook mode on step 2, so wait for the account to save that step.
@@ -262,7 +264,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await page.getByRole("link", { name: "Cook mode", exact: true }).click();
       await expect(panel).toContainText("Step 1 of 3");
       // Step 1 ("Cook the rice") is seeded with a 15 minute timer.
-      await expect(stepTimer).toContainText("15 min timer");
+      await expect(stepTimer).toContainText("Step 1 · Cook the rice · 15 min");
       await stepTimer.getByRole("button", { name: "Start timer", exact: true }).click();
       await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
       await expect(stepTimer).toContainText("14:5");
@@ -290,7 +292,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
         await expect(riceTimer).toContainText("14:");
       });
 
-      await riceTimer.getByRole("button", { name: "Go to step 1", exact: true }).click();
+      await riceTimer.getByRole("link", { name: "Go to Step 1 · Cook the rice", exact: true }).click();
       await expect(panel).toContainText("Step 1 of 3");
       await expect(stepTimer.getByRole("button", { name: "Pause timer", exact: true })).toBeVisible();
       await stepTimer.getByRole("button", { name: "Cancel timer", exact: true }).click();
@@ -303,7 +305,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       const jasmineRice = page.getByRole("checkbox", { name: "jasmine rice", exact: true });
       const cookedRice = page.getByRole("checkbox", { name: "Step 1: Cook the rice", exact: true });
       const checkedRows = page.locator('[role="checkbox"][aria-checked="true"]');
-      const scaleDisplay = page.getByTestId("scale-display");
+      const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
 
       await openLemonRiceDirectly(page);
       // Only the final state matches: nothing checked at 1.25× (the scale changes after the checks).
@@ -315,7 +317,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(cookedRice).toHaveAttribute("aria-checked", "true");
       // Clear progress keeps the scale; 1.25× after the reload shows the saved progress was read.
       await page.getByRole("button", { name: "Increase scale" }).click();
-      await expect(scaleDisplay).toHaveText("1.25×");
+      await expect(scaleDisplay).toHaveValue("1.25");
 
       await page.getByTestId("clear-progress-button").click();
       await expect(checkedRows).toHaveCount(0);
@@ -324,7 +326,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await saved;
 
       await verifyAfterReload(async () => {
-        await expect(scaleDisplay).toHaveText("1.25×");
+        await expect(scaleDisplay).toHaveValue("1.25");
         await expect(jasmineRice).toHaveAttribute("aria-checked", "false");
         await expect(cookedRice).toHaveAttribute("aria-checked", "false");
         await expect(checkedRows).toHaveCount(0);

@@ -276,7 +276,7 @@ describe("Recipes Index Route", () => {
     expect(await screen.findByRole("heading", { name: "Recipes worth opening." })).toBeInTheDocument();
     // Signed-in visitors must not be told to "sign in".
     expect(screen.queryByText(/before you sign in/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Every public Spoonjoy recipe, to cook, fork, save or shop from.")).toBeInTheDocument();
+    expect(screen.getByText("Public Spoonjoy recipes, to cook, fork, save or shop from.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Public Tomato Beans" })).toHaveAttribute("href", "/recipes/r1");
     expect(screen.getByRole("link", { name: /create recipe/i })).toHaveAttribute("href", "/recipes/new");
   });
@@ -309,7 +309,7 @@ describe("Recipes Index Route", () => {
     expect(await screen.findByRole("heading", { name: 'Recipes for "tomato"' })).toBeInTheDocument();
     // Signed-out visitors still see the sign-up invitation in the hero, now in one short line.
     expect(screen.getByRole("heading", { level: 1, name: "Recipes worth opening." })).toBeInTheDocument();
-    expect(screen.getByText("Every public Spoonjoy recipe, free to read. Sign up to cook, save and shop from them.")).toBeInTheDocument();
+    expect(screen.getByText("Public Spoonjoy recipes, free to read. Sign up to cook, save and shop from them.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Clear" })).toHaveAttribute("href", "/recipes");
     expect(screen.queryByRole("link", { name: /create recipe/i })).not.toBeInTheDocument();
     expect(screen.getAllByText("By rowan").length).toBeGreaterThan(0);
@@ -424,7 +424,11 @@ describe("Recipes Index Route", () => {
     fireEvent.click(showMore);
 
     const third = await screen.findByRole("link", { name: "Third Soup" });
-    expect(third).toHaveClass("border-b", "border-[var(--sj-border)]");
+    expect(third.closest('[data-ouro="item"]')).toBeInTheDocument();
+    // HX ShowMore lists rows without lines between them, so each row is an outlined Item.
+    for (const name of ["First Soup", "Second Soup", "Third Soup"]) {
+      expect(screen.getByRole("link", { name }).closest('[data-ouro="item"]')).toHaveClass("border");
+    }
     expect(screen.getByRole("link", { name: "First Soup" })).toBeInTheDocument();
     await waitFor(() => expect(third).toHaveFocus());
     expect(document.querySelector("[data-ouro-show-more-status]")).toHaveTextContent("Showing 3 recipes");
@@ -452,7 +456,7 @@ describe("Recipes Index Route", () => {
   it("returns public recipe metadata", () => {
     expect(meta({} as any)).toEqual([
       { title: "Recipes - Spoonjoy" },
-      { name: "description", content: "Browse public Spoonjoy recipes from every kitchen." },
+      { name: "description", content: "Browse public Spoonjoy recipes from kitchens across Spoonjoy." },
     ]);
   });
 });

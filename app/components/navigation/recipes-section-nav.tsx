@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { useLocation } from "react-router";
-import { Link } from "~/components/navigation/app-link";
+import { Button } from "~/components/button";
 
 /**
  * The switch at the top of the phone Recipes tab: your recipes, the ones you saved, and every
@@ -13,33 +13,20 @@ const sections = [
   { href: "/recipes", label: "Everyone" },
 ];
 
+// TODO(ouro-hx: tabs link mode, ourostack/ouro-ui#128): The three lists become HX Tabs over links once Tabs can be links.
 export function RecipesSectionNav({ className }: { className?: string }) {
   const { pathname } = useLocation();
 
   return (
-    <nav aria-label="Recipe lists" className={clsx("mb-6 lg:hidden", className)} data-testid="recipes-section-nav">
-      <ul className="m-0 grid list-none grid-cols-3 gap-1 rounded-full border border-[var(--sj-border)] bg-[var(--sj-flour)] p-1">
-        {sections.map(({ href, label }) => {
-          const active = pathname === href;
-          return (
-            <li key={href} className="flex">
-              <Link
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={clsx(
-                  "flex min-h-11 flex-1 items-center justify-center rounded-full font-sj-ui text-sm font-semibold no-underline transition duration-150",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-ink)]",
-                  active
-                    ? "bg-[var(--sj-ink)] text-[var(--sj-paper)]"
-                    : "text-[var(--sj-ink-soft)]",
-                )}
-              >
-                {label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+    <nav aria-label="Recipe lists" className={clsx("mb-6 grid grid-cols-3 gap-1 lg:hidden", className)} data-testid="recipes-section-nav">
+      {sections.map(({ href, label }) => {
+        const active = pathname === href;
+        return (
+          <Button key={href} href={href} plain={!active} aria-current={active ? "page" : undefined}>
+            {label}
+          </Button>
+        );
+      })}
     </nav>
   );
 }

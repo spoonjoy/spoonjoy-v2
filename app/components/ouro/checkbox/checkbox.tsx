@@ -5,6 +5,7 @@ import type { JSX, ReactNode, Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -15,6 +16,7 @@ export interface CheckboxProps {
   /**
    * What checking it means, shown to the right of the box and read as its name. Required:
    * every control needs a name. To hide it visually, keep it and add `hideLabel`.
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/checkbox/checkbox.test-d.ts verify:fileLine(registry/ouro/components/ouro/checkbox/checkbox.test-d.ts, /\{\schecked:\strue\s\}>\(\)\.not\.toExtend<CheckboxProps>/)
    */
   label: string;
   /** Hides the label visually; screen readers still read it as the checkbox's name. */
@@ -53,6 +55,7 @@ export interface CheckboxProps {
    * clear it in `onCheckedChange`, as in
    * `<Checkbox indeterminate={some} checked={all} onCheckedChange={toggleAll}>`. The box
    * submits only while `checked`.
+   * @claim "box does when some of its items are" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox > announces the indeterminate state as mixed and shows a dash)
    */
   indeterminate?: boolean | undefined;
   /** Shows the state but ignores clicks and keys, unlike `disabled`, which also fades it. */
@@ -89,6 +92,8 @@ export interface CheckboxProps {
 
 /** Field's messages and root name Checkbox, and put the box before its label. */
 const owner = { name: "Checkbox", data: "checkbox", layout: "inline" } as const;
+/** Marks the hidden input Base UI submits the box with. */
+const markInput = controlRef("checkbox", "hidden-input");
 
 /** The box, inside the Field: it takes its name, description and error ids from the field. */
 function CheckboxBox(props: {
@@ -105,6 +110,9 @@ function CheckboxBox(props: {
   return (
     <BaseCheckbox.Root
       {...rest}
+      inputRef={markInput}
+      data-ouro-control="checkbox"
+      data-ouro-part="box"
       onCheckedChange={onCheckedChange && ((checked) => onCheckedChange(checked))}
       required={field.required}
       // Set here, not left to Base UI's effects, so the server HTML names and describes the box.
@@ -116,7 +124,7 @@ function CheckboxBox(props: {
       <TouchTarget />
       <BaseCheckbox.Indicator keepMounted className={indicatorClass}>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-full">
-          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" pathLength={1} className={tickClass} />
+          <path d="M3.5 8.5 6.5 11.5 12.5 4.5" pathLength={1} data-ouro-part="tick" className={tickClass} />
           <path d="M4 8h8" className={dashClass} />
         </svg>
       </BaseCheckbox.Indicator>
@@ -127,7 +135,7 @@ function CheckboxBox(props: {
 /**
  * A labeled checkbox on the Field contract, with the label to its right: pass `label`, and
  * `checked` with `onCheckedChange` (or `defaultChecked`). Clicking the label toggles it,
- * Space toggles it from the keyboard, the tick fades in, and `indeterminate` shows a
+ * Space toggles it from the keyboard, the box fills and the tick draws, and `indeterminate` shows a
  * dash announced as "mixed". With `name`, a checked box submits `name=value` with its form.
  *
  * Use `CheckboxGroup` instead for several choices under one legend that submit together,

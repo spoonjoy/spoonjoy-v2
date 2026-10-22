@@ -1,5 +1,4 @@
-import { IngredientList, type Ingredient } from './IngredientList'
-import type { StepReference } from './StepOutputUseCallout'
+import { formatScaledAmount, formatStepReferenceName, IngredientList, type Ingredient, type StepReference } from './IngredientList'
 
 export interface StepCardProps {
   /** Step number (1-indexed) */
@@ -12,18 +11,16 @@ export interface StepCardProps {
   ingredients: Ingredient[]
   /** References to outputs from previous steps */
   stepOutputUses: StepReference[]
-  /** Scale factor for ingredient quantities (default: 1) */
-  scaleFactor?: number
-  /** Set of checked ingredient IDs */
-  checkedIngredientIds?: ReadonlySet<string>
-  /** Callback when an ingredient is toggled */
-  onIngredientToggle?: (id: string) => void
-  /** Set of checked step output IDs */
-  checkedStepOutputIds?: ReadonlySet<string>
-  /** Callback when a step output is toggled */
-  onStepOutputToggle?: (id: string) => void
-  /** Callback when a step reference is clicked */
-  onStepReferenceClick?: (stepNumber: number) => void
+  /** Scale factor for ingredient quantities */
+  scaleFactor: number
+  /** Ingredient ids the cook has ticked off */
+  checkedIngredientIds: ReadonlySet<string>
+  /** Called with an ingredient's id when it is ticked or unticked */
+  onIngredientToggle: (id: string) => void
+  /** Step output ids the cook has ticked off */
+  checkedStepOutputIds: ReadonlySet<string>
+  /** Called with a step output's id when it is ticked or unticked */
+  onStepOutputToggle: (id: string) => void
 }
 
 /**
@@ -32,7 +29,7 @@ export interface StepCardProps {
  * Features:
  * - Editorial step heading treatment
  * - Optional step title
- * - IngredientList with checkboxes and scaling
+ * - The step's ingredients as a checklist, scaled
  * - Spacious vertical rhythm for reading
  */
 export function StepCard({
@@ -46,15 +43,7 @@ export function StepCard({
   onIngredientToggle,
   checkedStepOutputIds,
   onStepOutputToggle,
-  onStepReferenceClick,
 }: StepCardProps) {
-  /* istanbul ignore next -- @preserve optional prop fallback defaults */
-  const resolvedScaleFactor = scaleFactor ?? 1
-  /* istanbul ignore next -- @preserve optional prop fallback defaults */
-  const resolvedCheckedIngredientIds = checkedIngredientIds ?? new Set<string>()
-  /* istanbul ignore next -- @preserve optional prop fallback defaults */
-  const resolvedCheckedStepOutputIds = checkedStepOutputIds ?? new Set<string>()
-
   return (
     <article
       className="sj-step-card px-5 py-8 sm:px-8 sm:py-10"
@@ -82,19 +71,28 @@ export function StepCard({
       <div className="mt-8 space-y-8">
         {(ingredients.length > 0 || stepOutputUses.length > 0) && (
           <div data-testid="step-ingredients-block" className="sj-step-ingredients mx-auto w-full max-w-[38rem]">
-            <div className="font-sj-ui mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
-              Ingredients
+            {/* The ticks are this cook's progress, not the recipe: paper gets the plain list below. */}
+            <div className="print:hidden">
+              <IngredientList
+                ingredients={ingredients}
+                scaleFactor={scaleFactor}
+                checkedIds={checkedIngredientIds}
+                onToggle={onIngredientToggle}
+                stepOutputUses={stepOutputUses}
+                checkedStepOutputIds={checkedStepOutputIds}
+                onStepOutputToggle={onStepOutputToggle}
+              />
             </div>
-            <IngredientList
-              ingredients={ingredients}
-              scaleFactor={resolvedScaleFactor}
-              checkedIds={resolvedCheckedIngredientIds}
-              onToggle={onIngredientToggle}
-              showCheckboxes={!!onIngredientToggle || !!onStepOutputToggle}
-              stepOutputUses={stepOutputUses}
-              checkedStepOutputIds={resolvedCheckedStepOutputIds}
-              onStepOutputToggle={onStepOutputToggle}
-            />
+            <ul data-testid="step-print-ingredients" className="m-0 hidden list-none p-0 font-sj-ui text-base text-[var(--sj-ink)] print:block">
+              {stepOutputUses.map((reference) => (
+                <li key={reference.id}>{formatStepReferenceName(reference)}</li>
+              ))}
+              {ingredients.map((ingredient) => (
+                <li key={ingredient.id}>
+                  {[formatScaledAmount(ingredient, scaleFactor), ingredient.name].filter(Boolean).join(' ')}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

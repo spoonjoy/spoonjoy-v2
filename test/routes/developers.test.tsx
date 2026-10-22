@@ -163,7 +163,7 @@ describe("/developers route", () => {
     expect(await screen.findByRole("heading", { name: "Spoonjoy Developer Platform" })).toBeInTheDocument();
     expect(screen.getByText(/public-by-default Chef graph/i)).toBeInTheDocument();
     expect(screen.getByText("Client examples")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Tiny-device clients/i })).toHaveAttribute("href", "#scenario-quickstarts");
+    expect(screen.getByRole("link", { name: /Tiny-device clients/i })).toHaveAttribute("href", "/developers#scenario-quickstarts");
     expect(screen.getByRole("heading", { name: "Token Acquisition" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "No token: signed-in browser" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Personal token: signed-in chef creates one" })).toBeInTheDocument();

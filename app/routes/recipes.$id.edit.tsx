@@ -14,7 +14,8 @@ import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { requireUserId } from "~/lib/session.server";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Link } from "~/components/ouro/link/link";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import { ImportedRecipeNotice } from "~/components/recipe/RecipeImportPanel";
 import {
@@ -33,7 +34,7 @@ import {
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+import { RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { ACTIVE_RECIPE_TITLE_CONFLICT_ERROR, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { createCover, getRecipeCoverImageUrl, setActiveRecipeCover } from "~/lib/recipe-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
@@ -567,8 +568,6 @@ export default function EditRecipe() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const submit = useSubmit();
-  const formRef = useRef<HTMLFormElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const submitInFlightRef = useRef(false);
   const [stepToDelete, setStepToDelete] = useState<{ id: string; stepNum: number } | null>(null);
   const [submitStarted, setSubmitStarted] = useState(false);
@@ -593,37 +592,19 @@ export default function EditRecipe() {
       return;
     }
 
-    /* istanbul ignore next -- @preserve defensive null check for ref */
-    if (!formRef.current) return;
-
     submitInFlightRef.current = true;
     setSubmitStarted(true);
 
-    const form = formRef.current;
-    const titleInput = form.querySelector('input[name="title"]') as HTMLInputElement;
-    const descriptionInput = form.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
-    const servingsInput = form.querySelector('input[name="servings"]') as HTMLInputElement;
-    const stepsInput = form.querySelector('input[name="steps"]') as HTMLInputElement;
-    const clearImageInput = form.querySelector('input[name="clearImage"]') as HTMLInputElement;
-
-    /* istanbul ignore else -- @preserve form elements always exist in rendered DOM */
-    if (titleInput) titleInput.value = recipeData.title;
-    /* istanbul ignore else -- @preserve */
-    if (descriptionInput) descriptionInput.value = recipeData.description || "";
-    /* istanbul ignore else -- @preserve */
-    if (servingsInput) servingsInput.value = recipeData.servings || "";
-    /* istanbul ignore else -- @preserve */
-    if (stepsInput) stepsInput.value = JSON.stringify(recipeData.steps);
-    /* istanbul ignore else -- @preserve */
-    if (clearImageInput) clearImageInput.value = recipeData.clearImage ? "true" : "";
-
-    if (recipeData.imageFile && fileInputRef.current) {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(recipeData.imageFile);
-      fileInputRef.current.files = dataTransfer.files;
-    }
-
-    form.requestSubmit();
+    const formData = new FormData();
+    formData.set("id", recipe.id);
+    formData.set("expectedUpdatedAt", saveData?.currentUpdatedAt ?? loadedUpdatedAt(recipe.updatedAt));
+    formData.set("title", recipeData.title);
+    formData.set("description", recipeData.description || "");
+    formData.set("servings", recipeData.servings || "");
+    formData.set("steps", JSON.stringify(recipeData.steps));
+    formData.set("clearImage", recipeData.clearImage ? "true" : "");
+    if (recipeData.imageFile) formData.set("image", recipeData.imageFile);
+    saveFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
   };
 
   const handleDeleteStep = () => {
@@ -639,31 +620,17 @@ export default function EditRecipe() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow="Edit recipe"
         title="Edit Recipe"
-        action={<Link href={`/recipes/${recipe.id}`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        actions={<Link href={`/recipes/${recipe.id}`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        size="lg"
+        divider
       />
 
       {imported ? <ImportedRecipeNotice sourceUrl={recipe.sourceUrl} /> : null}
 
       <div className="mt-8 max-w-5xl">
-        <saveFetcher.Form ref={formRef} method="post" encType="multipart/form-data" className="hidden" aria-hidden="true">
-          <input type="hidden" name="id" value={recipe.id} />
-          <input
-            type="hidden"
-            name="expectedUpdatedAt"
-            value={saveData?.currentUpdatedAt ?? loadedUpdatedAt(recipe.updatedAt)}
-          />
-          <input type="hidden" name="title" />
-          <textarea name="description" className="hidden" />
-          <input type="hidden" name="servings" />
-          <input type="hidden" name="steps" />
-          <input type="hidden" name="clearImage" />
-          <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
-          <button type="submit">Save recipe</button>
-        </saveFetcher.Form>
-
         {actionData?.errors?.reorder && (
           <Alert tone="destructive" title={actionData.errors.reorder} className="mb-4" />
         )}

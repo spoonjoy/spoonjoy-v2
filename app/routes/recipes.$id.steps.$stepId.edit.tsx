@@ -16,7 +16,7 @@ import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useMemo, useState } from "react";
-import { ConfirmationDialog } from "~/components/confirmation-dialog";
+import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Button } from "~/components/button";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Fieldset } from "~/components/ouro/field/fieldset";
@@ -26,10 +26,12 @@ import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
-import { useToast } from "~/components/feedback/toast";
-import { CookbookHeader, CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
-import { ChecklistRow } from "~/components/shopping/checklist-row";
+import { Text } from "~/components/ouro/text/text";
+import { toast } from "~/lib/ouro/toast";
+import { CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import { touchNativeSyncRecipe, touchNativeSyncRecipeOperation } from "~/lib/native-sync-invalidation.server";
 import { validateStepDeletion } from "~/lib/step-deletion-validation.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
@@ -613,7 +615,6 @@ export default function EditStep() {
   const submit = useSubmit();
   const addAllFetcher = useFetcher<ActionData>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { showToast } = useToast();
 
   const stepDeletionError = actionData?.errors?.stepDeletion;
 
@@ -652,12 +653,12 @@ export default function EditStep() {
 
   useEffect(() => {
     if (searchParams.get("created") === "1") {
-      showToast({ message: "Step created successfully." });
+      toast("Step created successfully.", { tone: "success" });
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete("created");
       setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, setSearchParams, showToast]);
+  }, [searchParams, setSearchParams]);
 
   // Ingredient input mode handlers
   const parsedListShown = showIngredientForm && ingredientInputMode !== "manual" && parsedIngredients.length > 0;
@@ -711,13 +712,14 @@ export default function EditStep() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow={`Step ${step.stepNum}`}
         title="Edit Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
-      >
-        <Text>Keep the method for {recipe.title} easy to follow in the kitchen.</Text>
-      </CookbookHeader>
+        actions={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        size="lg"
+        divider
+        description={`Keep the method for ${recipe.title} easy to follow in the kitchen.`}
+      />
 
       <div className="mt-8 max-w-4xl">
         <Form method="post" errors={formErrors} render={<updateFetcher.Form />} className="sj-form-section gap-6">
@@ -730,7 +732,7 @@ export default function EditStep() {
 
           {step.stepNum === 1 ? (
             <Fieldset legend="Uses output from">
-              <Text className="italic">No previous steps available</Text>
+              <Text tone="muted" className="italic">No previous steps available</Text>
             </Fieldset>
           ) : availableSteps.length > 0 && (
             <Select
@@ -821,37 +823,33 @@ export default function EditStep() {
             // Parsed ingredients waiting for "Add All" are not "none yet".
             !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
           ) : (
-            <div className="sj-list-ruled">
+            <ItemGroup aria-label="Ingredients" variant="divided">
               {step.ingredients.map((ingredient) => (
-                <div key={ingredient.id}>
-                  <ChecklistRow
-                    name={ingredient.ingredientRef.name}
-                    quantity={`${ingredient.quantity} ${ingredient.unit.name}`}
-                    action={
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => setIngredientToRemove(ingredient.id)}
-                        aria-label={`Remove ${ingredient.ingredientRef.name}`}
-                      >
-                        Remove
-                      </Button>
-                    }
-                  />
-                  <span className="sr-only">{ingredient.quantity}</span>
-                  <span className="sr-only">
-                    {ingredient.unit.name} {ingredient.ingredientRef.name}
-                  </span>
-                </div>
+                <Item
+                  key={ingredient.id}
+                  size="sm"
+                  title={ingredient.ingredientRef.name}
+                  description={`${ingredient.quantity} ${ingredient.unit.name}`}
+                  actions={
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => setIngredientToRemove(ingredient.id)}
+                      aria-label={`Remove ${ingredient.ingredientRef.name}`}
+                    >
+                      Remove
+                    </Button>
+                  }
+                />
               ))}
-            </div>
+            </ItemGroup>
           )}
         </SettingsPanel>
 
         {/* Remove ingredient confirmation dialog */}
-        <ConfirmationDialog
+        <ConfirmDialog
           open={!!ingredientToRemove}
-          onClose={() => setIngredientToRemove(null)}
+          onOpenChange={() => setIngredientToRemove(null)}
           onConfirm={() => {
             /* istanbul ignore next -- @preserve TypeScript requires null check; dialog only opens when ingredientToRemove is truthy */
             if (!ingredientToRemove) return;
@@ -865,7 +863,7 @@ export default function EditStep() {
           description="This ingredient will be removed from the step."
           confirmLabel="Remove it"
           cancelLabel="Keep it"
-          destructive
+          tone="destructive"
         />
       </div>
     </CookbookPage>

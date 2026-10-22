@@ -1,5 +1,5 @@
-import { Link as RouterLink } from "react-router";
 import { Button } from "~/components/button";
+import { Link } from "~/components/ouro/link/link";
 import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
 
 // A slim wordmark bar for signed-out visitors on a phone (below the desktop top bar's breakpoint).
@@ -12,10 +12,10 @@ export function PhoneBrandBar() {
       data-testid="phone-brand-bar"
       className="sj-phone-brandbar flex min-h-14 items-center justify-between gap-3 border-b border-[var(--sj-border)] bg-[var(--sj-page)] px-4 pt-[env(safe-area-inset-top)] lg:hidden print:hidden"
     >
-      <RouterLink to="/" className="inline-flex min-h-11 items-center gap-2 text-[var(--sj-ink)] no-underline">
+      <Link href="/" tone="secondary" inline={false} className="inline-flex min-h-11 items-center gap-2">
         <SpoonjoyLogo width={32} height={20} aria-hidden="true" />
         <span className="font-sj-ui text-sm font-bold uppercase tracking-[0.2em]">Spoonjoy</span>
-      </RouterLink>
+      </Link>
       <Button href="/signup">Sign up</Button>
     </header>
   );

@@ -16,14 +16,14 @@
  * - Character limits on inputs
  */
 
-import { render, screen, within, act, fireEvent } from "@testing-library/react";
+import { render, screen, within, act, createEvent, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { createRoutesStub } from "react-router";
 import { useState } from "react";
 import { RecipeBuilder } from "~/components/recipe/RecipeBuilder";
 import type { StepData } from "~/components/recipe/StepEditorCard";
-import { getShownAlert, requiredLabel } from "../../utils";
+import { chooseImage, getShownAlert, requiredLabel } from "../../utils";
 
 // Mock localStorage for IngredientInputToggle used by StepEditorCard
 let localStorageStore: Record<string, string> = {};
@@ -227,8 +227,8 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
       // Should render both steps
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/step 2/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 1" })).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 2" })).toBeInTheDocument();
 
       // Should not show empty state
       expect(screen.queryByText(/no steps/i)).not.toBeInTheDocument();
@@ -247,7 +247,7 @@ describe("RecipeBuilder", () => {
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
 
       // Should now have a step card
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 1" })).toBeInTheDocument();
 
       // Empty state should be gone
       expect(screen.queryByText(/no steps/i)).not.toBeInTheDocument();
@@ -270,7 +270,7 @@ describe("RecipeBuilder", () => {
 
       // Add a step and fill it
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
-      const stepCard = screen.getByLabelText(/step 1/i);
+      const stepCard = screen.getByRole("article", { name: "Step 1" });
       const instructionsTextarea =
         within(stepCard).getByLabelText(/instructions/i);
       await userEvent.type(instructionsTextarea, "Mix all ingredients");
@@ -554,7 +554,7 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
       // Step card controls should be disabled
-      const stepCard = screen.getByLabelText(/step 1/i);
+      const stepCard = screen.getByRole("article", { name: "Step 1" });
       expect(
         within(stepCard).getByRole("button", { name: /save/i }),
       ).toBeDisabled();
@@ -666,7 +666,7 @@ describe("RecipeBuilder", () => {
 
       // Add first step and fill it
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
-      const firstStepCard = screen.getByLabelText(/step 1/i);
+      const firstStepCard = screen.getByRole("article", { name: "Step 1" });
       const firstTextarea =
         within(firstStepCard).getByLabelText(/instructions/i);
       await userEvent.type(firstTextarea, "First step instructions");
@@ -683,7 +683,7 @@ describe("RecipeBuilder", () => {
       expect(firstTextarea).toHaveValue("First step instructions");
 
       // Second step should exist
-      expect(screen.getByLabelText(/step 2/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 2" })).toBeInTheDocument();
     });
   });
 
@@ -718,65 +718,126 @@ describe("RecipeBuilder", () => {
       expect(screen.queryByRole("img")).not.toBeInTheDocument();
     });
 
-    it("revokes previous preview URL when selecting a new image", async () => {
-      const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
-      const Wrapper = createTestWrapper();
-      render(<Wrapper initialEntries={["/recipes/new"]} />);
+    it("saves the photo just chosen, and goes back to the saved one when it is removed", async () => {
+      const onSave = vi.fn();
+      const recipe = createTestRecipe({ coverImageUrl: "https://example.com/cover.jpg" });
+      const Wrapper = createTestWrapper({ onSave, recipe });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      // Find the file input (it should be present in the image upload component)
-      const fileInput = screen.getByLabelText("Upload recipe image");
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      expect(within(field).getByRole("img", { name: `Photo of ${recipe.title}` })).toHaveAttribute("src", "https://example.com/cover.jpg");
+      const photo = new File(["content"], "image.jpg", { type: "image/jpeg" });
+      await chooseImage(within(field).getByLabelText("Recipe image", { selector: "input" }), photo);
 
-      // Create first image file
-      const firstFile = new File(["content1"], "image1.jpg", {
-        type: "image/jpeg",
-      });
-      await userEvent.upload(fileInput, firstFile);
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ imageFile: photo, clearImage: undefined }));
 
-      // Wait a moment for state to update
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      // Create second image file and upload it
-      const secondFile = new File(["content2"], "image2.jpg", {
-        type: "image/jpeg",
-      });
-      await userEvent.upload(fileInput, secondFile);
-
-      // Wait a moment for state to update
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
-
-      // revokeObjectURL should have been called when the second image was selected
-      expect(revokeObjectURL).toHaveBeenCalled();
-
-      revokeObjectURL.mockRestore();
+      await userEvent.click(within(field).getByRole("button", { name: "Remove image" }));
+      expect(within(field).getByRole("img", { name: `Photo of ${recipe.title}` })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ imageFile: null, clearImage: undefined }));
     });
 
-    it("revokes preview URL when clearing an image", async () => {
-      const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL");
-      const Wrapper = createTestWrapper();
+    it("clears the saved photo on save once it is removed", async () => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave, recipe: createTestRecipe({ coverImageUrl: "https://example.com/cover.jpg" }) });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
+
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      await userEvent.click(within(field).getByRole("button", { name: "Remove image" }));
+      expect(within(field).queryByRole("img")).not.toBeInTheDocument();
+      expect(within(field).queryByRole("button", { name: "Remove image" })).not.toBeInTheDocument();
+      expect(within(field).getByRole("button", { name: "Upload image" })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ clearImage: true }));
+    });
+
+    it.each([
+      ["a GIF", new File(["gif"], "spin.gif", { type: "image/gif" }), "Photos must be JPG, PNG, or WebP."],
+      ["another type", new File(["svg"], "logo.svg", { type: "image/svg+xml" }), "Invalid image type. Photos must be JPG, PNG, or WebP."],
+      ["a photo over 5 MB", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "huge.jpg", { type: "image/jpeg" }), "Image must be less than 5MB"],
+    ])("turns away %s with Spoonjoy's message", async (_kind, file, message) => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave });
       render(<Wrapper initialEntries={["/recipes/new"]} />);
 
-      // Find the file input and upload an image
-      const fileInput = screen.getByLabelText("Upload recipe image");
-      const file = new File(["content"], "image.jpg", { type: "image/jpeg" });
-      await userEvent.upload(fileInput, file);
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      fireEvent.change(within(field).getByLabelText("Recipe image", { selector: "input" }), { target: { files: [file] } });
+      await waitFor(() => expect(within(field).getByText(message)).toHaveAttribute("role", "status"));
+    });
 
-      // Wait for state to update
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      });
+    it("takes a photo dropped on the image field, and saves it", async () => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave, recipe: createTestRecipe() });
+      render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
-      // Clear the image (look for clear/remove button)
-      const clearButton = screen.getByRole("button", { name: /clear|remove/i });
-      await userEvent.click(clearButton);
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      const zone = field.closest<HTMLElement>("[data-drop-zone]")!;
+      expect(zone).not.toBeNull();
+      const photo = new File(["content"], "dropped.jpg", { type: "image/jpeg" });
+      const dataTransfer = { files: [photo], types: ["Files"] };
+      fireEvent.dragEnter(zone, { dataTransfer });
+      expect(zone).toHaveAttribute("data-drag-active");
+      // Moving over the field inside the zone keeps it highlighted; leaving the zone does not.
+      const leaveTo = (target: Element) => {
+        const leave = createEvent.dragLeave(zone, { dataTransfer });
+        Object.defineProperty(leave, "relatedTarget", { value: target });
+        fireEvent(zone, leave);
+      };
+      leaveTo(field);
+      expect(zone).toHaveAttribute("data-drag-active");
+      leaveTo(document.body);
+      expect(zone).not.toHaveAttribute("data-drag-active");
+      fireEvent.dragEnter(zone, { dataTransfer });
+      fireEvent.dragOver(zone, { dataTransfer });
+      fireEvent.drop(zone, { dataTransfer });
+      expect(zone).not.toHaveAttribute("data-drag-active");
+      const input = within(field).getByLabelText("Recipe image", { selector: "input" }) as HTMLInputElement;
+      await waitFor(() => expect(input.files?.[0]).toBe(photo));
 
-      // revokeObjectURL should have been called when clearing
-      expect(revokeObjectURL).toHaveBeenCalled();
+      await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
+      expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ imageFile: photo }));
+    });
 
-      revokeObjectURL.mockRestore();
+    it("turns away a dropped file the field would refuse, with Spoonjoy's message", async () => {
+      const Wrapper = createTestWrapper();
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      const zone = field.closest<HTMLElement>("[data-drop-zone]")!;
+      const gif = new File(["gif"], "spin.gif", { type: "image/gif" });
+      fireEvent.drop(zone, { dataTransfer: { files: [gif], types: ["Files"] } });
+      await waitFor(() => expect(within(field).getByText("Photos must be JPG, PNG, or WebP.")).toHaveAttribute("role", "status"));
+    });
+
+    it("ignores a drag that carries no file, and a drop while the form is busy", async () => {
+      const onSave = vi.fn();
+      const Wrapper = createTestWrapper({ onSave, disabled: true });
+      render(<Wrapper initialEntries={["/recipes/new"]} />);
+      const field = screen.getByRole("group", { name: "Recipe image" });
+      const zone = field.closest<HTMLElement>("[data-drop-zone]")!;
+      fireEvent.dragEnter(zone, { dataTransfer: { files: [], types: ["text/plain"] } });
+      expect(zone).not.toHaveAttribute("data-drag-active");
+      fireEvent.dragOver(zone, { dataTransfer: { files: [], types: ["text/plain"] } });
+      fireEvent.drop(zone, { dataTransfer: { files: [], types: ["Files"] } });
+      fireEvent.drop(zone, { dataTransfer: { files: [new File(["x"], "x.jpg", { type: "image/jpeg" })], types: ["Files"] } });
+      const input = within(field).getByLabelText("Recipe image", { selector: "input" }) as HTMLInputElement;
+      expect(input.files?.length ?? 0).toBe(0);
+    });
+
+    it("says when a chosen file cannot be opened as a photo", async () => {
+      const decode = vi.spyOn(HTMLImageElement.prototype, "decode").mockRejectedValue(new Error("not an image"));
+      try {
+        const Wrapper = createTestWrapper();
+        render(<Wrapper initialEntries={["/recipes/new"]} />);
+        const field = screen.getByRole("group", { name: "Recipe image" });
+        fireEvent.change(within(field).getByLabelText("Recipe image", { selector: "input" }), {
+          target: { files: [new File(["?"], "broken.jpg", { type: "image/jpeg" })] },
+        });
+        await waitFor(() => expect(within(field).getByText("broken.jpg could not be opened as a photo.")).toBeInTheDocument());
+      } finally {
+        decode.mockRestore();
+      }
     });
   });
 
@@ -853,12 +914,12 @@ describe("RecipeBuilder", () => {
       await userEvent.click(addStepButton);
 
       // A step card should now exist
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 1" })).toBeInTheDocument();
 
       // Continue tabbing - should reach the step card's instructions textarea
       await userEvent.tab();
       // Should be in the step card now - verify we can interact with elements
-      const stepCard = screen.getByLabelText(/step 1/i);
+      const stepCard = screen.getByRole("article", { name: "Step 1" });
       const instructionsTextarea =
         within(stepCard).getByLabelText(/instructions/i);
       // The instructions textarea should eventually receive focus through tabbing
