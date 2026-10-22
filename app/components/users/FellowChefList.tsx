@@ -2,13 +2,12 @@ import { Avatar } from "~/components/ouro/avatar/avatar";
 import { chefDisplayName } from "~/lib/username";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
+import { RelativeTime } from "~/components/ouro/relative-time/relative-time";
 import { Text } from "~/components/ouro/text/text";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 
-export interface FellowChefListRow extends FellowChefRow {
-  latestInteractionLabel: string;
-}
+export type FellowChefListRow = FellowChefRow;
 
 export interface FellowChefListProps {
   /** The list's name for screen readers: the page's title already shows it. */
@@ -55,7 +54,7 @@ export function FellowChefList({ label, rows, emptyStateText }: FellowChefListPr
               size="md"
             />
           }
-          actions={<Text size="sm" tone="muted">{row.latestInteractionLabel}</Text>}
+          actions={<Text size="sm" tone="muted"><RelativeTime value={row.latestInteractionAt} /></Text>}
         />
       ))}
     </ItemGroup>

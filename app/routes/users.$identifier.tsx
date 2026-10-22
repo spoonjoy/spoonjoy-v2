@@ -18,7 +18,7 @@ import { requestD1 } from "~/lib/d1-read.server";
 import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
 import { useAppendingList } from "~/hooks/use-appending-list";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { LocalDate } from "~/components/local-date";
+import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
@@ -172,9 +172,6 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     nextCursor,
     cookbooks: cookbooksWithCover,
     recentSpoons,
-    // What the recent cooks' relative times ("3 hr ago") are measured from, so the server's
-    // render and the browser's hydration agree.
-    renderedAt: Date.now(),
     fellowChefsCount,
     kitchenVisitorsCount,
   };
@@ -204,7 +201,6 @@ export default function UserProfile() {
     nextCursor = null,
     cookbooks,
     recentSpoons = EMPTY_SPOONS,
-    renderedAt,
     fellowChefsCount = 0,
     kitchenVisitorsCount = 0,
   } = useLoaderData<typeof loader>();
@@ -236,7 +232,7 @@ export default function UserProfile() {
                 {chefDisplayName(profile.username)}
               </h1>
               <Text tone="muted" size="sm" className="mt-1">
-                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+                Joined <LocalDate value={profile.joinedAt} format="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <p className="m-0 mt-2 text-sm">
                 <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
@@ -333,7 +329,7 @@ export default function UserProfile() {
 
         <SettingsPanel title="Recent cooks">
           <div className="mt-4">
-            <SpoonsStrip spoons={recentSpoons} showRecipe now={renderedAt} />
+            <SpoonsStrip spoons={recentSpoons} showRecipe />
           </div>
         </SettingsPanel>
 

@@ -12,11 +12,9 @@ import {
 import { FellowChefList } from "~/components/users/FellowChefList";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
-import { formatRelativeTime } from "~/lib/time";
 
 interface SerializedFellowChefRow extends Omit<FellowChefRow, "latestInteractionAt"> {
   latestInteractionAt: string;
-  latestInteractionLabel: string;
 }
 
 interface FellowChefsLoaderData {
@@ -95,7 +93,6 @@ export async function loader({
     limit: pageSize,
     offset,
   });
-  const renderedAt = Date.now();
 
   return {
     profileUsername: profileUser.username,
@@ -103,7 +100,6 @@ export async function loader({
     rows: result.rows.map((row) => ({
       ...row,
       latestInteractionAt: row.latestInteractionAt.toISOString(),
-      latestInteractionLabel: formatRelativeTime(row.latestInteractionAt, renderedAt),
     })),
     total: result.total,
     page,

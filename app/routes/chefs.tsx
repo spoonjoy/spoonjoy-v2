@@ -11,7 +11,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
 import { chefActivity, chefRef } from "~/lib/chef-activity.server";
 import { requireUserId } from "~/lib/session.server";
-import { LocalDate } from "~/components/local-date";
+import { LocalDate } from "~/components/ouro/local-date/local-date";
 
 export function meta({}: Route.MetaArgs) {
   return [

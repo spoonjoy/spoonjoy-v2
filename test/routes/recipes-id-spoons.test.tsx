@@ -114,9 +114,6 @@ describe("Recipes $id route — spoons + provenance", () => {
     const { data } = extractResponseData(response);
     expect(data.spoons).toHaveLength(1);
     expect(data.spoons[0].note).toBe("first");
-    // The cooks' relative times are measured from this, on the server and in the browser alike.
-    expect(data.renderedAt).toBeGreaterThanOrEqual(Date.parse(data.spoons[0].cookedAt));
-    expect(data.renderedAt).toBeLessThanOrEqual(Date.now());
     expect(data.isOriginCookCandidate).toBe(true);
     expect(data.coverImageUrl).toBeNull();
   });
@@ -269,8 +266,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     });
   });
 
-  it("measures each cook's time from the loader's render time, not the browser's clock", async () => {
-    const renderedAt = Date.parse("2025-05-01T15:00:30Z");
+  it("says how long ago each cook was, in a <time> carrying the exact instant", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2025-05-01T15:00:30Z"));
     const mockData = {
       recipe: {
         id: "r1",
@@ -297,7 +294,6 @@ describe("Recipes $id route — spoons + provenance", () => {
         },
       ],
       isOriginCookCandidate: false,
-      renderedAt,
     };
     const Stub = createTestRoutesStub([
       {
@@ -314,7 +310,8 @@ describe("Recipes $id route — spoons + provenance", () => {
     await waitFor(() => {
       expect(screen.getByText("three hours back")).toBeInTheDocument();
     });
-    const cookedAt = screen.getByText("3 hr ago");
+    const cookedAt = screen.getByText("3 hours ago");
+    clock.mockRestore();
     expect(cookedAt.tagName).toBe("TIME");
     expect(cookedAt).toHaveAttribute("datetime", "2025-05-01T12:00:00.000Z");
   });

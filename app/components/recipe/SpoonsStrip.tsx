@@ -5,6 +5,7 @@ import { Empty } from "~/components/ouro/empty/empty";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Link } from "~/components/ouro/link/link";
+import { RelativeTime } from "~/components/ouro/relative-time/relative-time";
 import { Text } from "~/components/ouro/text/text";
 import { LAZY_IMAGE_PROPS } from "~/lib/image-loading";
 
@@ -30,32 +31,10 @@ export interface SpoonsStripProps {
   spoons: SpoonsStripItem[];
   showRecipe?: boolean;
   emptyAction?: ReactNode;
-  /**
-   * The time the cooks' relative times are measured from, in epoch milliseconds: the loader's
-   * render time, so the server and the hydrating browser render the same text. Defaults to the
-   * clock, which only suits client-only renders.
-   */
-  now?: number;
 }
 
-function relativeTime(iso: string, now: number): string {
-  const then = new Date(iso).getTime();
-  const seconds = Math.max(0, Math.round((now - then) / 1000));
-  if (seconds < 45) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days} days ago`;
-  const months = Math.round(days / 30);
-  if (months < 12) return `${months} mo ago`;
-  const years = Math.round(days / 365);
-  return `${years} yr ago`;
-}
-
-function CookedAt({ iso, now }: { iso: string; now: number }) {
-  return <time dateTime={iso}>{relativeTime(iso, now)}</time>;
+function CookedAt({ iso }: { iso: string }) {
+  return <RelativeTime value={iso} />;
 }
 
 function NextTime({ text }: { text: string }) {
@@ -63,7 +42,7 @@ function NextTime({ text }: { text: string }) {
 }
 
 /** A chef's cooks across recipes: each an HX Item linked to the recipe, with the cook's photo or the recipe's cover. */
-function CompactSpoonList({ spoons, now }: { spoons: SpoonsStripItem[]; now: number }) {
+function CompactSpoonList({ spoons }: { spoons: SpoonsStripItem[] }) {
   return (
     <ItemGroup aria-label="Recent cooks" variant="divided">
       {spoons.map((spoon) => {
@@ -80,7 +59,7 @@ function CompactSpoonList({ spoons, now }: { spoons: SpoonsStripItem[]; now: num
           description,
           media: imageUrl ? <img src={imageUrl} alt={alt} {...LAZY_IMAGE_PROPS} /> : <ChefHat />,
           mediaSize: imageUrl ? ("md" as const) : ("icon" as const),
-          actions: <Text size="sm" tone="muted"><CookedAt iso={spoon.cookedAt} now={now} /></Text>,
+          actions: <Text size="sm" tone="muted"><CookedAt iso={spoon.cookedAt} /></Text>,
         };
         return spoon.recipe ? (
           <Item key={spoon.id} href={`/recipes/${spoon.recipe.id}`} title={spoon.recipe.title} {...shared} />
@@ -92,13 +71,13 @@ function CompactSpoonList({ spoons, now }: { spoons: SpoonsStripItem[]; now: num
   );
 }
 
-export function SpoonsStrip({ spoons, showRecipe = false, emptyAction, now = Date.now() }: SpoonsStripProps) {
+export function SpoonsStrip({ spoons, showRecipe = false, emptyAction }: SpoonsStripProps) {
   if (spoons.length === 0) {
     return <Empty title="No cooks yet." headingLevel={3} variant="plain" align="start" action={emptyAction} />;
   }
 
   if (showRecipe) {
-    return <CompactSpoonList spoons={spoons} now={now} />;
+    return <CompactSpoonList spoons={spoons} />;
   }
 
   return (
@@ -120,7 +99,7 @@ export function SpoonsStrip({ spoons, showRecipe = false, emptyAction, now = Dat
             mediaSize: "lg" as const,
             mediaAbove: "always" as const,
           } : {})}
-          actions={<Text size="sm" tone="muted"><CookedAt iso={spoon.cookedAt} now={now} /></Text>}
+          actions={<Text size="sm" tone="muted"><CookedAt iso={spoon.cookedAt} /></Text>}
         />
       ))}
     </ItemGroup>

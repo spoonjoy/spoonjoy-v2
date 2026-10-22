@@ -307,12 +307,12 @@ test.describe("Social, in Los Angeles", () => {
     const cook = cookRow(page, note);
     const cookTime = cook.locator("time");
     await expect(cook).toBeVisible();
-    await expect(cookTime).toHaveText("3 hr ago");
+    await expect(cookTime).toHaveText("3 hours ago");
     await expect(cookTime).toHaveAttribute("datetime", cookedAt.toISOString());
     await expectAccessible();
 
     await verifyAfterReload(async () => {
-      await expect(cookTime).toHaveText("3 hr ago");
+      await expect(cookTime).toHaveText("3 hours ago");
       await expect(cookTime).toHaveAttribute("datetime", cookedAt.toISOString());
     });
   });
