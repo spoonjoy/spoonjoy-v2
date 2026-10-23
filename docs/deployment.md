@@ -255,6 +255,13 @@ Basic local app development does not require these values. The app uses safe loc
 
 ## Preflight
 
+The locked test toolchain uses `@cloudflare/vitest-plugin` (the supported name for the former
+Workers pool), with its Wrangler kept at the existing `4.90.0` pin. Zod is pinned and overridden
+to `4.6.6` for GHSA-mrhx-c7xc-m3w5. `patches/zod@4.6.6.patch` removes two annotation tokens from
+explanatory comments that Rollup otherwise mistakes for misplaced optimization annotations.
+It changes no JavaScript statements or real optimization annotations; the normal build warning
+gate remains unchanged. Recheck whether this packaging patch is needed when upgrading Zod.
+
 Run the machine-checkable preflight before production deploys:
 
 ```bash

@@ -11,7 +11,7 @@
   "pnpm": {
     "overrides": {
       "@babel/core": "7.29.7",
-      "@cloudflare/vitest-pool-workers>wrangler": "4.90.0",
+      "@cloudflare/vitest-plugin>wrangler": "4.90.0",
       "axios": "1.20.0",
       "baseline-browser-mapping": "2.11.0",
       "brace-expansion@1": "1.1.21",
@@ -43,11 +43,13 @@
       "undici": "7.29.1",
       "valibot": "1.4.2",
       "ws@8": "8.21.0",
+      "zod": "4.6.6",
       "@prisma/adapter-better-sqlite3>better-sqlite3": "13.0.0"
     },
     "patchedDependencies": {
       "@prisma/adapter-d1@6.19.2": "patches/@prisma__adapter-d1@6.19.2.patch",
-      "react-router@7.18.2": "patches/react-router@7.18.2.patch"
+      "react-router@7.18.2": "patches/react-router@7.18.2.patch",
+      "zod@4.6.6": "patches/zod@4.6.6.patch"
     }
   },
   "scripts": {
@@ -164,11 +166,11 @@
     "react-dom": "^19.2.3",
     "react-router": "7.18.2",
     "tailwind-merge": "^3.7.0",
-    "zod": "^4.3.6"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.5.1",
-    "@cloudflare/vitest-pool-workers": "0.18.6",
+    "@cloudflare/vitest-plugin": "1.0.0",
     "@cloudflare/workers-types": "^4.20260507.1",
     "@faker-js/faker": "^10.5.0",
     "@modelcontextprotocol/client": "2.3.1",
