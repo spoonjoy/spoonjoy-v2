@@ -20,6 +20,12 @@ env:
 jobs:
   build-storybook:
     name: ${{ github.event_name == 'workflow_dispatch' && 'manual-build-storybook' || 'build-storybook' }}
+    # The one browser job still on the runner, installing its browsers with their system packages.
+    # In Playwright's image (test/workflows/playwright-image.test.ts) the installed Ouro UI
+    # swipe-actions tests fail: with the image's fonts a measured width ends in half a hundredth,
+    # which their rounding takes the other way (-147.62 for -147.63). ourostack/ouro-ui#170 fixed
+    # that rounding upstream; this job moves into the image once the installed copy has the fix,
+    # and the image test fails until it does.
     runs-on: ubuntu-latest
     permissions:
       contents: read

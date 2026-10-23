@@ -146,7 +146,7 @@ function validQaImageCoverSmokeWorkflow(): string {
     "        run: |",
     "          corepack enable",
     "          corepack prepare pnpm@10.28.1 --activate",
-    "      - run: pnpm install --frozen-lockfile",
+    "      - run: pnpm install --frozen-lockfile --ignore-scripts",
     "        if: steps.cloudflare.outputs.ready == 'true'",
     "      - run: pnpm prisma:generate",
     "        if: steps.cloudflare.outputs.ready == 'true'",
@@ -4052,39 +4052,39 @@ describe("deployment preflight", () => {
     expect(validateDeploymentConfig(inputs).errors.map((item) => item.name)).toContain("output gate scripts");
   });
 
-  it("requires Playwright dependency installation to disable dpkg progress cursor rewriting", () => {
+  // e2e runs in Playwright's image (test/workflows/playwright-image.test.ts).
+  const PLAYWRIGHT_IMAGE_LINE =
+    "      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble";
+  const CONTAINER_OPTIONS_LINE = "      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro";
+
+  it.each([
+    ["another image", PLAYWRIGHT_IMAGE_LINE, "      image: mcr.microsoft.com/playwright:v1.64.0-noble"],
+    ["no lent zstd", CONTAINER_OPTIONS_LINE, "      options: --user 1001"],
+    ["another runner", "    runs-on: ubuntu-24.04\n", "    runs-on: ubuntu-latest\n"],
+  ])("refuses e2e in %s", (_case, expected, replacement) => {
     const inputs = validInputs();
-    inputs.ciWorkflow = replaceRequired(
-      inputs.ciWorkflow,
-      "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install",
-      "sudo env NEEDRESTART_SUSPEND=1 apt-get install",
-    );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((entry) => entry.name)).toContain("CI workflow");
-  });
-
-  it("requires the exact warning-gated man-db preseed before Playwright dependency installation", () => {
-    const inputs = validInputs();
-    inputs.ciWorkflow = replaceRequired(
-      inputs.ciWorkflow,
-      "node scripts/warning-gate.ts -- sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
-      "sudo sh -c 'printf \"%s\\n\" \"man-db man-db/auto-update boolean true\" | debconf-set-selections'",
-    );
+    inputs.ciWorkflow = replaceRequired(inputs.ciWorkflow, expected, replacement);
 
     expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
   });
 
-  it("requires the man-db trigger cache to match the preseed before dependency installation", () => {
-    const inputs = validInputs();
-    inputs.ciWorkflow = replaceRequired(
-      inputs.ciWorkflow,
-      "node scripts/warning-gate.ts -- sudo touch /var/lib/man-db/auto-update",
-      "sudo touch /var/lib/man-db/auto-update",
-    );
+  it("refuses e2e with setup-node's package cache on, or a system package install", () => {
+    const e2eStart = (workflow: string) => workflow.indexOf("  e2e:\n");
+    const inE2e = (workflow: string, expected: string, replacement: string) => {
+      const start = e2eStart(workflow);
+      return workflow.slice(0, start) + replaceRequired(workflow.slice(start), expected, replacement);
+    };
+    const cacheOn = validInputs();
+    cacheOn.ciWorkflow = inE2e(cacheOn.ciWorkflow, '          cache: ""\n', "");
+    expect(validateDeploymentConfig(cacheOn).errors.map((entry) => entry.name)).toContain("CI workflow");
 
-    expect(validateDeploymentConfig(inputs).errors.map((entry) => entry.name)).toContain("CI workflow");
+    const apt = validInputs();
+    apt.ciWorkflow = inE2e(
+      apt.ciWorkflow,
+      "      - name: 🗄️ Apply D1 migrations\n",
+      "      - name: 🎭 Install Playwright Browsers\n        run: node scripts/warning-gate.ts -- pnpm exec playwright install --with-deps chromium\n\n      - name: 🗄️ Apply D1 migrations\n",
+    );
+    expect(validateDeploymentConfig(apt).errors.map((entry) => entry.name)).toContain("CI workflow");
   });
 
   it("requires an explicit non-interactive Playwright reporter while preserving HTML artifacts", () => {

@@ -143,13 +143,26 @@ async function forwardToCookSession(
   suffix: string,
   body?: string,
 ): Promise<Response> {
-  const stub = namespace.get(namespace.idFromName(cookSessionObjectName(userId, recipeId)));
+  const id = namespace.idFromName(cookSessionObjectName(userId, recipeId));
   const headers = new Headers({ [COOK_PROTOCOL_HEADER]: "1" });
   if (body !== undefined) headers.set("Content-Type", "application/json");
-  const response = await stub.fetch(new Request(
+  const send = () => namespace.get(id).fetch(new Request(
     `${COOK_INTERNAL_ORIGIN}${COOK_SESSION_PREFIX}/${recipeId}${suffix}`,
     { method, headers, body },
   ));
+  let response: Response;
+  try {
+    response = await send();
+  } catch (error) {
+    const failure = error as Error & { retryable?: boolean; overloaded?: boolean };
+    if (method !== "GET" || !(error instanceof Error) || failure.retryable !== true || failure.overloaded === true) {
+      throw error;
+    }
+    // A reset can leave the old stub broken. Only replay a read, once, with a fresh stub;
+    // writes might already have committed, and overloaded objects need less traffic, not more.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    response = await send();
+  }
   // Copy into a fresh Response so the Worker can add its security and version headers.
   return new Response(response.body, { status: response.status, headers: response.headers });
 }

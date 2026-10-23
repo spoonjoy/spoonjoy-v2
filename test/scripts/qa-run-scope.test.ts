@@ -1205,7 +1205,7 @@ describe("Journeys workflow", () => {
     expect(teardownStep.run).toBe("node scripts/qa-run-scope.mjs teardown");
     expect(report.name).toBe("Report Cloudflare API requests");
     expect(report.if).toBe("always()");
-    expect(report.run).toContain('node scripts/count-cloudflare-requests.mjs summary "$RUNNER_TEMP/cloudflare-requests.log"');
+    expect(report.run).toContain('node scripts/count-cloudflare-requests.mjs summary "$SPOONJOY_CF_REQUEST_LOG"');
   });
 
   it("migrates the run's empty database itself and never exports or copies shared QA", () => {
@@ -1229,13 +1229,15 @@ describe("Journeys workflow", () => {
       "Clean up disposable QA data",
       "Delete this run's QA stack",
     ]);
-    // Every one of those steps also logs its Cloudflare API requests.
+    // Every one of those steps also logs its Cloudflare API requests, to the log the job's first
+    // step points into the container (the job runs in Playwright's image).
     for (const name of withToken) {
-      expect(step(name!).env, name).toMatchObject({
-        NODE_OPTIONS: "--import ${{ github.workspace }}/scripts/count-cloudflare-requests.mjs",
-        SPOONJOY_CF_REQUEST_LOG: "${{ runner.temp }}/cloudflare-requests.log",
-      });
+      expect(step(name!).env, name).toMatchObject({ NODE_OPTIONS: "${{ env.SPOONJOY_CF_REQUEST_COUNTER }}" });
     }
+    expect(steps[1].name).toBe("Point the shared paths into the container");
+    expect(steps[1].run).toContain('echo "SPOONJOY_CF_REQUEST_COUNTER=--import $GITHUB_WORKSPACE/scripts/count-cloudflare-requests.mjs"');
+    expect(steps[1].run).toContain('echo "SPOONJOY_CF_REQUEST_LOG=$RUNNER_TEMP/cloudflare-requests.log"');
+    expect(steps[1].run).toContain('echo "SPOONJOY_QA_CREDENTIALS=$GITHUB_WORKSPACE/.journeys/credentials.json"');
   });
 
   it("skips a pull request's suite only on an explicit no from the scope check, which never runs outside pull requests", () => {

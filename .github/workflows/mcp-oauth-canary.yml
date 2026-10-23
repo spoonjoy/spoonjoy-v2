@@ -25,7 +25,17 @@ env:
 jobs:
   canary:
     name: canary
-    runs-on: ubuntu-latest
+    # Runs in Playwright's image, at the version package.json pins, by digest
+    # (test/workflows/playwright-image.test.ts): its browsers and their system packages are in it, so
+    # the job installs nothing from Ubuntu's mirror, whose downloads can stall for the whole job. The
+    # image ships zstd; the runner's own is mounted over it, as ourostack/ouro-ui#170 does, so an
+    # actions/cache step added here would compress exactly as the runner does (none uses one today).
+    # The runner's zstd needs the image's Ubuntu (24.04), so the job names that runner. setup-node's
+    # package cache is off: its path differs inside the container.
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f # v1.64.0-noble
+      options: --user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro
     timeout-minutes: 25
 
     steps:
@@ -50,6 +60,7 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
+          cache: ""
 
       - name: Activate pnpm
         if: steps.cloudflare.outputs.ready == 'true'
@@ -57,17 +68,16 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.28.1 --activate
 
+      # Without install scripts: the only one allowed (pnpm-workspace.yaml) builds better-sqlite3
+      # from source, which needs make and a C++ compiler the image lacks, and only the unit tests
+      # use it. The root postinstall is "prisma generate", which the next step runs.
       - name: Install dependencies
         if: steps.cloudflare.outputs.ready == 'true'
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Generate Prisma client
         if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm prisma:generate
-
-      - name: Install Playwright Chromium
-        if: steps.cloudflare.outputs.ready == 'true'
-        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run MCP OAuth canary
         id: mcp-canary

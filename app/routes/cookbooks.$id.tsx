@@ -1,6 +1,6 @@
 import type { Route } from "./+types/cookbooks.$id";
 import { chefDisplayName } from "~/lib/username";
-import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext } from "react-router";
+import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext, type ShouldRevalidateFunctionArgs } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -98,6 +98,8 @@ import {
 } from "~/lib/cookbook-membership-compat.server";
 import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.server";
 import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
+import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
+import { useResendLostSubmission } from "~/hooks/use-resend-lost-submission";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -189,6 +191,26 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     if (unavailable) return unavailable;
     throw error;
   }
+}
+
+// The intents that leave the same result when applied twice: a rename sets a fixed title, and
+// adding a recipe that is already in the cookbook keeps one copy. Only these are sent again when
+// a submission got no answer (useResendLostSubmission); a delete or a removal is not.
+const IDEMPOTENT_INTENTS = new Set(["updateTitle", "addRecipe"]);
+
+export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
+  const formData = await request.clone().formData();
+  const intent = formData.get("intent");
+  const name = typeof intent === "string" ? intent : null;
+  // In the order they were sent, so the second request's body is the first one's.
+  const resend = name !== null && IDEMPOTENT_INTENTS.has(name)
+    ? Object.fromEntries([...formData].filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+    : null;
+  return submitOrReportLostRequest(serverAction, { intent: name, resend });
+}
+
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessNetworkFailure(args, args.defaultShouldRevalidate);
 }
 
 async function handleCookbookAction(
@@ -366,12 +388,15 @@ export default function CookbookDetail() {
     titleAnswer,
   );
   const submit = useSubmit();
+  // A lost rename or add is sent once more before the page says Spoonjoy couldn't be reached.
+  const resendingLostSubmission = useResendLostSubmission(actionData);
   // The title editor is a form, so it hides the dock like other edit forms (R-M3-2).
   useDockSuppressed(isEditingTitle);
 
   // A rename either closes the editor with a short confirmation (R-M3-3) or keeps it open with
   // the error. Each submission yields a new actionData object, so this runs once per result.
   useEffect(() => {
+    if (resendingLostSubmission) return;
     // Saving, removing or deleting when the database was briefly unavailable: say so, so the cook
     // can try again.
     if (
@@ -390,7 +415,7 @@ export default function CookbookDetail() {
     setTitleAnswer(undefined);
     setIsEditingTitle(false);
     toast("Cookbook renamed.", { tone: "success" });
-  }, [actionData]);
+  }, [actionData, resendingLostSubmission]);
 
   const openTitleEditor = () => {
     setTitleAnswer(undefined);

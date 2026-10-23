@@ -163,6 +163,16 @@ const STORYBOOK_REQUIRED_JOB_NAME =
 const REQUIRED_PNPM_PACKAGE_MANAGER = "pnpm@10.28.1";
 const PINNED_CHECKOUT_ACTION = "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10";
 const PINNED_SETUP_NODE_ACTION = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
+// e2e, like the other browser jobs that can, runs in Playwright's image, pinned by digest at the
+// version package.json pins (test/workflows/playwright-image.test.ts), on the runner whose Ubuntu
+// matches the image, with the runner's zstd mounted over the image's. setup-node's package cache is
+// off there.
+export const PLAYWRIGHT_RUNNER = "ubuntu-24.04";
+export const PLAYWRIGHT_CONTAINER = Object.freeze({
+  image: "mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f",
+  options: "--user 1001 -v /usr/bin/zstd:/usr/bin/zstd:ro",
+});
+const CONTAINER_SETUP_NODE_WITH = Object.freeze({ "node-version": "22", cache: "" });
 // The only artifacts canonical CI may upload: the Playwright report, and the full-page captures
 // e2e/screens.spec.ts writes for reviewing a visual change. Any other path could carry secrets.
 const CI_ARTIFACT_UPLOADS = [
@@ -454,9 +464,6 @@ const CI_INVOCATION_VALIDATION_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}node scripts/workflow-security.mjs validate-ci-invocation`;
 const CI_DISPOSABLE_CLEANUP_COMMAND =
   `${WARNING_GATE_COMMAND_PREFIX}pnpm run cleanup:local:apply`;
-const PLAYWRIGHT_MAN_DB_PRESEED_COMMAND =
-  `sudo sh -c 'printf "%s\\n" "man-db man-db/auto-update boolean true" | debconf-set-selections'`;
-const PLAYWRIGHT_APT_INSTALL_COMMAND = "sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -o Dpkg::Use-Pty=0 install -y --no-install-recommends xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2";
 function actionStepSignature(action: string): string {
   return `action:${action}`;
 }
@@ -578,19 +585,11 @@ const CI_STEP_SIGNATURES_BY_JOB = new Map<string, readonly string[]>([
       `${WARNING_GATE_COMMAND_PREFIX}corepack enable`,
       `${WARNING_GATE_COMMAND_PREFIX}corepack prepare ${REQUIRED_PNPM_PACKAGE_MANAGER} --activate`,
     ),
-    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile`),
+    commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm install --frozen-lockfile --ignore-scripts`),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm prisma:generate`),
     commandStepSignature(
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why blake3-wasm`,
       `${WARNING_GATE_COMMAND_PREFIX}pnpm why @c4312/blake3-internal`,
-    ),
-    commandStepSignature(
-      `${WARNING_GATE_COMMAND_PREFIX}sudo apt-get update`,
-      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_MAN_DB_PRESEED_COMMAND}`,
-      `${WARNING_GATE_COMMAND_PREFIX}sudo touch /var/lib/man-db/auto-update`,
-      `${WARNING_GATE_COMMAND_PREFIX}${PLAYWRIGHT_APT_INSTALL_COMMAND}`,
-      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install-deps --dry-run chromium`,
-      `${WARNING_GATE_COMMAND_PREFIX}pnpm exec playwright install chromium`,
     ),
     commandStepSignature("pnpm run verify:clean:migrations"),
     commandStepSignature(`${WARNING_GATE_COMMAND_PREFIX}pnpm db:seed`),
@@ -648,6 +647,7 @@ const CI_JOB_CONTRACTS = Object.freeze({
   e2e: Object.freeze({
     name: "${{ github.event_name == 'workflow_dispatch' && 'report-only-e2e' || 'e2e' }}",
     timeoutMinutes: 10,
+    container: PLAYWRIGHT_CONTAINER,
     env: Object.freeze({
       NODE_ENV: "development",
       SESSION_SECRET: "ci-e2e-session-secret",
@@ -772,17 +772,25 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
   for (const [jobName, rawJob] of Object.entries(jobs)) {
     if (jobName === "queue-tested") continue;
     const job = objectRecord(rawJob);
-    const contract: { name: string; if?: string; timeoutMinutes: number; env?: Record<string, string> } =
-      CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
-    const expectedJobKeys = contract.env
-      ? ["name", "needs", "if", "runs-on", "timeout-minutes", "env", "steps"]
-      : ["name", "needs", "if", "runs-on", "timeout-minutes", "steps"];
+    const contract: {
+      name: string;
+      if?: string;
+      timeoutMinutes: number;
+      env?: Record<string, string>;
+      container?: Record<string, string>;
+    } = CI_JOB_CONTRACTS[jobName as keyof typeof CI_JOB_CONTRACTS];
+    const expectedJobKeys = [
+      "name", "needs", "if", "runs-on", "timeout-minutes", "steps",
+      ...(contract.env ? ["env"] : []),
+      ...(contract.container ? ["container"] : []),
+    ];
     if (
       !exactObjectKeys(job, expectedJobKeys) ||
       job.needs !== CI_CANONICAL_JOB_NEEDS ||
       job.if !== (contract.if ?? CI_CANONICAL_JOB_CONDITION) ||
       job.name !== contract.name ||
-      job["runs-on"] !== "ubuntu-latest" ||
+      job["runs-on"] !== (contract.container ? PLAYWRIGHT_RUNNER : "ubuntu-latest") ||
+      (contract.container && !exactWorkflowRecord(job.container, contract.container)) ||
       job["timeout-minutes"] !== contract.timeoutMinutes ||
       (contract.env ? !exactWorkflowRecord(job.env, contract.env) : job.env !== undefined)
     ) return false;
@@ -814,7 +822,7 @@ function parsedCiWorkflowIsCanonical(workflow: string): boolean {
           if (
             !exactObjectKeys(step, ["name", "uses", "with"]) ||
             typeof step.name !== "string" ||
-            !exactWorkflowRecord(withValues, { "node-version": "22" })
+            !exactWorkflowRecord(withValues, contract.container ? CONTAINER_SETUP_NODE_WITH : { "node-version": "22" })
           ) return false;
         } else if (step.uses === PINNED_SETUP_PYTHON_ACTION) {
           if (
@@ -1555,7 +1563,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       }
 
       if (
-        run === "pnpm install --frozen-lockfile" &&
+        run === "pnpm install --frozen-lockfile --ignore-scripts" &&
         stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.install = stepStart;
