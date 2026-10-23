@@ -114,3 +114,37 @@ export const Parts: Story = {
     </Surface>
   ),
 };
+
+const searchScopes = [
+  { value: "all", label: "All", href: "/search?q=soup" },
+  { value: "recipes", label: "Recipes", href: "/search?q=soup&scope=recipes" },
+  { value: "cookbooks", label: "Cookbooks", href: "/search?q=soup&scope=cookbooks" },
+  { value: "chefs", label: "Chefs", href: "/search?q=soup&scope=chefs" },
+];
+
+/**
+ * Tabs that are links, for views of one page that each have a URL: a search's scopes. The
+ * current one comes from the router's path and is marked `aria-current="page"`.
+ */
+export const Links: Story = {
+  parameters: { mode: "links" },
+  render: () => (
+    <Surface>
+      <Tabs label="Search scope" items={searchScopes} currentPath="/search?q=soup&scope=recipes" />
+      <Text>Twelve recipes with soup in them.</Text>
+    </Surface>
+  ),
+};
+
+/** Links in a column, for a search's scopes beside its results. On a phone they become a row. */
+export const LinksVertical: Story = {
+  parameters: { mode: "links" },
+  render: () => (
+    <Surface>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+        <Tabs label="Search scope" orientation="vertical" items={searchScopes} currentPath="/search?q=soup&scope=chefs" />
+        <Text>Three chefs who make soup.</Text>
+      </div>
+    </Surface>
+  ),
+};

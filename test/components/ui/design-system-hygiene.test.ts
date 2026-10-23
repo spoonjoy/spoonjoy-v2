@@ -35,11 +35,11 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// Every file the HX CLI installs, with the SHA-256 of the v1.2.0 tag's bytes (tag commit
-// 96542d72b60b436dd6a60447d888a4c9e9d5edf7), whatever its extension or folder: components, lib
+// Every file the HX CLI installs from v1.2.1 (tag commit
+// f09b84572ac8314625d3388006a0395e32513ed2), whatever its extension or folder: components, lib
 // modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
 // (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
-// below pins the map itself, so neither an installed file nor its recorded hash can change here.
+// below pins the map itself, including the CLI's omission of the checker's leading docs comment.
 const installed = JSON.parse(readSourceFile(".github/ouro-hx-installed.json")) as {
   tag: string;
   tagCommit: string;
@@ -76,10 +76,10 @@ describe("Spoonjoy UI design-system hygiene", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/ui"))).toBe(false);
   });
   it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
-    expect(installed.tag).toBe("v1.2.0");
+    expect(installed.tag).toBe("v1.2.1");
     expect(installedFiles).toHaveLength(547);
     expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("0483e65796100b0cc2fb58ac2abb34c2abd5e04120fc36b724e68f94c47b0a8f");
+      .toBe("7a9070c8381ff54d9466c7f089dfa94554f36b49e4d072568206e58f60cb22d7");
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,

@@ -3,6 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, server, userEvent } from "vitest/browser";
+import { Button } from "~/components/ouro/button/button";
+import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { Reorderable, type ReorderableProps } from "~/components/ouro/reorderable/reorderable";
 import { dropIndex, edgeSpeed, EDGE, MAX_SPEED, moveItem, scrollParent } from "~/components/ouro/reorderable/reorderable-styles";
 import { rubberband } from "~/lib/ouro/spring";
@@ -400,6 +402,50 @@ describe("Reorderable", () => {
       // The move does not animate: every row is in its place at once.
       for (const row of rows(element)) expect(row.style.transform).toBe("");
       expect(element.hasAttribute("data-ouro-settling")).toBe(false);
+    });
+
+    it("leaves the page's scroll alone while the menu is open: its menu does not hold the page", async () => {
+      // A dropdown: below 640px the menu is a phone sheet, which holds the page (Menu's own tests).
+      await page.viewport(1024, 768);
+      const locked = () => [document.documentElement, document.body].some((element) => /hidden|clip/.test(getComputedStyle(element).overflowY));
+      // Every time the page's scroll locks, from before the handle's menu opens to the end.
+      const locks: number[] = [];
+      let was = false;
+      const watch = new MutationObserver(() => {
+        const now = locked();
+        if (now && !was) locks.push(performance.now());
+        was = now;
+      });
+      for (const target of [document.documentElement, document.body]) watch.observe(target, { attributes: true });
+      watch.observe(document.head, { childList: true });
+      try {
+        await render(
+          <>
+            {list()}
+            <Menu trigger={<Button>Control</Button>}>
+              <MenuItem onClick={() => {}}>Hoist</MenuItem>
+            </Menu>
+          </>,
+        );
+        await userEvent.click(handle("Soften"));
+        await menuOpen();
+        expect(document.querySelector('[role="menu"]')!.getAttribute("data-ouro-presentation")).not.toBe("sheet");
+        await userEvent.click(move("Move down"));
+        await menuClosed();
+        // The positive control: a Menu that holds the page, opened after, locks it, and the watch
+        // sees it. Base UI locks on a timeout after a menu opens, so a lock the handle's menu took
+        // while it was open would be in the list before this one.
+        const control = performance.now();
+        await userEvent.click(page.getByRole("button", { name: "Control", exact: true }));
+        await expect.poll(() => locks.length).toBe(1);
+        expect(locks[0]).toBeGreaterThan(control);
+        await userEvent.keyboard("{Escape}");
+        await menuClosed();
+        await expect.poll(locked).toBe(false);
+      } finally {
+        watch.disconnect();
+        await page.viewport(414, 896);
+      }
     });
 
     it("moves a row to the top and to the bottom, and disables the moves that cannot apply", async () => {
@@ -1016,6 +1062,127 @@ describe("Reorderable", () => {
       await commands.pointerPress({ action: "up" });
       await expect.poll(() => element.hasAttribute("data-dragging")).toBe(false);
       expect(order(element).indexOf("Step 1")).toBeGreaterThan(8);
+    });
+  });
+
+  describe("disabled", () => {
+    it("takes no drag, no menu and no pick-up, and keeps its handles focusable and marked unavailable", async () => {
+      const onReorder = vi.fn();
+      const element = await render(list({ onReorder, disabled: true }));
+      for (const name of names) {
+        expect(handle(name).getAttribute("aria-disabled")).toBe("true");
+        expect(handle(name).hasAttribute("aria-describedby")).toBe(false);
+        expect(handle(name).disabled).toBe(false);
+      }
+      await expect.element(page.getByRole("button", { name: "Reorder Sear", exact: true })).toBeDisabled();
+      // Still in the tab order, so focus stays put while a save is in flight.
+      const before = document.createElement("button");
+      host.prepend(before);
+      before.focus();
+      await pressTab();
+      expect(document.activeElement).toBe(handle("Sear"));
+      const look = getComputedStyle(handle("Sear"));
+      expect(look.opacity).toBe("0.5");
+      expect(look.cursor).toBe("not-allowed");
+      // Space picks nothing up, Enter, an arrow key and a click open no menu.
+      await press(" ");
+      expect(handle("Sear").hasAttribute("data-grabbed")).toBe(false);
+      await press("{ArrowDown}");
+      await press("{Enter}");
+      await act(async () => handle("Sear").click());
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      expect(order(element)).toEqual(names);
+      // A pointer drag moves nothing.
+      const [x, y] = await dragBy("Sear", 120);
+      expect(element.hasAttribute("data-dragging")).toBe(false);
+      expect(rows(element)[0]!.style.transform).toBe("");
+      await pointer(window, "pointerup", x, y);
+      expect(order(element)).toEqual(names);
+      expect(onReorder).not.toHaveBeenCalled();
+      // The announcer outlives each test and may still say an earlier list's last move; this list has 4 rows.
+      expect(said()).not.toMatch(/ of 4\./);
+    });
+
+    it("reorders again once it turns off, and marks no handle unavailable", async () => {
+      const onReorder = vi.fn();
+      await render(list({ onReorder, disabled: true }));
+      await render(list({ onReorder, disabled: false }));
+      expect(handle("Sear").hasAttribute("aria-disabled")).toBe(false);
+      expect(handle("Sear").getAttribute("aria-describedby")).not.toBeNull();
+      expect(document.getElementById(handle("Sear").getAttribute("aria-describedby")!)!.textContent).toBe(instructions);
+      await focus("Sear");
+      await press(" ");
+      expect(handle("Sear").hasAttribute("data-grabbed")).toBe(true);
+      await press("{ArrowDown}{ }");
+      expect(onReorder).toHaveBeenCalledTimes(1);
+    });
+
+    it("puts back a row held from the keyboard and closes an open menu when it turns on", async () => {
+      const onReorder = vi.fn();
+      const element = await render(list({ onReorder }));
+      await focus("Braise");
+      await press(" ");
+      await press("{ArrowUp}{ArrowUp}");
+      expect(order(element)).toEqual(["Sear", "Braise", "Soften", "Deglaze"]);
+      await render(list({ onReorder, disabled: true }));
+      expect(order(element)).toEqual(names);
+      expect(handle("Braise").hasAttribute("data-grabbed")).toBe(false);
+      expect(document.activeElement).toBe(handle("Braise"));
+      await expect.poll(said).toBe("Braise put back. Position 4 of 4.");
+      await render(list({ onReorder }));
+      await act(async () => handle("Soften").click());
+      await menuOpen();
+      await expect.poll(() => document.activeElement?.closest('[role="menu"]')).not.toBeNull();
+      await render(list({ onReorder, disabled: true }));
+      await menuClosed();
+      // Focus comes back from the menu to the handle that opened it.
+      await expect.poll(() => document.activeElement).toBe(handle("Soften"));
+      expect(onReorder).not.toHaveBeenCalled();
+    });
+
+    it("puts back a row being dragged when it turns on, and reports nothing", async () => {
+      const onReorder = vi.fn();
+      const element = await render(list({ onReorder }));
+      const dragged = rows(element)[0]!;
+      const [x, y] = await dragBy("Sear", 120);
+      expect(element.hasAttribute("data-dragging")).toBe(true);
+      freeze();
+      await render(list({ onReorder, disabled: true }));
+      expect(element.hasAttribute("data-dragging")).toBe(false);
+      expect(order(element)).toEqual(names);
+      // It springs straight back into its place, without the bounce a flick gets.
+      const seen = [shifted(dragged)];
+      while (element.hasAttribute("data-ouro-settling")) {
+        frames!.step(16);
+        seen.push(shifted(dragged));
+      }
+      await rest(element);
+      expect(seen[0]).toBeGreaterThan(0);
+      expect(Math.min(...seen)).toBe(0);
+      for (let index = 1; index < seen.length; index++) expect(seen[index]!).toBeLessThanOrEqual(seen[index - 1]!);
+      await expect.poll(said).toBe("Sear put back. Position 1 of 4.");
+      // The pointer, still down, moves nothing, and its release reports nothing.
+      await pointer(window, "pointermove", x, y + 40);
+      expect(element.hasAttribute("data-dragging")).toBe(false);
+      await pointer(window, "pointerup", x, y + 40);
+      await rest(element);
+      expect(order(element)).toEqual(names);
+      expect(onReorder).not.toHaveBeenCalled();
+    });
+
+    it("draws a disabled handle in GrayText under forced colours", async () => {
+      try {
+        await render(list({ disabled: true }));
+        await commands.emulateMedia({ forcedColors: "active" });
+        const probe = document.body.appendChild(document.createElement("span"));
+        probe.style.color = "GrayText";
+        const gray = getComputedStyle(probe).color;
+        probe.remove();
+        await expect.poll(() => getComputedStyle(handle("Sear")).color).toBe(gray);
+        expect(getComputedStyle(handle("Sear")).borderTopStyle).toBe("solid");
+      } finally {
+        await commands.emulateMedia({ forcedColors: "none" });
+      }
     });
   });
 

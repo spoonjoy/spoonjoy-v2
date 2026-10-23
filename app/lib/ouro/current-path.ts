@@ -1,4 +1,4 @@
-export { currentHref };
+export { currentHref, currentTabHref };
 
 /**
  * The path of an `href` or a pathname: no query, no hash, no trailing slash (the root stays `/`).
@@ -32,6 +32,43 @@ function currentHref(hrefs: readonly string[], currentPath: string | undefined):
     if (candidate !== "/" && path.startsWith(`${candidate}/`) && candidate.length > bestLength) {
       best = href;
       bestLength = candidate.length;
+    }
+  }
+  return best;
+}
+
+/** An `href`'s query, without its hash. */
+function queryOf(href: string): URLSearchParams {
+  return new URLSearchParams(href.split("#")[0]!.split("?")[1]);
+}
+
+/**
+ * Picks which of a set of link tabs' `hrefs` is the current page for `currentPath`, your
+ * router's path with its query (`pathname + search`). Tabs at the current path match by
+ * query: the one whose every parameter the current path carries, the one with the most
+ * parameters winning, so `/search?scope=recipes&q=soup` marks `/search?scope=recipes` and
+ * `/search?q=soup` marks `/search`. When no tab is at the current path, the longest one the
+ * path sits under matches, as in `currentHref`.
+ *
+ * @internal Used by Tabs' link mode; apps pass `currentPath`.
+ * @example
+ * currentTabHref(["/search", "/search?scope=recipes"], "/search?scope=recipes&q=soup"); // "/search?scope=recipes"
+ * @claim "Tabs at the current path match" registry/ouro/lib/ouro/current-path.test.ts verify:testExists(registry/ouro/lib/ouro/current-path.test.ts::currentTabHref > marks the tab whose every parameter the current path carries, the most parameters winning)
+ * @claim "When no tab is at the" registry/ouro/lib/ouro/current-path.test.ts verify:testExists(registry/ouro/lib/ouro/current-path.test.ts::currentTabHref > falls back to the longest tab the path sits under when none is at its path)
+ */
+function currentTabHref(hrefs: readonly string[], currentPath: string | undefined): string | undefined {
+  if (currentPath === undefined) return undefined;
+  const path = pathOf(currentPath);
+  const here = queryOf(currentPath);
+  const atPath = hrefs.filter((href) => pathOf(href) === path);
+  if (atPath.length === 0) return currentHref(hrefs, currentPath);
+  let best: string | undefined;
+  let bestCount = -1;
+  for (const href of atPath) {
+    const query = [...queryOf(href)];
+    if (query.length > bestCount && query.every(([name, value]) => here.getAll(name).includes(value))) {
+      best = href;
+      bestCount = query.length;
     }
   }
   return best;

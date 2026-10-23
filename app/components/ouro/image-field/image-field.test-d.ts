@@ -20,5 +20,8 @@ expectTypeOf<{ label: "P"; maxFileSize: 1 }>().not.toExtend<ImageFieldProps>();
 expectTypeOf<{ label: "P"; cropper: true }>().not.toExtend<ImageFieldProps>();
 expectTypeOf<{ label: "P"; shape: "square" }>().not.toExtend<ImageFieldProps>();
 
+// The frame's words while a file is dragged over it.
+expectTypeOf<{ label: "Foto"; dropLabel: "Suelta la foto aquí" }>().toExtend<ImageFieldProps>();
+
 // @ts-expect-error value is not a prop.
 createElement(ImageField, { label: "P", value: "x" });

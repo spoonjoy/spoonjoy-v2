@@ -50,3 +50,20 @@ test("reorders without a drag: a click on the handle opens a menu of moves", asy
   await expect(page.getByTestId("saved-order")).toHaveText("Saved order: soften, wine, braise, sear");
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
+
+test("a disabled list keeps its handles focusable and unavailable, and moves nothing", async ({ page }) => {
+  await openStory(page, "lists-reorderable--disabled");
+  const first = page.locator("[data-ouro-reorderable-handle]").first();
+  const name = await first.getAttribute("aria-label");
+  await expect(first).toHaveAttribute("aria-disabled", "true");
+  await first.focus();
+  await expect(first).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(first).not.toHaveAttribute("data-grabbed");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await first.click({ force: true });
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.locator("[data-ouro-reorderable-handle]").first()).toHaveAttribute("aria-label", name!);
+});

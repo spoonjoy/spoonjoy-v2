@@ -182,12 +182,6 @@
   --ring: var(--sj-on-photo);
 }
 
-/* While a recipe's steps save, StepList keeps its HX Reorderable mounted, so each step keeps its
-   drafts, and hides the handles until HX Reorderable has a disabled state (ourostack/ouro-ui#185). */
-.sj-steps-saving [data-ouro-reorderable-handle] {
-  visibility: hidden;
-}
-
 /* Spoonjoy's primary action palette is not its brass text-link palette. Bind the
    released solid Button to our already contrast-qualified action tokens without
    changing Ouro's source or the inherited root provider. Its generic disabled

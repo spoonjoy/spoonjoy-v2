@@ -10,7 +10,7 @@
  */
 
 import { Plus } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Button } from '~/components/button'
 import { Link } from '~/components/ouro/link/link'
 import { ConfirmDialog } from '~/components/ouro/dialog/confirm-dialog'
@@ -113,13 +113,6 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
     [steps, onChange]
   )
 
-  const blockHandleWhileSaving = (event: SyntheticEvent) => {
-    if (disabled && (event.target as Element).closest('[data-ouro-reorderable-handle]')) {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-  }
-
   const stepItems = steps.map((step) => ({
     id: step.id,
     label: `Step ${step.stepNum}`,
@@ -143,17 +136,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
       {steps.length === 0 ? (
         <p className="mb-4 text-sm text-[var(--sj-ink-soft)]">No steps yet. Add your first step below.</p>
       ) : (
-        // TODO(ouro-hx: reorderable disabled, ourostack/ouro-ui#185): HX Reorderable's own disabled
-        // state. Until then, while a save is in flight, the list stays mounted, so each step keeps
-        // its drafts, and its handles are hidden (.sj-steps-saving) and take no press or key.
-        <div
-          className={disabled ? 'sj-steps-saving' : undefined}
-          onPointerDownCapture={blockHandleWhileSaving}
-          onClickCapture={blockHandleWhileSaving}
-          onKeyDownCapture={blockHandleWhileSaving}
-        >
-          <Reorderable label="Steps" className="mb-4" onReorder={handleReorder} items={stepItems} />
-        </div>
+        <Reorderable label="Steps" className="mb-4" onReorder={handleReorder} items={stepItems} disabled={disabled} />
       )}
 
       {/* Use Link for existing recipes (edit mode), Button for new recipes (create mode) */}

@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { ImageField } from "~/components/ouro/image-field/image-field";
 import { act } from "~/lib/ouro/testing/act";
 import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
@@ -55,6 +55,20 @@ async function pick(input: HTMLInputElement, ...files: File[]) {
   const data = new DataTransfer();
   for (const file of files) data.items.add(file);
   input.files = data.files;
+  await settling(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+/** Drags files over `target` and drops them there, settling as `pick` does. */
+async function dropOn(target: HTMLElement, ...files: File[]) {
+  const data = new DataTransfer();
+  for (const file of files) data.items.add(file);
+  await settling(() => {
+    for (const type of ["dragenter", "dragover", "drop"]) target.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+  });
+}
+
+/** Runs `action` in `act`, waiting for the photos it opens and a frame. */
+async function settling(action: () => void) {
   const decode = HTMLImageElement.prototype.decode;
   const opening: Array<Promise<void>> = [];
   if (!vi.isMockFunction(decode)) {
@@ -66,7 +80,7 @@ async function pick(input: HTMLInputElement, ...files: File[]) {
   }
   await act(async () => {
     try {
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      action();
     } finally {
       HTMLImageElement.prototype.decode = decode;
     }
@@ -324,6 +338,141 @@ describe("ImageField", () => {
     expect(getComputedStyle(field()).marginTop).toBe("24px");
     const second = await render(<ImageField label="Photo two" ref={object} />);
     expect(object.current).toBe(second.input());
+  });
+});
+
+describe("ImageField dropping a file", () => {
+  const zone = () => document.querySelector<HTMLElement>("[data-ouro-drop-zone]")!;
+
+  it("lights the frame while a file is over the field, and takes a dropped photo as if chosen", async () => {
+    const onFileChange = vi.fn();
+    const { field, input, preview } = await render(<ImageField label="Cover" name="cover" onFileChange={onFileChange} />);
+    // Unlit until a file comes over it.
+    expect(zone().hasAttribute("data-dragging")).toBe(false);
+    expect(field().textContent).not.toContain("Drop the photo here");
+    const data = new DataTransfer();
+    data.items.add(await photo(2, 2, "dot.png"));
+    const over = new DragEvent("dragover", { dataTransfer: data, bubbles: true, cancelable: true });
+    await act(async () => {
+      field().dispatchEvent(new DragEvent("dragenter", { dataTransfer: data, bubbles: true, cancelable: true }));
+      field().dispatchEvent(over);
+    });
+    // The browser would open the file in the tab otherwise.
+    expect(over.defaultPrevented).toBe(true);
+    expect(zone().getAttribute("data-dragging")).toBe("");
+    const primary = document.createElement("i");
+    primary.style.color = "var(--primary)";
+    zone().append(primary);
+    const lit = getComputedStyle(primary).color;
+    primary.remove();
+    // The frame's border eases to the primary colour.
+    await expect.poll(() => getComputedStyle(zone()).borderTopColor).toBe(lit);
+    await expect.element(page.getByText("Drop the photo here")).toBeVisible();
+    expect(page.getByText("Drop the photo here").element().getAttribute("aria-hidden")).toBe("true");
+    // Moving over the frame's own children keeps it lit; leaving the field puts it out.
+    await act(async () => {
+      field().dispatchEvent(new DragEvent("dragleave", { dataTransfer: data, bubbles: true, relatedTarget: zone() }));
+    });
+    expect(zone().hasAttribute("data-dragging")).toBe(true);
+    await act(async () => {
+      field().dispatchEvent(new DragEvent("dragleave", { dataTransfer: data, bubbles: true, relatedTarget: document.body }));
+    });
+    expect(zone().hasAttribute("data-dragging")).toBe(false);
+    expect(field().textContent).not.toContain("Drop the photo here");
+    await dropOn(field(), await photo(2, 2, "dot.png"), await photo(3, 3, "second.png"));
+    expect(zone().hasAttribute("data-dragging")).toBe(false);
+    // The first file dropped is the photo, as one chosen in the picker.
+    expect(onFileChange.mock.calls.map(([file]) => file?.name)).toEqual(["dot.png"]);
+    expect(input().files![0]!.name).toBe("dot.png");
+    expect(preview()!.src).toMatch(/^blob:/);
+    await expect.element(page.getByRole("button", { name: "Change photo" })).toBeVisible();
+  });
+
+  it("turns a dropped file away by type and size with the picker's messages, and crops a dropped photo with crop", async () => {
+    const announced = watchAnnouncements();
+    const onFileChange = vi.fn();
+    const { root, field, status } = await render(<ImageField label="Photo" maxSize={1000} onFileChange={onFileChange} />);
+    await dropOn(field(), new File(["notes"], "notes.txt", { type: "text/plain" }));
+    await expect.poll(() => status().textContent).toBe("notes.txt is not an image this field takes.");
+    expect(field().hasAttribute("data-invalid")).toBe(true);
+    await dropOn(field(), await photo(800, 800, "huge.png"));
+    await expect.poll(() => status().textContent).toMatch(/^huge\.png is larger than /);
+    expect(announced.count("notes.txt is not an image this field takes.")).toBe(1);
+    await dropOn(field(), broken());
+    await expect.poll(() => status().textContent).toBe("scan.heic could not be opened as a photo.");
+    expect(onFileChange).not.toHaveBeenCalled();
+    announced.stop();
+    await act(async () => root.render(<ImageField label="Photo" crop onFileChange={onFileChange} />));
+    await dropOn(field(), await photo());
+    await expect.element(page.getByRole("dialog", { name: "Crop photo" })).toBeVisible();
+  });
+
+  it("ignores a drop with no file, and anything dropped on a disabled field, without opening it in the tab", async () => {
+    const onFileChange = vi.fn();
+    const { root, field } = await render(<ImageField label="Photo" onFileChange={onFileChange} />);
+    const text = new DataTransfer();
+    text.setData("text/plain", "a recipe");
+    // Text dragged over is not a photo, so the frame stays unlit, and the tab still keeps it.
+    const textOver = new DragEvent("dragover", { dataTransfer: text, bubbles: true, cancelable: true });
+    await act(async () => void field().dispatchEvent(textOver));
+    expect(textOver.defaultPrevented).toBe(true);
+    expect(zone().hasAttribute("data-dragging")).toBe(false);
+    const empty = new DragEvent("drop", { dataTransfer: text, bubbles: true, cancelable: true });
+    await act(async () => void field().dispatchEvent(empty));
+    expect(empty.defaultPrevented).toBe(true);
+    await act(async () => root.render(<ImageField label="Photo" disabled onFileChange={onFileChange} />));
+    const data = new DataTransfer();
+    data.items.add(await photo(2, 2, "dot.png"));
+    const over = new DragEvent("dragover", { dataTransfer: data, bubbles: true, cancelable: true });
+    await act(async () => void field().dispatchEvent(over));
+    expect(over.defaultPrevented).toBe(true);
+    expect(zone().hasAttribute("data-dragging")).toBe(false);
+    await dropOn(field(), await photo(2, 2, "dot.png"));
+    expect(onFileChange).not.toHaveBeenCalled();
+  });
+
+  it("outlines the lit frame in Highlight under forced colours", async () => {
+    try {
+      const { field } = await render(<ImageField label="Photo" />);
+      await commands.emulateMedia({ forcedColors: "active" });
+      const data = new DataTransfer();
+      data.items.add(await photo(2, 2, "dot.png"));
+      await act(async () => void field().dispatchEvent(new DragEvent("dragenter", { dataTransfer: data, bubbles: true, cancelable: true })));
+      const highlight = document.createElement("i");
+      highlight.style.color = "Highlight";
+      field().append(highlight);
+      const expected = getComputedStyle(highlight).color;
+      highlight.remove();
+      await expect.poll(() => getComputedStyle(zone()).borderTopColor).toBe(expected);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("says beside the choose button that a photo can be dropped, in the app's words, and not while disabled", async () => {
+    const { root, field } = await render(<ImageField label="Cover" />);
+    const hint = page.getByText("or drop a photo here");
+    await expect.element(hint).toBeVisible();
+    // Beside the button, in the group, so a screen reader reads it after Choose photo.
+    const choose = page.getByRole("button", { name: "Choose photo" }).element();
+    expect(choose.nextElementSibling).toBe(hint.element());
+    expect(field().contains(hint.element())).toBe(true);
+    expect(getComputedStyle(hint.element()).color).toBe(getComputedStyle(field().querySelector("[data-ouro-drop-zone]")!).color);
+    await act(async () => root.render(<ImageField label="Foto" chooseLabel="Elegir foto" dropHint="o suelta una foto aquí" />));
+    await expect.element(page.getByText("o suelta una foto aquí")).toBeVisible();
+    expect(field().textContent).not.toContain("or drop a photo here");
+    await act(async () => root.render(<ImageField label="Cover" dropHint="" />));
+    expect(choose.nextElementSibling).toBeNull();
+    await act(async () => root.render(<ImageField label="Cover" disabled />));
+    expect(field().textContent).not.toContain("or drop a photo here");
+  });
+
+  it("takes the drop label from the app", async () => {
+    const { field } = await render(<ImageField label="Foto" dropLabel="Suelta la foto aquí" />);
+    const data = new DataTransfer();
+    data.items.add(await photo(2, 2, "dot.png"));
+    await act(async () => void field().dispatchEvent(new DragEvent("dragenter", { dataTransfer: data, bubbles: true, cancelable: true })));
+    await expect.element(page.getByText("Suelta la foto aquí")).toBeVisible();
   });
 });
 

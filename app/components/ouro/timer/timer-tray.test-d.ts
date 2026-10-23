@@ -19,5 +19,8 @@ expectTypeOf<{ timers: []; hidden: true }>().not.toExtend<TimerTrayProps>();
 expectTypeOf<{ timers: [{ id: "pasta"; label: "Pasta"; duration: 600 }] }>().not.toExtend<TimerTrayProps>();
 expectTypeOf<{ timers: [{ timerId: "pasta"; id: "pasta"; label: "Pasta"; duration: 600 }] }>().not.toExtend<TimerTrayProps>();
 
+expectTypeOf<{ timers: []; alert: "repeat"; repeatFor: 60 }>().toExtend<TimerTrayProps>();
+expectTypeOf<{ timers: []; alert: "loop" }>().not.toExtend<TimerTrayProps>();
+
 // @ts-expect-error items is not a prop.
 createElement(TimerTray, { timers: [], items: [] });

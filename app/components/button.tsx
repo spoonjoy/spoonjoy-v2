@@ -8,7 +8,8 @@ type AppRole<T> = T extends unknown
   ? Omit<T, "variant" | "tone"> & ActionRole & (T extends { href: string } ? { reloadDocument?: boolean } : { reloadDocument?: never })
   : never;
 
-// TODO(ouro-hx: action token, ourostack/ouro-ui#124): Pages use HX Button directly once a theme can give the primary action its own fill, apart from selection; this wrapper only sets that fill.
+// TODO(ouro-hx: button disabled theme and document navigation, spoonjoy/spoonjoy-v2#570): Remove
+// this adapter after shared Button supports the checked disabled contrast and document-link props.
 /** App action roles; the installed component owns interaction, focus, loading and touch targets. */
 export function Button({ plain, variant, reloadDocument, ...props }: AppRole<OuroButtonProps>) {
   const role = plain ? "quiet" : variant === "destructive" ? "destructive" : "primary";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type JSX, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type DragEvent, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -77,6 +77,15 @@ export interface ImageFieldProps {
   changeLabel?: string | undefined;
   /** The remove button's label. @default "Remove" */
   removeLabel?: string | undefined;
+  /** What the photo's frame says while a file is dragged over the field. @default "Drop the photo here" */
+  dropLabel?: string | undefined;
+  /**
+   * The words beside the choose button that say a photo can be dropped on the field, shown
+   * while it is enabled. An empty string leaves them out. @default "or drop a photo here"
+   *
+   * @claim "The words beside the choose button" registry/ouro/components/ouro/image-field/image-field.test.tsx verify:testExists(registry/ouro/components/ouro/image-field/image-field.test.tsx::ImageField dropping a file > says beside the choose button that a photo can be dropped, in the app's words, and not while disabled)
+   */
+  dropHint?: string | undefined;
   /** Layout only: margins, width (`mt-6`). Appearance classes warn in development. */
   className?: string | undefined;
   /** Reaches the file input. */
@@ -123,14 +132,20 @@ function setInputFile(input: HTMLInputElement, file: File | null): void {
  * open as a photo is turned away, keeping what showed, with a message under the field that
  * screen readers announce. The photo is in a real file input, so a plain form submits it.
  *
- * Use `FileField` instead for other files, several files or a drop zone, and `ImageCropper`
- * alone to crop an image you already have.
+ * A photo dragged onto the field lights its frame and says where to drop it; dropped, it goes
+ * through the same checks, cropper and messages as one chosen with the button, which stays
+ * the way to choose from the keyboard or a screen reader.
+ *
+ * Use `FileField` instead for other files or several files, and `ImageCropper` alone to crop
+ * an image you already have.
  *
  * @group Forms
  * @see https://ourostack.github.io/ouro-ui/docs/image-field
  *
  * @example
  * <ImageField label="Profile photo" name="photo" src={user.photoUrl} shape="circle" crop maxSize={5 * 1024 * 1024} onRemove={removePhoto} />
+ * @claim "A photo dragged onto the field lights" registry/ouro/components/ouro/image-field/image-field.test.tsx verify:testExists(registry/ouro/components/ouro/image-field/image-field.test.tsx::ImageField dropping a file > lights the frame while a file is over the field, and takes a dropped photo as if chosen)
+ * @claim "A photo dragged onto the field lights" registry/ouro/components/ouro/image-field/image-field.test.tsx verify:testExists(registry/ouro/components/ouro/image-field/image-field.test.tsx::ImageField dropping a file > turns a dropped file away by type and size with the picker's messages, and crops a dropped photo with crop)
  */
 export function ImageField(props: ImageFieldProps): JSX.Element {
   const {
@@ -154,6 +169,8 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
     chooseLabel = "Choose photo",
     changeLabel = "Change photo",
     removeLabel = "Remove",
+    dropLabel = "Drop the photo here",
+    dropHint = "or drop a photo here",
     className,
     ref,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -232,13 +249,12 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
       reason === "type" ? `${chosen.name} is not an image this field takes.` : reason === "size" ? `${chosen.name} is larger than ${formatSize(maxSize!)}.` : `${chosen.name} could not be opened as a photo.`;
     setRejection(rejectMessage ? rejectMessage(reason, chosen) : fallback());
   };
-  const choose = (event: ChangeEvent<HTMLInputElement>) => {
-    const chosen = event.target.files?.[0];
-    if (!chosen) return;
+  /** A photo from the picker or a drop: checked, opened (and, with crop, cropped), then shown. */
+  const consider = (chosen: File) => {
     const ticket = ++check.current;
     cancelAnimationFrame(frame.current);
     // The input keeps what showed before until the photo is opened (and, with crop, cropped).
-    setInputFile(event.target, file);
+    setInputFile(input.current!, file);
     // Empty the status region first, so the same message for the same file is announced again.
     setRejection(null);
     const reason: ImageFieldRejection | null = !matchesAccept(chosen, accept) ? "type" : maxSize !== undefined && chosen.size > maxSize ? "size" : null;
@@ -265,6 +281,29 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
       () => opened(false),
     );
   };
+  const choose = (event: ChangeEvent<HTMLInputElement>) => {
+    // Stryker disable next-line OptionalChaining: a file input's files is never null while it fires change; the type allows null.
+    const chosen = event.target.files?.[0];
+    if (chosen) consider(chosen);
+  };
+
+  // A file dragged over the field lights the photo's frame; dropped, it is taken as if chosen.
+  // Dropping never opens the file in the browser, so these always cancel the default; text or
+  // a link dragged over leaves the frame unlit, and a disabled field ignores what is dropped.
+  const [dragging, setDragging] = useState(false);
+  const dragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!disabled && event.dataTransfer.types.includes("Files")) setDragging(true);
+  };
+  const dragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+  };
+  const drop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = event.dataTransfer.files[0];
+    if (!disabled && dropped) consider(dropped);
+  };
   const remove = () => {
     check.current++;
     cancelAnimationFrame(frame.current);
@@ -288,6 +327,10 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
       data-disabled={disabled ? "" : undefined}
       data-invalid={invalid ? "" : undefined}
       className={cn("grid min-w-0 justify-items-start gap-3", className)}
+      onDragEnter={dragOver}
+      onDragOver={dragOver}
+      onDragLeave={dragLeave}
+      onDrop={drop}
     >
       <div data-ouro-label="" data-ouro-required={required ? "" : undefined} className={cn("grid gap-1", "data-ouro-required:[&>span:first-child]:after:ms-0.5 data-ouro-required:[&>span:first-child]:after:text-destructive data-ouro-required:[&>span:first-child]:after:content-['*'] supports-[content:'*'_/_'']:data-ouro-required:[&>span:first-child]:after:content-['*'_/_'']", hideLabel && "sr-only")}>
         <span className="text-sm leading-5 font-medium text-foreground">
@@ -300,13 +343,21 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
         ) : null}
       </div>
       <div
+        data-ouro-drop-zone=""
+        data-dragging={dragging ? "" : undefined}
         style={{ aspectRatio: aspect }}
         className={cn(
-          "flex items-center justify-center overflow-hidden border border-solid bg-muted text-muted-foreground",
+          "relative flex items-center justify-center overflow-hidden border border-solid bg-muted text-muted-foreground",
           invalid ? "border-destructive" : "border-border",
+          "transition-colors duration-(--ouro-duration-fast) ease-[ease] data-dragging:border-primary data-dragging:bg-primary/10 forced-colors:data-dragging:border-[Highlight]",
           shape === "circle" ? "w-32 rounded-full" : "w-full max-w-xs rounded-lg",
         )}
       >
+        {dragging ? (
+          <span aria-hidden="true" className="absolute inset-0 z-1 flex items-center justify-center bg-background p-2 text-center text-sm leading-5 font-medium text-foreground">
+            {dropLabel}
+          </span>
+        ) : null}
         {file ? (
           <img ref={attach} alt="" className="block size-full object-cover" />
         ) : src ? (
@@ -328,6 +379,7 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
         >
           {showing ? changeLabel : chooseLabel}
         </Button>
+        {dropHint && !disabled ? <span className="self-center text-sm leading-5 text-muted-foreground">{dropHint}</span> : null}
         {file !== null || (src && onRemove) ? (
           <Button data-ouro-control="image-field" data-ouro-part="remove" variant="plain" tone="destructive" size="sm" disabled={disabled} aria-describedby={`${id}-label`} onClick={remove}>
             {removeLabel}

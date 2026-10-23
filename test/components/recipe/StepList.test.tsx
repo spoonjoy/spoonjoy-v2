@@ -396,10 +396,13 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps: threeSteps(), onChange, disabled: true })
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
-      // The steps are still a list named Steps, in order, whose handles .sj-steps-saving hides.
       const list = screen.getByRole('list', { name: 'Steps' })
       expect(within(list).getAllByRole('listitem').filter((item) => item.parentElement === list)).toHaveLength(3)
-      expect(list.closest('.sj-steps-saving')).not.toBeNull()
+      for (const handle of within(list).getAllByRole('button', { name: /^Reorder Step \d$/ })) {
+        expect(handle).toHaveAttribute('aria-disabled', 'true')
+        expect(handle).not.toHaveAttribute('disabled')
+        expect(handle.tabIndex).toBe(0)
+      }
       expect(onChange).not.toHaveBeenCalled()
     })
 
@@ -448,10 +451,12 @@ describe('StepList', () => {
       await userEvent.keyboard(' ')
       await userEvent.keyboard('{ArrowUp}')
       await userEvent.keyboard(' ')
-      expect(fireEvent.pointerDown(handle)).toBe(false)
+      expect(handle).toHaveFocus()
+      expect(screen.getAllByRole('button', { name: /^Reorder Step \d$/ })
+        .map((button) => button.getAttribute('aria-label'))).toEqual([
+        'Reorder Step 1', 'Reorder Step 2', 'Reorder Step 3',
+      ])
       expect(onChange).not.toHaveBeenCalled()
-      // A press elsewhere in a step goes through.
-      expect(fireEvent.pointerDown(stepCard(2))).toBe(true)
     })
 
     it("a handle's Move up moves the step up and renumbers every step", async () => {

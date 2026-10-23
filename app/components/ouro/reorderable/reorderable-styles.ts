@@ -52,7 +52,12 @@ const contentClass = "min-w-0 flex-1";
 
 /**
  * The drag handle: a quiet grip button. `touch-none` keeps a touch that starts on it for
- * the drag instead of the page's scroll; `TouchTarget` makes it 44px to touch.
+ * the drag instead of the page's scroll; `TouchTarget` makes it 44px to touch. While the list
+ * is disabled (`aria-disabled`) it is dimmed, takes no hover or press, lets a touch scroll the
+ * page, and is GrayText under forced colours.
+ *
+ * @claim "While the list is disabled" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > disabled > draws a disabled handle in GrayText under forced colours) verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > disabled > takes no drag, no menu and no pick-up, and keeps its handles focusable and marked unavailable)
+ * @claim "While the list is disabled" registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx::Reorderable on a phone > takes no tap and no drag on a disabled handle, whose touch scrolls the page instead)
  *
  * @internal
  * @claim "`touch-none` keeps a touch that starts" registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.touch.test.tsx::Reorderable on a phone > moves a row with a touch drag on its handle, without scrolling the page)
@@ -62,8 +67,9 @@ const handleClass =
   "press relative m-0 box-border inline-flex size-8 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-md border-0 " +
   "forced-colors:border forced-colors:border-solid bg-transparent p-0 text-muted-foreground [-webkit-tap-highlight-color:transparent] " +
   "outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid " +
-  "pointer-fine:hover:bg-accent pointer-fine:hover:text-accent-foreground active:cursor-grabbing data-grabbed:bg-accent data-grabbed:text-accent-foreground " +
-  "motion-safe:active:scale-(--ouro-press-scale) active:duration-(--ouro-duration-fast)";
+  "not-aria-disabled:pointer-fine:hover:bg-accent not-aria-disabled:pointer-fine:hover:text-accent-foreground active:cursor-grabbing data-grabbed:bg-accent data-grabbed:text-accent-foreground " +
+  "motion-safe:not-aria-disabled:active:scale-(--ouro-press-scale) active:duration-(--ouro-duration-fast) " +
+  "aria-disabled:cursor-not-allowed aria-disabled:touch-auto aria-disabled:opacity-50 forced-colors:aria-disabled:text-[GrayText]";
 
 /**
  * Fills a label template: `{label}` is the row's label, `{n}` its 1-based position and

@@ -382,7 +382,7 @@
     "app/lib/ouro/announce.ts": "f62ab3a21f26633512372b1b81965dcee8117e3dd9d0733d7ab219fe67a95c1d",
     "app/lib/ouro/appearance-hints.test.ts": "988affb283d94abb0aabd598dd63b3f5f8628ab9bbd4b5ff0bd3ca24a2798527",
     "app/lib/ouro/appearance-hints.ts": "425329b0e45fe239e3ef1710c6c09060730a1e922fe1d29a5780adbde7bc6c7b",
-    "app/lib/ouro/claims-check.mjs": "9c682fc99c16ecfd94e3b807fcb9d43f80d9c0b0fa5997ed049ada52180a1645",
+    "app/lib/ouro/claims-check.mjs": "51f09a02873ef415f06ad51421e94e4561a69d4c1e0b97981d9dc91075527fe9",
     "app/lib/ouro/claims.test.ts": "2f1fa754ee862a805b46240b012d79b05d2a5b16012530252d46b90cda0d4326",
     "app/lib/ouro/claims.ts": "977ac24ab7c0e230a2ba7b9e72eb873901fd4ffb3a5e8374429db1b24e1c2b3b",
     "app/lib/ouro/class-name-check.test.tsx": "dde148739543b9b70436b908e91a6f9da1cd2dd3ba16657af7e9bfe43f538039",

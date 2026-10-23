@@ -55,3 +55,6 @@ export const Finished: Story = {
 
 /** Three seconds long, to hear it reach zero. */
 export const Short: Story = { args: { label: "Tea", duration: 3 } };
+
+/** Three seconds long with `alert="repeat"`: it chimes and vibrates every 2.5 seconds until Dismiss, Restart or 15 seconds pass. */
+export const Repeating: Story = { args: { label: "Tea", duration: 3, alert: "repeat", repeatFor: 15 } };

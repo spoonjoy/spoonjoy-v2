@@ -712,6 +712,113 @@ describe("Menu presentation", () => {
   });
 });
 
+describe("Menu modal", () => {
+  /** Whether the page's scroll is locked: Base UI hides the overflow of the element that scrolls the page. */
+  const locked = () => [document.documentElement, document.body].some((element) => /hidden|clip/.test(getComputedStyle(element).overflowY));
+
+  it("holds the page while open: its scroll is locked, and a click outside only closes it", async () => {
+    const outside = vi.fn();
+    await render(
+      <>
+        <Menu trigger={<Button>Actions</Button>}>{basicItems}</Menu>
+        <button type="button" data-testid="outside" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await expect.poll(locked).toBe(false);
+    await userEvent.click(trigger());
+    await settled();
+    await expect.poll(locked).toBe(true);
+    // Forced: the open menu keeps the pointer from the page, so the click lands where the button is.
+    await userEvent.click(document.querySelector<HTMLElement>("[data-testid=outside]")!, { force: true });
+    await expect.poll(menu).toBeNull();
+    expect(outside).not.toHaveBeenCalled();
+    await expect.poll(locked).toBe(false);
+  });
+
+  it("with modal={false}, leaves the page's scroll alone while a modal Menu's lock comes and goes", async () => {
+    function Pair() {
+      const [held, setHeld] = useState(false);
+      return (
+        <>
+          <Menu modal={false} open onOpenChange={() => {}} trigger={<Button>Light</Button>}>
+            <MenuItem onClick={() => {}}>Paint</MenuItem>
+          </Menu>
+          <Menu open={held} onOpenChange={setHeld} trigger={<Button>Heavy</Button>}>
+            <MenuItem onClick={() => {}}>Hoist</MenuItem>
+          </Menu>
+        </>
+      );
+    }
+    await render(<Pair />);
+    await expect.element(page.getByRole("menuitem", { name: "Paint", exact: true })).toBeVisible();
+    // The positive control: the modal Menu, opened while the light one stays open, locks the page...
+    await userEvent.click(page.getByRole("button", { name: "Heavy", exact: true }));
+    await expect.poll(locked).toBe(true);
+    // ...and unlocks it as it closes, which a lock of the light menu's own would prevent.
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => document.body.textContent?.includes("Hoist")).toBe(false);
+    await expect.poll(locked).toBe(false);
+    await expect.element(page.getByRole("menuitem", { name: "Paint", exact: true })).toBeVisible();
+  });
+
+  it("with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu", async () => {
+    const outside = vi.fn();
+    await render(
+      <>
+        <Menu modal={false} trigger={<Button>Actions</Button>}>
+          {basicItems}
+        </Menu>
+        <button type="button" onClick={outside}>
+          Outside
+        </button>
+      </>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    await userEvent.click(page.getByRole("button", { name: "Outside", exact: true }));
+    expect(outside).toHaveBeenCalledOnce();
+    await expect.poll(menu).toBeNull();
+    // A dropdown takes modal without a word.
+    expect(warnings()).toEqual([]);
+  });
+
+  it("keeps the phone sheet holding the page with modal={false}", async () => {
+    await page.viewport(390, 844);
+    await render(
+      <Menu modal={false} trigger={<Button>Actions</Button>}>
+        {basicItems}
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    expect((await settled()).getAttribute("data-ouro-presentation")).toBe("sheet");
+    await expect.poll(locked).toBe(true);
+  });
+
+  it("warns that a context menu does not use modal, and drops it", async () => {
+    await render(
+      <Menu contextTrigger={<div>Area</div>} {...({ modal: false } as object)}>
+        {basicItems}
+      </Menu>,
+    );
+    await act(nextFrame);
+    expect(warnings()).toEqual(["[ouro-ui] Menu: modal is not used by a context menu, which holds the page while open. Fix: remove modal."]);
+  });
+
+  it("warns that a menu in a MenuBar does not use modal: the bar decides", async () => {
+    await render(
+      <MenuBar aria-label="Recipe editor">
+        <Menu label="File" {...({ modal: false } as object)}>
+          {basicItems}
+        </Menu>
+      </MenuBar>,
+    );
+    await act(nextFrame);
+    expect(warnings()).toEqual(["[ouro-ui] Menu: modal is not used by a menu in <MenuBar>; the bar decides. Fix: remove modal."]);
+  });
+});
+
 describe("Menu context trigger", () => {
   const area = () => document.querySelector<HTMLElement>("[data-testid=area]")!;
 
@@ -808,6 +915,8 @@ describe("MenuBar", () => {
     expect(element.getAttribute("data-ouro-presentation")).toBe("sheet");
     expect(Math.round(element.getBoundingClientRect().bottom)).toBe(innerHeight);
     expect(Math.round(element.getBoundingClientRect().width)).toBe(innerWidth);
+    // The bar decides how its menus hold the page: a menu in it passes Base UI no modal, which would warn.
+    expect(warnings().filter((message: unknown) => String(message).includes("modal"))).toEqual([]);
   });
 });
 

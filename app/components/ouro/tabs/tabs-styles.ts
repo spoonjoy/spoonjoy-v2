@@ -1,4 +1,18 @@
-export { activations, indicatorClass, listClass, orientations, ownLook, panelClass, rootClass, tabClass, tabFaceClass };
+export {
+  activations,
+  indicatorClass,
+  linkIndicatorClass,
+  linkItemClass,
+  linkListClass,
+  listClass,
+  orientations,
+  ownLook,
+  panelClass,
+  rootClass,
+  tabClass,
+  tabFaceClass,
+  tabLinkClass,
+};
 export type { TabsActivation, TabsOrientation };
 
 // Class strings and value lists for Tabs, apart from the components so their files export
@@ -44,7 +58,7 @@ function ownLook(component: string): (token: string) => string {
 const rootClass = "flex min-w-0 gap-4 data-[orientation=horizontal]:flex-col data-[orientation=vertical]:flex-row";
 
 /**
- * The tab list. A hairline under the row (or beside the column) is an inset shadow, not a
+ * The tab list. A hairline under the row (or on the column's end edge, the left in a right-to-left page) is an inset shadow, not a
  * border, so the row can scroll sideways on a narrow screen without clipping the indicator.
  * While it scrolls, a mask fades the side that hides more tabs (`data-fade`, set by TabsList).
  * The mask's `#000` only means opaque: a gradient mask is read for its alpha (`mask-mode:
@@ -60,14 +74,19 @@ const listClass =
   "data-[fade=right]:[mask-image:linear-gradient(to_right,#000_calc(100%-2rem),transparent)] " +
   "data-[fade=left]:[mask-image:linear-gradient(to_left,#000_calc(100%-2rem),transparent)] " +
   "data-[fade=both]:[mask-image:linear-gradient(to_right,transparent,#000_2rem,#000_calc(100%-2rem),transparent)] " +
-  "data-[orientation=vertical]:flex-col data-[orientation=vertical]:shadow-[inset_-1px_0_0_0_var(--border)]";
+  "data-[orientation=vertical]:flex-col data-[orientation=vertical]:shadow-[inset_-1px_0_0_0_var(--border)] " +
+  "rtl:data-[orientation=vertical]:shadow-[inset_1px_0_0_0_var(--border)]";
 
 /**
  * A tab: 44px tall with 16px text on a coarse pointer, stepping down to 36px and 14px from
  * `sm` with a fine pointer. The selected tab takes the foreground color, the others are
- * muted. The focus outline is inset, so the scrolling row never clips it.
+ * muted. The focus outline is inset, so the scrolling row never clips it. Under forced colours,
+ * where the fill and the underline drop away, each tab draws a border, and the selected tab is
+ * filled with Highlight and lettered in HighlightText.
  *
  * @internal
+ * @claim "Under forced colours, where the fill" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs > draws each tab's edge under forced colours, where its fill and the underline drop away)
+ * @claim "Under forced colours, where the fill" registry/ouro/components/ouro/tabs/tabs.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.test.tsx::Tabs > shows which tab is selected under forced colours: Highlight behind it and HighlightText on it)
  * @claim "A tab: 44px tall with 16px" registry/ouro/components/ouro/tabs/tabs.touch.test.tsx verify:testExists(registry/ouro/components/ouro/tabs/tabs.touch.test.tsx::keeps 44px tabs with 16px text on a phone, also in landscape)
  * @claim "The focus outline is inset, so" registry/ouro/components/ouro/tabs/tabs-styles.ts verify:fileLine(registry/ouro/components/ouro/tabs/tabs-styles.ts, /outline-ring\s-outline-offset-2\sfocus-visible:outline-2/)
  */
@@ -76,6 +95,7 @@ const tabClass =
   "h-(--ouro-tab-h) px-3 [--ouro-tab-h:calc(var(--spacing)*11)] sm:pointer-fine:[--ouro-tab-h:calc(var(--spacing)*9)] " +
   "pointer-coarse:min-w-11 justify-center data-[orientation=vertical]:justify-start " +
   "rounded-md border-0 bg-transparent text-base font-medium text-muted-foreground sm:pointer-fine:text-sm " +
+  "forced-colors:border forced-colors:border-solid " +
   "select-none touch-manipulation [-webkit-tap-highlight-color:transparent] " +
   "not-data-disabled:pointer-fine:hover:text-foreground data-active:text-foreground " +
   "forced-colors:data-active:bg-[Highlight] forced-colors:data-active:text-[HighlightText] " +
@@ -119,6 +139,38 @@ const indicatorClass =
   "data-[orientation=vertical]:top-0 data-[orientation=vertical]:end-0 data-[orientation=vertical]:w-0.5 " +
   "data-[orientation=vertical]:h-px data-[orientation=vertical]:origin-top data-[orientation=vertical]:translate-y-(--active-tab-top) " +
   "data-[orientation=vertical]:scale-y-[tan(atan2(var(--active-tab-height,0px),1px))]";
+
+/**
+ * The list of links when the tabs are links: the tab row's look, without the list's bullets.
+ *
+ * @internal
+ */
+const linkListClass = "list-none";
+
+/**
+ * One link's list item, which the link fills, so a column of links lines up on the hairline.
+ *
+ * @internal
+ */
+const linkItemClass = "m-0 flex p-0";
+
+/**
+ * A tab that is a link: the tab's look, filling its list item, without the link's underline.
+ *
+ * @internal
+ */
+const tabLinkClass = "flex-1 no-underline";
+
+/**
+ * The line under the current link (beside it, in a column). It is drawn inside the current
+ * link, on the row's hairline, and stands still, since a link opens a page of its own.
+ *
+ * @internal
+ */
+const linkIndicatorClass =
+  "pointer-events-none absolute z-1 bg-primary " +
+  "data-[orientation=horizontal]:inset-x-0 data-[orientation=horizontal]:bottom-0 data-[orientation=horizontal]:h-0.5 " +
+  "data-[orientation=vertical]:inset-y-0 data-[orientation=vertical]:end-0 data-[orientation=vertical]:w-0.5";
 
 /**
  * A panel. It fades in when its tab is selected; the old panel leaves at once, so the

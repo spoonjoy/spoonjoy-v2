@@ -103,3 +103,34 @@ it("stacks vertical tabs in a row on a phone", async () => {
   await rotate(390, 844);
   await expect.poll(() => host.querySelector('[role="tablist"]')!.getAttribute("data-orientation")).toBe("horizontal");
 });
+
+it("keeps 44px links with 16px text on a phone, and the current one in view in a row that scrolls", async () => {
+  await rotate(390, 844);
+  const many = Array.from({ length: 8 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, href: `/s/${index}` }));
+  const host = await render(<Tabs label="Sections" items={many} currentPath="/s/7" />);
+  const list = host.querySelector<HTMLElement>("ul")!;
+  const link = host.querySelector<HTMLElement>('[aria-current="page"]')!;
+  expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
+  expect(link.getBoundingClientRect().right).toBeLessThanOrEqual(list.getBoundingClientRect().right + 1);
+  await expect.poll(() => list.getAttribute("data-fade")).toMatch(/left|both/);
+  await expectTouchSize(host, '[data-ouro-part="link"]');
+  for (const target of host.querySelectorAll('[data-ouro-part="link"]')) expect(target.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+});
+
+it("puts vertical links in a row on a phone", async () => {
+  const host = await render(
+    <Tabs
+      label="Search scope"
+      orientation="vertical"
+      currentPath="/search?scope=chefs"
+      items={[
+        { value: "all", label: "All", href: "/search" },
+        { value: "chefs", label: "Chefs", href: "/search?scope=chefs" },
+      ]}
+    />,
+  );
+  await rotate(390, 844);
+  await expect.poll(() => host.querySelector("ul")!.getAttribute("data-orientation")).toBe("horizontal");
+  const [all, chefs] = host.querySelectorAll("a");
+  expect(chefs!.getBoundingClientRect().top).toBe(all!.getBoundingClientRect().top);
+});

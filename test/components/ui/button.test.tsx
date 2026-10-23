@@ -7,8 +7,8 @@ import { createTestRoutesStub } from "../../utils";
 
 describe("Spoonjoy action roles over released Button", () => {
   it.each([
-    [{}, "solid", "primary", "bg-primary"],
-    [{ variant: "default" as const }, "solid", "primary", "bg-primary"],
+    [{}, "solid", "primary", "bg-(--ouro-action,var(--primary))"],
+    [{ variant: "default" as const }, "solid", "primary", "bg-(--ouro-action,var(--primary))"],
     [{ variant: "destructive" as const }, "soft", "destructive", "bg-destructive/10"],
     [{ plain: true as const }, "outline", "quiet", "border-border"],
   ])("maps the exclusive role %j without guessing a library tone", (props, variant, role, colorClass) => {

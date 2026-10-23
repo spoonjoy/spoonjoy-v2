@@ -63,6 +63,7 @@ describe("/mcp landing page", () => {
     ]);
     render(createElement(Stub, { initialEntries: ["/mcp"] }));
     const link = await screen.findByRole("link", { name: /protected-resource metadata/i });
+    expect(link).toHaveAttribute("data-ouro-control", "link");
 
     // The router leaves the click alone (it would fetch a resource route as a page and show an
     // error), so the browser loads the address as a document.

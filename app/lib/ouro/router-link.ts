@@ -35,18 +35,20 @@ export function safeRel(rel: string | undefined): string {
 /** Props for {@link RouterLink}: an anchor's attributes with a required `href`. */
 export type RouterLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
   href: string;
+  /** Renders a plain `<a>` for an internal path too, so the browser loads the page itself. */
+  reloadDocument?: boolean | undefined;
   ref?: Ref<HTMLAnchorElement> | undefined;
 };
 
 /**
  * Renders an internal `href` through `OuroProvider`'s `linkComponent` (your router's
- * link) and an absolute URL as a plain `<a>`. An absolute URL with `target="_blank"`
+ * link) and an absolute URL, or any `href` with `reloadDocument`, as a plain `<a>`. An absolute URL with `target="_blank"`
  * always gets `rel="noopener noreferrer"`, merged with any `rel` passed.
  *
  * @internal Shared by Button and Link; apps use those.
  * @claim "`, merged with any `rel` passed." registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::link branch > merges an explicit rel with noopener noreferrer on an external _blank link)
  */
-export function RouterLink({ href, target, rel, ...props }: RouterLinkProps): JSX.Element {
+export function RouterLink({ href, target, rel, reloadDocument, ...props }: RouterLinkProps): JSX.Element {
   const { linkComponent } = useOuro();
   const external = isExternalHref(href);
   // `ref` may be `undefined` here, which the adapter's type rules out under
@@ -57,5 +59,5 @@ export function RouterLink({ href, target, rel, ...props }: RouterLinkProps): JS
     target,
     rel: external && target === "_blank" ? safeRel(rel) : rel,
   } as ComponentProps<OuroLinkComponent>;
-  return external ? createElement("a", linkProps) : createElement(linkComponent, linkProps);
+  return external || reloadDocument ? createElement("a", linkProps) : createElement(linkComponent, linkProps);
 }

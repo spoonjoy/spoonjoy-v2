@@ -94,7 +94,7 @@ describe("primary button contrast", () => {
       expect(actual.getPropertyValue("--primary").trim()).toBe(color(LIGHT, disabled ? "--sj-action-disabled" : "--sj-action"));
       expect(actual.getPropertyValue("--primary-foreground").trim()).toBe(color(LIGHT, disabled ? "--sj-on-action-disabled" : "--sj-on-action"));
       if (disabled) expect(actual.opacity).toBe("1");
-      expect(button).toHaveClass("bg-primary", "text-primary-foreground", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
+      expect(button).toHaveClass("bg-(--ouro-action,var(--primary))", "text-(--ouro-action-foreground,var(--primary-foreground))", "outline-ring", "outline-offset-2", "focus-visible:outline-2");
     } finally {
       style.remove();
     }

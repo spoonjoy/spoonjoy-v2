@@ -116,6 +116,17 @@ export interface ReorderableProps {
   droppedLabel?: string | undefined;
   /** Announced when a move is cancelled and the row goes back. @default "{label} put back. Position {n} of {total}." */
   canceledLabel?: string | undefined;
+  /**
+   * Stops reordering, for example while a save of the last move is in flight: no drag, no
+   * menu of moves, no pick-up with Space. The handles stay in the tab order, marked
+   * `aria-disabled`, so focus stays where it is and a screen reader says they are unavailable.
+   * A row held from the keyboard or dragged when it turns on is put back, and an open menu
+   * closes.
+   * @claim "Stops reordering, for example while a" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > disabled > takes no drag, no menu and no pick-up, and keeps its handles focusable and marked unavailable)
+   * @claim "A row held from the keyboard" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > disabled > puts back a row held from the keyboard and closes an open menu when it turns on)
+   * @claim "A row held from the keyboard" registry/ouro/components/ouro/reorderable/reorderable.test.tsx verify:testExists(registry/ouro/components/ouro/reorderable/reorderable.test.tsx::Reorderable > disabled > puts back a row being dragged when it turns on, and reports nothing)
+   */
+  disabled?: boolean | undefined;
   /** Layout only: margins, or a height with `overflow-auto` (`max-h-80 overflow-auto`) to scroll the list in place. Appearance classes warn in development. */
   className?: string | undefined;
 
@@ -236,6 +247,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     movedLabel = "{label} moved. Position {n} of {total}.",
     droppedLabel = "{label} dropped. Position {n} of {total}.",
     canceledLabel = "{label} put back. Position {n} of {total}.",
+    disabled = false,
     className,
     // Guard props (hint types), dropped here so they never reach the DOM.
     values,
@@ -412,7 +424,16 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     onReorder?.(next, { id, from, to });
   };
 
+  /** Puts a row held from the keyboard back where it was picked up. */
+  const putBack = (held: { id: string; origin: string[] }) => {
+    refocus.current = held.id;
+    setState({ key, order: held.origin });
+    setGrab(null);
+    say(canceledLabel, held.id, held.origin.indexOf(held.id));
+  };
+
   const onClick = (event: ReactMouseEvent<HTMLButtonElement>, id: string) => {
+    if (disabled) return;
     // The pointer's click that ends a drag is not an activation. A click from the keyboard
     // or a screen reader (`detail` 0) always is, except while a pointer is dragging.
     if (dragging !== null || (dragged.current && event.detail !== 0)) return;
@@ -423,6 +444,8 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, id: string) => {
+    // Nothing to pick up or open; the Space that comes up clicks nothing (onKeyUp).
+    if (disabled) return;
     if (event.key === " ") {
       // Space picks the row up and drops it. Its click would open the menu instead.
       event.preventDefault();
@@ -452,10 +475,7 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
       // This Escape puts the row back; it does not also close a Dialog or Sheet around the list.
       event.preventDefault();
       event.stopPropagation();
-      refocus.current = id;
-      setState({ key, order: grabbed.origin });
-      setGrab(null);
-      say(canceledLabel, id, grabbed.origin.indexOf(id));
+      putBack(grabbed);
     }
   };
 
@@ -610,7 +630,23 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
     finishRef.current = finish;
   });
 
+  // Turning disabled on puts back what is held, by the keyboard or a pointer, and closes a
+  // menu, before the browser paints.
+  const stop = useRef<(() => void) | undefined>(undefined);
+  useLayoutEffect(() => {
+    stop.current = () => {
+      if (drag.current) finish(false, 0, false);
+      if (grabbed) putBack(grabbed);
+      setMenu(null);
+    };
+  });
+  useLayoutEffect(() => {
+    // Stryker disable next-line ConditionalExpression: with disabled off nothing can be held or open (disabled refuses every pick-up), so stopping then changes nothing
+    if (disabled) stop.current!();
+  }, [disabled]);
+
   const onPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, id: string) => {
+    if (disabled) return;
     if (event.button === 0 && event.isPrimary && !drag.current) {
       // Keep the press from selecting text or starting a native drag.
       event.preventDefault();
@@ -642,6 +678,8 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
                   if (!next) setMenu(null);
                 }}
                 closeLabel={closeLabel}
+                // A menu on every row: holding the page would lay out and repaint all of it on each open and close.
+                modal={false}
                 trigger={
                   <button
                     ref={dragProps.ref}
@@ -651,7 +689,8 @@ export function Reorderable(props: ReorderableProps): JSX.Element {
                     data-ouro-part="handle"
                     aria-label={fillLabel(handleLabel, item.label, index + 1, total)}
                     // A menu button, so no `aria-pressed`: a picked-up row is said by the announcer and by the handle's description.
-                    aria-describedby={grabbed?.id === id ? heldId : instructionsId}
+                    aria-describedby={disabled ? undefined : grabbed?.id === id ? heldId : instructionsId}
+                    aria-disabled={disabled || undefined}
                     data-grabbed={grabbed?.id === id ? "" : undefined}
                     className={handleClass}
                     onClick={(event) => onClick(event, id)}

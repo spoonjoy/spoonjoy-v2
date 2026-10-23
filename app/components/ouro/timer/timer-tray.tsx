@@ -1,12 +1,23 @@
 "use client";
 
-import type { HTMLAttributes, JSX, MouseEvent, Ref, RefObject } from "react";
+import { useEffect, type HTMLAttributes, type JSX, type MouseEvent, type Ref, type RefObject } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings, type DevWarning } from "~/lib/ouro/use-dev-messages";
 import { formatDuration, useTimer } from "~/lib/ouro/use-timer";
 import { Button } from "~/components/ouro/button/button";
-import { alertDone, doneText, wordsFor, type TimerLabels } from "~/components/ouro/timer/timer-styles";
+import {
+  alertDone,
+  doneText,
+  registerView,
+  REPEAT_FOR,
+  repeatLength,
+  stopAlert,
+  timerAlerts,
+  wordsFor,
+  type TimerAlert,
+  type TimerLabels,
+} from "~/components/ouro/timer/timer-styles";
 
 /** One timer a {@link TimerTray} watches. */
 export interface TimerTrayItem {
@@ -34,6 +45,22 @@ export interface TimerTrayOwnProps {
    * @claim "No chime and no vibration when" registry/ouro/components/ouro/timer/timer-tray.test.tsx verify:testExists(registry/ouro/components/ouro/timer/timer-tray.test.tsx::TimerTray > alerts on its own when the timer's screen is gone, unless silent)
    */
   silent?: boolean | undefined;
+  /**
+   * How it sounds when a timer reaches zero while only the tray shows it, as `Timer`'s
+   * `alert`: `once`, or `repeat`, again every 2.5 seconds until the timer is dismissed or
+   * `repeatFor` seconds pass. Dismiss or Cancel in the tray also stops a `Timer`'s repeating alert.
+   * @default "once"
+   * @claim "Dismiss or Cancel in the tray" registry/ouro/components/ouro/timer/timer-tray.test.tsx verify:testExists(registry/ouro/components/ouro/timer/timer-tray.test.tsx::TimerTray > stops the Timer's repeating alert when the tray dismisses the timer)
+   * @claim "`repeat`, again every 2.5 seconds until" registry/ouro/components/ouro/timer/timer-tray.test.tsx verify:testExists(registry/ouro/components/ouro/timer/timer-tray.test.tsx::TimerTray > repeats its own alert with alert=repeat until the timer is dismissed)
+   */
+  alert?: TimerAlert | (string & { 'Use "once" or "repeat"': never }) | undefined;
+  /**
+   * With `alert="repeat"`, how long it keeps sounding, in seconds from when the time was up. A
+   * value that is not finite and above 0 is taken as 120, and development warns.
+   * @default 120
+   * @claim "A value that is not finite" registry/ouro/components/ouro/timer/timer-tray.test.tsx verify:fileLine(registry/ouro/components/ouro/timer/timer-tray.test.tsx, /takes a repeatFor that is not finite and above 0 as two minutes/)
+   */
+  repeatFor?: number | undefined;
   /** The words it shows and says, for apps in other languages. */
   labels?: TimerLabels | undefined;
   /**
@@ -65,13 +92,27 @@ interface TrayRowProps {
   item: TimerTrayItem;
   words: ReturnType<typeof wordsFor>;
   silent: boolean;
+  repeat: boolean;
+  repeatFor: number;
   finalFocus: RefObject<HTMLElement | null> | undefined;
 }
 
-function TrayRow({ item, words, silent, finalFocus }: TrayRowProps): JSX.Element | null {
-  const timer = useTimer({ duration: item.duration, timerId: item.timerId, fallback: true, onDone: (event) => alertDone(item.label, words.done, event, silent) });
-  if (timer.status === "idle") return null;
+function TrayRow({ item, words, silent, repeat, repeatFor, finalFocus }: TrayRowProps): JSX.Element | null {
+  const timer = useTimer({
+    duration: item.duration,
+    timerId: item.timerId,
+    fallback: true,
+    onDone: (event) => alertDone(item.label, words.done, event, { silent, repeat, repeatFor, key: item.timerId }),
+  });
   const done = timer.status === "done";
+  // Dismiss or Cancel, here or in the timer's own view, stops a repeating alert.
+  useEffect(() => {
+    if (!done) stopAlert(item.timerId);
+  }, [done, item.timerId]);
+  // The alert stops once no view of the timer is left: the row goes with the tray, or leaves timers.
+  // Stryker disable next-line ArrayDeclaration: rows are keyed by timerId, so a row's timerId never changes while it is mounted.
+  useEffect(() => registerView(item.timerId), [item.timerId]);
+  if (timer.status === "idle") return null;
   // The row goes with the timer, so focus moves on first: to the next timer, the previous one, or out.
   const stop = (event: MouseEvent<HTMLButtonElement>) => {
     const row = event.currentTarget.closest("li")!;
@@ -136,6 +177,8 @@ export function TimerTray(props: TimerTrayProps): JSX.Element {
     timers,
     label = "Timers",
     silent,
+    alert: alertProp = "once",
+    repeatFor: repeatForProp = REPEAT_FOR,
     labels,
     finalFocus,
     className,
@@ -145,6 +188,8 @@ export function TimerTray(props: TimerTrayProps): JSX.Element {
     ...rest
   } = props;
   const words = wordsFor(labels);
+  const alert = timerAlerts.includes(alertProp as TimerAlert) ? (alertProp as TimerAlert) : "once";
+  const repeatFor = repeatLength(repeatForProp);
   useAppearanceClassNameCheck(
     "TimerTray",
     className,
@@ -162,6 +207,11 @@ export function TimerTray(props: TimerTrayProps): JSX.Element {
             return id !== undefined && ["id is not a key of a timer in timers", `<TimerTray timers={[{ timerId: ${JSON.stringify(id)}, label, duration }]} />`];
           }),
           hidden !== undefined && ["hidden is not a prop; the tray hides itself while no timer is running", "<TimerTray timers={timers} />"],
+          alert !== alertProp && [`alert="${String(alertProp)}" is not an alert; use "once" or "repeat"`, '<TimerTray alert="repeat" timers={timers} />'],
+          repeatFor !== repeatForProp && [
+            `repeatFor={${String(repeatForProp)}} is not a length; it is in seconds and above 0`,
+            '<TimerTray alert="repeat" repeatFor={120} timers={timers} />',
+          ],
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
@@ -176,7 +226,15 @@ export function TimerTray(props: TimerTrayProps): JSX.Element {
       <ul className="m-0 grid list-none divide-y divide-border p-0">
         {timers.map((item, index) => (
           // A plain-JavaScript app may leave timerId out (development names the fix); the index keeps React's key.
-          <TrayRow key={item.timerId ?? `index:${index}`} item={item} words={words} silent={silent === true} finalFocus={finalFocus} />
+          <TrayRow
+            key={item.timerId ?? `index:${index}`}
+            item={item}
+            words={words}
+            silent={silent === true}
+            repeat={alert === "repeat"}
+            repeatFor={repeatFor}
+            finalFocus={finalFocus}
+          />
         ))}
       </ul>
     </section>

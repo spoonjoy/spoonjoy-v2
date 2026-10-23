@@ -37,5 +37,9 @@ expectTypeOf<{ label: "Steps"; items: []; onChange: () => void }>().not.toExtend
 expectTypeOf<{ label: "Steps"; items: []; onDragEnd: () => void }>().not.toExtend<ReorderableProps>();
 expectTypeOf<{ label: "Steps"; items: []; axis: "y" }>().not.toExtend<ReorderableProps>();
 
+// disabled pauses reordering, as while a save is in flight.
+expectTypeOf<{ label: "Steps"; items: []; disabled: true }>().toExtend<ReorderableProps>();
+expectTypeOf<{ label: "Steps"; items: []; disabled: "saving" }>().not.toExtend<ReorderableProps>();
+
 // @ts-expect-error label is required.
 createElement(Reorderable, { items: [] });

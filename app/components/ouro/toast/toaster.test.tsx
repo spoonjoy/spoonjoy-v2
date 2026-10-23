@@ -866,8 +866,7 @@ describe("toast()", () => {
 
   it("warns when no Toaster mounts", async () => {
     // real clock: with no Toaster, no toast shows or counts down; the check for one runs a little later.
-    toast("Nobody sees this");
-    toast("Nor this");
+    for (const message of ["Nobody sees this", "Nor this"]) toast(message);
     await expect
       .poll(() => warnings())
       .toEqual(['[ouro-ui] toast: no <Toaster /> is mounted, so "Nobody sees this" is not shown. Fix: render <Toaster /> once, at the root of your app.']);

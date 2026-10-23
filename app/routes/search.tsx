@@ -1,5 +1,4 @@
 import type { Route } from "./+types/search";
-import { useCallback, useId } from "react";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
 import { Button } from "~/components/button";
@@ -7,7 +6,7 @@ import { Heading } from "~/components/ouro/text/heading";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
-import { Link } from "~/components/ouro/link/link";
+import { Tabs } from "~/components/ouro/tabs/tabs";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
@@ -95,22 +94,14 @@ function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: 
   const coverProvenanceLabel = typeof result.metadata.coverProvenanceLabel === "string"
     ? result.metadata.coverProvenanceLabel
     : null;
-  const id = useId();
   const isPrivate = result.type === "shopping-list-item";
   // The link is named by the card's visible type, Private mark, title and byline, so a screen
   // reader hears what a sighted reader sees first and voice control can say any of it (product
   // audit 2026-10-09, finding 19; WCAG 2.5.3). The title is the result's heading.
-  // TODO(ouro-hx: item description, ourostack/ouro-ui#183): HX Item describes its link by its
-  // description; until then the link's ref points aria-describedby at the cover note and the
-  // matching text, which describe the result rather than name it.
-  const describeLink = useCallback((link: HTMLAnchorElement | null) => {
-    link?.setAttribute("aria-describedby", `${id}-cover ${id}-snippet`);
-  }, [id]);
   return (
     <Item
       as="article"
       href={result.href}
-      linkRef={describeLink}
       title={
         <>
           <Badge variant="outline">{RESULT_LABELS[result.type]}</Badge>
@@ -119,11 +110,13 @@ function ResultCard({ result, imageProps }: { result: SearchResult; imageProps: 
           <Text size="sm" className="block">{result.subtitle}</Text>
         </>
       }
-      description={<Text id={`${id}-snippet`} size="sm" lines={2}>{result.snippet}</Text>}
+      description={<>
+        <CoverProvenanceBadge label={coverProvenanceLabel} />
+        <Text size="sm" lines={2}>{result.snippet}</Text>
+      </>}
       media={result.imageUrl ? <img src={result.imageUrl} alt="" {...imageProps} /> : <Icon />}
       mediaSize={result.imageUrl ? "lg" : "icon"}
       mediaAbove={result.imageUrl ? "sm" : undefined}
-      actions={<span id={`${id}-cover`} className="contents"><CoverProvenanceBadge label={coverProvenanceLabel} /></span>}
       stackBelow="sm"
     />
   );
@@ -198,38 +191,30 @@ export default function Search() {
         </header>
 
         <div className="grid gap-8 py-8 lg:grid-cols-[13.75rem_minmax(0,1fr)]">
-          {/* A <nav>, not <aside>: root.tsx already wraps every route in a <main> landmark, and
-              this scope switcher is core search navigation for the results beside it, not
-              tangential "complementary" content, so it should not add a complementary landmark
-              that would nest inside <main> and fail landmark-complementary-is-top-level. <nav>
-              has no such top-level restriction, and it's the correct role for this: an in-page
-              menu of links that switch the search scope. */}
-          {/* TODO(ouro-hx: tabs link mode, ourostack/ouro-ui#128): The scope switcher becomes HX Tabs over links once Tabs can be links. */}
-          <nav aria-label="Search scope" className="border-t border-[var(--sj-border)] pt-4 font-sj-ui text-sm font-bold uppercase tracking-[0.14em] lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
+          <div className="border-t border-[var(--sj-border)] pt-4 lg:border-r lg:border-t-0 lg:pr-6 lg:pt-0">
             <Heading level={2} size="lg">{SCOPE_LABELS[scope]}</Heading>
             <p className="text-base/6 text-[var(--sj-ink-soft)] mt-2 font-sj-body text-sm/6 normal-case tracking-normal">{SCOPE_DESCRIPTIONS[scope]}</p>
-            <div className="mt-5 grid gap-0">
-              {SEARCH_SCOPES.map((searchScope) => {
+            <Tabs
+              label="Search scope"
+              orientation="vertical"
+              className="mt-5"
+              value={scope}
+              items={SEARCH_SCOPES.map((searchScope) => {
                 const params = new URLSearchParams();
                 params.set("scope", searchScope);
                 if (query.trim()) params.set("q", query.trim());
 
-                return (
-                  <Link
-                    key={searchScope}
-                    href={`/search?${params.toString()}`}
-                    tone="secondary"
-                    aria-current={scope === searchScope ? "page" : undefined}
-                  >
-                    {SCOPE_LABELS[searchScope]}
-                  </Link>
-                );
+                return {
+                  value: searchScope,
+                  href: `/search?${params.toString()}`,
+                  label: SCOPE_LABELS[searchScope],
+                };
               })}
-            </div>
+            />
             <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui mt-5 hidden text-xs/5 uppercase tracking-[0.14em] sm:block">
               Shopping List results are private to your signed-in kitchen.
             </p>
-          </nav>
+          </div>
 
           {/* <section>, not <main>: root.tsx already renders the page's only <main>. */}
           <section aria-label="Search results">

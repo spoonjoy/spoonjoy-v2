@@ -773,12 +773,15 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
       const field = screen.getByRole("group", { name: "Recipe image" });
-      const zone = field.closest<HTMLElement>("[data-drop-zone]")!;
+      const zone = field.querySelector<HTMLElement>("[data-ouro-drop-zone]")!;
       expect(zone).not.toBeNull();
+      const input = within(field).getByLabelText("Recipe image", { selector: "input" }) as HTMLInputElement;
+      const syntheticChanges = vi.fn();
+      input.addEventListener("change", syntheticChanges);
       const photo = new File(["content"], "dropped.jpg", { type: "image/jpeg" });
       const dataTransfer = { files: [photo], types: ["Files"] };
       fireEvent.dragEnter(zone, { dataTransfer });
-      expect(zone).toHaveAttribute("data-drag-active");
+      expect(zone).toHaveAttribute("data-dragging");
       // Moving over the field inside the zone keeps it highlighted; leaving the zone does not.
       const leaveTo = (target: Element) => {
         const leave = createEvent.dragLeave(zone, { dataTransfer });
@@ -786,25 +789,25 @@ describe("RecipeBuilder", () => {
         fireEvent(zone, leave);
       };
       leaveTo(field);
-      expect(zone).toHaveAttribute("data-drag-active");
+      expect(zone).toHaveAttribute("data-dragging");
       leaveTo(document.body);
-      expect(zone).not.toHaveAttribute("data-drag-active");
+      expect(zone).not.toHaveAttribute("data-dragging");
       fireEvent.dragEnter(zone, { dataTransfer });
       fireEvent.dragOver(zone, { dataTransfer });
       fireEvent.drop(zone, { dataTransfer });
-      expect(zone).not.toHaveAttribute("data-drag-active");
-      const input = within(field).getByLabelText("Recipe image", { selector: "input" }) as HTMLInputElement;
+      expect(zone).not.toHaveAttribute("data-dragging");
       await waitFor(() => expect(input.files?.[0]).toBe(photo));
 
       await userEvent.click(screen.getByRole("button", { name: "Save recipe" }));
       expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ imageFile: photo }));
+      expect(syntheticChanges).not.toHaveBeenCalled();
     });
 
     it("turns away a dropped file the field would refuse, with Spoonjoy's message", async () => {
       const Wrapper = createTestWrapper();
       render(<Wrapper initialEntries={["/recipes/new"]} />);
       const field = screen.getByRole("group", { name: "Recipe image" });
-      const zone = field.closest<HTMLElement>("[data-drop-zone]")!;
+      const zone = field.querySelector<HTMLElement>("[data-ouro-drop-zone]")!;
       const gif = new File(["gif"], "spin.gif", { type: "image/gif" });
       fireEvent.drop(zone, { dataTransfer: { files: [gif], types: ["Files"] } });
       await waitFor(() => expect(within(field).getByText("Photos must be JPG, PNG, or WebP.")).toHaveAttribute("role", "status"));
@@ -815,9 +818,9 @@ describe("RecipeBuilder", () => {
       const Wrapper = createTestWrapper({ onSave, disabled: true });
       render(<Wrapper initialEntries={["/recipes/new"]} />);
       const field = screen.getByRole("group", { name: "Recipe image" });
-      const zone = field.closest<HTMLElement>("[data-drop-zone]")!;
+      const zone = field.querySelector<HTMLElement>("[data-ouro-drop-zone]")!;
       fireEvent.dragEnter(zone, { dataTransfer: { files: [], types: ["text/plain"] } });
-      expect(zone).not.toHaveAttribute("data-drag-active");
+      expect(zone).not.toHaveAttribute("data-dragging");
       fireEvent.dragOver(zone, { dataTransfer: { files: [], types: ["text/plain"] } });
       fireEvent.drop(zone, { dataTransfer: { files: [], types: ["Files"] } });
       fireEvent.drop(zone, { dataTransfer: { files: [new File(["x"], "x.jpg", { type: "image/jpeg" })], types: ["Files"] } });

@@ -15,8 +15,9 @@ describe("RecipesSectionNav", () => {
       </MemoryRouter>,
     );
     const nav = screen.getByRole("navigation", { name: "Recipe lists" });
-    expect(nav).toHaveClass("lg:hidden");
+    expect(screen.getByTestId("recipes-section-nav")).toHaveClass("lg:hidden");
     const links = within(nav).getAllByRole("link");
+    for (const link of links) expect(link).toHaveAttribute("data-ouro-control", "tabs");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Mine", "/my-recipes"],
       ["Saved", "/saved-recipes"],

@@ -80,6 +80,26 @@ describe("cook-mode timers", () => {
     expect(document.title).toBe("Pasta Night");
   });
 
+  it("keeps a step timer ringing without a tray, until that timer is dismissed", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    try {
+      render(<CookStepTimer timer={pasta} />);
+      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(65_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(3);
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(3);
+    } finally {
+      Reflect.deleteProperty(navigator, "vibrate");
+    }
+  });
+
   it("keeps ringing every 2.5 s after a timer is up, until it is dismissed", async () => {
     const vibrate = vi.fn(() => true);
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
@@ -122,15 +142,18 @@ describe("cook-mode timers", () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(120_000);
+      await vi.advanceTimersByTimeAsync(117_500);
     });
-    const rings = vibrate.mock.calls.length;
-    // The first alert, then one every 2.5 s for the two minutes after.
-    expect(rings).toBe(1 + 120_000 / 2_500);
+    // At zero, then every 2.5 s through 117.5 s; the two-minute cap admits no final ring.
+    expect(vibrate).toHaveBeenCalledTimes(48);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_500);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(48);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
-    expect(vibrate).toHaveBeenCalledTimes(rings);
+    expect(vibrate).toHaveBeenCalledTimes(48);
 
     // A page opened after the two minutes shows the timer up, and stays quiet.
     unmount();
@@ -139,7 +162,7 @@ describe("cook-mode timers", () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
     expect(document.title).toBe("Time's up: Step 1 · Boil pasta");
-    expect(vibrate).toHaveBeenCalledTimes(rings);
+    expect(vibrate).toHaveBeenCalledTimes(48);
     Reflect.deleteProperty(navigator, "vibrate");
   });
 

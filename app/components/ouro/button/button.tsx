@@ -28,7 +28,13 @@ export type ButtonIcon = ComponentType<SVGProps<SVGSVGElement>>;
 export interface ButtonBaseProps {
   /**
    * Color role from the theme, named after its token: `primary` reads `--primary`.
+   * A solid primary button, the page's main action, reads `--ouro-action` and
+   * `--ouro-action-foreground` instead when the theme sets them, with `href` too, so a theme
+   * can give its actions their own colour. Only the solid look reads them: soft, outline and
+   * plain primary buttons keep `--primary`, as do `Link`, checkboxes, switches and the current tab.
    * shadcn's `variant="destructive"` is `tone="destructive"`, and its `variant="secondary"` is `tone="secondary"`.
+   * @claim "Only the solid look reads them" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > repaints the solid primary Button, as a button and as a link, and leaves every selection on --primary)
+   * @claim "A solid primary button, the" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > repaints the solid primary Button, as a button and as a link, and leaves every selection on --primary)
    * @default "primary"
    */
   tone?:
@@ -187,9 +193,13 @@ const sizes = {
 // foreground, so its outline and plain text are the page's foreground. The primary outline's
 // text is the foreground too, as in shadcn, where --primary is a fill color: a theme whose primary
 // only just reaches 4.5:1 on its page loses it on any tinted surface around the button.
+// The solid primary is the page's main action: it reads --ouro-action and its foreground, which
+// fall back to --primary and --primary-foreground at the button itself (never in a :root rule,
+// so a theme scoped to part of the page still repaints it). A theme sets them to give the action
+// its own colour while selection (checkboxes, switches, the current tab) keeps --primary.
 const looks = {
   solid: {
-    primary: "border-transparent bg-primary text-primary-foreground",
+    primary: "border-transparent bg-(--ouro-action,var(--primary)) text-(--ouro-action-foreground,var(--primary-foreground))",
     secondary: "border-transparent bg-secondary text-secondary-foreground",
     destructive: "border-transparent bg-destructive text-destructive-foreground",
     success: "border-transparent bg-success text-success-foreground",

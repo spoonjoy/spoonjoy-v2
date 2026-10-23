@@ -1,19 +1,21 @@
 "use client";
 
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
-import { createContext, useContext, useEffect, useRef, type JSX } from "react";
+import { createContext, useContext, useEffect, useRef, type JSX, type ReactNode } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { devThrow } from "~/lib/ouro/dev";
 import { useMergedRef } from "~/lib/ouro/refs";
 import {
   indicatorClass,
+  linkListClass,
   listClass,
   ownLook,
   panelClass,
   rootClass,
   tabClass,
   tabFaceClass,
+  type TabsOrientation,
 } from "~/components/ouro/tabs/tabs-styles";
 
 const TabsContext = createContext(false);
@@ -148,6 +150,34 @@ export function TabsList({ className, ref, onKeyDownCapture, ...props }: TabsLis
       }}
       className={cn(listClass, className)}
     />
+  );
+}
+
+/**
+ * The list of Tabs' links, in the tab row's look, fading the side of a scrolling row that
+ * hides more links. The fade treats the list as a row (a list cannot carry `aria-orientation`):
+ * a column of links is as wide as its widest link, so it has nothing to fade. It scrolls the
+ * link to the current page (`current`, its value) into view.
+ *
+ * @internal Used by Tabs when its items are links; apps pass `items` with `href`.
+ */
+export function TabsLinkList({ orientation, current, children }: { orientation: TabsOrientation; current: string | undefined; children: ReactNode }): JSX.Element {
+  const own = useRef<HTMLUListElement>(null);
+  useEdgeFade(own);
+  // A row that scrolls, on a phone, brings the current page's link into view, as a row of tabs
+  // brings the selected tab, without scrolling the page.
+  useEffect(() => {
+    const list = own.current!;
+    const here = list.querySelector('[aria-current="page"]');
+    if (!here) return;
+    const [box, link] = [list.getBoundingClientRect(), here.getBoundingClientRect()];
+    // Back by what hides past the start, or on by what hides past the end; nothing when it shows.
+    list.scrollLeft += Math.min(link.left - box.left, 0) + Math.max(link.right - box.right, 0);
+  }, [current, orientation]);
+  return (
+    <ul ref={own} data-orientation={orientation} className={cn(listClass, linkListClass)}>
+      {children}
+    </ul>
   );
 }
 

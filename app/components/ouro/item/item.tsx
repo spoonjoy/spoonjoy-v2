@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
+import { createElement, useId, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { RouterLink, safeRel } from "~/lib/ouro/router-link";
@@ -21,7 +21,13 @@ export type ItemMediaSize = "icon" | "sm" | "md" | "lg";
  * @claim "The props every Item takes, with" registry/ouro/components/ouro/item/item.test-d.ts verify:fileLine(registry/ouro/components/ouro/item/item.test-d.ts, /expectTypeOf<\{\stitle:\s"Ribs";\shref:\s"\/recipes\/1";/)
  */
 export interface ItemOwnProps {
-  /** A short line under the title. Pass `<Text lines={2}>` to clamp a long one. */
+  /**
+   * A short line under the title. Pass `<Text lines={2}>` to clamp a long one. With `href`, it
+   * also describes the link (`aria-describedby`), so a screen reader that lands on the row hears
+   * its title and then this line: a result's byline and snippet, a recipe's time.
+   * @claim "so a screen reader that lands" registry/ouro/e2e/screen-reader/item.sr.spec.ts verify:fileLine(registry/ouro/e2e/screen-reader/item.sr.spec.ts, /is heard as a link by its title, then its description/)
+   * @claim "With `href`, it also describes the" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item with href > describes the row's link by its description, which keeps its place under the title)
+   */
   description?: ReactNode;
   /**
    * Leading media: an `<img>` (cropped square), an `Avatar`, or an icon with
@@ -239,6 +245,7 @@ export function Item(props: ItemProps): JSX.Element {
   const mediaAbove = mediaAboveProp !== undefined && Object.hasOwn(above, mediaAboveProp) ? (mediaAboveProp as keyof typeof above) : undefined;
   const element = (elements as readonly string[]).includes(asProp) ? (asProp as (typeof elements)[number]) : "div";
   const linked = href !== undefined;
+  const descriptionId = `${useId()}description`;
   useAppearanceClassNameCheck(
     "Item",
     className,
@@ -331,6 +338,7 @@ export function Item(props: ItemProps): JSX.Element {
             ref={linkRef}
             target={external ? "_blank" : undefined}
             rel={external ? safeRel(undefined) : undefined}
+            aria-describedby={description ? descriptionId : undefined}
             data-item-link=""
             data-stretched-link=""
             data-ouro-control="item"
@@ -344,7 +352,11 @@ export function Item(props: ItemProps): JSX.Element {
           title
         )}
       </div>
-      {description && <div data-ouro-text="" className="text-sm text-muted-foreground">{description}</div>}
+      {description && (
+        <div id={linked ? descriptionId : undefined} data-ouro-text="" className="text-sm text-muted-foreground">
+          {description}
+        </div>
+      )}
     </div>,
     actions && <div className={cn("flex flex-wrap items-center justify-end gap-2", stackLayouts.map((layout) => layout.actions))}>{actions}</div>,
   );

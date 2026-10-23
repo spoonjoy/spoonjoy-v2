@@ -176,6 +176,18 @@ export type MenuDropdownProps = MenuBaseProps &
   MenuPlacementProps & {
     /** The button that opens the menu, usually a Button: `trigger={<Button>Actions</Button>}`. */
     trigger: ReactElement;
+    /**
+     * Whether the open dropdown holds the page: it locks the page's scroll, and a click outside
+     * only closes it. `modal={false}` leaves the page scrolling and its controls live, and spares
+     * the browser a layout and repaint of the whole page each time the menu opens and closes:
+     * for a small menu that a list repeats on every row. The phone sheet always holds the page.
+     * @default true
+     * @claim "it locks the page's scroll" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+     * @claim "a click outside only closes it" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+     * @claim "leaves the page scrolling and its controls live" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's scroll alone while a modal Menu's lock comes and goes) verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu)
+     * @claim "The phone sheet always holds the page" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > keeps the phone sheet holding the page with modal={false})
+     */
+    modal?: boolean | undefined;
     /** Not with `trigger`. Use one way to open a menu. */
     contextTrigger?: never;
     /** Not with `trigger`. `label` is for a Menu inside `MenuBar`. */
@@ -199,6 +211,8 @@ export type MenuContextProps = MenuBaseProps & {
   side?: never;
   /** Not with `contextTrigger`: a context menu opens at the pointer. */
   align?: never;
+  /** Not with `contextTrigger`: a context menu holds the page while it is open. */
+  modal?: never;
 };
 
 /** A menu in a `MenuBar`: `label` is its button's text. */
@@ -210,6 +224,8 @@ export type MenuBarMenuProps = MenuBaseProps &
     trigger?: never;
     /** Not with `label`. A menu in a `MenuBar` gets its button from `label`. */
     contextTrigger?: never;
+    /** Not with `label`: the `MenuBar` decides how its menus hold the page. */
+    modal?: never;
   };
 
 /** Props for {@link Menu}: `trigger` (a dropdown), `contextTrigger` (a context menu) or `label` (in a `MenuBar`). */
@@ -410,6 +426,7 @@ export function Menu(props: MenuProps): JSX.Element {
     align: alignProp,
     className,
     closeLabel = "Close",
+    modal,
     open,
     onOpenChange,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -419,7 +436,7 @@ export function Menu(props: MenuProps): JSX.Element {
     asChild,
     options,
   } = props as MenuBaseProps &
-    MenuPlacementProps & { trigger?: ReactElement; contextTrigger?: ReactElement; label?: string };
+    MenuPlacementProps & { trigger?: ReactElement; contextTrigger?: ReactElement; label?: string; modal?: boolean | undefined };
   const inBar = useContext(MenuBarContext);
   const fix = (code: string) => (process.env.NODE_ENV !== "production" ? code : /* istanbul ignore next @preserve -- production only */ "");
 
@@ -460,8 +477,10 @@ export function Menu(props: MenuProps): JSX.Element {
             ? [
                 sideProp !== undefined && (["side is not used by a context menu, which opens at the pointer", "remove side"] as const),
                 alignProp !== undefined && (["align is not used by a context menu, which opens at the pointer", "remove align"] as const),
+                modal !== undefined && (["modal is not used by a context menu, which holds the page while open", "remove modal"] as const),
               ]
             : floatingPlacementWarnings("<Menu", sideProp, "bottom", alignProp, placement)),
+          label !== undefined && modal !== undefined && ["modal is not used by a menu in <MenuBar>; the bar decides", "remove modal"],
           isOpen !== undefined && ["isOpen is not a prop", controlFix],
           onClose !== undefined && ["onClose is not a prop", controlFix],
           asChild !== undefined && ["asChild is not a prop; the trigger element is the button", "trigger={<Button>Actions</Button>}"],
@@ -496,7 +515,8 @@ export function Menu(props: MenuProps): JSX.Element {
   }
 
   return (
-    <BaseMenu.Root {...control}>
+    // A MenuBar's menu takes no `modal` (Base UI warns): the bar decides.
+    <BaseMenu.Root {...control} modal={label === undefined ? sheet || modal : undefined}>
       {label !== undefined ? (
         <BaseMenu.Trigger data-ouro-control="menu" data-ouro-part="bar-trigger" className={menuBarTriggerClass}>
           {label}

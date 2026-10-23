@@ -310,15 +310,13 @@ export default function McpPage() {
               OAuth-ready MCP agents learn where to authorize from Spoonjoy's protected-resource metadata.
             </p>
             <div className="mt-4 overflow-hidden border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3">
-              {/* TODO(ouro-hx: link document navigation, ourostack/ouro-ui#184): HX Link with
-                  document navigation. Until then a plain anchor, styled as HX Link, so a click loads
-                  the JSON as a document instead of sending the resource route through the router. */}
-              <a
+              <Link
                 href="/.well-known/oauth-protected-resource/mcp"
-                className="break-words rounded-xs text-primary underline decoration-current/40 decoration-1 underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-current"
+                reloadDocument
+                className="break-words"
               >
                 Protected-resource metadata
-              </a>
+              </Link>
               <p className="mt-2 break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">
                 {protectedResourceMetadataUrl}
               </p>

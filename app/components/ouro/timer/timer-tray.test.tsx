@@ -179,6 +179,74 @@ describe("TimerTray", () => {
     }
   });
 
+  it("sounds once for an alert that is not one", async () => {
+    store("tea", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
+    await render(<TimerTray {...({ timers: [{ timerId: "tea", label: "Tea", duration: 60 }], alert: "loop" } as unknown as Parameters<typeof TimerTray>[0])} />);
+    await advance(1000);
+    await advance(10_000);
+    expect(tones).toBe(3);
+  });
+
+  it("stops the Timer's repeating alert when the tray dismisses the timer", async () => {
+    const page = await render(<Timer label="Roast" duration={1} timerId="roast" alert="repeat" />);
+    const { rows } = await render(<TimerTray timers={[{ timerId: "roast", label: "Roast", duration: 1 }]} />);
+    await act(async () => page.host.querySelector<HTMLButtonElement>('[data-ouro-part="primary"]')!.click());
+    await advance(1000);
+    await advance(2500);
+    expect(tones).toBe(6);
+    await act(async () => rows()[0]!.querySelector<HTMLButtonElement>('[data-ouro-part="stop"]')!.click());
+    await advance(10_000);
+    expect(tones).toBe(6);
+  });
+
+  it("repeats its own alert with alert=repeat until the timer is dismissed", async () => {
+    store("stock", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
+    const announced = watchAnnouncements();
+    try {
+      const { rows } = await render(<TimerTray timers={[{ timerId: "stock", label: "Stock", duration: 60 }]} alert="repeat" repeatFor={30} />);
+      await advance(1000);
+      expect(tones).toBe(3);
+      await advance(5000);
+      expect(tones).toBe(9);
+      expect(announced.count("Stock: Time's up")).toBe(1);
+      await act(async () => rows()[0]!.querySelector<HTMLButtonElement>('[data-ouro-part="stop"]')!.click());
+      await advance(10_000);
+      expect(tones).toBe(9);
+    } finally {
+      announced.stop();
+    }
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0])("takes a repeatFor that is not finite and above 0 as two minutes (%s)", async (repeatFor) => {
+    store("stock", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
+    await render(<TimerTray timers={[{ timerId: "stock", label: "Stock", duration: 60 }]} alert="repeat" repeatFor={repeatFor} />);
+    await advance(1000);
+    await advance(120_000);
+    expect(tones).toBe(48 * 3);
+    await advance(30_000);
+    expect(tones).toBe(48 * 3);
+  });
+
+  it("stops its repeating alert when the timer's row leaves the tray, and when the tray goes", async () => {
+    const timers = [
+      { timerId: "stock", label: "Stock", duration: 60 },
+      { timerId: "rice", label: "Rice", duration: 60 },
+    ];
+    store("stock", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
+    store("rice", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
+    const { root } = await render(<TimerTray timers={timers} alert="repeat" />);
+    await advance(1000);
+    await advance(2500);
+    // Both rang at zero and again 2.5 seconds later.
+    expect(tones).toBe(12);
+    await act(async () => root.render(<TimerTray timers={timers.slice(1)} alert="repeat" />));
+    await advance(2500);
+    expect(tones).toBe(15);
+    await act(async () => root.unmount());
+    await advance(10_000);
+    expect(tones).toBe(15);
+  });
+
   it("alerts on its own when the timer's screen is gone, unless silent", async () => {
     store("tea", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
     store("rest", { status: "running", duration: 60, endsAt: Date.now() + 2000 });
@@ -258,12 +326,24 @@ describe("TimerTray development messages", () => {
     ["items", { items: [] }, "items is not a prop", "<TimerTray timers={[{ timerId, label, duration }]} />"],
     ["a timer's id", { timers: [{ id: "pasta", label: "Pasta", duration: 600 }] }, "id is not a key of a timer in timers", '<TimerTray timers={[{ timerId: "pasta", label, duration }]} />'],
     ["hidden", { hidden: true }, "hidden is not a prop; the tray hides itself while no timer is running", "<TimerTray timers={timers} />"],
+    ["alert", { alert: "loop" }, 'alert="loop" is not an alert; use "once" or "repeat"', '<TimerTray alert="repeat" timers={timers} />'],
+    ["repeatFor", { alert: "repeat", repeatFor: Number.NaN }, "repeatFor={NaN} is not a length; it is in seconds and above 0", '<TimerTray alert="repeat" repeatFor={120} timers={timers} />'],
   ])("explains %s with the fix", async (_name, extra, problem, fix) => {
     const props = { timers: [], ...extra } as unknown as Parameters<typeof TimerTray>[0];
     const { tray } = await render(<TimerTray {...props} />);
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] TimerTray: ${problem}. Fix: ${fix}.`);
     expect(tray().hasAttribute("items")).toBe(false);
     expect(tray().hasAttribute("hidden")).toBe(false);
+  });
+
+  it("keeps React's keys apart for timers given an id in place of a timerId", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const loose = [
+      { id: "pasta", label: "Pasta", duration: 600 },
+      { id: "rice", label: "Rice", duration: 900 },
+    ] as unknown as TimerTrayItem[];
+    await render(<TimerTray timers={loose} />);
+    expect(error).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -60,6 +60,12 @@ export const InContext: Story = {
   render: () => <RecipeSteps />,
 };
 
+/**
+ * Disabled, as while the last move is being saved: the handles stay in the tab order, dimmed
+ * and marked unavailable, and take no drag, menu or pick-up.
+ */
+export const Disabled: Story = { args: { disabled: true } };
+
 /** A long list that scrolls in place: hold a row near its top or bottom edge to scroll while dragging. */
 export const ScrollsInPlace: Story = {
   render: () => (

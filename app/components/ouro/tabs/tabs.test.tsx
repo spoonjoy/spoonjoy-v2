@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import { commands, page, userEvent } from "vitest/browser";
 import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { Tabs, type TabsProps } from "~/components/ouro/tabs/tabs";
 import { TabsIndicator, TabsList, TabsPanel, TabsRoot, TabsTab } from "~/components/ouro/tabs/tabs-parts";
+import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
@@ -61,6 +62,40 @@ async function settled(element: Element) {
 }
 
 describe("Tabs", () => {
+  it("draws each tab's edge under forced colours, where its fill and the underline drop away", async () => {
+    try {
+      const { tabs } = await render(<Tabs label="Recipe" items={items} />);
+      const edge = (tab: HTMLElement) => ["top", "right", "bottom", "left"].every((side) => parseFloat(getComputedStyle(tab).getPropertyValue(`border-${side}-width`)) > 0 && getComputedStyle(tab).getPropertyValue(`border-${side}-style`) === "solid");
+      expect(tabs.some(edge)).toBe(false);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      expect(tabs.every(edge)).toBe(true);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("shows which tab is selected under forced colours: Highlight behind it and HighlightText on it", async () => {
+    try {
+      const { tabs } = await render(<Tabs label="Recipe" items={items} />);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const look = (tab: HTMLElement) => `${getComputedStyle(tab).backgroundColor} ${getComputedStyle(tab).color}`;
+      const [selected, ...others] = tabs;
+      expect(selected!.getAttribute("aria-selected")).toBe("true");
+      // The system colours a contrast theme gives a selection, set on a probe for comparison.
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const highlight = look(probe);
+      probe.remove();
+      // The tab's colours change with a transition, so read them once it has run.
+      await expect.poll(() => look(selected!)).toBe(highlight);
+      for (const tab of others) expect(look(tab)).not.toBe(look(selected!));
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
   it("renders a labelled tab list with the first tab selected and its panel shown", async () => {
     const { root, tabs } = await render(<Tabs label="Recipe" items={items} />);
     expect(root.getAttribute("data-ouro")).toBe("tabs");
@@ -415,11 +450,290 @@ describe("Tabs", () => {
   });
 });
 
+/** A router link that never leaves the test page. */
+const StayLink: OuroLinkComponent = ({ onClick, ...props }: ComponentProps<OuroLinkComponent>) => (
+  <a
+    data-router=""
+    {...props}
+    onClick={(event) => {
+      event.preventDefault();
+      onClick?.(event);
+    }}
+  />
+);
+
+const pages = [
+  { value: "all", label: "All recipes", href: "/recipes" },
+  { value: "mine", label: "My recipes", href: "/my-recipes" },
+  { value: "saved", label: "Saved", href: "/saved-recipes" },
+];
+
+const scopes = [
+  { value: "all", label: "All", href: "/search" },
+  { value: "recipes", label: "Recipes", href: "/search?scope=recipes" },
+  { value: "chefs", label: "Chefs", href: "/search?scope=chefs" },
+];
+
+describe("Tabs as links", () => {
+  const links = (host: HTMLElement) => [...host.querySelectorAll<HTMLElement>("a")];
+  const current = (host: HTMLElement) => links(host).filter((link) => link.getAttribute("aria-current") === "page").map((link) => link.textContent);
+
+  it("renders a named nav of links, marking the current page, with the tabs' look", async () => {
+    const { host, root } = await render(<Tabs label="Recipes" items={pages} currentPath="/my-recipes" />);
+    expect(root.getAttribute("data-ouro")).toBe("tabs");
+    const nav = page.getByRole("navigation", { name: "Recipes" });
+    await expect.element(nav).toBeInTheDocument();
+    expect(host.querySelector('[role="tablist"], [role="tab"], [role="tabpanel"]')).toBeNull();
+    expect(nav.getByRole("listitem").elements()).toHaveLength(3);
+    expect(links(host).map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
+      ["All recipes", "/recipes"],
+      ["My recipes", "/my-recipes"],
+      ["Saved", "/saved-recipes"],
+    ]);
+    expect(current(host)).toEqual(["My recipes"]);
+    const [all, mine] = links(host);
+    // The current link takes the foreground and the line; the others are muted, with no line.
+    expect(getComputedStyle(mine!).color).not.toBe(getComputedStyle(all!).color);
+    expect(getComputedStyle(mine!).textDecorationLine).toBe("none");
+    expect(mine!.getAttribute("data-active")).toBe("");
+    expect(all!.hasAttribute("data-active")).toBe(false);
+    expect(all!.getAttribute("data-ouro-control")).toBe("tabs");
+    expect(all!.getAttribute("data-ouro-part")).toBe("link");
+    const line = host.querySelectorAll<HTMLElement>("[data-ouro-tabs-indicator]");
+    expect(line).toHaveLength(1);
+    expect(mine!.contains(line[0]!)).toBe(true);
+    expect(line[0]!.getAttribute("aria-hidden")).toBe("true");
+    const [box, under] = [mine!.getBoundingClientRect(), line[0]!.getBoundingClientRect()];
+    expect(under.height).toBe(2);
+    expect([under.left, under.width, under.bottom]).toEqual([box.left, box.width, box.bottom]);
+    // The tab row's look: the same height and type as a tab with a panel.
+    const { tabs } = await render(<Tabs label="Recipe" items={items} />);
+    expect(getComputedStyle(all!).height).toBe(getComputedStyle(tabs[0]!).height);
+    expect(getComputedStyle(all!).fontSize).toBe(getComputedStyle(tabs[0]!).fontSize);
+  });
+
+  it("renders each link through the app's router link", async () => {
+    const { host } = await render(
+      <OuroProvider linkComponent={StayLink}>
+        <Tabs label="Recipes" items={pages} currentPath="/recipes" />
+      </OuroProvider>,
+    );
+    expect(links(host).every((link) => link.hasAttribute("data-router"))).toBe(true);
+    await userEvent.click(links(host)[1]!);
+    expect(location.pathname).not.toBe("/my-recipes");
+  });
+
+  it("moves between the links with Tab, and leaves the arrow keys to the page", async () => {
+    const { host } = await render(<Tabs label="Recipes" items={pages} currentPath="/recipes" />);
+    const [all, mine, saved] = links(host);
+    expect(links(host).every((link) => !link.hasAttribute("tabindex"))).toBe(true);
+    await pressTab();
+    expect(document.activeElement).toBe(all);
+    expect(getComputedStyle(all!).outlineStyle).toBe("solid");
+    await userEvent.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(all);
+    await pressTab();
+    expect(document.activeElement).toBe(mine);
+    await pressTab();
+    expect(document.activeElement).toBe(saved);
+  });
+
+  it("marks the tab for the current path, by its query when the tabs share a path", async () => {
+    const { host, rerender } = await render(<Tabs label="Search scope" items={scopes} currentPath="/search?q=soup&scope=chefs" />);
+    expect(current(host)).toEqual(["Chefs"]);
+    await rerender(<Tabs label="Search scope" items={scopes} currentPath="/search?q=soup" />);
+    expect(current(host)).toEqual(["All"]);
+    await rerender(<Tabs label="Recipes" items={pages} currentPath="/my-recipes/12" />);
+    expect(current(host)).toEqual(["My recipes"]);
+    await rerender(<Tabs label="Recipes" items={pages} currentPath="/cookbooks" />);
+    expect(current(host)).toEqual([]);
+    expect(host.querySelector("[data-ouro-tabs-indicator]")).toBeNull();
+    await rerender(<Tabs label="Recipes" items={pages} />);
+    expect(current(host)).toEqual([]);
+  });
+
+  it("marks the tab named by value, which wins over currentPath", async () => {
+    const { host, rerender } = await render(<Tabs label="Search scope" items={scopes} value="recipes" />);
+    expect(current(host)).toEqual(["Recipes"]);
+    await rerender(<Tabs label="Search scope" items={scopes} value="recipes" currentPath="/search?scope=chefs" />);
+    expect(current(host)).toEqual(["Recipes"]);
+  });
+
+  it("stacks the links in a column with orientation=\"vertical\", with the line on the end edge, and in a row on a narrow screen", async () => {
+    await page.viewport(1024, 768);
+    const { host, root } = await render(<Tabs label="Search scope" items={scopes} currentPath="/search?scope=recipes" orientation="vertical" />);
+    const list = root.querySelector<HTMLElement>("ul")!;
+    expect(list.getAttribute("data-orientation")).toBe("vertical");
+    expect(getComputedStyle(list).flexDirection).toBe("column");
+    const [all, recipes, chefs] = links(host);
+    expect(recipes!.getBoundingClientRect().top).toBeGreaterThan(all!.getBoundingClientRect().top);
+    expect(recipes!.getBoundingClientRect().left).toBe(all!.getBoundingClientRect().left);
+    // Every link is as wide as the column, so the line sits on the column's hairline.
+    expect(all!.getBoundingClientRect().width).toBe(list.getBoundingClientRect().width);
+    const line = recipes!.querySelector<HTMLElement>("[data-ouro-tabs-indicator]")!.getBoundingClientRect();
+    expect([line.width, line.right, line.height]).toEqual([2, list.getBoundingClientRect().right, recipes!.getBoundingClientRect().height]);
+    expect(getComputedStyle(chefs!).justifyContent).toBe("flex-start");
+    await page.viewport(390, 844);
+    await expect.poll(() => list.getAttribute("data-orientation")).toBe("horizontal");
+    expect(root.getAttribute("data-orientation")).toBe("horizontal");
+    expect(recipes!.getBoundingClientRect().top).toBe(all!.getBoundingClientRect().top);
+  });
+
+  it("keeps the hairline and the current line together on the left of a vertical column in a right-to-left page", async () => {
+    await page.viewport(1024, 768);
+    const { host } = await render(
+      <div dir="rtl">
+        <Tabs label="Search scope" items={scopes} currentPath="/search?scope=recipes" orientation="vertical" />
+        <Tabs label="Recipe" items={items} orientation="vertical" />
+      </div>,
+    );
+    const hairline = (list: Element) => getComputedStyle(list).boxShadow.match(/(-?\d+)px 0px 0px 0px inset/)?.[1];
+    const column = host.querySelector<HTMLElement>("ul")!;
+    const tablist = host.querySelector<HTMLElement>('[role="tablist"]')!;
+    expect(hairline(column)).toBe("1");
+    expect(hairline(tablist)).toBe("1");
+    const line = host.querySelector('[aria-current="page"] [data-ouro-tabs-indicator]')!.getBoundingClientRect();
+    expect(line.left).toBe(column.getBoundingClientRect().left);
+    host.firstElementChild!.setAttribute("dir", "ltr");
+    expect(hairline(column)).toBe("-1");
+    expect(hairline(tablist)).toBe("-1");
+  });
+
+  it("fades the edge of a row of links that scrolls, on the right in a right-to-left row", async () => {
+    const many = Array.from({ length: 10 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, href: `/s/${index}` }));
+    const { host, root } = await render(<Tabs label="Sections" items={many} currentPath="/s/0" />);
+    host.style.width = "320px";
+    const list = root.querySelector<HTMLElement>("ul")!;
+    await expect.poll(() => list.getAttribute("data-fade")).toBe("right");
+    expect(getComputedStyle(list).maskImage).toMatch(/gradient/);
+    host.setAttribute("dir", "rtl");
+    await act(async () => list.scrollTo({ left: 0 }));
+    await expect.poll(() => list.getAttribute("data-fade")).toBe("left");
+  });
+
+  it("scrolls a row of links to the current page's link, at either end and in a right-to-left row", async () => {
+    const many = Array.from({ length: 10 }, (_, index) => ({ value: `s${index}`, label: `Section ${index + 1}`, href: `/s/${index}` }));
+    const inView = (host: HTMLElement) => {
+      const list = host.querySelector("ul")!.getBoundingClientRect();
+      const link = host.querySelector('[aria-current="page"]')!.getBoundingClientRect();
+      return link.left >= list.left - 1 && link.right <= list.right + 1;
+    };
+    const narrow = (node: ReactNode) => (
+      <div style={{ width: 320 }}>
+        {node}
+      </div>
+    );
+    const { host, rerender } = await render(narrow(<Tabs label="Sections" items={many} currentPath="/s/9" />));
+    const list = host.querySelector<HTMLElement>("ul")!;
+    expect(list.scrollWidth).toBeGreaterThan(list.clientWidth);
+    expect(list.scrollLeft).toBeGreaterThan(0);
+    expect(inView(host)).toBe(true);
+    // Back to the first link, which sits before the row's scrolled edge.
+    await rerender(narrow(<Tabs label="Sections" items={many} currentPath="/s/0" />));
+    expect(list.scrollLeft).toBe(0);
+    expect(inView(host)).toBe(true);
+    // A link already in view leaves the row where it is.
+    await rerender(narrow(<Tabs label="Sections" items={many} currentPath="/s/1" />));
+    expect(list.scrollLeft).toBe(0);
+    const rtl = await render(<div dir="rtl">{narrow(<Tabs label="Sections" items={many} currentPath="/s/9" />)}</div>);
+    expect(rtl.host.querySelector("ul")!.scrollLeft).toBeLessThan(0);
+    expect(inView(rtl.host)).toBe(true);
+    const none = await render(narrow(<Tabs label="Sections" items={many} currentPath="/elsewhere" />));
+    expect(none.host.querySelector("ul")!.scrollLeft).toBe(0);
+  });
+
+  it("keeps each link's edge under forced colours, and fills the current one with Highlight", async () => {
+    try {
+      const { host } = await render(<Tabs label="Recipes" items={pages} currentPath="/recipes" />);
+      await commands.emulateMedia({ forcedColors: "active" });
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const [all, ...others] = links(host);
+      for (const link of links(host)) expect(getComputedStyle(link).borderTopStyle).toBe("solid");
+      const look = (element: HTMLElement) => `${getComputedStyle(element).backgroundColor} ${getComputedStyle(element).color}`;
+      const probe = document.body.appendChild(document.createElement("span"));
+      probe.style.cssText = "background-color: Highlight; color: HighlightText";
+      const highlight = look(probe);
+      probe.remove();
+      await expect.poll(() => look(all!)).toBe(highlight);
+      for (const link of others) expect(look(link)).not.toBe(highlight);
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
+  });
+
+  it("lets app layout classes win and forwards a ref to the root", async () => {
+    let element: HTMLDivElement | null = null;
+    const { root } = await render(<Tabs label="Recipes" items={pages} className="mt-4" ref={(node) => void (element = node)} />);
+    expect(getComputedStyle(root).marginTop).toBe("16px");
+    expect(element).toBe(root);
+  });
+
+  it("puts the links and the current page in server HTML and hydrates without a mismatch", async () => {
+    const node = <Tabs label="Recipes" items={pages} currentPath="/saved-recipes" />;
+    const html = renderToString(node);
+    expect(html).toContain('<nav aria-label="Recipes"');
+    expect(html).toMatch(/aria-current="page"[^>]*>.*Saved/);
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.append(host);
+    mounted.push(host);
+    const recoverable = vi.fn();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    let root!: Root;
+    await act(async () => {
+      root = hydrateRoot(host, node, { onRecoverableError: recoverable });
+    });
+    roots.push(root);
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    expect(current(host)).toEqual(["Saved"]);
+  });
+
+  it.each([
+    ["defaultValue", { defaultValue: "mine" }],
+    ["onValueChange", { onValueChange: () => {} }],
+    ["activation", { activation: "manual" as const }],
+  ])("says %s does nothing when the tabs are links", async (name, extra) => {
+    const { host } = await render(<Tabs label="Recipes" items={pages} currentPath="/recipes" {...extra} />);
+    expect(warn).toHaveBeenCalledWith(`[ouro-ui] Tabs: ${name} does nothing when the tabs are links. Fix: <Tabs currentPath={pathname}>.`);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(current(host)).toEqual(["All recipes"]);
+  });
+
+  it("says nothing for tabs with panels given only what panels take", async () => {
+    await render(<Tabs label="Recipe" items={items} defaultValue="method" activation="manual" onValueChange={() => {}} />);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("says currentPath marks a link when the tabs have panels", async () => {
+    await render(<Tabs label="Recipe" items={items} currentPath="/recipes" />);
+    expect(warn).toHaveBeenCalledWith('[ouro-ui] Tabs: currentPath marks a link, and these tabs have panels. Fix: <Tabs value="…">.');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing for link tabs given only what links take", async () => {
+    await render(<Tabs label="Recipes" items={pages} currentPath="/recipes" value="mine" orientation="vertical" />);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("renders panels, and says how to fix it, when only some items have an href", async () => {
+    const mixed = [items[0]!, { value: "mine", label: "Mine", href: "/my-recipes" }];
+    const props = { label: "Recipes", items: mixed } as unknown as TabsProps;
+    const { host } = await render(<Tabs {...props} />);
+    expect(host.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(host.querySelector("nav")).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      '[ouro-ui] Tabs: some items have an href and some do not, so they render as panels. Fix: <Tabs items={[{ value: "…", label: "…", href: "/…" }]}> for links, or { value, label, content } for panels.',
+    );
+  });
+});
+
 describe("Tabs development messages", () => {
   it.each([
     ["onChange", { onChange: () => {} }, "onChange is not a prop", "<Tabs onValueChange={(value) => …}>"],
     ["activateOnFocus", { activateOnFocus: false }, "activateOnFocus is not a prop", '<Tabs activation="manual">'],
     ["tabs", { tabs: [] }, "tabs is not a prop", '<Tabs items={[{ value, label, content }]}>'],
+    ["pathname", { pathname: "/recipes" }, "pathname is not a prop", "<Tabs currentPath={pathname}>"],
     ["orientation", { orientation: "row" }, 'orientation="row" is not an orientation; use "horizontal", "vertical"', '<Tabs orientation="horizontal">'],
     ["activation", { activation: "focus" }, 'activation="focus" is not an activation; use "automatic", "manual"', '<Tabs activation="automatic">'],
     ["unknown defaultValue", { defaultValue: "steps" }, 'defaultValue="steps" matches no item', '<Tabs defaultValue="ingredients">'],
@@ -430,6 +744,7 @@ describe("Tabs development messages", () => {
     expect(warn).toHaveBeenCalledWith(`[ouro-ui] Tabs: ${problem}. Fix: ${fix}.`);
     expect(root.hasAttribute("activateonfocus")).toBe(false);
     expect(root.hasAttribute("tabs")).toBe(false);
+    expect(root.hasAttribute("pathname")).toBe(false);
   });
 
   it("points activateOnFocus={true} to automatic activation", async () => {
@@ -439,7 +754,9 @@ describe("Tabs development messages", () => {
   });
 
   it("names a placeholder value when there are no items", async () => {
-    await render(<Tabs label="Recipe" items={[]} defaultValue="steps" />);
+    const { host } = await render(<Tabs label="Recipe" items={[]} defaultValue="steps" />);
+    // No items make an empty tab list, not a nav of links.
+    expect(host.querySelector('[role="tablist"]')).not.toBeNull();
     expect(warn).toHaveBeenCalledWith('[ouro-ui] Tabs: defaultValue="steps" matches no item. Fix: <Tabs defaultValue="…">.');
   });
 

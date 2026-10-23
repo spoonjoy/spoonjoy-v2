@@ -360,7 +360,7 @@ export const census: Journey[] = [
   { id: "developers-playground", enrolled: true, persona: "signed-out", path: "/developers/playground", states: [DEFAULT] },
   // The protected-resource metadata link is a plain <a>, so a click loads the JSON document.
   // TODO(ouro-hx: link document navigation, ourostack/ouro-ui#184): enrol mcp again on HX Link.
-  { id: "mcp", enrolled: false, persona: "signed-out", path: "/mcp", states: [DEFAULT] },
+  { id: "mcp", enrolled: true, persona: "signed-out", path: "/mcp", states: [DEFAULT] },
   { id: "agent-connect", enrolled: true, persona: "chef", path: "/agent/connect", states: [DEFAULT] },
   // No pending request is seeded, so this is the page for a request that does not exist.
   { id: "agent-connect-request", enrolled: true, persona: "chef", path: "/agent/connect/hx-census-no-such-request", states: [DEFAULT] },

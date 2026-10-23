@@ -18,13 +18,25 @@ export interface LinkOwnProps {
    */
   href: string;
   /**
+   * Navigates with a full page load: renders a plain `<a>` for an internal path too, skipping
+   * `OuroProvider`'s `linkComponent`, so your router never handles it. Use it for a path your
+   * router has no page for: a resource route (`/mcp`, `/feed.xml`), a file download, a sign-in
+   * that starts on the server (`/auth/github`). A link with `download` does the same.
+   * @claim "Navigates with a full page load:" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link > renders a plain <a> with reloadDocument or download, skipping the router's link, in the same look)
+   */
+  reloadDocument?: boolean | undefined;
+  /**
    * Opens the link in a new tab: sets `target="_blank"`, adds `rel="noopener noreferrer"`
    * (keeping your own `rel` tokens) and an icon, and tells screen readers "opens in a new tab".
    */
   external?: boolean | undefined;
   /**
    * Text color from the theme, named after its token. `secondary` is the page's foreground,
-   * for links in navigation and lists; the underline still marks it as a link.
+   * for links in navigation and lists; the underline still marks it as a link. `primary`
+   * reads `--primary`, not a theme's `--ouro-action`: a link is text in a sentence and the
+   * action colour is a fill. For a link that looks like the page's main action, use
+   * `<Button href>`.
+   * @claim "`primary` reads `--primary`, not a theme's" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > repaints the solid primary Button, as a button and as a link, and leaves every selection on --primary)
    * @default "primary"
    */
   tone?:
@@ -121,6 +133,7 @@ function linkHint(token: string): string {
  * @example
  * <Link href="/recipes">Browse recipes</Link>
  * <Link href="https://ouro.bot" external>Ouro</Link>
+ * <Link href="/mcp" reloadDocument>MCP server metadata</Link>
  * <Text>Read the <Link href="/terms">terms</Link> first.</Text>
  * <Text size="sm"><Link href="/forgot" inline={false}>Forgot password?</Link></Text>
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
@@ -131,6 +144,7 @@ export function Link(props: LinkProps): JSX.Element {
   const {
     href,
     external,
+    reloadDocument,
     tone: toneProp = "primary",
     inline: inlineProp,
     children,
@@ -169,6 +183,7 @@ export function Link(props: LinkProps): JSX.Element {
       data-ouro-part="root"
       {...rest}
       href={href}
+      reloadDocument={reloadDocument || rest.download !== undefined}
       target={external ? "_blank" : target}
       rel={external ? safeRel(rel) : rel}
       data-ouro="link"

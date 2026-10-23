@@ -21,6 +21,11 @@ expectTypeOf<{ label: "P"; duration: 1; size: "xl" }>().not.toExtend<TimerProps>
 expectTypeOf<{ label: "P"; duration: 1; autoSaveId: "pasta" }>().not.toExtend<TimerProps>();
 expectTypeOf<{ label: "P"; duration: 1; storageKey: "pasta" }>().not.toExtend<TimerProps>();
 
+// The alert at zero sounds once or repeats, for repeatFor seconds.
+expectTypeOf<{ label: "Roast"; duration: 5400; alert: "repeat"; repeatFor: 120 }>().toExtend<TimerProps>();
+expectTypeOf<{ label: "Roast"; duration: 5400; alert: "loop" }>().not.toExtend<TimerProps>();
+expectTypeOf<{ label: "Roast"; duration: 5400; repeatFor: "2 min" }>().not.toExtend<TimerProps>();
+
 // useTimer keeps and shares a timer by timerId, not id.
 expectTypeOf<{ duration: 600; timerId: "pasta"; fallback: true; onDone: () => void }>().toExtend<TimerOptions>();
 expectTypeOf<{ duration: 600; id: "pasta" }>().not.toExtend<TimerOptions>();

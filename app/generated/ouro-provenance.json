@@ -1,6 +1,6 @@
 {
   "guide": "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
-  "ouroTag": "v1.2.0",
+  "ouroTag": "v1.2.1",
   "root": {
     "file": "app/root.tsx",
     "sources": [
@@ -37,6 +37,7 @@
       "app/lib/hash-only-revalidation.ts",
       "app/lib/ingredient-parse.server.ts",
       "app/lib/llm-telemetry.server.ts",
+      "app/lib/network-failure.ts",
       "app/lib/nonce.ts",
       "app/lib/oauth-client-metadata.ts",
       "app/lib/oauth-metadata.server.ts",
@@ -63,6 +64,7 @@
       "route-progress",
       "skip-link",
       "tab-bar",
+      "tabs",
       "text",
       "toaster"
     ],
@@ -97,6 +99,9 @@
       ],
       "tab-bar": [
         "app/components/navigation/mobile-nav.tsx"
+      ],
+      "tabs": [
+        "app/components/navigation/recipes-section-nav.tsx"
       ],
       "text": [
         "app/root.tsx"
@@ -1029,7 +1034,7 @@
         "heading",
         "item",
         "item-group",
-        "link",
+        "tabs",
         "text",
         "text-field"
       ],
@@ -1050,7 +1055,7 @@
         "item-group": [
           "app/routes/search.tsx"
         ],
-        "link": [
+        "tabs": [
           "app/routes/search.tsx"
         ],
         "text": [
@@ -1096,6 +1101,7 @@
         "page-header",
         "pagination",
         "tab-bar",
+        "tabs",
         "text",
         "text-field",
         "toaster"
@@ -1121,6 +1127,9 @@
         ],
         "tab-bar": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "tabs": [
+          "app/components/navigation/recipes-section-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx"
@@ -1189,6 +1198,7 @@
         "page-header",
         "pagination",
         "tab-bar",
+        "tabs",
         "text",
         "text-field",
         "toaster"
@@ -1217,6 +1227,9 @@
         ],
         "tab-bar": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "tabs": [
+          "app/components/navigation/recipes-section-nav.tsx"
         ],
         "text": [
           "app/routes/my-recipes.tsx",
@@ -1344,6 +1357,7 @@
         "item",
         "show-more",
         "tab-bar",
+        "tabs",
         "text",
         "text-field",
         "toaster"
@@ -1366,6 +1380,9 @@
         ],
         "tab-bar": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "tabs": [
+          "app/components/navigation/recipes-section-nav.tsx"
         ],
         "text": [
           "app/routes/recipes._index.tsx"
@@ -1652,6 +1669,7 @@
         "spinner",
         "sync-status",
         "tab-bar",
+        "tabs",
         "text",
         "text-area",
         "text-field",
@@ -1753,6 +1771,9 @@
         ],
         "tab-bar": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "tabs": [
+          "app/components/navigation/recipes-section-nav.tsx"
         ],
         "text": [
           "app/components/cook/RecipeCookView.tsx",
@@ -2221,6 +2242,7 @@
         "page-header",
         "pagination",
         "tab-bar",
+        "tabs",
         "text",
         "text-field",
         "toaster"
@@ -2249,6 +2271,9 @@
         ],
         "tab-bar": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "tabs": [
+          "app/components/navigation/recipes-section-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks._index.tsx",
@@ -2326,6 +2351,7 @@
         "app/components/navigation/recipes-section-nav.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
         "app/hooks/use-form-errors.ts",
+        "app/hooks/use-resend-lost-submission.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
@@ -2344,6 +2370,7 @@
         "app/lib/ingredient-parse.server.ts",
         "app/lib/llm-telemetry.server.ts",
         "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/network-failure.ts",
         "app/lib/notification-dispatch.server.ts",
         "app/lib/notification-triggers.server.ts",
         "app/lib/oauth-client-metadata.ts",
@@ -2379,6 +2406,7 @@
         "page-header",
         "share-button",
         "tab-bar",
+        "tabs",
         "text",
         "text-field",
         "toaster"
@@ -2419,6 +2447,9 @@
         ],
         "tab-bar": [
           "app/components/navigation/mobile-nav.tsx"
+        ],
+        "tabs": [
+          "app/components/navigation/recipes-section-nav.tsx"
         ],
         "text": [
           "app/routes/cookbooks.$id.tsx"

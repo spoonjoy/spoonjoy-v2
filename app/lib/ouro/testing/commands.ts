@@ -2,6 +2,7 @@ import type {} from "@vitest/browser-playwright";
 import type { CDPSession, Frame, Page } from "playwright";
 import type { BrowserCommand } from "vitest/node";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
+import { hrtime } from "node:process";
 
 export interface EmulateMediaOptions {
   reducedMotion?: "reduce" | "no-preference";
@@ -44,23 +45,61 @@ export const emulateMedia: BrowserCommand<[EmulateMediaOptions]> = async (ctx, o
 /** Waits for the running transitions in a frame (`getAnimations` restyles first, starting them). */
 const SETTLE_TRANSITIONS = `Promise.all(document.getAnimations().filter((animation) => animation instanceof CSSTransition && animation.playState === "running").map((animation) => animation.finished.catch(() => undefined))).then(() => undefined)`;
 
+/** How much longer than its `durationMs` a mouse drag runs before it logs where it is waiting. */
+export const DRAG_SLOW_MS = 3000;
+
 /**
  * Drags with real mouse events through Playwright's `page.mouse`, spreading the
  * moves over `durationMs` so velocity-based gestures see a realistic speed.
  * Coordinates are relative to the top-level page (Vitest renders tests in an
  * iframe, so add the iframe offset when starting from an element's rect).
+ * A drag still running `DRAG_SLOW_MS` past its `durationMs` logs the step the browser
+ * has not answered yet and how long each step before it took, so a test that then hits
+ * its time limit says where the drag stalled; if the drag finishes after all, it logs
+ * every step's time. A drag that finishes in time logs nothing, and a slow one is not refused.
+ * @claim "logs the step the browser" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a mouse drag the browser stops answering logs the move it is stuck on and each earlier move's time, and is not refused)
+ * @claim "if the drag finishes after all" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a slow mouse drag that finishes logs every step's time once it ends)
+ * @claim "A drag that finishes in time logs nothing" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a mouse drag that finishes in time logs nothing)
  */
 export const drag: BrowserCommand<[DragOptions]> = async (ctx, { from, to, steps, durationMs, hold }) => {
   const { page } = ctx;
   const pause = steps > 0 ? durationMs / steps : 0;
-  await page.mouse.move(from[0], from[1]);
-  await page.mouse.down();
-  for (let step = 1; step <= steps; step++) {
-    const t = step / steps;
-    await page.mouse.move(from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t);
-    if (pause > 0) await page.waitForTimeout(pause);
+  const slow = durationMs + DRAG_SLOW_MS;
+  const start = performance.now();
+  const times: string[] = [];
+  const since = (mark: number) => Math.round(performance.now() - mark);
+  const about = () => `a ${durationMs}ms drag of ${steps} moves (logged at ${slow}ms)`;
+  const timesText = () => times.join(", ") || "none";
+  let waiting = "";
+  let begun = start;
+  let logged = false;
+  const cancel = after({ kit: kitNow() + slow, real: start + slow }, () => {
+    logged = true;
+    console.warn(`drag: still waiting on ${waiting} after ${since(begun)}ms, ${since(start)}ms into ${about()}. Each step before it, pauses between moves left out: ${timesText()}.`);
+  });
+  const timed = async (name: string, run: () => Promise<unknown>) => {
+    waiting = name;
+    begun = performance.now();
+    await run();
+    times.push(`${name} ${since(begun)}ms`);
+  };
+  try {
+    await timed("the move to the start", () => page.mouse.move(from[0], from[1]));
+    await timed("the press", () => page.mouse.down());
+    for (let step = 1; step <= steps; step++) {
+      const t = step / steps;
+      await timed(`move ${step}`, () => page.mouse.move(from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t));
+      if (pause > 0) {
+        waiting = `the pause after move ${step}`;
+        begun = performance.now();
+        await page.waitForTimeout(pause);
+      }
+    }
+    if (!hold) await timed("the release", () => page.mouse.up());
+  } finally {
+    cancel();
   }
-  if (!hold) await page.mouse.up();
+  if (logged) console.warn(`drag: finished after ${since(start)}ms, in ${about()}. Each step, pauses between moves left out: ${timesText()}.`);
 };
 
 export interface FlickOptions {
@@ -110,6 +149,16 @@ export const flick: BrowserCommand<[FlickOptions]> = async (ctx, { from, to, ste
 
 /** How long a touch command waits for the page to handle an event before it throws. */
 const TOUCH_HANDLED_TIMEOUT_MS = 5000;
+
+/**
+ * A touch command's ceiling in real time: its limits count only the kit's own time (`kitNow`),
+ * which leaves out Node's stalls, but never past this from the command's start, so a refusal
+ * comes before Vitest's 15-second test timeout in browser mode and a command does not go on into
+ * the next test.
+ * @claim "A touch command's ceiling in real" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a touch the page never handles is refused within the command's ceiling in real time, however long Node is starved) verify:testExists(scripts/touch-kit-frames.test.mjs::a touchstart into a frame that never answers is refused at the command's ceiling in real time, however long Node is starved)
+ * @claim "A touch command's ceiling in real" https://vitest.dev/config/testtimeout verify:urlOk(https://vitest.dev/config/testtimeout)
+ */
+const TOUCH_CEILING_MS = 2 * TOUCH_HANDLED_TIMEOUT_MS;
 
 /**
  * Runs in every frame of the page, as source text because an app's config for this file may
@@ -234,6 +283,8 @@ type TouchWatchAction = "expect" | "wait" | "settle" | "inspect";
  */
 interface FrameAt {
   watched: boolean | "unknown" | "frame";
+  /** Chromium had not answered by the time limit. */
+  unanswered?: boolean;
   where: string;
   url?: string;
   frameId?: string | undefined;
@@ -254,40 +305,116 @@ interface FrameState {
   watching: boolean;
 }
 
-/** Rejects with `message` after `ms`, and stops its timer once `promise` settles. */
+/** How often the kit's clock looks at Node's event loop, and how late a look must be to count as a stall, in ms. */
+const STALL_TICK_MS = 10;
+const STALL_MS = 50;
+const stalls = { holders: 0, ticker: undefined as ReturnType<typeof setInterval> | undefined, last: 0, lost: 0 };
+
 /**
- * Runs `run` once `ms` have passed on `performance.now()`, and returns a function that cancels it.
- * A Node timer counts whole milliseconds of the event loop's cached time, so it can fire before its
- * delay on a precise clock; this one sets another timer for whatever is left.
+ * The machine's monotonic clock, in ms, for telling stalls: a test that mocks `performance.now()`
+ * and moves it on by hand has not held Node up.
  */
-function after(ms: number, run: () => void): () => void {
-  const end = performance.now() + ms;
+const machineNow = () => Number(hrtime.bigint()) / 1e6;
+
+/** The time Node's event loop has been held up while a touch command ran, in ms, a stall still under way included. */
+function stalledFor(): number {
+  if (!stalls.ticker) return stalls.lost;
+  const late = machineNow() - stalls.last - STALL_TICK_MS;
+  return stalls.lost + (late > STALL_MS ? late : 0);
+}
+
+/**
+ * The kit's clock: `performance.now()` less the time Node's event loop was held up while a touch
+ * command ran. Other work in the same process, as Vitest's own for other test files, can hold it
+ * up for seconds; the browser goes on meanwhile, and its answers wait in the socket. The kit's
+ * limits are for the browser, so they count only the time the kit could run.
+ * @claim "The kit's limits are for the browser" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a touchstart into a busy frame in another process waits out Node's own stalls, which do not count against the time limit) verify:testExists(scripts/touch-kit-frames.test.mjs::a touchstart into a frame that never answers is still refused once the kit has waited the time limit, Node's stalls left out, and the refusal says what it waited on)
+ */
+function kitNow(): number {
+  return performance.now() - stalledFor();
+}
+
+/** Counts Node's stalls until the returned function is called; commands that overlap share one count. */
+function countStalls(): () => void {
+  if (stalls.holders++ === 0) {
+    stalls.last = machineNow();
+    stalls.ticker = setInterval(() => {
+      const now = machineNow();
+      const late = now - stalls.last - STALL_TICK_MS;
+      if (late > STALL_MS) stalls.lost += late;
+      stalls.last = now;
+    }, STALL_TICK_MS);
+    stalls.ticker.unref?.();
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (--stalls.holders > 0) return;
+    stalls.lost = stalledFor();
+    clearInterval(stalls.ticker);
+    stalls.ticker = undefined;
+  };
+}
+
+/**
+ * A time limit: `kit`, when it ends on the kit's clock (`kitNow`), and `real`, its ceiling on
+ * `performance.now()`, so Node's stalls can stretch it only so far. `onCeiling` runs when the
+ * ceiling ends it first.
+ */
+interface Limit {
+  kit: number;
+  real: number;
+  onCeiling?: () => void;
+}
+
+/** How far Node's stalls may stretch a time limit in real time: to twice its length. */
+const CEILING_FACTOR = 2;
+
+/** A limit `ms` long on the kit's clock, with a ceiling of twice that in real time. */
+const limitOf = (ms: number): Limit => ({ kit: kitNow() + ms, real: performance.now() + CEILING_FACTOR * ms });
+
+/**
+ * Runs `run` once `limit` (a `Limit`, or `ms` from now) has passed, and returns a function that
+ * cancels it. A Node timer counts whole milliseconds of the event loop's cached time, so it can
+ * fire before its delay on a precise clock, and after a stall it fires before the answers that
+ * came in meanwhile are read; this one sets another timer for whatever is left.
+ */
+function after(limit: number | Limit, run: () => void): () => void {
+  const end = typeof limit === "number" ? limitOf(limit) : limit;
+  const left = () => Math.min(end.kit - kitNow(), end.real - performance.now());
   let timer: ReturnType<typeof setTimeout>;
   const check = () => {
-    const left = end - performance.now();
-    if (left > 0) timer = setTimeout(check, Math.ceil(left));
-    else run();
+    const now = left();
+    if (now > 0) timer = setTimeout(check, Math.ceil(now));
+    else {
+      if (end.kit - kitNow() > 0) end.onCeiling?.();
+      run();
+    }
   };
-  timer = setTimeout(check, Math.max(0, Math.ceil(ms)));
+  timer = setTimeout(check, Math.max(0, Math.ceil(left())));
   return () => clearTimeout(timer);
 }
 
-function within<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+/** Rejects with `message` once `limit` (a `Limit`, or `ms` from now) has passed, and stops its timer once `promise` settles. */
+function within<T>(promise: Promise<T>, limit: number | Limit, message: string): Promise<T> {
   let cancel = () => {};
-  const expired = new Promise<never>((_, reject) => (cancel = after(ms, () => reject(new Error(message)))));
+  const expired = new Promise<never>((_, reject) => (cancel = after(limit, () => reject(new Error(message)))));
   return Promise.race([promise, expired]).finally(() => cancel());
 }
 
 /**
  * Calls `TOUCH_WATCH` in one frame. A failed call is kept, with its reason, and so is a call
- * still unanswered after `ms`: Playwright waits for a frame's document before it evaluates
- * there, and a frame whose document never arrives never answers.
+ * still unanswered after `limit` (`ms`, or a command's `Limit`, so the call ends by the command's
+ * ceiling): Playwright waits for a frame's document before it evaluates there, and a frame whose
+ * document never arrives never answers.
  * @claim "A failed call is kept, with" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a touch into an iframe that never loads does not hang)
  */
-function callWatch<T>(frame: Frame, action: TouchWatchAction, point: TouchPoint, ms: number): Promise<FrameAnswer<T>> {
+function callWatch<T>(frame: Frame, action: TouchWatchAction, point: TouchPoint, limit: number | Limit): Promise<FrameAnswer<T>> {
   const call = `(${TOUCH_WATCH})(${JSON.stringify(action)}, ${JSON.stringify({ ...point, type: point.type.toLowerCase() })})`;
   const url = () => frame.url() || "a frame with no URL yet";
-  return within(frame.evaluate<T>(call), ms, `did not answer within ${Math.round(ms)}ms`).then(
+  const ms = typeof limit === "number" ? limit : limit.kit - kitNow();
+  return within(frame.evaluate<T>(call), limit, `did not answer within ${Math.round(ms)}ms`).then(
     (value) => ({ frame, url: url(), action, value }),
     (error: unknown) => ({ frame, url: url(), action, error: (error instanceof Error ? error.message : String(error)).split("\n")[0]! }),
   );
@@ -386,8 +513,8 @@ async function frameAtPoint(session: CDPSession, { x, y }: { x: number; y: numbe
       lap("frame id");
       return at;
     } finally {
-      await session.send("Runtime.releaseObject", { objectId: object.objectId! }).catch(() => {});
-      lap("released");
+      // Nothing waits on Chromium letting go of the node: under load each answer can take a second.
+      void session.send("Runtime.releaseObject", { objectId: object.objectId! }).catch(() => {});
     }
   } catch (error) {
     lap("failed");
@@ -473,6 +600,12 @@ const TOUCH_SLOW_MS = 1000;
  */
 interface TouchTrace {
   start: number;
+  /** The command's limit of `ms` on the kit's clock, under its ceiling in real time (`TOUCH_CEILING_MS` from its start). */
+  limit: (ms: number) => Limit;
+  /** Whether a limit ended at the command's ceiling. */
+  ceilingReached: boolean;
+  /** `stalledFor()` when the command started. */
+  stalled: number;
   steps: string[];
   answered: Map<Frame, number>;
   /** Vitest's Node process, which runs the kit and Playwright: how late its event loop ran callbacks. */
@@ -480,6 +613,17 @@ interface TouchTrace {
 }
 
 const traceStep = (trace: TouchTrace, step: string) => trace.steps.push(`+${Date.now() - trace.start}ms ${step}`);
+
+/** How many of a long trace's first and last steps are kept: a kit that keeps asking Chromium repeats them. */
+const TRACE_HEAD = 8;
+const TRACE_TAIL = 16;
+
+/** The trace's steps, the middle of a long run of them left out. */
+function stepsText(trace: TouchTrace): string {
+  const { steps } = trace;
+  if (steps.length <= TRACE_HEAD + TRACE_TAIL + 1) return steps.join("; ");
+  return [...steps.slice(0, TRACE_HEAD), `… ${steps.length - TRACE_HEAD - TRACE_TAIL} steps left out …`, ...steps.slice(-TRACE_TAIL)].join("; ");
+}
 
 /** Logs `trace` when the command took longer than TOUCH_SLOW_MS. Only a command that succeeded logs: a refusal's error says why. */
 function logIfSlow(command: string, expected: TouchPoint, trace: TouchTrace, frames: Iterable<Frame>) {
@@ -492,7 +636,7 @@ function logIfSlow(command: string, expected: TouchPoint, trace: TouchTrace, fra
   });
   console.warn(
     `${command}: the ${expected.type} at (${Math.round(expected.x)}, ${Math.round(expected.y)}) took ${took}ms. ` +
-      `Steps: ${trace.steps.join("; ")}. Watches: ${watches.join("; ")}. ` +
+      `Steps: ${stepsText(trace)}. Watches: ${watches.join("; ")}. ` +
       `Node's event loop ran up to ${Math.round(trace.loop.max / 1e6)}ms late.`,
   );
 }
@@ -518,7 +662,9 @@ type TouchTarget = { point: { x: number; y: number } } | { frame: Frame };
  * touches it can get here before Playwright lists the frame (CI probe run 38385210551). So
  * for a touchstart this asks Chromium which frame is at the point, and checks again each time
  * Playwright lists a frame or a document, or a frame's watch starts, until that frame is
- * watched. It throws after 5 seconds, naming the frame. Later events of a gesture go to the
+ * watched. It throws after 5 seconds, naming the frame and the steps it took: seconds of the kit's
+ * own time (`kitNow`), which leaves out Node's stalls, up to the command's ceiling of 10 seconds
+ * in real time (`TOUCH_CEILING_MS`). Later events of a gesture go to the
  * frame its touchstart went to, so for them it waits for that frame's watch only.
  * @claim "So for a touchstart this asks" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a touchstart into a frame the kit cannot watch is refused after the time limit, and the next touch works)
  * @claim "Playwright learns of a new frame" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a touch into an iframe added just before it is handled)
@@ -544,11 +690,11 @@ async function watchTarget(
   target: TouchTarget,
   trace: TouchTrace,
 ): Promise<{ calls: Map<Frame, Promise<FrameAnswer<null>>>; gone?: string; inside?: Frame }> {
-  const deadline = performance.now() + TOUCH_HANDLED_TIMEOUT_MS;
+  const deadline = trace.limit(TOUCH_HANDLED_TIMEOUT_MS);
   const calls = new Map<Frame, Promise<FrameAnswer<null>>>();
   let changed = () => {};
   const watch = (frame: Frame) => {
-    const call = callWatch<null>(frame, "expect", expected, TOUCH_HANDLED_TIMEOUT_MS);
+    const call = callWatch<null>(frame, "expect", expected, trace.limit(TOUCH_HANDLED_TIMEOUT_MS));
     calls.set(frame, call);
     trace.answered.delete(frame);
     void call.then(() => {
@@ -561,7 +707,7 @@ async function watchTarget(
   try {
     for (const frame of page.frames()) watch(frame);
     if ("frame" in target) {
-      const answer = await (calls.get(target.frame) ?? callWatch<null>(target.frame, "expect", expected, TOUCH_HANDLED_TIMEOUT_MS));
+      const answer = await (calls.get(target.frame) ?? callWatch<null>(target.frame, "expect", expected, trace.limit(TOUCH_HANDLED_TIMEOUT_MS)));
       traceStep(trace, `the gesture's frame answered: ${answer.url}`);
       if (answer.error === undefined) return { calls };
       // A lift is sent all the same, so the finger is not left down.
@@ -571,13 +717,17 @@ async function watchTarget(
     }
     // Whether the frame at the point is armed but the hit test there does not reach inside it yet, which no change announces.
     let inside: boolean | undefined;
+    // Chromium's last answer, kept when a later question is still out at the limit.
+    let known: FrameAt | undefined;
     for (;;) {
       // Listen before asking, so a change during the question is not missed.
       const change = new Promise<void>((resolve) => (changed = resolve));
       inside = undefined;
-      const at = await within(frameAtPoint(session, target.point, expected, trace), deadline - performance.now(), "Chromium did not say which frame is there").catch(
-        (error: Error): FrameAt => ({ watched: false, where: `unknown (${error.message})` }),
+      const asked = await within(frameAtPoint(session, target.point, expected, trace), deadline, "Chromium did not say which frame is there").catch(
+        (error: Error): FrameAt => ({ watched: false, where: `unknown (${error.message})`, unanswered: true }),
       );
+      const at = asked.unanswered && known ? { ...known, where: `${known.where} (Chromium had not answered the kit's next question there)` } : asked;
+      if (!asked.unanswered) known = asked;
       traceStep(trace, `the frame at the point: ${String(at.watched)}, ${at.where}`);
       if (at.watched === true) return { calls };
       if (at.watched === "frame") {
@@ -586,20 +736,26 @@ async function watchTarget(
         // as the test's own, are already armed, and a touch Chromium sends to a frame before its
         // watcher is armed is lost, not queued.
         const children = [...calls.keys()].filter((frame) => frame.parentFrame() !== null);
-        const found = await Promise.all(children.map((frame) => within(frameSession(page, frame), deadline - performance.now(), "").catch(() => undefined)));
+        const found = await Promise.all(children.map((frame) => within(frameSession(page, frame), deadline, "").catch(() => undefined)));
         const index = at.frameId === undefined ? -1 : found.findIndex((frame) => frame?.id === at.frameId);
         const there = children[index];
         if (there && (await within(calls.get(there)!, 0, "").then((answer) => answer.error === undefined, () => false))) {
           // Armed is not enough: Chromium sends a touch at a point inside such a frame only once its hit
           // test there reaches the frame's own document, and after the frame has drawn; until then the
           // page around it gets the touch. Ask again shortly until it does, as far as the bound allows.
-          inside = await hitsInside(session, found[index]!.session, at, target.point);
+          // A frame busy running its scripts may not answer its hit test: that probe counts as "not
+          // inside", and the next one, a poll later, may answer. No probe outlasts the bound.
+          const probe = { ...deadline, kit: Math.min(deadline.kit, kitNow() + TOUCH_TIDY_MS) };
+          inside = await within(hitsInside(session, found[index]!.session, at, target.point), probe, "unanswered").catch(() => {
+            traceStep(trace, `the frame's hit test did not answer within ${TOUCH_TIDY_MS}ms`);
+            return false;
+          });
           traceStep(trace, `the hit test ${inside ? "reaches" : "does not reach"} inside the frame`);
           if (inside) {
             // When the page around the frame embeds it afresh, as when the frame's visual properties
             // change, Chromium sends the frame touches only once it has drawn again. So the frame
             // draws, then the page around it, then the frame once more.
-            const draw = (frame: Frame | null) => (frame ? within(frame.evaluate(TWO_FRAMES), deadline - performance.now(), "").catch(() => {}) : undefined);
+            const draw = (frame: Frame | null) => (frame ? within(frame.evaluate(TWO_FRAMES), deadline, "").catch(() => {}) : undefined);
             await draw(there);
             await draw(there.parentFrame());
             await draw(there);
@@ -610,12 +766,12 @@ async function watchTarget(
       }
       if (at.watched === "unknown") {
         // Chromium could not say: wait for every frame Playwright lists, as far as the bound allows.
-        await within(answered(), deadline - performance.now(), "expired").catch(() => {});
+        await within(answered(), deadline, "expired").catch(() => {});
         traceStep(trace, "waited for every frame's watch");
         return { calls };
       }
       const soon = inside === false ? new Promise<void>((resolve) => setTimeout(resolve, TOUCH_POLL_MS)) : change;
-      const expired = await within(Promise.race([change, soon]), deadline - performance.now(), "expired").then(
+      const expired = await within(Promise.race([change, soon]), deadline, "expired").then(
         () => false,
         () => true,
       );
@@ -666,13 +822,16 @@ async function watchTarget(
  * it; it is told apart as a touchmove sent before the page has handled any in this gesture.
  *
  * Each wait is bounded: up to 5 seconds for the frame's watch (`watchTarget`), then up to 5
- * for the page to handle the event, so a command throws within about 10 seconds at worst.
+ * for the page to handle the event, both on the kit's own clock (`kitNow`), and never past 10
+ * seconds of real time from the command's start (`TOUCH_CEILING_MS`). Reading the frames for its
+ * error and tidying them up take at most 2 seconds more, so a command throws within 12 seconds.
  * @claim "The page then handles a touchend" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::touchStep resolves once the page has handled its event, also a move during a scroll)
  * @claim "One event is never on its" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::touchStep resolves once the page has handled its event, also a move during a scroll)
  * @claim "Each wait is bounded: up to" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::touchStep resolves once the page has handled its event, also a move during a scroll)
  * @claim "One event is never on its" https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/widget/input/main_thread_event_queue.cc verify:urlOk(https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/platform/widget/input/main_thread_event_queue.cc)
  * @claim "The page then handles a touchend" registry/ouro/lib/ouro/testing/commands.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_HANDLED_TIMEOUT_MS\s=\s5000;/)
  * @claim "Each wait is bounded: up to" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a missing touch event remains bounded while the page clock is frozen)
+ * @claim "Reading the frames for its error" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a touch the page never handles is refused within the command's ceiling in real time, however long Node is starved) verify:testExists(scripts/touch-kit-frames.test.mjs::a touch into a frame that turns busy once it is sent is refused within the command's ceiling in real time, its wait for the frame included, however long Node is starved) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_CEILING_MS\s=\s2\s\*\sTOUCH_HANDLED_TIMEOUT_MS;/)
  */
 async function sendTouch(
   command: string,
@@ -683,13 +842,35 @@ async function sendTouch(
   send: () => Promise<unknown>,
 ): Promise<Frame | undefined> {
   const none: TouchSeen = { seen: false, active: false, moved: false, saw: [] };
-  const trace: TouchTrace = { start: Date.now(), steps: [], answered: new Map(), loop: monitorEventLoopDelay({ resolution: 10 }) };
+  const stopCounting = countStalls();
+  const ceiling = performance.now() + TOUCH_CEILING_MS;
+  const trace: TouchTrace = {
+    start: Date.now(),
+    limit: (ms) => ({ kit: kitNow() + ms, real: ceiling, onCeiling: () => (trace.ceilingReached = true) }),
+    ceilingReached: false,
+    stalled: stalledFor(),
+    steps: [],
+    answered: new Map(),
+    loop: monitorEventLoopDelay({ resolution: 10 }),
+  };
   trace.loop.enable();
   try {
     const handler = await sendTraced(command, page, session, expected, target, send, none, trace);
     logIfSlow(command, expected, trace, page.frames());
     return handler;
+  } catch (error) {
+    // A refusal says what the kit was waiting on, and since when, and how long Node was held up.
+    if (error instanceof Error && error.message.startsWith(`${command}:`)) {
+      const held = stalledFor() - trace.stalled;
+      if (held >= STALL_MS)
+        error.message +=
+          ` Node's event loop was held up for ${Math.round(held)}ms meanwhile, which the kit's limits leave out` +
+          (trace.ceilingReached ? `, up to their ceiling of ${TOUCH_CEILING_MS}ms in all, which this command reached.` : ".");
+      error.message += ` Steps: ${stepsText(trace)}.`;
+    }
+    throw error;
   } finally {
+    stopCounting();
     trace.loop.disable();
   }
 }
@@ -711,29 +892,35 @@ async function sendTraced(
   // Once a frame has handled the event, only its tidying is waited for: a busy frame elsewhere, as a
   // cross-origin page still running its scripts, would hold the command up to TOUCH_TIDY_MS. Calls
   // into one frame run in order, so that frame is still tidied before the next command watches it,
-  // and the next touchstart waits for a watcher armed for itself (frameAtPoint).
+  // and the next touchstart waits for a watcher armed for itself (frameAtPoint). The frame that
+  // handled a touchstart or touchmove has nothing to tidy: seeing the event ended its wait and
+  // cleared what it expected (TOUCH_WATCH), so it is not asked, which saves a round trip into the
+  // page on each step of a gesture. A lift is tidied and waited for: it ends the frame's watch.
   const tidy = async (handled?: Frame) => {
     const answered = (await Promise.all([...calls.values()].map(now))).flatMap((answer) => (answer && answer.error === undefined ? [answer.frame] : []));
     for (const [frame, call] of calls) if (!answered.includes(frame)) void call.then(() => callWatch(frame, "settle", expected, TOUCH_TIDY_MS));
-    const settled = watchTouch(page, "settle", expected, TOUCH_TIDY_MS, answered);
-    const waited = handled ? answered.filter((frame) => frame === handled) : answered;
-    await Promise.all(handled ? settled.filter((_, index) => answered[index] === handled) : settled);
+    const done = handled && expected.type !== "touchEnd" ? handled : undefined;
+    const tidied = answered.filter((frame) => frame !== done);
+    const settled = watchTouch(page, "settle", expected, TOUCH_TIDY_MS, tidied);
+    const waited = handled ? tidied.filter((frame) => frame === handled) : tidied;
+    await Promise.all(handled ? settled.filter((_, index) => tidied[index] === handled) : settled);
     traceStep(trace, `tidied, waiting for ${waited.map((frame) => frame.url() || "a frame with no URL yet").join(", ") || "no frame"}`);
   };
   let waits: Promise<FrameAnswer<TouchSeen> | undefined>[];
   let handler: Frame | undefined;
   let watchdog = () => {};
   try {
-    await send();
+    await acknowledged(command, expected, send, trace.limit(TOUCH_HANDLED_TIMEOUT_MS));
     traceStep(trace, "sent");
     if (gone) throw new Error(gone);
-    // Each frame waits once its watch has started, and stops after the bound on its own; a frame that never answers is let go a little later.
+    // Each frame waits once its watch has started, and stops after the bound on its own; a frame that
+    // never answers is let go a little later, and by the command's ceiling in real time at the latest.
     waits = [...calls].map(([frame, call]) =>
-      call.then((answer) => (answer.error === undefined ? callWatch<TouchSeen>(frame, "wait", expected, TOUCH_HANDLED_TIMEOUT_MS + TOUCH_TIDY_MS) : undefined)),
+      call.then((answer) => (answer.error === undefined ? callWatch<TouchSeen>(frame, "wait", expected, trace.limit(TOUCH_HANDLED_TIMEOUT_MS + TOUCH_TIDY_MS)) : undefined)),
     );
     // Page timers may be frozen by a test; keep the acknowledgement deadline on the provider.
     const deadline = new Promise<undefined>((resolve) => {
-      watchdog = after(TOUCH_HANDLED_TIMEOUT_MS, () => resolve(undefined));
+      watchdog = after(trace.limit(TOUCH_HANDLED_TIMEOUT_MS), () => resolve(undefined));
     });
     // The first frame to see it ends the wait in the others.
     const firstSeen = waits.map((wait) => wait.then((answer) => (answer?.value?.seen ? answer.frame : new Promise<never>(() => {}))));
@@ -813,11 +1000,14 @@ export interface TouchDragOptions {
  *
  * Before the touch it waits until the frame at `from` has the kit's watcher, up to 5 seconds,
  * and throws naming that frame if it never does. Then it waits up to 5 seconds for the page to
- * handle the touchend, and throws naming the events the page did handle. So it can take up to
- * about 10 seconds to throw, and two failing touches can outlast Vitest's default 15 second
- * test timeout in browser mode, which then reports the timeout instead of the kit's message.
+ * handle the touchend, and throws naming the events the page did handle. Those are seconds of
+ * the kit's own time, which leaves out Node's stalls, under a ceiling of 10 seconds of real time
+ * for the touch. So it can take up to 12 seconds to throw, tidying included, and two failing
+ * touches can outlast Vitest's default 15 second test timeout in browser mode, which then
+ * reports the timeout instead of the kit's message.
  * @claim "Before the touch it waits until" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::on a page zoomed and panned by touch, the kit waits for the frame where the touch lands)
  * @claim "So it can take up to" registry/ouro/lib/ouro/testing/commands.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_HANDLED_TIMEOUT_MS\s=\s5000;/)
+ * @claim "Those are seconds of the kit's" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a touch the page never handles is refused within the command's ceiling in real time, however long Node is starved) verify:testExists(scripts/touch-kit-frames.test.mjs::a touchstart into a frame that never answers is refused at the command's ceiling in real time, however long Node is starved) verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_CEILING_MS\s=\s2\s\*\sTOUCH_HANDLED_TIMEOUT_MS;/)
  * @claim "Before the touch it waits until" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a touchstart into a frame the kit cannot watch is refused after the time limit, and the next touch works)
  * @claim "So it can take up to" https://vitest.dev/config/testtimeout verify:urlOk(https://vitest.dev/config/testtimeout)
  * @claim "Then it waits up to 5" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::a missing touch event remains bounded while the page clock is frozen)
@@ -841,9 +1031,16 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
       ...(durationMs === undefined ? {} : { timestamp: start + (durationMs * t) / 1000 }),
     });
   await releaseFinger("touchDrag", page, session);
-  await sendTouch("touchDrag", page, session, { type: "touchEnd", x: to[0], y: to[1] }, { point: { x: from[0], y: from[1] } }, async () => {
+  // Set once the kit refuses the drag: Chromium may still let go of a held touch later, and the
+  // drag then sends nothing more. The finger is kept down (fingersDown) until its touchEnd is
+  // sent, so a refused drag's finger is lifted before the next gesture.
+  let refused = false;
+  const drag = async () => {
     const deliveries: Promise<unknown>[] = [];
     const send = async (type: "touchStart" | "touchMove" | "touchEnd", point: [number, number], t: number) => {
+      if (refused) return;
+      if (type === "touchEnd") fingersDown.delete(page);
+      else fingersDown.set(page, { x: point[0], y: point[1], frame: undefined });
       const delivery = touch(type, point, t);
       if (durationMs === undefined) await delivery;
       else deliveries.push(delivery);
@@ -855,7 +1052,13 @@ export const touchDrag: BrowserCommand<[TouchDragOptions]> = async (ctx, { from,
     }
     await send("touchEnd", to, 1);
     await Promise.all(deliveries);
-  });
+  };
+  try {
+    await sendTouch("touchDrag", page, session, { type: "touchEnd", x: to[0], y: to[1] }, { point: { x: from[0], y: from[1] } }, drag);
+  } catch (error) {
+    refused = true;
+    throw error;
+  }
 };
 
 export interface PointerPressOptions {
@@ -960,6 +1163,23 @@ export type TouchStepOptions =
  */
 const fingersDown = new WeakMap<object, { x: number; y: number; frame: Frame | undefined }>();
 
+/**
+ * Sends a touch event (`send`, Input.dispatchTouchEvent) and waits for Chromium to acknowledge it,
+ * up to `limit`. Chromium answers once the page has run the listeners that can cancel the event, so
+ * a page busy in one never answers; the command is refused then, saying so, rather than waiting on.
+ * @claim "the command is refused then, saying so" scripts/touch-kit-frames.test.mjs verify:testExists(scripts/touch-kit-frames.test.mjs::a touch Chromium never acknowledges is refused at the time limit, saying so)
+ */
+function acknowledged(command: string, point: TouchPoint, send: () => Promise<unknown>, limit: number | Limit): Promise<unknown> {
+  const ms = typeof limit === "number" ? limit : limit.kit - kitNow();
+  const at = `(${Math.round(point.x)}, ${Math.round(point.y)})`;
+  const what = command === "touchDrag" && point.type === "touchEnd" ? `the drag's touches, ending at ${at},` : `the ${point.type} at ${at}`;
+  return within(
+    send(),
+    limit,
+    `${command}: Chromium had not acknowledged ${what} within ${Math.round(ms)}ms: a listener in the page that can cancel it may be busy. The kit sends nothing more for this gesture, and a finger it left down is lifted before the next one.`,
+  );
+}
+
 /** Lifts a finger `touchStep` left down, so the next gesture starts clean. */
 async function releaseFinger(command: string, page: Page, session: CDPSession) {
   const finger = fingersDown.get(page);
@@ -971,8 +1191,12 @@ async function releaseFinger(command: string, page: Page, session: CDPSession) {
     await sendTouch(command, page, session, end, { frame: finger.frame }, send);
     return;
   }
-  // A page that never handled the touchstart gets no touchend to wait for.
-  await send();
+  // A page that never handled the touchstart gets no touchend to wait for. A lift Chromium does not
+  // acknowledge keeps the finger down, to lift before the next gesture.
+  await acknowledged(command, end, send, TOUCH_HANDLED_TIMEOUT_MS).catch((error: unknown) => {
+    fingersDown.set(page, finger);
+    throw error;
+  });
   await Promise.all(watchTouch(page, "settle", end, TOUCH_TIDY_MS));
 }
 
@@ -986,7 +1210,7 @@ async function releaseFinger(command: string, page: Page, session: CDPSession) {
  * Each step resolves once the page has handled its event. A `touchStart` first waits until
  * the frame at its point has the kit's watcher, up to 5 seconds, and throws naming that frame
  * if it never does; any step then waits up to 5 seconds for the page to handle the event. So a
- * step can take up to about 10 seconds to throw (see `touchDrag`). Once the gesture scrolls the page, Chromium
+ * step can take up to 12 seconds to throw, its ceiling in real time and tidying up included (see `touchDrag`). Once the gesture scrolls the page, Chromium
  * hands the page at most one touchmove every 200ms, so a `touchMove` step can take that long.
  * @claim "Each step resolves once the page" registry/ouro/lib/ouro/testing/commands.touch.test.ts verify:testExists(registry/ouro/lib/ouro/testing/commands.touch.test.ts::touchStep resolves once the page has handled its event, also a move during a scroll)
  * @claim "Each step resolves once the page" registry/ouro/lib/ouro/testing/commands.ts verify:fileLine(registry/ouro/lib/ouro/testing/commands.ts, /const\sTOUCH_HANDLED_TIMEOUT_MS\s=\s5000;/)
@@ -1011,7 +1235,7 @@ export const touchStep: BrowserCommand<[TouchStepOptions]> = async (ctx, step) =
     await session.send("Input.dispatchTouchEvent", { type, touchPoints: [{ x, y, id: 1 }] });
   };
   // Chromium sends the page nothing for a move to where the finger already is.
-  if (type === "touchMove" && last?.x === x && last.y === y) await send();
+  if (type === "touchMove" && last?.x === x && last.y === y) await acknowledged("touchStep", { type, x, y }, send, TOUCH_HANDLED_TIMEOUT_MS);
   else {
     // A move goes to the frame that handled the touchstart; a touchstart, or a move with no finger down, to the frame at the point.
     const handler = await sendTouch("touchStep", page, session, { type, x, y }, finger.frame ? { frame: finger.frame } : { point: { x, y } }, send);

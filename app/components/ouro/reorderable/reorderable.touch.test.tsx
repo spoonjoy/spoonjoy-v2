@@ -40,7 +40,7 @@ afterEach(async () => {
 const steps = ["Sear the ribs", "Soften the onions", "Add the wine", "Braise for three hours", "Rest overnight"];
 
 /** A list of steps between two blocks, so the page itself can scroll. */
-async function renderSteps({ count = steps.length, before = 120, after = 1600 } = {}) {
+async function renderSteps({ count = steps.length, before = 120, after = 1600, disabled = false } = {}) {
   const onReorder = vi.fn();
   const host = document.createElement("div");
   document.body.append(host);
@@ -58,6 +58,7 @@ async function renderSteps({ count = steps.length, before = 120, after = 1600 } 
             content: <Item title={step} description={`Step ${index + 1}`} />,
           }))}
           onReorder={onReorder}
+          disabled={disabled}
         />
         <div style={{ height: after }} />
       </div>,
@@ -136,6 +137,24 @@ describe("Reorderable on a phone", () => {
     expect(order(list)[0]).toBe("Rest overnight");
     await expect.poll(() => document.querySelector("[data-ouro-announcer]")?.textContent).toBe("Rest overnight moved. Position 1 of 5.");
     await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it("takes no tap and no drag on a disabled handle, whose touch scrolls the page instead", async () => {
+    const { list, onReorder } = await renderSteps({ disabled: true });
+    // A tap (a touch that does not move: Playwright's tap waits for an aria-disabled control to enable).
+    await commands.touchDrag({ from: middle(handle(list, "Soften the onions")), to: middle(handle(list, "Soften the onions")), steps: 1 });
+    await act(async () => {});
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    const grip = handle(list, "Add the wine");
+    expect(getComputedStyle(grip).touchAction).toBe("auto");
+    // Still a 44px target, the same control, only unavailable.
+    expect(grip.querySelector("[data-ouro-touch-target]")!.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    const [x, y] = middle(grip);
+    await commands.touchDrag({ from: [x, y + 40], to: [x, y - 160], steps: 12 });
+    await expect.poll(() => scrollY).toBeGreaterThan(50);
+    expect(list.hasAttribute("data-dragging")).toBe(false);
+    expect(order(list)).toEqual(steps);
+    expect(onReorder).not.toHaveBeenCalled();
   });
 
   it("moves a row with a touch drag on its handle, without scrolling the page", async () => {

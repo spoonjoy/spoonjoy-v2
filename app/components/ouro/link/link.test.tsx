@@ -73,6 +73,53 @@ describe("Link", () => {
     expect(link.getAttribute("href")).toBe("https://ouro.bot");
   });
 
+  it("renders a plain <a> with reloadDocument or download, skipping the router's link, in the same look", async () => {
+    const onClick = vi.fn((event: { preventDefault(): void }) => event.preventDefault());
+    const { host } = await render(
+      <OuroProvider linkComponent={RouterLink}>
+        <Link href="/recipes">Recipes</Link>
+        <Link href="/mcp" reloadDocument onClick={onClick}>
+          MCP server
+        </Link>
+        <Link href="/export.csv" download>
+          Export
+        </Link>
+        <Link href="/settings" reloadDocument={false}>
+          Settings
+        </Link>
+      </OuroProvider>,
+    );
+    const [recipes, mcp, csv, settings] = [...host.querySelectorAll<HTMLAnchorElement>('[data-ouro="link"]')];
+    expect(recipes!.hasAttribute("data-router")).toBe(true);
+    expect(settings!.hasAttribute("data-router")).toBe(true);
+    for (const link of [mcp!, csv!]) {
+      expect(link.tagName).toBe("A");
+      expect(link.hasAttribute("data-router")).toBe(false);
+      expect(link.className).toBe(recipes!.className);
+      expect(link.getAttribute("data-ouro-control")).toBe("link");
+    }
+    expect(mcp!.getAttribute("href")).toBe("/mcp");
+    expect(mcp!.hasAttribute("reloaddocument")).toBe(false);
+    expect(mcp!.hasAttribute("target")).toBe(false);
+    expect(csv!.getAttribute("download")).toBe("");
+    mcp!.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await expect.element(page.getByRole("link", { name: "MCP server" })).toBeVisible();
+  });
+
+  it("opens a reloadDocument link in a new tab safely with external", async () => {
+    const { link } = await render(
+      <OuroProvider linkComponent={RouterLink}>
+        <Link href="/auth/github" reloadDocument external>
+          Sign in with GitHub
+        </Link>
+      </OuroProvider>,
+    );
+    expect(link.hasAttribute("data-router")).toBe(false);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
   it("opens in a new tab with external, with rel and a label that says so", async () => {
     const { link } = await render(
       <Link href="https://ouro.bot" external>
