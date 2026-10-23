@@ -35,7 +35,7 @@ overrides:
   rollup@4: 4.59.0
   sharp: 0.35.5
   source-map-js: 1.2.2
-  undici: 7.29.1
+  undici: 7.30.1
   valibot: 1.4.2
   ws@8: 8.21.0
   zod: 4.6.6
@@ -235,8 +235,8 @@ importers:
         specifier: ^11.28.0
         version: 11.29.0
       happy-dom:
-        specifier: 20.8.9
-        version: 20.8.9
+        specifier: 21.0.4
+        version: 21.0.4
       jsdom-testing-mocks:
         specifier: ^1.16.0
         version: 1.16.0
@@ -271,14 +271,14 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
       undici:
-        specifier: 7.29.1
-        version: 7.29.1
+        specifier: 7.30.1
+        version: 7.30.1
       vite:
         specifier: 7.3.7
         version: 7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: 4.1.12
-        version: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+        version: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
       wrangler:
         specifier: ^4.90.0
         version: 4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21)
@@ -2152,6 +2152,10 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
+
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
     engines: {node: '>=18'}
@@ -2464,8 +2468,8 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
-  happy-dom@20.8.9:
-    resolution: {integrity: sha512-Tz23LR9T9jOGVZm2x1EPdXqwA37G/owYMxRwU0E4miurAtFsPMQ1d2Jc2okUaSjZqAFz2oEn3FLXC5a0a+siyA==}
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
     engines: {node: '>=20.0.0'}
 
   has-flag@4.0.0:
@@ -3195,8 +3199,8 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  undici@7.29.1:
-    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
+  undici@7.30.1:
+    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
 
   unenv@2.0.0-rc.24:
@@ -3708,7 +3712,7 @@ snapshots:
       cjs-module-lexer: 1.2.3
       esbuild: 0.28.1
       miniflare: 5.20260820.0-alpha(@types/node@22.19.21)
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
       wrangler: 4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21)
       zod: 4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)
     transitivePeerDependencies:
@@ -4716,7 +4720,7 @@ snapshots:
       '@vitest/browser': 4.1.12(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.12)
       '@vitest/browser-playwright': 4.1.12(playwright@1.64.0)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.12)
       '@vitest/runner': 4.1.12
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
     transitivePeerDependencies:
       - react
 
@@ -4993,7 +4997,7 @@ snapshots:
       '@vitest/mocker': 4.1.12(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
       playwright: 1.64.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -5009,7 +5013,7 @@ snapshots:
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
       ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
@@ -5029,7 +5033,7 @@ snapshots:
       magicast: 0.5.3
       obug: 2.1.1
       tinyrainbow: 3.1.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
     transitivePeerDependencies:
       - supports-color
 
@@ -5045,7 +5049,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.2.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
     optionalDependencies:
       '@vitest/browser': 4.1.12(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(vitest@4.1.12)
 
@@ -5109,7 +5113,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.1.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -5212,6 +5216,10 @@ snapshots:
       electron-to-chromium: 1.5.439
       node-releases: 2.0.57
       update-browserslist-db: 1.2.3(browserslist@4.28.7)
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 22.19.21
 
   bundle-name@4.1.0:
     dependencies:
@@ -5461,11 +5469,12 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  happy-dom@20.8.9:
+  happy-dom@21.0.4:
     dependencies:
       '@types/node': 22.19.21
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
+      buffer-image-size: 0.6.4
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
       ws: 8.21.0
@@ -5632,7 +5641,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.21)
-      undici: 7.29.1
+      undici: 7.30.1
       workerd: 1.20260128.0
       ws: 8.21.0
       youch: 4.1.0-beta.10
@@ -5645,7 +5654,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.21)
-      undici: 7.29.1
+      undici: 7.30.1
       workerd: 1.20260507.1
       ws: 8.21.0
       youch: 4.1.0-beta.10
@@ -5658,7 +5667,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.21)
-      undici: 7.29.1
+      undici: 7.30.1
       workerd: 1.20260820.1
       ws: 8.21.0
       youch: 4.1.0-beta.10
@@ -6187,7 +6196,7 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  undici@7.29.1: {}
+  undici@7.30.1: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -6257,7 +6266,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.9.0
 
-  vitest@4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0)):
+  vitest@4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@21.0.4)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.12
       '@vitest/mocker': 4.1.12(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
@@ -6286,7 +6295,7 @@ snapshots:
       '@vitest/coverage-istanbul': 4.1.12(vitest@4.1.12)
       '@vitest/coverage-v8': 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
       '@vitest/ui': 4.1.12(vitest@4.1.12)
-      happy-dom: 20.8.9
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
 
