@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@babel/core': 7.29.7
+  '@cloudflare/vitest-plugin>wrangler': 4.90.0
   axios: 1.20.0
   baseline-browser-mapping: 2.11.0
   brace-expansion@1: 1.1.21
@@ -47,6 +48,9 @@ patchedDependencies:
   react-router@7.18.2:
     hash: e7b901c76f0b120515a75c25c6e5cb80963ab8a8c11a9534bc0992a55d267be8
     path: patches/react-router@7.18.2.patch
+  zod@4.6.6:
+    hash: 459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3
+    path: patches/zod@4.6.6.patch
 
 importers:
 
@@ -114,7 +118,7 @@ importers:
         version: 12.29.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       openai:
         specifier: ^6.17.0
-        version: 6.17.0(ws@8.21.0)(zod@4.6.6)
+        version: 6.17.0(ws@8.21.0)(zod@4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3))
       posthog-js:
         specifier: 1.418.10
         version: 1.418.10
@@ -132,7 +136,7 @@ importers:
         version: 3.7.0
       zod:
         specifier: 4.6.6
-        version: 4.6.6
+        version: 4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)
     devDependencies:
       '@chromatic-com/storybook':
         specifier: ^5.5.1
@@ -3354,16 +3358,6 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  wrangler@4.125.0:
-    resolution: {integrity: sha512-yFpvggu+xk1Hdm/Uxwaqa19bb7GArME4CrCS3Vov68a2TZq2MPO+wLocKbbnIC9K0oLowcdau7/ycxbbNHKCEg==}
-    engines: {node: '>=22.0.0'}
-    hasBin: true
-    peerDependencies:
-      '@cloudflare/workers-types': ^5.20260820.1
-    peerDependenciesMeta:
-      '@cloudflare/workers-types':
-        optional: true
-
   wrangler@4.90.0:
     resolution: {integrity: sha512-bmNIykl59TfCUn5xQgU7IWylSsPx3LQaPLMSAq2VQHt89CBrcj9qXQ0eYfjBCWA5XTBVgten391evt7xxtXwcA==}
     engines: {node: '>=22.0.0'}
@@ -3693,12 +3687,6 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260507.1
 
-  '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260820.1)':
-    dependencies:
-      unenv: 2.0.0-rc.24
-    optionalDependencies:
-      workerd: 1.20260820.1
-
   '@cloudflare/vite-plugin@1.22.1(@types/node@22.19.21)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260507.1)(wrangler@4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21))':
     dependencies:
       '@cloudflare/unenv-preset': 2.12.0(unenv@2.0.0-rc.24)(workerd@1.20260507.1)
@@ -3721,8 +3709,8 @@ snapshots:
       esbuild: 0.28.1
       miniflare: 5.20260820.0-alpha(@types/node@22.19.21)
       vitest: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@22.19.21)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-istanbul@4.1.12)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.8.9)(vite@7.3.7(@types/node@22.19.21)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.9.0))
-      wrangler: 4.125.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21)
-      zod: 4.6.6
+      wrangler: 4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21)
+      zod: 4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@types/node'
@@ -4113,11 +4101,11 @@ snapshots:
       eventsource-parser: 3.1.1
       jose: 6.2.10
       pkce-challenge: 5.0.1
-      zod: 4.6.6
+      zod: 4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)
 
   '@modelcontextprotocol/core@2.3.1':
     dependencies:
-      zod: 4.6.6
+      zod: 4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)
 
   '@napi-rs/wasm-runtime@1.2.5(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)':
     dependencies:
@@ -5730,10 +5718,10 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
-  openai@6.17.0(ws@8.21.0)(zod@4.6.6):
+  openai@6.17.0(ws@8.21.0)(zod@4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)):
     optionalDependencies:
       ws: 8.21.0
-      zod: 4.6.6
+      zod: 4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3)
 
   oxc-parser@0.127.0:
     dependencies:
@@ -6343,24 +6331,6 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260820.1
       '@cloudflare/workerd-windows-64': 1.20260820.1
 
-  wrangler@4.125.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21):
-    dependencies:
-      '@cloudflare/kv-asset-handler': 0.5.0
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260820.1)
-      blake3-wasm: 2.1.5
-      esbuild: 0.28.1
-      miniflare: 5.20260820.0-alpha(@types/node@22.19.21)
-      path-to-regexp: 6.3.0
-      unenv: 2.0.0-rc.24
-      workerd: 1.20260820.1
-    optionalDependencies:
-      '@cloudflare/workers-types': 4.20260507.1
-      fsevents: 2.3.3
-    transitivePeerDependencies:
-      - '@types/node'
-      - bufferutil
-      - utf-8-validate
-
   wrangler@4.90.0(@cloudflare/workers-types@4.20260507.1)(@types/node@22.19.21):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
@@ -6404,4 +6374,4 @@ snapshots:
       cookie: 1.1.1
       youch-core: 0.3.3
 
-  zod@4.6.6: {}
+  zod@4.6.6(patch_hash=459038c37d8067a7b17389cc9abc8cf983c4cb225570f233b1be58c0cad0efa3): {}
