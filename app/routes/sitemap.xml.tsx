@@ -4,7 +4,7 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { buildSitemapXml, type SitemapEntry } from "~/lib/sitemap.server";
 
 // Public, indexable static pages.
-const STATIC_PATHS = ["/", "/privacy", "/terms", "/developers", "/api/docs"];
+const STATIC_PATHS = ["/", "/test-kitchen", "/privacy", "/terms", "/developers", "/api/docs"];
 
 // Cap per entity type. The app is well under this today; if any type ever
 // approaches the 50k sitemap limit, split this into a sitemap index by type.

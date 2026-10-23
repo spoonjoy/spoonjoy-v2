@@ -79,6 +79,7 @@ function createdDateLabel(value: string) {
 /** The cover jobs this panel starts; each resubmit of one makes one cover and one job. */
 const COVER_JOB_INTENTS = ["generateRecipeCoverPlaceholder", "regenerateRecipeCover", "createCoverFromSpoon"] as const;
 
+// TODO(ouro-hx: choice-card, spoonjoy/spoonjoy-v2#570): Choosing among cover images becomes HX's ChoiceCard (a radio group of cards with media) in #570.
 export function RecipeCoverHistory({
   covers,
   spoonImages = [],

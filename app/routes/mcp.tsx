@@ -21,7 +21,9 @@ import {
   protectedResourceMetadataUrl,
   resolveIssuerOrigin,
 } from "~/lib/oauth-metadata.server";
+import { Button } from "~/components/button";
 import { Badge } from "~/components/ouro/badge/badge";
+import { Link } from "~/components/ouro/link/link";
 import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 
 /**
@@ -150,29 +152,6 @@ function CodeBlock({ children }: { children: string }) {
   );
 }
 
-function ActionLink({
-  href,
-  children,
-  plain = false,
-}: {
-  href: string;
-  children: ReactNode;
-  plain?: boolean;
-}) {
-  const tone = plain
-    ? "border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] hover:border-[var(--sj-border-strong)] hover:bg-[var(--sj-flour)]"
-    : "border-[var(--sj-action)] bg-[var(--sj-action)] text-[var(--sj-on-action)] hover:border-[var(--sj-action-hover)] hover:bg-[var(--sj-action-hover)]";
-
-  return (
-    <a
-      href={href}
-      className={`${tone} font-sj-ui inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--sj-radius-control)] border px-4 py-2 text-base/6 font-semibold tracking-normal transition sm:min-h-10 sm:px-3.5 sm:py-1.5 sm:text-sm/6`}
-    >
-      {children}
-    </a>
-  );
-}
-
 function FactRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1 border-b border-[var(--sj-border)] py-3 last:border-b-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4">
@@ -193,14 +172,12 @@ export default function McpPage() {
           title="Spoonjoy MCP"
           action={(
             <>
-              <ActionLink href="/api" plain>
-                <Braces data-slot="icon" aria-hidden="true" />
+              <Button href="/api" plain startIcon={Braces}>
                 Developer Platform
-              </ActionLink>
-              <ActionLink href="/login">
-                <Cable data-slot="icon" aria-hidden="true" />
+              </Button>
+              <Button href="/login" startIcon={Cable}>
                 Sign In
-              </ActionLink>
+              </Button>
             </>
           )}
         >
@@ -287,9 +264,7 @@ export default function McpPage() {
             MCP deliberately has no arbitrary URL import tool. For imports, let the agent read the source you provide and
             create structured Spoonjoy data through <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">create_recipe</code>.
             AI cover generation also stays out of MCP. For broader REST and OpenAPI access, use the{" "}
-            <a className="font-semibold text-[var(--sj-tomato)] underline-offset-4 hover:underline" href="/api">
-              API guide
-            </a>.
+            <Link href="/api">API guide</Link>.
           </p>
         </section>
 
@@ -336,9 +311,12 @@ export default function McpPage() {
               OAuth-ready MCP agents learn where to authorize from Spoonjoy's protected-resource metadata.
             </p>
             <div className="mt-4 overflow-hidden border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3">
+              {/* TODO(ouro-hx: link document navigation, ourostack/ouro-ui#184): HX Link with
+                  document navigation. Until then a plain anchor, styled as HX Link, so a click loads
+                  the JSON as a document instead of sending the resource route through the router. */}
               <a
-                className="break-words font-sj-ui text-sm/6 font-semibold text-[var(--sj-tomato)] underline-offset-4 hover:underline"
                 href="/.well-known/oauth-protected-resource/mcp"
+                className="break-words rounded-xs text-primary underline decoration-current/40 decoration-1 underline-offset-4 outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:decoration-current"
               >
                 Protected-resource metadata
               </a>

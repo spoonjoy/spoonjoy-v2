@@ -2,8 +2,9 @@ import type { Route } from "./+types/chefs";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
 import { Users } from "lucide-react";
-import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
@@ -63,13 +64,13 @@ export default function Chefs() {
                 <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)]">
                   {row.direction === "inbound" ? "In your kitchen" : "From your kitchen"}
                 </p>
-                <Text className="mt-1">{row.label}</Text>
+                <Text tone="muted" className="mt-1">{row.label}</Text>
               </article>
             ))}
           </div>
         ) : (
           <RuledEmptyState title="No chef activity yet">
-            <Text>Cook, fork or save another chef's recipe, and that chef shows up here.</Text>
+            <Text tone="muted">Cook, fork or save another chef's recipe, and that chef shows up here.</Text>
           </RuledEmptyState>
         )}
       </section>
@@ -89,25 +90,18 @@ function ChefList({
   return (
     <section aria-label={title}>
       <h2 className="font-sj-display text-2xl/8 font-semibold text-[var(--sj-ink)]">{title}</h2>
-      {rows.length > 0 ? (
-        <div className="mt-3 divide-y divide-[var(--sj-border)]">
-          {rows.map((chef) => (
-            <Link key={chef.chefId} href={`/?chef=${chef.username}`} className="flex items-center gap-3 py-4 no-underline">
-              <span className="grid size-10 place-items-center rounded-full border border-[var(--sj-border)] text-[var(--sj-brass)]">
-                <Users className="size-4" aria-hidden="true" />
-              </span>
-              <span>
-                <span className="block font-sj-ui font-bold text-[var(--sj-ink)]">{chefDisplayName(chef.username)}</span>
-                <span className="text-sm text-[var(--sj-ink-soft)]">
-                  Latest activity <LocalDate value={chef.latestInteractionAt} />
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <Text className="mt-3">{empty}</Text>
-      )}
+      <ItemGroup aria-label={title} variant="divided" className="mt-3" empty={<Text tone="muted">{empty}</Text>}>
+        {rows.map((chef) => (
+          <Item
+            key={chef.chefId}
+            href={`/?chef=${chef.username}`}
+            title={chefDisplayName(chef.username)}
+            description={<>Latest activity <LocalDate value={chef.latestInteractionAt} /></>}
+            media={<Users />}
+            mediaSize="icon"
+          />
+        ))}
+      </ItemGroup>
     </section>
   );
 }

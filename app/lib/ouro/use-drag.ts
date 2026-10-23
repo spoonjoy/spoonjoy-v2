@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from "react";
 
-/** The slowest release, in px/ms, that is a flick: fast enough that its direction decides, however short the drag. */
+/**
+ * The slowest release, in px/ms, that is a flick: fast enough that its direction decides, however short the drag.
+ *
+ * @claim "The slowest release, in px/ms, that" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > measures velocity over the last 100ms up to the event, in px per millisecond, and calls a fast release a flick)
+ * @claim "The slowest release, in px/ms, that" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > prunes old coalesced points and still reads a slow release as slow)
+ */
 export const FLICK_VELOCITY = 0.11;
 
 // A release velocity is read from the moves of the last 100ms.
@@ -10,9 +15,19 @@ const VELOCITY_WINDOW = 100;
 
 /** Where a drag is. */
 export interface DragState {
-  /** Movement from the grab point along the axis, in px. 1:1 with the finger; the caller applies `rubberband`. */
+  /**
+   * Movement from the grab point along the axis, in px. 1:1 with the finger; the caller applies `rubberband`.
+   *
+   * @claim "1:1 with the finger; the caller" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > starts once the pointer has moved 10px along the axis, and reports movement from the grab point)
+   * @claim "1:1 with the finger; the caller" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > gives the gesture up when the other axis wins the first 10px, so the page scrolls)
+   */
   delta: number;
-  /** Velocity along the axis in px/ms over the last 100ms, up to this event. Its sign is the direction at release; a finger that paused before lifting reads slower, and one that rested 100ms reads 0. */
+  /**
+   * Velocity along the axis in px/ms over the last 100ms, up to this event. Its sign is the direction at release; a finger that paused before lifting reads slower, and one that rested 100ms reads 0.
+   *
+   * @claim "Velocity along the axis in px/ms" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > measures velocity over the last 100ms up to the event, in px per millisecond, and calls a fast release a flick)
+   * @claim "Its sign is the direction at" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > measures velocity over the last 100ms up to the event, in px per millisecond, and calls a fast release a flick)
+   */
   velocity: number;
   /** Whether the velocity is a flick: `Math.abs(velocity) >= FLICK_VELOCITY`. */
   flick: boolean;
@@ -34,6 +49,8 @@ export interface DragOptions {
    * `ignore`: for an element with `touch-action: none`, such as a drag handle, where
    * every touch is the gesture's.
    * @default "scroll"
+   * @claim "`ignore`: for an element with `touch-action" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > ignores the other axis for an element that takes every touch)
+   * @claim "`ignore`: for an element with `touch-action" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > takes the touch moves of a drag, and of nothing else, so the browser makes no scroll or fling of them)
    */
   crossAxis?: "scroll" | "ignore" | undefined;
   /**
@@ -49,9 +66,17 @@ export interface DragOptions {
   onPressEnd?: (() => void) | undefined;
   /** Called once the axis is chosen. Start from where the element is. Return false to refuse the drag. */
   onStart?: ((state: DragState) => boolean | void) | undefined;
-  /** Called on every move after the start, the move that started it included. */
+  /**
+   * Called on every move after the start, the move that started it included.
+   *
+   * @claim "Called on every move after the" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > starts once the pointer has moved 10px along the axis, and reports movement from the grab point)
+   */
   onMove: (state: DragState) => void;
-  /** Called on release, or on cancel with `cancelled` true. Not called for a press that never became a drag: that is `onPressEnd`. */
+  /**
+   * Called on release, or on cancel with `cancelled` true. Not called for a press that never became a drag: that is `onPressEnd`.
+   *
+   * @claim "Not called for a press that" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > says when a press begins, and when it ends without becoming a drag)
+   */
   onEnd: (state: DragState & { cancelled: boolean }) => void;
 }
 
@@ -61,6 +86,8 @@ export interface DragProps {
    * Takes the element's touch moves once a drag has begun, so the browser makes no scroll
    * or fling of them. Without it, Chromium runs a fling after a fast drag, although
    * nothing scrolls, and for its half second or so the next tap gets no `click`.
+   * @claim "Takes the element's touch moves once" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > takes the touch moves of a drag, and of nothing else, so the browser makes no scroll or fling of them)
+   * @claim "Without it, Chromium runs a fling" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > takes the touch moves of a drag, and of nothing else, so the browser makes no scroll or fling of them)
    */
   ref: (element: HTMLElement | null) => (() => void) | undefined;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -75,7 +102,11 @@ interface Gesture {
   started: () => boolean;
   move: (event: PointerEvent) => void;
   end: (event: PointerEvent) => void;
-  /** Stops listening. A press that never became a drag reports its end, unless `silent`. */
+  /**
+   * Stops listening. A press that never became a drag reports its end, unless `silent`.
+   *
+   * @claim "A press that never became a" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > says when a press begins, and when it ends without becoming a drag)
+   */
   release: (silent?: boolean) => void;
 }
 
@@ -91,6 +122,12 @@ interface Gesture {
  * the tap after a fast drag still clicks; that needs the returned `ref` on the element. A mouse whose release was never heard
  * (it happened outside the window) is released by its next move with no button down. The
  * handlers are the same on every render and call the options of the latest one.
+ * @claim "It follows the first pointer only" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > starts once the pointer has moved 10px along the axis, and reports movement from the grab point)
+ * @claim "It follows the first pointer only" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > gives the gesture up when the other axis wins the first 10px, so the page scrolls)
+ * @claim "It follows the first pointer only" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > follows the first pointer only, and a mouse's primary button only)
+ * @claim "Once a drag has begun, its" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > takes the touch moves of a drag, and of nothing else, so the browser makes no scroll or fling of them)
+ * @claim "A mouse whose release was never" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > lets go of a mouse press whose release was never heard, at its next move with no button down)
+ * @claim "The handlers are the same on" registry/ouro/lib/ouro/use-drag.test.tsx verify:testExists(registry/ouro/lib/ouro/use-drag.test.tsx::useDrag > uses the handlers of the latest render, and keeps the same props between renders)
  */
 export function useDrag(options: DragOptions): DragProps {
   const latest = useRef(options);

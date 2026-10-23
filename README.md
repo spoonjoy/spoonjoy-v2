@@ -1,6 +1,6 @@
-# Spoonjoy v2
+# Spoonjoy
 
-Recipe management platform rebuilt with React Router v7 on Cloudflare.
+A recipe app for home cooks, built with React Router 7 on Cloudflare.[^stack] It is the reference app for building with [Ouro HX](https://ourostack.github.io/ouro-ui/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
 
 ## Links
 
@@ -11,7 +11,7 @@ Recipe management platform rebuilt with React Router v7 on Cloudflare.
 
 ## Tech Stack
 
-- **Framework**: React Router v7 (Remix)
+- **Framework**: React Router 7[^stack]
 - **Platform**: Cloudflare Pages/Workers
 - **Database**: Cloudflare D1 (local & production) via Prisma
 - **Language**: TypeScript
@@ -44,7 +44,7 @@ Open [http://localhost:5173](http://localhost:5173) — no additional setup requ
 
 ## Configuration
 
-All configuration lives in `wrangler.json`:
+`wrangler.json` holds the Worker's configuration:
 
 | Setting | Purpose |
 |---------|---------|
@@ -53,7 +53,7 @@ All configuration lives in `wrangler.json`:
 | `r2_buckets` | R2 image storage binding for profile and recipe photos |
 | `vars` | Environment variables (NODE_ENV, OAuth credentials, etc.) |
 
-**Local development uses sensible defaults** — no configuration required to get started.
+**Local development uses sensible defaults**, so you can start without configuring anything.
 When the `PHOTOS` R2 binding is unavailable locally, uploaded images are stored as data URLs so recipe/profile image flows still work.
 
 For OAuth (Google/GitHub/Apple login), provide credentials through Cloudflare secrets in production or `.dev.vars` locally:
@@ -279,3 +279,5 @@ The canonical proposed backlog lives in [`BACKLOG.md`](./BACKLOG.md). Agent task
 ## License
 
 ISC
+
+[^stack]: package.json verify:fileLine(package.json, /"react-router": "7\./)

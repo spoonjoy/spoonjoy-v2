@@ -91,6 +91,14 @@ export interface OuroProviderProps {
  *     </html>
  *   );
  * }
+ * @claim "An app with none of those" scripts/registry.mts verify:fileLine(scripts/registry.mts, /entry\.name === "lib-router-link" \|\| entry\.name === "tooltip"\) registryDeps\.add\("lib-ouro-provider"\)/)
+ * @claim "Optional app-level provider that routes internal" registry/ouro/components/ouro/link/link.test-d.ts verify:fileLine(registry/ouro/components/ouro/link/link.test-d.ts, /expectTypeOf<\{\shref:\s"\/recipes";\schildren:\s"Recipes"\s\}>\(\)\.toExtend<LinkProps>/)
+ * @claim "Every Ouro UI link takes `href`" registry/ouro/components/ouro/link/link.test-d.ts verify:fileLine(registry/ouro/components/ouro/link/link.test-d.ts, /expectTypeOf<\{\shref:\s"\/recipes";\schildren:\s"Recipes"\s\}>\(\)\.toExtend<LinkProps>/)
+ * @claim "An internal `href` (a path) renders" registry/ouro/components/ouro/link/link.test-d.ts verify:fileLine(registry/ouro/components/ouro/link/link.test-d.ts, /expectTypeOf<\{\shref:\s"\/recipes";\schildren:\s"Recipes"\s\}>\(\)\.toExtend<LinkProps>/)
+ * @claim "In Next.js, `next/link`'s `Link` takes `href`" registry/ouro/components/ouro/link/link.test-d.ts verify:fileLine(registry/ouro/components/ouro/link/link.test-d.ts, /expectTypeOf<\{\shref:\s"\/recipes";\schildren:\s"Recipes"\s\}>\(\)\.toExtend<LinkProps>/)
+ * @claim "Ouro UI components work without it" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider and useOuro > defaults to a plain anchor without a provider)
+ * @claim "Ouro UI components work without it" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::npm dependencies are pinned to the ranges this repository tests)
+ * @claim "It installs with every component that" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::registryDependencies are the same-repo items each item imports, as full unpinned addresses)
  */
 export function OuroProvider({ children, linkComponent }: OuroProviderProps): JSX.Element {
   const value = useMemo<OuroContextValue>(

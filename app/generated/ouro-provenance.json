@@ -1,0 +1,3117 @@
+{
+  "guide": "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
+  "ouroTag": "v1.2.0",
+  "root": {
+    "file": "app/root.tsx",
+    "sources": [
+      "app/root.tsx",
+      "app/components/button.tsx",
+      "app/components/cookbook/page.tsx",
+      "app/components/errors/route-error.tsx",
+      "app/components/navigation/dock-context.tsx",
+      "app/components/navigation/index.ts",
+      "app/components/navigation/mobile-nav.tsx",
+      "app/components/navigation/ouro-router-link.tsx",
+      "app/components/navigation/phone-brand-bar.tsx",
+      "app/components/navigation/quick-actions.tsx",
+      "app/components/navigation/recipes-section-nav.tsx",
+      "app/components/navigation/skip-link.tsx",
+      "app/components/oauth.tsx",
+      "app/components/pwa/InstallPromptCard.tsx",
+      "app/components/spoonjoy-logo.tsx",
+      "app/hooks/use-back-navigation.ts",
+      "app/hooks/use-cook-session-sync.ts",
+      "app/hooks/use-unsaved-form-guard.ts",
+      "app/lib/analytics-server.ts",
+      "app/lib/analytics.ts",
+      "app/lib/api-auth.server.ts",
+      "app/lib/api-idempotency.server.ts",
+      "app/lib/canonical-host.server.ts",
+      "app/lib/client-storage-schema.ts",
+      "app/lib/cook-session-sync.ts",
+      "app/lib/d1-read.server.ts",
+      "app/lib/d1-transient-retry.server.ts",
+      "app/lib/d1-write-retry.server.ts",
+      "app/lib/d1-write.server.ts",
+      "app/lib/db.server.ts",
+      "app/lib/env.server.ts",
+      "app/lib/gemini-text.server.ts",
+      "app/lib/hash-only-revalidation.ts",
+      "app/lib/ingredient-parse.server.ts",
+      "app/lib/llm-telemetry.server.ts",
+      "app/lib/nonce.ts",
+      "app/lib/oauth-client-metadata.ts",
+      "app/lib/oauth-metadata.server.ts",
+      "app/lib/oauth-route.server.ts",
+      "app/lib/oauth-server.server.ts",
+      "app/lib/openai-client.server.ts",
+      "app/lib/openai-error.server.ts",
+      "app/lib/push-client.ts",
+      "app/lib/pwa-install.ts",
+      "app/lib/qa-error-logs.server.ts",
+      "app/lib/rate-limit.server.ts",
+      "app/lib/route-platform.server.ts",
+      "app/lib/session-version-fence.server.ts",
+      "app/lib/session.server.ts",
+      "app/lib/use-posthog.ts"
+    ],
+    "components": [
+      "button",
+      "color-scheme-toggle",
+      "link",
+      "navbar",
+      "popover",
+      "tab-bar",
+      "text",
+      "toaster"
+    ],
+    "renders": {
+      "button": [
+        "app/components/button.tsx"
+      ],
+      "color-scheme-toggle": [
+        "app/root.tsx"
+      ],
+      "link": [
+        "app/components/navigation/phone-brand-bar.tsx",
+        "app/root.tsx"
+      ],
+      "navbar": [
+        "app/root.tsx"
+      ],
+      "popover": [
+        "app/root.tsx"
+      ],
+      "tab-bar": [
+        "app/components/navigation/mobile-nav.tsx"
+      ],
+      "text": [
+        "app/components/errors/route-error.tsx",
+        "app/root.tsx"
+      ],
+      "toaster": [
+        "app/components/navigation/mobile-nav.tsx"
+      ]
+    }
+  },
+  "routes": [
+    {
+      "path": "/",
+      "file": "app/routes/_index.tsx",
+      "sources": [
+        "app/routes/_index.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/CookbookCoverArt.tsx",
+        "app/components/cookbook/KitchenHome.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/cookbook-previews.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/kitchen-home.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "avatar",
+        "badge",
+        "button",
+        "card",
+        "empty",
+        "heading",
+        "item",
+        "item-group",
+        "tab-bar",
+        "text",
+        "toaster"
+      ],
+      "renders": {
+        "avatar": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "card": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "empty": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "heading": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "item": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "item-group": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/login",
+      "file": "app/routes/login.tsx",
+      "sources": [
+        "app/routes/login.tsx",
+        "app/components/auth/PasskeySignInButton.tsx",
+        "app/components/auth/auth-page.tsx",
+        "app/components/button.tsx",
+        "app/components/oauth.tsx",
+        "app/components/spoonjoy-logo.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/auth.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/webauthn-client.ts"
+      ],
+      "components": [
+        "auth-layout",
+        "button",
+        "form",
+        "link",
+        "separator",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "auth-layout": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "form": [
+          "app/routes/login.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx",
+          "app/routes/login.tsx"
+        ],
+        "separator": [
+          "app/routes/login.tsx"
+        ],
+        "text": [
+          "app/components/auth/PasskeySignInButton.tsx",
+          "app/routes/login.tsx"
+        ],
+        "text-field": [
+          "app/routes/login.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/signup",
+      "file": "app/routes/signup.tsx",
+      "sources": [
+        "app/routes/signup.tsx",
+        "app/components/auth/auth-page.tsx",
+        "app/components/button.tsx",
+        "app/components/oauth.tsx",
+        "app/components/spoonjoy-logo.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/account-identity.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/auth.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/email.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "auth-layout",
+        "button",
+        "form",
+        "link",
+        "separator",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "auth-layout": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "form": [
+          "app/routes/signup.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx",
+          "app/routes/signup.tsx"
+        ],
+        "separator": [
+          "app/routes/signup.tsx"
+        ],
+        "text": [
+          "app/routes/signup.tsx"
+        ],
+        "text-field": [
+          "app/routes/signup.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/logout",
+      "file": "app/routes/logout.tsx",
+      "sources": [
+        "app/routes/logout.tsx",
+        "app/components/auth/auth-page.tsx",
+        "app/components/button.tsx",
+        "app/components/spoonjoy-logo.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/cook-session-sync.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "auth-layout",
+        "button",
+        "form",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "auth-layout": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "form": [
+          "app/routes/logout.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx",
+          "app/routes/logout.tsx"
+        ],
+        "text": [
+          "app/routes/logout.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/auth/google",
+      "file": "app/routes/auth.google.tsx",
+      "sources": [
+        "app/routes/auth.google.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/google-oauth.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/auth/google/callback",
+      "file": "app/routes/auth.google.callback.tsx",
+      "sources": [
+        "app/routes/auth.google.callback.tsx",
+        "app/lib/account-identity.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/apple-oauth-callback.server.ts",
+        "app/lib/apple-oauth.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/github-oauth-callback.server.ts",
+        "app/lib/github-oauth.server.ts",
+        "app/lib/google-oauth-callback.server.ts",
+        "app/lib/google-oauth.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-callback-route.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/oauth-user.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/auth/github",
+      "file": "app/routes/auth.github.tsx",
+      "sources": [
+        "app/routes/auth.github.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/github-oauth.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/auth/github/callback",
+      "file": "app/routes/auth.github.callback.tsx",
+      "sources": [
+        "app/routes/auth.github.callback.tsx",
+        "app/lib/account-identity.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/apple-oauth-callback.server.ts",
+        "app/lib/apple-oauth.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/github-oauth-callback.server.ts",
+        "app/lib/github-oauth.server.ts",
+        "app/lib/google-oauth-callback.server.ts",
+        "app/lib/google-oauth.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-callback-route.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/oauth-user.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/auth/apple",
+      "file": "app/routes/auth.apple.tsx",
+      "sources": [
+        "app/routes/auth.apple.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/apple-oauth.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/auth/apple/callback",
+      "file": "app/routes/auth.apple.callback.tsx",
+      "sources": [
+        "app/routes/auth.apple.callback.tsx",
+        "app/lib/account-identity.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/apple-oauth-callback.server.ts",
+        "app/lib/apple-oauth.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/github-oauth-callback.server.ts",
+        "app/lib/github-oauth.server.ts",
+        "app/lib/google-oauth-callback.server.ts",
+        "app/lib/google-oauth.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-callback-route.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/oauth-user.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/agent/connect",
+      "file": "app/routes/agent.connect.tsx",
+      "sources": [
+        "app/routes/agent.connect.tsx",
+        "app/components/button.tsx",
+        "app/lib/agent-connection-route.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "button",
+        "heading",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "heading": [
+          "app/routes/agent.connect.tsx"
+        ],
+        "text": [
+          "app/routes/agent.connect.tsx"
+        ],
+        "text-field": [
+          "app/routes/agent.connect.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/agent/connect/:requestId",
+      "file": "app/routes/agent.connect.$requestId.tsx",
+      "sources": [
+        "app/routes/agent.connect.$requestId.tsx",
+        "app/components/button.tsx",
+        "app/lib/agent-connection-route.server.ts",
+        "app/lib/agent-connection-scopes.ts",
+        "app/lib/agent-connection.server.ts",
+        "app/lib/ai-placeholder-cover.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/api-v1-contract.server.ts",
+        "app/lib/api-v1-recipe-steps.server.ts",
+        "app/lib/api-v1-recipe-writes.server.ts",
+        "app/lib/background-task.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/cookbook-membership-compat.server.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-once.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-gen-ledger.server.ts",
+        "app/lib/image-gen-telemetry.server.ts",
+        "app/lib/image-gen.server.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/image-upload-tools.server.ts",
+        "app/lib/ingredient-affordances.ts",
+        "app/lib/ingredient-parse-fallback.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/ingredient-text-parser.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/notification-dispatch.server.ts",
+        "app/lib/notification-fanout.server.ts",
+        "app/lib/notification-triggers.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover-service.server.ts",
+        "app/lib/recipe-cover-stuck.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-create.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/recipe-fork.server.ts",
+        "app/lib/recipe-image-assignment.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/recipe-import-fetch.server.ts",
+        "app/lib/recipe-import-jsonld.server.ts",
+        "app/lib/recipe-import-llm.server.ts",
+        "app/lib/recipe-import-video.server.ts",
+        "app/lib/recipe-import.server.ts",
+        "app/lib/recipe-save-follow-up.server.ts",
+        "app/lib/recipe-source-url.server.ts",
+        "app/lib/recipe-spoon.server.ts",
+        "app/lib/recipe-steps-update.server.ts",
+        "app/lib/recipe-title-uniqueness.server.ts",
+        "app/lib/recipe-write-dedupe.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/safe-image-fetch.server.ts",
+        "app/lib/search-triggers.server.ts",
+        "app/lib/search.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/shopping-list-d1-actions.server.ts",
+        "app/lib/shopping-list-mutations.server.ts",
+        "app/lib/spoon-cover-stylization.server.ts",
+        "app/lib/spoonjoy-api-request.server.ts",
+        "app/lib/spoonjoy-api.server.ts",
+        "app/lib/step-deletion-validation.server.ts",
+        "app/lib/step-output-use-queries.server.ts",
+        "app/lib/step-reorder-validation.server.ts",
+        "app/lib/validation.ts",
+        "app/lib/web-push.server.ts"
+      ],
+      "components": [
+        "button",
+        "heading",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "heading": [
+          "app/routes/agent.connect.$requestId.tsx"
+        ],
+        "text": [
+          "app/routes/agent.connect.$requestId.tsx"
+        ],
+        "text-field": [
+          "app/routes/agent.connect.$requestId.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/.redwood/functions/auth/oauth",
+      "file": "app/routes/redwood-functions-auth-oauth.tsx",
+      "sources": [
+        "app/routes/redwood-functions-auth-oauth.tsx",
+        "app/lib/account-identity.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/apple-oauth-callback.server.ts",
+        "app/lib/apple-oauth.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/github-oauth-callback.server.ts",
+        "app/lib/github-oauth.server.ts",
+        "app/lib/google-oauth-callback.server.ts",
+        "app/lib/google-oauth.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-callback-route.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/oauth-user.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/privacy",
+      "file": "app/routes/privacy.tsx",
+      "sources": [
+        "app/routes/privacy.tsx",
+        "app/components/cookbook/page.tsx"
+      ],
+      "components": [
+        "heading",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "heading": [
+          "app/routes/privacy.tsx"
+        ],
+        "link": [
+          "app/routes/privacy.tsx"
+        ],
+        "text": [
+          "app/routes/privacy.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/terms",
+      "file": "app/routes/terms.tsx",
+      "sources": [
+        "app/routes/terms.tsx",
+        "app/components/cookbook/page.tsx"
+      ],
+      "components": [
+        "heading",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "heading": [
+          "app/routes/terms.tsx"
+        ],
+        "link": [
+          "app/routes/terms.tsx"
+        ],
+        "text": [
+          "app/routes/terms.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/test-kitchen",
+      "file": "app/routes/test-kitchen.tsx",
+      "sources": [
+        "app/routes/test-kitchen.tsx",
+        "app/components/button.tsx",
+        "app/components/cook/RecipeCookView.tsx",
+        "app/components/cook/cook-controller.ts",
+        "app/components/cookbook/page.tsx",
+        "app/components/recipe/CookTimers.tsx",
+        "app/components/recipe/IngredientList.tsx",
+        "app/components/recipe/StepCard.tsx",
+        "app/components/recipe/StepsSectionHeading.tsx",
+        "app/hooks/use-cook-timers.ts",
+        "app/lib/build-info.server.ts",
+        "app/lib/cook-alarm.client.ts",
+        "app/lib/cook-timers.ts",
+        "app/lib/cook/local-cook-controller.ts",
+        "app/lib/ingredient-affordances.ts",
+        "app/lib/ouro-provenance.server.ts",
+        "app/lib/ouro-provenance.ts",
+        "app/lib/quantity.ts",
+        "app/lib/test-kitchen/content.ts",
+        "app/lib/test-kitchen/storage.ts"
+      ],
+      "components": [
+        "aspect-ratio",
+        "button",
+        "checklist",
+        "heading",
+        "inspector",
+        "number-field",
+        "page-header",
+        "pagination",
+        "switch",
+        "text"
+      ],
+      "renders": {
+        "aspect-ratio": [
+          "app/routes/test-kitchen.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx",
+          "app/components/cook/RecipeCookView.tsx",
+          "app/components/recipe/StepsSectionHeading.tsx",
+          "app/routes/test-kitchen.tsx"
+        ],
+        "checklist": [
+          "app/components/recipe/IngredientList.tsx"
+        ],
+        "heading": [
+          "app/routes/test-kitchen.tsx"
+        ],
+        "inspector": [
+          "app/routes/test-kitchen.tsx"
+        ],
+        "number-field": [
+          "app/components/cook/RecipeCookView.tsx",
+          "app/routes/test-kitchen.tsx"
+        ],
+        "page-header": [
+          "app/routes/test-kitchen.tsx"
+        ],
+        "pagination": [
+          "app/components/cook/RecipeCookView.tsx"
+        ],
+        "switch": [
+          "app/routes/test-kitchen.tsx"
+        ],
+        "text": [
+          "app/components/cook/RecipeCookView.tsx",
+          "app/routes/test-kitchen.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/search",
+      "file": "app/routes/search.tsx",
+      "sources": [
+        "app/routes/search.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/hooks/useUrlSyncedInput.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/search-triggers.server.ts",
+        "app/lib/search.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "heading",
+        "item",
+        "item-group",
+        "link",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx",
+          "app/routes/search.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "heading": [
+          "app/routes/search.tsx"
+        ],
+        "item": [
+          "app/routes/search.tsx"
+        ],
+        "item-group": [
+          "app/routes/search.tsx"
+        ],
+        "link": [
+          "app/routes/search.tsx"
+        ],
+        "text": [
+          "app/routes/search.tsx"
+        ],
+        "text-field": [
+          "app/routes/search.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/my-recipes",
+      "file": "app/routes/my-recipes.tsx",
+      "sources": [
+        "app/routes/my-recipes.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/my-recipes-search.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "button",
+        "item",
+        "item-group",
+        "link",
+        "pagination",
+        "tab-bar",
+        "text",
+        "text-field",
+        "toaster"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "item": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "item-group": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "link": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "pagination": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "text-field": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/saved-recipes",
+      "file": "app/routes/saved-recipes.tsx",
+      "sources": [
+        "app/routes/saved-recipes.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/collection-reads.server.ts",
+        "app/lib/cookbook-previews.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/my-recipes-search.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/search-triggers.server.ts",
+        "app/lib/search.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts",
+        "app/routes/my-recipes.tsx"
+      ],
+      "components": [
+        "button",
+        "item",
+        "item-group",
+        "link",
+        "pagination",
+        "tab-bar",
+        "text",
+        "text-field",
+        "toaster"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "item": [
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
+        ],
+        "item-group": [
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
+        ],
+        "link": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "pagination": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
+        ],
+        "text-field": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/chefs",
+      "file": "app/routes/chefs.tsx",
+      "sources": [
+        "app/routes/chefs.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/local-date.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/chef-activity.server.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/time.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "item",
+        "item-group",
+        "text"
+      ],
+      "renders": {
+        "item": [
+          "app/routes/chefs.tsx"
+        ],
+        "item-group": [
+          "app/routes/chefs.tsx"
+        ],
+        "text": [
+          "app/routes/chefs.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/recipes",
+      "file": "app/routes/recipes.tsx",
+      "sources": [
+        "app/routes/recipes.tsx"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/recipes",
+      "file": "app/routes/recipes._index.tsx",
+      "sources": [
+        "app/routes/recipes._index.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/hooks/use-appending-list.ts",
+        "app/hooks/useUrlSyncedInput.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/collection-reads.server.ts",
+        "app/lib/cookbook-previews.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/search-triggers.server.ts",
+        "app/lib/search.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "heading",
+        "item",
+        "show-more",
+        "tab-bar",
+        "text",
+        "text-field",
+        "toaster"
+      ],
+      "renders": {
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "heading": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "item": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "show-more": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "text-field": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/recipes/new",
+      "file": "app/routes/recipes.new.tsx",
+      "sources": [
+        "app/routes/recipes.new.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/recipe/IngredientInputToggle.tsx",
+        "app/components/recipe/IngredientParseInput.tsx",
+        "app/components/recipe/ManualIngredientInput.tsx",
+        "app/components/recipe/ParsedIngredientList.tsx",
+        "app/components/recipe/ParsedIngredientRow.tsx",
+        "app/components/recipe/RecipeBuilder.tsx",
+        "app/components/recipe/RecipeImageUpload.tsx",
+        "app/components/recipe/RecipeImportPanel.tsx",
+        "app/components/recipe/StepEditorCard.tsx",
+        "app/components/recipe/StepList.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/hooks/use-write-token.ts",
+        "app/hooks/useIngredientParser.ts",
+        "app/lib/ai-placeholder-cover.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-gen-ledger.server.ts",
+        "app/lib/image-gen-telemetry.server.ts",
+        "app/lib/image-gen.server.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/ingredient-parse-fallback.server.ts",
+        "app/lib/ingredient-parse-revalidation.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/ingredient-text-parser.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-create.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/recipe-import-fetch.server.ts",
+        "app/lib/recipe-import-jsonld.server.ts",
+        "app/lib/recipe-import-llm.server.ts",
+        "app/lib/recipe-import-session.server.ts",
+        "app/lib/recipe-import-video.server.ts",
+        "app/lib/recipe-import.server.ts",
+        "app/lib/recipe-save-follow-up.server.ts",
+        "app/lib/recipe-source-url.server.ts",
+        "app/lib/recipe-title-uniqueness.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/safe-image-fetch.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/spoon-cover-stylization.server.ts",
+        "app/lib/validation.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "confirm-dialog",
+        "field",
+        "fieldset",
+        "file-field",
+        "form",
+        "link",
+        "reorderable",
+        "segmented-control",
+        "switch",
+        "text",
+        "text-area",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/components/recipe/IngredientParseInput.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "confirm-dialog": [
+          "app/components/recipe/StepList.tsx"
+        ],
+        "field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/components/recipe/StepEditorCard.tsx"
+        ],
+        "fieldset": [
+          "app/components/recipe/RecipeBuilder.tsx"
+        ],
+        "file-field": [
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "form": [
+          "app/components/recipe/RecipeBuilder.tsx",
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "link": [
+          "app/components/recipe/RecipeImportPanel.tsx",
+          "app/components/recipe/StepList.tsx",
+          "app/routes/recipes.new.tsx"
+        ],
+        "reorderable": [
+          "app/components/recipe/StepList.tsx"
+        ],
+        "segmented-control": [
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "switch": [
+          "app/components/recipe/IngredientInputToggle.tsx"
+        ],
+        "text": [
+          "app/routes/recipes.new.tsx"
+        ],
+        "text-area": [
+          "app/components/recipe/IngredientParseInput.tsx",
+          "app/components/recipe/RecipeBuilder.tsx",
+          "app/components/recipe/RecipeImportPanel.tsx",
+          "app/components/recipe/StepEditorCard.tsx"
+        ],
+        "text-field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/components/recipe/RecipeBuilder.tsx",
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/recipes/:id",
+      "file": "app/routes/recipes.$id.tsx",
+      "sources": [
+        "app/routes/recipes.$id.tsx",
+        "app/components/button.tsx",
+        "app/components/cook/RecipeCookView.tsx",
+        "app/components/cook/cook-controller.ts",
+        "app/components/cookbook/page.tsx",
+        "app/components/errors/route-error.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/components/recipe/CookSyncStatusLine.tsx",
+        "app/components/recipe/CookTimers.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/components/recipe/ForkRecipeButton.tsx",
+        "app/components/recipe/IngredientList.tsx",
+        "app/components/recipe/RecipeCoverHistory.tsx",
+        "app/components/recipe/RecipeHeader.tsx",
+        "app/components/recipe/RecipeNotFound.tsx",
+        "app/components/recipe/RecipePhotoStudio.tsx",
+        "app/components/recipe/RecipeProvenance.tsx",
+        "app/components/recipe/SpoonDialog.tsx",
+        "app/components/recipe/SpoonsStrip.tsx",
+        "app/components/recipe/StepCard.tsx",
+        "app/components/recipe/StepsSectionHeading.tsx",
+        "app/hooks/use-back-navigation.ts",
+        "app/hooks/use-cook-session-sync.ts",
+        "app/hooks/use-cook-timers.ts",
+        "app/hooks/use-form-errors.ts",
+        "app/hooks/use-route-cook-controller.ts",
+        "app/hooks/use-screen-wake-lock.ts",
+        "app/hooks/use-write-token.ts",
+        "app/lib/ai-placeholder-cover.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/background-task.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/cook-alarm.client.ts",
+        "app/lib/cook-session-sync.ts",
+        "app/lib/cook-timers.ts",
+        "app/lib/cookbook-membership-compat.server.ts",
+        "app/lib/cooked-at.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/hash-only-revalidation.ts",
+        "app/lib/image-gen-ledger.server.ts",
+        "app/lib/image-gen-telemetry.server.ts",
+        "app/lib/image-gen.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/ingredient-affordances.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/notification-dispatch.server.ts",
+        "app/lib/notification-fanout.server.ts",
+        "app/lib/notification-triggers.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/og-image.server.tsx",
+        "app/lib/og-metadata.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-jobs-d1.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover-stuck.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/recipe-detail-d1-actions.server.ts",
+        "app/lib/recipe-detail-reads.server.ts",
+        "app/lib/recipe-detail.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/recipe-import-fetch.server.ts",
+        "app/lib/recipe-spoon-d1.server.ts",
+        "app/lib/recipe-spoon.server.ts",
+        "app/lib/recipe-structured-data.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/safe-image-fetch.server.ts",
+        "app/lib/saved-recipe-cutover.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/spoon-cover-activation.server.ts",
+        "app/lib/spoon-cover-decision.server.ts",
+        "app/lib/spoon-cover-stylization.server.ts",
+        "app/lib/use-posthog.ts",
+        "app/lib/username.ts",
+        "app/lib/web-push.server.ts"
+      ],
+      "components": [
+        "avatar",
+        "badge",
+        "button",
+        "checkbox",
+        "checklist",
+        "collapsible",
+        "confirm-dialog",
+        "dialog",
+        "empty",
+        "field",
+        "file-field",
+        "form",
+        "heading",
+        "item",
+        "item-group",
+        "link",
+        "number-field",
+        "pagination",
+        "show-more",
+        "spinner",
+        "tab-bar",
+        "text",
+        "text-area",
+        "text-field",
+        "toaster",
+        "toggle"
+      ],
+      "renders": {
+        "avatar": [
+          "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx",
+          "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx",
+          "app/components/cook/RecipeCookView.tsx",
+          "app/components/recipe/StepsSectionHeading.tsx"
+        ],
+        "checkbox": [
+          "app/components/recipe/RecipePhotoStudio.tsx",
+          "app/components/recipe/SpoonDialog.tsx"
+        ],
+        "checklist": [
+          "app/components/recipe/IngredientList.tsx"
+        ],
+        "collapsible": [
+          "app/routes/recipes.$id.tsx"
+        ],
+        "confirm-dialog": [
+          "app/routes/recipes.$id.tsx"
+        ],
+        "dialog": [
+          "app/components/recipe/ForkRecipeButton.tsx",
+          "app/components/recipe/SpoonDialog.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
+        "empty": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "field": [
+          "app/components/recipe/RecipePhotoStudio.tsx",
+          "app/components/recipe/SpoonDialog.tsx"
+        ],
+        "file-field": [
+          "app/components/recipe/RecipePhotoStudio.tsx",
+          "app/components/recipe/SpoonDialog.tsx"
+        ],
+        "form": [
+          "app/components/recipe/SpoonDialog.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
+        "heading": [
+          "app/routes/recipes.$id.tsx"
+        ],
+        "item": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "item-group": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "link": [
+          "app/components/recipe/RecipeHeader.tsx",
+          "app/components/recipe/RecipeProvenance.tsx",
+          "app/components/recipe/SpoonsStrip.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
+        "number-field": [
+          "app/components/cook/RecipeCookView.tsx",
+          "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "pagination": [
+          "app/components/cook/RecipeCookView.tsx"
+        ],
+        "show-more": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "spinner": [
+          "app/components/recipe/RecipeHeader.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/components/cook/RecipeCookView.tsx",
+          "app/components/errors/route-error.tsx",
+          "app/components/recipe/ForkRecipeButton.tsx",
+          "app/components/recipe/RecipeNotFound.tsx",
+          "app/components/recipe/SpoonsStrip.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
+        "text-area": [
+          "app/components/recipe/RecipePhotoStudio.tsx",
+          "app/components/recipe/SpoonDialog.tsx"
+        ],
+        "text-field": [
+          "app/components/recipe/RecipeCoverHistory.tsx",
+          "app/components/recipe/RecipeNotFound.tsx",
+          "app/components/recipe/RecipePhotoStudio.tsx",
+          "app/components/recipe/SpoonDialog.tsx",
+          "app/routes/recipes.$id.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "toggle": [
+          "app/routes/recipes.$id.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/recipes/:id/edit",
+      "file": "app/routes/recipes.$id.edit.tsx",
+      "sources": [
+        "app/routes/recipes.$id.edit.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/recipe/IngredientInputToggle.tsx",
+        "app/components/recipe/IngredientParseInput.tsx",
+        "app/components/recipe/ManualIngredientInput.tsx",
+        "app/components/recipe/ParsedIngredientList.tsx",
+        "app/components/recipe/ParsedIngredientRow.tsx",
+        "app/components/recipe/RecipeBuilder.tsx",
+        "app/components/recipe/RecipeImageUpload.tsx",
+        "app/components/recipe/RecipeImportPanel.tsx",
+        "app/components/recipe/StepEditorCard.tsx",
+        "app/components/recipe/StepList.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/hooks/useIngredientParser.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-gen-ledger.server.ts",
+        "app/lib/image-gen-telemetry.server.ts",
+        "app/lib/image-gen.server.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-edits.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/recipe-import-fetch.server.ts",
+        "app/lib/recipe-save-follow-up.server.ts",
+        "app/lib/recipe-title-uniqueness.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/safe-image-fetch.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/spoon-cover-stylization.server.ts",
+        "app/lib/step-deletion-validation.server.ts",
+        "app/lib/step-output-use-queries.server.ts",
+        "app/lib/step-reorder-validation.server.ts",
+        "app/lib/validation.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "confirm-dialog",
+        "field",
+        "fieldset",
+        "file-field",
+        "form",
+        "link",
+        "reorderable",
+        "segmented-control",
+        "switch",
+        "text-area",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/components/recipe/IngredientParseInput.tsx",
+          "app/routes/recipes.$id.edit.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "confirm-dialog": [
+          "app/components/recipe/StepList.tsx",
+          "app/routes/recipes.$id.edit.tsx"
+        ],
+        "field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/components/recipe/StepEditorCard.tsx"
+        ],
+        "fieldset": [
+          "app/components/recipe/RecipeBuilder.tsx"
+        ],
+        "file-field": [
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "form": [
+          "app/components/recipe/RecipeBuilder.tsx",
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "link": [
+          "app/components/recipe/RecipeImportPanel.tsx",
+          "app/components/recipe/StepList.tsx",
+          "app/routes/recipes.$id.edit.tsx"
+        ],
+        "reorderable": [
+          "app/components/recipe/StepList.tsx"
+        ],
+        "segmented-control": [
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "switch": [
+          "app/components/recipe/IngredientInputToggle.tsx"
+        ],
+        "text-area": [
+          "app/components/recipe/IngredientParseInput.tsx",
+          "app/components/recipe/RecipeBuilder.tsx",
+          "app/components/recipe/RecipeImportPanel.tsx",
+          "app/components/recipe/StepEditorCard.tsx"
+        ],
+        "text-field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/components/recipe/RecipeBuilder.tsx",
+          "app/components/recipe/RecipeImportPanel.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/recipes/:id/steps/new",
+      "file": "app/routes/recipes.$id.steps.new.tsx",
+      "sources": [
+        "app/routes/recipes.$id.steps.new.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/recipe/IngredientInputToggle.tsx",
+        "app/components/recipe/IngredientParseInput.tsx",
+        "app/components/recipe/ManualIngredientInput.tsx",
+        "app/components/recipe/ParsedIngredientList.tsx",
+        "app/components/recipe/ParsedIngredientRow.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/hooks/use-write-token.ts",
+        "app/hooks/useIngredientParser.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse-fallback.server.ts",
+        "app/lib/ingredient-parse-revalidation.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/ingredient-text-parser.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-edits.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/step-deletion-validation.server.ts",
+        "app/lib/step-output-use-queries.server.ts",
+        "app/lib/step-reorder-validation.server.ts",
+        "app/lib/validation.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "field",
+        "fieldset",
+        "form",
+        "item",
+        "item-group",
+        "link",
+        "select",
+        "switch",
+        "text",
+        "text-area",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/components/recipe/IngredientParseInput.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx"
+        ],
+        "fieldset": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "form": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "item": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "item-group": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "link": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "select": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "switch": [
+          "app/components/recipe/IngredientInputToggle.tsx"
+        ],
+        "text": [
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "text-area": [
+          "app/components/recipe/IngredientParseInput.tsx",
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "text-field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/routes/recipes.$id.steps.new.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/recipes/:id/steps/:stepId/edit",
+      "file": "app/routes/recipes.$id.steps.$stepId.edit.tsx",
+      "sources": [
+        "app/routes/recipes.$id.steps.$stepId.edit.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/recipe/IngredientInputToggle.tsx",
+        "app/components/recipe/IngredientParseInput.tsx",
+        "app/components/recipe/ManualIngredientInput.tsx",
+        "app/components/recipe/ParsedIngredientList.tsx",
+        "app/components/recipe/ParsedIngredientRow.tsx",
+        "app/hooks/useIngredientParser.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse-fallback.server.ts",
+        "app/lib/ingredient-parse-revalidation.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/ingredient-text-parser.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-edits.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/step-deletion-validation.server.ts",
+        "app/lib/step-output-use-queries.server.ts",
+        "app/lib/step-reorder-validation.server.ts",
+        "app/lib/validation.ts"
+      ],
+      "components": [
+        "alert",
+        "button",
+        "confirm-dialog",
+        "field",
+        "fieldset",
+        "form",
+        "item",
+        "item-group",
+        "link",
+        "select",
+        "switch",
+        "text",
+        "text-area",
+        "text-field"
+      ],
+      "renders": {
+        "alert": [
+          "app/components/recipe/IngredientParseInput.tsx",
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "confirm-dialog": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx"
+        ],
+        "fieldset": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "form": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "item": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "item-group": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "link": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "select": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "switch": [
+          "app/components/recipe/IngredientInputToggle.tsx"
+        ],
+        "text": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "text-area": [
+          "app/components/recipe/IngredientParseInput.tsx",
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "text-field": [
+          "app/components/recipe/ManualIngredientInput.tsx",
+          "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/cookbooks",
+      "file": "app/routes/cookbooks.tsx",
+      "sources": [
+        "app/routes/cookbooks.tsx"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/cookbooks",
+      "file": "app/routes/cookbooks._index.tsx",
+      "sources": [
+        "app/routes/cookbooks._index.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/collection-reads.server.ts",
+        "app/lib/cookbook-previews.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/my-recipes-search.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/search-triggers.server.ts",
+        "app/lib/search.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/routes/my-recipes.tsx"
+      ],
+      "components": [
+        "button",
+        "item",
+        "item-group",
+        "link",
+        "pagination",
+        "tab-bar",
+        "text",
+        "text-field",
+        "toaster"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "item": [
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "item-group": [
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "link": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "pagination": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "text-field": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/cookbooks/new",
+      "file": "app/routes/cookbooks.new.tsx",
+      "sources": [
+        "app/routes/cookbooks.new.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/hooks/use-write-token.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "button",
+        "form",
+        "link",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "form": [
+          "app/routes/cookbooks.new.tsx"
+        ],
+        "link": [
+          "app/routes/cookbooks.new.tsx"
+        ],
+        "text": [
+          "app/routes/cookbooks.new.tsx"
+        ],
+        "text-field": [
+          "app/routes/cookbooks.new.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/cookbooks/:id",
+      "file": "app/routes/cookbooks.$id.tsx",
+      "sources": [
+        "app/routes/cookbooks.$id.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/CookbookCoverArt.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/navigation/dock-context.tsx",
+        "app/components/navigation/index.ts",
+        "app/components/navigation/mobile-nav.tsx",
+        "app/components/navigation/quick-actions.tsx",
+        "app/components/navigation/recipes-section-nav.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/cookbook-membership-compat.server.ts",
+        "app/lib/cookbook-page-reads.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/notification-dispatch.server.ts",
+        "app/lib/notification-triggers.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/og-image.server.tsx",
+        "app/lib/og-metadata.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/saved-recipe-cutover.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts",
+        "app/lib/web-push.server.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "collapsible",
+        "confirm-dialog",
+        "form",
+        "item",
+        "item-group",
+        "link",
+        "native-select",
+        "tab-bar",
+        "text",
+        "text-field",
+        "toaster"
+      ],
+      "renders": {
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "collapsible": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "confirm-dialog": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "form": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "item": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "item-group": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "link": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "native-select": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "tab-bar": [
+          "app/components/navigation/mobile-nav.tsx"
+        ],
+        "text": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "text-field": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "toaster": [
+          "app/components/navigation/mobile-nav.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/shopping-list",
+      "file": "app/routes/shopping-list.tsx",
+      "sources": [
+        "app/routes/shopping-list.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/hooks/use-write-token.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-once.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-affordances.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/shopping-list-d1-actions.server.ts",
+        "app/lib/shopping-list-mutations.server.ts",
+        "app/lib/shopping-list-parser.ts",
+        "app/lib/shopping-list-reads.server.ts",
+        "app/lib/shopping-list.server.ts"
+      ],
+      "components": [
+        "button",
+        "checklist",
+        "confirm-dialog",
+        "field",
+        "link",
+        "native-select",
+        "segmented-control",
+        "swipe-actions",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "checklist": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "confirm-dialog": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "field": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "link": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "native-select": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "segmented-control": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "swipe-actions": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "text": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "text-field": [
+          "app/routes/shopping-list.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/account/settings",
+      "file": "app/routes/account.settings.tsx",
+      "sources": [
+        "app/routes/account.settings.tsx",
+        "app/components/account/AccountDataSection.tsx",
+        "app/components/account/ProfilePhotoCropper.tsx",
+        "app/components/account/ProfilePhotoField.tsx",
+        "app/components/auth/AddPasskeyButton.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/notifications-section.tsx",
+        "app/components/oauth.tsx",
+        "app/hooks/use-form-errors.ts",
+        "app/lib/account-deletion.server.ts",
+        "app/lib/account-identity.server.ts",
+        "app/lib/account-reauthentication.server.ts",
+        "app/lib/account-revocation.server.ts",
+        "app/lib/account-settings-reads.server.ts",
+        "app/lib/account-settings.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/apple-native-auth.server.ts",
+        "app/lib/apple-oauth-callback.server.ts",
+        "app/lib/apple-oauth.server.ts",
+        "app/lib/auth-telemetry.server.ts",
+        "app/lib/auth.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/cook-session-sync.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/email.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-crop.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-provider-call.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/oauth-user.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-lifecycle.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/push-client.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/username.ts",
+        "app/lib/webauthn-client.ts",
+        "app/lib/webauthn-route.server.ts",
+        "app/lib/webauthn.server.ts"
+      ],
+      "components": [
+        "avatar",
+        "button",
+        "checkbox",
+        "dialog",
+        "fieldset",
+        "form",
+        "link",
+        "switch",
+        "text",
+        "text-field"
+      ],
+      "renders": {
+        "avatar": [
+          "app/components/account/ProfilePhotoField.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "checkbox": [
+          "app/routes/account.settings.tsx"
+        ],
+        "dialog": [
+          "app/components/account/ProfilePhotoCropper.tsx",
+          "app/components/notifications-section.tsx"
+        ],
+        "fieldset": [
+          "app/components/notifications-section.tsx"
+        ],
+        "form": [
+          "app/components/account/AccountDataSection.tsx",
+          "app/routes/account.settings.tsx"
+        ],
+        "link": [
+          "app/components/account/AccountDataSection.tsx"
+        ],
+        "switch": [
+          "app/components/notifications-section.tsx"
+        ],
+        "text": [
+          "app/components/account/AccountDataSection.tsx",
+          "app/components/account/ProfilePhotoField.tsx",
+          "app/components/auth/AddPasskeyButton.tsx",
+          "app/components/notifications-section.tsx",
+          "app/routes/account.settings.tsx"
+        ],
+        "text-field": [
+          "app/components/account/AccountDataSection.tsx",
+          "app/components/auth/AddPasskeyButton.tsx",
+          "app/routes/account.settings.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/account/deleted",
+      "file": "app/routes/account.deleted.tsx",
+      "sources": [
+        "app/routes/account.deleted.tsx",
+        "app/components/cookbook/page.tsx"
+      ],
+      "components": [
+        "link",
+        "text"
+      ],
+      "renders": {
+        "link": [
+          "app/routes/account.deleted.tsx"
+        ],
+        "text": [
+          "app/routes/account.deleted.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/developers",
+      "file": "app/routes/developers.tsx",
+      "sources": [
+        "app/routes/developers.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/lib/analytics.ts",
+        "app/lib/api-v1-contract.server.ts",
+        "app/lib/generated/api-v1-playground.ts",
+        "app/lib/og-metadata.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/use-posthog.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "badge": [
+          "app/routes/developers.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "link": [
+          "app/routes/developers.tsx"
+        ],
+        "text": [
+          "app/routes/developers.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/developers/playground",
+      "file": "app/routes/developers.playground.tsx",
+      "sources": [
+        "app/routes/developers.playground.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/lib/analytics.ts",
+        "app/lib/db.server.ts",
+        "app/lib/generated/api-v1-playground.ts",
+        "app/lib/og-metadata.ts",
+        "app/lib/session.server.ts",
+        "app/lib/use-posthog.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "text"
+      ],
+      "renders": {
+        "badge": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "text": [
+          "app/routes/developers.playground.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/users/:identifier",
+      "file": "app/routes/users.$identifier.tsx",
+      "sources": [
+        "app/routes/users.$identifier.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/CookbookCoverArt.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/local-date.tsx",
+        "app/components/pantry/CookbookCard.tsx",
+        "app/components/pantry/RecipeGrid.tsx",
+        "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/components/recipe/SpoonsStrip.tsx",
+        "app/hooks/use-appending-list.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/chef-profile-reads.server.ts",
+        "app/lib/cook-session-sync.ts",
+        "app/lib/cookbook-previews.server.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-loading.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/kitchen-home.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/og-image.server.tsx",
+        "app/lib/og-metadata.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/quantity.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/time.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "avatar",
+        "badge",
+        "button",
+        "card",
+        "empty",
+        "heading",
+        "item",
+        "item-group",
+        "link",
+        "show-more",
+        "text"
+      ],
+      "renders": {
+        "avatar": [
+          "app/routes/users.$identifier.tsx"
+        ],
+        "badge": [
+          "app/components/recipe/CoverProvenanceBadge.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "card": [
+          "app/components/pantry/CookbookCard.tsx"
+        ],
+        "empty": [
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "heading": [
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/routes/users.$identifier.tsx"
+        ],
+        "item": [
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "item-group": [
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "link": [
+          "app/components/recipe/SpoonsStrip.tsx",
+          "app/routes/users.$identifier.tsx"
+        ],
+        "show-more": [
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx"
+        ],
+        "text": [
+          "app/components/pantry/RecipeGrid.tsx",
+          "app/components/recipe/SpoonsStrip.tsx",
+          "app/routes/users.$identifier.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/users/:identifier/fellow-chefs",
+      "file": "app/routes/users.$identifier.fellow-chefs.tsx",
+      "sources": [
+        "app/routes/users.$identifier.fellow-chefs.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/users/FellowChefList.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/time.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "avatar",
+        "heading",
+        "item",
+        "item-group",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "avatar": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "heading": [
+          "app/routes/users.$identifier.fellow-chefs.tsx"
+        ],
+        "item": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "item-group": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "link": [
+          "app/routes/users.$identifier.fellow-chefs.tsx"
+        ],
+        "text": [
+          "app/components/users/FellowChefList.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/users/:identifier/kitchen-visitors",
+      "file": "app/routes/users.$identifier.kitchen-visitors.tsx",
+      "sources": [
+        "app/routes/users.$identifier.kitchen-visitors.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/components/users/FellowChefList.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/time.ts",
+        "app/lib/username.ts"
+      ],
+      "components": [
+        "avatar",
+        "heading",
+        "item",
+        "item-group",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "avatar": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "heading": [
+          "app/routes/users.$identifier.kitchen-visitors.tsx"
+        ],
+        "item": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "item-group": [
+          "app/components/users/FellowChefList.tsx"
+        ],
+        "link": [
+          "app/routes/users.$identifier.kitchen-visitors.tsx"
+        ],
+        "text": [
+          "app/components/users/FellowChefList.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/mcp",
+      "file": "app/routes/mcp.tsx",
+      "sources": [
+        "app/routes/mcp.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx",
+        "app/lib/agent-connection-scopes.ts",
+        "app/lib/agent-connection.server.ts",
+        "app/lib/ai-placeholder-cover.server.ts",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/api-v1-contract.server.ts",
+        "app/lib/api-v1-recipe-steps.server.ts",
+        "app/lib/api-v1-recipe-writes.server.ts",
+        "app/lib/background-task.server.ts",
+        "app/lib/chef-avatar.ts",
+        "app/lib/cookbook-membership-compat.server.ts",
+        "app/lib/d1-coerce.server.ts",
+        "app/lib/d1-models.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-once.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/fellow-chefs.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/image-gen-ledger.server.ts",
+        "app/lib/image-gen-telemetry.server.ts",
+        "app/lib/image-gen.server.ts",
+        "app/lib/image-storage.server.ts",
+        "app/lib/image-upload-tools.server.ts",
+        "app/lib/ingredient-affordances.ts",
+        "app/lib/ingredient-parse-fallback.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/ingredient-text-parser.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/mcp/http-mcp-protocol.server.ts",
+        "app/lib/mcp/http-mcp-route.server.ts",
+        "app/lib/mcp/http-mcp.server.ts",
+        "app/lib/mcp/json-rpc.server.ts",
+        "app/lib/mcp/spoonjoy-tools.server.ts",
+        "app/lib/native-sync-invalidation.server.ts",
+        "app/lib/notification-dispatch.server.ts",
+        "app/lib/notification-fanout.server.ts",
+        "app/lib/notification-triggers.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/photo-variants.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-cover-schema.server.ts",
+        "app/lib/recipe-cover-service.server.ts",
+        "app/lib/recipe-cover-stuck.server.ts",
+        "app/lib/recipe-cover.server.ts",
+        "app/lib/recipe-create.server.ts",
+        "app/lib/recipe-d1-writes.server.ts",
+        "app/lib/recipe-fork.server.ts",
+        "app/lib/recipe-image-assignment.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/recipe-import-fetch.server.ts",
+        "app/lib/recipe-import-jsonld.server.ts",
+        "app/lib/recipe-import-llm.server.ts",
+        "app/lib/recipe-import-video.server.ts",
+        "app/lib/recipe-import.server.ts",
+        "app/lib/recipe-save-follow-up.server.ts",
+        "app/lib/recipe-source-url.server.ts",
+        "app/lib/recipe-spoon.server.ts",
+        "app/lib/recipe-steps-update.server.ts",
+        "app/lib/recipe-title-uniqueness.server.ts",
+        "app/lib/recipe-write-dedupe.server.ts",
+        "app/lib/request-body-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/safe-image-fetch.server.ts",
+        "app/lib/saved-recipe-cutover.server.ts",
+        "app/lib/search-triggers.server.ts",
+        "app/lib/search.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts",
+        "app/lib/shopping-list-d1-actions.server.ts",
+        "app/lib/shopping-list-mutations.server.ts",
+        "app/lib/spoon-cover-stylization.server.ts",
+        "app/lib/spoonjoy-api-request.server.ts",
+        "app/lib/spoonjoy-api.server.ts",
+        "app/lib/step-deletion-validation.server.ts",
+        "app/lib/step-output-use-queries.server.ts",
+        "app/lib/step-reorder-validation.server.ts",
+        "app/lib/validation.ts",
+        "app/lib/web-push.server.ts"
+      ],
+      "components": [
+        "badge",
+        "button",
+        "link"
+      ],
+      "renders": {
+        "badge": [
+          "app/routes/mcp.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "link": [
+          "app/routes/mcp.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/oauth/authorize",
+      "file": "app/routes/oauth.authorize.tsx",
+      "sources": [
+        "app/routes/oauth.authorize.tsx",
+        "app/components/button.tsx",
+        "app/lib/analytics-server.ts",
+        "app/lib/analytics.ts",
+        "app/lib/api-auth.server.ts",
+        "app/lib/api-idempotency.server.ts",
+        "app/lib/canonical-host.server.ts",
+        "app/lib/d1-read.server.ts",
+        "app/lib/d1-transient-retry.server.ts",
+        "app/lib/d1-write-retry.server.ts",
+        "app/lib/d1-write.server.ts",
+        "app/lib/db.server.ts",
+        "app/lib/env.server.ts",
+        "app/lib/gemini-text.server.ts",
+        "app/lib/ingredient-parse.server.ts",
+        "app/lib/llm-telemetry.server.ts",
+        "app/lib/oauth-client-metadata.ts",
+        "app/lib/oauth-metadata.server.ts",
+        "app/lib/oauth-route.server.ts",
+        "app/lib/oauth-routes.server.ts",
+        "app/lib/oauth-server.server.ts",
+        "app/lib/openai-client.server.ts",
+        "app/lib/openai-error.server.ts",
+        "app/lib/qa-error-logs.server.ts",
+        "app/lib/rate-limit.server.ts",
+        "app/lib/recipe-image.ts",
+        "app/lib/request-body-limit.server.ts",
+        "app/lib/route-platform.server.ts",
+        "app/lib/security-headers.server.ts",
+        "app/lib/session-version-fence.server.ts",
+        "app/lib/session.server.ts"
+      ],
+      "components": [
+        "button",
+        "collapsible",
+        "description-list",
+        "heading",
+        "text"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "collapsible": [
+          "app/routes/oauth.authorize.tsx"
+        ],
+        "description-list": [
+          "app/routes/oauth.authorize.tsx"
+        ],
+        "heading": [
+          "app/routes/oauth.authorize.tsx"
+        ],
+        "text": [
+          "app/routes/oauth.authorize.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/oauth/callback",
+      "file": "app/routes/oauth.callback.tsx",
+      "sources": [
+        "app/routes/oauth.callback.tsx",
+        "app/components/auth/auth-page.tsx",
+        "app/components/button.tsx",
+        "app/components/spoonjoy-logo.tsx"
+      ],
+      "components": [
+        "auth-layout",
+        "button",
+        "link",
+        "text"
+      ],
+      "renders": {
+        "auth-layout": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "link": [
+          "app/components/auth/auth-page.tsx"
+        ],
+        "text": [
+          "app/routes/oauth.callback.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/.well-known/spoonjoy-release-readiness",
+      "file": "app/routes/well-known.spoonjoy-release-readiness.tsx",
+      "sources": [
+        "app/routes/well-known.spoonjoy-release-readiness.tsx"
+      ],
+      "components": [
+        "button"
+      ],
+      "renders": {
+        "button": [
+          "app/routes/well-known.spoonjoy-release-readiness.tsx"
+        ]
+      }
+    },
+    {
+      "path": "/.well-known/appspecific/com.chrome.devtools.json",
+      "file": "app/routes/devtools-well-known.tsx",
+      "sources": [
+        "app/routes/devtools-well-known.tsx"
+      ],
+      "components": [],
+      "renders": {}
+    },
+    {
+      "path": "/*",
+      "file": "app/routes/$.tsx",
+      "sources": [
+        "app/routes/$.tsx",
+        "app/components/button.tsx",
+        "app/components/cookbook/page.tsx"
+      ],
+      "components": [
+        "button",
+        "text"
+      ],
+      "renders": {
+        "button": [
+          "app/components/button.tsx"
+        ],
+        "text": [
+          "app/routes/$.tsx"
+        ]
+      }
+    }
+  ]
+}

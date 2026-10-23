@@ -4,7 +4,7 @@ import { getCloudflareEnv, getIngredientParserEnv, getRequestDb } from "~/lib/ro
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { CookbookHeader, CookbookPage } from "~/components/cookbook/page";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import {
@@ -32,7 +32,7 @@ import {
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { FOOD_IMAGE_ACCEPT, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
+import { RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { ActiveRecipeTitleConflictError, validateActiveRecipeTitleUnique } from "~/lib/recipe-title-uniqueness.server";
 import { scheduleAiPlaceholderCover } from "~/lib/ai-placeholder-cover.server";
 import { scheduleSpoonCoverStylization } from "~/lib/spoon-cover-stylization.server";
@@ -391,8 +391,6 @@ export default function NewRecipe() {
   const saveData = saveAnswer ?? initialActionData;
   const navigate = useNavigate();
   const navigation = useNavigation();
-  const formRef = useRef<HTMLFormElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const submitInFlightRef = useRef(false);
   const [submitStarted, setSubmitStarted] = useState(false);
   // One recipe per opening of the page: a save after a 503, or a double tap, writes it once.
@@ -423,30 +421,15 @@ export default function NewRecipe() {
     submitInFlightRef.current = true;
     setSubmitStarted(true);
 
-    // formRef.current is guaranteed to exist when this is called because
-    // both the Form and RecipeBuilder are always rendered together
-    const form = formRef.current!;
-    const titleInput = form.querySelector('input[name="title"]') as HTMLInputElement;
-    const descriptionInput = form.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
-    const servingsInput = form.querySelector('input[name="servings"]') as HTMLInputElement;
-    const stepsInput = form.querySelector('input[name="steps"]') as HTMLInputElement;
-    const clearImageInput = form.querySelector('input[name="clearImage"]') as HTMLInputElement;
-
-    if (titleInput) titleInput.value = recipeData.title;
-    if (descriptionInput) descriptionInput.value = recipeData.description || "";
-    if (servingsInput) servingsInput.value = recipeData.servings || "";
-    if (stepsInput) stepsInput.value = JSON.stringify(recipeData.steps);
-    if (clearImageInput) clearImageInput.value = recipeData.clearImage ? "true" : "";
-
-    // Handle image file
-    if (recipeData.imageFile && fileInputRef.current) {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(recipeData.imageFile);
-      fileInputRef.current.files = dataTransfer.files;
-    }
-
-    // Submit the form
-    form.requestSubmit();
+    const formData = new FormData();
+    formData.set("recipeToken", recipeToken);
+    formData.set("title", recipeData.title);
+    formData.set("description", recipeData.description || "");
+    formData.set("servings", recipeData.servings || "");
+    formData.set("steps", JSON.stringify(recipeData.steps));
+    formData.set("clearImage", recipeData.clearImage ? "true" : "");
+    if (recipeData.imageFile) formData.set("image", recipeData.imageFile);
+    saveFetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
   };
 
   return (
@@ -456,21 +439,10 @@ export default function NewRecipe() {
         title="Write the version future-you can actually cook."
         action={<Link href="/recipes" className="inline-flex min-h-11 items-center">← Back to recipes</Link>}
       >
-        <Text>
+        <Text tone="muted">
           Bring in a recipe you already have, or start with the story and the photo and shape the method into steps.
         </Text>
       </CookbookHeader>
-
-      {/* Hidden form for submitting data to the action */}
-      <saveFetcher.Form ref={formRef} method="post" encType="multipart/form-data" className="hidden">
-        <input type="hidden" name="recipeToken" value={recipeToken} />
-        <input type="hidden" name="title" />
-        <textarea name="description" className="hidden" />
-        <input type="hidden" name="servings" />
-        <input type="hidden" name="steps" />
-        <input type="hidden" name="clearImage" />
-        <input ref={fileInputRef} type="file" name="image" accept={FOOD_IMAGE_ACCEPT} />
-      </saveFetcher.Form>
 
       <div className="mt-8 max-w-5xl">
         <RecipeImportPanel result={actionData?.importResult} />

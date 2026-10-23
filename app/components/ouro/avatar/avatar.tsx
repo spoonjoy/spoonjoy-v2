@@ -8,7 +8,12 @@ import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
-/** Avatar sizes: 24, 32, 40, 48, 64, 72 and 112px. */
+/**
+ * Avatar sizes: 24, 32, 40, 48, 64, 72 and 112px.
+ *
+ * @claim "Avatar sizes: 24, 32, 40, 48" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > comes in sizes that grow in order, as circles)
+ * @claim "Avatar sizes: 24, 32, 40, 48" registry/ouro/components/ouro/avatar/avatar.tsx verify:fileLine(registry/ouro/components/ouro/avatar/avatar.tsx, /"3xl": "size-28/)
+ */
 export type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl";
 
 /** The props Avatar adds to the `<span>` attributes it passes through. */
@@ -17,6 +22,7 @@ export interface AvatarOwnProps {
    * The person's or thing's name. Screen readers hear it, and the initials come from it
    * (the first letters of the first and last words) until the image loads, or when it
    * fails. Required, so no avatar is silent.
+   * @claim "Required, so no avatar is silent" registry/ouro/components/ouro/avatar/avatar.test-d.ts verify:fileLine(registry/ouro/components/ouro/avatar/avatar.test-d.ts, /expectTypeOf<\{\ssrc:\s"\/ada\.jpg"\s\}>\(\)\.not\.toExtend<AvatarProps>/)
    */
   name: string;
   /** The image URL. Until it loads, and if it fails, the initials show. */
@@ -32,6 +38,9 @@ export interface AvatarOwnProps {
    * 24, 32, 40, 48, 64, 72 or 112px (`2xl` and `3xl` for profile pages); the initials
    * grow with it. Avatar is always a circle. Inside an `AvatarGroup`, the group's size applies.
    * @default "md"
+   * @claim "24, 32, 40, 48, 64, 72" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > shows initials from the name, and the name to screen readers)
+   * @claim "Avatar is always a circle" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > shows initials from the name, and the name to screen readers)
+   * @claim "24, 32, 40, 48, 64, 72" registry/ouro/components/ouro/avatar/avatar.tsx verify:fileLine(registry/ouro/components/ouro/avatar/avatar.tsx, /"3xl": "size-28/)
    */
   size?: AvatarSize | (string & { 'Use "xs", "sm", "md", "lg", "xl", "2xl" or "3xl"': never }) | undefined;
   /** Layout only: margins, grid placement (`ms-2`). Appearance classes warn in development; use `size`. */
@@ -53,16 +62,21 @@ export interface AvatarGroupOwnProps {
   label: string;
   /** The `Avatar`s, in order. */
   children: ReactNode;
-  /** Shows at most this many avatars, then a "+N" count for the rest. @default all of them */
+  /** Shows at most this many avatars, then a "+N" count for the rest. @default unlimited */
   max?: number | undefined;
   /**
    * How many there are in all, when you pass only the first few avatars (a recipe with
    * 120 cooks). The "+N" count is `total` minus the avatars shown.
+   * @claim "How many there are in all" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::AvatarGroup > counts from total when more people exist than avatars passed)
    */
   total?: number | undefined;
   /** What screen readers hear for the "+N" count, for other languages. @default (count) => `${count} more` */
   moreLabel?: ((count: number) => string) | undefined;
-  /** The size of every avatar in the group, and of the count. @default "md" */
+  /**
+   * The size of every avatar in the group, and of the count. @default "md"
+   *
+   * @claim "The size of every avatar in" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::AvatarGroup > passes its size to every avatar and the count)
+   */
   size?: AvatarSize | (string & { 'Use "xs", "sm", "md", "lg", "xl", "2xl" or "3xl"': never }) | undefined;
   /** Layout only: margins, grid placement (`mt-4`). Appearance classes warn in development. */
   className?: string | undefined;
@@ -204,6 +218,8 @@ export function Avatar(props: AvatarProps): JSX.Element {
  * <AvatarGroup label="Cooks" max={3} size="sm">
  *   {cooks.map((cook) => <Avatar key={cook.id} name={cook.name} src={cook.photoUrl} />)}
  * </AvatarGroup>
+ * @claim "Its `label` names the group for" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::Avatar > shows initials from the name, and the name to screen readers)
+ * @claim "Its `label` names the group for" registry/ouro/components/ouro/avatar/avatar.test.tsx verify:testExists(registry/ouro/components/ouro/avatar/avatar.test.tsx::AvatarGroup > stacks avatars in a labeled group, overlapping)
  */
 export function AvatarGroup(props: AvatarGroupProps): JSX.Element {
   const { label, children, max, total, moreLabel = (count: number) => `${count} more`, size: sizeProp, className, ...rest } = props;

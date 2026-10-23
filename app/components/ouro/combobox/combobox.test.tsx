@@ -8,6 +8,16 @@ import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
 
+/** The colour behind an element: the nearest background around it that is not transparent. */
+function behind(element: Element): string {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const color = getComputedStyle(node).backgroundColor;
+    if (color !== "transparent" && !/rgba\(.*,\s*0\)$/.test(color)) return color;
+  }
+  return "rgb(255, 255, 255)";
+}
+
+
 const herbs = ["Basil", "Chives", "Dill", "Mint", "Oregano", "Parsley", "Rosemary", "Sage", "Thyme"];
 const cheeses = [
   { value: "brie", label: "Brie" },
@@ -83,6 +93,20 @@ describe("Combobox", () => {
     expect(input.getAttribute("aria-required")).toBe("true");
     await rerender(<Combobox label="Herb" items={herbs} disabled />);
     expect(input.disabled).toBe(true);
+  });
+
+  it("shows the highlighted option in the system's highlight colours under forced colours, where its fill is dropped", async () => {
+    const { input } = await render(<Combobox label="Herb" name="herb" items={herbs} />);
+    await userEvent.click(input);
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.poll(() => document.querySelector('[role="option"][data-highlighted]')).not.toBeNull();
+    await commands.emulateMedia({ forcedColors: "active" });
+    try {
+      const highlighted = document.querySelector('[role="option"][data-highlighted]')!;
+      expect(getComputedStyle(highlighted).backgroundColor).not.toBe(behind(highlighted));
+    } finally {
+      await commands.emulateMedia({ forcedColors: "none" });
+    }
   });
 
   it("filters the items as you type and picks one", async () => {

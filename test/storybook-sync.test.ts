@@ -8,7 +8,6 @@ const STORIES_DIR = path.join(__dirname, '../stories')
 
 const curatedRootStories = new Set([
   'AppFoundation.stories.tsx',
-  'ConfirmationDialog.stories.tsx',
   'MobileNav.stories.tsx',
   'ProfilePhotoCropper.stories.tsx',
   'SpoonjoyLogo.stories.tsx',
@@ -17,11 +16,8 @@ const curatedRootStories = new Set([
 const requiredStoryFiles = [
   'Introduction.mdx',
   'AppFoundation.stories.tsx',
-  'ConfirmationDialog.stories.tsx',
   'MobileNav.stories.tsx',
   'SpoonjoyLogo.stories.tsx',
-  'Pantry/BioCard.stories.tsx',
-  'Pantry/PantryPage.stories.tsx',
   'Pantry/RecipeGrid.stories.tsx',
   'Recipe/Input/RecipeBuilder.stories.tsx',
   'Recipe/View/RecipeView.stories.tsx',
@@ -35,6 +31,7 @@ const removedStaleFiles = [
   'Button.stories.tsx',
   'Checkbox.stories.tsx',
   'Combobox.stories.tsx',
+  'ConfirmationDialog.stories.tsx',
   'ComponentInventory.mdx',
   'DescriptionList.stories.tsx',
   'DesignTokens.mdx',
@@ -53,6 +50,8 @@ const removedStaleFiles = [
   'Navbar.stories.tsx',
   'OAuth.stories.tsx',
   'Pagination.stories.tsx',
+  'Pantry/BioCard.stories.tsx',
+  'Pantry/PantryPage.stories.tsx',
   'QuickActions.stories.tsx',
   'Radio.stories.tsx',
   'REORG-PLAN.md',

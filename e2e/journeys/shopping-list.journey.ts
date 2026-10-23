@@ -40,9 +40,9 @@ function row(page: Page, name: string) {
   return page.getByRole("checkbox", { name, exact: true });
 }
 
-// The "Need N" / "Basket N" / "All N" view buttons (CSS uppercases them).
+// The "Need N" / "Basket N" / "All N" segments of the View control.
 function view(page: Page, label: "Need" | "Basket" | "All", count: number) {
-  return page.getByRole("button", { name: new RegExp(`^${label} ${count}$`, "i") });
+  return page.getByRole("radiogroup", { name: "View", exact: true }).getByRole("radio", { name: `${label} ${count}`, exact: true });
 }
 
 function emptyList(page: Page) {
@@ -76,13 +76,13 @@ function recordShoppingListActions(page: Page, intent: string): number[] {
 // Adds an item by hand and waits for its row. A successful add clears the field (R-M3-3).
 // A counted amount: the number alone at the end of the row ("lemons2"), never "2 whole".
 function counted(n: number) {
-  return new RegExp(`\\D${n}$`);
+  return new RegExp(`(^|\\D)${n}$`);
 }
 
 async function addByHand(page: Page, text: string, name: string, amount: string | RegExp) {
   await itemField(page).fill(text);
   await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-  await expect(row(page, name), FALLBACK_PARSER).toContainText(amount);
+  await expect(row(page, name), FALLBACK_PARSER).toHaveAccessibleDescription(typeof amount === "string" ? new RegExp(`(^| )${amount}$`) : amount);
   await expect(itemField(page)).toHaveValue("");
 }
 
@@ -128,7 +128,7 @@ test.describe("Shopping list", () => {
     await waitForHydration(page);
     await expect(itemField(page)).toHaveValue("2 lemons");
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-    await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
+    await expect(lemons, FALLBACK_PARSER).toHaveAccessibleDescription(counted(2));
     await expect(lemons).toHaveAttribute("aria-checked", "false");
     // "lemons" is its own row: the "lemon" placeholder the reset just cleared doesn't come back.
     await expect(row(page, "lemon")).toBeHidden();
@@ -136,7 +136,7 @@ test.describe("Shopping list", () => {
     // empty field is required, so the browser doesn't submit it.
     await expect(itemField(page)).toHaveValue("");
     await addSection(page).getByRole("button", { name: "Add", exact: true }).click();
-    await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
+    await expect(lemons, FALLBACK_PARSER).toHaveAccessibleDescription(counted(2));
     await expect(view(page, "Need", 1)).toBeVisible();
     await expectAccessible();
 
@@ -148,7 +148,7 @@ test.describe("Shopping list", () => {
     await expect(view(page, "Basket", 1)).toBeVisible();
     await expect(view(page, "Need", 0)).toBeVisible();
     await view(page, "Basket", 1).click();
-    await expect(view(page, "Basket", 1)).toHaveAttribute("aria-pressed", "true");
+    await expect(view(page, "Basket", 1)).toHaveAttribute("aria-checked", "true");
     await expect(lemons).toBeVisible();
     await view(page, "Need", 0).click();
     await expect(page.getByRole("heading", { level: 2, name: "Nothing left in this view", exact: true })).toBeVisible();
@@ -157,11 +157,11 @@ test.describe("Shopping list", () => {
 
     await verifyAfterReload(async () => {
       await expect(lemons).toHaveAttribute("aria-checked", "true");
-      await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
+      await expect(lemons, FALLBACK_PARSER).toHaveAccessibleDescription(counted(2));
       await expect(view(page, "Basket", 1)).toBeVisible();
     });
 
-    // Uncheck it, then remove it (its "Remove lemons" button is for keyboards and screen readers).
+    // Uncheck it, then remove it through its row's actions menu (a swipe on a phone opens the same delete).
     await waitForHydration(page);
     const unchecked = nextShoppingListAction(page, "toggleCheck");
     await lemons.click();
@@ -178,12 +178,14 @@ test.describe("Shopping list", () => {
     });
     const selectedId = await page.locator("[data-shopping-item]").filter({ has: lemons }).getAttribute("data-shopping-item");
     expect(selectedId).not.toBeNull();
-    await page.getByRole("button", { name: "Remove lemons", exact: true }).press("Enter");
+    await page.getByRole("button", { name: "Actions for lemons", exact: true }).press("Enter");
+    await page.getByRole("menuitem", { name: "Delete lemons", exact: true }).press("Enter");
     const removalDialog = page.getByRole("alertdialog", { name: 'Remove "lemons"?', exact: true });
     await expect(removalDialog).toBeVisible();
     await expect(removalDialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
     expect(removeRequests).toEqual([]);
-    await expect(page.locator('[role="checkbox"][aria-label="lemons"]')).toHaveAttribute("aria-checked", "false");
+    // The modal hides the list from assistive technology while it asks; the row is still unchecked.
+    await expect(page.getByRole("checkbox", { name: "lemons", exact: true, includeHidden: true })).toHaveAttribute("aria-checked", "false");
     await removalDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(removalDialog).toBeHidden();
     await expect(page.getByRole("button", { name: "Actions for lemons", exact: true })).toBeFocused();
@@ -215,7 +217,7 @@ test.describe("Shopping list", () => {
     await expect(view(page, "All", 1)).toBeVisible();
 
     await verifyAfterReload(async () => {
-      await expect(lemons, FALLBACK_PARSER).toContainText(counted(2));
+      await expect(lemons, FALLBACK_PARSER).toHaveAccessibleDescription(counted(2));
       await expect(view(page, "All", 1)).toBeVisible();
     });
   });
@@ -225,9 +227,11 @@ test.describe("Shopping list", () => {
     // (product audit 2026-10-09, finding 9). The head noun, stock, decides: Pantry.
     await page.goto("/recipes/qa-kitchen-recipe-lemon-rice");
     await waitForHydration(page);
-    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-1-chicken-stock")).toContainText("Pantry");
-    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-1-chicken-stock")).not.toContainText("Protein");
-    await expect(page.getByTestId("ingredient-item-qa-kitchen-recipe-lemon-rice-ingredient-2-parsley")).toContainText("Produce");
+    // A recipe's checklist row is described by its aisle, then its amount.
+    const chickenStock = page.getByRole("checkbox", { name: "chicken stock", exact: true });
+    await expect(chickenStock).toHaveAccessibleDescription(/^Pantry /);
+    await expect(chickenStock).not.toHaveAccessibleDescription(/Protein/);
+    await expect(page.getByRole("checkbox", { name: "parsley", exact: true })).toHaveAccessibleDescription(/^Produce/);
     await expectAccessible();
   });
 
@@ -240,7 +244,7 @@ test.describe("Shopping list", () => {
     // "bell" is not a unit: the row is "bell pepper", not "pepper" with an amount of "1 bell".
     await addByHand(page, "1 bell pepper", "bell pepper", "1");
     await expect(row(page, "pepper")).toBeHidden();
-    await expect(row(page, "bell pepper"), FALLBACK_PARSER).not.toContainText("1 bell");
+    await expect(row(page, "bell pepper"), FALLBACK_PARSER).not.toHaveAccessibleDescription(/1 bell/);
     await addByHand(page, "2 cloves garlic", "garlic", "2 cloves");
     await expect(view(page, "All", 2)).toBeVisible();
     await expectAccessible();
@@ -248,7 +252,7 @@ test.describe("Shopping list", () => {
     await verifyAfterReload(async () => {
       await expect(row(page, "bell pepper")).toBeVisible();
       await expect(row(page, "pepper")).toBeHidden();
-      await expect(row(page, "garlic"), FALLBACK_PARSER).toContainText("2 cloves");
+      await expect(row(page, "garlic"), FALLBACK_PARSER).toHaveAccessibleDescription(/2 cloves/);
     });
     await clearAll(page);
   });
@@ -261,7 +265,7 @@ test.describe("Shopping list", () => {
     test.setTimeout(120_000);
     await startWithAnEmptyList(page);
     const listAction = page.getByTestId("recipe-header-list-action");
-    const scaleDisplay = page.getByTestId("scale-display");
+    const scaleDisplay = page.getByRole("textbox", { name: "Scale", exact: true });
     const increaseScale = page.getByRole("button", { name: "Increase scale" });
 
     // qa_kitchen_chef's seeded Roasted Tomato Soup: 6 whole tomato, 4 clove garlic, 2 cup vegetable
@@ -274,13 +278,13 @@ test.describe("Shopping list", () => {
 
     // 2x, four presses of 0.25.
     await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("1.25×");
+    await expect(scaleDisplay).toHaveValue("1.25");
     await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("1.5×");
+    await expect(scaleDisplay).toHaveValue("1.5");
     await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("1.75×");
+    await expect(scaleDisplay).toHaveValue("1.75");
     await increaseScale.click();
-    await expect(scaleDisplay).toHaveText("2×");
+    await expect(scaleDisplay).toHaveValue("2");
 
     await listAction.click();
     // The toast appears once QA's add-and-reload round trip finishes, which can be slow.
@@ -294,16 +298,16 @@ test.describe("Shopping list", () => {
     const garlic = row(page, "garlic");
     const stock = row(page, "vegetable stock");
     await page.goto(SHOPPING_LIST);
-    await expect(tomato).toContainText(counted(12));
-    await expect(garlic).toContainText("8 clove");
-    await expect(stock).toContainText("4 cup");
+    await expect(tomato).toHaveAccessibleDescription(counted(12));
+    await expect(garlic).toHaveAccessibleDescription(/8 clove/);
+    await expect(stock).toHaveAccessibleDescription(/4 cup/);
     await expect(view(page, "All", 3)).toBeVisible();
     await expectAccessible();
 
     await verifyAfterReload(async () => {
-      await expect(tomato).toContainText(counted(12));
-      await expect(garlic).toContainText("8 clove");
-      await expect(stock).toContainText("4 cup");
+      await expect(tomato).toHaveAccessibleDescription(counted(12));
+      await expect(garlic).toHaveAccessibleDescription(/8 clove/);
+      await expect(stock).toHaveAccessibleDescription(/4 cup/);
       await expect(view(page, "All", 3)).toBeVisible();
     });
 
@@ -351,13 +355,13 @@ test.describe("Shopping list", () => {
     const confirmed = nextShoppingListAction(page, "addItem");
     await review.getByRole("button", { name: "Add", exact: true }).click();
     expect((await confirmed).status()).toBe(200);
-    await expect(salt).toContainText("1 teaspoon");
+    await expect(salt).toHaveAccessibleDescription(/1 teaspoon/);
     await expect(review.getByLabel("Quantity", { exact: true })).toBeHidden();
     await expect(itemField(page)).toHaveValue("");
     await expectAccessible();
 
     await verifyAfterReload(async () => {
-      await expect(salt).toContainText("1 teaspoon");
+      await expect(salt).toHaveAccessibleDescription(/1 teaspoon/);
       await expect(view(page, "All", 1)).toBeVisible();
     });
   });
@@ -417,12 +421,12 @@ test.describe("Shopping list", () => {
     expect((await checked).status()).toBe(200);
     await page.getByRole("button", { name: "Clear checked", exact: true }).click();
     await expect(onions).toBeHidden();
-    await expect(carrots, FALLBACK_PARSER).toContainText(counted(3));
+    await expect(carrots, FALLBACK_PARSER).toHaveAccessibleDescription(counted(3));
     await expect(view(page, "All", 1)).toBeVisible();
 
     await verifyAfterReload(async () => {
       await expect(onions).toBeHidden();
-      await expect(carrots, FALLBACK_PARSER).toContainText(counted(3));
+      await expect(carrots, FALLBACK_PARSER).toHaveAccessibleDescription(counted(3));
       await expect(view(page, "All", 1)).toBeVisible();
     });
 

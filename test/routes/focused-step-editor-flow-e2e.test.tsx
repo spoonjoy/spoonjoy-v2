@@ -5,7 +5,7 @@ import { createTestRoutesStub } from "../utils";
 import EditRecipe from "~/routes/recipes.$id.edit";
 import NewStep from "~/routes/recipes.$id.steps.new";
 import EditStep from "~/routes/recipes.$id.steps.$stepId.edit";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 describe("Focused Step Editor Flow (E2E)", () => {
   it("renders compact step list cards with edit/delete/reorder controls and no inline editor", async () => {
@@ -124,9 +124,9 @@ describe("Focused Step Editor Flow (E2E)", () => {
       {
         path: "/recipes/:id/steps/:stepId/edit",
         Component: () => (
-          <ToastProvider>
+          <>
             <EditStep />
-          </ToastProvider>
+          <Toaster /></>
         ),
         loader: () => ({
           recipe: { id: "recipe-1", title: "Recipe" },

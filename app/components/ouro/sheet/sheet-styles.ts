@@ -13,6 +13,7 @@ type SheetSide = "bottom" | "top" | "left" | "right";
  * The four sides, for checking a `side` prop. Shared with `Sheet`.
  *
  * @internal
+ * @claim "The four sides, for checking a" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet dev messages > warns once about guessed props and drops them)
  */
 const sheetSides: readonly SheetSide[] = ["bottom", "top", "left", "right"];
 
@@ -36,6 +37,8 @@ function sideWarning(side: string, fix: string): readonly [string, string] {
  * the toolbars. Shared with the dialog backdrop.
  *
  * @internal
+ * @claim "iOS 26+ Safari draws the page" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet iOS backdrop rule > covers the visible screen on a page scrolled 2000px)
+ * @claim "iOS 26+ Safari draws the page" registry/ouro/components/ouro/sheet/sheet-styles.ts verify:fileLine(registry/ouro/components/ouro/sheet/sheet-styles.ts, /supports-\[-webkit-touch-callout:none\]:h-lvh/)
  */
 const iosBackdrop =
   "supports-[-webkit-touch-callout:none]:absolute supports-[-webkit-touch-callout:none]:inset-x-0 " +
@@ -48,6 +51,9 @@ const iosBackdrop =
  * sits at the bottom, nearest the thumb. Shared with `DialogFooter`.
  *
  * @internal
+ * @claim "The actions row of a Dialog" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::footer > renders footer as the actions row after the body, and closes from an action wrapped in SheetClose)
+ * @claim "The actions row of a Dialog" registry/ouro/components/ouro/sheet/sheet-styles.ts verify:fileLine(registry/ouro/components/ouro/sheet/sheet-styles.ts, /const\sfooterClass\s=\s"box-border\sflex\sshrink-0\sjustify-end\sgap-3\spx-5\spt-3\spb-5\smax-sm:flex-col\smax-sm:\*:w-full"/)
+ * @claim "The actions row of a Dialog" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::footer > lays out actions in a row at the end on wide screens)
  */
 const footerClass = "box-border flex shrink-0 justify-end gap-3 px-5 pt-3 pb-5 max-sm:flex-col max-sm:*:w-full";
 
@@ -76,6 +82,8 @@ function sheetHint(open: string, close: string) {
  * without it, where the variables inherit as before.
  *
  * @internal
+ * @claim "Registers the variables a drag rewrites" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > keeps the variables a drag rewrites out of the sheet's content)
+ * @claim "It does nothing where they are" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > registers its variables once: a second copy of the module finds them registered and does nothing)
  */
 function registerSheetProperties(): void {
   const lengths = ["--ouro-sheet-x", "--ouro-sheet-y", "--ouro-sheet-grab"];

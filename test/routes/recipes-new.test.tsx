@@ -1540,7 +1540,6 @@ describe("Recipes New Route", () => {
       render(<Stub initialEntries={["/recipes/new"]} />);
 
       // RecipeBuilder uses controlled inputs (no name attributes on the visible inputs)
-      // The actual submission uses a hidden form with name attributes
       const titleInput = await screen.findByLabelText(/Title/);
       expect(titleInput).toHaveAttribute("type", "text");
       expect(titleInput).toHaveAttribute("maxLength", "200");
@@ -1554,8 +1553,6 @@ describe("Recipes New Route", () => {
 
       // Recipe Image is now a file upload via RecipeImageUpload
       expect(screen.getByRole("button", { name: /upload.*image/i })).toBeInTheDocument();
-      const submissionImageInput = document.querySelector('form input[name="image"]');
-      expect(submissionImageInput).toHaveAttribute("accept", "image/jpeg,image/png,image/webp");
     });
 
     it("should have correct placeholders", async () => {
@@ -1599,7 +1596,7 @@ describe("Recipes New Route", () => {
       });
     });
 
-    it("should populate hidden form and submit when RecipeBuilder saves", async () => {
+    it("submits the recipe when RecipeBuilder saves", async () => {
       const user = userEvent.setup();
       let actionFormData: Record<string, string> = {};
 
@@ -1762,209 +1759,6 @@ describe("Recipes New Route", () => {
 
       // Wait for form to render
       await screen.findByLabelText(/Title/);
-    });
-
-    it("should handle missing title input in handleSave", async () => {
-      const user = userEvent.setup();
-      let formDataReceived: Record<string, string> = {};
-
-      const Stub = createTestRoutesStub([
-        {
-          path: "/recipes/new",
-          Component: NewRecipe,
-          loader: () => null,
-          action: async ({ request }: { request: Request }) => {
-            const formData = await request.formData();
-            formDataReceived = Object.fromEntries(formData.entries());
-            return redirect("/recipes/test-id");
-          },
-        },
-        {
-          path: "/recipes/:id",
-          Component: () => <div>Recipe Detail</div>,
-        },
-      ]);
-
-      render(<Stub initialEntries={["/recipes/new"]} />);
-
-      // Wait for form to render
-      const titleInput = await screen.findByLabelText(/Title/);
-      await user.type(titleInput, "Test Recipe");
-
-      // Remove the hidden title input from the DOM to test null branch
-      const hiddenTitleInput = document.querySelector('form.hidden input[name="title"]');
-      hiddenTitleInput?.remove();
-
-      // Click Create Recipe - should handle missing element gracefully
-      const submitButton = screen.getByRole("button", { name: "Create recipe" });
-      await user.click(submitButton);
-
-      // Form should still submit (null check prevents crash)
-      await waitFor(() => {
-        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
-      });
-      // Title won't be in form data since element was removed
-      expect(formDataReceived.title).toBeUndefined();
-    });
-
-    it("should handle missing description textarea in handleSave", async () => {
-      const user = userEvent.setup();
-      let formDataReceived: Record<string, string> = {};
-
-      const Stub = createTestRoutesStub([
-        {
-          path: "/recipes/new",
-          Component: NewRecipe,
-          loader: () => null,
-          action: async ({ request }: { request: Request }) => {
-            const formData = await request.formData();
-            formDataReceived = Object.fromEntries(formData.entries());
-            return redirect("/recipes/test-id");
-          },
-        },
-        {
-          path: "/recipes/:id",
-          Component: () => <div>Recipe Detail</div>,
-        },
-      ]);
-
-      render(<Stub initialEntries={["/recipes/new"]} />);
-
-      const titleInput = await screen.findByLabelText(/Title/);
-      await user.type(titleInput, "Test Recipe");
-
-      // Remove the hidden description textarea
-      const hiddenDescription = document.querySelector('form.hidden textarea[name="description"]');
-      hiddenDescription?.remove();
-
-      const submitButton = screen.getByRole("button", { name: "Create recipe" });
-      await user.click(submitButton);
-
-      // Form should still submit (null check prevents crash)
-      await waitFor(() => {
-        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
-      });
-      expect(formDataReceived.description).toBeUndefined();
-    });
-
-    it("should handle missing servings input in handleSave", async () => {
-      const user = userEvent.setup();
-      let formDataReceived: Record<string, string> = {};
-
-      const Stub = createTestRoutesStub([
-        {
-          path: "/recipes/new",
-          Component: NewRecipe,
-          loader: () => null,
-          action: async ({ request }: { request: Request }) => {
-            const formData = await request.formData();
-            formDataReceived = Object.fromEntries(formData.entries());
-            return redirect("/recipes/test-id");
-          },
-        },
-        {
-          path: "/recipes/:id",
-          Component: () => <div>Recipe Detail</div>,
-        },
-      ]);
-
-      render(<Stub initialEntries={["/recipes/new"]} />);
-
-      const titleInput = await screen.findByLabelText(/Title/);
-      await user.type(titleInput, "Test Recipe");
-
-      // Remove the hidden servings input
-      const hiddenServings = document.querySelector('form.hidden input[name="servings"]');
-      hiddenServings?.remove();
-
-      const submitButton = screen.getByRole("button", { name: "Create recipe" });
-      await user.click(submitButton);
-
-      // Form should still submit (null check prevents crash)
-      await waitFor(() => {
-        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
-      });
-      expect(formDataReceived.servings).toBeUndefined();
-    });
-
-    it("should handle missing steps input in handleSave", async () => {
-      const user = userEvent.setup();
-      let formDataReceived: Record<string, string> = {};
-
-      const Stub = createTestRoutesStub([
-        {
-          path: "/recipes/new",
-          Component: NewRecipe,
-          loader: () => null,
-          action: async ({ request }: { request: Request }) => {
-            const formData = await request.formData();
-            formDataReceived = Object.fromEntries(formData.entries());
-            return redirect("/recipes/test-id");
-          },
-        },
-        {
-          path: "/recipes/:id",
-          Component: () => <div>Recipe Detail</div>,
-        },
-      ]);
-
-      render(<Stub initialEntries={["/recipes/new"]} />);
-
-      const titleInput = await screen.findByLabelText(/Title/);
-      await user.type(titleInput, "Test Recipe");
-
-      // Remove the hidden steps input
-      const hiddenSteps = document.querySelector('form.hidden input[name="steps"]');
-      hiddenSteps?.remove();
-
-      const submitButton = screen.getByRole("button", { name: "Create recipe" });
-      await user.click(submitButton);
-
-      // Form should still submit (null check prevents crash)
-      await waitFor(() => {
-        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
-      });
-      expect(formDataReceived.steps).toBeUndefined();
-    });
-
-    it("should handle missing clearImage input in handleSave", async () => {
-      const user = userEvent.setup();
-      let formDataReceived: Record<string, string> = {};
-
-      const Stub = createTestRoutesStub([
-        {
-          path: "/recipes/new",
-          Component: NewRecipe,
-          loader: () => null,
-          action: async ({ request }: { request: Request }) => {
-            const formData = await request.formData();
-            formDataReceived = Object.fromEntries(formData.entries());
-            return redirect("/recipes/test-id");
-          },
-        },
-        {
-          path: "/recipes/:id",
-          Component: () => <div>Recipe Detail</div>,
-        },
-      ]);
-
-      render(<Stub initialEntries={["/recipes/new"]} />);
-
-      const titleInput = await screen.findByLabelText(/Title/);
-      await user.type(titleInput, "Test Recipe");
-
-      // Remove the hidden clearImage input
-      const hiddenClearImage = document.querySelector('form.hidden input[name="clearImage"]');
-      hiddenClearImage?.remove();
-
-      const submitButton = screen.getByRole("button", { name: "Create recipe" });
-      await user.click(submitButton);
-
-      // Form should still submit (null check prevents crash)
-      await waitFor(() => {
-        expect(screen.getByText("Recipe Detail")).toBeInTheDocument();
-      });
-      expect(formDataReceived.clearImage).toBeUndefined();
     });
 
     it("should set clearImage value to 'true' when clearImage flag is true", async () => {

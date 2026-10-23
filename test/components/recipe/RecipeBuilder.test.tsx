@@ -227,8 +227,8 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
       // Should render both steps
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/step 2/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 1" })).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 2" })).toBeInTheDocument();
 
       // Should not show empty state
       expect(screen.queryByText(/no steps/i)).not.toBeInTheDocument();
@@ -247,7 +247,7 @@ describe("RecipeBuilder", () => {
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
 
       // Should now have a step card
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 1" })).toBeInTheDocument();
 
       // Empty state should be gone
       expect(screen.queryByText(/no steps/i)).not.toBeInTheDocument();
@@ -270,7 +270,7 @@ describe("RecipeBuilder", () => {
 
       // Add a step and fill it
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
-      const stepCard = screen.getByLabelText(/step 1/i);
+      const stepCard = screen.getByRole("article", { name: "Step 1" });
       const instructionsTextarea =
         within(stepCard).getByLabelText(/instructions/i);
       await userEvent.type(instructionsTextarea, "Mix all ingredients");
@@ -554,7 +554,7 @@ describe("RecipeBuilder", () => {
       render(<Wrapper initialEntries={["/recipes/recipe-1/edit"]} />);
 
       // Step card controls should be disabled
-      const stepCard = screen.getByLabelText(/step 1/i);
+      const stepCard = screen.getByRole("article", { name: "Step 1" });
       expect(
         within(stepCard).getByRole("button", { name: /save/i }),
       ).toBeDisabled();
@@ -666,7 +666,7 @@ describe("RecipeBuilder", () => {
 
       // Add first step and fill it
       await userEvent.click(screen.getByRole("button", { name: /add step/i }));
-      const firstStepCard = screen.getByLabelText(/step 1/i);
+      const firstStepCard = screen.getByRole("article", { name: "Step 1" });
       const firstTextarea =
         within(firstStepCard).getByLabelText(/instructions/i);
       await userEvent.type(firstTextarea, "First step instructions");
@@ -683,7 +683,7 @@ describe("RecipeBuilder", () => {
       expect(firstTextarea).toHaveValue("First step instructions");
 
       // Second step should exist
-      expect(screen.getByLabelText(/step 2/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 2" })).toBeInTheDocument();
     });
   });
 
@@ -853,12 +853,12 @@ describe("RecipeBuilder", () => {
       await userEvent.click(addStepButton);
 
       // A step card should now exist
-      expect(screen.getByLabelText(/step 1/i)).toBeInTheDocument();
+      expect(screen.getByRole("article", { name: "Step 1" })).toBeInTheDocument();
 
       // Continue tabbing - should reach the step card's instructions textarea
       await userEvent.tab();
       // Should be in the step card now - verify we can interact with elements
-      const stepCard = screen.getByLabelText(/step 1/i);
+      const stepCard = screen.getByRole("article", { name: "Step 1" });
       const instructionsTextarea =
         within(stepCard).getByLabelText(/instructions/i);
       // The instructions textarea should eventually receive focus through tabbing

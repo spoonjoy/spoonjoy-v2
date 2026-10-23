@@ -12,6 +12,10 @@ export { boxClass, dashClass, indicatorClass, tickClass };
  * touch screens.
  *
  * @internal
+ * @claim "The box: 20px on touch screens" registry/ouro/components/ouro/checkbox/checkbox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.touch.test.tsx::keeps the 20px box and 16px label on a landscape phone, past the sm breakpoint)
+ * @claim "It fills with the primary color" registry/ouro/components/ouro/checkbox/checkbox.touch.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.touch.test.tsx::gives the box a 44px hit area, though it is 20px)
+ * @claim "The box: 20px on touch screens" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox look > is 16px beside 14px text with a fine pointer from sm, centered on the label's first line)
+ * @claim "Either way it sits 2px down" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox look > is 16px beside 14px text with a fine pointer from sm, centered on the label's first line)
  */
 const boxClass =
   "group press relative m-0 mt-0.5 box-border inline-flex size-5 shrink-0 items-center justify-center p-0 sm:pointer-fine:size-4 " +
@@ -32,15 +36,20 @@ const boxClass =
 const indicatorClass = "pointer-events-none flex size-full items-center justify-center";
 
 /**
- * The tick fades and grows in from 95% when the box is checked. With reduced motion it
- * only fades.
+ * The tick draws along its path (`pathLength` 1, so a dash of 1 is the whole tick, and its gap
+ * of 2 leaves no empty dash at either end for a round cap to draw as a dot) once the box has filled: `stroke-dashoffset` from 1 to 0 over `--ouro-duration-draw`, starting after
+ * `--ouro-duration-fast`. Unchecking takes it back along the same path at once, over
+ * `--ouro-duration-fast`. With reduced motion nothing draws: the whole tick fades in and out.
  *
  * @internal
+ * @claim "The tick draws along its path" registry/ouro/components/ouro/checkbox/checkbox.test.tsx verify:testExists(registry/ouro/components/ouro/checkbox/checkbox.test.tsx::Checkbox look > fills the box, then draws the tick along its path, and only fades and recolours with reduced motion)
  */
 const tickClass =
-  "origin-center [transform-box:fill-box] opacity-0 scale-95 group-data-checked:opacity-100 group-data-checked:scale-100 group-data-indeterminate:hidden " +
-  "[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out),scale_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
-  "motion-reduce:scale-100 motion-reduce:[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)]";
+  "[stroke-dasharray:1_2] [stroke-dashoffset:1] group-data-checked:[stroke-dashoffset:0] group-data-indeterminate:hidden " +
+  "motion-safe:[transition:stroke-dashoffset_var(--ouro-duration-fast)_var(--ouro-ease-out)] " +
+  "motion-safe:group-data-checked:[transition:stroke-dashoffset_var(--ouro-duration-draw)_var(--ouro-ease-out)_var(--ouro-duration-fast)] " +
+  "motion-reduce:[stroke-dashoffset:0] motion-reduce:opacity-0 motion-reduce:group-data-checked:opacity-100 " +
+  "motion-reduce:[transition:opacity_var(--ouro-duration-fast)_var(--ouro-ease-out)]";
 
 /**
  * The dash a mixed box shows in place of the tick.

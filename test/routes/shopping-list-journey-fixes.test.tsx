@@ -5,6 +5,7 @@
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { Link } from "react-router";
 import { createTestRoutesStub, requiredLabel } from "../utils";
@@ -260,11 +261,14 @@ describe("shopping list: rapid taps on different rows never undo each other (bug
     render(<Stub initialEntries={["/shopping-list"]} />);
 
     await screen.findByText("apples");
-    fireEvent.click(screen.getByRole("button", { name: "Remove apples" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Actions for apples" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete apples" }));
     expect(server.state.writes).toEqual([]);
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Remove bananas" }));
+    await user.click(screen.getByRole("button", { name: "Actions for bananas" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete bananas" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
     expect(server.state.writes).toEqual([]);
     await act(async () => { gate.resolve(); });

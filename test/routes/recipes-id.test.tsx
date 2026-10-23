@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { data as routerData, Outlet, redirect, useLocation, useNavigate, useNavigationType, useRevalidator } from "react-router";
 import { createTestRoutesStub } from "../utils";
 import { db } from "~/lib/db.server";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", async () => {
   const actual = await vi.importActual<typeof import("~/components/navigation")>("~/components/navigation");
@@ -2503,10 +2503,6 @@ describe("Recipes $id Route", () => {
       expect(content?.contains(modal)).toBe(true);
       expect(modal.contains(modalBody)).toBe(true);
       expect(modalBody.contains(screen.getByTestId("cookbook-item-cb-1"))).toBe(true);
-      // A toggle's colours show whether the recipe is saved, so it switches instantly, never fading
-      // through mid-state colours (the Ouro dialog's subtree is left out of the global reset).
-      expect(screen.getByTestId("cookbook-item-cb-1")).toHaveClass("sj-instant-state");
-      expect(screen.getByTestId("cookbook-item-cb-1")).not.toHaveClass("transition-colors");
       expect(dialog.contains(modalFooter)).toBe(true);
       expect(content?.contains(modalFooter)).toBe(false);
       expect(modalFooter.contains(screen.getByTestId("create-cookbook-button"))).toBe(true);
@@ -2675,7 +2671,6 @@ describe("Recipes $id Route", () => {
       });
       const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
       expect(createdCookbook).toBeInTheDocument();
-      expect(createdCookbook).toHaveTextContent("✓");
       expect(createdCookbook).toHaveAttribute("aria-pressed", "true");
       await closeSaveModal(user);
     });
@@ -2835,11 +2830,9 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("dialog", { name: "Save to cookbook" });
 
       await user.click(screen.getByTestId("cookbook-item-cb-unsaved"));
-      expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveTextContent("✓");
       expect(screen.getByTestId("cookbook-item-cb-unsaved")).toHaveAttribute("aria-pressed", "true");
 
       await user.click(screen.getByTestId("cookbook-item-cb-saved"));
-      expect(screen.getByTestId("cookbook-item-cb-saved")).not.toHaveTextContent("✓");
       expect(screen.getByTestId("cookbook-item-cb-saved")).toHaveAttribute("aria-pressed", "false");
 
       await waitFor(() => {
@@ -2993,9 +2986,9 @@ describe("Recipes $id Route", () => {
 
       const user = userEvent.setup();
       render(
-        <ToastProvider>
+        <>
           <Stub initialEntries={["/recipes/recipe-1"]} />
-        </ToastProvider>
+        <Toaster /></>
       );
       await screen.findByRole("heading", { name: "Dock Add Recipe" });
       await user.click(screen.getByRole("button", { name: "Increase scale" }));
@@ -3051,19 +3044,19 @@ describe("Recipes $id Route", () => {
 
       const user = userEvent.setup();
       render(
-        <ToastProvider>
+        <>
           <Stub initialEntries={["/recipes/recipe-1"]} />
-        </ToastProvider>
+        <Toaster /></>
       );
       await screen.findByRole("heading", { name: "Retry Add Recipe" });
       await user.click(screen.getByTestId("recipe-header-list-action"));
-      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
       await user.click(screen.getByTestId("recipe-header-list-action"));
       expect(await screen.findByText("1 items added at 1x")).toBeInTheDocument();
       await user.click(screen.getByTestId("recipe-header-list-action"));
       await waitFor(() => expect(tokens).toHaveLength(3));
       // Let the third answer render before the test ends, so its toast update lands inside act().
-      expect(await screen.findByText(message)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
 
       expect(tokens[0]).toMatch(/^[\w-]{8,}$/);
       // The tap after the 503 is the same add; the tap after a success is a new one.
@@ -3198,7 +3191,7 @@ describe("Recipes $id Route", () => {
       // The ingredient checklist/scale panel is core cook-mode UI, not a complementary
       // landmark nested inside root.tsx's <main> (landmark-complementary-is-top-level).
       expect(within(cookMode).queryByRole("complementary")).not.toBeInTheDocument();
-      expect(within(cookMode).getByText("Step 1 of 2")).toBeInTheDocument();
+      expect(within(within(cookMode).getByRole("article")).getByText("Step 1 of 2")).toBeInTheDocument();
       expect(within(cookMode).getByRole("heading", { level: 2, name: "Prep" })).toBeInTheDocument();
       expect(within(cookMode).getByText("Chop everything before the pan is hot.")).toBeInTheDocument();
 
@@ -3206,7 +3199,7 @@ describe("Recipes $id Route", () => {
       expect(within(cookMode).getByText("1 of 3 checked")).toBeInTheDocument();
 
       await user.click(within(cookMode).getByRole("button", { name: "Next step" }));
-      expect(within(cookMode).getByText("Step 2 of 2")).toBeInTheDocument();
+      expect(within(within(cookMode).getByRole("article")).getByText("Step 2 of 2")).toBeInTheDocument();
       expect(within(cookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
       expect(within(cookMode).getByRole("checkbox", { name: "Step 1: Prep" })).toBeInTheDocument();
       expect(within(cookMode).getByText("0 of 2 checked")).toBeInTheDocument();
@@ -3303,11 +3296,11 @@ describe("Recipes $id Route", () => {
 
       const restoredCookMode = await screen.findByTestId("cook-mode-panel");
       await waitFor(() => {
-        expect(within(restoredCookMode).getByText("Step 2 of 2")).toBeInTheDocument();
+        expect(within(within(restoredCookMode).getByRole("article")).getByText("Step 2 of 2")).toBeInTheDocument();
       });
       expect(within(restoredCookMode).getByRole("heading", { name: "Cook" })).toBeInTheDocument();
       expect(within(restoredCookMode).getByText("1 of 2 checked")).toBeInTheDocument();
-      expect(within(restoredCookMode).getByTestId("scale-display")).toHaveTextContent("1.25×");
+      expect(within(restoredCookMode).getByRole("textbox", { name: "Scale" })).toHaveValue("1.25");
       await exitCookMode(restoredCookMode);
       await settleBrowserTasks();
     });
@@ -3353,7 +3346,7 @@ describe("Recipes $id Route", () => {
       try {
         render(<Stub initialEntries={["/recipes/recipe-1"]} />);
         await screen.findByRole("heading", { name: "Synced Cook Recipe" });
-        expect(screen.getByTestId("scale-display")).toHaveTextContent("1.5×");
+        expect(screen.getByRole("textbox", { name: "Scale" })).toHaveValue("1.5");
 
         // Another device checked the tomatoes: the server's progress replaces this page's.
         await waitFor(() => {
@@ -3426,13 +3419,13 @@ describe("Recipes $id Route", () => {
         // 300 ms) and the cook confirms at once. The server answers 404 for a deleted recipe's
         // session, so nothing may be sent from the confirm on: no save, no session start.
         const increaseScale = screen.getByRole("button", { name: "Increase scale" });
-        await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+        await user.click(screen.getByRole("button", { name: "Manage recipe" }));
         await user.click(screen.getByRole("button", { name: "Delete" }));
         const confirm = await screen.findByRole("button", { name: "Delete" });
         // The released modal removes background controls from the accessibility tree.
         // Keep the pre-modal reference: this deliberately injects an unsent state change,
         // rather than claiming a person can activate an inert background control.
-        expect(increaseScale).toHaveAttribute("aria-hidden", "true");
+        expect(increaseScale.closest('[aria-hidden="true"]')).not.toBeNull();
         fireEvent.click(increaseScale);
         const requestsBeforeConfirm = fetchMock.mock.calls.length;
         expect(window.localStorage.getItem(syncedCookProgressStorageKey("user-1", "recipe-1"))).not.toBeNull();
@@ -4053,9 +4046,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("recipe-masthead")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/recipes");
       expect(screen.getByTestId("recipe-header-actions")).toBeInTheDocument();
-      // On a phone the row draws only its top rule; the masthead's rule closes it.
-      expect(screen.getByTestId("recipe-header-actions")).toHaveClass("border-t", "sm:border-t-0");
-      expect(screen.getByTestId("recipe-header-actions")).not.toHaveClass("border-y");
+      expect(screen.getByTestId("recipe-header-cook-action")).toHaveAttribute("data-ouro", "button");
       expect(screen.getByRole("link", { name: "Cook mode" })).toHaveAttribute("href", "/recipes/recipe-1#cook");
       expect(screen.getByTestId("recipe-header-save-action")).toHaveAccessibleName("Save");
       expect(screen.getByTestId("recipe-header-share-action")).toHaveAccessibleName("Share");
@@ -4235,10 +4226,8 @@ describe("Recipes $id Route", () => {
       expect(await screen.findByRole("heading", { name: "Spaghetti Bolognese" })).toBeInTheDocument();
       expect(screen.getByRole("heading", { name: "Prep the Sauce" })).toBeInTheDocument();
       expect(screen.getByText("Heat oil in a pan and sauté the onions")).toBeInTheDocument();
-      expect(screen.getByText("olive oil")).toBeInTheDocument();
-      expect(screen.getByText("onion")).toBeInTheDocument();
-      expect(screen.getByTestId("ingredient-quantity-ing-1")).toHaveTextContent("2 tbsp");
-      expect(screen.getByTestId("ingredient-quantity-ing-2")).toHaveTextContent("1 medium");
+      expect(screen.getByRole("checkbox", { name: "olive oil" })).toHaveAccessibleDescription(/2 tbsp$/);
+      expect(screen.getByRole("checkbox", { name: "onion" })).toHaveAccessibleDescription(/1 medium$/);
       expect(screen.getByText("Cook the pasta according to package instructions")).toBeInTheDocument();
       // Step numbers
       expect(screen.getByText("Step 1")).toBeInTheDocument();
@@ -4274,7 +4263,7 @@ describe("Recipes $id Route", () => {
       expect(screen.queryByRole("link", { name: "Edit recipe" })).not.toBeInTheDocument();
       expect(screen.getByTestId("recipe-owner-tools")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      fireEvent.click(screen.getByRole("button", { name: "Manage recipe" }));
       expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
     });
 
@@ -4359,7 +4348,7 @@ describe("Recipes $id Route", () => {
 
       const ownerRender = render(<OwnerStub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Cover History Recipe" });
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
 
       const history = await screen.findByTestId("recipe-cover-history");
       expect(within(history).getByRole("heading", { name: "Recipe covers" })).toBeInTheDocument();
@@ -4446,7 +4435,7 @@ describe("Recipes $id Route", () => {
       expect(screen.getByTestId("cover-provenance-badge")).toHaveTextContent("Original photo");
       expect(screen.getByRole("status")).toHaveTextContent("Styling cover");
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       expect(await screen.findByRole("heading", { name: "Photos" })).toBeInTheDocument();
       expect(screen.getAllByRole("status").map((status) => status.textContent)).toContain("Styling cover");
     });
@@ -4600,8 +4589,8 @@ describe("Recipes $id Route", () => {
 
       expect(await screen.findByText("No Servings Recipe")).toBeInTheDocument();
       expect(screen.getByText("Has a description")).toBeInTheDocument();
-      // Scale selector should still be present (for ingredient scaling)
-      expect(screen.getByTestId("scale-display")).toBeInTheDocument();
+      // The scale is still there (for ingredient scaling), with no servings to describe it
+      expect(screen.getByRole("textbox", { name: "Scale" })).not.toHaveAttribute("aria-describedby");
     });
 
     it("should render step without title", async () => {
@@ -4639,8 +4628,8 @@ describe("Recipes $id Route", () => {
 
       expect(await screen.findByText("Simple Recipe")).toBeInTheDocument();
       expect(screen.getByText("Just do the thing")).toBeInTheDocument();
-      // Only the Steps heading h2 should exist, no h3 for step title
-      expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+      // No h3 for the step title: the only level-3 heading is the empty Cooks section's.
+      expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual(["No cooks yet."]);
     });
 
     it("should render step output uses when present", async () => {
@@ -4704,14 +4693,9 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       expect(await screen.findByText("Recipe with Dependencies")).toBeInTheDocument();
-      // Step 3 should show step output uses inline with ingredients
-      const stepOutputSection = screen.getByTestId("step-output-uses-section");
-      expect(stepOutputSection).toBeInTheDocument();
-      // Should display the step references
-      expect(stepOutputSection).toHaveTextContent("Step 1");
-      expect(stepOutputSection).toHaveTextContent("Cook rice");
-      expect(stepOutputSection).toHaveTextContent("Step 2");
-      expect(stepOutputSection).toHaveTextContent("Make curry");
+      // Step 3 ticks off the outputs of steps 1 and 2 in its checklist
+      expect(screen.getByRole("checkbox", { name: "Step 1: Cook rice" })).toHaveAccessibleDescription("Step output");
+      expect(screen.getByRole("checkbox", { name: "Step 2: Make curry" })).toHaveAccessibleDescription("Step output");
     });
 
     it("should render step output use without title when stepTitle is null", async () => {
@@ -4762,9 +4746,8 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
 
       expect(await screen.findByText("Recipe with Untitled Dependency")).toBeInTheDocument();
-      // Should display "Step 1" in the step output uses section
-      const stepOutputSection = screen.getByTestId("step-output-uses-section");
-      expect(stepOutputSection).toHaveTextContent("Step 1");
+      // An untitled step's output is named by its number alone
+      expect(screen.getByRole("checkbox", { name: "Step 1" })).toHaveAccessibleDescription("Step output");
     });
 
     it("should not render using outputs section when usingSteps is empty", async () => {
@@ -4952,11 +4935,11 @@ describe("Recipes $id Route", () => {
 
       await screen.findByText("Recipe with Display Order");
 
-      // Get step 2's step-output-uses-section (now inline with ingredients)
-      const stepOutputSection = screen.getByTestId("step-output-uses-section");
+      // Step 2's checklist ticks off step 1's output before its ingredients
+      const stepOutput = screen.getByRole("checkbox", { name: "Step 1: First step" });
 
-      // Get the step card containing the section
-      const stepCard = stepOutputSection.closest("article");
+      // Get the step card containing the checklist
+      const stepCard = stepOutput.closest("article");
       expect(stepCard).not.toBeNull();
 
       // Extract text content to verify order
@@ -5012,7 +4995,7 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Recipe to Delete" });
       expect(screen.queryByRole("alertdialog", { name: /^Delete ".+"\?$/ })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
 
       // The dialog names the recipe and what deleting it does, instead of asking the same question twice.
@@ -5054,7 +5037,7 @@ describe("Recipes $id Route", () => {
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Actions" });
 
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Cancel" }));
       await waitFor(() => {
@@ -5097,7 +5080,7 @@ describe("Recipes $id Route", () => {
 
       render(<Stub initialEntries={["/recipes/recipe-1"]} />);
       await screen.findByRole("heading", { name: "Recipe Delete Confirm" });
-      await user.click(screen.getByRole("button", { name: "Manage recipe Open +" }));
+      await user.click(screen.getByRole("button", { name: "Manage recipe" }));
       await user.click(screen.getByRole("button", { name: "Delete" }));
       await user.click(await screen.findByRole("button", { name: "Delete" }));
 
@@ -5259,9 +5242,8 @@ describe("Recipes $id Route", () => {
       // Wait for recipe to render
       await screen.findByRole("heading", { name: "Recipe with Step Outputs" });
 
-      // Find the step output uses section
-      const stepOutputSection = screen.getByTestId("step-output-uses-section");
-      expect(stepOutputSection).toBeInTheDocument();
+      // The step output is ticked off in the step's checklist
+      expect(screen.getByRole("checkbox", { name: "Step 1: First step" })).toHaveAccessibleDescription("Step output");
 
       // Find all checkboxes - the first should be the step output
       const checkboxes = screen.getAllByRole("checkbox");
@@ -5394,26 +5376,20 @@ describe("Recipes $id Route", () => {
 
       // Wait for recipe to render
       await screen.findByRole("heading", { name: "Scalable Recipe" });
-      expect(screen.getByTestId("scale-selector")).toBeInTheDocument();
-      expect(screen.getByText("Yield")).toBeInTheDocument();
+      // The scale is Ouro HX's NumberField, described by the scaled servings.
+      const scale = screen.getByRole("textbox", { name: "Scale" });
+      expect(scale).toHaveValue("1");
+      expect(scale).toHaveAccessibleDescription("4");
 
-      // Initial scale should show scaled servings value.
-      const scaleDisplay = screen.getByTestId("scale-display");
-      expect(scaleDisplay).toHaveTextContent("4");
+      // Increase scale a quarter at a time.
+      await user.click(screen.getByRole("button", { name: "Increase scale" }));
+      expect(scale).toHaveValue("1.25");
+      expect(scale).toHaveAccessibleDescription("5");
 
-      // Click the plus button to increase scale (step is 0.25)
-      const plusButton = screen.getByTestId("scale-plus");
-      await user.click(plusButton);
-
-      // Scale should now show updated servings.
-      expect(scaleDisplay).toHaveTextContent("5");
-
-      // Click the minus button to decrease scale
-      const minusButton = screen.getByTestId("scale-minus");
-      await user.click(minusButton);
-
-      // Scale should be back to original servings value.
-      expect(scaleDisplay).toHaveTextContent("4");
+      // Decrease scale back to the recipe as written.
+      await user.click(screen.getByRole("button", { name: "Decrease scale" }));
+      expect(scale).toHaveValue("1");
+      expect(scale).toHaveAccessibleDescription("4");
     });
 
     it("should clear ingredient and step-output progress when clicking Clear progress", async () => {
@@ -5479,7 +5455,7 @@ describe("Recipes $id Route", () => {
       // Nothing is ticked yet, so there is nothing to clear (finding 15): the button keeps its room
       // on the Steps line but is invisible, disabled and hidden from assistive technology.
       expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
-      expect(screen.getByTestId("clear-progress-button")).toHaveAttribute("data-state", "reserved");
+      expect(screen.getByTestId("clear-progress-button").closest("[data-state]")).toHaveAttribute("data-state", "reserved");
 
       await user.click(checkboxes[0]);
       await user.click(checkboxes[1]);
@@ -5490,7 +5466,7 @@ describe("Recipes $id Route", () => {
       expect(checkboxes[0]).not.toBeChecked();
       expect(checkboxes[1]).not.toBeChecked();
       expect(screen.queryByRole("button", { name: "Clear progress" })).toBeNull();
-      expect(screen.getByTestId("clear-progress-button")).toHaveAttribute("data-state", "reserved");
+      expect(screen.getByTestId("clear-progress-button").closest("[data-state]")).toHaveAttribute("data-state", "reserved");
     });
 
     it("should keep cookbook-save controls out of the recipe page", async () => {

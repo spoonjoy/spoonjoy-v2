@@ -2,12 +2,13 @@ import { useRef, useState } from "react";
 import { Form, useActionData, useSubmit } from "react-router";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { ProfilePhotoCropper } from "~/components/account/ProfilePhotoCropper";
 import type { AccountSettingsActionResult } from "~/lib/account-settings.server";
 import { IMAGE_MAX_FILE_SIZE, PROFILE_IMAGE_ACCEPT, PROFILE_IMAGE_TYPES } from "~/lib/recipe-image";
 
+// TODO(ouro-hx: image-field, spoonjoy/spoonjoy-v2#570): Picking a photo with a preview becomes HX's ImageField in #570.
 export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
   const actionData = useActionData<AccountSettingsActionResult>();
   const submit = useSubmit();
@@ -93,7 +94,7 @@ export function ProfilePhotoField({ photoUrl }: { photoUrl: string | null }) {
           )}
         </div>
         {errorMessage && <Text size="sm" tone="destructive">{errorMessage}</Text>}
-        <Text size="sm">JPG, PNG, GIF, or WebP. 5 MB max.</Text>
+        <Text tone="muted" size="sm">JPG, PNG, GIF, or WebP. 5 MB max.</Text>
       </div>
 
       {cropFile && <ProfilePhotoCropper file={cropFile} onConfirm={handleConfirm} onCancel={handleCancel} />}

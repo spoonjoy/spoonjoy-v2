@@ -14,6 +14,8 @@ import { errorMessageKey, errorMessages, FormErrorsContext } from "~/lib/ouro/us
  * this shape. A message is text or a React node, so it can carry a link. The `form` key holds
  * messages about the whole form. A key may hold nothing (`undefined`, `null`, an empty string
  * or list), so an object mapped from an action's answer needs no cleanup.
+ * @claim "A key may hold nothing (`undefined`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > treats no errors, null and an empty object as the same, and an element with a loop in its props as new)
+ * @claim "A key may hold nothing (`undefined`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > follows its own fix: an object mapped key by key shows the message once and warns about nothing, whatever is missing)
  */
 export type { FormErrors } from "~/lib/ouro/form-answer";
 
@@ -55,6 +57,14 @@ export type FormProps = Omit<BaseForm.Props, "className" | "errors" | "children"
    * These errors only show: they never block the next submit, so the user can always send
    * the form again (a server error may be fixed by changing another field, or by trying
    * again). The browser's own checks (`required`, `type="email"`) still block a submit.
+   * @claim "Each changed answer, including an equal" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > a new answer and a re-render > keeps a cleared message cleared through the next submit's own re-render, then shows the equal answer and moves focus once when it arrives)
+   * @claim "Rebuilding the value or its mapped" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > compares errors by content: an equal object rebuilt on every render shows nothing again and moves no focus)
+   * @claim "Each one shows on the field" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form server rendering > links a form error to its control in the server HTML (task 1 review, finding 1))
+   * @claim "The `form` key shows in an" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > shows a form error and keys no field claims in an alert at the top of the form)
+   * @claim "The `form` key shows in an" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > warns in development about a key no field claims, naming the key, the form's fields and both fixes)
+   * @claim "No answer (`null`/`undefined`) is not arrival" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > answer-bearing errors > preserves a clear through omission, empty projections and absent answers, then restores it on the next accepted answer)
+   * @claim "Cached/reused or primitive answers need `{" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > answer-bearing errors > keeps a cached answer cleared for key zero, including rebuilt sources, and restores once for its next acceptance key)
+   * @claim "These errors only show: they never" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form errors are display-only (review fix round 1, finding 1) > resubmits a TextField after a server error, with the field unchanged)
    */
   errors?: ReadonlyFormErrors | FormErrorValue | null | undefined;
   /** Not a prop. Bind the accepted answer inside `errors`: `errors={formErrors(answer, messages)}`. */
@@ -80,6 +90,7 @@ function maskErrors(projection: ReadonlyFormErrors | null | undefined, cleared: 
 /**
  * The message at the top of the form, for the `form` key and keys no field claims: the
  * destructive color, with an outline only while focused.
+ * @claim "The message at the top of" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > shows a form error and keys no field claims in an alert at the top of the form)
  */
 const formMessageClass =
   "grid gap-1 text-sm leading-5 text-destructive outline-ring outline-offset-2 focus-visible:outline-2 focus-visible:outline-solid";
@@ -87,13 +98,19 @@ const formMessageClass =
 /** The key for a message about the whole form, shown at its top. */
 const FORM_KEY = "form";
 
-/** How deep `sameContent` looks before it calls two values different: past any real message, short of a loop. */
+/**
+ * How deep `sameContent` looks before it calls two values different: past any real message, short of a loop.
+ *
+ * @claim "How deep `sameContent` looks before it" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > treats no errors, null and an empty object as the same, and an element with a loop in its props as new)
+ */
 const MAX_DEPTH = 40;
 
 /**
  * Whether two error values hold the same content: equal text, arrays and plain objects with
  * equal entries, and React elements of the same type and key with equal props. An app that
  * builds its errors object while rendering passes a new, equal one on every render.
+ * @claim "Whether two error values hold the" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > compares errors by content: an equal object rebuilt on every render shows nothing again and moves no focus)
+ * @claim "An app that builds its errors" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > compares errors by content: an equal object rebuilt on every render shows nothing again and moves no focus)
  */
 function sameContent(a: unknown, b: unknown, depth = 0): boolean {
   if (Object.is(a, b)) return true;
@@ -129,8 +146,7 @@ function entryPoint(element: HTMLElement): HTMLElement {
  * `pattern`) and shows server errors on the matching fields. Pass `errors` straight from
  * your action; each message lands on the field with that `name`, and focus moves to the
  * first field with an error. Bind an accepted action answer with the framework-free
- * `formErrors` constructor in `@/lib/ouro/form-answer`; it adds no server protocol or router
- * dependency. Server errors only show: unlike the browser's checks they
+ * `formErrors` constructor in `@/lib/ouro/form-answer`. Server errors only show: unlike the browser's checks they
  * never block the next submit, so the user can always send the form again. A Form submits
  * only itself: its submit event stops there, so a Form in a sheet inside another Form
  * never submits the outer one. It renders a `<form>`, so `action` and `method` pass
@@ -155,8 +171,8 @@ function entryPoint(element: HTMLElement): HTMLElement {
  * New accepted answer: reset the mask and create one arrival, even when messages are equal.
  * Cached/reused answers require `{ key: acceptedAnswerKey }`, advanced only on actual
  * acceptance. Form never guesses arrival from submit start, waits or framework navigation.
- * The caller chooses accepted, form-local data; passing the same changing route-global
- * source to two Forms does not automatically partition answers between them.
+ * The caller chooses accepted, form-local data: to give two Forms on one route answers of
+ * their own, pass each its own source.
  *
  * Plain `errors={{ email: "Taken." }}` remains compatible and content-only: equal raw maps
  * cannot prove a new answer. Use the constructor from the initial render for action answers;
@@ -201,6 +217,19 @@ function entryPoint(element: HTMLElement): HTMLElement {
  *   <TextField label="Email" name="email" type="email" required />
  *   <Button type="submit">Subscribe</Button>
  * </Form>
+ * @claim "Server errors only show: unlike the" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form errors are display-only (review fix round 1, finding 1) > still blocks a submit on the browser's own constraints)
+ * @claim "Server errors only show: unlike the" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form errors are display-only (review fix round 1, finding 1) > resubmits a TextField after a server error, with the field unchanged)
+ * @claim "A Form submits only itself: its" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form submits only itself (review fix round 1, finding 2) > stops its submit event from reaching a Form around it in the React tree)
+ * @claim "First the browser's own checks (`required`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > validates with the browser's constraints and focuses the first invalid control)
+ * @claim "A key that no field in" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > warns in development about a key no field claims, naming the key, the form's fields and both fixes)
+ * @claim "A key that no field in" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > shows a form error and keys no field claims in an alert at the top of the form)
+ * @claim "Form never guesses arrival from submit" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > answer-bearing errors > seeds representation switches without inventing arrival, losing a clear or moving focus)
+ * @claim "The caller chooses accepted, form-local data" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form > answer-bearing errors > keeps the first accepted mask through two changes flushed in the same React turn)
+ * @claim "Reconstruct beside Form in each environment" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > enumerates and serializes only selected messages, never a cyclic private answer or its getter)
+ * @claim "Reconstruct beside Form in each environment" registry/ouro/lib/ouro/form-answer.test.ts verify:testExists(registry/ouro/lib/ouro/form-answer.test.ts::formErrors answer value > interns object keys without retaining the key payload and lets the key override source identity)
+ * @claim "It is in the page only" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > adds the alert to the page with its message already in it, each time an answer arrives, so screen readers announce it)
+ * @claim "A page that loads with `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > leaves focus where the browser put it when the page loads with errors)
+ * @claim "A page that loads with `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > puts the form error in the server HTML)
  */
 export function Form(props: FormProps): JSX.Element {
   const {
@@ -331,6 +360,7 @@ export function Form(props: FormProps): JSX.Element {
 /**
  * The development message for an `errors` key no field in the form is named: the key, the
  * fields there are, and both fixes. Development only.
+ * @claim "The development message for an `errors`" registry/ouro/components/ouro/form/form.test.tsx verify:testExists(registry/ouro/components/ouro/form/form.test.tsx::Form-level messages (review fix round 1, finding 3) > warns in development about a key no field claims, naming the key, the form's fields and both fixes)
  */
 function unclaimedWarning(key: string, fields: string[]): readonly [string, string] {
   const property = (name: string) => (/^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name));

@@ -1,0 +1,61 @@
+{
+  "allowedRegressions": [
+    {
+      "fingerprint": "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/StepList#StepList::",
+      "count": 1,
+      "reason": "While a save is in flight StepList keeps HX Reorderable mounted, so each step keeps its drafts, and a plain wrapper stops presses and keys on its handles until HX Reorderable has a disabled state (ourostack/ouro-ui#185)"
+    },
+    {
+      "fingerprint": "app/components/recipe/StepList.tsx::StepList::plain-element-handler::div::",
+      "count": 1,
+      "reason": "While a save is in flight StepList keeps HX Reorderable mounted, so each step keeps its drafts, and a plain wrapper stops presses and keys on its handles until HX Reorderable has a disabled state (ourostack/ouro-ui#185)"
+    }
+  ],
+  "offenders": {
+    "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::plain-element-handler::div::": 1,
+    "app/components/account/ProfilePhotoCropper.tsx::ProfilePhotoCropper::raw-input::input::type=range,aria-label=Zoom": 1,
+    "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::raw-input::input::type=file,name=photo": 1,
+    "app/components/account/ProfilePhotoField.tsx::ProfilePhotoField::uses-hand-rolled-control::app/components/account/ProfilePhotoCropper#ProfilePhotoCropper::": 1,
+    "app/components/navigation/skip-link.tsx::SkipLink::raw-anchor::a::": 1,
+    "app/components/recipe/CookSyncStatusLine.tsx::CookSyncStatusLine::control-state-style::button::type=button": 1,
+    "app/components/recipe/CookSyncStatusLine.tsx::CookSyncStatusLine::control-state-style::span::": 1,
+    "app/components/recipe/CookSyncStatusLine.tsx::CookSyncStatusLine::raw-button::button::type=button": 1,
+    "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/RecipeImageUpload#RecipeImageUpload::": 1,
+    "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/StepList#StepList::": 1,
+    "app/components/recipe/RecipeHeader.tsx::RecipeHeader::uses-hand-rolled-control::app/components/recipe/CookSyncStatusLine#CookSyncStatusLine::": 1,
+    "app/components/recipe/RecipeImageUpload.tsx::RecipeImageUpload::raw-input::input::type=file,aria-label=Upload recipe image": 1,
+    "app/components/recipe/StepList.tsx::StepList::plain-element-handler::div::": 1,
+    "app/root.tsx::Layout::uses-hand-rolled-control::app/components/navigation/skip-link#SkipLink::": 1,
+    "app/routes/account.settings.tsx::AccountSettings::uses-hand-rolled-control::app/components/account/ProfilePhotoField#ProfilePhotoField::": 1,
+    "app/routes/developers.playground.tsx::CopyButton::raw-button::button::type=button": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::h2::": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::input::": 3,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::input::type=file": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::input::type=password,aria-label=Bearer token": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::input::type=text": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::control-state-style::textarea::aria-label={bodyLabel}": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::details-summary::details::": 2,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::details-summary::summary::": 2,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::interactive-role::button::type=button,role=radio": 2,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::interactive-role::div::aria-label=API surface filter,role=radiogroup": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::interactive-role::div::aria-label=Authentication mode,role=radiogroup": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-anchor::a::": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-button::button::type=button": 7,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-button::button::type=button,aria-label={`${operation.method} ${operation.path}: ${operation.label}`}": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-button::button::type=button,role=radio": 2,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::": 3,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::type=checkbox": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::type=file": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::type=password,aria-label=Bearer token": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-input::input::type=text": 1,
+    "app/routes/developers.playground.tsx::DeveloperPlayground::raw-textarea::textarea::aria-label={bodyLabel}": 1,
+    "app/routes/mcp.tsx::McpPage::control-state-style::a::": 1,
+    "app/routes/mcp.tsx::McpPage::raw-anchor::a::": 1,
+    "app/routes/recipes.$id.edit.tsx::EditRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
+    "app/routes/recipes.$id.tsx::RecipeDetail::uses-hand-rolled-control::app/components/recipe/RecipeHeader#RecipeHeader::": 1,
+    "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
+    "app/styles/tailwind.css::(stylesheet)::control-state-style::.sj-skip-link:focus-visible::": 1,
+    "app/styles/tailwind.css::(stylesheet)::control-state-style::.sj-skip-link:focus::": 1,
+    "app/styles/tailwind.css::(stylesheet)::control-state-style::[data-sj-action=\"primary\"]:active:not([data-disabled])::": 1
+  }
+}

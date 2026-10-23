@@ -24,7 +24,8 @@ describe("RecipeProvenance", () => {
       <RecipeProvenance sourceUrl="https://example.com/very/long/path/to/recipe" />,
     );
     const link = screen.getByRole("link", { name: /example\.com/i });
-    expect(link.textContent).toBe("example.com");
+    expect(link.textContent).toBe("example.com (opens in a new tab)");
+    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("renders 'forked from <chef>/<title>' linking to the forked recipe when sourceRecipe is set", () => {

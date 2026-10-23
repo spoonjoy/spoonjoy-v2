@@ -1,4 +1,4 @@
-import clsx from "clsx";
+import { Badge } from "~/components/ouro/badge/badge";
 
 export function normalizeCoverProvenanceLabel(label?: string | null): string | null {
   if (!label) return null;
@@ -14,25 +14,21 @@ export function normalizeRequiredCoverProvenanceLabel(label: string): string {
   return normalized;
 }
 
+/** Where a recipe's cover came from, as an HX Badge; nothing when the cover has no label. */
 export function CoverProvenanceBadge({
   label,
   className,
 }: {
   label?: string | null;
+  /** Layout only: where the badge sits over a photo. */
   className?: string;
 }) {
   const displayLabel = normalizeCoverProvenanceLabel(label);
   if (!displayLabel) return null;
 
   return (
-    <span
-      data-testid="cover-provenance-badge"
-      className={clsx(
-        "font-sj-ui inline-flex min-h-6 max-w-full items-center border border-[rgba(255,252,246,0.76)] bg-[rgba(37,34,31,0.96)] px-2 py-0.5 text-xs/5 font-semibold text-[var(--sj-paper)] shadow-[0_3px_18px_rgba(0,0,0,0.45)] backdrop-blur-sm [text-shadow:0_1px_1px_rgba(0,0,0,0.62)]",
-        className,
-      )}
-    >
+    <Badge data-testid="cover-provenance-badge" className={className}>
       {displayLabel}
-    </span>
+    </Badge>
   );
 }

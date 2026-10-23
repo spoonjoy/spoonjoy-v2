@@ -13,6 +13,11 @@ export { thumbClass, trackClass };
  * `--ouro-switch-thumb` is the thumb's size at each density.
  *
  * @internal
+ * @claim "Off, it is an outline: a" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > tells on from off without hue, with an off outline at 3:1 against the page, in light and dark)
+ * @claim "Its hit area is 44px on" registry/ouro/components/ouro/switch/switch.touch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.touch.test.tsx::gives the switch a 44px hit area, though it is 24px tall)
+ * @claim "The track: 40x24 on touch screens" registry/ouro/components/ouro/switch/switch.touch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.touch.test.tsx::keeps the phone size and 16px label on a landscape phone, past the sm breakpoint)
+ * @claim "Off, it is an outline" https://www.w3.org/TR/WCAG22/#non-text-contrast verify:urlOk(https://www.w3.org/TR/WCAG22/#non-text-contrast)
+ * @claim "`--ouro-switch-thumb` is the thumb's size at" registry/ouro/components/ouro/switch/switch-styles.ts verify:fileLine(registry/ouro/components/ouro/switch/switch-styles.ts, /\[--ouro-switch-thumb:calc\(var\(--spacing\)\*5\)\]\ssm:pointer-fine:\[--ouro-switch-thumb:calc\(var\(--spacing\)\*4\)\]/)
  */
 const trackClass =
   "group relative m-0 box-border inline-flex h-6 w-10 shrink-0 items-center p-0 sm:pointer-fine:h-5 sm:pointer-fine:w-9 " +
@@ -26,17 +31,23 @@ const trackClass =
 
 /**
  * The thumb slides 16px in the press duration when the switch turns on or off. While the
- * pointer is down it stretches 4px toward the way it will travel, as in RedwoodUI: to the
- * right when off, to the left when on. With reduced motion it neither slides nor stretches.
+ * pointer is down it stretches 4px toward the way it will travel: toward the inline end when
+ * off, toward the start when on (right and left in a left-to-right page). With reduced motion it
+ * neither slides nor stretches.
  * It is `muted-foreground` when off and `primary-foreground` when on, so the thumb's color
  * also tells the states apart.
  *
  * @internal
+ * @claim "The thumb slides 16px in the" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > fills the track with the primary color and moves the thumb to the end when on)
+ * @claim "While the pointer is down it" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > widens the thumb toward its travel while the pointer is down)
+ * @claim "The thumb slides 16px in the" registry/ouro/components/ouro/switch/switch.test.tsx verify:testExists(registry/ouro/components/ouro/switch/switch.test.tsx::Switch look and motion > stretches by scaling and slides on translate, never by animating its width, with one timing for both)
  */
 const thumbClass =
-  "pointer-events-none block size-(--ouro-switch-thumb) rounded-full bg-muted-foreground data-checked:bg-primary-foreground shadow-sm " +
-  "translate-x-0 data-checked:translate-x-4 " +
-  "origin-left " +
+  "pointer-events-none block size-(--ouro-switch-thumb) rounded-full bg-muted-foreground data-checked:bg-primary-foreground shadow-(--shadow-sm) " +
+  // Translate and origin have no logical form, so a right-to-left page reverses them: the thumb
+  // starts at the inline start and slides toward the inline end either way.
+  "translate-x-0 data-checked:translate-x-4 rtl:data-checked:-translate-x-4 " +
+  "origin-left rtl:origin-right " +
   "motion-safe:[transition:translate_var(--ouro-duration-press)_var(--ouro-ease-out),scale_var(--ouro-duration-press)_var(--ouro-ease-out)] " +
   "motion-safe:group-active:not-data-disabled:scale-x-[1.2] " +
-  "motion-safe:group-active:not-data-disabled:data-checked:translate-x-3";
+  "motion-safe:group-active:not-data-disabled:data-checked:translate-x-3 rtl:motion-safe:group-active:not-data-disabled:data-checked:-translate-x-3";

@@ -106,14 +106,14 @@ const popupSides = {
     "w-full max-w-[40rem] max-h-[calc(100dvh-var(--ouro-sheet-gap))] ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)] " +
     "[--ouro-sheet-y:calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px))] " +
     "[--ouro-sheet-transform:translateY(calc(max(var(--ouro-sheet-y),0px)+min(var(--ouro-sheet-y)+var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-t-xl [box-shadow:0_-1px_0_color-mix(in_oklab,var(--border)_60%,transparent),0_-8px_32px_rgb(0_0_0/0.12)] " +
+    "rounded-t-xl [box-shadow:var(--ouro-shadow-sheet-bottom)] " +
     "after:inset-x-0 after:top-[calc(100%-1px)] after:h-[50dvh] " +
     "data-starting-style:[transform:translateY(calc(100%+2px))] data-ending-style:[transform:translateY(calc(100%+2px))]",
   top:
     "w-full max-w-[40rem] max-h-[calc(100dvh-var(--ouro-sheet-gap))] ps-[env(safe-area-inset-left,0px)] pe-[env(safe-area-inset-right,0px)] " +
     "[--ouro-sheet-y:calc(var(--drawer-snap-point-offset,0px)+var(--drawer-swipe-movement-y,0px))] " +
     "[--ouro-sheet-transform:translateY(calc(min(var(--ouro-sheet-y),0px)+max(var(--ouro-sheet-y)-var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-b-xl [box-shadow:0_1px_0_color-mix(in_oklab,var(--border)_60%,transparent),0_8px_32px_rgb(0_0_0/0.12)] " +
+    "rounded-b-xl [box-shadow:var(--ouro-shadow-sheet-top)] " +
     "pt-[env(safe-area-inset-top,0px)] " +
     "after:inset-x-0 after:bottom-[calc(100%-1px)] after:h-[50dvh] " +
     "data-starting-style:[transform:translateY(calc(-100%-2px))] data-ending-style:[transform:translateY(calc(-100%-2px))]",
@@ -123,7 +123,7 @@ const popupSides = {
     "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))] " +
     "[--ouro-sheet-x:var(--drawer-swipe-movement-x,0px)] " +
     "[--ouro-sheet-transform:translateX(calc(min(var(--ouro-sheet-x),0px)+max(var(--ouro-sheet-x)-var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-r-xl [box-shadow:8px_0_32px_rgb(0_0_0/0.12)] pl-[env(safe-area-inset-left,0px)] " +
+    "rounded-r-xl [box-shadow:var(--ouro-shadow-sheet-left)] pl-[env(safe-area-inset-left,0px)] " +
     "after:inset-y-0 after:right-[calc(100%-1px)] after:w-[50vw] " +
     "data-starting-style:[transform:translateX(calc(-100%-2px))] data-ending-style:[transform:translateX(calc(-100%-2px))]",
   right:
@@ -131,7 +131,7 @@ const popupSides = {
     "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))] " +
     "[--ouro-sheet-x:var(--drawer-swipe-movement-x,0px)] " +
     "[--ouro-sheet-transform:translateX(calc(max(var(--ouro-sheet-x),0px)+min(var(--ouro-sheet-x)+var(--ouro-sheet-slack),0px)*var(--ouro-sheet-stretch)+var(--ouro-sheet-grab,0px)))] " +
-    "rounded-l-xl [box-shadow:-8px_0_32px_rgb(0_0_0/0.12)] pr-[env(safe-area-inset-right,0px)] " +
+    "rounded-l-xl [box-shadow:var(--ouro-shadow-sheet-right)] pr-[env(safe-area-inset-right,0px)] " +
     "after:inset-y-0 after:left-[calc(100%-1px)] after:w-[50vw] " +
     "data-starting-style:[transform:translateX(calc(100%+2px))] data-ending-style:[transform:translateX(calc(100%+2px))]",
 } as const;
@@ -142,6 +142,8 @@ const popupSides = {
  * padded by that much more and the body ends on screen. The padding follows the snap
  * point, not the finger: it changes when the sheet lands on another point, never on the
  * frames of a drag.
+ * @claim "The padding follows the snap point" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > pads a sheet at a lower snap point by the part below the screen, and holds that padding through a drag)
+ * @claim "The padding follows the snap point" registry/ouro/components/ouro/sheet/sheet.touch.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.touch.test.tsx::Sheet on a phone > stays under the finger when a sheet with snap points is caught on its way back to one)
  */
 const bottomPadding = {
   fit: "pb-[calc(env(safe-area-inset-bottom,0px)+var(--drawer-keyboard-inset,0px))]",
@@ -213,7 +215,7 @@ export function SheetRoot({ side: sideProp = "bottom", snapPoints, ...props }: S
 /** Part: the button that opens the sheet. Pass your button as `render={<Button>Open</Button>}`. */
 export function SheetTrigger(props: Drawer.Trigger.Props): JSX.Element {
   useSheetPart("SheetTrigger", "…");
-  return <Drawer.Trigger {...props} />;
+  return <Drawer.Trigger {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "sheet", "data-ouro-part": "trigger" } : {})} {...props} />;
 }
 
 /**
@@ -223,6 +225,8 @@ export function SheetTrigger(props: Drawer.Trigger.Props): JSX.Element {
  * from ouro-base.css). If your app has fixed bars above z-50, raise it in a `:root`
  * rule of your own after the Ouro tokens, outside any `@layer`: `:root { --ouro-layer: 60; }`.
  * Don't edit the line shadcn wrote; `shadcn add` resets it.
+ * @claim "The portal is its own stacking" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::Sheet stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "The portal is its own stacking" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  */
 export function SheetPortal(props: Omit<Drawer.Portal.Props, "className">): JSX.Element {
   useSheetPart("SheetPortal", "…");
@@ -253,6 +257,8 @@ export function SheetBackdrop({
  * rest to `--ouro-sheet-grab` on the popup: that is where Base UI starts the drag from.
  * The listeners are on the window, on the way down, because Base UI begins a touch drag
  * from a listener on the document that stops the event there.
+ * @claim "On each event that can begin" registry/ouro/components/ouro/sheet/sheet.touch.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.touch.test.tsx::Sheet on a phone > stays under a finger that catches it by its scrolling body, where the drag starts with the first move)
+ * @claim "On each event that can begin" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:testExists(registry/ouro/components/ouro/sheet/sheet.test.tsx::feel > keeps the variables a drag rewrites out of the sheet's content)
  */
 function useGrabOffset(side: SheetSide): (viewport: HTMLDivElement) => () => void {
   return useCallback(
@@ -378,7 +384,11 @@ export type SheetTitleProps = Omit<Drawer.Title.Props, "className"> & {
   visuallyHidden?: boolean | undefined;
 };
 
-/** Part: the sheet's title, which names the dialog. Every sheet needs one. */
+/**
+ * Part: the sheet's title, which names the dialog. Every sheet needs one.
+ *
+ * @claim "Every sheet needs one" registry/ouro/components/ouro/sheet/sheet.test.tsx verify:fileLine(registry/ouro/components/ouro/sheet/sheet.test.tsx, /warns\swhen\sthe\stitle\sis\smissing/)
+ */
 export function SheetTitle({ visuallyHidden, ...props }: SheetTitleProps): JSX.Element {
   useSheetPart("SheetTitle", "<SheetTitle>…</SheetTitle>…");
   return (
@@ -388,7 +398,7 @@ export function SheetTitle({ visuallyHidden, ...props }: SheetTitleProps): JSX.E
       className={
         visuallyHidden
           ? "sr-only"
-          : "m-0 text-lg leading-6 font-semibold text-balance text-popover-foreground"
+          : "m-0 font-[family-name:var(--font-heading,inherit)] text-lg leading-6 font-semibold text-balance text-popover-foreground"
       }
     />
   );
@@ -426,6 +436,8 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
   );
   return (
     <Drawer.Content
+      data-ouro-control="sheet"
+      data-ouro-part="content"
       {...props}
       ref={scrollRef}
       data-ouro-sheet-content=""
@@ -433,6 +445,8 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
         "box-border min-h-0 flex-1 overflow-y-auto overscroll-contain touch-auto px-5 pt-2 pb-5",
         // A body that overflows is a tab stop (useKeyboardScrollable); show where focus is.
         "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid",
+        // Under forced colours, where the body ends while it is one.
+        "forced-colors:[&[tabindex='0']]:outline-1 forced-colors:[&[tabindex='0']]:outline-solid forced-colors:[&[tabindex='0']]:-outline-offset-1",
         className,
       )}
     />
@@ -442,5 +456,5 @@ export function SheetContent({ className, ref, ...props }: SheetContentProps): J
 /** Part: closes the sheet. Pass your button as `render={<Button>Done</Button>}`. */
 export function SheetClose(props: Drawer.Close.Props): JSX.Element {
   useSheetPart("SheetClose", "<SheetContent><SheetClose>…</SheetClose></SheetContent>");
-  return <Drawer.Close {...props} />;
+  return <Drawer.Close {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "sheet", "data-ouro-part": "close" } : {})} {...props} />;
 }
