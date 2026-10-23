@@ -19,26 +19,48 @@ describe("dependency advisory refresh contract", () => {
       "react-router": "7.18.2",
     });
     expect(packageJson.devDependencies).toMatchObject({
-      "@storybook/addon-a11y": "10.2.10",
-      "@storybook/addon-docs": "10.2.10",
-      "@storybook/addon-onboarding": "10.2.10",
-      "@storybook/addon-themes": "10.2.10",
-      "@storybook/addon-vitest": "10.2.10",
-      "@storybook/react-vite": "10.2.10",
+      "@storybook/addon-a11y": "10.6.2",
+      "@storybook/addon-docs": "10.6.2",
+      "@storybook/addon-onboarding": "10.6.2",
+      "@storybook/addon-themes": "10.6.2",
+      "@storybook/addon-vitest": "10.6.2",
+      "@storybook/react-vite": "10.6.2",
       "happy-dom": "20.8.9",
-      "storybook": "10.2.10",
+      "storybook": "10.6.2",
       "vite": "7.3.7",
+      // 4.1.12 patches @vitest/mocker's GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp.
+      "vitest": "4.1.12",
+      "@vitest/ui": "4.1.12",
+      "@vitest/coverage-istanbul": "4.1.12",
+      "@vitest/coverage-v8": "4.1.12",
+      "@vitest/browser-playwright": "4.1.12",
     });
+  });
+
+  it("locks the patched Vitest mocker, and allows no advisory", () => {
+    const lock = readFileSync(join(projectRoot, "pnpm-lock.yaml"), "utf8");
+    const mockers = [...new Set(lock.match(/^  '?@vitest\/mocker@[^:(']+/gm) ?? [])];
+    expect(mockers.map((entry) => entry.replace(/^  '?/, ""))).toEqual(["@vitest/mocker@4.1.12"]);
+    expect(allowlist.allowedVulnerabilities).toEqual([]);
+  });
+
+  it("keeps every locked Zod outside GHSA-mrhx-c7xc-m3w5", () => {
+    const lock = readFileSync(join(projectRoot, "pnpm-lock.yaml"), "utf8");
+    const versions = [...new Set([...lock.matchAll(/^  zod@([^:(\s]+)/gm)].map((match) => match[1]))];
+    expect(versions).toEqual(["4.6.6"]);
+    expect(packageJson.dependencies.zod).toBe("4.6.6");
+    expect(packageJson.pnpm.overrides.zod).toBe("4.6.6");
   });
 
   it("uses exact defensive transitive overrides and the reviewed React Router patch", () => {
     expect(packageJson.pnpm.overrides).toMatchObject({
+      "@cloudflare/vitest-plugin>wrangler": "4.90.0",
       "@babel/core": "7.29.7",
       "brace-expansion@1": "1.1.21",
       "brace-expansion@2": "2.1.7",
       "brace-expansion@5": "5.0.12",
       "defu": "6.1.5",
-      "dompurify": "3.4.16",
+      "dompurify": "3.4.17",
       "form-data": "4.0.6",
       "joi@17": "17.13.8",
       "js-yaml@3": "3.15.2",
@@ -57,6 +79,11 @@ describe("dependency advisory refresh contract", () => {
       "react-router@7.18.2",
       "patches/react-router@7.18.2.patch",
     );
+    expect(packageJson.pnpm.patchedDependencies).toHaveProperty(
+      "zod@4.6.6",
+      "patches/zod@4.6.6.patch",
+    );
+    expect(existsSync(join(projectRoot, "patches/zod@4.6.6.patch"))).toBe(true);
     expect(existsSync(join(projectRoot, "patches/react-router@7.18.2.patch"))).toBe(true);
     const reactRouterPatch = readFileSync(join(projectRoot, "patches/react-router@7.18.2.patch"), "utf8");
     expect(reactRouterPatch.match(/\+\s+suppressHydrationWarning: true/g)).toHaveLength(6);

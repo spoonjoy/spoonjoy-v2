@@ -20,6 +20,8 @@ QA differs from production in one knowingly accepted way: it runs `COOK_SESSION_
 
 The web client sends `X-Spoonjoy-Cook-User` with every cook-session request. The Worker requires it from cookie-session (browser) callers and answers `428 user_header_required` without it, which the current page answers by asking for a reload; Bearer callers may omit it, because a token belongs to one user and is not shared between signed-in identities the way a browser's cookies are. When the header names someone other than the authenticated user (for example after signing in as someone else in another tab), the Worker answers `412 user_mismatch`; the tab then clears its unsent changes, stops without saving, and asks for a reload.
 
+When a cook-session read throws an error that Cloudflare marks `retryable: true`, the Worker waits 100 ms and makes one more GET with a fresh Durable Object stub. A reset can leave the first stub broken. It never replays an overloaded request, an unmarked error, an ordinary HTTP error response, or a start/PATCH write, whose changes might already have committed. A failed second read still reaches the normal error handler; the Worker never invents empty progress to hide a storage failure.
+
 The client retries only transient failures (network errors, `429`, and `5xx` other than `503 cook_session_protocol_unavailable`), at most five times and only while the page is visible. `401` shows "Signed out" and stops. `403`, `400`, `404` from start, and the protocol-unavailable `503` stop syncing for that page view only, and nothing is stored, so the next load of the recipe tries again (this matters during a gradual `protocol-v1-canary` rollout).
 
 Leaving a recipe inside the app lets a save in flight finish, then sends whatever is still pending, replaying conflicts and starting the session if needed. It stops after 10 seconds, and only while the page is visible. That work belongs to the recipe it started on: it keeps that recipe's ids and never changes the page, which may already show another recipe. If a new page opens the same recipe for the same cook, the old one stops at once. Hiding or closing the tab sends pending progress once with `keepalive`, but only when no save is in flight and the session already exists. Ordinary unmount lets an outstanding keepalive save finish within the same 10-second leave budget rather than aborting it immediately. Otherwise, or if that request is lost, the unsent change stays in `localStorage` and the next visit sends it. Deleting the recipe is different: submitting the confirmed delete aborts outstanding owned fetches, including keepalive saves, ignores obsolete completions, and sends no further sync work. This cannot undo requests already processed by the server or guarantee that a browser never receives a 404. Only the delete action's successful redirect clears that cook/recipe's cached progress (and that recipe's device-only progress); unconfirmed errors retain it for recovery. Failures for live recipes are not broadly suppressed.
@@ -252,6 +254,13 @@ INGREDIENT_PARSE_MAX_RETRIES=1
 Basic local app development does not require these values. The app uses safe local fallbacks for sessions and stores uploaded images as data URLs when the `PHOTOS` binding is unavailable.
 
 ## Preflight
+
+The locked test toolchain uses `@cloudflare/vitest-plugin` (the supported name for the former
+Workers pool), with its Wrangler kept at the existing `4.90.0` pin. Zod is pinned and overridden
+to `4.6.6` for GHSA-mrhx-c7xc-m3w5. `patches/zod@4.6.6.patch` removes two annotation tokens from
+explanatory comments that Rollup otherwise mistakes for misplaced optimization annotations.
+It changes no JavaScript statements or real optimization annotations; the normal build warning
+gate remains unchanged. Recheck whether this packaging patch is needed when upgrading Zod.
 
 Run the machine-checkable preflight before production deploys:
 

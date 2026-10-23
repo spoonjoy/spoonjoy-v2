@@ -1,0 +1,20 @@
+diff --git a/v4/core/regexes.js b/v4/core/regexes.js
+--- a/v4/core/regexes.js
++++ b/v4/core/regexes.js
+@@ -74,3 +74,3 @@
+ /** Anchors a pattern source. The interpolation lives here rather than at the call site because
+- * esbuild will not drop a `@__PURE__` call whose own argument interpolates a variable, but it
++ * esbuild will not drop a pure call whose own argument interpolates a variable, but it
+  * will drop `anchor(dateSource)`. Keeping it inline pinned `date` into every bundle. */
+diff --git a/v4/core/util.js b/v4/core/util.js
+--- a/v4/core/util.js
++++ b/v4/core/util.js
+@@ -397,7 +397,7 @@
+         return shape[k]._zod.optin !== undefined && shape[k]._zod.optout === "optional";
+     });
+ }
+-// Wrapped in a `@__PURE__` IIFE: esbuild never tree-shakes a top-level initializer that contains a member access on `Number`, so the bare object literal survived into every bundle.
++// Wrapped in a pure IIFE: esbuild never tree-shakes a top-level initializer that contains a member access on `Number`, so the bare object literal survived into every bundle.
+ export const NUMBER_FORMAT_RANGES = /*@__PURE__*/ (() => ({
+     safeint: [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+     int32: [-2147483648, 2147483647],
