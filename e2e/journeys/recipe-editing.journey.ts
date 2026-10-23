@@ -6,11 +6,35 @@
 // title carries the project name and a timestamp; everything else the test touches belongs to that
 // recipe. AI ingredient parsing is switched off in favour of manual entry (QA may have no OpenAI
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
-import { test, expect } from "./support/journey";
+import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
 import { pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
+import { recordCookSyncRequests } from "./support/cook-sync-evidence";
+
+const test = journeyTest.extend<{ cookSyncEvidence: void }>({
+  cookSyncEvidence: [async ({ page }, use, testInfo) => {
+    const recording = recordCookSyncRequests(page);
+    try {
+      await use();
+    } finally {
+      recording.stop();
+      if (testInfo.status !== testInfo.expectedStatus) {
+        const browser = await page.evaluate(() => ({
+          visibility: document.visibilityState,
+          online: navigator.onLine,
+          readyState: document.readyState,
+          syncStatus: document.querySelector('[data-testid="cook-sync-status"]')?.getAttribute("data-status") ?? null,
+        })).catch(() => ({ unavailable: true }));
+        await testInfo.attach("cook-sync-request-phases", {
+          body: JSON.stringify({ ...recording.snapshot(), browser }, null, 2),
+          contentType: "application/json",
+        });
+      }
+    }
+  }, { auto: true }],
+});
 
 // A 1×1 PNG: enough to be a real photo file for the import form.
 const RECIPE_CARD_PNG = Buffer.from(
