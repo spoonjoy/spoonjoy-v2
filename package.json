@@ -11,6 +11,7 @@
   "pnpm": {
     "overrides": {
       "@babel/core": "7.29.7",
+      "@cloudflare/vitest-plugin>wrangler": "4.90.0",
       "axios": "1.20.0",
       "baseline-browser-mapping": "2.11.0",
       "brace-expansion@1": "1.1.21",
@@ -47,7 +48,8 @@
     },
     "patchedDependencies": {
       "@prisma/adapter-d1@6.19.2": "patches/@prisma__adapter-d1@6.19.2.patch",
-      "react-router@7.18.2": "patches/react-router@7.18.2.patch"
+      "react-router@7.18.2": "patches/react-router@7.18.2.patch",
+      "zod@4.6.6": "patches/zod@4.6.6.patch"
     }
   },
   "scripts": {

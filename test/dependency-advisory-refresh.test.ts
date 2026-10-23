@@ -46,7 +46,7 @@ describe("dependency advisory refresh contract", () => {
 
   it("keeps every locked Zod outside GHSA-mrhx-c7xc-m3w5", () => {
     const lock = readFileSync(join(projectRoot, "pnpm-lock.yaml"), "utf8");
-    const versions = [...new Set([...lock.matchAll(/^  zod@([^:\s]+):/gm)].map((match) => match[1]))];
+    const versions = [...new Set([...lock.matchAll(/^  zod@([^:(\s]+)/gm)].map((match) => match[1]))];
     expect(versions).toEqual(["4.6.6"]);
     expect(packageJson.dependencies.zod).toBe("4.6.6");
     expect(packageJson.pnpm.overrides.zod).toBe("4.6.6");
@@ -54,6 +54,7 @@ describe("dependency advisory refresh contract", () => {
 
   it("uses exact defensive transitive overrides and the reviewed React Router patch", () => {
     expect(packageJson.pnpm.overrides).toMatchObject({
+      "@cloudflare/vitest-plugin>wrangler": "4.90.0",
       "@babel/core": "7.29.7",
       "brace-expansion@1": "1.1.21",
       "brace-expansion@2": "2.1.7",
@@ -78,6 +79,11 @@ describe("dependency advisory refresh contract", () => {
       "react-router@7.18.2",
       "patches/react-router@7.18.2.patch",
     );
+    expect(packageJson.pnpm.patchedDependencies).toHaveProperty(
+      "zod@4.6.6",
+      "patches/zod@4.6.6.patch",
+    );
+    expect(existsSync(join(projectRoot, "patches/zod@4.6.6.patch"))).toBe(true);
     expect(existsSync(join(projectRoot, "patches/react-router@7.18.2.patch"))).toBe(true);
     const reactRouterPatch = readFileSync(join(projectRoot, "patches/react-router@7.18.2.patch"), "utf8");
     expect(reactRouterPatch.match(/\+\s+suppressHydrationWarning: true/g)).toHaveLength(6);
