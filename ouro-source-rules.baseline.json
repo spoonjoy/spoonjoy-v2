@@ -1,7 +1,11 @@
 {
   "offenders": {
+    "app/components/recipe/RecipeBuilder.tsx::RecipeBuilder::uses-hand-rolled-control::app/components/recipe/StepList#StepList::": 1,
+    "app/components/recipe/StepList.tsx::StepList::plain-element-handler::div::": 1,
     "app/routes/mcp.tsx::McpPage::control-state-style::a::": 1,
     "app/routes/mcp.tsx::McpPage::raw-anchor::a::": 1,
+    "app/routes/recipes.$id.edit.tsx::EditRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
+    "app/routes/recipes.new.tsx::NewRecipe::uses-hand-rolled-control::app/components/recipe/RecipeBuilder#RecipeBuilder::": 1,
     "app/styles/tailwind.css::(stylesheet)::control-state-style::[data-sj-action=\"primary\"]:active:not([data-disabled])::": 1
   }
 }

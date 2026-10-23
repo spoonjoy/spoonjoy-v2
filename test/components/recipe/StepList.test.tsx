@@ -12,6 +12,7 @@ import { render, screen, within, act, waitFor, fireEvent } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { createRoutesStub } from 'react-router'
+import { useState } from 'react'
 import { StepList } from '~/components/recipe/StepList'
 import type { StepData } from '~/components/recipe/StepEditorCard'
 
@@ -395,11 +396,62 @@ describe('StepList', () => {
       const Wrapper = createTestWrapper({ steps: threeSteps(), onChange, disabled: true })
       render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
 
-      // The steps are still a list named Steps, in order, with no handle to move one.
+      // The steps are still a list named Steps, in order, whose handles .sj-steps-saving hides.
       const list = screen.getByRole('list', { name: 'Steps' })
       expect(within(list).getAllByRole('listitem').filter((item) => item.parentElement === list)).toHaveLength(3)
-      expect(screen.queryAllByRole('button', { name: /^Reorder Step \d$/ })).toHaveLength(0)
+      expect(list.closest('.sj-steps-saving')).not.toBeNull()
       expect(onChange).not.toHaveBeenCalled()
+    })
+
+    it("keeps each step's drafts while a save starts and ends: the AI text, the input mode and a half-typed ingredient", async () => {
+      function Harness() {
+        const [disabled, setDisabled] = useState(false)
+        return (
+          <>
+            <button type="button" onClick={() => setDisabled((value) => !value)}>Toggle saving</button>
+            <StepList steps={threeSteps()} recipeId="recipe-1" onChange={vi.fn()} disabled={disabled} />
+          </>
+        )
+      }
+      const Stub = createRoutesStub([
+        { path: '/recipes/:id/edit', Component: Harness },
+        { path: '/recipes/:id/steps/:stepId/edit', action: async () => ({ parsedIngredients: [] }) },
+      ])
+      render(<Stub initialEntries={['/recipes/recipe-1/edit']} />)
+      const toggleSaving = async () => {
+        await userEvent.click(screen.getByRole('button', { name: 'Toggle saving' }))
+        await userEvent.click(screen.getByRole('button', { name: 'Toggle saving' }))
+      }
+
+      const aiText = within(stepCard(1)).getByRole('textbox', { name: 'Ingredient text' })
+      fireEvent.change(aiText, { target: { value: '2 eggs' } })
+      await toggleSaving()
+      expect(within(stepCard(1)).getByRole('textbox', { name: 'Ingredient text' })).toBe(aiText)
+      expect(aiText).toHaveValue('2 eggs')
+
+      await userEvent.click(within(stepCard(2)).getByRole('switch', { name: 'AI Parse' }))
+      await userEvent.type(within(stepCard(2)).getByRole('textbox', { name: 'Unit' }), 'cup')
+      await toggleSaving()
+      expect(within(stepCard(2)).getByRole('switch', { name: 'AI Parse' })).not.toBeChecked()
+      expect(within(stepCard(2)).getByRole('textbox', { name: 'Unit' })).toHaveValue('cup')
+    })
+
+    it('blocks the handles while a save is in flight, without moving the steps out of the list', async () => {
+      const onChange = vi.fn()
+      const Wrapper = createTestWrapper({ steps: threeSteps(), onChange, disabled: true })
+      render(<Wrapper initialEntries={['/recipes/recipe-1/edit']} />)
+
+      const handle = screen.getByRole('button', { name: 'Reorder Step 2' })
+      await userEvent.click(handle)
+      expect(screen.queryByRole('menuitem', { name: 'Move up' })).not.toBeInTheDocument()
+      handle.focus()
+      await userEvent.keyboard(' ')
+      await userEvent.keyboard('{ArrowUp}')
+      await userEvent.keyboard(' ')
+      expect(fireEvent.pointerDown(handle)).toBe(false)
+      expect(onChange).not.toHaveBeenCalled()
+      // A press elsewhere in a step goes through.
+      expect(fireEvent.pointerDown(stepCard(2))).toBe(true)
     })
 
     it("a handle's Move up moves the step up and renumbers every step", async () => {
