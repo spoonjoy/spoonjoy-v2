@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { claimRunDbDir } from "./test/support/worker-db";
+import { claimRunDbDir, releaseRunDbDirOnExit, sweepStaleRunDbDirs } from "./test/support/worker-db";
 
 const appDirectory = new URL("./app", import.meta.url).pathname;
 const componentsDirectory = new URL("./app/components", import.meta.url).pathname;
@@ -73,8 +73,11 @@ const isFocusedCoverageRun = hasCoverageFlag && hasFocusedTestFilter;
 
 // One temporary directory per run for each worker process's own copy of prisma/test.db
 // (test/support/worker-db.ts). Set SPOONJOY_TEST_DB_DIR="" to use prisma/test.db directly; that
-// shares one file, so the run is then serial.
+// shares one file, so the run is then serial. Directories that runs killed before their teardown
+// left behind go first; this run's own goes at its teardown, or at exit if the run ends sooner.
+sweepStaleRunDbDirs();
 const runDbDir = claimRunDbDir();
+releaseRunDbDirOnExit();
 const requestedDbWorkers = Number(process.env.VITEST_DB_WORKERS ?? 4);
 const dbWorkers = runDbDir && Number.isInteger(requestedDbWorkers) && requestedDbWorkers > 0 ? requestedDbWorkers : 1;
 
