@@ -68,7 +68,7 @@ function callsCloudflareTestPlugin(source: string) {
   );
   const importsCloudflareTest = hasNamedImport(
     sourceFile,
-    "@cloudflare/vitest-pool-workers",
+    "@cloudflare/vitest-plugin",
     "cloudflareTest",
   );
   let pluginCallFound = false;
@@ -211,7 +211,8 @@ jobs:
     ]) {
       expect(packageJson.devDependencies?.[dependency]).toBe("4.1.12");
     }
-    expect(packageJson.devDependencies?.["@cloudflare/vitest-pool-workers"]).toBe("0.18.6");
+    expect(packageJson.devDependencies?.["@cloudflare/vitest-plugin"]).toBe("1.0.0");
+    expect(packageJson.devDependencies?.["@cloudflare/vitest-pool-workers"]).toBeUndefined();
     expect(packageJson.scripts?.["test:workers"]).toBe(
       "vitest run --config vitest.workers.config.ts --maxWorkers=1 --no-isolate",
     );

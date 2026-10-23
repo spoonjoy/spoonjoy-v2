@@ -44,6 +44,14 @@ describe("dependency advisory refresh contract", () => {
     expect(allowlist.allowedVulnerabilities).toEqual([]);
   });
 
+  it("keeps every locked Zod outside GHSA-mrhx-c7xc-m3w5", () => {
+    const lock = readFileSync(join(projectRoot, "pnpm-lock.yaml"), "utf8");
+    const versions = [...new Set([...lock.matchAll(/^  zod@([^:\s]+):/gm)].map((match) => match[1]))];
+    expect(versions).toEqual(["4.6.6"]);
+    expect(packageJson.dependencies.zod).toBe("4.6.6");
+    expect(packageJson.pnpm.overrides.zod).toBe("4.6.6");
+  });
+
   it("uses exact defensive transitive overrides and the reviewed React Router patch", () => {
     expect(packageJson.pnpm.overrides).toMatchObject({
       "@babel/core": "7.29.7",
