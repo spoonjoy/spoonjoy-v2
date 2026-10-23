@@ -52,7 +52,23 @@ function environment(first: unknown, next: unknown = Response.json({ state: null
 
 describe("cook-session reads after a storage reset", () => {
   it("returns the session from a fresh stub after a retryable read failure", async () => {
-    const state = { revision: 7, progress: { scaleFactor: 2 } };
+    const state = {
+      version: 1,
+      recipeId: "recipe-1",
+      attemptId: "11111111-1111-4111-8111-111111111111",
+      status: "active",
+      revision: 7,
+      progress: {
+        activeStepIndex: 0,
+        activeStepId: null,
+        scaleFactor: 2,
+        checkedIngredientIds: [],
+        checkedStepOutputIds: [],
+      },
+      startedAt: "2026-10-23T18:00:00.000Z",
+      updatedAt: "2026-10-23T18:01:00.000Z",
+      terminalAt: null,
+    };
     const { env, get, requests } = environment(storageReset(), Response.json({ state }));
 
     const response = await handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
