@@ -5,10 +5,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-// The merge of main (#566, #567) into this branch: the last gated consumer source before this upgrade.
-const acceptedHead = "fbb51ffa13c8823d9a2a62e230b0b6004452be03";
-const tag = "v1.2.0";
-const tagCommit = "96542d72b60b436dd6a60447d888a4c9e9d5edf7";
+// Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
+const acceptedHead = "0039f67e29582040d9132e76c4e1b55390d2f55f";
+const tag = "v1.2.1";
+const tagCommit = "f09b84572ac8314625d3388006a0395e32513ed2";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -66,7 +66,7 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// The files this upgrade adds; every other expected path is already installed.
+// Paths introduced by the initial v1.2.0 CLI run; this patch updates existing files.
 const expectedNew = [
   "app/components/ouro/breadcrumb/breadcrumb.stories.tsx",
   "app/components/ouro/breadcrumb/breadcrumb.test-d.ts",
@@ -214,7 +214,7 @@ const expectedNew = [
   "e2e/ouro/timer-tray.spec.ts",
   "e2e/ouro/timer.spec.ts",
   "scripts/ouro-source-rules.mjs",
-];
+].filter((file) => !existsSync(file));
 const protectedPaths = [
   "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
   "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
@@ -292,8 +292,8 @@ if (mode === "classify") {
     const untracked = command("git", ["ls-files", "--others", "--exclude-standard"]).trim().split("\n").filter(Boolean).sort();
     receipt.untracked = untracked;
     writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
-    assert.deepEqual(untracked, [...expectedNew].sort(), "Only the files v1.2.0 adds may be new");
-    command("git", ["add", "--intent-to-add", "--", ...untracked]);
+    assert.deepEqual(untracked, [...expectedNew].sort(), "Only missing qualified installed paths may be new");
+    if (untracked.length > 0) command("git", ["add", "--intent-to-add", "--", ...untracked]);
     const changed = command("git", ["diff", "--name-only"]).trim().split("\n").filter(Boolean).sort();
     receipt.changedPaths = changed;
     receipt.after = hashes();

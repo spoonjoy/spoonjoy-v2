@@ -1,7 +1,7 @@
-name: Real Ouro HX v1.2.0 CLI and strict consumer proof
+name: Real Ouro HX CLI and strict consumer proof
 on:
   push:
-    branches: [feat/test-kitchen]
+    branches: [feat/test-kitchen, feat/hx-v120-items]
 permissions:
   contents: read
 concurrency:
