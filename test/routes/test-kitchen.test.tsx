@@ -194,6 +194,27 @@ describe("Test Kitchen", () => {
     expect(within(timer).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
   });
 
+  it("warns when the browser cannot persist a timer reset", () => {
+    render(page());
+    fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
+    const remove = Storage.prototype.removeItem;
+    const blocked = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (this: Storage, key) {
+      if (key.startsWith("ouro-timer:")) throw new DOMException("Blocked", "SecurityError");
+      remove.call(this, key);
+    });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Reset the kitchen" }));
+      expect(screen.getByRole("alert")).toHaveTextContent("Some timer resets could not be saved. They may return after a reload.");
+      fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
+      expect(within(screen.getByTestId("cook-mode-timer")).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
+    } finally {
+      blocked.mockRestore();
+    }
+  });
+
   it("turns X-ray on and off from its switch", async () => {
     const user = userEvent.setup();
     render(page());
