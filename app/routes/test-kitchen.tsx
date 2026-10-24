@@ -2,6 +2,7 @@ import type { Route } from "./+types/test-kitchen";
 import { useState } from "react";
 import { useLoaderData, useSearchParams } from "react-router";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
+import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { SCALE_RANGE } from "~/components/cook/cook-controller";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
@@ -143,6 +144,7 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
         </div>
       </section>
 
+      <CookTimerTray timers={controller.timers} />
       <RecipeCookView controller={controller} />
     </CookbookPage>
   );

@@ -34,6 +34,28 @@ describe("cook-mode timers", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it.each([
+    ["running", { status: "running", durationSeconds: 60, endsAt: NOW + 30_000 }, "Pause timer", "0:30"],
+    ["paused", { status: "paused", durationSeconds: 60, remainingMs: 45_000 }, "Resume timer", "0:45"],
+    ["done", { status: "done", durationSeconds: 60, endedAt: NOW - 1_000 }, "Dismiss", "0:00"],
+  ] as const)("restores an existing %s recipe timer when upgrading to native timers", async (_status, stored, action, time) => {
+    window.localStorage.setItem("spoonjoy-cook-timers:v1:cook-timers-test", JSON.stringify({ "1": stored }));
+    render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
+      </>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const timer = screen.getByTestId("cook-mode-timer");
+    expect(within(timer).getByRole("button", { name: action })).toBeInTheDocument();
+    expect(within(timer).getByRole("timer")).toHaveTextContent(time);
+    if (stored.status === "done") expect(timer).toHaveTextContent("Time's up");
+    expect(window.localStorage.getItem("spoonjoy-cook-timers:v1:cook-timers-test")).toBeNull();
+  });
+
   it("runs a step's timer with Spoonjoy's words, and the tray follows it on another step", () => {
     const onGoToStep = vi.fn();
     render(
@@ -202,6 +224,44 @@ describe("cook-mode timers", () => {
       });
       expect(screen.getByTestId("cook-timer-tray")).toHaveTextContent("Time's up");
       expect(vibrate).toHaveBeenCalledTimes(3);
+      fireEvent.click(within(screen.getByTestId("cook-timer-tray")).getByRole("button", { name: /^Dismiss/ }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(3);
+    } finally {
+      Reflect.deleteProperty(navigator, "vibrate");
+    }
+  });
+
+  it("keeps a finished timer ringing when the cook moves to another step", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    try {
+      const { rerender } = render(
+        <>
+          <CookStepTimer timer={pasta} />
+          <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
+        </>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <>
+          <CookStepTimer timer={sauce} />
+          <CookTimerTray timers={[pasta, sauce]} currentStepNum={2} />
+        </>,
+      );
+      expect(screen.getByTestId("cook-timer-tray")).toHaveTextContent("Time's up");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(3);
+
       fireEvent.click(within(screen.getByTestId("cook-timer-tray")).getByRole("button", { name: /^Dismiss/ }));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);

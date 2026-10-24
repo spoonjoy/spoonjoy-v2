@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expectConsoleError } from "../warning-policy";
-import { CHECKER, defaultDeps, isCliEntry, main, pullRequestText, runCliIfEntry, STEPS } from "../../scripts/claims-pr.mjs";
+import { defaultDeps, isCliEntry, main, pullRequestText, runCliIfEntry } from "../../scripts/claims-pr.mjs";
 
 const event = { pull_request: { title: "Adopt Ouro HX v1.2.0", body: "It installs 3 items.[^n]" } };
 
@@ -33,9 +33,11 @@ describe("main", () => {
     const deps = setup();
     expect(main(deps)).toBe(0);
     expect(deps.readFile).toHaveBeenCalledWith("/event.json");
-    expect(deps.run.mock.calls.map(([command, args]) => [command, args])).toEqual(
-      STEPS.map((step) => [process.execPath, [CHECKER, ...step]]),
-    );
+    expect(deps.run.mock.calls.map(([command, args]) => [command, args])).toEqual([
+      [process.execPath, ["app/lib/ouro/claims-check.mjs", "ratchet"]],
+      [process.execPath, ["app/lib/ouro/claims-check.mjs", "lint", "--pr"]],
+      [process.execPath, ["app/lib/ouro/claims-check.mjs", "check", "--network=changed"]],
+    ]);
     for (const [, , options] of deps.run.mock.calls) {
       expect(options.env).toEqual({
         GITHUB_EVENT_PATH: "/event.json",
@@ -47,10 +49,11 @@ describe("main", () => {
     }
   });
 
-  it("runs every step, and fails when any of them fails", () => {
-    const deps = setup({ run: vi.fn().mockReturnValueOnce({ status: 1 }).mockReturnValue({ status: 0 }) });
+  it.each(["ratchet", "lint", "check"])("runs every required phase and fails when %s fails", (failedPhase) => {
+    const run = vi.fn((_command: string, args: string[]) => ({ status: args[1] === failedPhase ? 1 : 0 }));
+    const deps = setup({ run });
     expect(main(deps)).toBe(1);
-    expect(deps.run).toHaveBeenCalledTimes(STEPS.length);
+    expect(run).toHaveBeenCalledTimes(3);
   });
 
   it("needs the event file", () => {
@@ -87,7 +90,7 @@ describe("defaults", () => {
     writeFileSync(join(dir, "event.json"), JSON.stringify(event));
     const revParse = vi.fn().mockReturnValue({ status: 0, stdout: "base\n" });
     expect(main({ env: { GITHUB_EVENT_PATH: join(dir, "event.json") }, run, revParse })).toBe(0);
-    expect(run).toHaveBeenCalledTimes(STEPS.length);
+    expect(run).toHaveBeenCalledTimes(3);
   });
 });
 

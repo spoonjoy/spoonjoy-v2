@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -154,6 +154,44 @@ describe("Test Kitchen", () => {
 
     await user.click(within(cookMode).getByRole("button", { name: "Exit cook mode" }));
     expect(await screen.findByRole("heading", { name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
+  });
+
+  it("keeps a started timer running and sounding after leaving cook mode", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(5_000_000);
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    try {
+      render(page());
+      fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
+      expect(screen.getByRole("heading", { name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(720_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("region", { name: "Running timers" })).toHaveTextContent("Time's up");
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+      Reflect.deleteProperty(navigator, "vibrate");
+    }
+  });
+
+  it("resets a paused timer with the rest of the kitchen", () => {
+    render(page());
+    fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pause timer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset the kitchen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start cooking" }));
+
+    const timer = screen.getByTestId("cook-mode-timer");
+    expect(within(timer).queryByRole("button", { name: "Resume timer" })).not.toBeInTheDocument();
+    expect(within(timer).getByRole("button", { name: "Start timer" })).toBeInTheDocument();
   });
 
   it("turns X-ray on and off from its switch", async () => {
