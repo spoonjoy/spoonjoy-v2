@@ -354,7 +354,7 @@ export function ImageField(props: ImageFieldProps): JSX.Element {
         )}
       >
         {dragging ? (
-          <span aria-hidden="true" className="absolute inset-0 z-1 flex items-center justify-center bg-background p-2 text-center text-sm leading-5 font-medium text-foreground">
+          <span aria-hidden="true" className="absolute inset-0 z-1 flex items-center justify-center bg-background/85 p-2 text-center text-sm leading-5 font-medium text-foreground">
             {dropLabel}
           </span>
         ) : null}

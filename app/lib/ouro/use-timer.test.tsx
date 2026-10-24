@@ -145,6 +145,29 @@ describe("useTimer", () => {
     expect(other).toHaveBeenCalledExactlyOnceWith({ endedAt: Date.now(), first: false });
   });
 
+  it.each([false, true])("does not let a passive reader claim a fallback's completion event (fallback=%s)", async (fallback) => {
+    const events: TimerDoneEvent[] = [];
+    const reader = await renderTimer({ duration: 1, timerId: "passive", fallback });
+    await renderTimer({ duration: 1, timerId: "passive", fallback: true, onDone: (event) => events.push(event) });
+    await act(async () => reader.state.current.start());
+    await advance(1000);
+    expect(reader.state.current.status).toBe("done");
+    expect(events).toEqual([{ endedAt: Date.now(), first: true }]);
+  });
+
+  it.each([false, true])("uses the current completion callback when choosing the alert owner (initially present=%s)", async (initiallyPresent) => {
+    const primary: TimerDoneEvent[] = [];
+    const fallback: TimerDoneEvent[] = [];
+    const onDone = (event: TimerDoneEvent) => primary.push(event);
+    const reader = await renderTimer({ duration: 1, timerId: "changed-callback", onDone: initiallyPresent ? onDone : undefined });
+    await renderTimer({ duration: 1, timerId: "changed-callback", fallback: true, onDone: (event) => fallback.push(event) });
+    await reader.rerender({ duration: 1, timerId: "changed-callback", onDone: initiallyPresent ? undefined : onDone });
+    await act(async () => reader.state.current.start());
+    await advance(1000);
+    expect(primary).toEqual(initiallyPresent ? [] : [{ endedAt: Date.now(), first: true }]);
+    expect(fallback).toEqual([{ endedAt: Date.now(), first: initiallyPresent }]);
+  });
+
   it("carries a stored timer on after a reload, and finishes one that ended while the page was closed", async () => {
     localStorage.setItem("ouro-timer:oven", JSON.stringify({ status: "running", duration: 600, endsAt: Date.now() + 120_000 }));
     localStorage.setItem("ouro-timer:rice", JSON.stringify({ status: "running", duration: 600, endsAt: Date.now() - 30_000 }));

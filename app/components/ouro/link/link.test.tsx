@@ -63,6 +63,21 @@ describe("Link", () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  it("treats only a present download as document navigation, including an empty filename", async () => {
+    const { host } = await render(
+      <OuroProvider linkComponent={RouterLink}>
+        <Link href="/export.csv" download>Export</Link>
+        <Link href="/export.csv" download="recipes.csv">Named export</Link>
+        <Link href="/export.csv" download="">Unnamed export</Link>
+        <Link href="/recipes" download={false}>Not a download</Link>
+        <Link href="/recipes" download={null}>No download</Link>
+      </OuroProvider>,
+    );
+    const links = [...host.querySelectorAll<HTMLAnchorElement>('[data-ouro="link"]')];
+    expect(links.map((link) => link.hasAttribute("data-router"))).toEqual([false, false, false, true, true]);
+    expect(links.map((link) => link.getAttribute("download"))).toEqual(["", "recipes.csv", "", null, null]);
+  });
+
   it("renders an absolute URL as a plain <a>, bypassing linkComponent", async () => {
     const { link } = await render(
       <OuroProvider linkComponent={RouterLink}>

@@ -107,29 +107,36 @@ describe("Celebrate", () => {
     expect(colours.size).toBe(4);
   });
 
-  it("says the message once when the moment starts, and again for the next one", async () => {
+  it("says the message once after a delay when the moment starts, and again for the next one", async () => {
+    // celebrate.tsx's SPEAK_DELAY_MS.
+    const SPEAK_DELAY_MS = 1500;
     const announced = watchAnnouncements();
     try {
       const { root } = await render(<Celebrate show={false} message="List cleared" />);
       await act(async () => root.render(<Celebrate show message="List cleared" />));
-      await expect.poll(() => announced.count("List cleared")).toBe(1);
+      // The message must not compete immediately with the triggering control's announcement.
+      await new Promise((resolve) => setTimeout(resolve, SPEAK_DELAY_MS - 300));
+      expect(announced.count("List cleared")).toBe(0);
+      await expect.poll(() => announced.count("List cleared"), { timeout: 2000 }).toBe(1);
       await act(async () => root.render(<Celebrate show message="List cleared" className="mt-2" />));
       await act(async () => root.render(<Celebrate show={false} message="List cleared" />));
       await act(async () => root.render(<Celebrate show message="List cleared" />));
-      await expect.poll(() => announced.count("List cleared")).toBe(2);
+      await expect.poll(() => announced.count("List cleared"), { timeout: SPEAK_DELAY_MS + 1000 }).toBe(2);
     } finally {
       announced.stop();
     }
   });
 
   it("says nothing when the page opens with it already shown", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const announced = watchAnnouncements();
     try {
       await render(<Celebrate show message="Already done" />);
-      await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+      await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
       expect(announced.count("Already done")).toBe(0);
     } finally {
       announced.stop();
+      vi.useRealTimers();
     }
   });
 

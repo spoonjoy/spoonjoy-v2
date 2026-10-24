@@ -33,6 +33,9 @@ export interface CelebrateOwnProps {
 /** Props for {@link Celebrate}: its own props and the `<span>` attributes it passes through. */
 export type CelebrateProps = Omit<HTMLAttributes<HTMLSpanElement>, keyof CelebrateOwnProps> & CelebrateOwnProps;
 
+/** Leaves time for the triggering control's state announcement before the celebration message. This fixed delay cannot detect when a screen reader has finished speaking; the badge and confetti show immediately. */
+const SPEAK_DELAY_MS = 1500;
+
 // Twelve pieces around the circle, at two distances, in the theme's tones.
 const PIECES = 12;
 const tones = ["bg-primary", "bg-success", "bg-warning", "bg-destructive"] as const;
@@ -50,14 +53,12 @@ const pieces = Array.from({ length: PIECES }, (_, index) => {
 });
 
 /**
- * A small moment of celebration for something the person finished: confetti bursts from a
- * badge with the message ("List cleared") and screen readers hear the message once. With
- * reduced motion nothing flies: the badge only fades in. Put it where the eye already is,
- * such as at the end of the list that was just cleared.
+ * A small moment of celebration for something the person finished: confetti bursts from a badge with the message ("List cleared") and screen readers hear the message once. The message waits about 1.5 s to leave time for the triggering control's announcement; this does not detect when a screen reader finishes speaking. With reduced motion nothing flies: the badge only fades in. Put it where the eye already is, such as at the end of the list that was just cleared.
  *
  * Use `toast()` instead to confirm an everyday action (saved, sent), and `Alert` for a
  * message that should stay.
  *
+ * @claim "The message waits about 1.5 s" registry/ouro/components/ouro/celebrate/celebrate.test.tsx verify:testExists(registry/ouro/components/ouro/celebrate/celebrate.test.tsx::Celebrate > says the message once after a delay when the moment starts, and again for the next one)
  * @group Feedback
  * @see https://ourostack.github.io/ouro-ui/docs/celebrate
  *
@@ -96,7 +97,7 @@ export function Celebrate(props: CelebrateProps): JSX.Element {
   // Spoken when the moment starts, not when a page renders with it already shown.
   const shown = useRef(show);
   useEffect(() => {
-    if (show && !shown.current) announce(message);
+    if (show && !shown.current) announce(message, { delayMs: SPEAK_DELAY_MS });
     shown.current = show;
   }, [show, message]);
 

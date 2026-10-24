@@ -6,6 +6,7 @@ import { Timer } from "~/components/ouro/timer/timer";
 import { TimerTray, type TimerTrayItem } from "~/components/ouro/timer/timer-tray";
 import { act } from "~/lib/ouro/testing/act";
 import { watchAnnouncements } from "~/lib/ouro/testing/announcements";
+import type { TimerDoneEvent } from "~/lib/ouro/use-timer";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -124,6 +125,40 @@ describe("TimerTray", () => {
     } finally {
       announced.stop();
     }
+  });
+
+  it("reports a timer's completion once with the same alert ownership as its Timer", async () => {
+    const timerEvents: TimerDoneEvent[] = [];
+    const trayEvents: TimerDoneEvent[] = [];
+    const page = await render(
+      <Timer label="Pasta" duration={1} timerId="callback" onDone={(event) => timerEvents.push(event)} />,
+    );
+    await render(
+      <TimerTray timers={[{ timerId: "callback", label: "Pasta", duration: 1, onDone: (event) => trayEvents.push(event) }]} />,
+    );
+    await act(async () => page.host.querySelector<HTMLButtonElement>('[data-ouro-part="primary"]')!.click());
+    await advance(1000);
+    expect(timerEvents).toEqual([{ endedAt: Date.now(), first: true }]);
+    expect(trayEvents).toEqual([{ endedAt: Date.now(), first: false }]);
+    expect(tones).toBe(3);
+    await advance(5000);
+    expect(trayEvents).toHaveLength(1);
+  });
+
+  it("calls the current item completion handler when the tray owns the alert", async () => {
+    const first: TimerDoneEvent[] = [];
+    const current: TimerDoneEvent[] = [];
+    store("callback", { status: "running", duration: 60, endsAt: Date.now() + 1000 });
+    const { root } = await render(
+      <TimerTray timers={[{ timerId: "callback", label: "Pasta", duration: 60, onDone: (event) => first.push(event) }]} />,
+    );
+    await act(async () => root.render(
+      <TimerTray timers={[{ timerId: "callback", label: "Pasta", duration: 60, onDone: (event) => current.push(event) }]} />,
+    ));
+    await advance(1000);
+    expect(first).toEqual([]);
+    expect(current).toEqual([{ endedAt: Date.now(), first: true }]);
+    expect(tones).toBe(3);
   });
 
   it.each([

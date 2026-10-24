@@ -183,7 +183,7 @@ export function Link(props: LinkProps): JSX.Element {
       data-ouro-part="root"
       {...rest}
       href={href}
-      reloadDocument={reloadDocument || rest.download !== undefined}
+      reloadDocument={reloadDocument}
       target={external ? "_blank" : target}
       rel={external ? safeRel(rel) : rel}
       data-ouro="link"

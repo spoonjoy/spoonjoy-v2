@@ -32,7 +32,12 @@ export interface ButtonBaseProps {
    * `--ouro-action-foreground` instead when the theme sets them, with `href` too, so a theme
    * can give its actions their own colour. Only the solid look reads them: soft, outline and
    * plain primary buttons keep `--primary`, as do `Link`, checkboxes, switches and the current tab.
+   * Optional `--ouro-action-hover` and `--ouro-action-active` set its state fills without
+   * changing the state layers. `--ouro-action-disabled`, `--ouro-action-disabled-foreground`
+   * and `--ouro-action-disabled-opacity` set its disabled look; opacity defaults to 0.5.
    * shadcn's `variant="destructive"` is `tone="destructive"`, and its `variant="secondary"` is `tone="secondary"`.
+   * @claim "Optional `--ouro-action-hover` and" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > uses optional hover and active action fills for a button and a link, keeping the original state layers)
+   * @claim "`--ouro-action-disabled`, `--ouro-action-disabled-foreground` and `--ouro-action-disabled-opacity` set its disabled look" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > uses optional disabled action colours and opacity without changing other button looks or selections) verify:fileLine(registry/ouro/components/ouro/button/button.tsx, /disabled:opacity-\(--ouro-action-disabled-opacity,0\.5\)/)
    * @claim "Only the solid look reads them" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > repaints the solid primary Button, as a button and as a link, and leaves every selection on --primary)
    * @claim "A solid primary button, the" test/action-token.test.tsx verify:testExists(test/action-token.test.tsx::the action token > repaints the solid primary Button, as a button and as a link, and leaves every selection on --primary)
    * @default "primary"
@@ -130,6 +135,12 @@ export type ButtonLinkProps = ButtonBaseProps &
      */
     href: string;
     /**
+     * Loads the document instead of using the provider's router link, for a server sign-in
+     * or a resource route. A present `download` attribute does the same.
+     * @claim "Loads the document instead of using" registry/ouro/components/ouro/button/button.test.tsx verify:testExists(registry/ouro/components/ouro/button/button.test.tsx::link branch > uses the document for reloadDocument and downloads, retaining router navigation otherwise)
+     */
+    reloadDocument?: boolean | undefined;
+    /**
      * Links have no `type`. Remove `href` to make a submit button: `<Button type="submit">`.
      *
      * @claim "Links have no `type`" registry/ouro/components/ouro/button/button.test-d.ts verify:fileLine(registry/ouro/components/ouro/button/button.test-d.ts, /\{\schildren:\s"Go";\shref:\s"\/x";\stype:\s"submit"\s\}>\(\)\.not\.toExtend<ButtonProps>/)
@@ -145,6 +156,8 @@ export type ButtonButtonProps = ButtonBaseProps &
   Omit<ButtonHTMLAttributes<HTMLButtonElement>, keyof ButtonBaseProps | "type"> & {
     /** Not set: this is a `<button>`. Pass `href` to render a link instead. */
     href?: never;
+    /** Document navigation needs a link: pass `href` with `reloadDocument`. */
+    reloadDocument?: never;
     /**
      * The button's role in a form: `submit` sends it, `reset` clears it.
      * @default "button" (never submits a form by accident)
@@ -199,7 +212,13 @@ const sizes = {
 // its own colour while selection (checkboxes, switches, the current tab) keeps --primary.
 const looks = {
   solid: {
-    primary: "border-transparent bg-(--ouro-action,var(--primary)) text-(--ouro-action-foreground,var(--primary-foreground))",
+    primary:
+      "border-transparent bg-(--ouro-action,var(--primary)) text-(--ouro-action-foreground,var(--primary-foreground)) " +
+      "not-data-disabled:not-active:pointer-fine:hover:bg-(--ouro-action-hover,var(--ouro-action,var(--primary))) " +
+      "not-data-disabled:active:bg-(--ouro-action-active,var(--ouro-action,var(--primary))) " +
+      "data-disabled:bg-(--ouro-action-disabled,var(--ouro-action,var(--primary))) " +
+      "data-disabled:text-(--ouro-action-disabled-foreground,var(--ouro-action-foreground,var(--primary-foreground))) " +
+      "disabled:opacity-(--ouro-action-disabled-opacity,0.5)",
     secondary: "border-transparent bg-secondary text-secondary-foreground",
     destructive: "border-transparent bg-destructive text-destructive-foreground",
     success: "border-transparent bg-success text-success-foreground",
@@ -321,6 +340,7 @@ export function Button(props: ButtonProps): JSX.Element {
     asChild,
     leftIcon,
     rightIcon,
+    reloadDocument,
     ...rest
   } = props;
   // A tone, variant or size that is not one of Ouro UI's (a type error) warns and renders the default.
@@ -352,6 +372,8 @@ export function Button(props: ButtonProps): JSX.Element {
                 `type="${link.type}" is not a button type; use "button", "submit", "reset"`,
                 Object.hasOwn(looks.solid, link.type) ? `<Button tone="${link.type}">` : '<Button type="button">',
               ],
+            link.href === undefined &&
+              reloadDocument !== undefined && ["reloadDocument needs href", '<Button href="/path" reloadDocument>'],
             link.href !== undefined &&
               link.type !== undefined && [
                 `a link has no type, so type="${link.type}" is ignored`,
@@ -403,6 +425,7 @@ export function Button(props: ButtonProps): JSX.Element {
         data-ouro-control="button"
         data-ouro-part="root"
         {...anchorProps}
+        reloadDocument={reloadDocument}
         onClick={loading ? preventDefault : onClick}
         onAuxClick={loading ? preventDefault : anchorProps.onAuxClick}
         className={classes}

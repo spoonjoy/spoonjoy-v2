@@ -26,6 +26,8 @@ export interface TimerDoneEvent {
    * Whether this `useTimer` is the one on the page that should sound the alert: the first with
    * the timer's `timerId` to hear it, not counting `fallback` ones unless only those are mounted. When
    * a `Timer` and a `TimerTray` both show one timer, the `Timer` alerts, whichever mounted first.
+   * A hook without `onDone` reads the timer without taking the alert.
+   * @claim "A hook without `onDone` reads" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::useTimer > does not let a passive reader claim a fallback's completion event (fallback=%s))
    */
   first: boolean;
 }
@@ -95,6 +97,7 @@ type Stored =
 
 interface DoneListener {
   hear: (event: Omit<TimerDoneEvent, "first">, first: boolean) => void;
+  hasCallback: () => boolean;
   fallback: () => boolean;
 }
 
@@ -204,7 +207,7 @@ function settle(key: string, entry: Entry, alert: boolean): void {
   write(key, entry);
   notify(entry);
   if (!alert) return;
-  const listeners = [...entry.done];
+  const listeners = [...entry.done].filter((listener) => listener.hasCallback());
   // The alert is the first listener's that is not a fallback, else the first fallback's.
   const alerter = listeners.find((listener) => !listener.fallback()) ?? listeners[0];
   for (const listener of listeners) listener.hear({ endedAt: stored.endsAt }, listener === alerter);
@@ -280,6 +283,7 @@ export function useTimer({ duration, timerId, onDone, fallback }: TimerOptions):
       }
       const done: DoneListener = {
         hear: (event, first) => onDoneRef.current?.({ ...event, first }),
+        hasCallback: () => onDoneRef.current !== undefined,
         fallback: () => fallbackRef.current === true,
       };
       entry.listeners.add(onChange);

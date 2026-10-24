@@ -4,7 +4,7 @@ import { useEffect, type HTMLAttributes, type JSX, type MouseEvent, type Ref, ty
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { useDevWarnings, type DevWarning } from "~/lib/ouro/use-dev-messages";
-import { formatDuration, useTimer } from "~/lib/ouro/use-timer";
+import { formatDuration, useTimer, type TimerDoneEvent } from "~/lib/ouro/use-timer";
 import { Button } from "~/components/ouro/button/button";
 import {
   alertDone,
@@ -31,6 +31,12 @@ export interface TimerTrayItem {
   duration: number;
   /** Where the timer's own screen is, for a "Go to" link. */
   href?: string | undefined;
+  /**
+   * Called once when this timer finishes. `event.first` says whether this view owns the alert;
+   * when a Timer shares it, that Timer owns it instead.
+   * @claim "Called once when this timer finishes." registry/ouro/components/ouro/timer/timer-tray.test.tsx verify:testExists(registry/ouro/components/ouro/timer/timer-tray.test.tsx::TimerTray > reports a timer's completion once with the same alert ownership as its Timer)
+   */
+  onDone?: ((event: TimerDoneEvent) => void) | undefined;
 }
 
 /** The props TimerTray adds to the `<section>` attributes it passes through. */
@@ -102,7 +108,10 @@ function TrayRow({ item, words, silent, repeat, repeatFor, finalFocus }: TrayRow
     duration: item.duration,
     timerId: item.timerId,
     fallback: true,
-    onDone: (event) => alertDone(item.label, words.done, event, { silent, repeat, repeatFor, key: item.timerId }),
+    onDone: (event) => {
+      alertDone(item.label, words.done, event, { silent, repeat, repeatFor, key: item.timerId });
+      item.onDone?.(event);
+    },
   });
   const done = timer.status === "done";
   // Dismiss or Cancel, here or in the timer's own view, stops a repeating alert.

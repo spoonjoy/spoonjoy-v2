@@ -4,7 +4,7 @@ import { createElement, type AnchorHTMLAttributes, type ComponentProps, type JSX
 import { useOuro, type OuroLinkComponent } from "~/lib/ouro/use-ouro";
 
 // The one path every Ouro link takes (Button with href, Link): internal paths render through
-// OuroProvider's linkComponent, absolute URLs as a plain <a>.
+// OuroProvider's linkComponent, document loads and downloads as a plain <a>.
 
 /** Absolute URLs (`https:`, `mailto:`, protocol-relative) skip the router link. */
 const EXTERNAL = /^([a-z][a-z\d+.-]*:|\/\/)/i;
@@ -42,7 +42,7 @@ export type RouterLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "hre
 
 /**
  * Renders an internal `href` through `OuroProvider`'s `linkComponent` (your router's
- * link) and an absolute URL, or any `href` with `reloadDocument`, as a plain `<a>`. An absolute URL with `target="_blank"`
+ * link) and an absolute URL, or any `href` with `reloadDocument` or a download attribute, as a plain `<a>`. An absolute URL with `target="_blank"`
  * always gets `rel="noopener noreferrer"`, merged with any `rel` passed.
  *
  * @internal Shared by Button and Link; apps use those.
@@ -59,5 +59,6 @@ export function RouterLink({ href, target, rel, reloadDocument, ...props }: Rout
     target,
     rel: external && target === "_blank" ? safeRel(rel) : rel,
   } as ComponentProps<OuroLinkComponent>;
-  return external || reloadDocument ? createElement("a", linkProps) : createElement(linkComponent, linkProps);
+  const download = props.download !== undefined && props.download !== null && props.download !== false;
+  return external || reloadDocument || download ? createElement("a", linkProps) : createElement(linkComponent, linkProps);
 }
