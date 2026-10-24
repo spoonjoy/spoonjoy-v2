@@ -16,6 +16,7 @@ import { useContext, useEffect } from "react";
 import { usePostHog } from "~/lib/use-posthog";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
+import { FOLD_BOOTSTRAP } from "~/lib/fold";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 import { revalidateUnlessNetworkFailure } from "~/lib/network-failure";
 import { getConfiguredOAuthProviders, type OAuthProvider } from "~/lib/env.server";
@@ -46,6 +47,7 @@ import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
 import "./styles/tailwind.css";
+import "./styles/fold.css";
 
 /**
  * Default document title for every route. React Router only calls a route's
@@ -275,6 +277,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
         {/* Applies the kept colour scheme before the page paints, so a reload never flashes the wrong one. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: colorSchemeScript({ storageKey: THEME_STORAGE_KEY }) }} />
+        {/* Mark where a foldable screen (the iPhone Duo's inner screen) bends, before first paint, so
+            app/styles/fold.css can lay pages out as a two-page spread instead of across the fold. */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `(${FOLD_BOOTSTRAP})(window);` }} />
       </head>
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
         <ColorSchemeProvider storageKey={THEME_STORAGE_KEY}>

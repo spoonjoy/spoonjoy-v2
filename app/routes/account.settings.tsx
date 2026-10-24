@@ -226,11 +226,11 @@ export default function AccountSettings() {
         ) : null}
         {!isEditing && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="border-y border-[var(--sj-border)] py-4"><Text tone="muted">
+            <div className="min-w-0 border-y border-[var(--sj-border)] py-4"><Text tone="muted" className="[overflow-wrap:anywhere]">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
               {user.email}
             </Text></div>
-            <div className="border-y border-[var(--sj-border)] py-4"><Text tone="muted">
+            <div className="min-w-0 border-y border-[var(--sj-border)] py-4"><Text tone="muted" className="[overflow-wrap:anywhere]">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Username</span>
               {user.username}
             </Text></div>

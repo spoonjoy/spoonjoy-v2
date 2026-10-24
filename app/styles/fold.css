@@ -1,0 +1,244 @@
+/* Foldable screens (the iPhone Duo's inner screen). app/lib/fold.ts marks <html> with data-fold and
+ * the --sj-fold-start / --sj-fold-end offsets before first paint. Held like a book the fold runs
+ * down the middle (data-fold="vertical"), so a page becomes a two-page spread: nothing straddles
+ * the fold and each side keeps a margin from it. Held tall, or stood half-open on the counter, it
+ * runs across the middle (data-fold="horizontal"), and cook mode puts the step above the fold and
+ * the controls below it.
+ *
+ * These rules are unlayered so they beat Tailwind's layered utilities at every breakpoint, the
+ * same way the print rules in tailwind.css do. None of them apply without a fold. */
+
+:root[data-fold] {
+  /* Space kept clear on each side of the fold. */
+  --sj-fold-gutter: 1.75rem;
+}
+
+/* ---- Book posture: a two-page spread ------------------------------------------------------- */
+
+@media screen {
+  /* The floating dock sits on the right-hand page instead of across the fold. */
+  :root[data-fold="vertical"] [data-testid="mobile-tab-bar"] {
+    left: calc(var(--sj-fold-end) + var(--sj-fold-gutter));
+    right: max(var(--sj-fold-gutter), env(safe-area-inset-right));
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  /* Recipe masthead: the photo fills the left page, the title and actions the right. */
+  :root[data-fold="vertical"] .sj-recipe-header-layout {
+    grid-template-columns: var(--sj-fold-start) minmax(0, 1fr);
+    column-gap: 0;
+    min-height: min(100svh, 42rem);
+  }
+
+  :root[data-fold="vertical"] .sj-recipe-header-layout > :first-child {
+    height: auto;
+    min-height: 100%;
+    max-height: none;
+    margin-right: var(--sj-fold-gutter);
+  }
+
+  :root[data-fold="vertical"] .sj-recipe-header-layout > :first-child img {
+    height: 100%;
+    min-height: 0;
+    position: absolute;
+    inset: 0;
+  }
+
+  :root[data-fold="vertical"] .sj-recipe-header-body {
+    padding-left: var(--sj-fold-gutter);
+    padding-right: max(1.75rem, env(safe-area-inset-right));
+    justify-content: center;
+  }
+
+  /* Steps read down the left page and continue on the right, like a cookbook. */
+  :root[data-fold="vertical"] #steps {
+    max-width: none;
+    padding-left: max(1.75rem, env(safe-area-inset-left));
+    padding-right: max(1.75rem, env(safe-area-inset-right));
+  }
+
+  :root[data-fold="vertical"] [data-fold-columns] {
+    columns: 2;
+    column-gap: calc(var(--sj-fold-gutter) * 2);
+    /* Keep the column gap on the fold: both page margins match, so the gap is centred. */
+    column-fill: balance;
+  }
+
+  :root[data-fold="vertical"] [data-fold-columns] > * {
+    break-inside: avoid;
+  }
+
+  /* Cook mode: the step on the left page, its ingredients and scale on the right. */
+  :root[data-fold="vertical"] [data-testid="cook-mode-panel"] > div {
+    max-width: none;
+    padding-left: max(1.75rem, env(safe-area-inset-left));
+    padding-right: max(1.75rem, env(safe-area-inset-right));
+  }
+
+  :root[data-fold="vertical"] [data-testid="cook-mode-pager"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: calc(var(--sj-fold-gutter) * 2);
+    align-items: stretch;
+  }
+
+  :root[data-fold="vertical"] [data-testid="cook-mode-pager"] > * {
+    min-height: 0;
+    max-width: none;
+    overflow-y: auto;
+  }
+
+  :root[data-fold="vertical"] [data-testid="cook-mode-pager"] > article {
+    justify-content: center;
+  }
+
+  /* A page laid out as a book (data-fold-book): the left page stays put while the right one
+     scrolls. overflow: clip instead of hidden keeps the page surfaces from becoming scroll containers,
+     which would stop the left page sticking. */
+  :root[data-fold="vertical"] .sj-desktop-surface,
+  :root[data-fold="vertical"] .sj-mobile-surface,
+  :root[data-fold="vertical"] .sj-page {
+    overflow: clip;
+  }
+
+  :root[data-fold="vertical"] [data-fold-book] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: calc(var(--sj-fold-gutter) * 2);
+    align-items: start;
+    max-width: none;
+    /* The last, flexible row soaks up the height of whichever page is taller, so the rows the shorter
+       page sits in keep their own heights. */
+    grid-template-rows: repeat(6, auto) minmax(0, 1fr);
+  }
+
+  /* Everything but the left page flows down the right page. */
+  :root[data-fold="vertical"] [data-fold-book] > * {
+    grid-column: 2;
+  }
+
+  :root[data-fold="vertical"] [data-fold-book] > [data-fold-page="left"] {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    position: sticky;
+    top: 1.25rem;
+  }
+
+  :root[data-fold="vertical"] [data-fold-book] > :nth-child(2) {
+    margin-top: 0;
+  }
+
+  /* The index variant: left-page parts stack down the left page in order, and the one right-page part
+     (a long index) runs down the right beside them. */
+  :root[data-fold="vertical"] [data-fold-book="index"] > [data-fold-page="left"] {
+    grid-column: 1;
+    grid-row: auto;
+    position: static;
+  }
+
+  :root[data-fold="vertical"] [data-fold-book="index"] > [data-fold-page="right"] {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    margin-top: 0;
+  }
+
+  /* Shopping list: the header, filters and add-item forms on the left page, the checklist down the
+     right. The board unwraps (display: contents) so its controls and its list land in the page grid. */
+  :root[data-fold="vertical"] .sj-page-frame:has(> [data-testid="shopping-list-checklist-board"]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: repeat(8, auto) minmax(0, 1fr);
+    column-gap: calc(var(--sj-fold-gutter) * 2);
+    align-items: start;
+  }
+
+  :root[data-fold="vertical"] .sj-page-frame:has(> [data-testid="shopping-list-checklist-board"]) > *,
+  :root[data-fold="vertical"] [data-testid="shopping-list-checklist-board"] > * {
+    grid-column: 1;
+    max-width: none;
+    /* Auto margins would shrink a grid item to its content and centre it. */
+    margin-inline: 0;
+  }
+
+  :root[data-fold="vertical"] [data-testid="shopping-list-checklist-board"] {
+    display: contents;
+  }
+
+  :root[data-fold="vertical"] [data-testid="shopping-list-checklist-board"] > .sj-list-ruled {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    margin-top: 0;
+  }
+
+  /* A page already split in two (data-fold-halves, such as sign-in) splits at the fold. */
+  :root[data-fold="vertical"] [data-fold-halves] {
+    grid-template-columns: var(--sj-fold-start) minmax(0, 1fr);
+  }
+
+  :root[data-fold="vertical"] [data-fold-halves] > :first-child {
+    padding-right: var(--sj-fold-gutter);
+    justify-content: center;
+  }
+
+  :root[data-fold="vertical"] [data-fold-halves] > :last-child {
+    padding-left: var(--sj-fold-gutter);
+    border-top: 0;
+  }
+
+  /* Repeats of the site header's own brand line, which stays on screen on a foldable. */
+  :root[data-fold="vertical"] [data-fold-hide] {
+    display: none;
+  }
+
+  /* Dialogs, and sheets that rise from the bottom or drop from the top, open on the right-hand page
+     instead of across the fold. Side sheets already sit against one edge. */
+  :root[data-fold="vertical"] [data-ouro="dialog-viewport"],
+  :root[data-fold="vertical"] [data-ouro="sheet-viewport"][data-side="bottom"],
+  :root[data-fold="vertical"] [data-ouro="sheet-viewport"][data-side="top"] {
+    padding-left: calc(var(--sj-fold-end) + var(--sj-fold-gutter));
+  }
+
+  /* Any two-up spread marked with data-fold-spread splits exactly at the fold. */
+  :root[data-fold="vertical"] [data-fold-spread] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: calc(var(--sj-fold-gutter) * 2);
+    max-width: none;
+    padding-left: max(1.75rem, env(safe-area-inset-left));
+    padding-right: max(1.75rem, env(safe-area-inset-right));
+  }
+}
+
+/* ---- Tall and tabletop posture: the step above the fold, the controls below --------------- */
+
+@media screen {
+  :root[data-fold="horizontal"] [data-testid="cook-mode-panel"] > div {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+
+  :root[data-fold="horizontal"] [data-testid="cook-mode-pager"] {
+    display: grid;
+    /* The pager starts below the cook header; its first row ends on the fold. The header's
+       height is published by the cook panel as --sj-cook-pager-top. */
+    grid-template-rows:
+      calc(var(--sj-fold-start) - var(--sj-cook-pager-top, 0px) - var(--sj-fold-gutter))
+      minmax(0, 1fr);
+    row-gap: calc(var(--sj-fold-gutter) * 2);
+    padding-top: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+
+  :root[data-fold="horizontal"] [data-testid="cook-mode-pager"] > * {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  :root[data-fold="horizontal"] [data-testid="cook-mode-pager"] > article {
+    justify-content: center;
+    border-top: 0;
+  }
+}

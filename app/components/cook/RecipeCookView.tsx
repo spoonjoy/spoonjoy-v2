@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Button } from "~/components/ouro/button/button";
 import { NumberField } from "~/components/ouro/number-field/number-field";
 import { Pagination } from "~/components/ouro/pagination/pagination";
@@ -8,6 +8,7 @@ import { IngredientList, type Ingredient, type StepReference } from "~/component
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
 import type { CookTimer } from "~/lib/cook-timers";
+import { useViewportTopVar } from "~/hooks/use-viewport-top-var";
 import {
   SCALE_RANGE,
   clampStepIndex,
@@ -77,7 +78,7 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
           {emptyStepsAction}
         </div>
       ) : (
-        <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0">
+        <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0" data-fold-columns="">
           {recipe.steps.map((step) => (
             <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0 print:break-inside-avoid">
               <StepCard
@@ -153,6 +154,10 @@ function CookModePanel({
     ? `${pageProgressChecked} of ${pageProgressTotal} checked`
     : "No checklist items";
   const pageLabel = `Step ${activeStepIndex + 1} of ${stepCount}`;
+  // On a tall or half-open foldable, fold.css ends the step's row on the fold; it needs to know
+  // where the pager starts.
+  const pagerRef = useRef<HTMLDivElement>(null);
+  useViewportTopVar(pagerRef, "--sj-cook-pager-top");
 
   return (
     <section
@@ -183,6 +188,7 @@ function CookModePanel({
         <CookTimerTray timers={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
 
         <div
+          ref={pagerRef}
           data-testid="cook-mode-pager"
           className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-stretch lg:gap-12 lg:py-10"
         >
@@ -276,4 +282,3 @@ function CookModePanel({
     </section>
   );
 }
-

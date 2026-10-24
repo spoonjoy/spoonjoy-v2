@@ -209,6 +209,7 @@ function RecipeRow({
       // HX ShowMore lists rows without lines between them, so each row is outlined.
       variant="outline"
       href={`/recipes/${recipe.id}`}
+      className="[overflow-wrap:anywhere]"
       title={recipe.title}
       description={
         <>

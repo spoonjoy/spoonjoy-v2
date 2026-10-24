@@ -30,9 +30,9 @@ export function AuthPage({
   // "Log in") stays at level 1, preserving a single h1 per page.
   return (
     <div className="sj-page min-h-dvh">
-      <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]">
+      <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]" data-fold-halves="">
         <section className="flex flex-col justify-between px-5 py-7 sm:px-8 lg:px-12">
-          <Link href="/" tone="secondary" inline={false} className="inline-flex items-center gap-2 lg:hidden">
+          <Link href="/" data-fold-hide="" tone="secondary" inline={false} className="inline-flex items-center gap-2 lg:hidden">
             <SpoonjoyLogo size={28} />
             <span className="font-sj-display text-2xl font-semibold">SPOONJOY</span>
           </Link>

@@ -429,7 +429,9 @@ export default function CookbookDetail() {
 
   return (
     <CookbookPage>
-      <div className="mx-auto max-w-5xl">
+      {/* On a foldable held like a book, the cover sits on the left page and the contents on the right. */}
+      <div className="mx-auto max-w-5xl" data-fold-book="">
+        <div data-fold-page="left">
         <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
           <Link href="/cookbooks" tone="secondary">
             ← Back to cookbooks
@@ -448,12 +450,12 @@ export default function CookbookDetail() {
             title={cookbook.title}
             size="lg"
             description={(
-              <>
+              <Text as="div" tone="muted" className="[overflow-wrap:anywhere]">
                 By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
                 <span>
                   {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
                 </span>
-              </>
+              </Text>
             )}
           />
           <CookbookCoverArt
@@ -467,6 +469,7 @@ export default function CookbookDetail() {
             // would skip past that <h2> and trip heading-order.
             titleAsHeading={false}
           />
+        </div>
         </div>
 
         {isOwner && (
@@ -502,7 +505,7 @@ export default function CookbookDetail() {
               </h2>
             </div>
 
-            <ItemGroup aria-labelledby="cookbook-recipes-heading" ordered variant="divided" className="mt-6">
+            <ItemGroup aria-labelledby="cookbook-recipes-heading" ordered variant="divided" className="@container mt-6 [overflow-wrap:anywhere]">
               {cookbook.recipes.map((item, index) => (
                 <Item
                   key={item.id}
