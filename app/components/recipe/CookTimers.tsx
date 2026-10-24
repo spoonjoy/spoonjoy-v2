@@ -27,6 +27,7 @@ export function CookStepTimer({ timer }: { timer: CookTimer | undefined }) {
       timerId={timer.timerId}
       labels={LABELS}
       alert="repeat"
+      onDone={(event) => notifyTimeUp(timer.label, event)}
     />
   );
 }
@@ -70,6 +71,7 @@ export function CookTimerTray({
             label: timer.label,
             duration: timer.duration,
             href: onGoToStep ? `#step-${timer.stepNum}` : undefined,
+            onDone: (event) => notifyTimeUp(timer.label, event),
           }))}
       />
       <CookTimerAlerts timers={timers} />
@@ -112,10 +114,7 @@ function CookTimerAlerts({ timers }: { timers: readonly CookTimer[] }) {
 }
 
 function CookTimerWatch({ timer, onFinished }: { timer: CookTimer; onFinished: (timer: CookTimer, endedAt: number | null) => void }) {
-  const onDone = (event: TimerDoneEvent) => {
-    notifyTimeUp(timer.label, event);
-  };
-  const { status, endedAt } = useTimer({ duration: timer.duration, timerId: timer.timerId, fallback: true, onDone });
+  const { status, endedAt } = useTimer({ duration: timer.duration, timerId: timer.timerId });
   const done = status === "done";
   useEffect(() => onFinished(timer, done ? endedAt : null), [timer, done, endedAt, onFinished]);
   return null;

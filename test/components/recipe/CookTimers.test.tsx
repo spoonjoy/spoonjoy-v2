@@ -180,6 +180,66 @@ describe("cook-mode timers", () => {
     Reflect.deleteProperty(navigator, "vibrate");
   });
 
+  it("keeps sounding after the cook moves from the running timer to another step", async () => {
+    const vibrate = vi.fn(() => true);
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: vibrate });
+    try {
+      const { rerender } = render(
+        <>
+          <CookStepTimer timer={pasta} />
+          <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
+        </>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+      rerender(
+        <>
+          <CookStepTimer timer={sauce} />
+          <CookTimerTray timers={[pasta, sauce]} currentStepNum={2} />
+        </>,
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(65_000);
+      });
+      expect(screen.getByTestId("cook-timer-tray")).toHaveTextContent("Time's up");
+      expect(vibrate).toHaveBeenCalledTimes(3);
+      fireEvent.click(within(screen.getByTestId("cook-timer-tray")).getByRole("button", { name: /^Dismiss/ }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(vibrate).toHaveBeenCalledTimes(3);
+    } finally {
+      Reflect.deleteProperty(navigator, "vibrate");
+    }
+  });
+
+  it.each(["step", "tray"] as const)("sends one fresh background notification from the %s when a timer finishes", async (view) => {
+    const Notification = Object.assign(vi.fn(), { permission: "granted" });
+    setNotification(Notification);
+    setVisibility("hidden");
+    const { rerender } = render(
+      <>
+        <CookStepTimer timer={pasta} />
+        <CookTimerTray timers={[pasta, sauce]} currentStepNum={1} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
+    if (view === "tray") {
+      rerender(
+        <>
+          <CookStepTimer timer={sauce} />
+          <CookTimerTray timers={[pasta, sauce]} currentStepNum={2} />
+        </>,
+      );
+    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(65_000);
+    });
+    expect(Notification).toHaveBeenCalledExactlyOnceWith("Time's up", {
+      body: "Step 1 · Boil pasta",
+      tag: "spoonjoy-cook-timer",
+    });
+  });
+
   it("notifies a cook who allowed notifications while the tab is in the background, once and only while fresh", () => {
     const Notification = Object.assign(vi.fn(), { permission: "granted" });
     setNotification(Notification);
