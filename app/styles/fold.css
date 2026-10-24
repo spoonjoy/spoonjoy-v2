@@ -192,6 +192,14 @@
     display: none;
   }
 
+  /* Dialogs, and sheets that rise from the bottom or drop from the top, open on the right-hand page
+     instead of across the fold. Side sheets already sit against one edge. */
+  :root[data-fold="vertical"] [data-ouro="dialog-viewport"],
+  :root[data-fold="vertical"] [data-ouro="sheet-viewport"][data-side="bottom"],
+  :root[data-fold="vertical"] [data-ouro="sheet-viewport"][data-side="top"] {
+    padding-left: calc(var(--sj-fold-end) + var(--sj-fold-gutter));
+  }
+
   /* Any two-up spread marked with data-fold-spread splits exactly at the fold. */
   :root[data-fold="vertical"] [data-fold-spread] {
     display: grid;
