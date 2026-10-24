@@ -76,6 +76,13 @@ describe("SpoonsStrip", () => {
     expect(screen.getByText(/minute ago|just now|1 min/i)).toBeInTheDocument();
   });
 
+  it("keeps a next-time suggestion visible when a cook leaves no note", () => {
+    renderWithRouter(<SpoonsStrip spoons={[makeSpoon({ nextTime: "Less salt" })]} />);
+    expect(screen.getByRole("link", { name: "alice" })).toHaveAttribute("href", "/users/alice");
+    expect(screen.getByRole("listitem")).toHaveTextContent("Next time: Less salt");
+    expect(screen.queryByRole("button", { name: /show more/i })).not.toBeInTheDocument();
+  });
+
   it("links each chef to their profile by username", () => {
     renderWithRouter(<SpoonsStrip spoons={[makeSpoon()]} />);
     const link = screen.getByRole("link", { name: /alice/i });
