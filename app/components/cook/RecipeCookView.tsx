@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "~/components/button";
 import { Text } from "~/components/text";
@@ -9,6 +9,7 @@ import { StepCard } from "~/components/recipe/StepCard";
 import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
 import type { CookTimersController } from "~/hooks/use-cook-timers";
+import { useViewportTopVar } from "~/hooks/use-viewport-top-var";
 import {
   clampStepIndex,
   stepIngredients,
@@ -91,7 +92,7 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
           {emptyStepsAction}
         </div>
       ) : (
-        <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0">
+        <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0" data-fold-columns="">
           {recipe.steps.map((step) => (
             <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0 print:break-inside-avoid">
               <StepCard
@@ -174,6 +175,10 @@ function CookModePanel({
   const isFirstStep = activeStepIndex === 0;
   const isLastStep = activeStepIndex >= stepCount - 1;
   const pageLabel = `Step ${activeStepIndex + 1} of ${stepCount}`;
+  // On a tall or half-open foldable, fold.css ends the step's row on the fold; it needs to know
+  // where the pager starts.
+  const pagerRef = useRef<HTMLDivElement>(null);
+  useViewportTopVar(pagerRef, "--sj-cook-pager-top");
 
   return (
     <section
@@ -208,6 +213,7 @@ function CookModePanel({
         <CookTimerTray controller={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
 
         <div
+          ref={pagerRef}
           data-testid="cook-mode-pager"
           className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] lg:items-stretch lg:gap-12 lg:py-10"
         >

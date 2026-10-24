@@ -433,7 +433,9 @@ export default function CookbookDetail() {
 
   return (
     <CookbookPage>
-      <div className="mx-auto max-w-5xl">
+      {/* On a foldable held like a book, the cover sits on the left page and the contents on the right. */}
+      <div className="mx-auto max-w-5xl" data-fold-book="">
+        <div data-fold-page="left">
         <div className="mb-6 flex items-center justify-between gap-4 print:hidden">
           <Link
             href="/cookbooks"
@@ -452,7 +454,7 @@ export default function CookbookDetail() {
             title={cookbook.title}
             ruled={false}
           >
-            <Text className="m-0">
+            <Text className="m-0 [overflow-wrap:anywhere]">
               By <strong className="font-medium text-[var(--sj-ink)]">{cookbook.author.username}</strong> ·{" "}
               <span>
                 {cookbook.recipes.length} {cookbook.recipes.length === 1 ? "recipe" : "recipes"}
@@ -470,6 +472,7 @@ export default function CookbookDetail() {
             // would skip past that <h2> and trip heading-order.
             titleAsHeading={false}
           />
+        </div>
         </div>
 
         {isOwner && (
@@ -505,7 +508,7 @@ export default function CookbookDetail() {
               </h2>
             </div>
 
-            <ol className="mt-6 border-y border-[var(--sj-border-strong)]">
+            <ol className="@container mt-6 border-y border-[var(--sj-border-strong)]">
               {cookbook.recipes.map((item, index) => {
                 const servingsLabel = formatServingsLabel(item.recipe.servings);
 
@@ -513,10 +516,10 @@ export default function CookbookDetail() {
                   <li key={item.id} className="border-b border-[var(--sj-border)] last:border-b-0">
                     <AppLink
                       href={`/recipes/${item.recipe.id}`}
-                      className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline sm:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] sm:items-center sm:gap-5"
+                      className="group grid min-h-24 grid-cols-[2.25rem_4.75rem_minmax(0,1fr)] gap-4 py-5 no-underline @md:grid-cols-[3rem_6rem_minmax(0,1fr)_auto] @md:items-center @md:gap-5"
                       aria-label={item.recipe.title}
                     >
-                      <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">
+                      <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] @md:pt-0">
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <span className="block aspect-[4/3] overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_70%,var(--sj-panel-solid))]">
@@ -527,7 +530,7 @@ export default function CookbookDetail() {
                         )}
                       </span>
                       <span className="min-w-0 self-center">
-                        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] sm:text-3xl/8">
+                        <span className="font-sj-display block text-2xl/7 font-semibold text-[var(--sj-ink)] @md:text-3xl/8">
                           {item.recipe.title}
                         </span>
                         <CoverProvenanceBadge label={item.recipe.coverProvenanceLabel} className="mt-2" />
@@ -536,7 +539,7 @@ export default function CookbookDetail() {
                         </span>
                       </span>
                       {servingsLabel ? (
-                        <span className="font-sj-ui col-start-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:justify-self-end">
+                        <span className="font-sj-ui col-start-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] @md:col-start-auto @md:justify-self-end">
                           {servingsLabel}
                         </span>
                       ) : null}
