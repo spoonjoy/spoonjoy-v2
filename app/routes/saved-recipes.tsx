@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/saved-recipes";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
@@ -5,7 +6,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -86,21 +87,20 @@ export default function SavedRecipes() {
           ))}
         </ItemGroup>
       ) : (
-        <RuledEmptyState
+        <Empty headingLevel={2} align="start" description={<>
+          <Text tone="muted">
+            {query
+              ? "Try a different cookbook, chef, or recipe term."
+              : "Save recipes by adding them to one of your cookbooks."}
+          </Text>
+        </>}
           title={query ? "No matching saved recipes" : "No saved recipes yet"}
           action={(
             <div className="flex flex-wrap gap-2">
               <Button href="/recipes">Explore recipes</Button>
               <Button href="/cookbooks/new" variant="outline" tone="secondary">New cookbook</Button>
             </div>
-          )}
-        >
-          <Text tone="muted">
-            {query
-              ? "Try a different cookbook, chef, or recipe term."
-              : "Save recipes by adding them to one of your cookbooks."}
-          </Text>
-        </RuledEmptyState>
+          )} />
       )}
     </CookbookPage>
   );

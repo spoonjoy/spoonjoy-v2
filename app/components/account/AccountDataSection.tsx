@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import { useMemo, useState } from "react";
 import { Form as RouterForm } from "react-router";
 import { Download } from "lucide-react";
@@ -7,7 +8,7 @@ import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
-import { SettingsPanel } from "~/components/cookbook/page";
+
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export interface AccountDataSectionProps {
@@ -42,7 +43,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
 
   return (
     <div id="delete-account">
-      <SettingsPanel testId="account-data-section" title="Your data">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="account-data-section" title="Your data">
         <Text tone="muted">
           Download everything you've put into Spoonjoy: your recipes with their steps and ingredients, cookbooks,
           shopping list, cooks and photo links, as one JSON file.
@@ -116,7 +117,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
             </RouterForm>
           ) : null}
         </div>
-      </SettingsPanel>
+      </Card>
     </div>
   );
 }

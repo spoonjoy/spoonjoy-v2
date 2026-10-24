@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/cookbooks.$id";
 import { chefDisplayName } from "~/lib/username";
 import { redirect, useLoaderData, useActionData, Form as RouterForm, data, useSubmit, type AppLoadContext, type ShouldRevalidateFunctionArgs } from "react-router";
@@ -84,7 +85,7 @@ import { Link } from "~/components/ouro/link/link";
 import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { toast } from "~/lib/ouro/toast";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { CookbookCoverArt } from "~/components/cookbook/CookbookCoverArt";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
@@ -491,11 +492,11 @@ export default function CookbookDetail() {
         )}
 
         {cookbook.recipes.length === 0 ? (
-          <RuledEmptyState title="No recipes yet">
+          <Empty headingLevel={2} align="start" description={<>
             <Text tone="muted" className="mb-6">
               {isOwner ? "Add recipes to your cookbook using the owner tools below." : "This cookbook is empty."}
             </Text>
-          </RuledEmptyState>
+          </>} title="No recipes yet" />
         ) : (
           <section aria-labelledby="cookbook-recipes-heading" className="mt-10">
             <div className="max-w-3xl">

@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/my-recipes";
 import { Form, useLoaderData, useLocation } from "react-router";
 import { Plus, Search } from "lucide-react";
@@ -8,7 +9,7 @@ import { Pagination } from "~/components/ouro/pagination/pagination";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import {
   normalizeMyRecipesPage,
@@ -126,16 +127,15 @@ export default function MyRecipes() {
           ))}
         </ItemGroup>
       ) : (
-        <RuledEmptyState
-          title={query ? "No matching recipes" : "No recipes yet"}
-          action={<Button href="/recipes/new">Create recipe</Button>}
-        >
+        <Empty headingLevel={2} align="start" description={<>
           <Text tone="muted">
             {query
               ? "Try another title, ingredient, serving size, or note."
               : "Start with the dish you make most often."}
           </Text>
-        </RuledEmptyState>
+        </>}
+          title={query ? "No matching recipes" : "No recipes yet"}
+          action={<Button href="/recipes/new">Create recipe</Button>} />
       )}
 
       {(hasPreviousPage || hasNextPage) ? (

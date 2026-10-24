@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import McpPage, { loader } from "~/routes/mcp";
 import { loader as protectedResourceLoader } from "~/routes/well-known.oauth-protected-resource.mcp";
@@ -33,6 +33,10 @@ describe("/mcp landing page", () => {
     expect(pageText).toContain("JSON-RPC");
     expect(pageText).toContain("Authorization: Bearer");
     expect(pageText).toContain("claude mcp add");
+    const command = screen.getByText(/claude mcp add/);
+    const codeBlock = command.closest<HTMLElement>('[data-ouro="code-block"]');
+    expect(codeBlock).not.toBeNull();
+    if (codeBlock) expect(within(codeBlock).getByRole("button", { name: "Copy code" })).toBeInTheDocument();
     expect(pageText).toContain("Import through an agent");
     expect(pageText).toContain("create_recipe");
     expect(pageText).toContain("recipes");

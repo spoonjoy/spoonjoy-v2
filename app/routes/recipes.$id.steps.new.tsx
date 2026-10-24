@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/recipes.$id.steps.new";
 import { redirect, data, useActionData, useLoaderData, useNavigate, useFetcher } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -12,7 +13,7 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
@@ -560,7 +561,7 @@ export default function NewStep() {
 
               {ingredients.length === 0 ? (
                 // Parsed ingredients waiting for "Add All" are not "none yet".
-                !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
+                !parsedListShown && <Empty headingLevel={2} align="start" title="No ingredients added yet" />
               ) : (
                 <ItemGroup aria-label="Ingredients" variant="divided" className="mt-4">
                   {ingredients.map((ingredient, index) => (

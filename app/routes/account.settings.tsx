@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/account.settings";
 import { useLoaderData, useActionData, useRevalidator, useFetcher, Form as RouterForm } from "react-router";
 import { useState, useEffect } from "react";
@@ -20,7 +21,7 @@ import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { AccountDataSection } from "~/components/account/AccountDataSection";
-import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
@@ -174,8 +175,8 @@ export default function AccountSettings() {
 
       {/* User Info Section (the anchor brings a chef back here after "Sign in again") */}
       <div id="user-info">
-      <SettingsPanel
-        testId="user-info-section"
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4"
+        data-testid="user-info-section"
         title="User information"
         action={!isEditing ? (
             <Button variant="outline" tone="secondary" onClick={() => setIsEditing(true)}>
@@ -236,17 +237,17 @@ export default function AccountSettings() {
             </Text></div>
           </div>
         )}
-      </SettingsPanel>
+      </Card>
       </div>
 
       {/* Profile Photo Section */}
-      <SettingsPanel testId="profile-photo-section" title="Profile photo">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="profile-photo-section" title="Profile photo">
         <Text tone="muted" className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
         <ProfilePhotoField photoUrl={user.photoUrl} />
-      </SettingsPanel>
+      </Card>
 
       {/* OAuth Providers Section */}
-      <SettingsPanel testId="oauth-providers-section" title="Connected accounts">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="oauth-providers-section" title="Connected accounts">
         <Text tone="muted" className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
 
         {/* Warning when can't unlink */}
@@ -336,9 +337,9 @@ export default function AccountSettings() {
             );
           })}
         </div>
-      </SettingsPanel>
+      </Card>
 
-      <SettingsPanel testId="api-access-section" title="API and app access">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="api-access-section" title="API and app access">
         <Text tone="muted" className="mt-1">
           Revoke personal, delegated, and OAuth app access without exposing token secrets.
         </Text>
@@ -425,10 +426,10 @@ export default function AccountSettings() {
             )}
           </div>
         </div>
-      </SettingsPanel>
+      </Card>
 
       {/* Passkeys Section */}
-      <SettingsPanel testId="passkeys-section" title="Passkeys">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="passkeys-section" title="Passkeys">
         <Text tone="muted" className="mt-1">
           Sign in without a password using your device's biometrics or a security key.
         </Text>
@@ -527,10 +528,10 @@ export default function AccountSettings() {
         <div className="mt-4">
           <AddPasskeyButton onAdded={revalidator.revalidate} />
         </div>
-      </SettingsPanel>
+      </Card>
 
       {/* Password Section */}
-      <SettingsPanel testId="password-section" title="Password">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="password-section" title="Password">
         <Text tone="muted" className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
         {passwordAnswer?.success && passwordAnswer.message ? (
           <div role="status" className="mt-4 text-sm text-[var(--sj-herb)]">{passwordAnswer.message}</div>
@@ -655,7 +656,7 @@ export default function AccountSettings() {
             </div>
           )}
         </div>
-      </SettingsPanel>
+      </Card>
 
       <NotificationsSection
         initiallySubscribed={notifications.pushSubscribed}

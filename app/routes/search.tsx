@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/search";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
@@ -9,7 +10,7 @@ import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Tabs } from "~/components/ouro/tabs/tabs";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -246,11 +247,11 @@ export default function Search() {
                 ))}
               </ItemGroup>
             ) : (
-              <RuledEmptyState title="No matches yet">
+              <Empty headingLevel={2} align="start" description={<>
                 <Text tone="muted" className="mx-auto mt-2 max-w-xl">
                   Broaden the scope, try an ingredient, or search for a chef username.
                 </Text>
-              </RuledEmptyState>
+              </>} title="No matches yet" />
             )}
           </section>
         </div>

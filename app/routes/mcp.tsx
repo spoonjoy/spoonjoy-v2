@@ -1,5 +1,6 @@
+import { Heading } from "~/components/ouro/text/heading";
+import { CodeBlock } from "~/components/ouro/code-block/code-block";
 import type { Route } from "./+types/mcp";
-import type { ReactNode } from "react";
 import { useLoaderData } from "react-router";
 import {
   BookOpen,
@@ -24,7 +25,7 @@ import {
 import { Button } from "~/components/ouro/button/button";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
-import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 /**
@@ -145,13 +146,7 @@ const setupSteps = [
   },
 ] as const;
 
-function CodeBlock({ children }: { children: string }) {
-  return (
-    <pre className="overflow-x-auto border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 text-sm/6 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow-soft)]">
-      <code className="font-mono whitespace-pre">{children}</code>
-    </pre>
-  );
-}
+
 
 function FactRow({ label, value }: { label: string; value: string }) {
   return (
@@ -197,7 +192,7 @@ export default function McpPage() {
         </section>
 
         <section>
-          <CookbookSectionTitle>Where MCP Fits</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">Where MCP Fits</Heading>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
             {taskGradient.map((item) => {
               const Icon = item.icon;
@@ -234,7 +229,7 @@ export default function McpPage() {
               or an OAuth access token bound to this resource.
             </p>
             <div className="mt-6">
-              <CodeBlock>{endpoint}</CodeBlock>
+              <CodeBlock code={endpoint} />
             </div>
           </div>
 
@@ -246,7 +241,7 @@ export default function McpPage() {
         </section>
 
         <section>
-          <CookbookSectionTitle>What It Can Use</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">What It Can Use</Heading>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {capabilities.map((item) => {
               const Icon = item.icon;
@@ -268,7 +263,7 @@ export default function McpPage() {
         </section>
 
         <section>
-          <CookbookSectionTitle>How To Connect</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">How To Connect</Heading>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
             {setupSteps.map((step, index) => {
               const Icon = step.icon;
@@ -290,13 +285,11 @@ export default function McpPage() {
 
         <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]">
           <div>
-            <CookbookSectionTitle>Claude Code</CookbookSectionTitle>
+            <Heading className="my-5" level={2} size="xl">Claude Code</Heading>
             <p className="mb-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
               After you create a Spoonjoy token, add the remote server with an explicit bearer header:
             </p>
-            <CodeBlock>
-              {'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'}
-            </CodeBlock>
+            <CodeBlock code={'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'} />
           </div>
 
           {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a

@@ -1,3 +1,5 @@
+import { Heading } from "~/components/ouro/text/heading";
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/recipes.$id.edit";
 import { Form, redirect, data, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit, useFetcher } from "react-router";
 import { getCloudflareEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -14,7 +16,7 @@ import { isD1GuardFailure } from "~/lib/d1-write.server";
 import { requireUserId } from "~/lib/session.server";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Link } from "~/components/ouro/link/link";
-import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { RecipeBuilder, type RecipeBuilderData } from "~/components/recipe/RecipeBuilder";
 import { ImportedRecipeNotice } from "~/components/recipe/RecipeImportPanel";
@@ -658,14 +660,14 @@ export default function EditRecipe() {
 
         <section aria-label="Recipe steps" className="mt-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <CookbookSectionTitle className="my-0 flex-1">Recipe Steps</CookbookSectionTitle>
+            <Heading level={2} size="xl" className="my-5 my-0 flex-1">Recipe Steps</Heading>
             <Link href={`/recipes/${recipe.id}/steps/new`} className="inline-flex min-h-11 items-center">+ Add step</Link>
           </div>
 
           {recipe.steps.length === 0 ? (
-            <RuledEmptyState title="No steps yet.">
+            <Empty headingLevel={2} align="start" description={<>
               Add the first step when you are ready to turn the dish into a cooking path.
-            </RuledEmptyState>
+            </>} title="No steps yet." />
           ) : (
             <div className="sj-list-ruled mt-5">
               {recipe.steps.map((step, index) => {

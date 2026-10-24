@@ -1,10 +1,11 @@
+import { Empty } from '~/components/ouro/empty/empty'
 import { UtensilsCrossed } from 'lucide-react'
 import { Heading } from '~/components/ouro/text/heading'
 import { Item } from '~/components/ouro/item/item'
 import { ItemGroup } from '~/components/ouro/item/item-group'
 import { Text } from '~/components/ouro/text/text'
 import { Button } from '~/components/ouro/button/button'
-import { RuledEmptyState } from '~/components/cookbook/page'
+
 import { formatServingsLabel } from '~/lib/quantity'
 import { CoverProvenanceBadge } from '~/components/recipe/CoverProvenanceBadge'
 import { listImageProps } from '~/lib/image-loading'
@@ -42,7 +43,7 @@ export function RecipeGrid({
 }: RecipeGridProps) {
   if (recipes.length === 0) {
     return (
-      <RuledEmptyState title={emptyTitle}>
+      <Empty headingLevel={2} align="start" description={<>
         <Text tone="muted" className="mt-2">{emptyMessage}</Text>
         {emptyCtaHref ? (
           <div className="mt-4">
@@ -51,7 +52,7 @@ export function RecipeGrid({
             </Button>
           </div>
         ) : null}
-      </RuledEmptyState>
+      </>} title={emptyTitle} />
     )
   }
 

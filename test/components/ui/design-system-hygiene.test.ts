@@ -201,8 +201,8 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const stepNew = readSourceFile("app/routes/recipes.$id.steps.new.tsx");
 
     expect(css).not.toContain(".sj-form-section {\n  border");
-    expect(cookbookPage).toContain('className="border-b border-[var(--sj-border)] py-6"');
-    expect(cookbookPage).not.toContain('className="border-t border-[var(--sj-border)] py-6"');
+    expect(cookbookPage).not.toMatch(/\bborder(?:-[\w[\]()-]+)?\b/);
+    expect(cookbookPage).not.toContain("SettingsPanel");
     expect(shoppingList).not.toContain('<header className="border-b border-[var(--sj-border-strong)] pb-6">');
     expect(stepNew).not.toContain("Step Number:");
   });

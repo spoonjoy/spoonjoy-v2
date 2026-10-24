@@ -1,3 +1,4 @@
+import { Heading } from "~/components/ouro/text/heading";
 import { useLoaderData } from "react-router";
 import { useEffect, useRef, type ReactNode } from "react";
 import { usePostHog } from "~/lib/use-posthog";
@@ -21,7 +22,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 const DEVELOPER_SCOPES = [
@@ -500,11 +501,11 @@ function MethodBadge({ method }: { method: string }) {
 function SectionShell({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section id={sectionId(title)} className="scroll-mt-6 border-t border-[var(--sj-border-strong)] py-8">
-      <CookbookSectionTitle className="my-0">
+      <Heading level={2} size="xl" className="my-5 my-0">
         <Link href={`#${sectionId(title)}`} tone="secondary">
           {title}
         </Link>
-      </CookbookSectionTitle>
+      </Heading>
       <div className="mt-5">{children}</div>
     </section>
   );

@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/users.$identifier";
 import { chefDisplayName } from "~/lib/username";
 import { Form, redirect, useLoaderData } from "react-router";
@@ -21,7 +22,7 @@ import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
-import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 
 type RecentSpoonItem = {
   id: string;
@@ -327,11 +328,11 @@ export default function UserProfile() {
           </section>
         </div>
 
-        <SettingsPanel title="Recent cooks">
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Recent cooks">
           <div className="mt-4">
             <SpoonsStrip spoons={recentSpoons} showRecipe />
           </div>
-        </SettingsPanel>
+        </Card>
 
       </section>
     </CookbookPage>

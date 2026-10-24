@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/cookbooks._index";
 import { useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
@@ -5,7 +6,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -93,16 +94,15 @@ export default function CookbooksIndexRedirect() {
           })}
         </ItemGroup>
       ) : (
-        <RuledEmptyState
-          title={query ? "No matching cookbooks" : "No cookbooks yet"}
-          action={<Button href="/cookbooks/new">Create cookbook</Button>}
-        >
+        <Empty headingLevel={2} align="start" description={<>
           <Text tone="muted">
             {query
               ? "Try another cookbook title or recipe title."
               : "Group recipes into a shelf you can find again."}
           </Text>
-        </RuledEmptyState>
+        </>}
+          title={query ? "No matching cookbooks" : "No cookbooks yet"}
+          action={<Button href="/cookbooks/new">Create cookbook</Button>} />
       )}
     </CookbookPage>
   );

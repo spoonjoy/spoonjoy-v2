@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLoaderData } from "react-router";
 import { usePostHog } from "~/lib/use-posthog";
 import { Braces, CheckCircle2, KeyRound, Play, RefreshCw, Search, Terminal, XCircle } from "lucide-react";
@@ -22,7 +22,7 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Button } from "~/components/ouro/button/button";
-import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
@@ -563,7 +563,7 @@ export function ResponsePanel({ response, onClear }: { response: PlaygroundRespo
   return (
     <section aria-label="Response" className="sj-on-charcoal border border-[var(--sj-border-strong)] bg-[var(--sj-photo-charcoal)] p-5 text-[var(--sj-on-photo)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <CookbookSectionTitle className="my-0 text-[var(--sj-on-photo)]">Response</CookbookSectionTitle>
+        <Heading style={{ "--foreground": "var(--sj-on-photo)" } as CSSProperties} level={2} size="xl" className="my-5 my-0">Response</Heading>
         {response ? (
           <div className="flex flex-wrap items-center gap-3">
             <CopyButton variant="plain" value={response.body} label="Copy response" />
@@ -1478,7 +1478,7 @@ export default function DeveloperPlayground() {
 
       <section className="grid gap-6 border-t border-[var(--sj-border-strong)] py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div>
-          <CookbookSectionTitle className="my-0">OAuth Scope Mapping</CookbookSectionTitle>
+          <Heading level={2} size="xl" className="my-5 my-0">OAuth Scope Mapping</Heading>
           <div className="mt-4 grid gap-3">
             {Object.entries(manifest.oauthScopeMap).map(([oauthScope, restScopes]) => (
               <div key={oauthScope} className="border-b border-[var(--sj-border)] pb-3">
@@ -1489,7 +1489,7 @@ export default function DeveloperPlayground() {
           </div>
         </div>
         <div>
-          <CookbookSectionTitle className="my-0">Current API Boundary</CookbookSectionTitle>
+          <Heading level={2} size="xl" className="my-5 my-0">Current API Boundary</Heading>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
               <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Available now</p>

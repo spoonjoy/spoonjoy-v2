@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/recipes._index";
 import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
@@ -7,7 +8,7 @@ import { Heading } from "~/components/ouro/text/heading";
 import { Item } from "~/components/ouro/item/item";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { useUrlSyncedInput } from "~/hooks/useUrlSyncedInput";
@@ -171,14 +172,7 @@ export default function RecipesIndex() {
               noMoreLabel={`Showing ${recipes.length} recipes`}
             />
           ) : (
-            <RuledEmptyState
-              title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
-              action={hasQuery ? (
-                <Button href="/recipes" variant="outline" tone="secondary">Clear search</Button>
-              ) : after ? (
-                <Button href="/recipes" variant="outline" tone="secondary">Back to the newest</Button>
-              ) : null}
-            >
+            <Empty headingLevel={2} align="start" description={<>
               <Text tone="muted" className="mx-auto mt-2 max-w-xl">
                 {hasQuery
                   ? "Try a broader ingredient, dish name, or chef."
@@ -186,7 +180,13 @@ export default function RecipesIndex() {
                     ? "You've reached the oldest public recipe."
                     : "The public recipe box will fill as kitchens publish their first recipes."}
               </Text>
-            </RuledEmptyState>
+            </>}
+              title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
+              action={hasQuery ? (
+                <Button href="/recipes" variant="outline" tone="secondary">Clear search</Button>
+              ) : after ? (
+                <Button href="/recipes" variant="outline" tone="secondary">Back to the newest</Button>
+              ) : null} />
           )}
         </div>
       </section>

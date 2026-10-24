@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/cookbooks.new";
 import { Form as RouterForm, redirect, data, useActionData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -8,7 +9,7 @@ import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { useFormErrors } from "~/hooks/use-form-errors";
-import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import {
   D1_WRITE_UNAVAILABLE_CODE,
@@ -154,7 +155,7 @@ export default function NewCookbook() {
           </Link>
         </PageHeader>
 
-        <SettingsPanel title="Cookbook title">
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Cookbook title">
           <Form method="post" errors={formErrors} render={<RouterForm />} className="gap-6">
             <input type="hidden" name="cookbookToken" value={cookbookToken} />
             <TextField
@@ -173,7 +174,7 @@ export default function NewCookbook() {
               </Button>
             </div>
           </Form>
-        </SettingsPanel>
+        </Card>
       </div>
     </CookbookPage>
   );

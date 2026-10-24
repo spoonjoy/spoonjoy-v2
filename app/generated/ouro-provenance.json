@@ -32,6 +32,7 @@
       "app/lib/d1-write.server.ts",
       "app/lib/db.server.ts",
       "app/lib/env.server.ts",
+      "app/lib/fold.ts",
       "app/lib/gemini-text.server.ts",
       "app/lib/hash-only-revalidation.ts",
       "app/lib/ingredient-parse.server.ts",
@@ -920,6 +921,7 @@
         "app/components/recipe/IngredientList.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
+        "app/hooks/use-viewport-top-var.ts",
         "app/lib/build-info.server.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cook/local-cook-controller.ts",
@@ -1030,6 +1032,7 @@
       "components": [
         "badge",
         "button",
+        "empty",
         "heading",
         "item",
         "item-group",
@@ -1043,6 +1046,9 @@
           "app/routes/search.tsx"
         ],
         "button": [
+          "app/routes/search.tsx"
+        ],
+        "empty": [
           "app/routes/search.tsx"
         ],
         "heading": [
@@ -1093,6 +1099,7 @@
       ],
       "components": [
         "button",
+        "empty",
         "item",
         "item-group",
         "link",
@@ -1106,6 +1113,9 @@
       ],
       "renders": {
         "button": [
+          "app/routes/my-recipes.tsx"
+        ],
+        "empty": [
           "app/routes/my-recipes.tsx"
         ],
         "item": [
@@ -1189,6 +1199,7 @@
       ],
       "components": [
         "button",
+        "empty",
         "item",
         "item-group",
         "link",
@@ -1202,6 +1213,10 @@
       ],
       "renders": {
         "button": [
+          "app/routes/my-recipes.tsx",
+          "app/routes/saved-recipes.tsx"
+        ],
+        "empty": [
           "app/routes/my-recipes.tsx",
           "app/routes/saved-recipes.tsx"
         ],
@@ -1264,6 +1279,7 @@
         "app/lib/username.ts"
       ],
       "components": [
+        "empty",
         "item",
         "item-group",
         "local-date",
@@ -1271,6 +1287,9 @@
         "text"
       ],
       "renders": {
+        "empty": [
+          "app/routes/chefs.tsx"
+        ],
         "item": [
           "app/routes/chefs.tsx"
         ],
@@ -1350,6 +1369,7 @@
       "components": [
         "badge",
         "button",
+        "empty",
         "heading",
         "item",
         "show-more",
@@ -1364,6 +1384,9 @@
           "app/components/recipe/CoverProvenanceBadge.tsx"
         ],
         "button": [
+          "app/routes/recipes._index.tsx"
+        ],
+        "empty": [
           "app/routes/recipes._index.tsx"
         ],
         "heading": [
@@ -1572,6 +1595,7 @@
         "app/hooks/use-form-errors.ts",
         "app/hooks/use-route-cook-controller.ts",
         "app/hooks/use-screen-wake-lock.ts",
+        "app/hooks/use-viewport-top-var.ts",
         "app/hooks/use-write-token.ts",
         "app/lib/ai-placeholder-cover.server.ts",
         "app/lib/analytics-server.ts",
@@ -1879,9 +1903,11 @@
         "alert",
         "button",
         "confirm-dialog",
+        "empty",
         "field",
         "file-field",
         "form",
+        "heading",
         "image-field",
         "link",
         "page-header",
@@ -1911,6 +1937,9 @@
           "app/components/recipe/StepList.tsx",
           "app/routes/recipes.$id.edit.tsx"
         ],
+        "empty": [
+          "app/routes/recipes.$id.edit.tsx"
+        ],
         "field": [
           "app/components/recipe/ManualIngredientInput.tsx",
           "app/components/recipe/ParsedIngredientRow.tsx",
@@ -1922,6 +1951,9 @@
         "form": [
           "app/components/recipe/RecipeBuilder.tsx",
           "app/components/recipe/RecipeImportPanel.tsx"
+        ],
+        "heading": [
+          "app/routes/recipes.$id.edit.tsx"
         ],
         "image-field": [
           "app/components/recipe/RecipeBuilder.tsx"
@@ -2010,6 +2042,7 @@
       "components": [
         "alert",
         "button",
+        "empty",
         "field",
         "fieldset",
         "form",
@@ -2032,6 +2065,9 @@
           "app/components/recipe/ManualIngredientInput.tsx",
           "app/components/recipe/ParsedIngredientList.tsx",
           "app/components/recipe/ParsedIngredientRow.tsx",
+          "app/routes/recipes.$id.steps.new.tsx"
+        ],
+        "empty": [
           "app/routes/recipes.$id.steps.new.tsx"
         ],
         "field": [
@@ -2127,7 +2163,9 @@
       "components": [
         "alert",
         "button",
+        "card",
         "confirm-dialog",
+        "empty",
         "field",
         "fieldset",
         "form",
@@ -2153,7 +2191,13 @@
           "app/components/recipe/ParsedIngredientRow.tsx",
           "app/routes/recipes.$id.steps.$stepId.edit.tsx"
         ],
+        "card": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
         "confirm-dialog": [
+          "app/routes/recipes.$id.steps.$stepId.edit.tsx"
+        ],
+        "empty": [
           "app/routes/recipes.$id.steps.$stepId.edit.tsx"
         ],
         "field": [
@@ -2256,6 +2300,7 @@
       ],
       "components": [
         "button",
+        "empty",
         "item",
         "item-group",
         "link",
@@ -2269,6 +2314,10 @@
       ],
       "renders": {
         "button": [
+          "app/routes/cookbooks._index.tsx",
+          "app/routes/my-recipes.tsx"
+        ],
+        "empty": [
           "app/routes/cookbooks._index.tsx",
           "app/routes/my-recipes.tsx"
         ],
@@ -2333,6 +2382,7 @@
       ],
       "components": [
         "button",
+        "card",
         "form",
         "link",
         "page-header",
@@ -2340,6 +2390,9 @@
       ],
       "renders": {
         "button": [
+          "app/routes/cookbooks.new.tsx"
+        ],
+        "card": [
           "app/routes/cookbooks.new.tsx"
         ],
         "form": [
@@ -2417,6 +2470,7 @@
         "button",
         "collapsible",
         "confirm-dialog",
+        "empty",
         "form",
         "item",
         "item-group",
@@ -2441,6 +2495,9 @@
           "app/routes/cookbooks.$id.tsx"
         ],
         "confirm-dialog": [
+          "app/routes/cookbooks.$id.tsx"
+        ],
+        "empty": [
           "app/routes/cookbooks.$id.tsx"
         ],
         "form": [
@@ -2524,7 +2581,9 @@
         "button",
         "checklist",
         "confirm-dialog",
+        "empty",
         "field",
+        "heading",
         "link",
         "native-select",
         "segmented-control",
@@ -2542,7 +2601,13 @@
         "confirm-dialog": [
           "app/routes/shopping-list.tsx"
         ],
+        "empty": [
+          "app/routes/shopping-list.tsx"
+        ],
         "field": [
+          "app/routes/shopping-list.tsx"
+        ],
+        "heading": [
           "app/routes/shopping-list.tsx"
         ],
         "link": [
@@ -2630,6 +2695,7 @@
       ],
       "components": [
         "button",
+        "card",
         "checkbox",
         "dialog",
         "fieldset",
@@ -2647,6 +2713,11 @@
           "app/components/auth/AddPasskeyButton.tsx",
           "app/components/notifications-section.tsx",
           "app/components/oauth.tsx",
+          "app/routes/account.settings.tsx"
+        ],
+        "card": [
+          "app/components/account/AccountDataSection.tsx",
+          "app/components/notifications-section.tsx",
           "app/routes/account.settings.tsx"
         ],
         "checkbox": [
@@ -2727,6 +2798,7 @@
       "components": [
         "badge",
         "button",
+        "heading",
         "link",
         "page-header",
         "text"
@@ -2736,6 +2808,9 @@
           "app/routes/developers.tsx"
         ],
         "button": [
+          "app/routes/developers.tsx"
+        ],
+        "heading": [
           "app/routes/developers.tsx"
         ],
         "link": [
@@ -2902,9 +2977,11 @@
           "app/routes/users.$identifier.tsx"
         ],
         "card": [
-          "app/components/pantry/CookbookCard.tsx"
+          "app/components/pantry/CookbookCard.tsx",
+          "app/routes/users.$identifier.tsx"
         ],
         "empty": [
+          "app/components/pantry/RecipeGrid.tsx",
           "app/components/recipe/SpoonsStrip.tsx"
         ],
         "heading": [
@@ -3159,6 +3236,8 @@
       "components": [
         "badge",
         "button",
+        "code-block",
+        "heading",
         "link",
         "page-header"
       ],
@@ -3167,6 +3246,12 @@
           "app/routes/mcp.tsx"
         ],
         "button": [
+          "app/routes/mcp.tsx"
+        ],
+        "code-block": [
+          "app/routes/mcp.tsx"
+        ],
+        "heading": [
           "app/routes/mcp.tsx"
         ],
         "link": [

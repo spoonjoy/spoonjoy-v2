@@ -1,3 +1,5 @@
+import { Empty } from "~/components/ouro/empty/empty";
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/recipes.$id.steps.$stepId.edit";
 import { redirect, data, useActionData, useFetcher, useLoaderData, useSearchParams, useSubmit } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
@@ -28,7 +30,7 @@ import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Text } from "~/components/ouro/text/text";
 import { toast } from "~/lib/ouro/toast";
-import { CookbookPage, RuledEmptyState, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
@@ -771,7 +773,7 @@ export default function EditStep() {
           {stepDeletionError ? <Alert tone="destructive" title={stepDeletionError} className="mb-4" /> : null}
         </div>
 
-        <SettingsPanel
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4"
           title="Ingredients"
           action={
             <Button onClick={() => setShowIngredientForm(!showIngredientForm)}>
@@ -821,7 +823,7 @@ export default function EditStep() {
 
           {step.ingredients.length === 0 ? (
             // Parsed ingredients waiting for "Add All" are not "none yet".
-            !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
+            !parsedListShown && <Empty headingLevel={2} align="start" title="No ingredients added yet" />
           ) : (
             <ItemGroup aria-label="Ingredients" variant="divided">
               {step.ingredients.map((ingredient) => (
@@ -844,7 +846,7 @@ export default function EditStep() {
               ))}
             </ItemGroup>
           )}
-        </SettingsPanel>
+        </Card>
 
         {/* Remove ingredient confirmation dialog */}
         <ConfirmDialog

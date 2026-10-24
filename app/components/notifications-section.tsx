@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import { useEffect, useState } from "react";
 import { Text } from "~/components/ouro/text/text";
 import { Button } from "~/components/ouro/button/button";
@@ -11,7 +12,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from "~/lib/push-client";
-import { SettingsPanel } from "~/components/cookbook/page";
+
 
 export interface NotificationPreferenceFlags {
   notifySpoonOnMyRecipe: boolean;
@@ -70,11 +71,11 @@ export function NotificationsSection({
 
   if (!support.supported) {
     return (
-      <SettingsPanel title="Notifications">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Notifications">
         <Text tone="muted" className="mt-2">
           Not supported on this browser ({support.reason}).
         </Text>
-      </SettingsPanel>
+      </Card>
     );
   }
 
@@ -136,7 +137,7 @@ export function NotificationsSection({
   }
 
   return (
-    <SettingsPanel title="Notifications">
+    <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Notifications">
       {subscribed ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <Text tone="muted">Notifications enabled.</Text>
@@ -176,6 +177,6 @@ export function NotificationsSection({
           </Button>
         )}
       >{null}</Dialog>
-    </SettingsPanel>
+    </Card>
   );
 }

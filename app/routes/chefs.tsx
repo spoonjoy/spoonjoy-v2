@@ -1,3 +1,4 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/chefs";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
@@ -5,7 +6,7 @@ import { Users } from "lucide-react";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
@@ -74,9 +75,9 @@ export default function Chefs() {
             ))}
           </div>
         ) : (
-          <RuledEmptyState title="No chef activity yet">
+          <Empty headingLevel={2} align="start" description={<>
             <Text tone="muted">Cook, fork or save another chef's recipe, and that chef shows up here.</Text>
-          </RuledEmptyState>
+          </>} title="No chef activity yet" />
         )}
       </section>
     </CookbookPage>

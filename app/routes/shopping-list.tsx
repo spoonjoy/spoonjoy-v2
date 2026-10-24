@@ -1,3 +1,5 @@
+import { Heading } from "~/components/ouro/text/heading";
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/shopping-list";
 import { formatAmount } from "~/lib/quantity";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -21,7 +23,7 @@ import { NativeSelect } from "~/components/ouro/select/native-select";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
-import { CookbookPage, CookbookSectionTitle, RuledEmptyState } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 import { ChecklistItem, ChecklistRoot } from "~/components/ouro/checklist/checklist-parts";
 import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
 import { useWriteToken } from "~/hooks/use-write-token";
@@ -373,17 +375,17 @@ export default function ShoppingList() {
           // "Add from recipe" below only lists the user's own recipes, so a new user gets a way
           // to the public recipes, where any recipe's ingredients can be added. The link sits in
           // the sentence, not in a button row, so the Add button still clears the dock on a phone.
-          <RuledEmptyState title="Your shopping list is empty">
+          <Empty headingLevel={2} align="start" description={<>
             <Text tone="muted" className="mt-2">
               <Link href="/recipes">Explore recipes</Link> to add a recipe&apos;s ingredients, or add items one at a time below.
             </Text>
-          </RuledEmptyState>
+          </>} title="Your shopping list is empty" />
         ) : filteredItems.length === 0 ? (
-          <RuledEmptyState title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"}>
+          <Empty headingLevel={2} align="start" description={<>
             <Text tone="muted" className="mt-2">
               Switch views or categories to see the rest of your shopping list.
             </Text>
-          </RuledEmptyState>
+          </>} title={viewMode === "basket" ? "Nothing in the basket yet" : "Nothing left in this view"} />
         ) : (
           /* One checklist per aisle; each row swipes (or opens its actions menu) to delete. */
           <div ref={boardRef} className="mt-6 grid gap-6">
@@ -428,7 +430,7 @@ export default function ShoppingList() {
 
       {/* Add Item Form */}
       <div id="add-item" className="border-b border-[var(--sj-border)] py-6">
-        <CookbookSectionTitle>Add item</CookbookSectionTitle>
+        <Heading className="my-5" level={2} size="xl">Add item</Heading>
         <Form method="post" className="mt-4" ref={addItemFormRef}>
           <input type="hidden" name="intent" value="addItem" />
           <input type="hidden" name="writeToken" value={addItemToken} />
@@ -480,7 +482,7 @@ export default function ShoppingList() {
       {/* Add from Recipe */}
       {/* istanbul ignore next -- @preserve */ recipes.length > 0 && (
         <div className="border-b border-[var(--sj-border)] py-6">
-          <CookbookSectionTitle>Add from recipe</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">Add from recipe</Heading>
           <Form method="post" className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-end">
             <input type="hidden" name="intent" value="addFromRecipe" />
             <input type="hidden" name="writeToken" value={addRecipeToken} />
