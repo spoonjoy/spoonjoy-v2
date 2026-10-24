@@ -163,4 +163,13 @@ describe("soonestRunningCookTimerSeconds", () => {
     vi.spyOn(window, "localStorage", "get").mockReturnValue({ length: 1, key: () => null } as unknown as Storage);
     expect(soonestRunningCookTimerSeconds("r1", NOW)).toBeNull();
   });
+
+  it("skips a timer whose value is gone by the time it is read", () => {
+    vi.spyOn(window, "localStorage", "get").mockReturnValue({
+      length: 1,
+      key: () => "ouro-timer:spoonjoy-cook-timer:r1:1",
+      getItem: () => null,
+    } as unknown as Storage);
+    expect(soonestRunningCookTimerSeconds("r1", NOW)).toBeNull();
+  });
 });
