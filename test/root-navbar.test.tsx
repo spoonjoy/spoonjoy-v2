@@ -6,14 +6,14 @@ import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
 import type { OAuthProvider } from "~/lib/env.server";
 import { AppNavbar } from "~/root";
 
-function renderNavbar(userId: string | null = null, path = "/", oauthProviders: OAuthProvider[] = []) {
+function renderNavbar(userId: string | null = null, path = "/", oauthProviders: OAuthProvider[] = [], cookingNowCount?: number) {
   const router = createMemoryRouter(
     [
       {
         path: "*",
         element: (
           <ColorSchemeProvider storageKey="spoonjoy-theme">
-            <AppNavbar userId={userId} oauthProviders={oauthProviders} />
+            <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
           </ColorSchemeProvider>
         ),
       },
@@ -162,5 +162,18 @@ describe("AppNavbar", () => {
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     expect(within(nav).getByRole("link", { name: "Recipes", exact: true })).not.toHaveAttribute("aria-current");
     expect(within(nav).getByRole("link", { name: "Kitchen" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows the Cooking pill, signed in or out, only with something in progress", () => {
+    const { unmount } = renderNavbar("user-1", "/recipes", [], 3);
+    expect(screen.getByRole("link", { name: "Cooking · 3" })).toHaveAttribute("href", "/#cooking-now");
+    unmount();
+
+    const signedOut = renderNavbar(null, "/", [], 1);
+    expect(screen.getByRole("link", { name: "Cooking · 1" })).toBeInTheDocument();
+    signedOut.unmount();
+
+    renderNavbar("user-1");
+    expect(screen.queryByTestId("cooking-now-pill")).toBeNull();
   });
 });

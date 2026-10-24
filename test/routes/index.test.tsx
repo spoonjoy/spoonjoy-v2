@@ -313,6 +313,8 @@ describe("Kitchen Index Route", () => {
         kitchenUser: null,
         recipes: [],
         cookbooks: [],
+        cookingNow: [],
+        renderedAt: expect.any(Number),
       });
     });
     it("returns an empty kitchen when the signed-in user is deleted after the session check", async () => {
@@ -335,6 +337,8 @@ describe("Kitchen Index Route", () => {
         kitchenUser: null,
         recipes: [],
         cookbooks: [],
+        cookingNow: [],
+        renderedAt: expect.any(Number),
       });
     });
   });
@@ -821,6 +825,130 @@ describe("Kitchen Index Route", () => {
       await screen.findByText("e2e Chocolate Cake");
       expect(screen.getByRole("link", { name: /e2e Chocolate Cake/ })).toHaveAttribute("href", "/recipes/recipe-qa-title");
       expect(screen.getByRole("link", { name: /Pasta \(variation 2\)/ })).toHaveAttribute("href", "/recipes/recipe-variation");
+    });
+  });
+
+  describe("Cooking now", () => {
+    async function signedInAs(userId: string) {
+      const session = await sessionStorage.getSession();
+      session.set("userId", userId);
+      const headers = new Headers();
+      headers.set("Cookie", (await sessionStorage.commitSession(session)).split(";")[0]);
+      return headers;
+    }
+
+    async function cookWithRecipes() {
+      const cook = await createUser(db, faker.internet.email(), `cook_${faker.string.alphanumeric(8)}`, "testPassword123");
+      const plain = await db.recipe.create({ data: { title: "Plain Soup", chefId: cook.id } });
+      const pictured = await db.recipe.create({ data: { title: "Pictured Bread", chefId: cook.id } });
+      const cover = await db.recipeCover.create({
+        data: { recipeId: pictured.id, imageUrl: "/photos/bread.jpg", sourceType: "chef-upload" },
+      });
+      await db.recipe.update({ where: { id: pictured.id }, data: { activeCoverId: cover.id } });
+      const now = Date.now();
+      const row = { userId: cook.id, attemptId: "a", revision: 1, listed: true, activeStepIndex: 1, stepCount: 3, checkedCount: 1, totalCount: 4 };
+      await db.cookingNow.create({ data: { ...row, recipeId: plain.id, touchedAt: BigInt(now - 60_000) } });
+      await db.cookingNow.create({ data: { ...row, recipeId: pictured.id, activeStepId: "s2", touchedAt: BigInt(now), allCheckedAt: BigInt(now) } });
+      return { cook, plain, pictured };
+    }
+
+    it("lists the owner's recipes in progress, newest first, with their covers", async () => {
+      const { cook, plain, pictured } = await cookWithRecipes();
+      const result = await loader({
+        request: new UndiciRequest("http://localhost:3000/", { headers: await signedInAs(cook.id) }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.cookingNow.map((entry) => entry.recipe.id)).toEqual([pictured.id, plain.id]);
+      expect(result.cookingNow[0]).toMatchObject({
+        recipe: { title: "Pictured Bread", coverImageUrl: expect.stringContaining("bread"), href: `/recipes/${pictured.id}` },
+        activeStepId: "s2",
+        activeStepIndex: 1,
+        allCheckedAt: expect.any(String),
+      });
+      expect(result.cookingNow[1].recipe.coverImageUrl).toBeNull();
+      expect(result.cookingNow[1].allCheckedAt).toBeNull();
+    });
+
+    it("never shows a visitor the kitchen owner's list", async () => {
+      const { cook } = await cookWithRecipes();
+      const visitor = await createUser(db, faker.internet.email(), `visitor_${faker.string.alphanumeric(8)}`, "testPassword123");
+      const result = await loader({
+        request: new UndiciRequest(`http://localhost:3000/?chefId=${cook.id}`, { headers: await signedInAs(visitor.id) }),
+        context: { cloudflare: { env: null } },
+        params: {},
+      } as any);
+
+      expect(result.isOwner).toBe(false);
+      expect(result.cookingNow).toEqual([]);
+    });
+
+    it("puts the Back to banner and the strip above the owner's kitchen", async () => {
+      const now = Date.now();
+      const entry = {
+        recipe: { id: "r1", title: "Lemon Herb Rice", coverImageUrl: null, href: "/recipes/r1" },
+        activeStepId: null,
+        activeStepIndex: 1,
+        stepCount: 3,
+        checkedCount: 1,
+        totalCount: 4,
+        allCheckedAt: null,
+        touchedAt: new Date(now - 60_000).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+      };
+      const Stub = createTestRoutesStub([
+        {
+          path: "/",
+          Component: Index,
+          loader: () => ({
+            tab: "recipes",
+            isOwner: true,
+            viewer: { id: "u1" },
+            kitchenUser: { id: "u1", username: "cook", photoUrl: null },
+            recipes: [],
+            cookbooks: [],
+            cookingNow: [entry],
+            renderedAt: now,
+          }),
+        },
+      ]);
+      render(<Stub initialEntries={["/"]} />);
+
+      expect(await screen.findByRole("region", { name: "Cooking now" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Back to Lemon Herb Rice" })).toHaveAttribute("href", "/recipes/r1");
+    });
+
+    it("shows a signed-out cook the recipes in progress in this browser", async () => {
+      window.localStorage.setItem("spoonjoy-cooking-now:v1", JSON.stringify({
+        r1: {
+          recipe: { id: "r1", title: "Lemon Herb Rice", coverImageUrl: null },
+          listed: true,
+          activeStepId: null,
+          activeStepIndex: 1,
+          stepCount: 3,
+          checkedCount: 1,
+          totalCount: 4,
+          allCheckedAt: null,
+          touchedAt: Date.now(),
+          progressKey: "k",
+        },
+      }));
+      try {
+        const Stub = createTestRoutesStub([
+          {
+            path: "/",
+            Component: Index,
+            loader: () => ({ tab: "recipes", isOwner: false, viewer: null, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [], renderedAt: Date.now() }),
+          },
+        ]);
+        render(<Stub initialEntries={["/"]} />);
+
+        expect(await screen.findByRole("region", { name: "Cooking now" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Back to Lemon Herb Rice" })).toBeInTheDocument();
+      } finally {
+        window.localStorage.clear();
+      }
     });
   });
 });

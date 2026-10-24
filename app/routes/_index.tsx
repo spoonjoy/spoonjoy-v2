@@ -13,6 +13,9 @@ import { Button } from "~/components/ouro/button/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
+import { cookingNowEntry } from "~/lib/cooking-now-entries.server";
+import type { CookingNowEntry } from "~/lib/cooking-now";
+import { CookingNowStrip, LocalCookingNow } from "~/components/cooking-now/CookingNow";
 
 const LANDING_FOOD_PHOTOS = [
   {
@@ -78,6 +81,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       kitchenUser: null,
       recipes: [],
       cookbooks: [],
+      cookingNow: [] as CookingNowEntry[],
+      renderedAt: Date.now(),
     };
   }
 
@@ -90,8 +95,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   // On the Worker the page's reads go to D1 as one batch; Prisma is only the fallback
   // where there is no binding (unit tests, local scripts).
   const d1 = requestD1(context);
-  const readInput = { viewerId: currentUserId, kitchenUserWhere };
-  const { viewer, kitchenUser, recipes, cookbooks } = d1
+  const renderedAt = Date.now();
+  const readInput = { viewerId: currentUserId, kitchenUserWhere, now: renderedAt };
+  const { viewer, kitchenUser, recipes, cookbooks, cookingNow } = d1
     ? await readKitchenHomeFromD1(d1, readInput)
     : await readKitchenHomeWithPrisma(await getRequestDb(context), readInput);
 
@@ -107,6 +113,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       kitchenUser: null,
       recipes: [],
       cookbooks: [],
+      cookingNow: [] as CookingNowEntry[],
+      renderedAt: Date.now(),
     };
   }
 
@@ -131,22 +139,28 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     })),
   }));
 
+  const isOwner = viewer?.id === kitchenUser.id;
   return {
     tab,
     viewer,
     kitchenUser,
-    isOwner: viewer?.id === kitchenUser.id,
+    isOwner,
     recipes: recipesWithCover,
     cookbooks: cookbooksWithCover,
+    // The cook's own recipes in progress; a visitor to another kitchen never sees them.
+    cookingNow: cookingNow.map(cookingNowEntry),
+    renderedAt,
   };
 }
 
 export default function Index() {
-  const { kitchenUser, isOwner, recipes, cookbooks } = useLoaderData<typeof loader>();
+  const { kitchenUser, isOwner, recipes, cookbooks, cookingNow = [], renderedAt } = useLoaderData<typeof loader>();
 
   if (!kitchenUser) {
     return (
       <div className="sj-page">
+        {/* Signed out, the recipes in progress live in this browser, so they appear after hydration. */}
+        <LocalCookingNow />
         <section className="relative min-h-[clamp(24rem,56svh,42rem)] sm:min-h-[clamp(32rem,70svh,42rem)] overflow-hidden">
           <img
             src={LANDING_FOOD_PHOTOS[2].src}
@@ -192,5 +206,15 @@ export default function Index() {
     );
   }
 
-  return <KitchenHome kitchenUser={kitchenUser} isOwner={isOwner} recipes={recipes} cookbooks={cookbooks} />;
+  return (
+    <KitchenHome
+      kitchenUser={kitchenUser}
+      isOwner={isOwner}
+      recipes={recipes}
+      cookbooks={cookbooks}
+      cookingNow={
+        cookingNow.length > 0 ? <CookingNowStrip entries={cookingNow} now={renderedAt} /> : null
+      }
+    />
+  );
 }

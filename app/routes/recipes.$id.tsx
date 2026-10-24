@@ -47,6 +47,7 @@ import type { ShareResult } from "~/lib/ouro/share";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { confirmCookSessionRecipeDeletion } from "~/hooks/use-cook-session-sync";
 import { getCookProgressStorageKey, useRouteCookController } from "~/hooks/use-route-cook-controller";
+import { useResumeStepScroll } from "~/hooks/use-resume-step-scroll";
 import { useWriteToken } from "~/hooks/use-write-token";
 import { revalidateUnlessHashOnly } from "~/lib/hash-only-revalidation";
 
@@ -222,9 +223,10 @@ export default function RecipeDetail() {
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
   // Cook progress, cook mode and timers: the view below draws them, the controller owns them.
-  const cookController = useRouteCookController(loaderData);
-  const { scaleFactor, setScale: handleScaleChange, enterCookMode } = cookController;
+  const cookController = useRouteCookController(loaderData, { coverImageUrl: coverImageUrl ?? recipeCoverImageUrl });
+  const { scaleFactor, setScale: handleScaleChange, enterCookMode, resumeStepNum } = cookController;
   const isCookMode = cookController.cookMode;
+  useResumeStepScroll(resumeStepNum, isCookMode);
 
   const [availableCookbooks, setAvailableCookbooks] = useState(() => cookbooks);
 

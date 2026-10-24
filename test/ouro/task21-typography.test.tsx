@@ -24,6 +24,7 @@ vi.mock("~/lib/route-platform.server", () => ({ getRequestDb: vi.fn() }));
 vi.mock("~/lib/d1-read.server", () => ({ requestD1: vi.fn() }));
 vi.mock("~/lib/session.server", () => ({ getUserId: vi.fn() }));
 vi.mock("~/lib/kitchen-home.server", () => ({ readKitchenHomeFromD1: vi.fn(), readKitchenHomeWithPrisma: vi.fn() }));
+vi.mock("~/lib/cooking-now-entries.server", () => ({ cookingNowEntry: vi.fn(), readCookingNowEntries: vi.fn() }));
 vi.mock("~/lib/recipe-cover.server", () => ({ getRecipeCoverDisplay: vi.fn() }));
 vi.mock("~/lib/collection-reads.server", () => ({ readPublicRecipesFromD1: vi.fn(), readPublicRecipesWithPrisma: vi.fn() }));
 vi.mock("~/lib/account-settings.server", () => ({ loadAccountSettings: vi.fn(), handleAccountSettingsAction: vi.fn() }));
@@ -263,7 +264,8 @@ for (const theme of ["light", "dark"] as const) {
         measurements.push({
           media, width,
           title: compareDelivered(sectionTitle, `${heading} mt-3 print:mt-0 text-3xl/9 font-semibold tracking-normal sm:text-4xl/11`),
-          instructions: compareDelivered(instructions, `${text} m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg`),
+          // The method is set in full ink: it used to carry both ink colours, and the softer one won by CSS order.
+          instructions: compareDelivered(instructions, "font-sj-body m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg"),
         });
       }
       if (media === "print") {

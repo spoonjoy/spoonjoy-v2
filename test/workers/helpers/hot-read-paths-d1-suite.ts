@@ -10,6 +10,8 @@ import {
 } from "../../../app/lib/cookbook-page-reads.server";
 import { getDb } from "../../../app/lib/db.server";
 import { readKitchenHomeFromD1, readKitchenHomeWithPrisma, type KitchenHomeRows } from "../../../app/lib/kitchen-home.server";
+import { cookingNowD1Query, cookingNowRowsFromD1, listCookingNow, recordCookingNow } from "../../../app/lib/cooking-now.server";
+import { d1ReadBatch } from "../../../app/lib/d1-read.server";
 import { getRecipeCoverDisplay } from "../../../app/lib/recipe-cover.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "../../../app/lib/recipe-detail-reads.server";
 import {
@@ -261,6 +263,26 @@ describe("hot read paths on Wrangler D1", () => {
     expect(rows.cookbooks[0]).toMatchObject({ id: "hot-read-cookbook", _count: { recipes: 6 } });
     const preview = rows.cookbooks[0]!.recipes;
     expect(preview.map((entry) => entry.id)).toEqual(["hot-read-entry-7", "hot-read-entry-6", "hot-read-entry-5", "hot-read-entry-4"]);
+  });
+
+  it("reads Cooking now through Prisma and through the kitchen's D1 batch alike", async () => {
+    const now = Date.now();
+    // The friend logged cooks of the recipe while seeding, before this touch, so it stays listed.
+    for (const userId of [OWNER, FRIEND]) {
+      await recordCookingNow(database(), {
+        userId, recipeId: RECIPE, attemptId: "hot-read-attempt", revision: 1,
+        activeStepId: null, activeStepIndex: 1, checkedCount: 2, touchedAt: now,
+      });
+    }
+
+    for (const userId of [OWNER, FRIEND, STRANGER]) {
+      const viaPrisma = await listCookingNow(prisma, userId, now);
+      const [rows] = await d1ReadBatch(database(), [cookingNowD1Query({ sql: `cn."userId" = ?`, values: [userId] }, now)]);
+      expect(cookingNowRowsFromD1(rows!)).toEqual(viaPrisma);
+      expect(viaPrisma.map((row) => row.recipe.id)).toEqual(userId === STRANGER ? [] : [RECIPE]);
+    }
+    const kitchen = { viewerId: OWNER, kitchenUserWhere: { id: OWNER }, now };
+    expect(displayed(await readKitchenHomeFromD1(database(), kitchen))).toEqual(displayed(await readKitchenHomeWithPrisma(prisma, kitchen)));
   });
 
   it("reads the recipe page as Prisma does, for the owner, another chef and a visitor", async () => {

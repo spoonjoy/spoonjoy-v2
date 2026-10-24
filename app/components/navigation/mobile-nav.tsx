@@ -51,6 +51,26 @@ function shouldHideTabBar(pathname: string, isAuthenticated: boolean) {
 
 interface MobileNavProps {
   isAuthenticated?: boolean;
+  /** How many recipes the cook has in progress, shown on the home tab. */
+  cookingNowCount?: number;
+}
+
+/**
+ * The home tab's icon with the Cooking now count on it, since the home tab opens the Kitchen's
+ * Cooking now strip. The count is hidden from screen readers, as the icon is; the strip says it.
+ */
+function homeIconWithCount(count: number) {
+  return (
+    <span className="relative grid size-full">
+      <Home className="size-full" />
+      <span
+        data-testid="tab-cooking-now-count"
+        className="absolute -right-2.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-[var(--sj-brass)] px-1 font-sj-ui text-[0.625rem] font-bold leading-4 text-[var(--sj-photo-charcoal)]"
+      >
+        {count}
+      </span>
+    </span>
+  );
 }
 
 /** Auth/path/suppression eligibility; CSS still owns the screen/print breakpoint. */
@@ -70,7 +90,7 @@ export function MobileNavToaster({ isAuthenticated }: { isAuthenticated: boolean
 }
 
 /** HX's tab bar on phones, below the lg breakpoint where the desktop Navbar takes over. */
-export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
+export function MobileNav({ isAuthenticated = true, cookingNowCount = 0 }: MobileNavProps) {
   const { pathname } = useLocation();
   const isEligible = useMobileNavEligibility(isAuthenticated);
 
@@ -84,7 +104,8 @@ export function MobileNav({ isAuthenticated = true }: MobileNavProps) {
       currentPath={pathname}
       hideFrom="lg"
       className="sj-tab-bar"
-      items={isAuthenticated ? signedInTabs : signedOutTabs}
+      items={(isAuthenticated ? signedInTabs : signedOutTabs).map((tab) =>
+        tab.href === "/" && cookingNowCount > 0 ? { ...tab, icon: homeIconWithCount(cookingNowCount) } : tab)}
       accessory={{ label: "Search", href: "/search", icon: <Search /> }}
     />
   );

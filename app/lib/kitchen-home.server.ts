@@ -6,6 +6,7 @@ import {
   cookbookPreviewQuery,
   cookbookPreviewsById,
 } from "~/lib/cookbook-previews.server";
+import { cookingNowD1Query, cookingNowRowsFromD1, listCookingNow, type CookingNowRow } from "~/lib/cooking-now.server";
 
 // Reads behind the kitchen home page (`/`, `/?chef=…`). The Prisma reader is the
 // original query; the D1 reader returns the same shapes in one batch.
@@ -30,17 +31,21 @@ export interface KitchenHomeRows {
       >;
     }
   >;
+  /** The owner's recipes in progress; empty unless the viewer owns the kitchen. */
+  cookingNow: CookingNowRow[];
 }
 
 export interface KitchenHomeInput {
   viewerId: string | null;
   kitchenUserWhere: KitchenUserWhere;
+  /** The time the Cooking now list is read at, in epoch milliseconds. */
+  now?: number;
 }
 
 
 export async function readKitchenHomeWithPrisma(
   database: PrismaClient,
-  { viewerId, kitchenUserWhere }: KitchenHomeInput,
+  { viewerId, kitchenUserWhere, now = Date.now() }: KitchenHomeInput,
 ): Promise<KitchenHomeRows> {
   const viewer = viewerId
     ? await database.user.findUnique({
@@ -55,10 +60,10 @@ export async function readKitchenHomeWithPrisma(
   });
 
   if (!kitchenUser) {
-    return { viewer, kitchenUser: null, recipes: [], cookbooks: [] };
+    return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [] };
   }
 
-  const [recipes, cookbooks] = await Promise.all([
+  const [recipes, cookbooks, cookingNow] = await Promise.all([
     database.recipe.findMany({
       where: { chefId: kitchenUser.id, deletedAt: null },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
@@ -98,9 +103,10 @@ export async function readKitchenHomeWithPrisma(
         },
       },
     }),
+    viewer?.id === kitchenUser.id ? listCookingNow(database, kitchenUser.id, now) : Promise.resolve([]),
   ]);
 
-  return { viewer, kitchenUser, recipes, cookbooks };
+  return { viewer, kitchenUser, recipes, cookbooks, cookingNow };
 }
 
 function kitchenUserCondition(where: KitchenUserWhere): { sql: string; value: string } {
@@ -144,12 +150,12 @@ const ACTIVE_COVER_JOIN = `LEFT JOIN "RecipeCover" rc ON rc."id" = r."activeCove
  */
 export async function readKitchenHomeFromD1(
   db: D1ReadDatabase,
-  { viewerId, kitchenUserWhere }: KitchenHomeInput,
+  { viewerId, kitchenUserWhere, now = Date.now() }: KitchenHomeInput,
 ): Promise<KitchenHomeRows> {
   const owner = kitchenUserCondition(kitchenUserWhere);
   const ownerId = `(SELECT "id" FROM "User" WHERE ${owner.sql})`;
   const coverSelect = selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_");
-  const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows] = await d1ReadBatch(db, [
+  const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows, cookingNowRows] = await d1ReadBatch(db, [
     viewerId
       ? [`SELECT "id", "username", "email", "photoUrl" FROM "User" WHERE "id" = ? LIMIT 1`, viewerId]
       : [`SELECT NULL AS "id" WHERE 0`],
@@ -172,6 +178,10 @@ export async function readKitchenHomeFromD1(
       owner.value,
     ],
     cookbookPreviewQuery(`SELECT "id" FROM "Cookbook" WHERE "authorId" = ${ownerId}`, owner.value),
+    // Only the owner sees their Cooking now list, so the cook must be both the viewer and the owner.
+    viewerId
+      ? cookingNowD1Query({ sql: `cn."userId" = ? AND cn."userId" = ${ownerId}`, values: [viewerId, owner.value] }, now)
+      : [`SELECT NULL AS "id" WHERE 0`],
   ]);
 
   const viewerRow = viewerRows[0];
@@ -186,7 +196,7 @@ export async function readKitchenHomeFromD1(
 
   const kitchenUserRow = kitchenUserRows[0];
   if (!kitchenUserRow) {
-    return { viewer, kitchenUser: null, recipes: [], cookbooks: [] };
+    return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [] };
   }
   const kitchenUser = {
     id: requiredString(kitchenUserRow.id, "id"),
@@ -213,5 +223,5 @@ export async function readKitchenHomeFromD1(
     };
   });
 
-  return { viewer, kitchenUser, recipes, cookbooks };
+  return { viewer, kitchenUser, recipes, cookbooks, cookingNow: cookingNowRowsFromD1(cookingNowRows) };
 }

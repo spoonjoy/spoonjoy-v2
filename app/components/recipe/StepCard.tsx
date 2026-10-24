@@ -21,6 +21,8 @@ export interface StepCardProps {
   checkedStepOutputIds: ReadonlySet<string>
   /** Called with a step output's id when it is ticked or unticked */
   onStepOutputToggle: (id: string) => void
+  /** The step the cook is on: marked so they find their place again. */
+  current?: boolean
 }
 
 /**
@@ -43,20 +45,29 @@ export function StepCard({
   onIngredientToggle,
   checkedStepOutputIds,
   onStepOutputToggle,
+  current = false,
 }: StepCardProps) {
   return (
     <article
       className="sj-step-card px-5 py-8 sm:px-8 sm:py-10"
       aria-labelledby={`step-${stepNumber}-heading`}
+      data-current-step={current ? "" : undefined}
     >
-      <div className="space-y-3">
-        <p
-          data-testid="step-number"
-          className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"
-          aria-label={`Step ${stepNumber}`}
-        >
-          Step {stepNumber}
-        </p>
+      <div className="sj-step-card-head space-y-3">
+        <div className="flex items-baseline gap-3">
+          <p
+            data-testid="step-number"
+            className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"
+            aria-label={`Step ${stepNumber}`}
+          >
+            Step {stepNumber}
+          </p>
+          {current ? (
+            <p data-testid="current-step-marker" className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-brass)]">
+              You are here
+            </p>
+          ) : null}
+        </div>
         {title && (
           <h3
             id={`step-${stepNumber}-heading`}
@@ -68,7 +79,7 @@ export function StepCard({
         {!title && <span id={`step-${stepNumber}-heading`} className="sr-only">Step {stepNumber}</span>}
       </div>
 
-      <div className="mt-8 space-y-8">
+      <div className="sj-step-card-body mt-8 space-y-8">
         {(ingredients.length > 0 || stepOutputUses.length > 0) && (
           <div data-testid="step-ingredients-block" className="sj-step-ingredients mx-auto w-full max-w-[38rem]">
             {/* The ticks are this cook's progress, not the recipe: paper gets the plain list below. */}
@@ -96,7 +107,7 @@ export function StepCard({
           </div>
         )}
 
-        <p className="text-base/6 text-[var(--sj-ink-soft)] m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg">
+        <p className="sj-step-method font-sj-body m-0 whitespace-pre-wrap text-base leading-loose text-[var(--sj-ink)] sm:text-lg">
           {description}
         </p>
       </div>

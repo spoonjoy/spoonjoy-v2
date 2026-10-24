@@ -5,9 +5,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getLocalDb } from "~/lib/db.server";
 import { D1WriteUnavailableError } from "~/lib/d1-write-retry.server";
+import { d1ReadBatch } from "~/lib/d1-read.server";
 import {
   COOKING_NOW_DONE_MS,
   COOKING_NOW_IDLE_MS,
+  cookingNowD1Query,
+  cookingNowRowsFromD1,
   listCookingNow,
   recordCookingNow,
   type CookingNowWrite,
@@ -60,7 +63,17 @@ function write(overrides: Partial<CookingNowWrite> = {}): CookingNowWrite {
 }
 
 const row = () => db.cookingNow.findUnique({ where: { userId_recipeId: { userId, recipeId } } });
-const listed = async (now = T0) => (await listCookingNow(db, userId, now)).map((entry) => entry.recipe.id);
+// The batched D1 read the kitchen page uses must return exactly what the Prisma reader returns.
+async function listFromD1(cook: string, now: number) {
+  const [rows] = await d1ReadBatch(d1.binding, [cookingNowD1Query({ sql: `cn."userId" = ?`, values: [cook] }, now)]);
+  return cookingNowRowsFromD1(rows!);
+}
+async function list(cook: string, now: number) {
+  const rows = await listCookingNow(db, cook, now);
+  expect(await listFromD1(cook, now)).toEqual(rows);
+  return rows;
+}
+const listed = async (now = T0) => (await list(userId, now)).map((entry) => entry.recipe.id);
 
 beforeEach(async () => {
   await cleanupDatabase();
@@ -161,7 +174,7 @@ describe("recording a cook-session write", () => {
     await recordCookingNow(d1.binding, write({ userId: otherUserId, checkedCount: 0, activeStepIndex: 0 }));
 
     expect(await listed()).toEqual([recipeId]);
-    expect(await listCookingNow(db, otherUserId, T0)).toEqual([]);
+    expect(await list(otherUserId, T0)).toEqual([]);
   });
 
   it("prunes the cook's rows no reader would return, and leaves other cooks' rows", async () => {
@@ -239,7 +252,7 @@ describe("reading the list", () => {
     await recordCookingNow(d1.binding, write({ touchedAt: T0 - 2000, activeStepIndex: 2, activeStepId: stepIds[2], checkedCount: 4 }));
     await recordCookingNow(d1.binding, write({ recipeId: second.id, touchedAt: T0 - 1000, activeStepId: second.stepIds[1], activeStepIndex: 1 }));
 
-    const rows = await listCookingNow(db, userId, T0);
+    const rows = await list(userId, T0);
 
     expect(rows.map((entry) => entry.recipe.title)).toEqual(["Second recipe", expect.any(String)]);
     expect(rows[1]).toEqual({
@@ -320,7 +333,22 @@ describe("reading the list", () => {
       await recordCookingNow(d1.binding, write({ recipeId: recipe.id, activeStepId: null, activeStepIndex: 1, touchedAt: T0 - index }));
     }
 
-    expect(await listCookingNow(db, userId, T0)).toHaveLength(50);
+    expect(await list(userId, T0)).toHaveLength(50);
+  });
+});
+
+describe("the batched D1 read", () => {
+  it("brings the recipe's active cover with it", async () => {
+    const cover = await db.recipeCover.create({ data: { recipeId, imageUrl: "https://example.com/rice.jpg", sourceType: "upload" } });
+    await db.recipe.update({ where: { id: recipeId }, data: { activeCoverId: cover.id } });
+    await recordCookingNow(d1.binding, write());
+
+    const [entry] = await list(userId, T0);
+    expect(entry!.recipe.activeCover).toMatchObject({ id: cover.id, imageUrl: "https://example.com/rice.jpg" });
+  });
+
+  it("refuses a row whose counts are not integers", () => {
+    expect(() => cookingNowRowsFromD1([{ touchedAt: "soon" }])).toThrow("D1 column touchedAt is not an integer");
   });
 });
 

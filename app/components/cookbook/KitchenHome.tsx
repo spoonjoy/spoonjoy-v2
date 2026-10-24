@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
 import { Button } from "~/components/ouro/button/button";
@@ -29,11 +30,14 @@ export function KitchenHome({
   isOwner,
   recipes,
   cookbooks,
+  cookingNow,
 }: {
   kitchenUser: { id: string; username: string; photoUrl: string | null };
   isOwner: boolean;
   recipes: KitchenRecipe[];
   cookbooks: KitchenCookbook[];
+  /** The owner's recipes in progress, above everything else in their kitchen. */
+  cookingNow?: ReactNode;
 }) {
   const displayRecipes = recipes;
   const heading = isOwner ? "My Kitchen" : `${chefDisplayName(kitchenUser.username)}'s Kitchen`;
@@ -54,6 +58,7 @@ export function KitchenHome({
 
   return (
     <CookbookPage>
+      {cookingNow}
       {/* On a foldable held like a book, the kitchen's name and its cookbooks sit on the left page and the
           recipe index runs down the right. */}
       <section data-fold-book="index">

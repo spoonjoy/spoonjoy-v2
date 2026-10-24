@@ -1,5 +1,6 @@
 import type { PrismaClient, RecipeCover } from "@prisma/client";
-import type { D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1EpochMsSql, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { mapModel, RECIPE_COVER_COLUMNS, selectColumns } from "~/lib/d1-models.server";
 import { d1WriteBatch } from "~/lib/d1-write.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 
@@ -214,4 +215,66 @@ export async function listCookingNow(db: CookingNowDb, userId: string, now: numb
         expiresAt: new Date(expiresAt),
       };
     });
+}
+
+/**
+ * The same list as `listCookingNow`, as one D1 read for a page that batches its reads. The cook is
+ * whoever matches `cook` (SQL over `cn."userId"` and its values), so a page can require the cook to
+ * be both the viewer and the kitchen's owner. The logged-cook rule is a NOT EXISTS here.
+ */
+export function cookingNowD1Query(cook: { sql: string; values: readonly unknown[] }, now: number): D1Query {
+  return [
+    `SELECT cn."activeStepId", cn."activeStepIndex", cn."stepCount", cn."checkedCount", cn."totalCount",
+       cn."allCheckedAt", cn."touchedAt", r."id", r."title", r."activeCoverId", r."activeCoverVariant", r."coverMode",
+       ${selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_")}
+     FROM "CookingNow" cn
+     JOIN "Recipe" r ON r."id" = cn."recipeId" AND r."deletedAt" IS NULL
+     LEFT JOIN "RecipeCover" rc ON rc."id" = r."activeCoverId" AND rc."recipeId" = r."id"
+     WHERE ${cook.sql} AND cn."listed" = 1 AND cn."touchedAt" > ?
+       AND (cn."allCheckedAt" IS NULL OR cn."allCheckedAt" > ?)
+       AND NOT EXISTS (
+         SELECT 1 FROM "RecipeSpoon" s
+         WHERE s."chefId" = cn."userId" AND s."recipeId" = cn."recipeId" AND s."deletedAt" IS NULL
+           AND ${d1EpochMsSql(`s."createdAt"`)} >= cn."touchedAt"
+       )
+     ORDER BY cn."touchedAt" DESC, cn."recipeId" ASC
+     LIMIT ${COOKING_NOW_LIMIT}`,
+    ...cook.values,
+    now - COOKING_NOW_IDLE_MS,
+    now - COOKING_NOW_DONE_MS,
+  ];
+}
+
+function d1Integer(value: unknown, column: string): number {
+  if (typeof value === "number" && Number.isSafeInteger(value)) return value;
+  throw new Error(`D1 column ${column} is not an integer`);
+}
+
+/** Rows from `cookingNowD1Query`, shaped as `listCookingNow` returns them. */
+export function cookingNowRowsFromD1(rows: readonly D1Row[]): CookingNowRow[] {
+  return rows.map((row) => {
+    const touchedAt = d1Integer(row.touchedAt, "touchedAt");
+    const allCheckedAt = row.allCheckedAt === null ? null : d1Integer(row.allCheckedAt, "allCheckedAt");
+    return {
+      recipe: {
+        id: String(row.id),
+        title: String(row.title),
+        activeCoverId: row.activeCoverId as string | null,
+        activeCoverVariant: row.activeCoverVariant as string | null,
+        coverMode: row.coverMode as string | null,
+        activeCover: row.cover_id === null ? null : mapModel(RECIPE_COVER_COLUMNS, row, "cover_"),
+      },
+      activeStepId: row.activeStepId as string | null,
+      activeStepIndex: d1Integer(row.activeStepIndex, "activeStepIndex"),
+      stepCount: d1Integer(row.stepCount, "stepCount"),
+      checkedCount: d1Integer(row.checkedCount, "checkedCount"),
+      totalCount: d1Integer(row.totalCount, "totalCount"),
+      allCheckedAt: allCheckedAt === null ? null : new Date(allCheckedAt),
+      touchedAt: new Date(touchedAt),
+      expiresAt: new Date(Math.min(
+        touchedAt + COOKING_NOW_IDLE_MS,
+        allCheckedAt === null ? Infinity : allCheckedAt + COOKING_NOW_DONE_MS,
+      )),
+    };
+  });
 }

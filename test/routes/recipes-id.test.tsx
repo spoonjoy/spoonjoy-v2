@@ -125,6 +125,8 @@ describe("Recipes $id Route", () => {
     vi.clearAllMocks();
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();
+    // Each test is a new tab: it keeps no tab state from the last.
+    window.sessionStorage.clear();
     await cleanupDatabase();
     const email = faker.internet.email();
     const username = faker.internet.username() + "_" + faker.string.alphanumeric(8);

@@ -6,6 +6,7 @@
     "sources": [
       "app/root.tsx",
       "app/components/cookbook/page.tsx",
+      "app/components/cooking-now/CookingNow.tsx",
       "app/components/errors/route-error.tsx",
       "app/components/navigation/dock-context.tsx",
       "app/components/navigation/index.ts",
@@ -18,6 +19,7 @@
       "app/components/spoonjoy-logo.tsx",
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
+      "app/hooks/use-cooking-now.ts",
       "app/hooks/use-unsaved-form-guard.ts",
       "app/lib/analytics-server.ts",
       "app/lib/analytics.ts",
@@ -26,6 +28,8 @@
       "app/lib/canonical-host.server.ts",
       "app/lib/client-storage-schema.ts",
       "app/lib/cook-session-sync.ts",
+      "app/lib/cook-timers.ts",
+      "app/lib/cooking-now.ts",
       "app/lib/d1-read.server.ts",
       "app/lib/d1-transient-retry.server.ts",
       "app/lib/d1-write-retry.server.ts",
@@ -35,6 +39,7 @@
       "app/lib/fold.ts",
       "app/lib/gemini-text.server.ts",
       "app/lib/hash-only-revalidation.ts",
+      "app/lib/image-loading.ts",
       "app/lib/ingredient-parse.server.ts",
       "app/lib/llm-telemetry.server.ts",
       "app/lib/network-failure.ts",
@@ -70,6 +75,7 @@
     ],
     "renders": {
       "button": [
+        "app/components/cooking-now/CookingNow.tsx",
         "app/components/errors/route-error.tsx",
         "app/components/navigation/phone-brand-bar.tsx",
         "app/components/oauth.tsx",
@@ -82,6 +88,7 @@
         "app/root.tsx"
       ],
       "link": [
+        "app/components/cooking-now/CookingNow.tsx",
         "app/components/navigation/phone-brand-bar.tsx",
         "app/root.tsx"
       ],
@@ -123,13 +130,19 @@
         "app/components/cookbook/CookbookCoverArt.tsx",
         "app/components/cookbook/KitchenHome.tsx",
         "app/components/cookbook/page.tsx",
+        "app/components/cooking-now/CookingNow.tsx",
         "app/components/recipe/CoverProvenanceBadge.tsx",
+        "app/hooks/use-cooking-now.ts",
         "app/lib/analytics-server.ts",
         "app/lib/analytics.ts",
         "app/lib/api-auth.server.ts",
         "app/lib/api-idempotency.server.ts",
         "app/lib/chef-avatar.ts",
+        "app/lib/cook-timers.ts",
         "app/lib/cookbook-previews.server.ts",
+        "app/lib/cooking-now-entries.server.ts",
+        "app/lib/cooking-now.server.ts",
+        "app/lib/cooking-now.ts",
         "app/lib/d1-models.server.ts",
         "app/lib/d1-read.server.ts",
         "app/lib/d1-transient-retry.server.ts",
@@ -167,6 +180,7 @@
         "heading",
         "item",
         "item-group",
+        "link",
         "text"
       ],
       "renders": {
@@ -178,6 +192,7 @@
         ],
         "button": [
           "app/components/cookbook/KitchenHome.tsx",
+          "app/components/cooking-now/CookingNow.tsx",
           "app/routes/_index.tsx"
         ],
         "card": [
@@ -194,6 +209,9 @@
         ],
         "item-group": [
           "app/components/cookbook/KitchenHome.tsx"
+        ],
+        "link": [
+          "app/components/cooking-now/CookingNow.tsx"
         ],
         "text": [
           "app/components/cookbook/KitchenHome.tsx"
@@ -1597,6 +1615,7 @@
         "app/hooks/use-back-navigation.ts",
         "app/hooks/use-cook-session-sync.ts",
         "app/hooks/use-form-errors.ts",
+        "app/hooks/use-resume-step-scroll.ts",
         "app/hooks/use-route-cook-controller.ts",
         "app/hooks/use-screen-wake-lock.ts",
         "app/hooks/use-viewport-top-var.ts",
@@ -1610,9 +1629,11 @@
         "app/lib/chef-avatar.ts",
         "app/lib/cook-session-sync.ts",
         "app/lib/cook-sync-status.ts",
+        "app/lib/cook-tab.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cookbook-membership-compat.server.ts",
         "app/lib/cooked-at.ts",
+        "app/lib/cooking-now.ts",
         "app/lib/d1-coerce.server.ts",
         "app/lib/d1-models.server.ts",
         "app/lib/d1-read.server.ts",
@@ -2922,6 +2943,7 @@
         "app/lib/chef-profile-reads.server.ts",
         "app/lib/cook-session-sync.ts",
         "app/lib/cookbook-previews.server.ts",
+        "app/lib/cooking-now.server.ts",
         "app/lib/d1-coerce.server.ts",
         "app/lib/d1-models.server.ts",
         "app/lib/d1-read.server.ts",
