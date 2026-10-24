@@ -70,6 +70,10 @@ const PAIRS = [
   ["--primary", "--popover"],
   ["--destructive", "--popover"],
   ["--success", "--popover"],
+  ["--ouro-action-foreground", "--ouro-action"],
+  ["--ouro-action-foreground", "--ouro-action-hover"],
+  ["--ouro-action-foreground", "--ouro-action-active"],
+  ["--ouro-action-disabled-foreground", "--ouro-action-disabled"],
 ] as const;
 
 describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
@@ -81,6 +85,13 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
       "--popover-foreground": "var(--sj-ink)",
       "--primary": "var(--sj-brass)",
       "--primary-foreground": "var(--sj-paper)",
+      "--ouro-action": "var(--sj-action)",
+      "--ouro-action-foreground": "var(--sj-on-action)",
+      "--ouro-action-hover": "var(--sj-action-hover)",
+      "--ouro-action-active": "var(--sj-action-hover)",
+      "--ouro-action-disabled": "var(--sj-action-disabled)",
+      "--ouro-action-disabled-foreground": "var(--sj-on-action-disabled)",
+      "--ouro-action-disabled-opacity": "1",
       "--secondary": "var(--sj-flour)",
       "--secondary-foreground": "var(--sj-ink)",
       "--muted": "var(--sj-flour)",
@@ -117,10 +128,6 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
       "--border": "var(--sj-photo-line)",
       "--ring": "var(--sj-on-photo)",
     });
-  });
-
-  it("hides the step handles while a recipe's steps save, keeping the list in place", () => {
-    expect(block(".sj-steps-saving [data-ouro-reorderable-handle]", /([\w-]+):\s*([^;]+);/g)).toEqual({ visibility: "hidden" });
   });
 
   it("declares the mapping after the .dark palette, so it wins over ouro-base's defaults there", () => {

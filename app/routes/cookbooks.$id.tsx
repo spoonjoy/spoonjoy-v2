@@ -72,7 +72,7 @@ function captureCookbookActionFailure(
   }
 }
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 import { BookOpen } from "lucide-react";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
@@ -537,14 +537,14 @@ export default function CookbookDetail() {
                   <div className="flex flex-wrap gap-2 sm:justify-end">
                     <Button
                       onClick={openTitleEditor}
-                      plain
+                      variant="outline" tone="secondary"
                       size="sm"
                     >
                       Edit title
                     </Button>
                     <Button
                       type="button"
-                      variant="destructive"
+                      variant="soft" tone="destructive"
                       aria-label="Delete cookbook"
                       onClick={() => setShowDeleteDialog(true)}
                     >
@@ -575,7 +575,7 @@ export default function CookbookDetail() {
                       </Button>
                       <Button
                         type="button"
-                        plain
+                        variant="outline" tone="secondary"
                         onClick={closeTitleEditor}
                       >
                         Cancel
@@ -613,7 +613,7 @@ export default function CookbookDetail() {
                           <span className="font-sj-ui text-sm/5 font-semibold text-[var(--sj-ink)]">{item.recipe.title}</span>
                           <Button
                             type="button"
-                            variant="destructive"
+                            variant="soft" tone="destructive"
                             size="sm"
                             className="w-full sm:w-auto"
                             aria-label={`Remove ${item.recipe.title} from cookbook`}

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { Button } from '../../../app/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Text } from '../../../app/components/ouro/text/text'
 import { RecipeHeader } from '../../../app/components/recipe/RecipeHeader'
 import { StepCard } from '../../../app/components/recipe/StepCard'
@@ -134,11 +134,11 @@ function RecipeViewMock({ recipe, initialScale = 1, isOwner = false }: { recipe:
     <div className="sj-page pb-24">
       <div className="mx-auto max-w-6xl px-4 pt-5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4">
-          <Button href="/recipes" plain>
+          <Button href="/recipes" variant="outline" tone="secondary">
             <ArrowLeft data-slot="icon" aria-hidden="true" />
             Back to recipes
           </Button>
-          {isOwner ? <Button variant="destructive">Delete Recipe</Button> : null}
+          {isOwner ? <Button variant="soft" tone="destructive">Delete Recipe</Button> : null}
         </div>
       </div>
 

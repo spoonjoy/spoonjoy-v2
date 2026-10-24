@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Form } from "react-router";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { ChoiceCard, type ChoiceCardItem } from "~/components/ouro/choice-card/choice-card";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { useActionWriteToken } from "~/hooks/use-write-token";
@@ -130,7 +130,7 @@ function ActiveCoverChoice({ covers }: { covers: RecipeCoverHistoryItem[] }) {
         columns={3}
         className="w-full"
       />
-      <Button type="submit" plain disabled={chosen === current}>
+      <Button type="submit" variant="outline" tone="secondary" disabled={chosen === current}>
         Use this cover
       </Button>
     </Form>
@@ -183,7 +183,7 @@ export function RecipeCoverHistory({
           maxLength={240}
           placeholder="Bright window light, golden edges, linen backdrop"
         />
-        <Button type="submit" plain>
+        <Button type="submit" variant="outline" tone="secondary">
           Generate placeholder cover
         </Button>
       </Form>
@@ -303,7 +303,7 @@ export function RecipeCoverHistory({
                           maxLength={240}
                           placeholder="What should change?"
                         />
-                        <Button type="submit" plain>
+                        <Button type="submit" variant="outline" tone="secondary">
                           Regenerate with direction
                         </Button>
                       </Form>
@@ -321,7 +321,7 @@ export function RecipeCoverHistory({
                             <input type="hidden" name="replacementVariant" value={option.variant} />
                             <Button
                               type="submit"
-                              plain
+                              variant="outline" tone="secondary"
                               aria-label={`Archive and use ${option.label} ${variantName(option.variant)} cover`}
                             >
                               Archive + use {variantName(option.variant)}
@@ -332,7 +332,7 @@ export function RecipeCoverHistory({
                           <input type="hidden" name="intent" value="archiveRecipeCover" />
                           <input type="hidden" name="coverId" value={cover.id} />
                           <input type="hidden" name="confirmNoCover" value="true" />
-                          <Button type="submit" plain>
+                          <Button type="submit" variant="outline" tone="secondary">
                             Archive and set no cover
                           </Button>
                         </Form>
@@ -341,7 +341,7 @@ export function RecipeCoverHistory({
                       <Form method="post">
                         <input type="hidden" name="intent" value="archiveRecipeCover" />
                         <input type="hidden" name="coverId" value={cover.id} />
-                        <Button type="submit" plain>
+                        <Button type="submit" variant="outline" tone="secondary">
                           Archive cover
                         </Button>
                       </Form>
@@ -401,7 +401,7 @@ export function RecipeCoverHistory({
                     />
                     <Button
                       type="submit"
-                      plain
+                      variant="outline" tone="secondary"
                       className="mt-2"
                       aria-label={`Make a styled cover from the cook photo by ${spoon.chef.username}`}
                     >

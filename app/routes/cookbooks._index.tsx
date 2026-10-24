@@ -1,7 +1,7 @@
 import type { Route } from "./+types/cookbooks._index";
 import { useLoaderData } from "react-router";
 import { Plus } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";

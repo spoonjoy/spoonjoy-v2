@@ -8,7 +8,7 @@ import { act } from "~/lib/ouro/testing/act";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { OuroRouterLink } from "~/components/navigation/ouro-router-link";
 import { Toaster } from "~/components/ouro/toast/toaster";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { StepCard } from "~/components/recipe/StepCard";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
 import { StepOutputUseDisplay } from "~/components/StepOutputUseDisplay";
@@ -283,6 +283,8 @@ for (const theme of ["light", "dark"] as const) {
     const measure = (element: HTMLElement) => {
       const css = getComputedStyle(element);
       const overlay = getComputedStyle(element, "::before");
+      expect(css.fontFamily).toContain("IBM Plex Sans Condensed");
+      expect(css.fontWeight).toBe("600");
       const fill = rgba(css.backgroundColor);
       const layer = rgba(overlay.backgroundColor);
       const alpha = Number(overlay.opacity) * layer[3];

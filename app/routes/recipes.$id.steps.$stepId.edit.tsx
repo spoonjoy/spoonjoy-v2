@@ -17,7 +17,7 @@ import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalida
 import { requireUserId } from "~/lib/session.server";
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Alert } from "~/components/ouro/alert/alert";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Form, type FormErrors } from "~/components/ouro/form/form";
@@ -758,7 +758,7 @@ export default function EditStep() {
           />
 
           <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
-            <Button href={`/recipes/${recipe.id}/edit`} plain>
+            <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary">
               Cancel
             </Button>
             <Button type="submit">
@@ -833,7 +833,7 @@ export default function EditStep() {
                   actions={
                     <Button
                       type="button"
-                      variant="destructive"
+                      variant="soft" tone="destructive"
                       onClick={() => setIngredientToRemove(ingredient.id)}
                       aria-label={`Remove ${ingredient.ingredientRef.name}`}
                     >

@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { Form, useActionData } from "react-router";
 import { Dialog } from "~/components/ouro/dialog/dialog";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { createTestRoutesStub } from "../../utils";
 
 describe("released rich Dialog with Spoonjoy actions and real Router forms", () => {
@@ -20,7 +20,7 @@ describe("released rich Dialog with Spoonjoy actions and real Router forms", () 
           <label htmlFor="recipe-name">Recipe name</label>
           <input id="recipe-name" name="title" defaultValue="Rice" />
           <Button type="submit">Save recipe</Button>
-          <Button plain onClick={() => setOpen(false)}>Cancel edit</Button>
+          <Button variant="outline" tone="secondary" onClick={() => setOpen(false)}>Cancel edit</Button>
         </Form>
       </Dialog>
     </>;

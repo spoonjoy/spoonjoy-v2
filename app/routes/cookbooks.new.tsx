@@ -3,7 +3,7 @@ import { Form as RouterForm, redirect, data, useActionData } from "react-router"
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -165,7 +165,7 @@ export default function NewCookbook() {
             />
 
             <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
-              <Button href="/cookbooks" plain>
+              <Button href="/cookbooks" variant="outline" tone="secondary">
                 Cancel
               </Button>
               <Button type="submit">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Text } from "~/components/ouro/text/text";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { toast } from "~/lib/ouro/toast";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Switch } from "~/components/ouro/switch/switch";
@@ -140,7 +140,7 @@ export function NotificationsSection({
       {subscribed ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <Text tone="muted">Notifications enabled.</Text>
-          <Button type="button" plain onClick={onDisable} disabled={busy}>
+          <Button type="button" variant="outline" tone="secondary" onClick={onDisable} disabled={busy}>
             Disable
           </Button>
         </div>

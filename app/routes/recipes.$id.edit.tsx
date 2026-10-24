@@ -43,7 +43,7 @@ import {
   touchNativeSyncCookbooksForRecipeOperation,
   touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { useEffect, useRef, useState } from "react";
 
@@ -691,20 +691,20 @@ export default function EditRecipe() {
                         <input type="hidden" name="intent" value="reorderStep" />
                         <input type="hidden" name="stepId" value={step.id} />
                         <input type="hidden" name="direction" value="up" />
-                        <Button type="submit" plain disabled={index === 0}>Move up</Button>
+                        <Button type="submit" variant="outline" tone="secondary" disabled={index === 0}>Move up</Button>
                       </Form>
 
                       <Form method="post" className="m-0">
                         <input type="hidden" name="intent" value="reorderStep" />
                         <input type="hidden" name="stepId" value={step.id} />
                         <input type="hidden" name="direction" value="down" />
-                        <Button type="submit" plain disabled={index === recipe.steps.length - 1}>Move down</Button>
+                        <Button type="submit" variant="outline" tone="secondary" disabled={index === recipe.steps.length - 1}>Move down</Button>
                       </Form>
 
                       <Button href={`/recipes/${recipe.id}/steps/${step.id}/edit`}>Edit</Button>
                       <Button
                         type="button"
-                        variant="destructive"
+                        variant="soft" tone="destructive"
                         onClick={() => setStepToDelete({ id: step.id, stepNum: step.stepNum })}
                       >
                         Delete

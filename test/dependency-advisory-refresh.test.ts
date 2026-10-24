@@ -25,7 +25,7 @@ describe("dependency advisory refresh contract", () => {
       "@storybook/addon-themes": "10.6.2",
       "@storybook/addon-vitest": "10.6.2",
       "@storybook/react-vite": "10.6.2",
-      "happy-dom": "20.8.9",
+      "happy-dom": "21.0.4",
       "storybook": "10.6.2",
       "vite": "7.3.7",
       // 4.1.12 patches @vitest/mocker's GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp.
@@ -72,7 +72,7 @@ describe("dependency advisory refresh contract", () => {
       "picomatch@4": "4.0.4",
       "rollup@4": "4.59.0",
       "source-map-js": "1.2.2",
-      "undici": "7.29.1",
+      "undici": "7.30.1",
       "ws@8": "8.21.0",
     });
     expect(packageJson.pnpm.patchedDependencies).toHaveProperty(

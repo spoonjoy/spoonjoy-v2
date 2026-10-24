@@ -406,6 +406,38 @@ describe('StepList', () => {
       expect(onChange).not.toHaveBeenCalled()
     })
 
+    it('keeps the list and handle focus while saving, blocks reordering, then enables it again', async () => {
+      const steps = threeSteps()
+      const onChange = vi.fn()
+      let setSaving!: (saving: boolean) => void
+      function Harness() {
+        const [saving, updateSaving] = useState(false)
+        setSaving = updateSaving
+        return <StepList steps={steps} recipeId="recipe-1" onChange={onChange} disabled={saving} />
+      }
+      const Stub = createRoutesStub([{ path: '/recipes/:id/edit', Component: Harness }])
+      render(<Stub initialEntries={['/recipes/recipe-1/edit']} />)
+      const list = screen.getByRole('list', { name: 'Steps' })
+      const handle = screen.getByRole('button', { name: 'Reorder Step 2' })
+      act(() => handle.focus())
+
+      act(() => setSaving(true))
+      expect(screen.getByRole('list', { name: 'Steps' })).toBe(list)
+      expect(screen.getByRole('button', { name: 'Reorder Step 2' })).toBe(handle)
+      expect(handle).toHaveFocus()
+      expect(handle).toHaveAttribute('aria-disabled', 'true')
+      expect(handle).not.toHaveAttribute('disabled')
+      await userEvent.keyboard(' ')
+      expect(screen.queryByRole('menuitem', { name: 'Move up' })).not.toBeInTheDocument()
+      expect(onChange).not.toHaveBeenCalled()
+
+      act(() => setSaving(false))
+      expect(handle).toHaveFocus()
+      expect(handle).not.toBeDisabled()
+      await userEvent.keyboard('{Enter}')
+      expect(await screen.findByRole('menuitem', { name: 'Move up' })).toBeInTheDocument()
+    })
+
     it("keeps each step's drafts while a save starts and ends: the AI text, the input mode and a half-typed ingredient", async () => {
       function Harness() {
         const [disabled, setDisabled] = useState(false)

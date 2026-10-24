@@ -20,7 +20,7 @@ import {
   handleRecipeDetailAction,
   loadRecipeDetail,
 } from "~/lib/recipe-detail.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { toast } from "~/lib/ouro/toast";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
@@ -413,10 +413,10 @@ export default function RecipeDetail() {
         <Button href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
           Cook mode
         </Button>
-        <Button plain onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">
+        <Button variant="outline" tone="secondary" onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">
           Save
         </Button>
-        <Button plain onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
+        <Button variant="outline" tone="secondary" onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
           {addToListLabel}
         </Button>
         <ShareButton
@@ -427,16 +427,16 @@ export default function RecipeDetail() {
           onShare={handleShared}
         />
         {isOwner ? (
-          <Button href={`/recipes/${recipe.id}/edit`} plain data-testid="recipe-header-edit-action">
+          <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary" data-testid="recipe-header-edit-action">
             Edit
           </Button>
         ) : null}
         {isAuthenticated ? (
-          <Button plain onClick={openSpoonDialog} data-testid="recipe-header-log-cook-action">
+          <Button variant="outline" tone="secondary" onClick={openSpoonDialog} data-testid="recipe-header-log-cook-action">
             Log cook
           </Button>
         ) : (
-          <Button href={loginRedirect} plain data-testid="recipe-header-log-cook-action">
+          <Button href={loginRedirect} variant="outline" tone="secondary" data-testid="recipe-header-log-cook-action">
             Log cook
           </Button>
         )}
@@ -450,7 +450,7 @@ export default function RecipeDetail() {
               triggerTestId="recipe-header-fork-action"
             />
           ) : (
-            <Button href={loginRedirect} plain data-testid="recipe-header-fork-action">
+            <Button href={loginRedirect} variant="outline" tone="secondary" data-testid="recipe-header-fork-action">
               Fork
             </Button>
           )
@@ -609,7 +609,7 @@ export default function RecipeDetail() {
             <Collapsible title="Manage recipe" open={showOwnerTools} onOpenChange={setShowOwnerTools}>
               <div id="recipe-owner-maintenance" className="py-5">
                 <div className="flex flex-wrap gap-3">
-                  <Button href={`/recipes/${recipe.id}/edit`} plain>
+                  <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary">
                     Edit recipe
                   </Button>
                   <ForkRecipeButton
@@ -620,7 +620,7 @@ export default function RecipeDetail() {
                   />
                   <Button
                     type="button"
-                    variant="destructive"
+                    variant="soft" tone="destructive"
                     onClick={() => setIsDeleteDialogOpen(true)}
                   >
                     Delete
@@ -757,11 +757,11 @@ export default function RecipeDetail() {
             spoons={spoons}
             emptyAction={
               isAuthenticated ? (
-                <Button type="button" plain onClick={openSpoonDialog}>
+                <Button type="button" variant="outline" tone="secondary" onClick={openSpoonDialog}>
                   Log the first cook
                 </Button>
               ) : (
-                <Button href={loginRedirect} plain>
+                <Button href={loginRedirect} variant="outline" tone="secondary">
                   Log the first cook
                 </Button>
               )

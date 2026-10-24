@@ -1,7 +1,7 @@
 import type { Route } from "./+types/search";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Search as SearchIcon, ShoppingCart, Users } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Heading } from "~/components/ouro/text/heading";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Item } from "~/components/ouro/item/item";

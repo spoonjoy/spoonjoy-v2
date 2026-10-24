@@ -21,7 +21,7 @@ import {
   protectedResourceMetadataUrl,
   resolveIssuerOrigin,
 } from "~/lib/oauth-metadata.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
 import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
@@ -173,7 +173,7 @@ export default function McpPage() {
           title="Spoonjoy MCP"
           actions={(
             <>
-              <Button href="/api" plain startIcon={Braces}>
+              <Button href="/api" variant="outline" tone="secondary" startIcon={Braces}>
                 Developer Platform
               </Button>
               <Button href="/login" startIcon={Cable}>

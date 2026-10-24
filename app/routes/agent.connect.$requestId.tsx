@@ -20,7 +20,7 @@ import {
   normalizeUserCode,
   typedCodeFor,
 } from "~/lib/agent-connection-route.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
@@ -313,7 +313,7 @@ export default function AgentConnect() {
             This access lasts {AGENT_CONNECTION_TOKEN_TTL_DAYS} days from approval. You can revoke it at any time under API and app access in your account settings.
           </Text>
           <div className="mt-8 flex flex-col sm:flex-row">
-            <Button href="/account/settings" plain>
+            <Button href="/account/settings" variant="outline" tone="secondary">
               Manage connected apps and tokens
             </Button>
           </div>
@@ -353,7 +353,7 @@ export default function AgentConnect() {
             <Button type="submit" name="intent" value="approve">
               Approve access
             </Button>
-            <Button type="submit" name="intent" value="deny" plain>
+            <Button type="submit" name="intent" value="deny" variant="outline" tone="secondary">
               Deny
             </Button>
           </div>

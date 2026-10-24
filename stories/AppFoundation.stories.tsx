@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Plus, ShoppingCart, Trash2, UtensilsCrossed } from 'lucide-react'
 import { Avatar } from '../app/components/ouro/avatar/avatar'
 import { Badge } from '../app/components/ouro/badge/badge'
-import { Button } from '../app/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Fieldset } from '../app/components/ouro/field/fieldset'
 import { TextArea } from '../app/components/ouro/text-field/text-area'
 import { TextField } from '../app/components/ouro/text-field/text-field'
@@ -50,8 +50,8 @@ export const KitchenActions: Story = {
           <ShoppingCart data-slot="icon" aria-hidden="true" />
           Shopping list
         </Button>
-        <Button plain>Cancel</Button>
-        <Button variant="destructive">
+        <Button variant="outline" tone="secondary">Cancel</Button>
+        <Button variant="soft" tone="destructive">
           <Trash2 data-slot="icon" aria-hidden="true" />
           Delete recipe
         </Button>

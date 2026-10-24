@@ -9,7 +9,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Form as RouterForm, useNavigation } from "react-router";
 import { Loader2 } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { FileField } from "~/components/ouro/file-field/file-field";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";

@@ -38,7 +38,7 @@ import { Navbar } from "~/components/ouro/navbar/navbar";
 import { Popover } from "~/components/ouro/popover/popover";
 import { Text } from "~/components/ouro/text/text";
 import { MobileNav, MobileNavToaster, DockContextProvider } from "~/components/navigation";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { OAuthButtonGroup } from "~/components/oauth";
 import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
 import { RouteErrorContent } from "~/components/errors/route-error";
@@ -121,14 +121,14 @@ const signedOutLinks = [
 /** Signing in from the desktop bar: an HX Popover with the providers, the password form and signup. */
 function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
   return (
-    <Popover title="Sign in to SPOONJOY" align="end" trigger={<Button plain>Log in</Button>}>
+    <Popover title="Sign in to SPOONJOY" align="end" trigger={<Button variant="outline" tone="secondary">Log in</Button>}>
       {oauthProviders.length > 0 ? (
         <OAuthButtonGroup providers={oauthProviders} />
       ) : (
         <Text tone="muted" size="sm">OAuth is not configured here, but email and password sign-in is available.</Text>
       )}
       <div className="mt-4 grid gap-2">
-        <Button href="/login" plain>Use Password</Button>
+        <Button href="/login" variant="outline" tone="secondary">Use Password</Button>
         <Button href="/signup">Create Account</Button>
       </div>
     </Popover>
@@ -160,9 +160,9 @@ export function AppNavbar({
       actions={userId ? (
         <>
           <ColorSchemeToggle />
-          <Button href="/account/settings" plain aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
+          <Button href="/account/settings" variant="outline" tone="secondary" aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
           <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
-            <Button type="submit" plain>Log out</Button>
+            <Button type="submit" variant="outline" tone="secondary">Log out</Button>
           </Form>
         </>
       ) : (

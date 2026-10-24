@@ -1,5 +1,3 @@
 {
-  "offenders": {
-    "app/styles/tailwind.css::(stylesheet)::control-state-style::[data-sj-action=\"primary\"]:active:not([data-disabled])::": 1
-  }
+  "offenders": {}
 }

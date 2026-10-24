@@ -1,6 +1,6 @@
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextField } from '~/components/ouro/text-field/text-field'
@@ -178,7 +178,7 @@ export function ParsedIngredientRow({
             <Button type="button" onClick={handleSave} aria-label="Save">
               <Check />
             </Button>
-            <Button type="button" plain onClick={handleCancel} aria-label="Cancel">
+            <Button type="button" variant="outline" tone="secondary" onClick={handleCancel} aria-label="Cancel">
               <X />
             </Button>
           </div>
@@ -198,7 +198,7 @@ export function ParsedIngredientRow({
         <Button
           ref={editButtonRef}
           type="button"
-          plain
+          variant="outline" tone="secondary"
           onClick={handleEditClick}
           disabled={disabled}
           aria-label={`Edit ${ingredient.ingredientName}`}
@@ -207,7 +207,7 @@ export function ParsedIngredientRow({
         </Button>
         <Button
           type="button"
-          variant="destructive"
+          variant="soft" tone="destructive"
           onClick={() => onRemove(ingredient)}
           disabled={disabled}
           aria-label={`Remove ${ingredient.ingredientName}`}

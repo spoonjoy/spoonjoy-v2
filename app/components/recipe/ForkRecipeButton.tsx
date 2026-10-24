@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useFetcher } from "react-router";
 import { Dialog } from "~/components/ouro/dialog/dialog";
-import { Button } from "../button";
+import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 
 export interface ForkRecipeButtonProps {
@@ -50,12 +50,12 @@ export function ForkRecipeButton({
 
   return (
     <>
-      <Button type="button" plain onClick={open} data-testid={triggerTestId}>
+      <Button type="button" variant="outline" tone="secondary" onClick={open} data-testid={triggerTestId}>
         {triggerLabel}
       </Button>
       <Dialog open={isOpen} onOpenChange={setIsOpen} size="md" title={dialogTitle}
         footer={<>
-          <Button plain type="button" onClick={() => setIsOpen(false)}>
+          <Button variant="outline" tone="secondary" type="button" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
           <fetcher.Form method="post" action={`/recipes/${recipeId}/fork`} onSubmit={() => setSubmittedToken(forkToken)}>

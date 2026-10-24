@@ -1996,9 +1996,10 @@ describe("Cookbooks $id Route", () => {
             },
           ]);
           render(
-            <ToastProvider>
+            <>
               <Stub initialEntries={["/cookbooks/cookbook-1"]} />
-            </ToastProvider>,
+              <Toaster />
+            </>,
           );
           return { loads: () => loads, sent };
         }
@@ -2096,7 +2097,7 @@ describe("Cookbooks $id Route", () => {
           fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
           fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-          expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't be reached/ })).toBeInTheDocument();
+          expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't be reached");
           expect(sent).toEqual(["intent=delete"]);
           await waitFor(() => {
             expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();

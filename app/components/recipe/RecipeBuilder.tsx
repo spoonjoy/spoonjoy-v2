@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useRef, type FormEvent } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Form } from '~/components/ouro/form/form'
 import { ImageField, type ImageFieldRejection } from '~/components/ouro/image-field/image-field'
 import { TextArea } from '~/components/ouro/text-field/text-area'
@@ -279,7 +279,7 @@ export function RecipeBuilder({
 
           onClick={handleCancel}
           disabled={isDisabled}
-          plain
+          variant="outline" tone="secondary"
         >
           Cancel
         </Button>

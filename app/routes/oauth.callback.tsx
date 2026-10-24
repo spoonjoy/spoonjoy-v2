@@ -2,7 +2,7 @@ import type { Route } from "./+types/oauth.callback";
 import { data, redirect } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { AuthPage } from "~/components/auth/auth-page";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 
 const CALLBACK_COPY = {

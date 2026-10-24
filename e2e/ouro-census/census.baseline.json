@@ -2345,7 +2345,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Protected-resource metadata\" [-/-] in region \"Auth Discovery\"",
+          "identity": "link \"Protected-resource metadata\" [link/root] in region \"Auth Discovery\"",
           "count": 1
         },
         {
@@ -4749,15 +4749,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Chefs\" [link/root] in navigation \"Search scope\"",
-          "count": 1
-        },
-        {
           "identity": "link \"Chefs\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Chefs\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4765,7 +4761,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Everything\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Cookbooks\" [tabs/link] in navigation \"Search scope\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Everything\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4781,11 +4781,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "identity": "link \"Recipes\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4793,11 +4793,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping List\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Shopping List\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping List\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "identity": "link \"Shopping List\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4833,11 +4833,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Chefs\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Chefs\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Chefs\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "identity": "link \"Chefs\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4845,15 +4845,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [link/root] in navigation \"Search scope\"",
-          "count": 1
-        },
-        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Everything\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Cookbooks\" [tabs/link] in navigation \"Search scope\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Everything\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4873,11 +4873,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "identity": "link \"Recipes\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -4889,11 +4889,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping List\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Shopping List\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Shopping List\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "identity": "link \"Shopping List\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -8391,7 +8391,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Protected-resource metadata\" [-/-] in region \"Auth Discovery\"",
+          "identity": "link \"Protected-resource metadata\" [link/root] in region \"Auth Discovery\"",
           "count": 1
         },
         {
@@ -8435,7 +8435,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Everyone\" [button/root] in navigation \"Recipe lists\"",
+          "identity": "link \"Everyone\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
@@ -8447,7 +8447,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Mine\" [button/root] in navigation \"Recipe lists\"",
+          "identity": "link \"Mine\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
@@ -8459,7 +8459,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saved\" [button/root] in navigation \"Recipe lists\"",
+          "identity": "link \"Saved\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
@@ -10207,7 +10207,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Everyone\" [button/root] in navigation \"Recipe lists\"",
+          "identity": "link \"Everyone\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
@@ -10219,7 +10219,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Mine\" [button/root] in navigation \"Recipe lists\"",
+          "identity": "link \"Mine\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
@@ -10235,7 +10235,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Saved\" [button/root] in navigation \"Recipe lists\"",
+          "identity": "link \"Saved\" [tabs/link] in navigation \"Recipe lists\"",
           "count": 1
         },
         {
@@ -10263,11 +10263,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Chefs\" [link/root] in navigation \"Search scope\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Cookbooks\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Chefs\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10275,7 +10271,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Everything\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Cookbooks\" [tabs/link] in navigation \"Search scope\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Everything\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10283,11 +10283,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10295,7 +10295,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping List\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Shopping List\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10319,7 +10319,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Chefs\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Chefs\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10327,15 +10327,15 @@
           "count": 1
         },
         {
-          "identity": "link \"Cookbooks\" [link/root] in navigation \"Search scope\"",
-          "count": 1
-        },
-        {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Everything\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Cookbooks\" [tabs/link] in navigation \"Search scope\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Everything\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10347,11 +10347,11 @@
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
         {
-          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "identity": "link \"Recipes\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {
@@ -10363,7 +10363,7 @@
           "count": 1
         },
         {
-          "identity": "link \"Shopping List\" [link/root] in navigation \"Search scope\"",
+          "identity": "link \"Shopping List\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
         {

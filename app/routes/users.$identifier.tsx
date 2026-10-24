@@ -5,7 +5,7 @@ import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Avatar } from "~/components/ouro/avatar/avatar";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 import { Link } from "~/components/ouro/link/link";
@@ -252,12 +252,12 @@ export default function UserProfile() {
 
           {isOwner ? (
             <div className="flex items-center gap-2">
-              <Button href="/account/settings" plain aria-label="Open settings">
+              <Button href="/account/settings" variant="outline" tone="secondary" aria-label="Open settings">
                 <Settings data-slot="icon" className="size-4" />
                 Settings
               </Button>
               <Form method="post" action="/logout" onSubmit={clearCookProgressCache}>
-                <Button type="submit" variant="destructive">Log out</Button>
+                <Button type="submit" variant="soft" tone="destructive">Log out</Button>
               </Form>
             </div>
           ) : null}

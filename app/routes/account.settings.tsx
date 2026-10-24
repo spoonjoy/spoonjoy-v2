@@ -10,7 +10,7 @@ import {
 } from "~/lib/account-settings.server";
 import { LogOut } from "lucide-react";
 import { Text } from "~/components/ouro/text/text";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -144,7 +144,7 @@ export default function AccountSettings() {
           // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
           // so it works before the page hydrates and the next page loads fresh.
           <RouterForm method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
-            <Button type="submit" plain>
+            <Button type="submit" variant="outline" tone="secondary">
               <LogOut data-slot="icon" className="size-4" />
               Log out
             </Button>
@@ -178,7 +178,7 @@ export default function AccountSettings() {
         testId="user-info-section"
         title="User information"
         action={!isEditing ? (
-            <Button plain onClick={() => setIsEditing(true)}>
+            <Button variant="outline" tone="secondary" onClick={() => setIsEditing(true)}>
               Edit
             </Button>
         ) : null}
@@ -209,7 +209,7 @@ export default function AccountSettings() {
               <Button type="submit">
                 Save
               </Button>
-              <Button type="button" plain onClick={() => setIsEditing(false)}>
+              <Button type="button" variant="outline" tone="secondary" onClick={() => setIsEditing(false)}>
                 Cancel
               </Button>
             </div>
@@ -219,7 +219,7 @@ export default function AccountSettings() {
           <RouterForm method="post" className="mt-3">
             <input type="hidden" name="intent" value="reauthenticate" />
             <input type="hidden" name="for" value="email" />
-            <Button type="submit" plain>
+            <Button type="submit" variant="outline" tone="secondary">
               Sign in again
             </Button>
           </RouterForm>
@@ -294,7 +294,7 @@ export default function AccountSettings() {
                         <input type="hidden" name="provider" value={provider} />
                         <Button
                           type="submit"
-                          variant="destructive"
+                          variant="soft" tone="destructive"
                           aria-label={`Confirm unlink ${capitalizeProvider(provider)}`}
                         >
                           Confirm
@@ -302,7 +302,7 @@ export default function AccountSettings() {
                       </RouterForm>
                       <Button
                         type="button"
-                        plain
+                        variant="outline" tone="secondary"
                         onClick={() => setUnlinkingProvider(null)}
                       >
                         Cancel
@@ -311,7 +311,7 @@ export default function AccountSettings() {
                   ) : (
                     <Button
                       type="button"
-                      plain
+                      variant="outline" tone="secondary"
                       aria-label={`Unlink ${capitalizeProvider(provider)}`}
                       disabled={!canUnlinkOAuth}
                       onClick={() => setUnlinkingProvider(provider)}
@@ -325,7 +325,7 @@ export default function AccountSettings() {
                     <input type="hidden" name="provider" value={provider} />
                     <Button
                       type="submit"
-                      plain
+                      variant="outline" tone="secondary"
                       aria-label={`Link ${capitalizeProvider(provider)}`}
                     >
                       Link
@@ -369,7 +369,7 @@ export default function AccountSettings() {
                     <RouterForm method="post">
                       <input type="hidden" name="intent" value="revokeApiCredential" />
                       <input type="hidden" name="credentialId" value={credential.id} />
-                      <Button type="submit" variant="destructive" aria-label={`Revoke ${credential.name}`}>
+                      <Button type="submit" variant="soft" tone="destructive" aria-label={`Revoke ${credential.name}`}>
                         Revoke
                       </Button>
                     </RouterForm>
@@ -412,7 +412,7 @@ export default function AccountSettings() {
                         {connection.connectionKeys.map((connectionKey) => (
                           <input key={connectionKey} type="hidden" name="connectionKey" value={connectionKey} />
                         ))}
-                        <Button type="submit" variant="destructive" aria-label={`Disconnect ${appName} from ${connection.issuer}`}>
+                        <Button type="submit" variant="soft" tone="destructive" aria-label={`Disconnect ${appName} from ${connection.issuer}`}>
                           Disconnect
                         </Button>
                       </RouterForm>
@@ -464,7 +464,7 @@ export default function AccountSettings() {
                       />
                       <div className="flex flex-wrap gap-2">
                         <Button type="submit">Save</Button>
-                        <Button type="button" plain onClick={() => setRenamingPasskeyId(null)}>
+                        <Button type="button" variant="outline" tone="secondary" onClick={() => setRenamingPasskeyId(null)}>
                           Cancel
                         </Button>
                       </div>
@@ -485,13 +485,13 @@ export default function AccountSettings() {
                             <input type="hidden" name="credentialId" value={passkey.id} />
                             <Button
                               type="submit"
-                              variant="destructive"
+                              variant="soft" tone="destructive"
                               aria-label={`Confirm remove ${label}`}
                             >
                               Confirm
                             </Button>
                           </RouterForm>
-                          <Button type="button" plain onClick={() => setRemovingPasskeyId(null)}>
+                          <Button type="button" variant="outline" tone="secondary" onClick={() => setRemovingPasskeyId(null)}>
                             Cancel
                           </Button>
                         </div>
@@ -499,7 +499,7 @@ export default function AccountSettings() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
-                            plain
+                            variant="outline" tone="secondary"
                             aria-label={`Rename ${label}`}
                             onClick={() => setRenamingPasskeyId(passkey.id)}
                           >
@@ -507,7 +507,7 @@ export default function AccountSettings() {
                           </Button>
                           <Button
                             type="button"
-                            plain
+                            variant="outline" tone="secondary"
                             aria-label={`Remove ${label}`}
                             disabled={!canRemovePasskey}
                             onClick={() => setRemovingPasskeyId(passkey.id)}
@@ -561,7 +561,7 @@ export default function AccountSettings() {
                   <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Change password
                   </Button>
-                  <Button type="button" plain onClick={cancelPasswordForm}>
+                  <Button type="button" variant="outline" tone="secondary" onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
@@ -573,10 +573,10 @@ export default function AccountSettings() {
                   <input type="hidden" name="intent" value="removePassword" />
                   <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" variant="destructive">
+                    <Button type="submit" variant="soft" tone="destructive">
                       Confirm
                     </Button>
-                    <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
+                    <Button type="button" variant="outline" tone="secondary" onClick={() => setPasswordFormState("idle")}>
                       Cancel
                     </Button>
                   </div>
@@ -584,11 +584,11 @@ export default function AccountSettings() {
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
-                <Button type="button" plain onClick={() => openPasswordForm("change")}>
+                <Button type="button" variant="outline" tone="secondary" onClick={() => openPasswordForm("change")}>
                   Change password
                 </Button>
                 {canRemovePassword && (
-                  <Button type="button" variant="destructive" onClick={() => setPasswordFormState("removeConfirm")}>
+                  <Button type="button" variant="soft" tone="destructive" onClick={() => setPasswordFormState("removeConfirm")}>
                     Remove password
                   </Button>
                 )}
@@ -610,7 +610,7 @@ export default function AccountSettings() {
                   <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Set password
                   </Button>
-                  <Button type="button" plain onClick={cancelPasswordForm}>
+                  <Button type="button" variant="outline" tone="secondary" onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
@@ -620,7 +620,7 @@ export default function AccountSettings() {
                 <Text tone="muted" className="mb-4">
                   You don't have a password set. Set one to enable email/password login.
                 </Text>
-                <Button type="button" plain onClick={() => openPasswordForm("set")}>
+                <Button type="button" variant="outline" tone="secondary" onClick={() => openPasswordForm("set")}>
                   Set password
                 </Button>
               </div>
@@ -639,17 +639,17 @@ export default function AccountSettings() {
               <Text tone="muted" size="sm">Are you sure?</Text>
               <RouterForm method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
                 <input type="hidden" name="intent" value="signOutEverywhere" />
-                <Button type="submit" variant="destructive" aria-label="Confirm sign out everywhere">
+                <Button type="submit" variant="soft" tone="destructive" aria-label="Confirm sign out everywhere">
                   Confirm
                 </Button>
               </RouterForm>
-              <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(false)}>
+              <Button type="button" variant="outline" tone="secondary" onClick={() => setIsConfirmingSignOutEverywhere(false)}>
                 Cancel
               </Button>
             </div>
           ) : (
             <div className="mt-3">
-              <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(true)}>
+              <Button type="button" variant="outline" tone="secondary" onClick={() => setIsConfirmingSignOutEverywhere(true)}>
                 Sign out everywhere
               </Button>
             </div>

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/$";
 import { data } from "react-router";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 

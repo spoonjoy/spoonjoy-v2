@@ -15,7 +15,7 @@ import { getOAuthEnv } from "~/lib/oauth-route.server";
 import { AuthPage } from "~/components/auth/auth-page";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";

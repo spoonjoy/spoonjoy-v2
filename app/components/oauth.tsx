@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Button } from './button'
+import { Button } from '~/components/ouro/button/button'
 
 export type OAuthProvider = 'google' | 'github' | 'apple'
 

@@ -1,7 +1,7 @@
 import type { Route } from "./+types/my-recipes";
 import { Form, useLoaderData, useLocation } from "react-router";
 import { Plus, Search } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Pagination } from "~/components/ouro/pagination/pagination";
@@ -185,7 +185,7 @@ export function DrawerSearch({
         startAdornment={<Search />}
         className="flex-1"
       />
-      <Button type="submit" plain>Search</Button>
+      <Button type="submit" variant="outline" tone="secondary">Search</Button>
       {query ? <Link href=".">Clear</Link> : null}
     </Form>
   );

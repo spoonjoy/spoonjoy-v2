@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 import {
   browserSupportsPasskeys,

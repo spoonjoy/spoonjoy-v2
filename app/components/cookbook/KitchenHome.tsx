@@ -1,6 +1,6 @@
 import { BookOpen, ChefHat, Plus, Search as SearchIcon, Settings, Share2, Users } from "lucide-react";
 import { chefDisplayName } from "~/lib/username";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Card } from "~/components/ouro/card/card";
 import { Empty } from "~/components/ouro/empty/empty";
 import { Item } from "~/components/ouro/item/item";
@@ -76,12 +76,12 @@ export function KitchenHome({
             {isOwner ? (
               <>
                 {/* Desktop reaches Chefs from its top navigation; a phone reaches it here. */}
-                <Button href="/chefs" plain startIcon={Users} className="lg:hidden">Chefs</Button>
-                <Button href="/account/settings" plain startIcon={Settings} aria-label="Kitchen settings">Settings</Button>
+                <Button href="/chefs" variant="outline" tone="secondary" startIcon={Users} className="lg:hidden">Chefs</Button>
+                <Button href="/account/settings" variant="outline" tone="secondary" startIcon={Settings} aria-label="Kitchen settings">Settings</Button>
                 <Button href="/recipes/new" startIcon={Plus}>Create recipe</Button>
               </>
             ) : (
-              <Button href="/search" plain startIcon={SearchIcon}>Search recipes</Button>
+              <Button href="/search" variant="outline" tone="secondary" startIcon={SearchIcon}>Search recipes</Button>
             )}
           </div>
         </header>
@@ -134,7 +134,7 @@ function RecipeIndex({
     <section aria-labelledby="recipe-index-heading">
       <div className="mb-2 flex items-end justify-between gap-4">
         <Heading id="recipe-index-heading" level={2} size="xl">Recipe index</Heading>
-        {isOwner && recipes.length > 0 ? <Button href="/recipes/new" plain startIcon={Plus}>New recipe</Button> : null}
+        {isOwner && recipes.length > 0 ? <Button href="/recipes/new" variant="outline" tone="secondary" startIcon={Plus}>New recipe</Button> : null}
       </div>
 
       <ItemGroup
@@ -194,7 +194,7 @@ function RecipeIndexRow({
       actions={
         <>
           <CoverProvenanceBadge label={recipe.coverProvenanceLabel} />
-          <Button plain aria-label={`Share ${recipe.title}`} onClick={() => onShare(recipe)}>
+          <Button variant="outline" tone="secondary" aria-label={`Share ${recipe.title}`} onClick={() => onShare(recipe)}>
             <Share2 />
           </Button>
         </>
@@ -216,7 +216,7 @@ function CookbookShelf({
     <section aria-labelledby="cookbook-shelf-heading" className="mt-12">
       <div className="mb-5 flex items-end justify-between gap-4">
         <Heading id="cookbook-shelf-heading" level={2} size="xl">Cookbooks</Heading>
-        {isOwner ? <Button href="/cookbooks/new" plain>New cookbook</Button> : null}
+        {isOwner ? <Button href="/cookbooks/new" variant="outline" tone="secondary">New cookbook</Button> : null}
       </div>
 
       {cookbooks.length > 0 ? (
@@ -268,7 +268,7 @@ function CookbookCover({
         />
       }
       action={
-        <Button plain aria-label={`Share ${cookbook.title}`} onClick={() => onShare(cookbook)}>
+        <Button variant="outline" tone="secondary" aria-label={`Share ${cookbook.title}`} onClick={() => onShare(cookbook)}>
           <Share2 />
         </Button>
       }

@@ -3,7 +3,7 @@ import { Search as SearchIcon } from "lucide-react";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 
 // What a recipe link shows when its recipe is gone: whether it was deleted, a recipe search and the
 // recipe box (product audit 2026-10-09, finding 20). It never names the deleted recipe's chef: until
@@ -28,7 +28,7 @@ export function RecipeNotFound({ deleted }: { deleted: boolean }) {
       </Form>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button href="/recipes" plain>Browse recipes</Button>
+        <Button href="/recipes" variant="outline" tone="secondary">Browse recipes</Button>
       </div>
     </CookbookPage>
   );

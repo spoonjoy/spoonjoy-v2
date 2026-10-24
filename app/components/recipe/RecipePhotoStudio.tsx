@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Form, useNavigation, useSubmit } from "react-router";
 import { ChevronDown, Loader2, Sparkles } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Field } from "~/components/ouro/field/field";
 import { FileField } from "~/components/ouro/file-field/file-field";
@@ -197,7 +197,7 @@ export function RecipePhotoStudio({
           <div className="space-y-3">
             <Button
               type="button"
-              plain
+              variant="outline" tone="secondary"
               aria-expanded={showSpoonDetails}
               onClick={() => setShowSpoonDetails((visible) => !visible)}
               disabled={isPosting}

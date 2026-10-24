@@ -21,7 +21,7 @@ import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
 import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
 import { CopyButton } from "~/components/ouro/copy-button/copy-button";
@@ -608,7 +608,7 @@ export function ResponsePanel({ response, onClear }: { response: PlaygroundRespo
               {response.secrets.map((secret, index) => (
                 <CopyButton key={`${secret.label}-${index}`} variant="plain" value={secret.value} label={`Copy hidden ${secret.label} value`} />
               ))}
-            <Button plain size="sm" onClick={onClear}>
+            <Button variant="outline" tone="secondary" size="sm" onClick={onClear}>
               Clear response
             </Button>
           </div>
@@ -990,7 +990,7 @@ export default function DeveloperPlayground() {
         divider
         description="Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for private, scoped, and mutating calls."
         actions={(
-        <Button href="/api" plain>
+        <Button href="/api" variant="outline" tone="secondary">
           <Terminal data-slot="icon" aria-hidden="true" />
           Docs
         </Button>
@@ -1016,7 +1016,7 @@ export default function DeveloperPlayground() {
           </p>
           <div className="flex flex-wrap gap-2">
             <CopyButton variant="plain" value={absoluteSpecUrl(selectedSurface.url, requestOrigin)} label="Copy import URL" />
-            <Button href={selectedSurface.url} plain>
+            <Button href={selectedSurface.url} variant="outline" tone="secondary">
               <Braces data-slot="icon" aria-hidden="true" />
               Open spec
             </Button>
@@ -1167,7 +1167,7 @@ export default function DeveloperPlayground() {
                   />
                   <div>
                     <Button
-                      plain
+                      variant="outline" tone="secondary"
                       startIcon={KeyRound}
                       onClick={() => {
                         setAuthMode("session");
@@ -1211,7 +1211,7 @@ export default function DeveloperPlayground() {
             ) : null}
             {hasHeaderMutationId ? (
               <div className="mt-3">
-                <Button plain startIcon={RefreshCw} onClick={() => updateParam("X-Client-Mutation-Id", freshMutationId(selected))}>
+                <Button variant="outline" tone="secondary" startIcon={RefreshCw} onClick={() => updateParam("X-Client-Mutation-Id", freshMutationId(selected))}>
                   Fresh mutation id
                 </Button>
               </div>
@@ -1229,7 +1229,7 @@ export default function DeveloperPlayground() {
                   Generate a verifier and state, store both in your client, and verify state after the callback before exchanging the code.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button plain startIcon={KeyRound} onClick={() => void generatePkce()}>
+                  <Button variant="outline" tone="secondary" startIcon={KeyRound} onClick={() => void generatePkce()}>
                     Generate PKCE + state
                   </Button>
                   {pkceVerifier ? <CopyButton variant="plain" value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
@@ -1246,7 +1246,7 @@ export default function DeveloperPlayground() {
                   placeholder="https://example.com/oauth/callback?code=oac_...&state=state_..."
                 />
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button plain startIcon={RefreshCw} onClick={prepareOauthTokenExchange}>
+                  <Button variant="outline" tone="secondary" startIcon={RefreshCw} onClick={prepareOauthTokenExchange}>
                     Prepare token exchange
                   </Button>
                   {oauthCallbackStatus ? (
@@ -1262,7 +1262,7 @@ export default function DeveloperPlayground() {
                   {bodyLabel}
                   <span className="flex flex-wrap gap-2">
                     {hasBodyMutationId ? (
-                      <Button plain size="sm" startIcon={RefreshCw} onClick={generateBodyMutationId}>
+                      <Button variant="outline" tone="secondary" size="sm" startIcon={RefreshCw} onClick={generateBodyMutationId}>
                         Fresh mutation id
                       </Button>
                     ) : null}
@@ -1272,7 +1272,7 @@ export default function DeveloperPlayground() {
                 {selected.requestBody.examples.length > 1 ? (
                   <div className="flex flex-wrap gap-2">
                     {selected.requestBody.examples.map((example) => (
-                      <Button key={example.name} plain size="sm" onClick={() => updateBody(example.example)}>
+                      <Button key={example.name} variant="outline" tone="secondary" size="sm" onClick={() => updateBody(example.example)}>
                         {example.label}
                       </Button>
                     ))}

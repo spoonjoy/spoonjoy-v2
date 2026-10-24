@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState, type RefObject } from "react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 import {
   authenticatePasskey,
@@ -77,7 +77,7 @@ export function PasskeySignInButton({
     <div className="space-y-2">
       <Button
         type="button"
-        plain
+        variant="outline" tone="secondary"
         className="w-full"
         disabled={status === "pending"}
         onClick={handleClick}

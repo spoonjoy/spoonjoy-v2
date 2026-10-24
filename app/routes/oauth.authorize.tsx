@@ -30,7 +30,7 @@ import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { DescriptionList } from "~/components/ouro/description-list/description-list";
 import { Heading } from "~/components/ouro/text/heading";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Text } from "~/components/ouro/text/text";
 import { OAUTH_FORM_ACTION_ORIGIN_HEADER } from "~/lib/security-headers.server";
 import { safeOAuthClientDisplayName } from "~/lib/oauth-client-metadata";
@@ -355,7 +355,7 @@ export default function OAuthAuthorize() {
         </form>
         <form method="post">
           <input type="hidden" name="consent_token" value={view.consentToken} />
-          <Button className="w-full sm:w-auto" type="submit" name="decision" value="deny" plain>
+          <Button className="w-full sm:w-auto" type="submit" name="decision" value="deny" variant="outline" tone="secondary">
             Deny
           </Button>
         </form>

@@ -11,7 +11,7 @@
 
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Link } from '~/components/ouro/link/link'
 import { ConfirmDialog } from '~/components/ouro/dialog/confirm-dialog'
 import { Reorderable } from '~/components/ouro/reorderable/reorderable'
@@ -152,7 +152,7 @@ export function StepList({ steps, recipeId, onChange, disabled = false }: StepLi
           type="button"
           onClick={handleAddStep}
           disabled={disabled}
-          plain
+          variant="outline" tone="secondary"
         >
           <Plus data-slot="icon" />
           Add step

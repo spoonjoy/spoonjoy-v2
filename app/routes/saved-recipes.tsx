@@ -1,7 +1,7 @@
 import type { Route } from "./+types/saved-recipes";
 import { chefDisplayName } from "~/lib/username";
 import { useLoaderData } from "react-router";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Item } from "~/components/ouro/item/item";
 import { ItemGroup } from "~/components/ouro/item/item-group";
 import { Text } from "~/components/ouro/text/text";
@@ -91,7 +91,7 @@ export default function SavedRecipes() {
           action={(
             <div className="flex flex-wrap gap-2">
               <Button href="/recipes">Explore recipes</Button>
-              <Button href="/cookbooks/new" plain>New cookbook</Button>
+              <Button href="/cookbooks/new" variant="outline" tone="secondary">New cookbook</Button>
             </div>
           )}
         >

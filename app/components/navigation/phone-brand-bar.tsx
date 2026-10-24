@@ -1,4 +1,4 @@
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { SpoonjoyLogo } from "~/components/spoonjoy-logo";
 

@@ -14,7 +14,7 @@
 
 import { Save, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextArea } from '~/components/ouro/text-field/text-area'
@@ -248,7 +248,7 @@ export function StepEditorCard({
 
         <Button
           type="button"
-          variant="destructive"
+          variant="soft" tone="destructive"
           onClick={handleRemove}
           disabled={disabled}
         >

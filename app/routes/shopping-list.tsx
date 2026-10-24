@@ -13,7 +13,7 @@ import {
 } from "~/lib/shopping-list-parser";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Plus } from "lucide-react";
 import { Field } from "~/components/ouro/field/field";
 import { FieldControl } from "~/components/ouro/field/field-parts";
@@ -341,7 +341,7 @@ export default function ShoppingList() {
           {/* istanbul ignore next -- @preserve */ checkedCount > 0 && (
             <Form method="post">
               <input type="hidden" name="intent" value="clearCompleted" />
-              <Button type="submit" plain>
+              <Button type="submit" variant="outline" tone="secondary">
                 Clear checked
               </Button>
             </Form>
@@ -349,7 +349,7 @@ export default function ShoppingList() {
           {/* istanbul ignore next -- @preserve */ displayItems.length > 0 && (
             <>
               <Button
-                variant="destructive"
+                variant="soft" tone="destructive"
                 onClick={() => setShowClearDialog(true)}
               >
                 Clear all

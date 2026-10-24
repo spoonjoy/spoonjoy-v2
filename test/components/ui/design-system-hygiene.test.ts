@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 
 const APP_AND_STORY_FILES = [
   "app/components",
@@ -35,8 +35,8 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// Every file the HX CLI installs from v1.2.1 (tag commit
-// f09b84572ac8314625d3388006a0395e32513ed2), whatever its extension or folder: components, lib
+// Every file the HX CLI installs from v1.2.3 (tag commit
+// 9669728d40c12476c2e7aa77ed06fef87c4faf83), whatever its extension or folder: components, lib
 // modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
 // (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
 // below pins the map itself, including the CLI's omission of the checker's leading docs comment.
@@ -75,11 +75,15 @@ describe("Spoonjoy UI design-system hygiene", () => {
   it("does not ship or hide the retired Catalyst source directory", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/ui"))).toBe(false);
   });
+  it("does not ship an app-owned Button wrapper", () => {
+    expect(existsSync(resolve(process.cwd(), "app/components/button.tsx"))).toBe(false);
+  });
   it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
-    expect(installed.tag).toBe("v1.2.1");
+    expect(installed.tag).toBe("v1.2.3");
+    expect(installed.tagCommit).toBe("9669728d40c12476c2e7aa77ed06fef87c4faf83");
     expect(installedFiles).toHaveLength(547);
     expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
-      .toBe("7a9070c8381ff54d9466c7f089dfa94554f36b49e4d072568206e58f60cb22d7");
+      .toBe("a47fa1f50ed2d8eecdce77053e7929451914abd9e1ff05e54f5d78a84cee7857");
     const actual = Object.fromEntries(installedFiles.map((file) => [
       file,
       existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,

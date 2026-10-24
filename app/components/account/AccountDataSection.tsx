@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Form as RouterForm } from "react-router";
 import { Download } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Form } from "~/components/ouro/form/form";
 import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -48,7 +48,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
           shopping list, cooks and photo links, as one JSON file.
         </Text>
         <div className="mt-3">
-          <Button href="/account/export" plain reloadDocument download>
+          <Button href="/account/export" variant="outline" tone="secondary" reloadDocument download>
             <Download data-slot="icon" className="size-4" />
             Download my data
           </Button>
@@ -92,17 +92,17 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
                 </Text>
               )}
               <div className="flex flex-wrap gap-3">
-                <Button type="submit" variant="destructive" disabled={typedUsername.trim() !== username}>
+                <Button type="submit" variant="soft" tone="destructive" disabled={typedUsername.trim() !== username}>
                   Delete my account
                 </Button>
-                <Button type="button" plain onClick={() => setIsDeleting(false)}>
+                <Button type="button" variant="outline" tone="secondary" onClick={() => setIsDeleting(false)}>
                   Cancel
                 </Button>
               </div>
             </Form>
           ) : (
             <div className="mt-3">
-              <Button type="button" variant="destructive" onClick={() => setIsDeleting(true)}>
+              <Button type="button" variant="soft" tone="destructive" onClick={() => setIsDeleting(true)}>
                 Delete account…
               </Button>
             </div>
@@ -110,7 +110,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
           {isDeleting && !hasPassword ? (
             <RouterForm method="post" className="mt-3">
               <input type="hidden" name="intent" value="reauthenticate" />
-              <Button type="submit" plain>
+              <Button type="submit" variant="outline" tone="secondary">
                 Sign in again
               </Button>
             </RouterForm>

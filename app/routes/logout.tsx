@@ -3,7 +3,7 @@ import { Form as RouterForm, data, redirect, useActionData } from "react-router"
 import { destroyUserSession, getUserId } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { AuthPage } from "~/components/auth/auth-page";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { Form } from "~/components/ouro/form/form";

@@ -61,7 +61,6 @@ function hasUIComponentImports(content: string): boolean {
   return (
     content.includes('from "~/components/ouro/') ||
     content.includes("from '~/components/ouro/") ||
-    content.includes('from "~/components/button"') ||
     content.includes('from "~/components/recipe/') ||
     content.includes('from "@/') ||
     content.includes("from '@/")
@@ -127,6 +126,10 @@ describe("Recipe Routes UI/CSS Compliance", () => {
   });
 
   describe("Uses UI Components", () => {
+    it("recognizes direct HX imports, not the retired app Button wrapper", () => {
+      expect(hasUIComponentImports('import { Button } from "~/components/ouro/button/button";')).toBe(true);
+      expect(hasUIComponentImports('import { Button } from "~/components/button";')).toBe(false);
+    });
     it.each(RECIPE_ROUTE_FILES_WITH_UI)(
       "%s should import released UI or its app-owned integration",
       (filePath) => {
@@ -149,7 +152,7 @@ describe("Recipe Routes UI/CSS Compliance", () => {
         expect(
           usesRawButtonElements(content),
           `${filePath} uses raw <button> elements. ` +
-          `Should use released Button through app/components/button.tsx`
+          `Import the released Button directly from ~/components/ouro/button/button`
         ).toBe(false);
       }
     );

@@ -8,7 +8,7 @@ import {
   normalizeUserCode,
   rememberTypedCode,
 } from "~/lib/agent-connection-route.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";

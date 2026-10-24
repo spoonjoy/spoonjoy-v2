@@ -3,7 +3,7 @@ import { redirect, data, useActionData, useLoaderData, useNavigate, useFetcher }
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
@@ -572,7 +572,7 @@ export default function NewStep() {
                       actions={
                         <Button
                           type="button"
-                          variant="destructive"
+                          variant="soft" tone="destructive"
                           onClick={() => handleRemoveIngredient(index)}
                           aria-label={`Remove ${ingredient.ingredientName}`}
                         >

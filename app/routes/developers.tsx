@@ -17,7 +17,7 @@ import { API_V1_ERROR_STATUS, API_V1_RESOURCES, API_V1_SCOPE_REQUIREMENTS } from
 import { captureSafeClientEvent } from "~/lib/analytics";
 import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
@@ -547,15 +547,15 @@ export default function Developers() {
             <Play data-slot="icon" aria-hidden="true" />
             Playground
           </Button>
-          <Button href={openapiUrl} plain>
+          <Button href={openapiUrl} variant="outline" tone="secondary">
             <Braces data-slot="icon" aria-hidden="true" />
             Full spec
           </Button>
-          <Button href={sdkOpenapiUrl} plain>
+          <Button href={sdkOpenapiUrl} variant="outline" tone="secondary">
             <Braces data-slot="icon" aria-hidden="true" />
             SDK spec
           </Button>
-          <Button href={connectorOpenapiUrl} plain>
+          <Button href={connectorOpenapiUrl} variant="outline" tone="secondary">
             <Braces data-slot="icon" aria-hidden="true" />
             Connector spec
           </Button>
@@ -579,7 +579,7 @@ export default function Developers() {
 
       <nav aria-label="Developer guide sections" className="flex flex-wrap gap-2 border-b border-[var(--sj-border-strong)] py-4">
         {guideSections.map((section) => (
-          <Button key={section} href={`#${sectionId(section)}`} plain size="sm">
+          <Button key={section} href={`#${sectionId(section)}`} variant="outline" tone="secondary" size="sm">
             {section}
           </Button>
         ))}

@@ -2,7 +2,7 @@ import type { Route } from "./+types/recipes._index";
 import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Heading } from "~/components/ouro/text/heading";
 import { Item } from "~/components/ouro/item/item";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -130,9 +130,9 @@ export default function RecipesIndex() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit">Search</Button>
-                  {hasQuery ? <Button href="/recipes" plain>Clear</Button> : null}
+                  {hasQuery ? <Button href="/recipes" variant="outline" tone="secondary">Clear</Button> : null}
                   {isAuthenticated ? (
-                    <Button href="/recipes/new" plain>
+                    <Button href="/recipes/new" variant="outline" tone="secondary">
                       <Plus data-slot="icon" aria-hidden="true" />
                       Create recipe
                     </Button>
@@ -174,9 +174,9 @@ export default function RecipesIndex() {
             <RuledEmptyState
               title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
               action={hasQuery ? (
-                <Button href="/recipes" plain>Clear search</Button>
+                <Button href="/recipes" variant="outline" tone="secondary">Clear search</Button>
               ) : after ? (
-                <Button href="/recipes" plain>Back to the newest</Button>
+                <Button href="/recipes" variant="outline" tone="secondary">Back to the newest</Button>
               ) : null}
             >
               <Text tone="muted" className="mx-auto mt-2 max-w-xl">
