@@ -229,7 +229,7 @@ export default function McpPage() {
               or an OAuth access token bound to this resource.
             </p>
             <div className="mt-6">
-              <CodeBlock code={endpoint} />
+              <CodeBlock code={endpoint} wrap />
             </div>
           </div>
 
