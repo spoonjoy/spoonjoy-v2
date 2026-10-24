@@ -15,6 +15,8 @@ import {
   type CookProgressValue,
   type CookSyncStatus,
 } from "~/lib/cook-session-sync";
+import { cookTabStepIndex, readCookTab, writeCookTab } from "~/lib/cook-tab";
+import { recordLocalCookingNow } from "~/lib/cooking-now";
 import { resolveIngredientAffordance } from "~/lib/ingredient-affordances";
 import { usePostHog } from "~/lib/use-posthog";
 
@@ -48,6 +50,13 @@ export interface RecipeDetailLoaderData {
 /** The recipe page's controller, plus what only the page shows: the cook-session sync status. */
 export interface RouteCookController extends CookController {
   syncStatus: CookSyncStatus | null;
+  /** The step to bring into view once this tab's progress has loaded, or null to leave the page where it is. */
+  resumeStepNum: number | null;
+}
+
+export interface RouteCookControllerOptions {
+  /** The recipe's cover, for the signed-out Cooking now list. */
+  coverImageUrl?: string | null;
 }
 
 const COOK_PROGRESS_STORAGE_VERSION = 1;
@@ -250,7 +259,10 @@ export function toCookRecipe(recipe: RecipeDetailLoaderData["recipe"]): CookReci
  * mode is the recipe's `#cook` history entry; timers live here, above cook mode's step view, so
  * changing step or leaving cook mode keeps them.
  */
-export function useRouteCookController(loaderData: RecipeDetailLoaderData): RouteCookController {
+export function useRouteCookController(
+  loaderData: RecipeDetailLoaderData,
+  { coverImageUrl = null }: RouteCookControllerOptions = {},
+): RouteCookController {
   const { recipe: loadedRecipe } = loaderData;
   const cookSessionUserId = loaderData.cookSessionUserId ?? null;
   const posthog = usePostHog();
@@ -274,6 +286,12 @@ export function useRouteCookController(loaderData: RecipeDetailLoaderData): Rout
   const [activeCookStepIndex, setActiveCookStepIndex] = useState(0);
   const [loadedCookProgressRecipeId, setLoadedCookProgressRecipeId] = useState<string | null>(null);
   const pendingCookModeScroll = useRef(false);
+  // Whether this tab has its own step for the recipe (sessionStorage), which another tab's or
+  // device's progress then never moves.
+  const tabOwnsStep = useRef(false);
+  // This tab left the recipe with cook mode open, so coming back to it reopens cook mode.
+  const restoreCookMode = useRef(false);
+  const [resumeStepNum, setResumeStepNum] = useState<number | null>(null);
 
   const cookProgressBounds = useMemo<CookProgressBounds>(() => ({
     stepIds: steps.map((step) => step.id),
@@ -292,7 +310,7 @@ export function useRouteCookController(loaderData: RecipeDetailLoaderData): Rout
     setScaleFactor(progress.scaleFactor);
     setCheckedIngredients(new Set(progress.checkedIngredientIds));
     setCheckedStepOutputs(new Set(progress.checkedStepOutputIds));
-    setActiveCookStepIndex(progress.activeStepIndex);
+    if (!tabOwnsStep.current) setActiveCookStepIndex(progress.activeStepIndex);
   }, []);
   const syncStatus = useCookSessionSync({
     recipeId: recipe.id,
@@ -369,6 +387,16 @@ export function useRouteCookController(loaderData: RecipeDetailLoaderData): Rout
       setCheckedStepOutputs(storedProgress.checkedStepOutputIds);
       setActiveCookStepIndex(storedProgress.activeStepIndex);
     }
+
+    // This tab's own step wins over the one shared by every tab and device.
+    const tab = readCookTab(recipe.id);
+    const tabStepIndex = tab ? cookTabStepIndex(tab, cookProgressBounds.stepIds) : null;
+    tabOwnsStep.current = tabStepIndex !== null;
+    if (tabStepIndex !== null) setActiveCookStepIndex(tabStepIndex);
+    restoreCookMode.current = tab?.mode === "cook";
+    // Both indexes are already within the recipe's steps (cookTabStepIndex and the bounds clamp them).
+    const resumeIndex = tabStepIndex ?? storedProgress?.activeStepIndex ?? 0;
+    setResumeStepNum(resumeIndex > 0 ? steps[resumeIndex]!.stepNum : null);
 
     setLoadedCookProgressRecipeId(recipe.id);
   }, [recipe.id, cookProgressBounds, cookSessionUserId]);
@@ -471,6 +499,53 @@ export function useRouteCookController(loaderData: RecipeDetailLoaderData): Rout
 
   const cookMode = isCookMode && steps.length > 0;
 
+  useEffect(() => {
+    if (loadedCookProgressRecipeId !== recipe.id || !restoreCookMode.current) return;
+    restoreCookMode.current = false;
+    if (location.hash !== "#cook" && steps.length > 0) {
+      void navigate(
+        { pathname: location.pathname, search: location.search, hash: "#cook" },
+        { replace: true, preventScrollReset: true },
+      );
+    }
+  }, [loadedCookProgressRecipeId, recipe.id, location.hash, location.pathname, location.search, navigate, steps.length]);
+
+  // This tab's recipe, mode and step, so a reload of this tab comes back to them.
+  useEffect(() => {
+    if (loadedCookProgressRecipeId !== recipe.id || restoreCookMode.current) return;
+    writeCookTab({
+      recipeId: recipe.id,
+      mode: cookMode ? "cook" : "read",
+      activeStepIndex: activeCookStepIndex,
+      activeStepId: steps[activeCookStepIndex]?.id ?? null,
+    });
+  }, [loadedCookProgressRecipeId, recipe.id, cookMode, activeCookStepIndex, steps]);
+
+  // Signed out, the Cooking now list lives in this browser; signed in, the account keeps it.
+  useEffect(() => {
+    if (loadedCookProgressRecipeId !== recipe.id || cookSessionUserId) return;
+    recordLocalCookingNow({
+      recipe: { id: recipe.id, title: recipe.title, coverImageUrl },
+      activeStepId: steps[activeCookStepIndex]?.id ?? null,
+      activeStepIndex: activeCookStepIndex,
+      stepCount: steps.length,
+      checkedIds: [...checkedIngredients, ...checkedStepOutputs],
+      totalCount: cookProgressBounds.ingredientIds.size + cookProgressBounds.stepOutputIds.size,
+      now: Date.now(),
+    });
+  }, [
+    loadedCookProgressRecipeId,
+    cookSessionUserId,
+    recipe.id,
+    recipe.title,
+    coverImageUrl,
+    steps,
+    activeCookStepIndex,
+    checkedIngredients,
+    checkedStepOutputs,
+    cookProgressBounds,
+  ]);
+
   const timers = useMemo(() => cookTimers(recipe.id, steps), [recipe.id, steps]);
   useScreenWakeLock(cookMode);
 
@@ -483,10 +558,14 @@ export function useRouteCookController(loaderData: RecipeDetailLoaderData): Rout
     cookMode,
     timers,
     syncStatus,
+    resumeStepNum,
     toggleIngredient,
     toggleStepOutput,
     setScale,
-    goToStep: (index) => setActiveCookStepIndex(clampStepIndex(index, steps.length)),
+    goToStep: (index) => {
+      tabOwnsStep.current = true;
+      setActiveCookStepIndex(clampStepIndex(index, steps.length));
+    },
     enterCookMode,
     exitCookMode,
     clearProgress,

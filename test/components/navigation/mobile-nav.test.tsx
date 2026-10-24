@@ -134,6 +134,25 @@ describe("MobileNav signed out", () => {
   });
 });
 
+describe("MobileNav Cooking now count", () => {
+  it("carries the count on the home tab, hidden from screen readers with the icon", () => {
+    render(
+      <MemoryRouter initialEntries={["/recipes"]}>
+        <MobileNav isAuthenticated cookingNowCount={2} />
+      </MemoryRouter>,
+    );
+    const kitchen = within(tabBar()).getByRole("link", { name: "Kitchen" });
+    expect(within(kitchen).getByTestId("tab-cooking-now-count")).toHaveTextContent("2");
+    expect(within(kitchen).getByTestId("tab-cooking-now-count").closest("[aria-hidden='true']")).not.toBeNull();
+    expect(screen.getAllByTestId("tab-cooking-now-count")).toHaveLength(1);
+  });
+
+  it("shows no count with nothing in progress", () => {
+    renderAt("/recipes");
+    expect(screen.queryByTestId("tab-cooking-now-count")).toBeNull();
+  });
+});
+
 describe("MobileNavToaster", () => {
   it("raises HX's toasts above the tab bar on phones only while the tab bar shows", () => {
     const toaster = (path: string) => {

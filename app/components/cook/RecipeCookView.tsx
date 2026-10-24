@@ -38,6 +38,8 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
     0,
   );
   const progressChecked = checkedIngredientIds.size + checkedStepOutputIds.size;
+  // The step the cook is on, marked once they have started.
+  const hasCookProgress = progressChecked > 0 || activeStepIndex > 0;
 
   if (controller.cookMode) {
     const step = recipe.steps[activeStepIndex];
@@ -69,7 +71,7 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
   }
 
   return (
-    <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
+    <div id="steps" className="mx-auto max-w-4xl scroll-mt-24 px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
       <StepsSectionHeading hasProgress={progressChecked > 0} onClearProgress={controller.clearProgress} />
 
       {recipe.steps.length === 0 ? (
@@ -78,10 +80,13 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
           {emptyStepsAction}
         </div>
       ) : (
-        <div className="mt-6 border-y border-[var(--sj-border)] sm:mt-0" data-fold-columns="">
-          {recipe.steps.map((step) => (
-            <div key={step.id} id={`step-${step.stepNum}`} className="border-b border-[var(--sj-border)] last:border-b-0 print:break-inside-avoid">
+        // On a wide window, and on a foldable held like a book, the steps are a cookbook spread:
+        // each step's ingredients on the left page and its method on the right (app/styles/fold.css).
+        <div className="sj-cookbook-spread mt-6 border-y border-[var(--sj-border)] sm:mt-0">
+          {recipe.steps.map((step, index) => (
+            <div key={step.id} id={`step-${step.stepNum}`} className="scroll-mt-24 border-b border-[var(--sj-border)] last:border-b-0 print:break-inside-avoid">
               <StepCard
+                current={hasCookProgress && index === activeStepIndex}
                 stepNumber={step.stepNum}
                 title={step.stepTitle ?? undefined}
                 description={step.description}

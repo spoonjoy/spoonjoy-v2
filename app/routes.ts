@@ -26,6 +26,7 @@ export default [
   route("saved-recipes", "routes/saved-recipes.tsx"),
   route("chefs", "routes/chefs.tsx"),
   route("sitemap.xml", "routes/sitemap.xml.tsx"),
+  route("cooking-now.json", "routes/cooking-now.json.ts"),
   route("robots.txt", "routes/robots.txt.tsx"),
   route("llms.txt", "routes/llms[.]txt.ts"),
   route("ouro-provenance.json", "routes/ouro-provenance[.]json.ts"),

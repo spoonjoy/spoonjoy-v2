@@ -84,4 +84,16 @@ describe('StepCard', () => {
     expect(printed).toHaveClass('hidden', 'print:block')
     expect(Array.from(printed.children, (line) => line.textContent)).toEqual(['Step 1', '2 cups water', 'salt'])
   })
+
+  it('marks the step the cook is on', () => {
+    const { rerender } = render(
+      <StepCard {...progress} stepNumber={2} description="Simmer" ingredients={[]} stepOutputUses={[]} current />
+    )
+    expect(screen.getByTestId('current-step-marker')).toHaveTextContent('You are here')
+    expect(screen.getByRole('article')).toHaveAttribute('data-current-step', '')
+
+    rerender(<StepCard {...progress} stepNumber={2} description="Simmer" ingredients={[]} stepOutputUses={[]} />)
+    expect(screen.queryByTestId('current-step-marker')).toBeNull()
+    expect(screen.getByRole('article')).not.toHaveAttribute('data-current-step')
+  })
 })

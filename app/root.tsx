@@ -46,6 +46,8 @@ import { RouteErrorContent } from "~/components/errors/route-error";
 import { PhoneBrandBar } from "~/components/navigation/phone-brand-bar";
 import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
+import { useCookingNow } from "~/hooks/use-cooking-now";
+import { CookingNowPill } from "~/components/cooking-now/CookingNow";
 import "./styles/tailwind.css";
 import "./styles/fold.css";
 
@@ -141,9 +143,12 @@ function LoginPopover({ oauthProviders }: { oauthProviders: OAuthProvider[] }) {
 export function AppNavbar({
   userId,
   oauthProviders = [],
+  cookingNowCount = 0,
 }: {
   userId: string | null;
   oauthProviders?: OAuthProvider[];
+  /** How many recipes the cook has in progress; the "Cooking" pill shows when there is one. */
+  cookingNowCount?: number;
 }) {
   const location = useLocation();
   const currentNav = getActiveNav(location.pathname);
@@ -161,6 +166,7 @@ export function AppNavbar({
       items={links.map(({ label, href, nav }) => ({ label, href, current: currentNav === nav }))}
       actions={userId ? (
         <>
+          <CookingNowPill count={cookingNowCount} />
           <ColorSchemeToggle />
           <Button href="/account/settings" variant="outline" tone="secondary" aria-current={currentNav === "account" ? "page" : undefined}>Account</Button>
           <Form method="post" action="/logout" className="m-0" onSubmit={clearCookProgressCache}>
@@ -169,6 +175,7 @@ export function AppNavbar({
         </>
       ) : (
         <>
+          <CookingNowPill count={cookingNowCount} />
           <ColorSchemeToggle />
           <LoginPopover oauthProviders={oauthProviders} />
           <Button href="/signup">Sign up</Button>
@@ -183,6 +190,8 @@ export default function App() {
   const location = useLocation();
   const navigation = useNavigation();
   const posthog = usePostHog();
+  // The cook's recipes in progress, read again on every page, for the nav's "Cooking" pill.
+  const cookingNowCount = useCookingNow(Boolean(userId), location.pathname).entries.length;
 
   // Apply storage schema migration after hydration (client-side only)
   useEffect(() => {
@@ -224,7 +233,7 @@ export default function App() {
       <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
         {userId ? null : <PhoneBrandBar />}
         <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
-          <AppNavbar userId={userId} oauthProviders={oauthProviders} />
+          <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
         </div>
         {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
             max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
@@ -237,7 +246,7 @@ export default function App() {
           <Outlet />
         </main>
       </div>
-      <MobileNav isAuthenticated={!!userId} />
+      <MobileNav isAuthenticated={!!userId} cookingNowCount={cookingNowCount} />
       {/* Floats above the phone's tab bar (MobileNav): its bottom margin, max(1rem, safe-area inset),
           plus its 4rem height and a gap. Keeps Spoonjoy's earlier dismissal key, so a "Not now" stands. */}
       <InstallPrompt

@@ -19,6 +19,45 @@ export interface CookTimer {
   legacyStorageKey: string | null;
 }
 
+const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** The start of the timerId of every timer under `scope` (a recipe's id): its steps' timers. */
+export function cookTimerIdPrefix(scope: string): string {
+  return `spoonjoy-cook-timer:${scope}:`;
+}
+
+/** Where HX's Timer keeps a timer with a timerId (app/lib/ouro/use-timer.ts). */
+const HX_TIMER_STORAGE_PREFIX = "ouro-timer:";
+
+/**
+ * Seconds left on the soonest running timer of the recipe in this browser, or null when none
+ * runs. Reads HX Timer's stored state, so a page without the recipe's timers on it (the Kitchen's
+ * Cooking now strip) can still count down.
+ */
+export function soonestRunningCookTimerSeconds(scope: string, now: number): number | null {
+  const prefix = HX_TIMER_STORAGE_PREFIX + cookTimerIdPrefix(scope);
+  let soonest: number | null = null;
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key === null || !key.startsWith(prefix)) continue;
+      let value: unknown;
+      try {
+        value = JSON.parse(window.localStorage.getItem(key) ?? "");
+      } catch {
+        continue;
+      }
+      const timer = value as Record<string, unknown> | null;
+      if (!timer || timer.status !== "running" || !finite(timer.endsAt)) continue;
+      const seconds = Math.ceil((timer.endsAt - now) / 1000);
+      if (seconds > 0 && (soonest === null || seconds < soonest)) soonest = seconds;
+    }
+  } catch {
+    return null;
+  }
+  return soonest;
+}
+
 /** Every step's timer, for the steps whose duration is positive, in step order. */
 export function cookTimers(scope: string, steps: readonly CookTimerStepSource[], legacyRecipeId: string | null = scope): CookTimer[] {
   return steps.flatMap((step) => {
@@ -28,13 +67,11 @@ export function cookTimers(scope: string, steps: readonly CookTimerStepSource[],
       stepNum: step.stepNum,
       label: step.stepTitle ? `Step ${step.stepNum} · ${step.stepTitle}` : `Step ${step.stepNum}`,
       duration,
-      timerId: `spoonjoy-cook-timer:${scope}:${step.stepNum}`,
+      timerId: `${cookTimerIdPrefix(scope)}${step.stepNum}`,
       legacyStorageKey: legacyRecipeId === null ? null : `spoonjoy-cook-timers:v1:${legacyRecipeId}`,
     }];
   });
 }
-
-const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 function legacyState(value: unknown): TimerState | null {
   if (typeof value !== "object" || value === null) return null;

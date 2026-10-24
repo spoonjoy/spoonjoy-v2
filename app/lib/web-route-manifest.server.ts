@@ -117,6 +117,7 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/api.v1.$.ts", "/api/v1/*", "api-or-oauth"),
   route("routes/api.$.ts", "/api/*", "api-or-oauth"),
   route("routes/mcp.tsx", "/mcp", "api-or-oauth"),
+  route("routes/cooking-now.json.ts", "/cooking-now.json", "api-or-oauth"),
   route("routes/csp-report.ts", "/csp-report", "api-or-oauth"),
   route("routes/health.ts", "/health", "platform-asset"),
   route("routes/health.ready.ts", "/health/ready", "platform-asset"),

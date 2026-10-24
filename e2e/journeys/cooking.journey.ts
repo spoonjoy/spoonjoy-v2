@@ -12,7 +12,7 @@
 // proves the account kept the change. The history tests
 // open the recipe from the chef's kitchen home (a scratch cook's home lists no recipes) and change
 // no progress, so the chef's progress on Lemon Herb Rice stays untouched.
-import { test, expect } from "./support/journey";
+import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { expectNoHydrationErrors } from "./support/hydration";
@@ -31,6 +31,8 @@ function amount(text: string) {
 const LEMON_RICE_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}$`);
 const LEMON_RICE_COOK_URL = new RegExp(`^https?://[^/]+${LEMON_RICE}#cook$`);
 const SCRATCH_INDEX = 7;
+const TOMATO_SOUP_ID = "qa-kitchen-recipe-tomato-soup";
+const TOMATO_SOUP = `/recipes/${TOMATO_SOUP_ID}`;
 
 function recipeHeading(page: Page) {
   return page.getByRole("heading", { level: 1, name: "Lemon Herb Rice", exact: true });
@@ -332,6 +334,143 @@ test.describe("Cooking Lemon Herb Rice", () => {
         await expect(checkedRows).toHaveCount(0);
       });
       await expectAccessible();
+    });
+  });
+
+  // Cooking now: each tab keeps its own recipe, mode and step, and the Kitchen lists every recipe
+  // in progress. Same scratch cook as the progress tests, so they never race on one account.
+  test.describe("Cooking now", () => {
+    test.use({ storageState: scratchStorageStateForProject(SCRATCH_INDEX) });
+
+    test.beforeEach(async ({ page }, testInfo) => {
+      const cookId = scratchForProject(SCRATCH_INDEX, testInfo.project.name).id;
+      await resetCookProgress(page, LEMON_RICE_ID, cookId);
+      await resetCookProgress(page, TOMATO_SOUP_ID, cookId);
+    });
+
+    test("two tabs on one recipe keep their own steps, and each comes back to its own after a reload @mutates", async ({ page, verifyAfterReload, expectAccessible, expectConsoleError }, testInfo) => {
+      const panel = page.getByTestId("cook-mode-panel");
+      // Two tabs save one cook session, so a save can carry a revision the other tab already
+      // replaced. The server answers 409 with its state and the tab replays its change on top
+      // (app/lib/cook-session-sync.ts); the steps asserted below are the contract. Some browsers log
+      // that 409, so accept exactly that diagnostic for this session's URL, in either tab.
+      const conflict = /^Failed to load resource: the server responded with a status of 409(?: \((?:Conflict)?\))?$/;
+      const sessionUrl = /\/api\/cook-sessions\/qa-kitchen-recipe-lemon-rice$/;
+      expectConsoleError(conflict, { url: sessionUrl, optional: true });
+      const isReplayedConflict = (issue: { text: string; location?: string }) => conflict.test(issue.text) && sessionUrl.test(issue.location ?? "");
+
+      // Tab one opens cook mode and moves to step 2; the account saves step 2.
+      await openLemonRiceDirectly(page);
+      const onStepTwo = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.activeStepIndex === 1);
+      await page.getByRole("link", { name: "Cook mode", exact: true }).click();
+      await expect(panel).toContainText("Step 1 of 3");
+      await panel.getByRole("button", { name: "Next step" }).click();
+      await expect(panel).toContainText("Step 2 of 3");
+      await onStepTwo;
+
+      // Tab two: the same cook (same browser context), its own sessionStorage. A fresh tab starts
+      // at the account's step, then moves on to step 3 without moving tab one.
+      const second = await page.context().newPage();
+      const secondConsole = watchConsole(second);
+      try {
+        const secondPanel = second.getByTestId("cook-mode-panel");
+        await openLemonRiceDirectly(second);
+        const onStepThree = cookProgressSaved(second, LEMON_RICE_ID, (progress) => progress.activeStepIndex === 2);
+        await second.getByRole("link", { name: "Cook mode", exact: true }).click();
+        await expect(secondPanel).toContainText("Step 2 of 3");
+        await secondPanel.getByRole("button", { name: "Next step" }).click();
+        await expect(secondPanel).toContainText("Step 3 of 3");
+        await onStepThree;
+        await savePageScreenshot(second, testInfo, "cooking-now-second-tab");
+
+        // Tab two comes back to step 3 in cook mode after a reload.
+        await second.reload();
+        // Cook mode has no sync status; the step comes from this tab's own state.
+        await waitForHydration(second);
+        await expect(second).toHaveURL(LEMON_RICE_COOK_URL);
+        await expect(secondPanel).toContainText("Step 3 of 3");
+      } catch (error) {
+        throw appendConsoleIssues(error, secondConsole.issues);
+      } finally {
+        secondConsole.dispose();
+        await second.close();
+      }
+      assertNoConsoleIssues(secondConsole.issues.filter((issue) => !isReplayedConflict(issue)));
+
+      // Tab one is still on its own step 2, and still is after a reload.
+      await page.bringToFront();
+      await expect(panel).toContainText("Step 2 of 3");
+      await savePageScreenshot(page, testInfo, "cooking-now-first-tab");
+      await verifyAfterReload(async () => {
+        await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
+        await expect(panel).toContainText("Step 2 of 3");
+      });
+      await savePageScreenshot(page, testInfo, "cooking-now-after-reload");
+      await expectAccessible();
+
+      // Leaving for the Kitchen and going back to the recipe from its card reopens cook mode on step 2.
+      await page.goto("/");
+      await waitForHydration(page);
+      const strip = page.getByRole("region", { name: "Cooking now" });
+      await strip.getByRole("link", { name: "Back to Lemon Herb Rice", exact: true }).click();
+      await expect(page).toHaveURL(LEMON_RICE_COOK_URL);
+      await expect(panel).toContainText("Step 2 of 3");
+    });
+
+    test("the Kitchen lists every recipe in progress and offers Back to the one just cooked @mutates", async ({ page, verifyAfterReload, expectAccessible }, testInfo) => {
+      const strip = page.getByRole("region", { name: "Cooking now" });
+      // The one recipe just cooked leads the strip as its Back to card.
+      const hero = strip.getByTestId("cooking-now-hero");
+      // The navbar pill on a wide window, the Kitchen tab's badge on a phone.
+      const count = page.getByTestId("cooking-now-pill").or(page.getByTestId("tab-cooking-now-count")).filter({ visible: true });
+      const lemonCard = strip.getByRole("article", { name: "Lemon Herb Rice" });
+
+      // One recipe in progress: the strip shows it once, as the card that offers Back to it.
+      await openLemonRiceDirectly(page);
+      const riceChecked = cookProgressSaved(page, LEMON_RICE_ID, (progress) => progress.checkedIngredientIds.includes(JASMINE_RICE_ID));
+      await page.getByRole("checkbox", { name: "jasmine rice", exact: true }).click();
+      await riceChecked;
+
+      await page.goto("/");
+      await waitForHydration(page);
+      await expect(kitchenHeading(page)).toBeVisible();
+      await expect(hero.getByRole("link", { name: "Back to Lemon Herb Rice", exact: true })).toHaveAttribute("href", LEMON_RICE);
+      await expect(strip.getByRole("article")).toHaveCount(1);
+      await expect(hero).toHaveAccessibleName("Lemon Herb Rice");
+      await expect(lemonCard.getByTestId("cooking-now-step")).toHaveText("Step 1 of 3");
+      await expect(lemonCard.getByTestId("cooking-now-checked")).toHaveText("1 of 5 checked");
+      await expect(count).toContainText("1");
+      await savePageScreenshot(page, testInfo, "cooking-now-banner");
+      await expectAccessible();
+
+      // A second recipe in progress: both are listed as cards, newest first, and neither leads
+      // as Back to because there is no single recipe to go back to.
+      await page.goto(TOMATO_SOUP);
+      await waitForHydration(page);
+      await expect(syncStatus(page)).toHaveText("Progress synced");
+      const soupChecked = cookProgressSaved(page, TOMATO_SOUP_ID, (progress) => progress.checkedIngredientIds.length === 1);
+      await page.getByRole("checkbox", { name: "tomato", exact: true }).click();
+      await soupChecked;
+
+      await page.goto("/");
+      await waitForHydration(page);
+      await verifyAfterReload(async () => {
+        await expect(strip.getByRole("article")).toHaveCount(2);
+        await expect(strip.getByRole("article").first()).toHaveAccessibleName("Roasted Tomato Soup");
+        await expect(hero).toBeHidden();
+        await expect(count).toContainText("2");
+      });
+      const newWindow = lemonCard.getByRole("link", { name: "Open in new window: Lemon Herb Rice", exact: true });
+      await expect(newWindow).toHaveAttribute("href", LEMON_RICE);
+      await expect(newWindow).toHaveAttribute("target", "_blank");
+      await savePageScreenshot(page, testInfo, "cooking-now-strip");
+      await expectAccessible();
+
+      // Open goes straight back to the recipe with its progress.
+      await lemonCard.getByRole("link", { name: "Open Lemon Herb Rice", exact: true }).click();
+      await expect(page).toHaveURL(pathUrl(LEMON_RICE));
+      await expect(syncStatus(page)).toHaveText("Progress synced");
+      await expect(page.getByRole("checkbox", { name: "jasmine rice", exact: true })).toHaveAttribute("aria-checked", "true");
     });
   });
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cookTimers, restoreCookTimer } from "~/lib/cook-timers";
+import { cookTimers, restoreCookTimer, soonestRunningCookTimerSeconds } from "~/lib/cook-timers";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -125,5 +125,51 @@ describe("cookTimers", () => {
         changedDuringWrite.mockRestore();
       }
     });
+  });
+});
+
+describe("soonestRunningCookTimerSeconds", () => {
+  const NOW = 1_800_000_000_000;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  it("is the soonest running timer of the recipe, ignoring others and anything unreadable", () => {
+    const store = (key: string, value: string) => window.localStorage.setItem(`ouro-timer:${key}`, value);
+    store("spoonjoy-cook-timer:r1:1", JSON.stringify({ status: "running", duration: 900, endsAt: NOW + 600_000 }));
+    store("spoonjoy-cook-timer:r1:2", JSON.stringify({ status: "running", duration: 120, endsAt: NOW + 64_500 }));
+    store("spoonjoy-cook-timer:r1:3", JSON.stringify({ status: "paused", duration: 60, remainingMs: 5_000 }));
+    store("spoonjoy-cook-timer:r1:4", JSON.stringify({ status: "running", duration: 60, endsAt: NOW - 1_000 }));
+    store("spoonjoy-cook-timer:r1:5", "{not json");
+    store("spoonjoy-cook-timer:r1:6", "null");
+    store("spoonjoy-cook-timer:r1:7", JSON.stringify({ status: "running", duration: 60, endsAt: "soon" }));
+    store("spoonjoy-cook-timer:r10:1", JSON.stringify({ status: "running", duration: 60, endsAt: NOW + 5_000 }));
+    window.localStorage.setItem("unrelated", "1");
+
+    expect(soonestRunningCookTimerSeconds("r1", NOW)).toBe(65);
+    expect(soonestRunningCookTimerSeconds("r2", NOW)).toBeNull();
+  });
+
+  it("is null when storage cannot be read", () => {
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(soonestRunningCookTimerSeconds("r1", NOW)).toBeNull();
+  });
+
+  it("skips a key that disappears while it reads", () => {
+    vi.spyOn(window, "localStorage", "get").mockReturnValue({ length: 1, key: () => null } as unknown as Storage);
+    expect(soonestRunningCookTimerSeconds("r1", NOW)).toBeNull();
+  });
+
+  it("skips a timer whose value is gone by the time it is read", () => {
+    vi.spyOn(window, "localStorage", "get").mockReturnValue({
+      length: 1,
+      key: () => "ouro-timer:spoonjoy-cook-timer:r1:1",
+      getItem: () => null,
+    } as unknown as Storage);
+    expect(soonestRunningCookTimerSeconds("r1", NOW)).toBeNull();
   });
 });

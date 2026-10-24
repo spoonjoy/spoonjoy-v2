@@ -1,4 +1,5 @@
-/* Foldable screens (the iPhone Duo's inner screen). app/lib/fold.ts marks <html> with data-fold and
+/* Foldable screens (the iPhone Duo's inner screen), and the cookbook spread that wide windows share
+ * with them (at the end of this file). app/lib/fold.ts marks <html> with data-fold and
  * the --sj-fold-start / --sj-fold-end offsets before first paint. Held like a book the fold runs
  * down the middle (data-fold="vertical"), so a page becomes a two-page spread: nothing straddles
  * the fold and each side keeps a margin from it. Held tall, or stood half-open on the counter, it
@@ -6,7 +7,7 @@
  * the controls below it.
  *
  * These rules are unlayered so they beat Tailwind's layered utilities at every breakpoint, the
- * same way the print rules in tailwind.css do. None of them apply without a fold. */
+ * same way the print rules in tailwind.css do. Only the cookbook spread applies without a fold. */
 
 :root[data-fold] {
   /* Space kept clear on each side of the fold. */
@@ -59,15 +60,16 @@
     padding-right: max(1.75rem, env(safe-area-inset-right));
   }
 
-  :root[data-fold="vertical"] [data-fold-columns] {
-    columns: 2;
+  /* The recipe's steps as a cookbook spread (see "Cookbook spread" below), split at the fold: the
+     ingredients page ends a gutter before it and the method page starts a gutter after it. The fold
+     itself is the spine, so the drawn one is dropped. */
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-card {
+    grid-template-columns:
+      calc(var(--sj-fold-start) - var(--sj-fold-gutter) - max(1.75rem, env(safe-area-inset-left)))
+      minmax(0, 1fr);
     column-gap: calc(var(--sj-fold-gutter) * 2);
-    /* Keep the column gap on the fold: both page margins match, so the gap is centred. */
-    column-fill: balance;
-  }
-
-  :root[data-fold="vertical"] [data-fold-columns] > * {
-    break-inside: avoid;
+    padding-inline: 0;
+    background-image: none;
   }
 
   /* Cook mode: the step on the left page, its ingredients and scale on the right. */
@@ -240,5 +242,81 @@
   :root[data-fold="horizontal"] [data-testid="cook-mode-pager"] > article {
     justify-content: center;
     border-top: 0;
+  }
+}
+
+/* ---- Cookbook spread: a recipe's steps on a wide window or a book-held foldable ------------- */
+
+/* Each step is one opening of a printed cookbook: its ingredients on the left page and its title and
+   method on the right, the pages in a 5:7 balance with a thin spine between them. The method is set
+   in the serif at a measure of about 65 characters with generous leading, the ingredients a size up
+   from the phone's, and each opening has room above and below it. The step card's body unwraps
+   (display: contents) so its ingredients and method land in the opening's grid. Below 64rem without
+   a book-held fold (phones, a Duo held tall, a Split View half) the steps stay one column, each
+   step's ingredients above its method. The fold rules above set the columns at the fold. */
+@media screen and (min-width: 64rem) {
+  #steps:has(> .sj-cookbook-spread) {
+    max-width: 80rem;
+  }
+
+  .sj-cookbook-spread .sj-step-card {
+    --sj-spread-gap: clamp(3.5rem, 6vw, 6rem);
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    column-gap: var(--sj-spread-gap);
+    padding: 5rem 0 5.5rem;
+    /* The spine between the pages, in the middle of the gap. */
+    background-image: linear-gradient(var(--sj-border), var(--sj-border));
+    background-size: 1px 100%;
+    background-repeat: no-repeat;
+    background-position: calc((100% - var(--sj-spread-gap)) * 5 / 12 + var(--sj-spread-gap) / 2) 0;
+  }
+  .sj-cookbook-spread .sj-step-card-head { grid-column: 2; grid-row: 1; }
+  .sj-cookbook-spread .sj-step-card-head h3 { font-size: 2.375rem; line-height: 1.15; }
+  .sj-cookbook-spread .sj-step-card-body { display: contents; }
+  .sj-cookbook-spread .sj-step-ingredients { grid-column: 1; grid-row: 1 / span 2; max-width: none; margin: 0; }
+  .sj-cookbook-spread .sj-step-method {
+    grid-column: 2;
+    grid-row: 2;
+    max-width: 65ch;
+    margin: 2rem 0 0;
+    font-size: 1.25rem;
+    line-height: 1.8;
+    text-wrap: pretty;
+  }
+}
+
+/* The ingredients page, on any spread: HX Checklist a size up from the phone. Its strike is one
+   line-height tall, so it stays through the middle of the larger label. */
+@media screen and (min-width: 64rem) {
+  .sj-cookbook-spread .sj-step-ingredients [data-ouro-part="label"] { font-size: 1.125rem; line-height: 1.75rem; }
+  .sj-cookbook-spread .sj-step-ingredients [data-ouro-checklist-description] { font-size: 0.875rem; }
+  .sj-cookbook-spread .sj-step-ingredients [data-ouro-part="value"] { font-size: 1rem; line-height: 1.75rem; }
+}
+
+@media screen {
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-ingredients [data-ouro-part="label"] { font-size: 1.125rem; line-height: 1.75rem; }
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-ingredients [data-ouro-checklist-description] { font-size: 0.875rem; }
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-ingredients [data-ouro-part="value"] { font-size: 1rem; line-height: 1.75rem; }
+}
+
+@media screen {
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-card {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    padding-block: 3.5rem 4rem;
+  }
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-card-head { grid-column: 2; grid-row: 1; }
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-card-body { display: contents; }
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-ingredients { grid-column: 1; grid-row: 1 / span 2; max-width: none; margin: 0; }
+  :root[data-fold="vertical"] .sj-cookbook-spread .sj-step-method {
+    grid-column: 2;
+    grid-row: 2;
+    max-width: 65ch;
+    margin: 1.25rem 0 0;
+    font-size: 1.125rem;
+    line-height: 1.85;
+    text-wrap: pretty;
   }
 }

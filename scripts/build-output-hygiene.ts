@@ -20,6 +20,7 @@ const SERVER_ONLY_ROUTE_CHUNKS = new Set([
   "auth.webauthn.authenticate.verify",
   "auth.webauthn.register.options",
   "auth.webauthn.register.verify",
+  "cooking-now.json",
   "csp-report",
   "health",
   "health.ready",
