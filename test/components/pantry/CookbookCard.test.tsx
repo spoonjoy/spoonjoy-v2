@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { CookbookCard, type CookbookCardProps } from '~/components/pantry/CookbookCard'
 
@@ -40,13 +40,6 @@ describe('CookbookCard', () => {
 
     const links = screen.getAllByRole('link', { name: /italian classics/i })
     expect(links[0]).toHaveAttribute('href', '/cookbooks/cb-1')
-  })
-
-  it('uses custom href when provided', () => {
-    renderWithRouter(<CookbookCard {...base} href="/custom/path" />)
-
-    const links = screen.getAllByRole('link', { name: /italian classics/i })
-    expect(links[0]).toHaveAttribute('href', '/custom/path')
   })
 
   // #19 — 4-image grid cover
@@ -91,55 +84,13 @@ describe('CookbookCard', () => {
     expect(screen.getAllByText('0 recipes').length).toBeGreaterThan(0)
   })
 
-  // #20 — Share affordance
-  it('renders share button with correct aria-label when sharing is wired', () => {
-    renderWithRouter(<CookbookCard {...base} onShare={vi.fn()} />)
-
-    expect(screen.getByLabelText('Share Italian Classics')).toBeInTheDocument()
-  })
-
-  it('calls onShare with cookbook id when clicked', () => {
-    const onShare = vi.fn()
-    renderWithRouter(<CookbookCard {...base} onShare={onShare} />)
-
-    fireEvent.click(screen.getByLabelText('Share Italian Classics'))
-    expect(onShare).toHaveBeenCalledWith('cb-1')
-  })
-
-  it('does not render an inert share button without a share callback', () => {
+  it('is one HX Card link named by its title, with the count as its description', () => {
     renderWithRouter(<CookbookCard {...base} />)
 
-    expect(screen.queryByLabelText('Share Italian Classics')).toBeNull()
-  })
-
-  it('prevents link navigation when share is clicked', () => {
-    const onShare = vi.fn()
-    renderWithRouter(<CookbookCard {...base} onShare={onShare} />)
-
-    const shareBtn = screen.getByLabelText('Share Italian Classics')
-    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
-    const prevented = !shareBtn.dispatchEvent(clickEvent)
-    // The onClick calls e.preventDefault() — verify onShare fires
-    fireEvent.click(shareBtn)
-    expect(onShare).toHaveBeenCalled()
-  })
-
-  it('uses a restrained cookbook-cover treatment', () => {
-    const { container } = renderWithRouter(<CookbookCard {...base} />)
-
-    const article = container.querySelector('article')
-    expect(article?.className).toContain('border-[var(--sj-border-strong)]')
-    expect(article?.className).toContain('bg-[var(--sj-panel-solid)]')
-    expect(article?.className).not.toContain('sj-card')
-    expect(article?.className).not.toContain('rounded-lg')
-  })
-
-  it('keeps cookbook covers on-brand with no blue outline', () => {
-    const { container } = renderWithRouter(<CookbookCard {...base} />)
-
-    const article = container.querySelector('article')
-    expect(article?.className).toContain('sj-hover-lift')
-    expect(article?.className).not.toContain('border-blue')
+    const card = screen.getByRole('article')
+    expect(card).toHaveAttribute('data-ouro', 'card')
+    expect(screen.getAllByRole('link')).toHaveLength(1)
+    expect(screen.getByRole('heading', { level: 3, name: 'Italian Classics' })).toBeInTheDocument()
   })
 
   it('does not render emoji tiles', () => {

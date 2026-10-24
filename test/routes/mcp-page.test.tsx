@@ -1,7 +1,8 @@
 import { createElement } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import McpPage, { loader } from "~/routes/mcp";
+import { loader as protectedResourceLoader } from "~/routes/well-known.oauth-protected-resource.mcp";
 import { createTestRoutesStub } from "../utils";
 
 function routeArgs(url = "https://spoonjoy.app/mcp") {
@@ -32,6 +33,10 @@ describe("/mcp landing page", () => {
     expect(pageText).toContain("JSON-RPC");
     expect(pageText).toContain("Authorization: Bearer");
     expect(pageText).toContain("claude mcp add");
+    const command = screen.getByText(/claude mcp add/);
+    const codeBlock = command.closest<HTMLElement>('[data-ouro="code-block"]');
+    expect(codeBlock).not.toBeNull();
+    if (codeBlock) expect(within(codeBlock).getByRole("button", { name: "Copy code" })).toBeInTheDocument();
     expect(pageText).toContain("Import through an agent");
     expect(pageText).toContain("create_recipe");
     expect(pageText).toContain("recipes");
@@ -52,5 +57,26 @@ describe("/mcp landing page", () => {
     // fail landmark-complementary-is-top-level.
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Auth Discovery" })).toBeInTheDocument();
+  });
+
+  it("opens the protected-resource metadata as a document, so a click gets the JSON", async () => {
+    const data = await loader(routeArgs());
+    const Stub = createTestRoutesStub([
+      { path: "/mcp", Component: McpPage, loader: () => data },
+      { path: "/.well-known/oauth-protected-resource/mcp", loader: protectedResourceLoader as never },
+    ]);
+    render(createElement(Stub, { initialEntries: ["/mcp"] }));
+    const link = await screen.findByRole("link", { name: /protected-resource metadata/i });
+    expect(link).toHaveAttribute("data-ouro-control", "link");
+
+    // The router leaves the click alone (it would fetch a resource route as a page and show an
+    // error), so the browser loads the address as a document.
+    expect(fireEvent.click(link)).toBe(true);
+    expect(screen.getByRole("heading", { name: "Spoonjoy MCP" })).toBeInTheDocument();
+
+    // What that document is: the route's JSON.
+    const response = protectedResourceLoader(routeArgs(`https://spoonjoy.app${link.getAttribute("href")}`));
+    expect(response.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(await response.json()).toMatchObject({ resource: "https://spoonjoy.app/mcp" });
   });
 });

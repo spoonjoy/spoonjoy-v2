@@ -12,7 +12,7 @@ function format(component: string, problem: string, fix: string): string {
  * `[ouro-ui] <Component>: <what's wrong>. Fix: <exact code>.`
  *
  * With a `key` (use a per-instance ref object) the warning is emitted once per
- * key and message; without one, once per message text. No-op in production.
+ * key and message; without one, once per message text. In production it does nothing.
  *
  * The check is the bare `process.env.NODE_ENV !== "production"` form, which
  * bundlers replace statically. Guard the call site the same way so the message
@@ -67,7 +67,11 @@ export function devThrow(component: string, problem: string, fix: string): never
   }
 }
 
-/** Marks the page as checked, on `window`, so two copies of this module still check once. */
+/**
+ * Marks the page as checked, on `window`, so two copies of this module still check once.
+ *
+ * @claim "Marks the page as checked, on" registry/ouro/lib/ouro/dev.test.ts verify:testExists(registry/ouro/lib/ouro/dev.test.ts::checkTheme > names the command that adds ouro-base, once per page, when the token is unset)
+ */
 const THEME_CHECKED = Symbol.for("ouro-ui.theme-checked");
 
 /**
@@ -81,6 +85,8 @@ const THEME_CHECKED = Symbol.for("ouro-ui.theme-checked");
  *
  * @example
  * if (process.env.NODE_ENV !== "production") checkTheme();
+ * @claim "No component installs `ouro-base`, and without" scripts/registry.test.mjs verify:testExists(scripts/registry.test.mjs::only ouro-base and ouro-theme touch the app's stylesheet, and no other item installs them)
+ * @claim "No component installs `ouro-base`, and without" registry/ouro/lib/ouro/dev.test.ts verify:testExists(registry/ouro/lib/ouro/dev.test.ts::checkTheme > names the command that adds ouro-base, once per page, when the token is unset)
  */
 export function checkTheme(): void {
   /* istanbul ignore else @preserve -- the else path exists only in production bundles; scripts/dev-strip.test.mjs covers it */
@@ -93,7 +99,7 @@ export function checkTheme(): void {
       devWarn(
         "theme",
         "ouro-base is not in this page's CSS (--ouro-layer is unset), so overlays have no backdrop, layer or motion and fields have no border",
-        "npx shadcn@latest add ourostack/ouro-ui/ouro-base#v1.0.2",
+        "npx shadcn@latest add ourostack/ouro-ui/ouro-base#v1.2.4",
       );
     };
     if (document.readyState === "complete") check();

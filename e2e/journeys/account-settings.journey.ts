@@ -184,7 +184,8 @@ test.describe("Account settings", () => {
     await page.goto(SETTINGS);
     await waitForHydration(page);
     const photoSection = page.getByTestId("profile-photo-section");
-    const settingsAvatar = avatarImage(photoSection, "Profile photo");
+    // HX's image field shows the saved photo (the default avatar until there is one).
+    const settingsAvatar = photoSection.getByRole("img", { name: "Profile photo", exact: true });
     await expect(settingsAvatar).toHaveAttribute("src", DEFAULT_AVATAR);
     const chooser = page.waitForEvent("filechooser");
     await photoSection.getByRole("button", { name: "Upload photo", exact: true }).click();
@@ -193,9 +194,11 @@ test.describe("Account settings", () => {
     const cropDialog = page.getByRole("dialog", { name: "Crop your photo" });
     await expect(cropDialog).toBeVisible();
     await expect(cropDialog.getByRole("slider", { name: "Zoom" })).toBeVisible();
-    const savePhoto = cropDialog.getByRole("button", { name: "Save photo", exact: true });
-    // Enabled once the preview has loaded.
+    const savePhoto = cropDialog.getByRole("button", { name: "Save", exact: true });
+    // Enabled once the preview has loaded. HX's button fades its label in as it enables; the
+    // contrast scan waits for that fade, which it would otherwise measure half-way.
     await expect(savePhoto).toBeEnabled();
+    await expect.poll(() => savePhoto.evaluate((button) => button.getAnimations({ subtree: true }).length)).toBe(0);
     await expectAccessible();
     const uploaded = page.waitForResponse(
       (response) => response.request().method() === "POST" && new URL(response.url()).pathname === SETTINGS_ACTION,

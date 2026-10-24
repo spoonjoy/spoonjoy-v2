@@ -11,15 +11,16 @@ import { createUser } from "~/lib/auth.server";
 import { getUserId, sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
-import { shareContent } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
 
-vi.mock("~/components/navigation", () => ({
-  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
-}));
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
+});
 
 describe("Kitchen Index Route", () => {
   beforeEach(async () => {
-    vi.mocked(shareContent).mockClear();
+    vi.mocked(share).mockClear();
     await cleanupDatabase();
   });
 
@@ -498,8 +499,7 @@ describe("Kitchen Index Route", () => {
         expect.stringContaining("Newest Without Cover"),
         expect.stringContaining("Older With Cover"),
       ]);
-      expect(rows[0]).toHaveTextContent("01");
-      expect(rows[1]).toHaveTextContent("02");
+      expect(within(index).getByRole("list", { name: "Recipe index" }).tagName).toBe("OL");
       expect(screen.queryByRole("region", { name: "Recently Updated" })).not.toBeInTheDocument();
       expect(screen.queryByText("Recently Updated")).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Open Recipe" })).not.toBeInTheDocument();
@@ -575,7 +575,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: /Fondue/ })).toHaveAttribute("href", "/recipes/recipe-1");
       fireEvent.click(screen.getByRole("button", { name: "Share Fondue" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Fondue",
           url: expect.stringContaining("/recipes/recipe-1"),
         }));
@@ -585,7 +585,7 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("button", { name: "Share Rosti" })).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Share Rosti" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Rosti",
           url: expect.stringContaining("/recipes/recipe-2"),
         }));
@@ -595,14 +595,15 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByRole("link", { name: /Broth/ })).toHaveAttribute("href", "/recipes/recipe-3");
       fireEvent.click(screen.getByRole("button", { name: "Share Broth" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           text: "Open this Spoonjoy recipe: Broth",
           title: "Broth",
           url: expect.stringContaining("/recipes/recipe-3"),
         }));
       });
 
-      const styles = container.querySelectorAll("[style]");
+      // HX components set their own custom properties (Text's line clamp); the app sets none.
+      const styles = container.querySelectorAll("[style]:not([data-ouro])");
       expect(styles.length).toBe(0);
     });
 
@@ -744,14 +745,14 @@ describe("Kitchen Index Route", () => {
       expect(screen.getAllByText("No Photo Book").length).toBeGreaterThan(0);
       fireEvent.click(screen.getByRole("button", { name: "Share Swiss Weeknight" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           title: "Swiss Weeknight",
           url: expect.stringContaining("/cookbooks/cookbook-1"),
         }));
       });
       fireEvent.click(screen.getByRole("button", { name: "Share No Photo Book" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith(expect.objectContaining({
+        expect(vi.mocked(share)).toHaveBeenCalledWith(expect.objectContaining({
           text: "No Photo Book has 2 recipes on Spoonjoy.",
           title: "No Photo Book",
           url: expect.stringContaining("/cookbooks/cookbook-2"),

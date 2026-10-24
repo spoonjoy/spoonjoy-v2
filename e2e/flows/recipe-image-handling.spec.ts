@@ -58,8 +58,11 @@ test.describe('Recipe image handling', () => {
         await titleInput.fill(title);
         return createButton.getAttribute('aria-disabled');
       }, { timeout: 10_000 }).not.toBe('true');
-      await page.getByLabel('Upload recipe image').setInputFiles(ORIENTATION_FIXTURE);
-      await expect(page.getByRole('img', { name: /recipe image preview/i })).toBeVisible();
+      // HX ImageField: its file input is hidden; the chosen photo shows (decorative) once it opens.
+      const imageField = page.getByRole('group', { name: 'Recipe image' });
+      await imageField.locator('input[type="file"]').setInputFiles(ORIENTATION_FIXTURE);
+      await expect(imageField.getByRole('button', { name: 'Change image' })).toBeVisible();
+      await expect(imageField.locator('img')).toBeVisible();
       await expect(createButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 15_000 });
       await createButton.click();
 

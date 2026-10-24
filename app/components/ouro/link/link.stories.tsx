@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
+import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
@@ -79,5 +80,25 @@ export const Tones: Story = {
         </Text>
       ))}
     </Surface>
+  ),
+};
+
+/** Stands in for an app's router link, and marks the links it renders. */
+const StandInRouterLink: OuroLinkComponent = (props) => <a data-router-link="" {...props} />;
+
+/**
+ * A link to a path the router has no page for (a resource route, a download, a sign-in that
+ * starts on the server) takes `reloadDocument`: a plain `<a>`, in the same look, that the
+ * browser loads itself.
+ */
+export const DocumentNavigation: Story = {
+  render: () => (
+    <OuroProvider linkComponent={StandInRouterLink}>
+      <Surface>
+        <Text>
+          Connect your agent with <Link href="#mcp" reloadDocument>the MCP server&apos;s details</Link>, or <Link href="#recipes">browse recipes</Link>.
+        </Text>
+      </Surface>
+    </OuroProvider>
   ),
 };

@@ -1,4 +1,5 @@
 import type React from 'react'
+import { Link } from '~/components/ouro/link/link'
 import { SpoonjoyLogo } from '../spoonjoy-logo'
 import { AuthLayout } from '~/components/ouro/auth-layout/auth-layout'
 
@@ -31,10 +32,10 @@ export function AuthPage({
     <div className="sj-page min-h-dvh">
       <div className="grid min-h-dvh lg:grid-cols-[minmax(0,0.92fr)_minmax(24rem,0.58fr)]" data-fold-halves="">
         <section className="flex flex-col justify-between px-5 py-7 sm:px-8 lg:px-12">
-          <a href="/" data-fold-hide="" className="inline-flex min-h-11 items-center gap-2 font-sj-display text-2xl font-semibold text-[var(--sj-ink)] no-underline lg:hidden">
+          <Link href="/" data-fold-hide="" tone="secondary" inline={false} className="inline-flex items-center gap-2 lg:hidden">
             <SpoonjoyLogo size={28} />
-            SPOONJOY
-          </a>
+            <span className="font-sj-display text-2xl font-semibold">SPOONJOY</span>
+          </Link>
           <div className="max-w-2xl py-16">
             <p className="sj-eyebrow">{eyebrow}</p>
             <h2 className="font-sj-display mt-3 text-5xl/12 font-semibold text-[var(--sj-ink)] sm:text-6xl/14">
@@ -54,9 +55,9 @@ export function AuthPage({
               {children}
             </AuthLayout>
             <p className="mt-8 text-center text-xs text-[var(--sj-ink-soft)]">
-              <a className="underline hover:text-[var(--sj-ink)]" href="/privacy">Privacy</a>
+              <Link href="/privacy" tone="secondary">Privacy</Link>
               <span aria-hidden="true"> · </span>
-              <a className="underline hover:text-[var(--sj-ink)]" href="/terms">Terms</a>
+              <Link href="/terms" tone="secondary">Terms</Link>
             </p>
           </div>
         </section>

@@ -175,6 +175,7 @@ export const Loading: Story = {
 
 /** `href` makes a link that looks like a button. External links open safely. */
 export const Links: Story = {
+  parameters: { mode: "link" },
   render: () => (
     <Surface>
       <div style={row}>

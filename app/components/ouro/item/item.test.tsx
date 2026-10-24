@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -272,6 +272,45 @@ describe("Item with href", () => {
     expect(document.activeElement).toBe(save);
   });
 
+  it("describes the row's link by its description, which keeps its place under the title", async () => {
+    const { item } = await render(
+      <Item
+        href="/search/ribs"
+        title="Braised short ribs"
+        description={
+          <>
+            <span>By Ada · 4 hours</span> <span>Short ribs braised in stock until they fall apart.</span>
+          </>
+        }
+      />,
+    );
+    const link = page.getByRole("link", { name: "Braised short ribs" });
+    await expect.element(link).toHaveAccessibleName("Braised short ribs");
+    await expect.element(link).toHaveAccessibleDescription("By Ada · 4 hours Short ribs braised in stock until they fall apart.");
+    const description = item.querySelector<HTMLElement>("[data-ouro-text]")!;
+    expect(link.element().getAttribute("aria-describedby")).toBe(description.id);
+    // The visible layout is unchanged: the description sits under the title, outside the link.
+    expect(link.element().contains(description)).toBe(false);
+    expect(description.getBoundingClientRect().top).toBeGreaterThanOrEqual(link.element().getBoundingClientRect().bottom);
+  });
+
+  it("gives each row's link its own description, and none without a description or a link", async () => {
+    const { host } = await render(
+      <>
+        <Item href="/recipes/1" title="Short ribs" description="Four hours" />
+        <Item href="/recipes/2" title="Focaccia" description="Overnight" />
+        <Item href="/recipes/3" title="Toast" />
+        <Item title="Passkey" description="Added May 2" />
+      </>,
+    );
+    await expect.element(page.getByRole("link", { name: "Short ribs" })).toHaveAccessibleDescription("Four hours");
+    await expect.element(page.getByRole("link", { name: "Focaccia" })).toHaveAccessibleDescription("Overnight");
+    expect(page.getByRole("link", { name: "Toast" }).element().hasAttribute("aria-describedby")).toBe(false);
+    const ids = [...host.querySelectorAll("[data-ouro-text]")].map((element) => element.id);
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(ids[2]).toBe("");
+  });
+
   it("keeps links in the description and controls in the media clickable on a phone", async () => {
     await page.viewport(390, 844);
     const onPlay = vi.fn();
@@ -393,6 +432,24 @@ describe("Item development messages", () => {
     expect(warn).toHaveBeenCalledWith(
       '[ouro-ui] Item: "bg-muted" sets appearance, and className is for layout only. Fix: <Item variant="outline">, or <ItemGroup variant="outline"> around the rows.',
     );
+  });
+
+  it("ties the link to its description in server HTML and hydrates without a mismatch", async () => {
+    const node = <Item href="/recipes/1" title="Short ribs" description="Four hours" />;
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(node);
+    document.body.append(host);
+    mounted.push(host);
+    const link = host.querySelector("a")!;
+    expect(link.getAttribute("aria-describedby")).toBe(host.querySelector("[data-ouro-text]")!.id);
+    const recoverable = vi.fn();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => {
+      roots.push(hydrateRoot(host, node, { onRecoverableError: recoverable }));
+    });
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    await expect.element(page.getByRole("link", { name: "Short ribs" })).toHaveAccessibleDescription("Four hours");
   });
 
   it("renders to a string without warnings", () => {

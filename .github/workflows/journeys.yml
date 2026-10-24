@@ -202,7 +202,11 @@ jobs:
       - name: Check the QA config
         run: SPOONJOY_PREFLIGHT_SKIP_REMOTE=1 pnpm run qa:preflight
 
+      # X-ray's Source links point at the commit a person can open: the pull request's head, not
+      # its merge commit.
       - name: Build for QA
+        env:
+          SPOONJOY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/warning-gate.ts -- env CLOUDFLARE_ENV=qa pnpm run build
 
       - name: Check the generated QA build
@@ -305,24 +309,24 @@ jobs:
             exit "$census"
           fi
 
-      # Each census worker wrote hx-census/hx-census-actual.<project>.<worker>.json, and the census
-      # wrote the states it must cover to hx-census/hx-census-expected.json; merge them into one
-      # hx-census-actual.json, failing on a journey/state recorded twice or on any project that does
-      # not record exactly the expected states,
+      # Each census worker wrote hx-census/census-actual.<project>.<worker>.json, and the census
+      # wrote the states it must cover to hx-census/census-expected.json; HX's census kit merges
+      # them into one census-actual.json, failing on a journey/state recorded twice or on any
+      # project that does not record exactly the expected states,
       # and upload it on every run, pass or fail, for `pnpm census:update <run-id>` (AGENTS.md,
       # "The HX census"). It holds only control roles, accessible names and HX markers of the
       # personas' pages: no password, cookie or typed value, so it needs none of the report's gates.
       - name: Merge the HX census
         id: census-merge
         if: always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'
-        run: node scripts/hx-census-merge.mjs hx-census hx-census-actual.json
+        run: node e2e/ouro-census/census-merge.mjs hx-census census-actual.json
 
       - name: Upload the HX census
         if: always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: hx-census-actual
-          path: hx-census-actual.json
+          name: ouro-census-actual
+          path: census-actual.json
           retention-days: 30
           if-no-files-found: warn
           include-hidden-files: false

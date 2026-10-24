@@ -1,15 +1,16 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/cookbooks.new";
 import { Form as RouterForm, redirect, data, useActionData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { requireUserId } from "~/lib/session.server";
 import { captureException, resolvePostHogServerConfig } from "~/lib/analytics-server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
-import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import {
   D1_WRITE_UNAVAILABLE_CODE,
   D1_WRITE_UNAVAILABLE_MESSAGE,
@@ -139,19 +140,22 @@ export default function NewCookbook() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-3xl">
-        <CookbookHeader eyebrow="New cookbook" title="Make a collection worth coming back to.">
-          <Text className="mt-4 max-w-2xl leading-7">
-            Start with a clear title. Add recipes next and let the cover become a living collage.
-          </Text>
+        <PageHeader
+          eyebrow="New cookbook"
+          title="Make a collection worth coming back to."
+          size="lg"
+          divider
+          description="Start with a clear title. Add recipes next and let the cover become a living collage."
+        >
           <Link
             href="/cookbooks"
             className="mt-4 inline-flex min-h-11 items-center"
           >
             ← Back to cookbooks
           </Link>
-        </CookbookHeader>
+        </PageHeader>
 
-        <SettingsPanel title="Cookbook title">
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Cookbook title">
           <Form method="post" errors={formErrors} render={<RouterForm />} className="gap-6">
             <input type="hidden" name="cookbookToken" value={cookbookToken} />
             <TextField
@@ -162,7 +166,7 @@ export default function NewCookbook() {
             />
 
             <div className="flex flex-col-reverse gap-3 border-t border-[var(--sj-border)] pt-4 sm:flex-row sm:justify-end">
-              <Button href="/cookbooks" plain>
+              <Button href="/cookbooks" variant="outline" tone="secondary">
                 Cancel
               </Button>
               <Button type="submit">
@@ -170,7 +174,7 @@ export default function NewCookbook() {
               </Button>
             </div>
           </Form>
-        </SettingsPanel>
+        </Card>
       </div>
     </CookbookPage>
   );

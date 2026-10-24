@@ -24,6 +24,9 @@ export interface TooltipProps {
    * A short label for the trigger, a few words: "Add to cookbook". It shows on hover and
    * keyboard focus, never on touch, and screen readers don't read it, so it must never
    * hold anything the user needs.
+   * @claim "It shows on hover and keyboard" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip > shows on keyboard focus and hides on Escape)
+   * @claim "It shows on hover and keyboard" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip > shows its content above the trigger on hover, and hides it when the pointer leaves)
+   * @claim "It shows on hover and keyboard" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip > never opens after a touch on the trigger, even when the touch focuses it)
    */
   content: ReactNode;
   /**
@@ -31,7 +34,11 @@ export interface TooltipProps {
    * its own; give an icon-only button `aria-label`.
    */
   children: ReactElement;
-  /** The side of the trigger the tooltip sits on; it flips when there is no room. @default "top" */
+  /**
+   * The side of the trigger the tooltip sits on; it flips when there is no room. @default "top"
+   *
+   * @claim "it flips when there is no room" https://base-ui.com/react/components/tooltip verify:urlOk(https://base-ui.com/react/components/tooltip)
+   */
   side?: FloatingSide | (string & { 'Use "top", "bottom", "left" or "right"': never }) | undefined;
   /** How the tooltip lines up with the trigger along that side. @default "center" */
   align?: FloatingAlign | (string & { 'Use "start", "center" or "end": left is "start", right is "end"': never }) | undefined;
@@ -51,7 +58,11 @@ export interface TooltipProps {
 /** Content longer than this is more than a label. */
 const LABEL_LENGTH = 80;
 
-/** A link or control inside the content, which no one can reach: the tooltip closes when the pointer leaves the trigger for it. */
+/**
+ * A link or control inside the content, which no one can reach: the tooltip closes when the pointer leaves the trigger for it.
+ *
+ * @claim "A link or control inside the" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip dev messages > warns when the content holds a link or a control, once it shows)
+ */
 const INTERACTIVE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /** The dev message for content that holds essential information. Development only. */
@@ -93,6 +104,10 @@ function essential(detail: string): readonly [string, string] {
  * >
  *   <TextField label="Link" defaultValue={url} readOnly />
  * </Popover>
+ * @claim "It stacks above the page at" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip > portals at the --ouro-layer level, as its own stacking context)
+ * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
+ * @claim "It never opens on touch, and" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip > never opens after a touch on the trigger, even when the touch focuses it)
+ * @claim "It never opens on touch, and" registry/ouro/components/ouro/tooltip/tooltip.test.tsx verify:testExists(registry/ouro/components/ouro/tooltip/tooltip.test.tsx::Tooltip > opens on mouse hover after a touch elsewhere, as on a laptop with a touchscreen)
  */
 export function Tooltip(props: TooltipProps): JSX.Element {
   const {

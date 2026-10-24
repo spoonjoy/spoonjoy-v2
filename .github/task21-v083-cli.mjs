@@ -1,50 +1,231 @@
-// The readonly repair's real CLI runs only in Actions, never inherited Mac providers.
+// Ouro HX upgrades run the real CLI only in Actions, never inherited Mac providers.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const acceptedHead = "2b0a6dffbe7ef4fa61e2fc8f7de4837b8775b706";
-const tag = "v1.0.2";
-const tagCommit = "22f0b72388250d475bf8a34c60f8a164a0c3e932";
-// Hashes from the parent's qualified public manifest, not regenerated from local edits.
-const expected = {
-  "app/components/ouro/checkbox/checkbox-group.test-d.ts": "ea747fe60e8c5cde8c4f449701b0af3fd351d67fe04d11311e040d04f088405c",
-  "app/components/ouro/checkbox/checkbox-group.tsx": "ae8063b0413905ca057b3da2d798238a38d43da329ac5a769ef4f54c954cbd88",
-  "app/components/ouro/checkbox/checkbox.test-d.ts": "e261fb63263ce17fef5412a4efa079e354022d03093079d616c2bb7c41b3c959",
-  "app/components/ouro/checkbox/checkbox.tsx": "236b756304e45538f2725c2e904b22283df91af311e9d7fa3111ca4aa435a00a",
-  "app/components/ouro/combobox/combobox.test-d.ts": "54d61170cd76134a644b55b730ae855b27ce0e5341a73137d37aa2ce7d08f609",
-  "app/components/ouro/combobox/combobox.tsx": "80cd97cc86800180f4b995b385bfcda94a351eca568b57624eeca6494433da42",
-  "app/components/ouro/field/field.test-d.ts": "caafcb1194f284bf24334eb2716c78891365a54c8744318cd333345ae5c3c288",
-  "app/components/ouro/field/field.tsx": "887f8f41820efa3fc7782e2bcc47884c9d6be0f01845042cf86b88a1a2f87558",
-  "app/components/ouro/form/form.test-d.ts": "0d61c4621232a16de96ed262517cac2415d560197ed7d4662bff31c4d4b38739",
-  "app/components/ouro/form/form.tsx": "be8dd189e666a7a2853334bbfdf0c1a0dcccba288206e07f4c5aba766028060c",
-  "app/components/ouro/radio-group/radio-group.test-d.ts": "bb207eec8d6a7aa246b0a3a0296a54431e2c291a82e8e578bef99265ac531e44",
-  "app/components/ouro/radio-group/radio-group.tsx": "7ba91819ebda573c2c4921c91b5b0020ff1ef42276d6e6517cb56daf239a0d6d",
-  "app/components/ouro/select/native-select.test-d.ts": "0b896ec32a55394292c3e08bb9b33dc4db3accb32a92a06167aaa176580af516",
-  "app/components/ouro/select/native-select.tsx": "b2ec9109ea81910eb1f265e2eb5c0335a42e826fe0155185c4dd2e92d79ccb8d",
-  "app/components/ouro/select/select.test-d.ts": "77cb2461dad6946ff4b036d04ae835a018ee610e6171d8215262006b968e8f37",
-  "app/components/ouro/select/select.tsx": "0abef3fd1403d98b0c5c13f137b3426eb650eb7717992465e1b82ae1aab99bbc",
-  "app/components/ouro/switch/switch.test-d.ts": "6f16fada873f963fc46eec19fd9860fbbae513d82cd6c3e062fc1d2d3a0eb551",
-  "app/components/ouro/switch/switch.tsx": "31d30d47bee434ae1084846fac79fcdddd3b2a58a16ae49c7be2eddd10da8efc",
-  "app/components/ouro/text-field/text-area.test-d.ts": "c27ecba0eb1343294c426e31f8fb1245080faea6b25078fab462c6ddafe6edf1",
-  "app/components/ouro/text-field/text-area.tsx": "a009026a8e14467cad1485bb9e225e4feb53d4478e7df730942186291ec8b8f8",
-  "app/components/ouro/text-field/text-field.test-d.ts": "f8f49dc6539cb6f234321f0979431863a3b840b53ed12f7248c242db37079ed2",
-  "app/components/ouro/text-field/text-field.tsx": "7fb200fffa7ad01b52e699dea65530168f2490152e1b3c91261332327c212af6",
-  "app/lib/ouro/dev.test.ts": "94f4ab823bb7d1fe60bdd3d84b8120140406d63a6ce60071ce73b380f881cefa",
-  "app/lib/ouro/dev.ts": "7f320bdb0d05dd0dc097cd79574a947138e7a0e3a19e81021dc75c415dab630d",
-  "app/lib/ouro/form-answer.test.ts": "60a4254b4e4c0661594b966f2b7e74faf4a91a6a7eff5006433b5c441a53c26d",
-  "app/lib/ouro/form-answer.ts": "b0a40e58765ff860c3767c90658243b11a813869c2f1f0ef15ee128f6a7dcca7",
-  "app/lib/ouro/use-field.ts": "d1c1a06cb5c96a53b5d06474bc24b69863c70777ff952d4ba2277d65da28807c",
-};
-const expectedChanges = Object.keys(expected).sort();
+// Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
+const acceptedHead = "c8d29d69b1023f8c3209b127117d59c94f9c5e66";
+const tag = "v1.2.4";
+const tagCommit = "b10393e1015eaf0f0aceb98212660bfe17f1f6fd";
+// Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
+// TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
+// Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
+// RelativeTime, InstallPrompt), lib-claims, the ouro-census and ouro-source-rules kits, and the
+// dependencies they bring.
+const items = [
+  "alert", "alert-tests", "aspect-ratio", "aspect-ratio-tests", "auth-layout", "auth-layout-tests",
+  "avatar", "avatar-tests", "badge", "badge-tests", "breadcrumb", "breadcrumb-tests", "button",
+  "button-tests", "card", "card-tests", "celebrate", "celebrate-tests", "checkbox",
+  "checkbox-group", "checkbox-group-tests", "checkbox-tests", "checklist", "checklist-tests",
+  "choice-card", "choice-card-tests", "code-block", "code-block-tests", "collapsible",
+  "collapsible-tests", "color-scheme-toggle", "color-scheme-toggle-tests", "combobox",
+  "combobox-tests", "confirm-dialog", "confirm-dialog-tests", "copy-button", "copy-button-tests",
+  "description-list", "description-list-tests", "dialog", "dialog-tests", "empty", "empty-tests",
+  "field", "field-tests", "fieldset", "fieldset-tests", "file-field", "file-field-tests", "form",
+  "form-tests", "heading", "heading-tests", "image-cropper", "image-cropper-tests", "image-field",
+  "image-field-tests", "inspector", "inspector-tests", "install-prompt", "install-prompt-tests",
+  "item", "item-group", "item-group-tests", "item-tests", "kbd", "kbd-tests", "lib-announce",
+  "lib-announce-tests", "lib-appearance-hints", "lib-appearance-hints-tests", "lib-claims",
+  "lib-claims-tests", "lib-class-name-check", "lib-class-name-check-tests", "lib-cn",
+  "lib-cn-tests", "lib-color-scheme", "lib-color-scheme-script", "lib-color-scheme-script-tests",
+  "lib-color-scheme-tests", "lib-control-ref", "lib-control-ref-tests", "lib-current-path",
+  "lib-current-path-tests", "lib-dev", "lib-dev-tests", "lib-env", "lib-feedback",
+  "lib-feedback-tests", "lib-floating", "lib-floating-tests", "lib-focus-handoff",
+  "lib-focus-handoff-tests", "lib-form-answer", "lib-form-answer-tests", "lib-key-shortcuts",
+  "lib-key-shortcuts-tests", "lib-last-input", "lib-last-input-tests", "lib-open-mode",
+  "lib-ouro-provider", "lib-ouro-provider-tests", "lib-refs", "lib-router-link",
+  "lib-server-element", "lib-server-element-tests", "lib-share", "lib-share-tests", "lib-spring",
+  "lib-spring-tests", "lib-stretched-link", "lib-toast", "lib-tones", "lib-touch-target",
+  "lib-use-backdrop-anchor", "lib-use-dev-messages", "lib-use-dev-messages-tests", "lib-use-drag",
+  "lib-use-drag-tests", "lib-use-field", "lib-use-install-prompt", "lib-use-install-prompt-tests",
+  "lib-use-keyboard-scrollable", "lib-use-keyboard-scrollable-tests", "lib-use-media-query",
+  "lib-use-media-query-tests", "lib-use-ouro", "lib-use-sheet-presentation",
+  "lib-use-sheet-presentation-tests", "lib-use-timer", "lib-use-timer-tests", "link", "link-tests",
+  "local-date", "local-date-tests", "menu", "menu-tests", "native-select", "native-select-tests",
+  "navbar", "navbar-tests", "navigation-menu", "navigation-menu-tests", "number-field",
+  "number-field-tests", "ouro-census", "ouro-source-rules", "ouro-testing", "page-header",
+  "page-header-tests", "pagination", "pagination-tests", "popover", "popover-tests", "radio-group",
+  "radio-group-tests", "relative-time", "relative-time-tests", "reorderable", "reorderable-tests",
+  "route-progress", "route-progress-tests", "scroll-area", "scroll-area-tests", "segmented-control",
+  "segmented-control-tests", "select", "select-tests", "separator", "separator-tests",
+  "share-button", "share-button-tests", "sheet", "sheet-tests", "show-more", "show-more-tests",
+  "skip-link", "skip-link-tests", "slider", "slider-tests", "spinner", "spinner-tests",
+  "swipe-actions", "swipe-actions-tests", "switch", "switch-tests", "sync-status",
+  "sync-status-tests", "tab-bar", "tab-bar-tests", "tabs", "tabs-tests", "text", "text-area",
+  "text-area-tests", "text-field", "text-field-tests", "text-tests", "timer", "timer-tests",
+  "timer-tray", "timer-tray-tests", "toaster", "toaster-tests", "toggle", "toggle-group",
+  "toggle-group-tests", "toggle-tests", "tooltip", "tooltip-tests",
+];
+// Hashes of the tag's registry sources (the public build serves them byte for byte), never
+// regenerated from local edits: every file the CLI writes for these items and their dependencies.
+// test/components/ui/design-system-hygiene.test.ts pins the installed files to the same map on
+// every pull request.
+const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf8"));
+assert.equal(installed.tag, tag);
+assert.equal(installed.tagCommit, tagCommit);
+const expected = installed.files;
+// Paths introduced by the initial v1.2.0 CLI run; this patch updates existing files.
+const expectedNew = [
+  "app/components/ouro/breadcrumb/breadcrumb.stories.tsx",
+  "app/components/ouro/breadcrumb/breadcrumb.test-d.ts",
+  "app/components/ouro/breadcrumb/breadcrumb.test.tsx",
+  "app/components/ouro/breadcrumb/breadcrumb.touch.test.tsx",
+  "app/components/ouro/breadcrumb/breadcrumb.tsx",
+  "app/components/ouro/celebrate/celebrate.stories.tsx",
+  "app/components/ouro/celebrate/celebrate.test-d.ts",
+  "app/components/ouro/celebrate/celebrate.test.tsx",
+  "app/components/ouro/celebrate/celebrate.tsx",
+  "app/components/ouro/choice-card/choice-card.stories.tsx",
+  "app/components/ouro/choice-card/choice-card.test-d.ts",
+  "app/components/ouro/choice-card/choice-card.test.tsx",
+  "app/components/ouro/choice-card/choice-card.touch.test.tsx",
+  "app/components/ouro/choice-card/choice-card.tsx",
+  "app/components/ouro/code-block/code-block.stories.tsx",
+  "app/components/ouro/code-block/code-block.test-d.ts",
+  "app/components/ouro/code-block/code-block.test.tsx",
+  "app/components/ouro/code-block/code-block.tsx",
+  "app/components/ouro/color-scheme-toggle/color-scheme-toggle.stories.tsx",
+  "app/components/ouro/color-scheme-toggle/color-scheme-toggle.test-d.ts",
+  "app/components/ouro/color-scheme-toggle/color-scheme-toggle.test.tsx",
+  "app/components/ouro/color-scheme-toggle/color-scheme-toggle.touch.test.tsx",
+  "app/components/ouro/color-scheme-toggle/color-scheme-toggle.tsx",
+  "app/components/ouro/copy-button/copy-button.stories.tsx",
+  "app/components/ouro/copy-button/copy-button.test-d.ts",
+  "app/components/ouro/copy-button/copy-button.test.tsx",
+  "app/components/ouro/copy-button/copy-button.touch.test.tsx",
+  "app/components/ouro/copy-button/copy-button.tsx",
+  "app/components/ouro/image-cropper/image-cropper-styles.ts",
+  "app/components/ouro/image-cropper/image-cropper.stories.tsx",
+  "app/components/ouro/image-cropper/image-cropper.test-d.ts",
+  "app/components/ouro/image-cropper/image-cropper.test.tsx",
+  "app/components/ouro/image-cropper/image-cropper.touch.test.tsx",
+  "app/components/ouro/image-cropper/image-cropper.tsx",
+  "app/components/ouro/image-field/image-field.stories.tsx",
+  "app/components/ouro/image-field/image-field.test-d.ts",
+  "app/components/ouro/image-field/image-field.test.tsx",
+  "app/components/ouro/image-field/image-field.touch.test.tsx",
+  "app/components/ouro/image-field/image-field.tsx",
+  "app/components/ouro/install-prompt/install-prompt.focus.test.tsx",
+  "app/components/ouro/install-prompt/install-prompt.stories.tsx",
+  "app/components/ouro/install-prompt/install-prompt.test-d.ts",
+  "app/components/ouro/install-prompt/install-prompt.test.tsx",
+  "app/components/ouro/install-prompt/install-prompt.touch.test.tsx",
+  "app/components/ouro/install-prompt/install-prompt.tsx",
+  "app/components/ouro/local-date/local-date-styles.ts",
+  "app/components/ouro/local-date/local-date.stories.tsx",
+  "app/components/ouro/local-date/local-date.test-d.ts",
+  "app/components/ouro/local-date/local-date.test.tsx",
+  "app/components/ouro/local-date/local-date.tsx",
+  "app/components/ouro/page-header/page-header.stories.tsx",
+  "app/components/ouro/page-header/page-header.test-d.ts",
+  "app/components/ouro/page-header/page-header.test.tsx",
+  "app/components/ouro/page-header/page-header.tsx",
+  "app/components/ouro/relative-time/relative-time-styles.ts",
+  "app/components/ouro/relative-time/relative-time.stories.tsx",
+  "app/components/ouro/relative-time/relative-time.test-d.ts",
+  "app/components/ouro/relative-time/relative-time.test.tsx",
+  "app/components/ouro/relative-time/relative-time.tsx",
+  "app/components/ouro/route-progress/route-progress.stories.tsx",
+  "app/components/ouro/route-progress/route-progress.test-d.ts",
+  "app/components/ouro/route-progress/route-progress.test.tsx",
+  "app/components/ouro/route-progress/route-progress.tsx",
+  "app/components/ouro/share-button/share-button.stories.tsx",
+  "app/components/ouro/share-button/share-button.test-d.ts",
+  "app/components/ouro/share-button/share-button.test.tsx",
+  "app/components/ouro/share-button/share-button.touch.test.tsx",
+  "app/components/ouro/share-button/share-button.tsx",
+  "app/components/ouro/skip-link/skip-link.stories.tsx",
+  "app/components/ouro/skip-link/skip-link.test-d.ts",
+  "app/components/ouro/skip-link/skip-link.test.tsx",
+  "app/components/ouro/skip-link/skip-link.touch.test.tsx",
+  "app/components/ouro/skip-link/skip-link.tsx",
+  "app/components/ouro/slider/slider-styles.ts",
+  "app/components/ouro/slider/slider.stories.tsx",
+  "app/components/ouro/slider/slider.test-d.ts",
+  "app/components/ouro/slider/slider.test.tsx",
+  "app/components/ouro/slider/slider.touch.test.tsx",
+  "app/components/ouro/slider/slider.tsx",
+  "app/components/ouro/sync-status/sync-status.stories.tsx",
+  "app/components/ouro/sync-status/sync-status.test-d.ts",
+  "app/components/ouro/sync-status/sync-status.test.tsx",
+  "app/components/ouro/sync-status/sync-status.touch.test.tsx",
+  "app/components/ouro/sync-status/sync-status.tsx",
+  "app/components/ouro/tab-bar/tab-bar-styles.ts",
+  "app/components/ouro/tab-bar/tab-bar.stories.tsx",
+  "app/components/ouro/tab-bar/tab-bar.test-d.ts",
+  "app/components/ouro/tab-bar/tab-bar.test.tsx",
+  "app/components/ouro/tab-bar/tab-bar.touch.test.tsx",
+  "app/components/ouro/tab-bar/tab-bar.tsx",
+  "app/components/ouro/timer/timer-styles.ts",
+  "app/components/ouro/timer/timer-tray.stories.tsx",
+  "app/components/ouro/timer/timer-tray.test-d.ts",
+  "app/components/ouro/timer/timer-tray.test.tsx",
+  "app/components/ouro/timer/timer-tray.tsx",
+  "app/components/ouro/timer/timer.stories.tsx",
+  "app/components/ouro/timer/timer.test-d.ts",
+  "app/components/ouro/timer/timer.test.tsx",
+  "app/components/ouro/timer/timer.touch.test.tsx",
+  "app/components/ouro/timer/timer.tsx",
+  "app/lib/ouro/claims-check.mjs",
+  "app/lib/ouro/claims.test.ts",
+  "app/lib/ouro/claims.ts",
+  "app/lib/ouro/color-scheme-script.test.ts",
+  "app/lib/ouro/color-scheme-script.ts",
+  "app/lib/ouro/color-scheme.test.tsx",
+  "app/lib/ouro/color-scheme.ts",
+  "app/lib/ouro/feedback.test.ts",
+  "app/lib/ouro/feedback.ts",
+  "app/lib/ouro/focus-handoff.test.tsx",
+  "app/lib/ouro/focus-handoff.ts",
+  "app/lib/ouro/share.test.ts",
+  "app/lib/ouro/share.ts",
+  "app/lib/ouro/use-install-prompt.test.tsx",
+  "app/lib/ouro/use-install-prompt.ts",
+  "app/lib/ouro/use-timer.test.tsx",
+  "app/lib/ouro/use-timer.ts",
+  "e2e/ouro-census/census-collect.d.mts",
+  "e2e/ouro-census/census-collect.mjs",
+  "e2e/ouro-census/census-compare.mjs",
+  "e2e/ouro-census/census-merge.mjs",
+  "e2e/ouro-census/census-page.d.mts",
+  "e2e/ouro-census/census-page.mjs",
+  "e2e/ouro-census/census-update.mjs",
+  "e2e/ouro-census/census.mjs",
+  "e2e/ouro/breadcrumb.spec.ts",
+  "e2e/ouro/celebrate.spec.ts",
+  "e2e/ouro/choice-card.spec.ts",
+  "e2e/ouro/code-block.spec.ts",
+  "e2e/ouro/color-scheme-toggle.spec.ts",
+  "e2e/ouro/copy-button.spec.ts",
+  "e2e/ouro/image-cropper.spec.ts",
+  "e2e/ouro/image-field.spec.ts",
+  "e2e/ouro/install-prompt.spec.ts",
+  "e2e/ouro/local-date.spec.ts",
+  "e2e/ouro/page-header.spec.ts",
+  "e2e/ouro/relative-time.spec.ts",
+  "e2e/ouro/route-progress.spec.ts",
+  "e2e/ouro/share-button.spec.ts",
+  "e2e/ouro/skip-link.spec.ts",
+  "e2e/ouro/slider.spec.ts",
+  "e2e/ouro/sync-status.spec.ts",
+  "e2e/ouro/tab-bar.spec.ts",
+  "e2e/ouro/timer-tray.spec.ts",
+  "e2e/ouro/timer.spec.ts",
+  "scripts/ouro-source-rules.mjs",
+].filter((file) => !existsSync(file));
+const protectedPaths = [
+  "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
+  "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
+];
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const normalizedHash = (file) => sha(readFileSync(file, "utf8")
+const normalizedHash = (file) => existsSync(file) ? sha(readFileSync(file, "utf8")
   .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
-  .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/"));
+  .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/")) : null;
+const run = (name, args) => spawnSync(name, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 const command = (name, args) => {
-  const result = spawnSync(name, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+  const result = run(name, args);
   assert.equal(result.status, 0, `${name} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
   return result.stdout;
 };
@@ -52,19 +233,29 @@ const hashes = () => Object.fromEntries(Object.keys(expected).map((file) => [fil
 const mode = process.argv[2];
 assert.equal(process.env.GITHUB_ACTIONS, "true", "CI-only: do not run against inherited local providers");
 
+// The binding holds on every push: the accepted head stays an ancestor of HEAD, and the commit
+// that bound it (the last to change acceptedHead in this file) changed no consumer source.
+assert.equal(run("git", ["merge-base", "--is-ancestor", acceptedHead, "HEAD"]).status, 0,
+  `acceptedHead ${acceptedHead} must be an ancestor of HEAD`);
+const bootstrapCommit = command("git", [
+  "log", "-1", "--format=%H", "-G", "^const acceptedHead = ", "--", ".github/task21-v083-cli.mjs",
+]).trim();
+assert.equal(command("git", ["diff", "--name-only", acceptedHead, bootstrapCommit, "--", ...protectedPaths]), "",
+  `Bootstrap commit ${bootstrapCommit} must preserve the gated consumer source of ${acceptedHead}`);
+
 if (mode === "classify") {
   const current = hashes();
   const upgrade = Object.entries(expected).some(([file, hash]) => current[file] !== hash);
   appendFileSync(process.env.GITHUB_OUTPUT, `upgrade=${upgrade}\n`);
-  console.log(JSON.stringify({ head: command("git", ["rev-parse", "HEAD"]).trim(), tag, upgrade, current }));
+  console.log(JSON.stringify({ head: command("git", ["rev-parse", "HEAD"]).trim(), bootstrapCommit, tag, upgrade, current }));
 } else {
   assert.ok(mode === "upgrade" || mode === "binding");
-  const directory = join(process.env.RUNNER_TEMP, mode === "upgrade" ? "task24-v102-cli" : "task24-v102-strict");
+  const directory = join(process.env.RUNNER_TEMP, mode === "upgrade" ? "hx-v120-cli" : "hx-v120-strict");
   mkdirSync(directory, { recursive: true });
   const receipt = {
     head: command("git", ["rev-parse", "HEAD"]).trim(),
     tree: command("git", ["rev-parse", "HEAD^{tree}"]).trim(),
-    acceptedHead, tag, tagCommit, node: process.version,
+    acceptedHead, bootstrapCommit, tag, tagCommit, node: process.version,
     pnpm: command("pnpm", ["--version"]).trim(),
     packageSha256: sha(readFileSync("package.json")),
     lockSha256: sha(readFileSync("pnpm-lock.yaml")),
@@ -73,28 +264,15 @@ if (mode === "classify") {
   writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
   if (mode === "upgrade") {
     assert.equal(command("git", ["status", "--porcelain"]), "");
-    const protectedPaths = [
-      "app", "test", "e2e", "package.json", "pnpm-lock.yaml", "components.json",
-      "vitest.config.ts", "vitest.ouro.config.ts", "playwright.ouro.config.ts",
-    ];
-    assert.equal(command("git", ["diff", "--name-only", acceptedHead, "HEAD", "--", ...protectedPaths]), "",
-      "Bootstrap must preserve the previously gated consumer source");
     const originalLock = readFileSync("pnpm-lock.yaml");
     const originalPackage = readFileSync("package.json");
-    const items = [
-      "checkbox", "checkbox-group", "checkbox-group-tests", "checkbox-tests",
-      "combobox", "combobox-tests", "field", "field-tests", "form", "form-tests",
-      "lib-dev", "lib-dev-tests", "lib-form-answer", "lib-form-answer-tests",
-      "lib-use-field", "native-select", "native-select-tests", "radio-group",
-      "radio-group-tests", "select", "select-tests", "switch", "switch-tests",
-      "text-area", "text-area-tests", "text-field", "text-field-tests",
-    ]
-      .map((item) => `ourostack/ouro-ui/${item}#${tag}`);
-    const args = ["dlx", "shadcn@4.21.1", "add", ...items, "--yes", "--overwrite"];
+    const args = [
+      "dlx", "shadcn@4.21.1", "add", ...items.map((item) => `ourostack/ouro-ui/${item}#${tag}`), "--yes", "--overwrite",
+    ];
     receipt.commands = [];
     for (const dryRun of [true, false]) {
       const argv = [...args, ...(dryRun ? ["--dry-run"] : [])];
-      const result = spawnSync("pnpm", argv, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+      const result = run("pnpm", argv);
       process.stdout.write(result.stdout ?? "");
       process.stderr.write(result.stderr ?? "");
       writeFileSync(join(directory, dryRun ? "cli-preview.log" : "cli-install.log"),
@@ -111,17 +289,25 @@ if (mode === "classify") {
     assert.deepEqual(readFileSync("package.json"), originalPackage, "Unexpected dependency-field mutation");
     writeFileSync("pnpm-lock.yaml", originalLock);
     assert.equal(sha(readFileSync("pnpm-lock.yaml")), receipt.lockSha256);
-    assert.equal(command("git", ["ls-files", "--others", "--exclude-standard"]), "", "No unused new catalog files");
+    const untracked = command("git", ["ls-files", "--others", "--exclude-standard"]).trim().split("\n").filter(Boolean).sort();
+    receipt.untracked = untracked;
+    writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
+    assert.deepEqual(untracked, [...expectedNew].sort(), "Only missing qualified installed paths may be new");
+    if (untracked.length > 0) command("git", ["add", "--intent-to-add", "--", ...untracked]);
     const changed = command("git", ["diff", "--name-only"]).trim().split("\n").filter(Boolean).sort();
-    assert.deepEqual(changed, expectedChanges, "Only the 27 qualified installed paths may change");
+    receipt.changedPaths = changed;
     receipt.after = hashes();
-    assert.deepEqual(receipt.after, expected, "CLI output must match the qualified public tag");
+    writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
+    assert.deepEqual(changed.filter((file) => !(file in expected)), [], "Only qualified installed paths may change");
+    // The patch is written before the comparison, so a mismatch can be read in the artifact.
     const patch = command("git", ["diff", "--binary", "HEAD"]);
     receipt.generatedPatchSha256 = sha(patch);
-    receipt.changedPaths = changed;
     writeFileSync(join(directory, "registry-generated.patch"), patch);
+    assert.deepEqual(receipt.after, expected, "CLI output must match the qualified public tag");
     writeFileSync(join(directory, "binding.json"), JSON.stringify(receipt, null, 2));
   } else {
+    // The census and the source rule are HX kits now (ouro-census, ouro-source-rules), pinned above
+    // like every other installed file, so nothing in Spoonjoy copies HX's selectors any more.
     assert.deepEqual(receipt.before, expected, "Strict proof must consume the actual qualified CLI output");
   }
 }

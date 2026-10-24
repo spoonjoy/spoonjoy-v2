@@ -406,6 +406,8 @@ describe("Combobox on a phone", () => {
     expect(host.querySelector(TRIGGER)!.textContent).toContain("Any cuisine");
   });
 
+  // Two full runs, a popup and a sheet, each opening, typing, picking and reopening: about 5s alone,
+  // 11–16s on a loaded CI runner, so it gets more than the default 15s.
   it("submits the same text with allowCustomValue on a phone sheet as in the popup, for object items", async () => {
     const cuisines = [
       { value: "it", label: "Italian" },
@@ -455,7 +457,7 @@ describe("Combobox on a phone", () => {
     const phone = await run("sheet");
     expect(popup).toEqual({ picked: ["Thai", "Thai"], typed: ["Georgian", "Georgian"] });
     expect(phone).toEqual(popup);
-  });
+  }, 30_000);
 
   it("translates the row that keeps the typed text", async () => {
     await render(<Combobox label="Küche" allowCustomValue items={[]} customValueLabel={(text) => `„${text}“ verwenden`} />);

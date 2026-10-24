@@ -1,13 +1,14 @@
+import { Card } from "~/components/ouro/card/card";
 import { useMemo, useState } from "react";
 import { Form as RouterForm } from "react-router";
 import { Download } from "lucide-react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Form } from "~/components/ouro/form/form";
 import { formErrors as bindFormErrors } from "~/lib/ouro/form-answer";
 import { TextField } from "~/components/ouro/text-field/text-field";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
-import { SettingsPanel } from "~/components/cookbook/page";
+import { Text } from "~/components/ouro/text/text";
+
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export interface AccountDataSectionProps {
@@ -42,13 +43,13 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
 
   return (
     <div id="delete-account">
-      <SettingsPanel testId="account-data-section" title="Your data">
-        <Text>
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="account-data-section" title="Your data">
+        <Text tone="muted">
           Download everything you've put into Spoonjoy: your recipes with their steps and ingredients, cookbooks,
           shopping list, cooks and photo links, as one JSON file.
         </Text>
         <div className="mt-3">
-          <Button href="/account/export" plain reloadDocument download>
+          <Button href="/account/export" variant="outline" tone="secondary" reloadDocument download>
             <Download data-slot="icon" className="size-4" />
             Download my data
           </Button>
@@ -56,7 +57,7 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
 
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="delete-account">
           <Text tone="default">Delete account</Text>
-          <Text size="sm" className="mt-1">
+          <Text tone="muted" size="sm" className="mt-1">
             Permanently deletes your account, recipes, cookbooks, shopping list, cooks and photos, and signs out every
             app and agent you connected. Recipes other cooks forked, saved or cooked stay up,
             credited to a “Deleted chef” placeholder; their forks stay theirs. This can't be undone, so download your data first if you want a copy.
@@ -86,23 +87,23 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
                 <TextField label="Current password" type="password" name="password" autoComplete="current-password" />
               ) : needsFreshSignIn ? null : (
                 // Neutral guidance before any attempt; a failed attempt's message replaces it.
-                <Text size="sm">
+                <Text tone="muted" size="sm">
                   Your account has no password, so you need to have signed in within the last 10 minutes. If it has
                   been longer, sign in again first.
                 </Text>
               )}
               <div className="flex flex-wrap gap-3">
-                <Button type="submit" variant="destructive" disabled={typedUsername.trim() !== username}>
+                <Button type="submit" variant="soft" tone="destructive" disabled={typedUsername.trim() !== username}>
                   Delete my account
                 </Button>
-                <Button type="button" plain onClick={() => setIsDeleting(false)}>
+                <Button type="button" variant="outline" tone="secondary" onClick={() => setIsDeleting(false)}>
                   Cancel
                 </Button>
               </div>
             </Form>
           ) : (
             <div className="mt-3">
-              <Button type="button" variant="destructive" onClick={() => setIsDeleting(true)}>
+              <Button type="button" variant="soft" tone="destructive" onClick={() => setIsDeleting(true)}>
                 Delete account…
               </Button>
             </div>
@@ -110,13 +111,13 @@ export function AccountDataSection({ username, hasPassword, deleteError, default
           {isDeleting && !hasPassword ? (
             <RouterForm method="post" className="mt-3">
               <input type="hidden" name="intent" value="reauthenticate" />
-              <Button type="submit" plain>
+              <Button type="submit" variant="outline" tone="secondary">
                 Sign in again
               </Button>
             </RouterForm>
           ) : null}
         </div>
-      </SettingsPanel>
+      </Card>
     </div>
   );
 }

@@ -17,14 +17,13 @@
  */
 
 import { useState, useEffect, useRef, type FormEvent } from 'react'
-import { Button } from '~/components/button'
-import { Fieldset } from '~/components/ouro/field/fieldset'
+import { Button } from '~/components/ouro/button/button'
 import { Form } from '~/components/ouro/form/form'
+import { ImageField, type ImageFieldRejection } from '~/components/ouro/image-field/image-field'
 import { TextArea } from '~/components/ouro/text-field/text-area'
 import { TextField } from '~/components/ouro/text-field/text-field'
 import { useFormErrors } from '~/hooks/use-form-errors'
 import { StepList } from './StepList'
-import { RecipeImageUpload } from './RecipeImageUpload'
 import { Loader2 } from 'lucide-react'
 import type { StepData } from './StepEditorCard'
 import {
@@ -32,6 +31,12 @@ import {
   DESCRIPTION_MAX_LENGTH,
   SERVINGS_MAX_LENGTH,
 } from '~/lib/validation'
+import {
+  FOOD_IMAGE_ACCEPT,
+  FOOD_IMAGE_TYPE_MESSAGE,
+  IMAGE_MAX_FILE_SIZE,
+  RECIPE_IMAGE_SIZE_MESSAGE,
+} from '~/lib/recipe-image'
 
 export interface RecipeBuilderData {
   id?: string
@@ -62,6 +67,12 @@ export interface RecipeBuilderProps {
     general?: string
   }
   showSteps?: boolean
+}
+
+function recipeImageRejection(reason: ImageFieldRejection, file: File): string {
+  if (reason === 'size') return RECIPE_IMAGE_SIZE_MESSAGE
+  if (reason === 'unreadable') return `${file.name} could not be opened as a photo.`
+  return file.type === 'image/gif' ? FOOD_IMAGE_TYPE_MESSAGE : `Invalid image type. ${FOOD_IMAGE_TYPE_MESSAGE}`
 }
 
 // The fields of the recipe details form. The image and steps errors show beside their own controls.
@@ -102,23 +113,13 @@ export function RecipeBuilder({
     setTitle(titleRef.current!.value)
   }, [])
 
-  // Image state
+  // Image state: the photo just chosen (HX ImageField shows it), and whether the saved one was removed
   const [imageFile, setImageFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [clearImage, setClearImage] = useState(false)
 
   // Steps state
   const [steps, setSteps] = useState<StepData[]>(recipe?.steps ?? [])
   const lastSaveRequestSignal = useRef(saveRequestSignal)
-
-  // Cleanup preview URL on unmount
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl)
-      }
-    }
-  }, [previewUrl])
 
   // Derive recipe ID (for edit mode or generate temp ID for create mode)
   const recipeId = recipe?.id ?? 'new-recipe'
@@ -157,37 +158,19 @@ export function RecipeBuilder({
     onCancel?.()
   }
 
-  const handleImageSelect = (file: File) => {
+  // Removing a photo just chosen goes back to the saved one (onFileChange(null)); removing the
+  // saved one clears it on save.
+  const handleImageChange = (file: File | null) => {
     setImageFile(file)
-    setClearImage(false)
-    // Create preview URL for display
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-    }
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
   }
 
-  const handleImageClear = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-      setPreviewUrl(null)
-    }
-    setImageFile(null)
+  const handleImageRemove = () => {
     setClearImage(true)
   }
 
-  // Determine which image URL to display
-  const getDisplayImageUrl = () => {
-    if (previewUrl) return previewUrl
-    if (clearImage) return ''
-    return recipe?.coverImageUrl || ''
-  }
-
-  const displayImageUrl = getDisplayImageUrl()
+  const savedImageUrl = clearImage ? null : recipe?.coverImageUrl || null
 
   const isSaveDisabled = isDisabled || !title.trim()
-  const imageUploadStatus = imageFile ? 'Uploading image...' : 'Saving recipe...'
 
   return (
     <div className="space-y-8">
@@ -238,17 +221,28 @@ export function RecipeBuilder({
             maxLength={SERVINGS_MAX_LENGTH}
             disabled={isDisabled}
           />
-          <Fieldset legend="Recipe image">
-            <RecipeImageUpload
-              coverImageUrl={displayImageUrl}
-              onFileSelect={handleImageSelect}
-              onClear={handleImageClear}
-              disabled={isDisabled}
-              loading={loading}
-              loadingLabel={imageUploadStatus}
-              error={errors?.image}
-            />
-          </Fieldset>
+          <ImageField
+            label="Recipe image"
+            description="JPG, PNG, or WebP. 5 MB max."
+            src={savedImageUrl}
+            alt={recipe?.title ? `Photo of ${recipe.title}` : 'Recipe photo'}
+            accept={FOOD_IMAGE_ACCEPT}
+            maxSize={IMAGE_MAX_FILE_SIZE}
+            aspect={16 / 9}
+            rejectMessage={recipeImageRejection}
+            chooseLabel="Upload image"
+            changeLabel="Change image"
+            removeLabel="Remove image"
+            onFileChange={handleImageChange}
+            onRemove={savedImageUrl ? handleImageRemove : undefined}
+            disabled={isDisabled}
+            error={errors?.image}
+          />
+          {loading ? (
+            <p role="status" className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
+              {imageFile ? 'Uploading image...' : 'Saving recipe...'}
+            </p>
+          ) : null}
         </Form>
       </fieldset>
 
@@ -285,7 +279,7 @@ export function RecipeBuilder({
 
           onClick={handleCancel}
           disabled={isDisabled}
-          plain
+          variant="outline" tone="secondary"
         >
           Cancel
         </Button>

@@ -13,6 +13,35 @@ import { pressTab } from "~/lib/ouro/testing/tab";
 const roots: Root[] = [];
 let mounted: Element[] = [];
 
+const actionThemes = ["inherited", "action overrides", "constant action"] as const;
+function applyActionTheme(theme: (typeof actionThemes)[number]) {
+  if (theme === "inherited") return;
+  const style = document.createElement("style");
+  style.textContent = `
+    :root {
+      --ouro-action: rgb(10, 20, 30);
+      --ouro-action-foreground: rgb(250, 240, 230);
+      --ouro-action-disabled-opacity: 0.75;
+    }
+    .dark {
+      --ouro-action: ${theme === "constant action" ? "rgb(10, 20, 30)" : "rgb(50, 60, 70)"};
+      --ouro-action-foreground: ${theme === "constant action" ? "rgb(250, 240, 230)" : "rgb(230, 240, 250)"};
+      --ouro-action-disabled-opacity: 0.8;
+    }
+  `;
+  document.head.append(style);
+  mounted.push(style);
+}
+
+function disabledOpacity(button: HTMLElement): string {
+  const probe = document.createElement("span");
+  probe.style.opacity = "var(--ouro-action-disabled-opacity, 0.5)";
+  button.append(probe);
+  const value = getComputedStyle(probe).opacity;
+  probe.remove();
+  return value;
+}
+
 async function render(node: ReactNode) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -103,7 +132,8 @@ describe("button branch", () => {
     expect(element).toBeInstanceOf(HTMLButtonElement);
   });
 
-  it("disables natively with disabled and fades", async () => {
+  it.each(actionThemes)("disables natively with the theme's disabled opacity (%s)", async (theme) => {
+    applyActionTheme(theme);
     const onClick = vi.fn();
     const { button } = await render(
       <Button disabled onClick={onClick}>
@@ -111,7 +141,8 @@ describe("button branch", () => {
       </Button>,
     );
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(getComputedStyle(button).opacity).toBe("0.5");
+    expect(getComputedStyle(button).opacity).toBe(disabledOpacity(button));
+    if (theme !== "inherited") expect(getComputedStyle(button).opacity).toBe("0.75");
     button.click();
     expect(onClick).not.toHaveBeenCalled();
   });
@@ -231,14 +262,16 @@ describe("loading", () => {
     expect(aux.defaultPrevented).toBe(true);
   });
 
-  it("keeps a disabled button natively disabled while loading", async () => {
+  it.each(actionThemes)("keeps a disabled button natively disabled while loading (%s)", async (theme) => {
+    applyActionTheme(theme);
     const { button } = await render(
       <Button disabled loading>
         Save
       </Button>,
     );
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(getComputedStyle(button).opacity).toBe("0.5");
+    expect(getComputedStyle(button).opacity).toBe(disabledOpacity(button));
+    if (theme !== "inherited") expect(getComputedStyle(button).opacity).toBe("0.75");
   });
 
   it("keeps the accessible name exactly the label while loading", async () => {
@@ -316,6 +349,29 @@ describe("link branch", () => {
     expect(button.getAttribute("href")).toBe("/recipes");
     button.click();
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the document for reloadDocument and downloads, retaining router navigation otherwise", async () => {
+    const RouterLink: OuroLinkComponent = (props) => <a data-router="" {...props} />;
+    const { host } = await render(
+      <OuroProvider linkComponent={RouterLink}>
+        <Button href="/recipes">Recipes</Button>
+        <Button href="/auth/start" reloadDocument>Sign in</Button>
+        <Button href="/export.csv" download>Export</Button>
+        <Button href="/export.csv" download="recipes.csv">Named export</Button>
+        <Button href="/export.csv" download="">Unnamed export</Button>
+        <Button href="/recipes" download={false}>Not a download</Button>
+        <Button href="/recipes" reloadDocument={false}>Router navigation</Button>
+      </OuroProvider>,
+    );
+    const links = [...host.querySelectorAll<HTMLAnchorElement>('[data-ouro="button"]')];
+    expect(links.map((link) => link.hasAttribute("data-router"))).toEqual([true, false, false, false, false, true, true]);
+    expect(links.map((link) => link.getAttribute("download"))).toEqual([null, null, "", "recipes.csv", "", null, null]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/recipes", "/auth/start", "/export.csv", "/export.csv", "/export.csv", "/recipes", "/recipes",
+    ]);
+    expect(new Set(links.map((link) => link.className)).size).toBe(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it.each(["https://ouro.bot", "http://ouro.bot", "mailto:hi@ouro.bot", "//cdn.ouro.bot/x"])(
@@ -667,6 +723,15 @@ describe("runtime guards", () => {
     );
   });
 
+  it.each([false, true])("drops reloadDocument=%s without href and explains the missing link", async (reloadDocument) => {
+    const { button } = await render(<Untyped reloadDocument={reloadDocument}>Go</Untyped>);
+    expect(button.tagName).toBe("BUTTON");
+    expect(button.hasAttribute("reloaddocument")).toBe(false);
+    expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      '[ouro-ui] Button: reloadDocument needs href. Fix: <Button href="/path" reloadDocument>.',
+    ]);
+  });
+
   it.each([
     ["tone", "danger", 'tone="danger" is not a tone. Fix: <Button tone="destructive">.'],
     ["tone", "accent", 'tone="accent" is not a tone. Fix: <Button tone="primary">.'],
@@ -735,27 +800,33 @@ function themeColor(variable: string, scheme?: "dark"): string {
 }
 
 describe("theme", () => {
-  it("follows an app theme that sets --primary on a wrapper, solid and soft", async () => {
+  it.each(actionThemes)("follows scoped primary fallback and action overrides without repainting soft buttons (%s)", async (theme) => {
+    applyActionTheme(theme);
     const { host } = await render(
       <>
         <Button>Plain</Button>
-        <Button variant="soft">Plain soft</Button>
-        <div style={{ "--primary": "rgb(255, 0, 0)" } as React.CSSProperties}>
+        <div style={{ "--primary": "rgb(255, 0, 0)", "--ouro-action": "initial" } as React.CSSProperties}>
           <Button>Scoped</Button>
           <Button variant="soft">Scoped soft</Button>
         </div>
+        <div style={{ "--primary": "rgb(255, 0, 0)", "--ouro-action": "rgb(0, 0, 255)" } as React.CSSProperties}>
+          <Button>Scoped action</Button>
+          <Button variant="soft">Scoped action soft</Button>
+        </div>
       </>,
     );
-    const [plain, plainSoft, scoped, scopedSoft] = [...host.querySelectorAll("button")].map(
+    const [plain, scoped, scopedSoft, action, actionSoft] = [...host.querySelectorAll("button")].map(
       (el) => getComputedStyle(el).backgroundColor,
     );
+    expect(plain).toBe(themeColor("--ouro-action, var(--primary)"));
     expect(scoped).toBe("rgb(255, 0, 0)");
-    expect(scoped).not.toBe(plain);
-    expect(scopedSoft).not.toBe(plainSoft);
     expect(scopedSoft).toMatch(/^(color\(srgb 1 0 0 \/ 0\.1\)|rgba\(255, 0, 0, 0\.1\)|oklab\(.*\/ 0\.1\))/);
+    expect(action).toBe("rgb(0, 0, 255)");
+    expect(actionSoft).toBe(scopedSoft);
   });
 
-  it("switches to the dark values under a .dark ancestor", async () => {
+  it.each(actionThemes)("switches to the dark action values under a .dark ancestor (%s)", async (theme) => {
+    applyActionTheme(theme);
     const { host } = await render(
       <>
         <Button>Light</Button>
@@ -765,17 +836,21 @@ describe("theme", () => {
       </>,
     );
     const [light, dark] = [...host.querySelectorAll("button")].map((el) => getComputedStyle(el).backgroundColor);
-    expect(light).toBe(themeColor("--primary"));
-    expect(dark).toBe(themeColor("--primary", "dark"));
-    expect(dark).not.toBe(light);
+    expect(light).toBe(themeColor("--ouro-action, var(--primary)"));
+    expect(dark).toBe(themeColor("--ouro-action, var(--primary)", "dark"));
+    if (theme !== "inherited") {
+      expect(light).toBe("rgb(10, 20, 30)");
+      expect(dark).toBe(theme === "constant action" ? "rgb(10, 20, 30)" : "rgb(50, 60, 70)");
+    }
   });
 
-  it("follows the .dark class on the root", async () => {
+  it.each(actionThemes)("follows the .dark class on the root with optional action colours (%s)", async (theme) => {
+    applyActionTheme(theme);
     document.documentElement.classList.add("dark");
     try {
       const { button } = await render(<Button>Theme</Button>);
-      expect(getComputedStyle(button).backgroundColor).toBe(themeColor("--primary"));
-      expect(getComputedStyle(button).color).toBe(themeColor("--primary-foreground"));
+      expect(getComputedStyle(button).backgroundColor).toBe(themeColor("--ouro-action, var(--primary)"));
+      expect(getComputedStyle(button).color).toBe(themeColor("--ouro-action-foreground, var(--primary-foreground)"));
     } finally {
       document.documentElement.classList.remove("dark");
     }

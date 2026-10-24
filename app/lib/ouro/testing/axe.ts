@@ -7,7 +7,7 @@ export { axeExclude };
  * What an axe scan leaves out while an Ouro UI Dialog, ConfirmDialog or Sheet is open:
  * Base UI's focus guards. In WebKit they take `role="button"` without a name on purpose,
  * so VoiceOver's virtual cursor stays trapped in the modal, and axe reports
- * `aria-command-name` on them. They are visually hidden and never reached by Tab.
+ * `aria-command-name` on them. They are visually hidden.
  *
  * @example
  * // Playwright

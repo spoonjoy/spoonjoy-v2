@@ -17,21 +17,25 @@ export type { FloatingSide, FloatingAlign };
 // them): the sides and alignments, their dev messages, the portal's stacking level, the
 // surface and the motion. Class strings are literals so the app's Tailwind finds them.
 
-/** The side of its trigger a floating layer sits on. It flips to the other side when there is no room. */
+/**
+ * The side of its trigger a floating layer sits on. It flips to the other side when there is no room.
+ *
+ * @claim "It flips to the other side" https://base-ui.com/react/components/popover verify:urlOk(https://base-ui.com/react/components/popover)
+ */
 type FloatingSide = "top" | "bottom" | "left" | "right";
 
 /** How a floating layer lines up with its trigger along that side. */
 type FloatingAlign = "start" | "center" | "end";
 
 /**
- * The four sides, for checking a `side` prop.
+ * The sides, for checking a `side` prop.
  *
  * @internal
  */
 const floatingSides: readonly FloatingSide[] = ["top", "bottom", "left", "right"];
 
 /**
- * The three alignments, for checking an `align` prop.
+ * The alignments, for checking an `align` prop.
  *
  * @internal
  */
@@ -103,6 +107,7 @@ const floatingPortalClass = "relative isolate z-(--ouro-layer)";
  * keeps only the fade.
  *
  * @internal
+ * @claim "Opens with a scale from 0.96" registry/ouro/lib/ouro/floating.test.ts verify:testExists(registry/ouro/lib/ouro/floating.test.ts::floatingMotionClass > eases on the ease-out token, never ease-in, and grows from the trigger)
  */
 const floatingMotionClass =
   "origin-(--transform-origin) " +
@@ -121,7 +126,7 @@ const floatingMotionClass =
  */
 const floatingSurfaceClass =
   "box-border rounded-lg bg-popover text-popover-foreground outline-none " +
-  "[box-shadow:0_0_0_1px_color-mix(in_oklab,var(--border)_60%,transparent),0_8px_24px_rgb(0_0_0/0.14)]";
+  "ring-1 ring-border/60 shadow-(--shadow-lg)";
 
 /**
  * The Fix code for an appearance class on a floating surface: the theme's CSS variables

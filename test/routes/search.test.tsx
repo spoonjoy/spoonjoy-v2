@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Request as UndiciRequest } from "undici";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useNavigate } from "react-router";
+import { renderToString } from "react-dom/server";
 import { faker } from "@faker-js/faker";
 import { db } from "~/lib/db.server";
 import Search, { loader, meta } from "~/routes/search";
@@ -153,7 +154,10 @@ describe("Search Route", () => {
       // The scope switcher is in-page navigation, so it's a labelled <nav> rather than an
       // <aside> or a bare <div>.
       const scopeNav = screen.getByRole("navigation", { name: "Search scope" });
-      expect(within(scopeNav).getByRole("heading", { name: "Everything" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Everything" })).toBeInTheDocument();
+      for (const link of within(scopeNav).getAllByRole("link")) {
+        expect(link).toHaveAttribute("data-ouro-control", "tabs");
+      }
       expect(within(scopeNav).getByRole("link", { name: "Recipes" })).toHaveAttribute(
         "href",
         "/search?scope=recipes",
@@ -222,46 +226,24 @@ describe("Search Route", () => {
       expect((screen.getByLabelText("Search terms") as HTMLInputElement).value).toBe("half typed");
     });
 
-    it("submits the search form when Enter is pressed in the search field", async () => {
-      const requestSubmit = vi
-        .spyOn(HTMLFormElement.prototype, "requestSubmit")
-        .mockImplementation(() => {});
+    it("describes a recipe result in server HTML before refs run", () => {
+      const data = {
+        query: "tomato", scope: "all", isAuthenticated: true,
+        results: [{
+          type: "recipe", id: "recipe-1", ownerId: "user-1", ownerUsername: "chef-ari",
+          title: "Tomato Sauce", subtitle: "Recipe by chef-ari", snippet: "tomato basil simmer",
+          href: "/recipes/recipe-1", imageUrl: "https://example.com/tomato.jpg", score: -1,
+          metadata: { coverProvenanceLabel: "Editorial photo" },
+        }],
+      };
       const Stub = createTestRoutesStub([
-        {
-          path: "/search",
-          Component: Search,
-          loader: () => ({ query: "", scope: "all", isAuthenticated: false, results: [] }),
-        },
+        { id: "search", path: "/search", Component: Search, loader: () => data },
       ]);
-
-      try {
-        render(<Stub initialEntries={["/search"]} />);
-        fireEvent.keyDown(await screen.findByRole("searchbox"), { key: "Enter" });
-        expect(requestSubmit).toHaveBeenCalledTimes(1);
-      } finally {
-        requestSubmit.mockRestore();
-      }
-    });
-
-    it("does not submit the search form for ordinary typing keys", async () => {
-      const requestSubmit = vi
-        .spyOn(HTMLFormElement.prototype, "requestSubmit")
-        .mockImplementation(() => {});
-      const Stub = createTestRoutesStub([
-        {
-          path: "/search",
-          Component: Search,
-          loader: () => ({ query: "", scope: "all", isAuthenticated: false, results: [] }),
-        },
-      ]);
-
-      try {
-        render(<Stub initialEntries={["/search"]} />);
-        fireEvent.keyDown(await screen.findByRole("searchbox"), { key: "t" });
-        expect(requestSubmit).not.toHaveBeenCalled();
-      } finally {
-        requestSubmit.mockRestore();
-      }
+      const html = renderToString(<Stub initialEntries={["/search?q=tomato"]}
+        hydrationData={{ loaderData: { search: data } }} />);
+      const document = new DOMParser().parseFromString(html, "text/html");
+      const link = within(document.body).getByRole("link", { name: "Recipe Tomato Sauce Recipe by chef-ari" });
+      expect(link).toHaveAccessibleDescription("Editorial photo tomato basil simmer");
     });
 
     it("renders recipe, cookbook, chef, and private shopping-list result cards", async () => {
@@ -343,6 +325,9 @@ describe("Search Route", () => {
       expect(recipeLink).toHaveAttribute("href", "/recipes/recipe-1");
       expect(recipeLink).not.toHaveAttribute("aria-label");
       expect(recipeLink).toHaveAccessibleDescription("Editorial photo tomato basil simmer");
+      expect(screen.getByRole("list", { name: "Results" })).toContainElement(recipeLink);
+      // The title is the result's heading, as before.
+      expect(screen.getByRole("heading", { level: 2, name: "Tomato Sauce" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /^Cookbook Sunday Sauces Cookbook by chef-ari$/ })).toHaveAttribute("href", "/cookbooks/cookbook-1");
       expect(screen.getByRole("link", { name: /^Chef chef-ari Chef kitchen/ })).toHaveAttribute("href", "/users/chef-ari");
       expect(screen.getByRole("link", { name: /^Shopping List Private tomato paste Shopping list item for chef-ari/ })).toHaveAttribute("href", "/shopping-list");

@@ -29,7 +29,11 @@ export const DefaultLink: OuroLinkComponent = (props) => createElement("a", prop
  */
 export const OuroContext = createContext<OuroContextValue>({ linkComponent: DefaultLink });
 
-/** Reads the `OuroProvider` settings; returns defaults when there is no provider. */
+/**
+ * Reads the `OuroProvider` settings; returns defaults when there is no provider.
+ *
+ * @claim "Reads the `OuroProvider` settings; returns defaults" registry/ouro/lib/ouro/ouro-provider.test.tsx verify:testExists(registry/ouro/lib/ouro/ouro-provider.test.tsx::OuroProvider and useOuro > defaults to a plain anchor without a provider)
+ */
 export function useOuro(): OuroContextValue {
   return useContext(OuroContext);
 }

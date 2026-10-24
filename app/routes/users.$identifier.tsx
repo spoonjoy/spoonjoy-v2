@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/users.$identifier";
 import { chefDisplayName } from "~/lib/username";
 import { Form, redirect, useLoaderData } from "react-router";
@@ -5,9 +6,9 @@ import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { Avatar } from "~/components/ouro/avatar/avatar";
-import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
-import { Text } from "~/components/text";
+import { Button } from "~/components/ouro/button/button";
+import { Heading } from "~/components/ouro/text/heading";
+import { Text } from "~/components/ouro/text/text";
 import { Link } from "~/components/ouro/link/link";
 import { RecipeGrid } from "~/components/pantry/RecipeGrid";
 import { CookbookCard } from "~/components/pantry/CookbookCard";
@@ -18,10 +19,10 @@ import { requestD1 } from "~/lib/d1-read.server";
 import { readChefProfileFromD1, readChefProfileWithPrisma } from "~/lib/chef-profile-reads.server";
 import { useAppendingList } from "~/hooks/use-appending-list";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
-import { LocalDate } from "~/components/local-date";
+import { LocalDate } from "~/components/ouro/local-date/local-date";
 import { resolveChefAvatarUrl } from "~/lib/chef-avatar";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
-import { CookbookPage, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
 
 type RecentSpoonItem = {
   id: string;
@@ -172,9 +173,6 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     nextCursor,
     cookbooks: cookbooksWithCover,
     recentSpoons,
-    // What the recent cooks' relative times ("3 hr ago") are measured from, so the server's
-    // render and the browser's hydration agree.
-    renderedAt: Date.now(),
     fellowChefsCount,
     kitchenVisitorsCount,
   };
@@ -204,7 +202,6 @@ export default function UserProfile() {
     nextCursor = null,
     cookbooks,
     recentSpoons = EMPTY_SPOONS,
-    renderedAt,
     fellowChefsCount = 0,
     kitchenVisitorsCount = 0,
   } = useLoaderData<typeof loader>();
@@ -235,8 +232,8 @@ export default function UserProfile() {
               <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 text-5xl/12 tracking-normal">
                 {chefDisplayName(profile.username)}
               </h1>
-              <Text size="sm" className="mt-1">
-                Joined <LocalDate value={profile.joinedAt} unit="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
+              <Text tone="muted" size="sm" className="mt-1">
+                Joined <LocalDate value={profile.joinedAt} format="month" /> • {recipeCount} {recipeCount === 1 ? "recipe" : "recipes"} • {cookbooks.length} {cookbooks.length === 1 ? "cookbook" : "cookbooks"}
               </Text>
               <p className="m-0 mt-2 text-sm">
                 <Link href={`/?chef=${profile.username}`} className="inline-flex min-h-11 items-center">
@@ -256,12 +253,12 @@ export default function UserProfile() {
 
           {isOwner ? (
             <div className="flex items-center gap-2">
-              <Button href="/account/settings" plain aria-label="Open settings">
+              <Button href="/account/settings" variant="outline" tone="secondary" aria-label="Open settings">
                 <Settings data-slot="icon" className="size-4" />
                 Settings
               </Button>
               <Form method="post" action="/logout" onSubmit={clearCookProgressCache}>
-                <Button type="submit" variant="destructive">Log out</Button>
+                <Button type="submit" variant="soft" tone="destructive">Log out</Button>
               </Form>
             </div>
           ) : null}
@@ -301,13 +298,13 @@ export default function UserProfile() {
               region instead of dropping to a plain <div>. */}
           <section aria-labelledby="chef-cookbooks-heading">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <Subheading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Subheading>
+              <Heading id="chef-cookbooks-heading" level={2} size="xl">Cookbooks</Heading>
               <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs uppercase tracking-[0.14em]">{cookbooks.length} total</p>
             </div>
 
             {cookbooks.length === 0 ? (
               <div className="border-y border-dashed border-[var(--sj-border-strong)] py-5">
-                <Text>
+                <Text tone="muted">
                   {isOwner ? "No cookbooks yet." : `${chefDisplayName(profile.username)} has not shared any cookbooks yet.`}
                 </Text>
               </div>
@@ -331,11 +328,11 @@ export default function UserProfile() {
           </section>
         </div>
 
-        <SettingsPanel title="Recent cooks">
+        <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" title="Recent cooks">
           <div className="mt-4">
-            <SpoonsStrip spoons={recentSpoons} showRecipe now={renderedAt} />
+            <SpoonsStrip spoons={recentSpoons} showRecipe />
           </div>
-        </SettingsPanel>
+        </Card>
 
       </section>
     </CookbookPage>

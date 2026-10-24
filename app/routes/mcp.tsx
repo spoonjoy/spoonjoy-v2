@@ -1,5 +1,6 @@
+import { Heading } from "~/components/ouro/text/heading";
+import { CodeBlock } from "~/components/ouro/code-block/code-block";
 import type { Route } from "./+types/mcp";
-import type { ReactNode } from "react";
 import { useLoaderData } from "react-router";
 import {
   BookOpen,
@@ -21,8 +22,11 @@ import {
   protectedResourceMetadataUrl,
   resolveIssuerOrigin,
 } from "~/lib/oauth-metadata.server";
+import { Button } from "~/components/ouro/button/button";
 import { Badge } from "~/components/ouro/badge/badge";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { Link } from "~/components/ouro/link/link";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 /**
  * Remote MCP connector endpoint (Streamable HTTP, `application/json`).
@@ -142,36 +146,7 @@ const setupSteps = [
   },
 ] as const;
 
-function CodeBlock({ children }: { children: string }) {
-  return (
-    <pre className="overflow-x-auto border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 text-sm/6 text-[var(--sj-on-photo)] shadow-[var(--sj-shadow-soft)]">
-      <code className="font-mono whitespace-pre">{children}</code>
-    </pre>
-  );
-}
 
-function ActionLink({
-  href,
-  children,
-  plain = false,
-}: {
-  href: string;
-  children: ReactNode;
-  plain?: boolean;
-}) {
-  const tone = plain
-    ? "border-[var(--sj-border)] bg-[color-mix(in_srgb,var(--sj-panel-solid)_72%,transparent)] text-[var(--sj-ink)] hover:border-[var(--sj-border-strong)] hover:bg-[var(--sj-flour)]"
-    : "border-[var(--sj-action)] bg-[var(--sj-action)] text-[var(--sj-on-action)] hover:border-[var(--sj-action-hover)] hover:bg-[var(--sj-action-hover)]";
-
-  return (
-    <a
-      href={href}
-      className={`${tone} font-sj-ui inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--sj-radius-control)] border px-4 py-2 text-base/6 font-semibold tracking-normal transition sm:min-h-10 sm:px-3.5 sm:py-1.5 sm:text-sm/6`}
-    >
-      {children}
-    </a>
-  );
-}
 
 function FactRow({ label, value }: { label: string; value: string }) {
   return (
@@ -188,27 +163,23 @@ export default function McpPage() {
   return (
     <CookbookPage>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-10">
-        <CookbookHeader
+        <PageHeader
           eyebrow="Remote connector"
           title="Spoonjoy MCP"
-          action={(
+          actions={(
             <>
-              <ActionLink href="/api" plain>
-                <Braces data-slot="icon" aria-hidden="true" />
+              <Button href="/api" variant="outline" tone="secondary" startIcon={Braces}>
                 Developer Platform
-              </ActionLink>
-              <ActionLink href="/login">
-                <Cable data-slot="icon" aria-hidden="true" />
+              </Button>
+              <Button href="/login" startIcon={Cable}>
                 Sign In
-              </ActionLink>
+              </Button>
             </>
           )}
-        >
-          <p>
-            Spoonjoy MCP gives an authorized agent tools for kitchen work that is too detailed for ordinary app clicks:
-            creating recipes, importing from messy sources, reshaping cookbooks, and updating your shopping list.
-          </p>
-        </CookbookHeader>
+          size="lg"
+          divider
+          description="Spoonjoy MCP gives an authorized agent tools for kitchen work that is too detailed for ordinary app clicks: creating recipes, importing from messy sources, reshaping cookbooks, and updating your shopping list."
+        />
 
         <section className="min-w-0 border-y border-[var(--sj-border-strong)] py-5" aria-labelledby="mcp-tldr">
           <p id="mcp-tldr" className="sj-eyebrow">TL;DR</p>
@@ -221,7 +192,7 @@ export default function McpPage() {
         </section>
 
         <section>
-          <CookbookSectionTitle>Where MCP Fits</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">Where MCP Fits</Heading>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
             {taskGradient.map((item) => {
               const Icon = item.icon;
@@ -258,7 +229,7 @@ export default function McpPage() {
               or an OAuth access token bound to this resource.
             </p>
             <div className="mt-6">
-              <CodeBlock>{endpoint}</CodeBlock>
+              <CodeBlock code={endpoint} wrap />
             </div>
           </div>
 
@@ -270,7 +241,7 @@ export default function McpPage() {
         </section>
 
         <section>
-          <CookbookSectionTitle>What It Can Use</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">What It Can Use</Heading>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {capabilities.map((item) => {
               const Icon = item.icon;
@@ -287,14 +258,12 @@ export default function McpPage() {
             MCP deliberately has no arbitrary URL import tool. For imports, let the agent read the source you provide and
             create structured Spoonjoy data through <code className="font-sj-ui font-semibold text-[var(--sj-ink)]">create_recipe</code>.
             AI cover generation also stays out of MCP. For broader REST and OpenAPI access, use the{" "}
-            <a className="font-semibold text-[var(--sj-tomato)] underline-offset-4 hover:underline" href="/api">
-              API guide
-            </a>.
+            <Link href="/api">API guide</Link>.
           </p>
         </section>
 
         <section>
-          <CookbookSectionTitle>How To Connect</CookbookSectionTitle>
+          <Heading className="my-5" level={2} size="xl">How To Connect</Heading>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
             {setupSteps.map((step, index) => {
               const Icon = step.icon;
@@ -316,13 +285,11 @@ export default function McpPage() {
 
         <section className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,28rem)]">
           <div>
-            <CookbookSectionTitle>Claude Code</CookbookSectionTitle>
+            <Heading className="my-5" level={2} size="xl">Claude Code</Heading>
             <p className="mb-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
               After you create a Spoonjoy token, add the remote server with an explicit bearer header:
             </p>
-            <CodeBlock>
-              {'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'}
-            </CodeBlock>
+            <CodeBlock code={'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'} />
           </div>
 
           {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a
@@ -336,12 +303,13 @@ export default function McpPage() {
               OAuth-ready MCP agents learn where to authorize from Spoonjoy's protected-resource metadata.
             </p>
             <div className="mt-4 overflow-hidden border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-3">
-              <a
-                className="break-words font-sj-ui text-sm/6 font-semibold text-[var(--sj-tomato)] underline-offset-4 hover:underline"
+              <Link
                 href="/.well-known/oauth-protected-resource/mcp"
+                reloadDocument
+                className="break-words"
               >
                 Protected-resource metadata
-              </a>
+              </Link>
               <p className="mt-2 break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">
                 {protectedResourceMetadataUrl}
               </p>

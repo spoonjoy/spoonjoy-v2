@@ -8,9 +8,10 @@ import {
   normalizeUserCode,
   rememberTypedCode,
 } from "~/lib/agent-connection-route.server";
-import { Button } from "~/components/button";
-import { Heading } from "~/components/heading";
-import { Text } from "~/components/text";
+import { Button } from "~/components/ouro/button/button";
+import { TextField } from "~/components/ouro/text-field/text-field";
+import { Heading } from "~/components/ouro/text/heading";
+import { Text } from "~/components/ouro/text/text";
 
 type LookupData = {
   code: string;
@@ -71,24 +72,22 @@ export default function AgentConnectLookup() {
       <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
         Agent access
       </p>
-      <Heading className="mt-3">Enter Connection Code</Heading>
-      <Text size="lg" className="mt-5 leading-7">
+      <Heading level={1} size="xl" className="mt-3">Enter Connection Code</Heading>
+      <Text tone="muted" size="lg" className="mt-5 leading-7">
         Enter the short Spoonjoy code shown by your device, CLI, or agent. You will sign in before approving access.
       </Text>
       <Form method="post" className="mt-8 grid gap-4">
-        <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-          Connection code
-          <input
-            name="code"
-            defaultValue={view.code}
-            autoComplete="one-time-code"
-            autoCapitalize="characters"
-            spellCheck={false}
-            placeholder="ABCD-2345"
-            className="min-h-12 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xl font-semibold tracking-[0.12em] text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-          />
-        </label>
-        {view.error ? <Text role="alert">{view.error}</Text> : null}
+        <TextField
+          label="Connection code"
+          name="code"
+          size="lg"
+          defaultValue={view.code}
+          autoComplete="one-time-code"
+          autoCapitalize="characters"
+          spellCheck={false}
+          placeholder="ABCD-2345"
+        />
+        {view.error ? <Text tone="muted" role="alert">{view.error}</Text> : null}
         <div>
           <Button type="submit">Continue</Button>
         </div>

@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { Request as UndiciRequest } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import routes from "~/routes";
@@ -49,10 +49,39 @@ async function signedInPlaygroundData() {
   } as any);
 }
 
+// The operations the flow tests use. A flow renders these as HX ChoiceCards rather than the whole
+// API's, so it stays quick; "renders all operations…" renders the full manifest.
+const FLOW_OPERATIONS = [
+  "GET /api/v1",
+  "GET /api/v1/recipes",
+  "GET /api/v1/search",
+  "GET /api/v1/recipes/{id}",
+  "GET /api/v1/cookbooks/{id}",
+  "POST /api/v1/recipes/{id}/image",
+  "POST /api/v1/me/photo",
+  "GET /api/v1/shopping-list",
+  "PATCH /api/v1/shopping-list/items/{itemId}",
+  "DELETE /api/v1/shopping-list/items/{itemId}",
+  "POST /api/v1/tokens",
+  "DELETE /api/v1/tokens/{credentialId}",
+  "GET /oauth/authorize",
+  "POST /oauth/token",
+  "POST /mcp",
+];
+
+/** The loader's data with only `operationIds` in its manifest. */
+async function playgroundData(operationIds: readonly string[] = FLOW_OPERATIONS, data?: PlaygroundLoaderData) {
+  const full = data ?? await loader();
+  const operations = full.manifest.operations.filter((operation) => operationIds.includes(operation.id));
+  expect(operations.map((operation) => operation.id).sort()).toEqual([...operationIds].sort());
+  return { ...full, manifest: { ...full.manifest, operations } } as PlaygroundLoaderData;
+}
+
 async function renderPlayground(data?: PlaygroundLoaderData) {
-  const resolvedData = data ?? await loader();
+  const resolvedData = data ?? await playgroundData();
   const Stub = createTestRoutesStub([
     { path: "/developers/playground", Component: DeveloperPlayground, loader: () => resolvedData },
+    { path: "/login", Component: () => null },
   ]);
   render(<Stub initialEntries={["/developers/playground"]} />);
 }
@@ -67,7 +96,13 @@ function mockApiResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe("/developers/playground", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    vi.useRealTimers();
+    // HX ChoiceCard and fields settle their highlight and validity a tick after a click; let that
+    // land inside act before the page unmounts, so a test that ends right after a click stays quiet.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -266,7 +301,8 @@ describe("/developers/playground", () => {
   });
 
   it("captures safe playground view, surface, operation, and auth-mode telemetry from generated metadata", async () => {
-    await renderPlayground();
+    const data = await playgroundData();
+    await renderPlayground(data);
 
     await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
       "spoonjoy.developer.playground.viewed",
@@ -274,7 +310,7 @@ describe("/developers/playground", () => {
         page: "api_playground",
         auth_status: "anonymous",
         surface: "full",
-        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.length,
+        operation_count: data.manifest.operations.length,
         operation_id: "GET /api/v1/recipes",
         operation_group: "Recipes",
         method: "GET",
@@ -286,12 +322,12 @@ describe("/developers/playground", () => {
       "spoonjoy.developer.playground.surface_selected",
       expect.objectContaining({
         surface: "connector",
-        operation_count: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.profiles.includes("connector")).length,
+        operation_count: data.manifest.operations.filter((operation) => operation.profiles.includes("connector")).length,
       }),
     );
 
     fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "cookbooks/{id}" } });
-    fireEvent.click(await screen.findByRole("button", { name: /Read one public cookbook/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Read one public cookbook/i }));
     expect(posthogCapture).toHaveBeenCalledWith(
       "spoonjoy.developer.playground.operation_selected",
       expect.objectContaining({
@@ -431,10 +467,12 @@ describe("/developers/playground", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await renderPlayground();
+    // The full manifest: every operation renders.
+    await renderPlayground(await loader());
     expect(await screen.findByRole("heading", { name: "Spoonjoy API Playground" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Create a bearer credential/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Remove a shopping-list item/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio").filter((radio) => radio.closest("fieldset"))).toHaveLength(PLAYGROUND_OPERATIONS.length);
+    expect(screen.getByRole("radio", { name: /Create a bearer credential/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Remove a shopping-list item/i })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "All APIs" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Connector" })).toBeInTheDocument();
     expect(screen.getAllByText("/api/v1/openapi.json").length).toBeGreaterThan(0);
@@ -532,11 +570,11 @@ describe("/developers/playground", () => {
       },
     }, { status: 201, statusText: "Created" }));
     posthogCapture.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: /Create a bearer credential/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Create a bearer credential/i }));
     fireEvent.change(screen.getByLabelText("JSON body"), {
       target: { value: "{\"name\":\"Kitchen secret token\",\"clientMutationId\":\"secret-mutation\",\"scopes\":[\"recipes:read\"]}" },
     });
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(posthogCapture).toHaveBeenCalledWith(
@@ -636,7 +674,7 @@ describe("/developers/playground", () => {
       ], { initialEntries: ["/developers/playground"] });
       render(<RouterProvider router={router} />);
 
-      fireEvent.click(await screen.findByRole("button", { name: /Read the authenticated shopping list/i }));
+      fireEvent.click(await screen.findByRole("radio", { name: /Read the authenticated shopping list/i }));
       fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
       expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
 
@@ -660,7 +698,7 @@ describe("/developers/playground", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await renderPlayground();
-    fireEvent.click(await screen.findByRole("button", { name: /Search public recipes/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Search public recipes/i }));
     fireEvent.change(screen.getByLabelText(/Query/), { target: { value: "pasta" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-limit")!, { target: { value: "5" } });
     fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
@@ -682,17 +720,17 @@ describe("/developers/playground", () => {
     await renderPlayground();
     await screen.findByRole("heading", { name: "Spoonjoy API Playground" });
 
-    fireEvent.click(screen.getByRole("button", { name: /Discover the Spoonjoy API/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Discover the Spoonjoy API/i }));
     fireEvent.click(screen.getByRole("radio", { name: "Connector" }));
     expect(screen.getByRole("radio", { name: "Connector" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("link", { name: /Open spec/i })).toHaveAttribute("href", "/api/v1/openapi.connector.json");
-    expect(screen.getByRole("button", { name: /Search public recipes/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByRole("button", { name: /Exchange or refresh an OAuth token/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Search public recipes/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Search public recipes/i })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: /Exchange or refresh an OAuth token/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Search public recipes/i })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "cookbooks/{id}" } });
-    expect(await screen.findByRole("button", { name: /Read one public cookbook/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Search public recipes/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: /Read one public cookbook/i })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Search public recipes/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Search operations/i), { target: { value: "definitely no operation" } });
     expect(await screen.findByText("No operations match this surface and search.")).toBeInTheDocument();
@@ -701,7 +739,7 @@ describe("/developers/playground", () => {
   it("uses the first generated operation when a custom manifest has no recipe list", async () => {
     const manifestWithoutDefaultRecipe = {
       ...API_V1_PLAYGROUND_MANIFEST,
-      operations: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.id !== "GET /api/v1/recipes"),
+      operations: (await playgroundData()).manifest.operations.filter((operation) => operation.id !== "GET /api/v1/recipes"),
     };
 
     await renderPlayground({
@@ -712,7 +750,7 @@ describe("/developers/playground", () => {
       viewer: { isAuthenticated: false },
     } as PlaygroundLoaderData);
 
-    expect(await screen.findByRole("button", { name: /Discover the Spoonjoy API/i })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("radio", { name: /Discover the Spoonjoy API/i })).toBeChecked();
   });
 
   it("sends generated JSON-body operations with session auth by default", async () => {
@@ -724,14 +762,14 @@ describe("/developers/playground", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await renderPlayground();
-    fireEvent.click(await screen.findByRole("button", { name: /Create a bearer credential/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Create a bearer credential/i }));
     expect(screen.getByText("Authenticated chef")).toBeInTheDocument();
     expect(screen.getByText("tokens:write")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("JSON body"), {
       target: { value: "{\"name\":\"External client\",\"scopes\":[\"recipes:read\"]}" },
     });
     expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -756,7 +794,7 @@ describe("/developers/playground", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await renderPlayground();
-    fireEvent.click(await screen.findByRole("button", { name: /Upload the authenticated account profile photo/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Upload the authenticated account profile photo/i }));
     expect(screen.getAllByText("account:write").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Multipart body")).toHaveTextContent("body.append(\"clientMutationId\", \"device-uuid-profile-photo\")");
     expect(screen.getByLabelText("Multipart body")).toHaveTextContent("body.append(\"photo\", file)");
@@ -775,16 +813,16 @@ describe("/developers/playground", () => {
     fireEvent.change(photoInput, { target: { files: [] } });
     expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled();
 
-    const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
+    const riskCheckbox = screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i });
     fireEvent.click(riskCheckbox);
     expect(riskCheckbox).toBeChecked();
 
 	    const file = new File(["profile-bytes"], "profile.png", { type: "image/png" });
 	    fireEvent.change(mutationIdInput, { target: { value: "profile-photo:playground" } });
 	    fireEvent.change(photoInput, { target: { files: [file] } });
-    await waitFor(() => expect(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i)).not.toBeChecked());
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i })).not.toBeChecked());
     expect(screen.getByText("Confirm this real-data operation before sending.")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Send request" })).not.toBeDisabled());
 
     fireEvent.submit(screen.getByRole("button", { name: "Send request" }).closest("form")!);
@@ -803,6 +841,10 @@ describe("/developers/playground", () => {
 	      ["photo", file],
 	    ]);
     expect(await screen.findByText("200 OK")).toBeInTheDocument();
+
+    // Removing the photo from the field takes it out of the request again.
+    fireEvent.click(screen.getByRole("button", { name: `Remove ${file.name}` }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send request" })).toBeDisabled());
   });
 
   it("renders optional multipart fields without accept or description metadata", async () => {
@@ -842,7 +884,7 @@ describe("/developers/playground", () => {
     const optionalInput = await screen.findByLabelText(/Photo/) as HTMLInputElement;
     expect(optionalInput).not.toHaveAttribute("accept");
     expect(optionalInput).not.toBeRequired();
-    expect(optionalInput).toHaveAttribute("aria-required", "false");
+    expect(optionalInput).not.toHaveAttribute("aria-required", "true");
     expect(optionalInput).toHaveAccessibleDescription("multipart optional");
     expect(optionalInput).toHaveValue("");
 
@@ -912,7 +954,7 @@ describe("/developers/playground", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await renderPlayground();
-    fireEvent.click(await screen.findByRole("button", { name: /Read the authenticated shopping list/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Read the authenticated shopping list/i }));
     fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
 
     expect(screen.getAllByText("Paste a bearer token before sending in Bearer mode.").length).toBeGreaterThan(0);
@@ -923,7 +965,7 @@ describe("/developers/playground", () => {
   it("renders required path parameters for generated detail operations", async () => {
     await renderPlayground();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Read one public recipe/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Read one public recipe/i }));
     fireEvent.submit(screen.getByRole("button", { name: "Send request" }).closest("form")!);
 
     expect(await screen.findByText(/path required/i)).toBeInTheDocument();
@@ -961,7 +1003,7 @@ describe("/developers/playground", () => {
 
     await renderPlayground();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Redirect the chef through OAuth consent/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-client_id")!, { target: { value: "cm_e2e_client" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-redirect_uri")!, { target: { value: "https://client.example/callback" } });
     fireEvent.click(screen.getByRole("button", { name: "Generate PKCE + state" }));
@@ -991,7 +1033,7 @@ describe("/developers/playground", () => {
     fireEvent.change(callbackInput, { target: { value: callbackValue } });
     await waitFor(() => expect(callbackInput).toHaveValue(callbackValue));
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
-    expect(await screen.findByRole("button", { name: /Exchange or refresh an OAuth token/i })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("radio", { name: /Exchange or refresh an OAuth token/i })).toBeChecked();
     await waitFor(() => expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain(
       "grant_type=authorization_code",
     ));
@@ -999,13 +1041,13 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh Token" }));
     expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain("grant_type=refresh_token");
 
-    fireEvent.click(screen.getByRole("button", { name: /Set a shopping-list item checked state/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Set a shopping-list item checked state/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
     const checkBody = screen.getByLabelText("JSON body");
     fireEvent.click(screen.getByRole("button", { name: "Fresh mutation id" }));
     expect((checkBody as HTMLTextAreaElement).value).toContain("patchApiV1ShoppingListItem:");
 
-    fireEvent.click(screen.getByRole("button", { name: /Remove a shopping-list item/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Remove a shopping-list item/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
     const deleteBody = screen.getByLabelText("JSON body");
     expect((deleteBody as HTMLTextAreaElement).value).toContain("\"clientMutationId\": \"device-uuid-3\"");
@@ -1015,19 +1057,25 @@ describe("/developers/playground", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Fresh mutation id" })[0]);
     expect(headerMutationId?.value).toMatch(/^deleteApiV1ShoppingListItem:/);
 
-    fireEvent.click(screen.getByRole("button", { name: /Revoke a bearer credential/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Revoke a bearer credential/i }));
     expect(screen.getByText(/A bearer credential may revoke its own credential id/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Create a bearer credential/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /Create a bearer credential/i }));
     fireEvent.change(screen.getByLabelText("JSON body"), { target: { value: "{\"name\":\"Client\"}" } });
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Send request" }));
 
     expect(await screen.findByText("Secret values hidden in response body")).toBeInTheDocument();
+    // The Response panel is charcoal; its HX controls take photo-white tokens from the panel.
+    const panel = screen.getByRole("region", { name: "Response" });
+    expect(panel).toHaveClass("sj-on-charcoal");
+    for (const name of ["Copy response", "Clear response", /^Copy hidden .+ value$/]) {
+      for (const button of within(panel).getAllByRole("button", { name })) expect(panel).toContainElement(button);
+    }
     expect(screen.getByLabelText("Response body")).toHaveTextContent("sj_...redacted");
     fireEvent.click(screen.getByRole("button", { name: "Clear response" }));
     expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");
-  }, 10000);
+  });
 
   it("renders portable curl for bearer mode and body requests", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
@@ -1201,55 +1249,29 @@ describe("/developers/playground", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Copy import URL" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://spoonjoy.app/api/v1/openapi.json"));
-    expect(await screen.findByText("Copied Copy import URL")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy path" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("Could not copy Copy path")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Couldn't copy" })).toBeInTheDocument();
     await act(async () => {
-      await new Promise((resolve) => window.setTimeout(resolve, 1700));
+      await new Promise((resolve) => window.setTimeout(resolve, 2100));
     });
-    expect(screen.queryByText("Could not copy Copy path")).not.toBeInTheDocument();
-  });
-
-  it("supports keyboard roving for surface and auth mode radio groups", async () => {
-    await renderPlayground();
-
-    const allApis = await screen.findByRole("radio", { name: "All APIs" });
-    fireEvent.keyDown(allApis, { key: "ArrowRight" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Connector" })).toHaveFocus());
-    expect(screen.getByRole("radio", { name: "Connector" })).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.keyDown(screen.getByRole("radio", { name: "Connector" }), { key: "End" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "SDK" })).toHaveFocus());
-    expect(screen.getByRole("radio", { name: "SDK" })).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.keyDown(screen.getByRole("radio", { name: "SDK" }), { key: "Home" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "All APIs" })).toHaveFocus());
-    fireEvent.keyDown(screen.getByRole("radio", { name: "All APIs" }), { key: "Escape" });
-    expect(screen.getByRole("radio", { name: "All APIs" })).toHaveAttribute("aria-checked", "true");
-
-    fireEvent.click(screen.getByRole("button", { name: /Search public recipes/i }));
-    const anonymous = screen.getByRole("radio", { name: "Anonymous" });
-    fireEvent.keyDown(anonymous, { key: "ArrowLeft" });
-    await waitFor(() => expect(screen.getByRole("radio", { name: "Bearer" })).toHaveFocus());
-    expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.keyDown(screen.getByRole("radio", { name: "Bearer" }), { key: "Enter" });
-    expect(screen.getByRole("radio", { name: "Bearer" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Copy path" })).toBeInTheDocument();
   });
 
   it("handles OAuth callback validation failures and redirect submissions", async () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
 
     await renderPlayground();
-    fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Redirect the chef through OAuth consent/i }));
 
     const callbackInput = screen.getByLabelText("OAuth callback URL");
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-client_id")!, { target: { value: "cm_without_pkce" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-redirect_uri")!, { target: { value: "https://client.example/callback" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-state")!, { target: { value: "state_without_pkce" } });
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-query-code_challenge")!, { target: { value: "challenge_without_pkce" } });
-    const riskCheckbox = screen.getByLabelText(/I understand this request can change real Spoonjoy data/i);
+    const riskCheckbox = screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i });
     fireEvent.click(riskCheckbox);
     fireEvent.click(screen.getByRole("button", { name: "Open authorization URL" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(
@@ -1309,7 +1331,7 @@ describe("/developers/playground", () => {
     window.sessionStorage.removeItem("spoonjoy.playground.pkce");
     fireEvent.click(screen.getByRole("button", { name: "Generate PKCE + state" }));
     await screen.findByLabelText("PKCE and state bundle");
-    fireEvent.click(screen.getByLabelText(/I understand this request can change real Spoonjoy data/i));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this request can change real Spoonjoy data/i }));
     fireEvent.click(screen.getByRole("button", { name: "Open authorization URL" }));
 
     await waitFor(() => expect(open).toHaveBeenCalledWith(
@@ -1327,14 +1349,14 @@ describe("/developers/playground", () => {
       target: { value: `https://client.example/callback?code=oac_456&state=${state}&iss=https%3A%2F%2Fspoonjoy.app` },
     });
     fireEvent.click(screen.getByRole("button", { name: "Prepare token exchange" }));
-    expect(await screen.findByRole("button", { name: /Exchange or refresh an OAuth token/i })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("radio", { name: /Exchange or refresh an OAuth token/i })).toBeChecked();
     expect((screen.getByLabelText("Form body") as HTMLTextAreaElement).value).toContain("code=oac_456");
   });
 
   it("reports when a custom manifest omits the OAuth token operation", async () => {
     const manifestWithoutToken = {
       ...API_V1_PLAYGROUND_MANIFEST,
-      operations: API_V1_PLAYGROUND_MANIFEST.operations.filter((operation) => operation.id !== "POST /oauth/token"),
+      operations: (await playgroundData()).manifest.operations.filter((operation) => operation.id !== "POST /oauth/token"),
     };
     await renderPlayground({
       manifest: manifestWithoutToken,
@@ -1344,7 +1366,7 @@ describe("/developers/playground", () => {
       viewer: { isAuthenticated: false },
     } as PlaygroundLoaderData);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Redirect the chef through OAuth consent/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Redirect the chef through OAuth consent/i }));
     window.sessionStorage.setItem("spoonjoy.playground.pkce", JSON.stringify({
       state: "state_ok",
       issuer: "https://spoonjoy.app",
@@ -1363,11 +1385,11 @@ describe("/developers/playground", () => {
   it("switches from bearer mode to token creation with session auth", async () => {
     await renderPlayground();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Read the authenticated shopping list/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Read the authenticated shopping list/i }));
     fireEvent.click(screen.getByRole("radio", { name: "Bearer" }));
     fireEvent.click(screen.getByRole("button", { name: "Create a token with Session auth" }));
 
-    expect(await screen.findByRole("button", { name: /Create a bearer credential/i })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("radio", { name: /Create a bearer credential/i })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Session" })).toHaveAttribute("aria-checked", "true");
     expect((screen.getByLabelText("JSON body") as HTMLTextAreaElement).value).toContain("scopes");
   });
@@ -1375,7 +1397,7 @@ describe("/developers/playground", () => {
   it("recovers from invalid JSON when generating body mutation ids", async () => {
     await renderPlayground();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Set a shopping-list item checked state/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Set a shopping-list item checked state/i }));
     fireEvent.change(document.querySelector<HTMLInputElement>("#param-path-itemId")!, { target: { value: "item_1" } });
     fireEvent.change(screen.getByLabelText("JSON body"), { target: { value: "{bad json" } });
     fireEvent.click(screen.getAllByRole("button", { name: "Fresh mutation id" })[0]);

@@ -1,7 +1,7 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLoaderData } from "react-router";
 import { usePostHog } from "~/lib/use-posthog";
-import { Braces, CheckCircle2, Clipboard, KeyRound, LogIn, Play, RefreshCw, Search, ShieldOff, Terminal, XCircle } from "lucide-react";
+import { Braces, CheckCircle2, KeyRound, Play, RefreshCw, Search, Terminal, XCircle } from "lucide-react";
 import {
   API_V1_PLAYGROUND_MANIFEST,
   type ApiV1PlaygroundManifest,
@@ -12,9 +12,20 @@ import { captureSafeClientEvent, latencyBucket, responseStatusClass } from "~/li
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { getUserId } from "~/lib/session.server";
 import { Badge } from "~/components/ouro/badge/badge";
-import { Button } from "~/components/button";
-import { Text } from "~/components/text";
-import { CookbookHeader, CookbookPage, CookbookSectionTitle } from "~/components/cookbook/page";
+import { Checkbox } from "~/components/ouro/checkbox/checkbox";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
+import { Empty } from "~/components/ouro/empty/empty";
+import { FileField } from "~/components/ouro/file-field/file-field";
+import { Link } from "~/components/ouro/link/link";
+import { SegmentedControl } from "~/components/ouro/segmented-control/segmented-control";
+import { TextArea } from "~/components/ouro/text-field/text-area";
+import { TextField } from "~/components/ouro/text-field/text-field";
+import { Heading } from "~/components/ouro/text/heading";
+import { Button } from "~/components/ouro/button/button";
+import { CookbookPage } from "~/components/cookbook/page";
+import { ChoiceCard } from "~/components/ouro/choice-card/choice-card";
+import { CopyButton } from "~/components/ouro/copy-button/copy-button";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 
 type PlaygroundAuthMode = "session" | "bearer" | "anonymous";
 type PlaygroundSurface = "full" | "connector" | "sdk";
@@ -39,14 +50,10 @@ const PLAYGROUND_OG_CARD = PAGE_OG_CARDS["api-playground"];
 const PLAYGROUND_CANONICAL_PATH = "/api/playground";
 const PLAYGROUND_OG_PATH = pageOgPath("api-playground");
 
-const AUTH_MODES: Array<{
-  id: PlaygroundAuthMode;
-  label: string;
-  icon: typeof LogIn;
-}> = [
-  { id: "session", label: "Session", icon: LogIn },
-  { id: "bearer", label: "Bearer", icon: KeyRound },
-  { id: "anonymous", label: "Anonymous", icon: ShieldOff },
+const AUTH_MODES: Array<{ id: PlaygroundAuthMode; label: string }> = [
+  { id: "session", label: "Session" },
+  { id: "bearer", label: "Bearer" },
+  { id: "anonymous", label: "Anonymous" },
 ];
 
 const SURFACES: Array<{ id: PlaygroundSurface; label: string; url: string; body: string }> = [
@@ -529,10 +536,6 @@ function bodyHasClientMutationId(bodyText: string) {
   }
 }
 
-async function copyText(value: string) {
-  await navigator.clipboard?.writeText(value);
-}
-
 function bytesToBase64Url(bytes: Uint8Array) {
   const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -555,63 +558,67 @@ export async function pkceS256Challenge(verifier: string) {
   return bytesToBase64Url(new Uint8Array(digest));
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
-  async function handleCopy() {
-    try {
-      await copyText(value);
-      setStatus("copied");
-    } catch {
-      setStatus("failed");
-    }
-    window.setTimeout(() => setStatus("idle"), 1600);
-  }
-
+/** The latest response, on a charcoal panel whose HX controls take photo-white tokens (`sj-on-charcoal`). */
+export function ResponsePanel({ response, onClear }: { response: PlaygroundResponse | null; onClear: () => void }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => void handleCopy()}
-        className="inline-flex min-h-9 items-center justify-center gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xs font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)]"
-      >
-        <Clipboard className="size-3.5" aria-hidden="true" />
-        {label}
-      </button>
-      <span className="sr-only" aria-live="polite">
-        {status === "copied" ? `Copied ${label}` : status === "failed" ? `Could not copy ${label}` : ""}
-      </span>
-    </span>
+    <section aria-label="Response" className="sj-on-charcoal border border-[var(--sj-border-strong)] bg-[var(--sj-photo-charcoal)] p-5 text-[var(--sj-on-photo)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Heading style={{ "--foreground": "var(--sj-on-photo)" } as CSSProperties} level={2} size="xl" className="my-5 my-0">Response</Heading>
+        {response ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <CopyButton variant="plain" value={response.body} label="Copy response" />
+            <span className="inline-flex items-center gap-2 font-sj-ui text-sm font-semibold">
+              {response.status >= 200 && response.status < 300 ? (
+                <CheckCircle2 className="size-4 text-[var(--sj-on-photo-warm)]" aria-hidden="true" />
+              ) : (
+                <XCircle className="size-4 text-[var(--sj-tomato)]" aria-hidden="true" />
+              )}
+              {response.status} {response.statusText}
+            </span>
+          </div>
+        ) : null}
+        </div>
+        <p className="sr-only" aria-live="polite">
+          {response ? `Response ${response.status} ${response.statusText}${response.requestId ? `, request id ${response.requestId}` : ""}` : ""}
+        </p>
+        {response?.requestId ? (
+        <p className="mt-3 font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">Request ID: {response.requestId}</p>
+      ) : null}
+      {response?.headers.length ? (
+        <div className="mt-3 grid gap-1">
+          {response.headers.map((header) => (
+            <p key={`${header.name}-${header.value}`} className="break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+              {header.name}: {header.value}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {response?.method && response.path ? (
+        <p className="mt-2 break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+          {response.method} {response.path}
+          {" - "}{response.elapsedMs} ms
+        </p>
+      ) : null}
+      {response?.secrets?.length ? (
+        <div className="mt-4 border border-[var(--sj-on-photo-muted)] p-3">
+          <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-on-photo-warm)]">
+            Secret values hidden in response body
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+              {response.secrets.map((secret, index) => (
+                <CopyButton key={`${secret.label}-${index}`} variant="plain" value={secret.value} label={`Copy hidden ${secret.label} value`} />
+              ))}
+            <Button variant="outline" tone="secondary" size="sm" onClick={onClear}>
+              Clear response
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      <pre tabIndex={-1} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+        {response ? response.body : "No response yet."}
+      </pre>
+    </section>
   );
-}
-
-function rovingRadioKeyDown<T extends string>(
-  event: KeyboardEvent<HTMLButtonElement>,
-  items: readonly T[],
-  selected: T,
-  onSelect: (value: T) => void,
-) {
-  const key = event.key;
-  if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End", " ", "Enter"].includes(key)) return;
-  event.preventDefault();
-  if (key === " " || key === "Enter") {
-    onSelect(selected);
-    return;
-  }
-  const index = Math.max(0, items.indexOf(selected));
-  const nextIndex = key === "Home"
-    ? 0
-    : key === "End"
-      ? items.length - 1
-      : key === "ArrowRight" || key === "ArrowDown"
-        ? (index + 1) % items.length
-        : (index - 1 + items.length) % items.length;
-  const next = items[nextIndex]!;
-  const group = event.currentTarget.parentElement;
-  onSelect(next);
-  window.setTimeout(() => {
-    const nextButton = group?.querySelector<HTMLButtonElement>(`[data-radio-value="${next}"]`);
-    nextButton?.focus();
-  }, 0);
 }
 
 export default function DeveloperPlayground() {
@@ -729,11 +736,11 @@ export default function DeveloperPlayground() {
     return modes.includes(current) ? current : defaultAuthModeFor(operation, isAuthenticated);
   }
 
-  function selectOperation(id: string, options: { focusBuilder?: boolean } = {}) {
+  function selectOperation(id: string) {
     const operation = operations.find((candidate) => candidate.id === id)!;
     setSelectedId(id);
     setAuthMode((current) => nextAuthModeFor(operation, current));
-    focusSelectedOperation.current = Boolean(options.focusBuilder);
+    focusSelectedOperation.current = false;
     setConfirmedRisk(false);
     setResponse(null);
     capturePlaygroundTelemetry(
@@ -976,42 +983,28 @@ export default function DeveloperPlayground() {
 
   return (
     <CookbookPage className="sj-developer-playground">
-      <CookbookHeader eyebrow={`API ${manifest.version}`} title="Spoonjoy API Playground" action={(
-        <Button href="/api" plain>
+      <PageHeader
+        eyebrow={`API ${manifest.version}`}
+        title="Spoonjoy API Playground"
+        size="lg"
+        divider
+        description="Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for private, scoped, and mutating calls."
+        actions={(
+        <Button href="/api" variant="outline" tone="secondary">
           <Terminal data-slot="icon" aria-hidden="true" />
           Docs
         </Button>
-      )}>
-        <Text size="lg" className="leading-8">
-          Generated from the live v1 OpenAPI surface. Sign into Spoonjoy and the playground uses that session for
-          private, scoped, and mutating calls.
-        </Text>
-      </CookbookHeader>
+      )}
+      />
 
       <section className="grid gap-4 border-y border-[var(--sj-border-strong)] py-5 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)]">
         <div className="grid gap-3">
-          <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">API surface</p>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="API surface filter">
-            {SURFACES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                role="radio"
-                aria-checked={surface === item.id}
-                tabIndex={surface === item.id ? 0 : -1}
-                data-radio-value={item.id}
-                onClick={() => selectSurface(item.id)}
-                onKeyDown={(event) => rovingRadioKeyDown(event, SURFACES.map((surfaceItem) => surfaceItem.id), surface, selectSurface)}
-                className={`inline-flex min-h-10 items-center justify-center border px-3 font-sj-ui text-sm font-bold transition ${
-                  surface === item.id
-                    ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] text-[var(--sj-ink)]"
-                    : "border-[var(--sj-border)] bg-[var(--sj-paper)] text-[var(--sj-ink-soft)] hover:border-[var(--sj-border-strong)]"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="API surface"
+            items={SURFACES.map(({ id, label }) => ({ value: id, label }))}
+            value={surface}
+            onValueChange={(value) => selectSurface(value as PlaygroundSurface)}
+          />
           <p className="text-sm/6 text-[var(--sj-ink-soft)]">
             {selectedSurface.body}
           </p>
@@ -1022,8 +1015,8 @@ export default function DeveloperPlayground() {
             {absoluteSpecUrl(selectedSurface.url, requestOrigin)}
           </p>
           <div className="flex flex-wrap gap-2">
-            <CopyButton value={absoluteSpecUrl(selectedSurface.url, requestOrigin)} label="Copy import URL" />
-            <Button href={selectedSurface.url} plain>
+            <CopyButton variant="plain" value={absoluteSpecUrl(selectedSurface.url, requestOrigin)} label="Copy import URL" />
+            <Button href={selectedSurface.url} variant="outline" tone="secondary">
               <Braces data-slot="icon" aria-hidden="true" />
               Open spec
             </Button>
@@ -1036,13 +1029,9 @@ export default function DeveloperPlayground() {
           <div className="min-w-0 border border-[var(--sj-border-strong)] bg-[var(--sj-panel-solid)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-	                <h2
-	                  ref={selectedHeadingRef}
-	                  tabIndex={-1}
-	                  className="font-sj-display my-0 min-w-0 break-words text-2xl/7 font-semibold text-[var(--sj-ink)] outline-none after:mt-3 after:block after:border-t after:border-[var(--sj-border)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--sj-brass)]"
-	                >
-	                  {selected.label}
-	                </h2>
+                <Heading ref={selectedHeadingRef} tabIndex={-1} level={2} className="min-w-0 break-words">
+                  {selected.label}
+                </Heading>
                 <p className="mt-2 break-words font-mono text-sm/6 text-[var(--sj-ink-soft)]">{selected.path}</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1099,12 +1088,11 @@ export default function DeveloperPlayground() {
                 {operationPolicies.length ? (
                   <div className="grid gap-3 lg:grid-cols-3">
                     {operationPolicies.map(([label, policy]) => (
-                      <details key={label} className="border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3">
-                        <summary className="cursor-pointer font-sj-ui text-sm font-bold text-[var(--sj-ink)]">{label}</summary>
+                      <Collapsible key={label} title={label}>
                         <pre tabIndex={-1} aria-label={`${selected.label} ${label.toLowerCase()}`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
                           {JSON.stringify(policy, null, 2)}
                         </pre>
-                      </details>
+                      </Collapsible>
                     ))}
                   </div>
                 ) : null}
@@ -1121,28 +1109,14 @@ export default function DeveloperPlayground() {
             ) : (
             <div className="mt-5 grid gap-3 border-y border-[var(--sj-border)] py-5">
               <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Auth</p>
-              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Authentication mode">
-                {visibleAuthModes.map(({ id, label, icon: Icon }) => (
-                  <button
-                    key={id}
-	                    type="button"
-	                    role="radio"
-	                    aria-checked={authMode === id}
-	                    tabIndex={authMode === id ? 0 : -1}
-	                    data-radio-value={id}
-	                    onClick={() => selectAuthMode(id)}
-	                    onKeyDown={(event) => rovingRadioKeyDown(event, visibleAuthModes.map((mode) => mode.id), authMode, selectAuthMode)}
-                    className={`flex min-h-11 items-center justify-center gap-2 border px-3 font-sj-ui text-sm font-semibold transition ${
-                      authMode === id
-                        ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))] text-[var(--sj-ink)]"
-                        : "border-[var(--sj-border)] bg-[var(--sj-paper)] text-[var(--sj-ink-soft)] hover:border-[var(--sj-border-strong)]"
-                    }`}
-                  >
-                    <Icon className="size-4" aria-hidden="true" />
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                label="Authentication mode"
+                hideLabel
+                fullWidth
+                items={visibleAuthModes.map(({ id, label }) => ({ value: id, label }))}
+                value={authMode}
+                onValueChange={(value) => selectAuthMode(value as PlaygroundAuthMode)}
+              />
               <p className="text-sm/6 text-[var(--sj-ink-soft)]">{authCopy(authMode, isAuthenticated)}</p>
               {/* istanbul ignore next -- @preserve auth mode state is constrained by generated credentialModes and reset on operation changes. */ !authModeAllowed ? (
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">
@@ -1164,15 +1138,14 @@ export default function DeveloperPlayground() {
                   <p className="text-sm/6 text-[var(--sj-ink-soft)]">
                     Session mode is browser-only. If a private request returns 401, sign in and come back to the same operation.
                     {" "}
-                    <a
+                    <Link
                       href="/login?redirectTo=/api/playground"
                       onClick={() => capturePlaygroundTelemetry("spoonjoy.developer.playground.sign_in_clicked", {
                         auth_mode: "session",
                       }, selected)}
-                      className="font-sj-ui font-bold text-[var(--sj-ink)] underline decoration-[var(--sj-brass)] underline-offset-4"
                     >
                       Sign in
-                    </a>
+                    </Link>
                   </p>
                 )
               ) : null}
@@ -1183,26 +1156,27 @@ export default function DeveloperPlayground() {
               ) : null}
               {authMode === "bearer" ? (
                 <div className="grid gap-2">
-                  <input
-                    aria-label="Bearer token"
+                  <TextField
+                    label="Bearer token"
+                    hideLabel
                     value={token}
                     onChange={(event) => setToken(event.target.value)}
                     type="password"
                     autoComplete="off"
                     placeholder="sj_..."
-                    className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-mono text-sm text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode("session");
-                      selectOperation("POST /api/v1/tokens");
-                    }}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-sm font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)] sm:justify-start"
-                  >
-                    <KeyRound className="size-4" aria-hidden="true" />
-                    Create a token with Session auth
-                  </button>
+                  <div>
+                    <Button
+                      variant="outline" tone="secondary"
+                      startIcon={KeyRound}
+                      onClick={() => {
+                        setAuthMode("session");
+                        selectOperation("POST /api/v1/tokens");
+                      }}
+                    >
+                      Create a token with Session auth
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1212,42 +1186,34 @@ export default function DeveloperPlayground() {
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
 	                {selected.params.map((param) => {
 	                  const fieldId = `param-${param.in}-${param.name}`;
-	                  const hintId = `${fieldId}-hint`;
 	                  const isMissing = param.required && !params[param.name]?.trim();
 	                  return (
-	                    <label key={`${param.in}-${param.name}`} className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-	                      {param.label}
-	                      <input
-	                        id={fieldId}
-	                        value={params[param.name]}
-	                        onChange={(event) => updateParam(param.name, event.target.value)}
-	                        placeholder={param.placeholder}
-	                        required={param.required}
-	                        aria-required={param.required}
-	                        aria-invalid={isMissing}
-	                        aria-describedby={hintId}
-	                        className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 text-base font-normal text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-	                      />
-	                      <span id={hintId} className="font-mono text-xs font-normal text-[var(--sj-ink-soft)]">
-	                        {param.in}{param.required ? " required" : ""}
-	                        {param.description ? ` - ${param.description}` : ""}
-	                        {isMissing ? " - fill this before sending" : ""}
-	                      </span>
-	                    </label>
+                    <TextField
+                      key={`${param.in}-${param.name}`}
+                      id={fieldId}
+                      label={param.label}
+                      value={params[param.name]}
+                      onChange={(event) => updateParam(param.name, event.target.value)}
+                      placeholder={param.placeholder}
+                      required={param.required}
+                      aria-invalid={isMissing}
+                      description={
+                        <span className="font-mono">
+                          {param.in}{param.required ? " required" : ""}
+                          {param.description ? ` - ${param.description}` : ""}
+                          {isMissing ? " - fill this before sending" : ""}
+                        </span>
+                      }
+                    />
 	                  );
 	                })}
               </div>
             ) : null}
             {hasHeaderMutationId ? (
               <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => updateParam("X-Client-Mutation-Id", freshMutationId(selected))}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-sm font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)]"
-                >
-                  <RefreshCw className="size-4" aria-hidden="true" />
+                <Button variant="outline" tone="secondary" startIcon={RefreshCw} onClick={() => updateParam("X-Client-Mutation-Id", freshMutationId(selected))}>
                   Fresh mutation id
-                </button>
+                </Button>
               </div>
             ) : null}
             {missingParams.length ? (
@@ -1263,39 +1229,26 @@ export default function DeveloperPlayground() {
                   Generate a verifier and state, store both in your client, and verify state after the callback before exchanging the code.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void generatePkce()}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-sm font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)]"
-                  >
-                    <KeyRound className="size-4" aria-hidden="true" />
+                  <Button variant="outline" tone="secondary" startIcon={KeyRound} onClick={() => void generatePkce()}>
                     Generate PKCE + state
-                  </button>
-                  {pkceVerifier ? <CopyButton value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
+                  </Button>
+                  {pkceVerifier ? <CopyButton variant="plain" value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
                 </div>
                 {pkceVerifier ? (
                   <pre tabIndex={-1} aria-label="PKCE and state bundle" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3 font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
                     {`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`}
                   </pre>
                 ) : null}
-                <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-                  OAuth callback URL
-                  <input
-                    value={oauthCallbackUrl}
-                    onChange={(event) => setOauthCallbackUrl(event.target.value)}
-                    placeholder="https://example.com/oauth/callback?code=oac_...&state=state_..."
-                    className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 text-base font-normal text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-                  />
-                </label>
+                <TextField
+                  label="OAuth callback URL"
+                  value={oauthCallbackUrl}
+                  onChange={(event) => setOauthCallbackUrl(event.target.value)}
+                  placeholder="https://example.com/oauth/callback?code=oac_...&state=state_..."
+                />
                 <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={prepareOauthTokenExchange}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-sm font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)]"
-                  >
-                    <RefreshCw className="size-4" aria-hidden="true" />
+                  <Button variant="outline" tone="secondary" startIcon={RefreshCw} onClick={prepareOauthTokenExchange}>
                     Prepare token exchange
-                  </button>
+                  </Button>
                   {oauthCallbackStatus ? (
                     <p className="text-sm/6 text-[var(--sj-ink-soft)]">{oauthCallbackStatus}</p>
                   ) : null}
@@ -1309,29 +1262,19 @@ export default function DeveloperPlayground() {
                   {bodyLabel}
                   <span className="flex flex-wrap gap-2">
                     {hasBodyMutationId ? (
-                      <button
-                        type="button"
-                        onClick={generateBodyMutationId}
-                        className="inline-flex min-h-9 items-center justify-center gap-2 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xs font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)]"
-                      >
-                        <RefreshCw className="size-3.5" aria-hidden="true" />
+                      <Button variant="outline" tone="secondary" size="sm" startIcon={RefreshCw} onClick={generateBodyMutationId}>
                         Fresh mutation id
-                      </button>
+                      </Button>
                     ) : null}
-                    <CopyButton value={bodyText} label="Copy body" />
+                    <CopyButton variant="plain" value={bodyText} label="Copy body" />
                   </span>
                 </span>
                 {selected.requestBody.examples.length > 1 ? (
                   <div className="flex flex-wrap gap-2">
                     {selected.requestBody.examples.map((example) => (
-                      <button
-                        key={example.name}
-                        type="button"
-                        onClick={() => updateBody(example.example)}
-                        className="inline-flex min-h-9 items-center justify-center border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 font-sj-ui text-xs font-bold text-[var(--sj-ink)] transition hover:border-[var(--sj-border-strong)]"
-                      >
+                      <Button key={example.name} variant="outline" tone="secondary" size="sm" onClick={() => updateBody(example.example)}>
                         {example.label}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 ) : null}
@@ -1339,39 +1282,27 @@ export default function DeveloperPlayground() {
                   <div className="grid gap-3">
                     {selected.requestBody.fields.map((field) => {
                       const fieldId = `multipart-${selected.operationId}-${field.name}`;
-                      const hintId = `${fieldId}-hint`;
                       const isFileField = Boolean(field.accept);
-                      return (
-                        <label key={field.name} className="grid gap-2">
-                          {field.label}
-                          {isFileField ? (
-                            <input
-                              id={fieldId}
-                              type="file"
-                              accept={field.accept}
-                              required={field.required}
-                              aria-required={field.required}
-                              aria-describedby={hintId}
-                              onChange={(event) => updateMultipartFile(field.name, event.currentTarget.files?.[0] ?? null)}
-                              className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-2 text-base font-normal text-[var(--sj-ink)] outline-none file:mr-3 file:border-0 file:bg-[var(--sj-brass)] file:px-3 file:py-1.5 file:font-sj-ui file:text-sm file:font-bold file:text-[var(--sj-on-brass)] focus:border-[var(--sj-brass)]"
-                            />
-                          ) : (
-                            <input
-                              id={fieldId}
-                              type="text"
-                              value={multipartValues[field.name] ?? ""}
-                              required={field.required}
-                              aria-required={field.required}
-                              aria-describedby={hintId}
-                              onChange={(event) => updateMultipartValue(field.name, event.currentTarget.value)}
-                              className="min-h-11 border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-2 font-mono text-sm font-normal text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-                            />
-                          )}
-                          <span id={hintId} className="font-mono text-xs font-normal text-[var(--sj-ink-soft)]">
-                            {field.required ? "multipart required" : "multipart optional"}
-                            {field.description ? ` - ${field.description}` : ""}
-                          </span>
-                        </label>
+                      const description = `${field.required ? "multipart required" : "multipart optional"}${field.description ? ` - ${field.description}` : ""}`;
+                      return isFileField ? (
+                        <FileField
+                          key={field.name}
+                          label={field.label}
+                          accept={field.accept}
+                          required={field.required}
+                          description={description}
+                          onFilesChange={(files) => updateMultipartFile(field.name, files[0] ?? null)}
+                        />
+                      ) : (
+                        <TextField
+                          key={field.name}
+                          id={fieldId}
+                          label={field.label}
+                          value={multipartValues[field.name] ?? ""}
+                          required={field.required}
+                          description={description}
+                          onChange={(event) => updateMultipartValue(field.name, event.currentTarget.value)}
+                        />
                       );
                     })}
                     <pre tabIndex={-1} aria-label={bodyLabel} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-3 font-mono text-sm/6 font-normal text-[var(--sj-ink-soft)]">
@@ -1379,13 +1310,13 @@ export default function DeveloperPlayground() {
                     </pre>
                   </div>
                 ) : (
-                  <textarea
-                    aria-label={bodyLabel}
+                  <TextArea
+                    label={bodyLabel}
+                    hideLabel
                     value={bodyText}
                     onChange={(event) => updateBody(event.target.value)}
                     spellCheck={false}
                     rows={10}
-                    className="min-h-48 resize-y border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-3 font-mono text-sm/6 font-normal text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
                   />
                 )}
                 {bodyError ? (
@@ -1401,8 +1332,8 @@ export default function DeveloperPlayground() {
                 <code className="rounded-sm border border-[var(--sj-border)] bg-[var(--sj-flour)] px-0.5 text-sm font-medium text-[var(--sj-ink)] sm:text-[0.8125rem]">{path}</code>
               </p>
               <div className="flex flex-wrap gap-2">
-                <CopyButton value={path} label="Copy path" />
-                <CopyButton value={curl} label={authMode === "session" ? "Copy fetch" : "Copy curl"} />
+                <CopyButton variant="plain" value={path} label="Copy path" />
+                <CopyButton variant="plain" value={curl} label={authMode === "session" ? "Copy fetch" : "Copy curl"} />
               </div>
               <pre tabIndex={-1} aria-label={authMode === "session" ? "Generated browser fetch snippet" : "Generated curl command"} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                 {curl}
@@ -1423,31 +1354,24 @@ export default function DeveloperPlayground() {
 	                <div className="mt-4 grid gap-3">
 	                  <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Example payloads</p>
 	                  {selected.responseExamples.map((example) => (
-	                    <details key={`${selected.id}-${example.status}-${example.name}`} className="border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3">
-	                      <summary className="cursor-pointer font-sj-ui text-sm font-bold text-[var(--sj-ink)]">
-	                        {example.status} {example.label}
-	                      </summary>
+                    <Collapsible key={`${selected.id}-${example.status}-${example.name}`} title={`${example.status} ${example.label}`}>
 	                      <pre tabIndex={-1} aria-label={`${selected.label} ${example.status} ${example.label} response example`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
 	                        {example.example}
 	                      </pre>
-	                    </details>
+                    </Collapsible>
 	                  ))}
 	                </div>
 	              ) : null}
 	            </div>
 
             {riskNeedsConfirmation ? (
-              <label className="mt-5 flex items-start gap-3 border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_8%,var(--sj-paper))] p-4 font-sj-ui text-sm/6 font-semibold text-[var(--sj-ink)]">
-                <input
-                  type="checkbox"
+              <div className="mt-5 border border-[var(--sj-tomato)] bg-[color-mix(in_srgb,var(--sj-tomato)_8%,var(--sj-paper))] p-4">
+                <Checkbox
+                  label="I understand this request can change real Spoonjoy data, revoke/create credentials, or reveal a secret token."
                   checked={confirmedRisk}
-                  onChange={(event) => setConfirmedRisk(event.target.checked)}
-                  className="mt-1 size-4 accent-[var(--sj-tomato)]"
+                  onCheckedChange={setConfirmedRisk}
                 />
-                <span>
-                  I understand this request can change real Spoonjoy data, revoke/create credentials, or reveal a secret token.
-                </span>
-              </label>
+              </div>
             ) : null}
 
             {validationErrors.length ? (
@@ -1469,117 +1393,43 @@ export default function DeveloperPlayground() {
             </div>
           </div>
 
-	          <section className="border border-[var(--sj-border-strong)] bg-[var(--sj-photo-charcoal)] p-5 text-[var(--sj-on-photo)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CookbookSectionTitle className="my-0 text-[var(--sj-on-photo)]">Response</CookbookSectionTitle>
-              {response ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <CopyButton value={response.body} label="Copy response" />
-                  <span className="inline-flex items-center gap-2 font-sj-ui text-sm font-semibold">
-                    {response.status >= 200 && response.status < 300 ? (
-                      <CheckCircle2 className="size-4 text-[var(--sj-on-photo-warm)]" aria-hidden="true" />
-                    ) : (
-                      <XCircle className="size-4 text-[var(--sj-tomato)]" aria-hidden="true" />
-                    )}
-                    {response.status} {response.statusText}
-                  </span>
-                </div>
-              ) : null}
-	            </div>
-	            <p className="sr-only" aria-live="polite">
-	              {response ? `Response ${response.status} ${response.statusText}${response.requestId ? `, request id ${response.requestId}` : ""}` : ""}
-	            </p>
-	            {response?.requestId ? (
-              <p className="mt-3 font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">Request ID: {response.requestId}</p>
-            ) : null}
-            {response?.headers.length ? (
-              <div className="mt-3 grid gap-1">
-                {response.headers.map((header) => (
-                  <p key={`${header.name}-${header.value}`} className="break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-                    {header.name}: {header.value}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-            {response?.method && response.path ? (
-              <p className="mt-2 break-words font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-                {response.method} {response.path}
-                {" - "}{response.elapsedMs} ms
-              </p>
-            ) : null}
-            {response?.secrets?.length ? (
-              <div className="mt-4 border border-[var(--sj-on-photo-muted)] p-3">
-                <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-on-photo-warm)]">
-                  Secret values hidden in response body
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-	                  {response.secrets.map((secret, index) => (
-	                    <CopyButton key={`${secret.label}-${index}`} value={secret.value} label={`Copy hidden ${secret.label} value`} />
-	                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setResponse(null)}
-                    className="inline-flex min-h-9 items-center justify-center border border-[var(--sj-on-photo-muted)] px-3 font-sj-ui text-xs font-bold text-[var(--sj-on-photo)] transition hover:border-[var(--sj-on-photo)]"
-                  >
-                    Clear response
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <pre tabIndex={-1} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-              {response ? response.body : "No response yet."}
-            </pre>
-          </section>
+          <ResponsePanel response={response} onClear={() => setResponse(null)} />
         </section>
 
         <section aria-label="Operations" className="grid content-start gap-5 pr-1 xl:max-h-[46rem] xl:overflow-y-auto">
-          <label className="grid gap-2 font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">
-            Search operations
-            <span className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--sj-ink-soft)]" aria-hidden="true" />
-              <input
-                value={operationQuery}
-                onChange={(event) => setOperationQuery(event.target.value)}
-                placeholder="recipe, token, sync..."
-                className="min-h-11 w-full border border-[var(--sj-border)] bg-[var(--sj-paper)] py-2 pl-9 pr-3 font-sj-ui text-sm font-normal text-[var(--sj-ink)] outline-none focus:border-[var(--sj-brass)]"
-              />
-            </span>
-          </label>
+          <TextField
+            label="Search operations"
+            type="search"
+            value={operationQuery}
+            onChange={(event) => setOperationQuery(event.target.value)}
+            placeholder="recipe, token, sync..."
+            startAdornment={<Search aria-hidden="true" />}
+          />
           {filteredOperations.length === 0 ? (
-            <p className="border border-[var(--sj-border)] bg-[var(--sj-panel-solid)] p-4 text-sm/6 text-[var(--sj-ink-soft)]">
-              No operations match this surface and search.
-            </p>
+            <Empty title="No operations match this surface and search." />
           ) : null}
           {operationGroups.map((group) => (
-            <div key={group.tag} className="grid gap-2">
-              <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">{group.tag}</p>
-              {group.operations.map((operation) => (
-                <button
-                  key={operation.id}
-                  type="button"
-                  aria-label={`${operation.method} ${operation.path}: ${operation.label}`}
-                  aria-pressed={operation.id === selected.id}
-	                  onClick={() => selectOperation(operation.id, { focusBuilder: true })}
-                  className={`grid gap-2 border p-4 text-left transition ${
-                    operation.id === selected.id
-                      ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_12%,var(--sj-panel-solid))]"
-                      : "border-[var(--sj-border)] bg-[var(--sj-panel-solid)] hover:border-[var(--sj-border-strong)]"
-                  }`}
-                >
-                  <span className="flex items-start justify-between gap-2">
-                    <span className="font-sj-ui text-sm/5 font-bold text-[var(--sj-ink)]">{operation.label}</span>
-                    <Badge tone={methodColor(operation.method)} variant="soft">
-                      {operation.method}
-                    </Badge>
+            <ChoiceCard
+              key={group.tag}
+              legend={group.tag}
+              columns={2}
+              value={group.operations.some((operation) => operation.id === selected.id) ? selected.id : ""}
+              onValueChange={(id) => selectOperation(id)}
+              items={group.operations.map((operation) => ({
+                value: operation.id,
+                label: operation.label,
+                description: (
+                  <span className="grid gap-2">
+                    <span className="break-words font-mono text-xs/5">{operation.path}</span>
+                    <span className="flex flex-wrap gap-2">
+                      <Badge tone={methodColor(operation.method)} variant="soft">{operation.method}</Badge>
+                      <Badge tone={riskColor(operation.risk)} variant="soft">{operation.risk}</Badge>
+                      {operation.credentialModes.map((mode) => <Badge key={mode} variant="soft">{mode}</Badge>)}
+                    </span>
                   </span>
-                  <span className="break-words font-mono text-xs/5 text-[var(--sj-ink-soft)]">{operation.path}</span>
-                  <span className="flex flex-wrap gap-2">
-                    <Badge tone={riskColor(operation.risk)} variant="soft">{operation.risk}</Badge>
-                    {operation.credentialModes.map((mode) => <Badge key={mode} variant="soft">{mode}</Badge>)}
-                  </span>
-                </button>
-              ))}
-            </div>
+                ),
+              }))}
+            />
           ))}
         </section>
       </form>
@@ -1599,7 +1449,7 @@ export default function DeveloperPlayground() {
               {scenario.sample}
             </pre>
             <div>
-	              <CopyButton value={scenario.sample} label={`Copy ${scenario.title} sample`} />
+	              <CopyButton variant="plain" value={scenario.sample} label={`Copy ${scenario.title} sample`} />
             </div>
           </article>
         ))}
@@ -1620,7 +1470,7 @@ export default function DeveloperPlayground() {
               {flow.sample}
             </pre>
             <div>
-	              <CopyButton value={flow.sample} label={`Copy ${flow.title} sample`} />
+	              <CopyButton variant="plain" value={flow.sample} label={`Copy ${flow.title} sample`} />
             </div>
           </article>
         ))}
@@ -1628,7 +1478,7 @@ export default function DeveloperPlayground() {
 
       <section className="grid gap-6 border-t border-[var(--sj-border-strong)] py-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div>
-          <CookbookSectionTitle className="my-0">OAuth Scope Mapping</CookbookSectionTitle>
+          <Heading level={2} size="xl" className="my-5 my-0">OAuth Scope Mapping</Heading>
           <div className="mt-4 grid gap-3">
             {Object.entries(manifest.oauthScopeMap).map(([oauthScope, restScopes]) => (
               <div key={oauthScope} className="border-b border-[var(--sj-border)] pb-3">
@@ -1639,7 +1489,7 @@ export default function DeveloperPlayground() {
           </div>
         </div>
         <div>
-          <CookbookSectionTitle className="my-0">Current API Boundary</CookbookSectionTitle>
+          <Heading level={2} size="xl" className="my-5 my-0">Current API Boundary</Heading>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
               <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Available now</p>

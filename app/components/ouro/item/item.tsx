@@ -1,18 +1,33 @@
 "use client";
 
-import { createElement, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
+import { createElement, useId, type HTMLAttributes, type JSX, type ReactNode, type Ref } from "react";
 import { useAppearanceClassNameCheck } from "~/lib/ouro/class-name-check";
 import { cn } from "~/lib/ouro/cn";
 import { RouterLink, safeRel } from "~/lib/ouro/router-link";
 import { raiseControlsClass, stretchedLinkClass } from "~/lib/ouro/stretched-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 
-/** How big an Item's media is: an `icon` in a muted 40px tile, or an image at 40, 64 or 112px. */
+/**
+ * How big an Item's media is: an `icon` in a muted 40px tile, or an image at 40, 64 or 112px.
+ *
+ * @claim "How big an Item's media is" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > sizes its media: sm 40px by default, md 64px, lg 112px, and an icon in a 40px tile)
+ * @claim "How big an Item's media is" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > gives an icon a muted tile and hides it from screen readers)
+ */
 export type ItemMediaSize = "icon" | "sm" | "md" | "lg";
 
-/** The props every Item takes, with or without `href`. */
+/**
+ * The props every Item takes, with or without `href`.
+ *
+ * @claim "The props every Item takes, with" registry/ouro/components/ouro/item/item.test-d.ts verify:fileLine(registry/ouro/components/ouro/item/item.test-d.ts, /expectTypeOf<\{\stitle:\s"Ribs";\shref:\s"\/recipes\/1";/)
+ */
 export interface ItemOwnProps {
-  /** One or two lines under the title. Pass `<Text lines={2}>` to clamp a long one. */
+  /**
+   * A short line under the title. Pass `<Text lines={2}>` to clamp a long one. With `href`, it
+   * also describes the link (`aria-describedby`), so a screen reader that lands on the row hears
+   * its title and then this line: a result's byline and snippet, a recipe's time.
+   * @claim "so a screen reader that lands" registry/ouro/e2e/screen-reader/item.sr.spec.ts verify:fileLine(registry/ouro/e2e/screen-reader/item.sr.spec.ts, /is heard as a link by its title, then its description/)
+   * @claim "With `href`, it also describes the" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item with href > describes the row's link by its description, which keeps its place under the title)
+   */
   description?: ReactNode;
   /**
    * Leading media: an `<img>` (cropped square), an `Avatar`, or an icon with
@@ -23,12 +38,18 @@ export interface ItemOwnProps {
    * The media's size: `icon` puts an icon in a muted 40px tile (and hides it from screen
    * readers); `sm` is 40px, `md` 64px, `lg` 112px for a recipe photo.
    * @default "sm"
+   * @claim "The media's size: `icon` puts an" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > sizes its media: sm 40px by default, md 64px, lg 112px, and an icon in a 40px tile)
+   * @claim "The media's size: `icon` puts an" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > gives an icon a muted tile and hides it from screen readers)
    */
   mediaSize?: ItemMediaSize | (string & { 'Use "icon", "sm" (40px), "md" (64px) or "lg" (112px)': never }) | undefined;
   /**
    * Below this breakpoint the media leaves the row and runs full width above the text, at
    * 4:3, as a recipe list shows its photos on a phone; above it, it sits beside the text at
    * `mediaSize`. `always` keeps it above at every width.
+   * @claim "Below this breakpoint the media leaves" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > always puts the media above the text with mediaAbove=always, with the actions beside the title)
+   * @claim "Below this breakpoint the media leaves" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > stacks the actions beside media below md and the media above below sm)
+   * @claim "Below this breakpoint the media leaves" registry/ouro/components/ouro/item/item.tsx verify:fileLine(registry/ouro/components/ouro/item/item.tsx, /media:\s"col-span-full\sw-full\sh-auto\saspect-\[4\/3\]\srounded-lg"/)
+   * @claim "`always` keeps it above at every" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > always puts the media above the text with mediaAbove=always, with the actions beside the title)
    */
   mediaAbove?: "always" | "sm" | "md" | (string & { 'Use "always", "sm" (640px) or "md" (768px)': never }) | undefined;
   /**
@@ -39,19 +60,28 @@ export interface ItemOwnProps {
   /**
    * Below this breakpoint the actions drop under the text, lined up with the title, as in a
    * settings row on a phone. Without it they stay at the end at every width.
+   * @claim "Without it they stay at the" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > keeps the actions beside the text on a phone by default)
    */
   stackBelow?: "sm" | "md" | (string & { 'Use "sm" (640px) or "md" (768px)': never }) | undefined;
   /**
    * `plain` has no frame, for rows in an `ItemGroup`; `outline` is a bordered, padded box for
    * a row on its own.
    * @default "plain"
+   * @claim "`plain` has no frame, for rows" registry/ouro/components/ouro/item/item.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.test.tsx::Item > is a bordered box with padding with variant=outline, and tighter with size=sm)
+   * @claim "`plain` has no frame, for rows" registry/ouro/components/ouro/item/item-group.test.tsx verify:testExists(registry/ouro/components/ouro/item/item-group.test.tsx::ItemGroup > has no lines with variant=plain)
    */
   variant?: "plain" | "outline" | (string & { 'Use "plain" or "outline"; muted is a Card': never }) | undefined;
-  /** Row height: `md` has 12px above and below, `sm` 8px for dense lists. @default "md" */
+  /**
+   * Row height: `md` has 12px above and below, `sm` 8px for dense lists. @default "md"
+   *
+   * @claim "Row height: `md` has 12px above" registry/ouro/components/ouro/item/item.tsx verify:fileLine(registry/ouro/components/ouro/item/item.tsx, /const\ssizes\s=\s\{\smd:\s"py-3",\ssm:\s"py-2"\s\}/)
+   */
   size?: "md" | "sm" | (string & { 'Use "md" or "sm"': never }) | undefined;
   /**
    * The element to render. `ItemGroup` already wraps each Item in an `<li>`.
    * @default "div"
+   * @claim "`ItemGroup` already wraps each Item in" registry/ouro/components/ouro/item/item-group.test.tsx verify:testExists(registry/ouro/components/ouro/item/item-group.test.tsx::ItemGroup > is a list labelled by its label, with each Item a list item)
+   * @claim "`ItemGroup` already wraps each Item in" registry/ouro/components/ouro/item/item-group.test.tsx verify:testExists(registry/ouro/components/ouro/item/item-group.test.tsx::ItemGroup development messages > warns when an Item inside renders its own <li>)
    */
   as?: "div" | "li" | "article" | (string & { 'Use "div", "li" or "article"; for a link use href': never }) | undefined;
   /** Layout only: margins, grid placement (`mt-2`). Appearance classes warn in development; use `variant`. */
@@ -91,6 +121,7 @@ export type ItemProps = Omit<HTMLAttributes<HTMLElement>, keyof ItemOwnProps | "
          * the row (a link in the description, a button in the media or the actions) stay
          * their own tab stops and take their own clicks and taps. On a touch screen the row
          * is at least 44px tall.
+         * @claim "On a touch screen the row" registry/ouro/components/ouro/item/item.touch.test.tsx verify:testExists(registry/ouro/components/ouro/item/item.touch.test.tsx::makes a linked row at least 44px tall at every size, so it is a full touch target)
          */
         href: string;
         /** Opens the link in a new tab, safely, and tells screen readers so. */
@@ -214,6 +245,7 @@ export function Item(props: ItemProps): JSX.Element {
   const mediaAbove = mediaAboveProp !== undefined && Object.hasOwn(above, mediaAboveProp) ? (mediaAboveProp as keyof typeof above) : undefined;
   const element = (elements as readonly string[]).includes(asProp) ? (asProp as (typeof elements)[number]) : "div";
   const linked = href !== undefined;
+  const descriptionId = `${useId()}description`;
   useAppearanceClassNameCheck(
     "Item",
     className,
@@ -306,8 +338,11 @@ export function Item(props: ItemProps): JSX.Element {
             ref={linkRef}
             target={external ? "_blank" : undefined}
             rel={external ? safeRel(undefined) : undefined}
+            aria-describedby={description ? descriptionId : undefined}
             data-item-link=""
             data-stretched-link=""
+            data-ouro-control="item"
+            data-ouro-part="link"
             className={cn(stretchedLinkClass, variant === "outline" && "after:rounded-xl")}
           >
             {title}
@@ -317,7 +352,11 @@ export function Item(props: ItemProps): JSX.Element {
           title
         )}
       </div>
-      {description && <div data-ouro-text="" className="text-sm text-muted-foreground">{description}</div>}
+      {description && (
+        <div id={linked ? descriptionId : undefined} data-ouro-text="" className="text-sm text-muted-foreground">
+          {description}
+        </div>
+      )}
     </div>,
     actions && <div className={cn("flex flex-wrap items-center justify-end gap-2", stackLayouts.map((layout) => layout.actions))}>{actions}</div>,
   );

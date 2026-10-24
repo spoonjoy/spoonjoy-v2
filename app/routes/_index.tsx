@@ -9,7 +9,7 @@ import {
   type KitchenUserWhere,
 } from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { HERO_IMAGE_PROPS } from "~/lib/image-loading";
@@ -167,8 +167,8 @@ export default function Index() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/signup">Start Your Kitchen</Button>
-              <Button href="/login" plain>Log in</Button>
-              <Button href="/search" plain>
+              <Button href="/login" variant="outline" tone="secondary">Log in</Button>
+              <Button href="/search" variant="outline" tone="secondary">
                 <SearchIcon data-slot="icon" className="size-4" aria-hidden="true" />
                 Search Recipes
               </Button>

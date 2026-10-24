@@ -117,7 +117,11 @@ export type MenuEntry =
   | MenuSubmenuEntry
   | { type: "separator" };
 
-/** Props shared by every way of opening a Menu. */
+/**
+ * Props shared by every way of opening a Menu.
+ *
+ * @claim "Props shared by every way of" registry/ouro/components/ouro/menu/menu.test.tsx verify:fileLine(registry/ouro/components/ouro/menu/menu.test.tsx, /throws\sthe\sexact\sfix\swith\sno\sway\sto\sopen/)
+ */
 export interface MenuBaseProps {
   /** The entries as data, in place of children: `items={[{ label: "Edit", onClick: edit }, { type: "separator" }]}`. */
   items?: readonly MenuEntry[] | undefined;
@@ -130,6 +134,7 @@ export interface MenuBaseProps {
   /**
    * Layout only, applied to the menu panel: width (`w-64`; at least 12rem by default) and
    * margins. The phone sheet keeps its full width. Appearance classes warn in development.
+   * @claim "Layout only, applied to the menu" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu dropdown > is at least 12rem wide, and className sets layout)
    */
   className?: string | undefined;
   /**
@@ -152,17 +157,37 @@ export interface MenuBaseProps {
 
 /** Where a dropdown sits beside its trigger. */
 interface MenuPlacementProps {
-  /** The side of the trigger the menu sits on; it flips when there is no room. @default "bottom" */
+  /**
+   * The side of the trigger the menu sits on; it flips when there is no room. @default "bottom"
+   *
+   * @claim "it flips when there is no room" https://base-ui.com/react/components/menu verify:urlOk(https://base-ui.com/react/components/menu)
+   */
   side?: FloatingSide | (string & { 'Use "top", "bottom", "left" or "right"': never }) | undefined;
   /** How the menu lines up with the trigger along that side. @default "start" */
   align?: FloatingAlign | (string & { 'Use "start", "center" or "end": left is "start", right is "end"': never }) | undefined;
 }
 
-/** A dropdown: `trigger` opens it. Below 640px it is a bottom sheet. */
+/**
+ * A dropdown: `trigger` opens it. Below 640px it is a bottom sheet.
+ *
+ * @claim "Below 640px it is a bottom" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu presentation > is a bottom sheet below 640px, with a backdrop, and its submenu is a sheet with a Back item)
+ */
 export type MenuDropdownProps = MenuBaseProps &
   MenuPlacementProps & {
     /** The button that opens the menu, usually a Button: `trigger={<Button>Actions</Button>}`. */
     trigger: ReactElement;
+    /**
+     * Whether the open dropdown holds the page: it locks the page's scroll, and a click outside
+     * only closes it. `modal={false}` leaves the page scrolling and its controls live, and spares
+     * the browser a layout and repaint of the whole page each time the menu opens and closes:
+     * for a small menu that a list repeats on every row. The phone sheet always holds the page.
+     * @default true
+     * @claim "it locks the page's scroll" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+     * @claim "a click outside only closes it" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > holds the page while open: its scroll is locked, and a click outside only closes it)
+     * @claim "leaves the page scrolling and its controls live" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's scroll alone while a modal Menu's lock comes and goes) verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > with modal={false}, leaves the page's controls live: a click outside reaches them and closes the menu)
+     * @claim "The phone sheet always holds the page" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu modal > keeps the phone sheet holding the page with modal={false})
+     */
+    modal?: boolean | undefined;
     /** Not with `trigger`. Use one way to open a menu. */
     contextTrigger?: never;
     /** Not with `trigger`. `label` is for a Menu inside `MenuBar`. */
@@ -186,6 +211,8 @@ export type MenuContextProps = MenuBaseProps & {
   side?: never;
   /** Not with `contextTrigger`: a context menu opens at the pointer. */
   align?: never;
+  /** Not with `contextTrigger`: a context menu holds the page while it is open. */
+  modal?: never;
 };
 
 /** A menu in a `MenuBar`: `label` is its button's text. */
@@ -197,6 +224,8 @@ export type MenuBarMenuProps = MenuBaseProps &
     trigger?: never;
     /** Not with `label`. A menu in a `MenuBar` gets its button from `label`. */
     contextTrigger?: never;
+    /** Not with `label`: the `MenuBar` decides how its menus hold the page. */
+    modal?: never;
   };
 
 /** Props for {@link Menu}: `trigger` (a dropdown), `contextTrigger` (a context menu) or `label` (in a `MenuBar`). */
@@ -338,7 +367,7 @@ function MenuSurface({
           {sheet && closeLabel !== undefined && (
             <>
               <BaseMenu.Separator className={menuSeparatorClass} />
-              <BaseMenu.Item data-ouro-menu-close="" className={menuItemClass}>
+              <BaseMenu.Item data-ouro-menu-close="" data-ouro-control="menu" data-ouro-part="close" className={menuItemClass}>
                 <span data-ouro-menu-label="">{closeLabel}</span>
               </BaseMenu.Item>
             </>
@@ -378,6 +407,13 @@ function MenuSurface({
  *   <MenuItem tone="destructive" onClick={remove}>Delete</MenuItem>
  * </Menu>
  * <Menu contextTrigger={<RecipeCard recipe={recipe} />} items={[{ label: "Copy link", onClick: copy }]} />
+ * @claim "Below 640px a dropdown is a" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu presentation > is a bottom sheet below 640px, with a backdrop, and its submenu is a sheet with a Back item)
+ * @claim "a context menu opens at the pointer at every width" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu context trigger > stays a menu at the pointer on a phone, not a sheet)
+ * @claim "It stacks above the page at" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu stacking > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
+ * @claim "A list of actions that opens" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu dropdown > opens a menu below its trigger, aligned to its start, named by the trigger)
+ * @claim "A list of actions that opens" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu context trigger > opens at the pointer on right-click)
+ * @claim "A list of actions that opens" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::MenuBar > is a menubar of menus that the arrow keys move between)
  */
 export function Menu(props: MenuProps): JSX.Element {
   const {
@@ -390,6 +426,7 @@ export function Menu(props: MenuProps): JSX.Element {
     align: alignProp,
     className,
     closeLabel = "Close",
+    modal,
     open,
     onOpenChange,
     // Guard props (hint types), dropped here so they never reach the DOM.
@@ -399,7 +436,7 @@ export function Menu(props: MenuProps): JSX.Element {
     asChild,
     options,
   } = props as MenuBaseProps &
-    MenuPlacementProps & { trigger?: ReactElement; contextTrigger?: ReactElement; label?: string };
+    MenuPlacementProps & { trigger?: ReactElement; contextTrigger?: ReactElement; label?: string; modal?: boolean | undefined };
   const inBar = useContext(MenuBarContext);
   const fix = (code: string) => (process.env.NODE_ENV !== "production" ? code : /* istanbul ignore next @preserve -- production only */ "");
 
@@ -440,8 +477,10 @@ export function Menu(props: MenuProps): JSX.Element {
             ? [
                 sideProp !== undefined && (["side is not used by a context menu, which opens at the pointer", "remove side"] as const),
                 alignProp !== undefined && (["align is not used by a context menu, which opens at the pointer", "remove align"] as const),
+                modal !== undefined && (["modal is not used by a context menu, which holds the page while open", "remove modal"] as const),
               ]
             : floatingPlacementWarnings("<Menu", sideProp, "bottom", alignProp, placement)),
+          label !== undefined && modal !== undefined && ["modal is not used by a menu in <MenuBar>; the bar decides", "remove modal"],
           isOpen !== undefined && ["isOpen is not a prop", controlFix],
           onClose !== undefined && ["onClose is not a prop", controlFix],
           asChild !== undefined && ["asChild is not a prop; the trigger element is the button", "trigger={<Button>Actions</Button>}"],
@@ -476,9 +515,10 @@ export function Menu(props: MenuProps): JSX.Element {
   }
 
   return (
-    <BaseMenu.Root {...control}>
+    // A MenuBar's menu takes no `modal` (Base UI warns): the bar decides.
+    <BaseMenu.Root {...control} modal={label === undefined ? sheet || modal : undefined}>
       {label !== undefined ? (
-        <BaseMenu.Trigger className={menuBarTriggerClass}>
+        <BaseMenu.Trigger data-ouro-control="menu" data-ouro-part="bar-trigger" className={menuBarTriggerClass}>
           {label}
         </BaseMenu.Trigger>
       ) : (
@@ -493,7 +533,12 @@ export function Menu(props: MenuProps): JSX.Element {
 
 /** Props for {@link MenuBar}. */
 export interface MenuBarProps extends Omit<HTMLAttributes<HTMLDivElement>, "className" | "children"> {
-  /** The menus, each `<Menu label="File">…</Menu>`. */
+  /**
+   * The menus, each `<Menu label="File">…</Menu>`.
+   *
+   * @claim "The menus, each `<Menu label=" registry/ouro/components/ouro/menu/menu.test-d.ts verify:fileLine(registry/ouro/components/ouro/menu/menu.test-d.ts, /\{\strigger:\sReactElement;\slabel:\s"File";\schildren:\s"Items"\s\}>\(\)\.not\.toExtend<MenuProps>/)
+   * @claim "The menus, each `<Menu label=" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu dev messages > throws the exact fix for label outside a MenuBar, and for a trigger inside one)
+   */
   children: ReactNode;
   /** Layout only: margins and width. Appearance classes warn in development. */
   className?: string | undefined;
@@ -518,6 +563,10 @@ export interface MenuBarProps extends Omit<HTMLAttributes<HTMLDivElement>, "clas
  *     <MenuItem onClick={undo} shortcut={["mod", "z"]}>Undo</MenuItem>
  *   </Menu>
  * </MenuBar>
+ * @claim "The arrow keys move between the menus" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::MenuBar > is a menubar of menus that the arrow keys move between)
+ * @claim "hovering another switches to it instantly" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::MenuBar > switches instantly to the next menu on hover once one is open)
+ * @claim "Below 640px each menu opens as a bottom sheet" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::MenuBar > opens each menu as a bottom sheet below 640px)
+ * @claim "Each child is a `Menu` with" registry/ouro/components/ouro/menu/menu.test.tsx verify:testExists(registry/ouro/components/ouro/menu/menu.test.tsx::Menu dev messages > throws the exact fix for label outside a MenuBar, and for a trigger inside one)
  */
 export function MenuBar({ children, className, ...rest }: MenuBarProps): JSX.Element {
   useAppearanceClassNameCheck(
@@ -632,7 +681,7 @@ export function MenuItem(props: MenuItemProps): JSX.Element {
         ]
       : /* istanbul ignore next @preserve -- production only */ undefined,
   );
-  const shared = { className: menuItemClass, "data-tone": tone, ...keyShortcutProps(shortcut), ...(onClick ? { onClick: (event: MouseEvent<HTMLElement>) => onClick(event) } : {}) };
+  const shared = { className: menuItemClass, "data-ouro-control": "menu", "data-ouro-part": "item", "data-tone": tone, ...keyShortcutProps(shortcut), ...(onClick ? { onClick: (event: MouseEvent<HTMLElement>) => onClick(event) } : {}) };
   const body = <ItemBody shortcut={shortcut}>{children}</ItemBody>;
   // A disabled link is a disabled item: nothing to follow.
   if (href !== undefined && !disabled) {
@@ -692,7 +741,7 @@ export function MenuCheckboxItem({ children, shortcut, onCheckedChange, ...rest 
     process.env.NODE_ENV !== "production" ? () => [shortcutWarning("MenuCheckboxItem", shortcut)] : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   return (
-    <BaseMenu.CheckboxItem {...rest} {...keyShortcutProps(shortcut)} {...(onCheckedChange ? { onCheckedChange: (next: boolean) => onCheckedChange(next) } : {})} className={menuItemClass}>
+    <BaseMenu.CheckboxItem data-ouro-control="menu" data-ouro-part="checkbox-item" {...rest} {...keyShortcutProps(shortcut)} {...(onCheckedChange ? { onCheckedChange: (next: boolean) => onCheckedChange(next) } : {})} className={menuItemClass}>
       <span data-ouro-menu-indicator="" className={menuIndicatorClass}>
         <BaseMenu.CheckboxItemIndicator className="flex">
           <CheckIcon />
@@ -779,7 +828,7 @@ export function MenuRadioItem({ children, shortcut, ...rest }: MenuRadioItemProp
     process.env.NODE_ENV !== "production" ? () => [shortcutWarning("MenuRadioItem", shortcut)] : /* istanbul ignore next @preserve -- production only */ undefined,
   );
   return (
-    <BaseMenu.RadioItem {...rest} {...keyShortcutProps(shortcut)} className={menuItemClass}>
+    <BaseMenu.RadioItem data-ouro-control="menu" data-ouro-part="radio-item" {...rest} {...keyShortcutProps(shortcut)} className={menuItemClass}>
       <span data-ouro-menu-indicator="" className={menuIndicatorClass}>
         <BaseMenu.RadioItemIndicator className="flex">
           <CheckIcon />
@@ -792,7 +841,11 @@ export function MenuRadioItem({ children, shortcut, ...rest }: MenuRadioItemProp
 
 /** Props for {@link MenuGroup}. */
 export interface MenuGroupProps {
-  /** Names the group, shown above its items. Always required. */
+  /**
+   * Names the group, shown above its items. It is always required.
+   *
+   * @claim "It is always required" registry/ouro/components/ouro/menu/menu.test-d.ts verify:fileLine(registry/ouro/components/ouro/menu/menu.test-d.ts, /\{\stype:\s"radio";\slabel:\s"Sort"\s\}>\(\)\.not\.toExtend<MenuEntry>/)
+   */
   label: string;
   /** The group's items. */
   children: ReactNode;
@@ -873,7 +926,7 @@ export function MenuSub({ label, children, disabled, backLabel = "Back" }: MenuS
   const [open, setOpen] = useState(false);
   return (
     <BaseMenu.SubmenuRoot open={open} onOpenChange={setOpen} disabled={disabled}>
-      <BaseMenu.SubmenuTrigger className={menuItemClass} disabled={disabled} openOnHover={!sheet}>
+      <BaseMenu.SubmenuTrigger data-ouro-control="menu" data-ouro-part="submenu-trigger" className={menuItemClass} disabled={disabled} openOnHover={!sheet}>
         <span data-ouro-menu-label="" className="flex min-w-0 flex-1 items-center gap-2">
           {label}
         </span>
@@ -881,7 +934,7 @@ export function MenuSub({ label, children, disabled, backLabel = "Back" }: MenuS
       </BaseMenu.SubmenuTrigger>
       <MenuSurface sheet={sheet} context={false}>
         {sheet && (
-          <BaseMenu.Item data-ouro-menu-back="" className={menuItemClass} closeOnClick={false} onClick={() => setOpen(false)}>
+          <BaseMenu.Item data-ouro-menu-back="" data-ouro-control="menu" data-ouro-part="back" className={menuItemClass} closeOnClick={false} onClick={() => setOpen(false)}>
             <ChevronIcon back />
             <span data-ouro-menu-label="">{backLabel}</span>
           </BaseMenu.Item>

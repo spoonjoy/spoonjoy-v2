@@ -19,3 +19,10 @@ test("a row's actions drop under its text on a phone with stackBelow", async ({ 
   const revoke = await page.getByRole("button", { name: "Revoke" }).boundingBox();
   expect(revoke!.y).toBeGreaterThan(title!.y + title!.height);
 });
+
+test("a row's link is described by its description, as a screen reader hears it", async ({ page }) => {
+  await openStory(page, "lists-item--in-context");
+  const link = page.getByRole("link", { name: "Braised short ribs" });
+  await expect(link).toHaveAccessibleName("Braised short ribs");
+  await expect(link).toHaveAccessibleDescription(/^Seared hard, then braised low in red wine and stock/);
+});

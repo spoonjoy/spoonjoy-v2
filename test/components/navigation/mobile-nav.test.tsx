@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { MobileNav } from "~/components/navigation/mobile-nav";
+import { MobileNav, MobileNavToaster } from "~/components/navigation/mobile-nav";
 import { DockContext } from "~/components/navigation";
 
 function renderAt(path: string, isAuthenticated = true) {
@@ -33,7 +33,7 @@ describe("MobileNav signed in", () => {
   it("is a phone-only bar of four labeled tabs plus Search in its own circle", () => {
     renderAt("/");
 
-    expect(tabBar()).toHaveClass("lg:hidden");
+    expect(tabBar().closest('[data-ouro="tab-bar"]')).toHaveClass("lg:hidden", "sj-tab-bar");
     expect(tabNames()).toEqual(["Kitchen", "Recipes", "Cookbooks", "Shopping", "Search"]);
     expect(screen.getByRole("link", { name: "Kitchen" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Recipes" })).toHaveAttribute("href", "/my-recipes");
@@ -107,11 +107,10 @@ describe("MobileNav signed in", () => {
     expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
   });
 
-  it("draws the bar and the search circle on solid charcoal", () => {
+  it("draws the bar and the search circle on one solid surface, which tailwind.css turns charcoal", () => {
     renderAt("/");
-    expect(within(tabBar()).getByRole("list")).toHaveClass("bg-[var(--sj-photo-charcoal)]");
-    expect(screen.getByRole("link", { name: "Search" })).toHaveClass("bg-[var(--sj-photo-charcoal)]");
     for (const element of [within(tabBar()).getByRole("list"), screen.getByRole("link", { name: "Search" })]) {
+      expect(element).toHaveClass("bg-popover");
       expect(element.className).not.toMatch(/backdrop-blur|\/9\d\b/);
     }
   });
@@ -132,5 +131,23 @@ describe("MobileNav signed out", () => {
       expect(screen.queryByRole("navigation", { name: "Spoonjoy navigation" })).not.toBeInTheDocument();
       unmount();
     }
+  });
+});
+
+describe("MobileNavToaster", () => {
+  it("raises HX's toasts above the tab bar on phones only while the tab bar shows", () => {
+    const toaster = (path: string) => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <MobileNavToaster isAuthenticated />
+        </MemoryRouter>,
+      );
+      const viewport = screen.getByRole("region", { name: "Notifications", hidden: true });
+      const raised = viewport.classList.contains("max-lg:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]");
+      unmount();
+      return raised;
+    };
+    expect(toaster("/")).toBe(true);
+    expect(toaster("/recipes/new")).toBe(false);
   });
 });

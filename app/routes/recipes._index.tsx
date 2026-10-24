@@ -1,13 +1,14 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/recipes._index";
 import { chefDisplayName } from "~/lib/username";
 import { Form, useLoaderData } from "react-router";
 import { BookOpen, ChefHat, Plus, Search as SearchIcon } from "lucide-react";
-import { Button } from "~/components/button";
-import { Subheading } from "~/components/heading";
-import { Link } from "~/components/navigation/app-link";
+import { Button } from "~/components/ouro/button/button";
+import { Heading } from "~/components/ouro/text/heading";
+import { Item } from "~/components/ouro/item/item";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
-import { CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
+import { Text } from "~/components/ouro/text/text";
+import { CookbookPage } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
 import { useUrlSyncedInput } from "~/hooks/useUrlSyncedInput";
@@ -130,9 +131,9 @@ export default function RecipesIndex() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button type="submit">Search</Button>
-                  {hasQuery ? <Button href="/recipes" plain>Clear</Button> : null}
+                  {hasQuery ? <Button href="/recipes" variant="outline" tone="secondary">Clear</Button> : null}
                   {isAuthenticated ? (
-                    <Button href="/recipes/new" plain>
+                    <Button href="/recipes/new" variant="outline" tone="secondary">
                       <Plus data-slot="icon" aria-hidden="true" />
                       Create recipe
                     </Button>
@@ -147,9 +148,9 @@ export default function RecipesIndex() {
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="sj-eyebrow">{hasQuery ? "Matches" : after ? "Older recipes" : "Recently cooked and saved"}</p>
-              <Subheading level={2} size="2xl" className="mt-1 leading-9">
+              <Heading level={2} size="2xl" className="mt-1 leading-9">
                 {hasQuery ? `Recipes for "${query}"` : "All public recipes"}
-              </Subheading>
+              </Heading>
             </div>
             <p className="text-base/6 text-[var(--sj-ink-soft)] font-sj-ui text-xs font-semibold uppercase tracking-[0.16em]">
               {list.nextCursor ? `${recipes.length} shown` : `${recipes.length} ${recipes.length === 1 ? "recipe" : "recipes"}`}
@@ -157,43 +158,35 @@ export default function RecipesIndex() {
           </div>
 
           {recipes.length > 0 ? (
-            <div className="border-t border-[var(--sj-border)]">
-              <ShowMore
-                ordered
-                items={recipes.map((recipe, index) => (
-                  <RecipeRow
-                    key={recipe.id}
-                    recipe={recipe}
-                    ordinal={index + 1}
-                    imageProps={listImageProps(index)}
-                  />
-                ))}
-                hasMore={Boolean(list.nextCursor)}
-                loading={list.loading}
-                onShowMore={list.showMore}
-                href={list.nextCursor ? publicRecipesPageHref(list.nextCursor) : undefined}
-                showMoreLabel="Show more recipes"
-                loadedLabel={(count) => `Showing ${count} recipes`}
-                noMoreLabel={`Showing ${recipes.length} recipes`}
-              />
-            </div>
+            <ShowMore
+              ordered
+              items={recipes.map((recipe, index) => (
+                <RecipeRow key={recipe.id} recipe={recipe} imageProps={listImageProps(index)} />
+              ))}
+              hasMore={Boolean(list.nextCursor)}
+              loading={list.loading}
+              onShowMore={list.showMore}
+              href={list.nextCursor ? publicRecipesPageHref(list.nextCursor) : undefined}
+              showMoreLabel="Show more recipes"
+              loadedLabel={(count) => `Showing ${count} recipes`}
+              noMoreLabel={`Showing ${recipes.length} recipes`}
+            />
           ) : (
-            <RuledEmptyState
-              title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
-              action={hasQuery ? (
-                <Button href="/recipes" plain>Clear search</Button>
-              ) : after ? (
-                <Button href="/recipes" plain>Back to the newest</Button>
-              ) : null}
-            >
-              <Text className="mx-auto mt-2 max-w-xl">
+            <Empty headingLevel={2} align="start" description={<>
+              <Text tone="muted" className="mx-auto mt-2 max-w-xl">
                 {hasQuery
                   ? "Try a broader ingredient, dish name, or chef."
                   : after
                     ? "You've reached the oldest public recipe."
                     : "The public recipe box will fill as kitchens publish their first recipes."}
               </Text>
-            </RuledEmptyState>
+            </>}
+              title={hasQuery ? "No matching recipes yet" : after ? "That's every recipe" : "No public recipes yet"}
+              action={hasQuery ? (
+                <Button href="/recipes" variant="outline" tone="secondary">Clear search</Button>
+              ) : after ? (
+                <Button href="/recipes" variant="outline" tone="secondary">Back to the newest</Button>
+              ) : null} />
           )}
         </div>
       </section>
@@ -203,50 +196,32 @@ export default function RecipesIndex() {
 
 function RecipeRow({
   recipe,
-  ordinal,
   imageProps,
-  linkRef,
 }: {
   recipe: PublicRecipe;
-  ordinal: number;
   imageProps: ImageLoadingProps;
-  linkRef?: React.Ref<HTMLAnchorElement>;
 }) {
-  const servingsLabel = formatServingsLabel(recipe.servings);
-  const displayImageUrl = recipe.coverImageUrl && recipe.coverImageUrl.length > 0
-    ? recipe.coverImageUrl
-    : undefined;
+  const byline = [`By ${chefDisplayName(recipe.chef.username)}`, formatServingsLabel(recipe.servings)].filter(Boolean).join(" • ");
 
   return (
-    <Link
-      ref={linkRef}
+    <Item
+      as="article"
+      // HX ShowMore lists rows without lines between them, so each row is outlined.
+      variant="outline"
       href={`/recipes/${recipe.id}`}
-      className="group grid min-h-28 grid-cols-[2.5rem_5.25rem_minmax(0,1fr)] gap-4 border-b border-[var(--sj-border)] py-5 no-underline sm:grid-cols-[3rem_7rem_minmax(0,1fr)_fit-content(12rem)] sm:items-center sm:gap-5"
-      aria-label={recipe.title}
-    >
-      <span className="font-sj-ui pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-brass)] sm:pt-0">
-        {String(ordinal).padStart(2, "0")}
-      </span>
-      <span className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-[color-mix(in_srgb,var(--sj-flour)_62%,var(--sj-panel-solid))]">
-        {displayImageUrl ? (
-          <img src={displayImageUrl} alt="" {...imageProps} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.025]" />
-        ) : (
-          <ChefHat className="size-6 text-[var(--sj-brass)]" aria-hidden="true" />
-        )}
-      </span>
-      <span className="min-w-0 self-center">
-        <span className="font-sj-display block text-2xl/7 font-semibold [overflow-wrap:anywhere] text-[var(--sj-ink)] group-hover:text-[var(--sj-tomato)] sm:text-3xl/8">
-          {recipe.title}
-        </span>
-        <CoverProvenanceBadge label={recipe.coverProvenanceLabel} className="mt-2" />
-        <span className="mt-1 block max-w-2xl text-base/6 text-[var(--sj-ink-soft)] [overflow-wrap:anywhere]">
-          {recipe.description ?? `By ${chefDisplayName(recipe.chef.username)}`}
-        </span>
-      </span>
-      <span className="font-sj-ui col-start-3 flex min-w-0 flex-wrap [overflow-wrap:anywhere] gap-x-3 gap-y-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--sj-ink-soft)] sm:col-start-auto sm:block sm:justify-self-end sm:text-right">
-        <span>By {chefDisplayName(recipe.chef.username)}</span>
-        {servingsLabel ? <span className="sm:mt-1 sm:block">{servingsLabel}</span> : null}
-      </span>
-    </Link>
+      className="[overflow-wrap:anywhere]"
+      title={recipe.title}
+      description={
+        <>
+          {recipe.description ? <Text lines={2}>{recipe.description}</Text> : null}
+          <Text size="sm">{byline}</Text>
+        </>
+      }
+      media={recipe.coverImageUrl ? <img src={recipe.coverImageUrl} alt="" {...imageProps} /> : <ChefHat />}
+      mediaSize={recipe.coverImageUrl ? "lg" : "icon"}
+      mediaAbove={recipe.coverImageUrl ? "sm" : undefined}
+      actions={recipe.coverProvenanceLabel ? <CoverProvenanceBadge label={recipe.coverProvenanceLabel} /> : undefined}
+      stackBelow="sm"
+    />
   );
 }
