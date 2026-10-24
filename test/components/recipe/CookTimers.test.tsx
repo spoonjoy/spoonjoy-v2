@@ -56,6 +56,50 @@ describe("cook-mode timers", () => {
     expect(window.localStorage.getItem("spoonjoy-cook-timers:v1:cook-timers-test")).toBeNull();
   });
 
+  it("keeps newer native progress instead of replacing it with the legacy timer", async () => {
+    window.localStorage.setItem("spoonjoy-cook-timers:v1:cook-timers-test", JSON.stringify({
+      "1": { status: "paused", durationSeconds: 60, remainingMs: 45_000 },
+    }));
+    window.localStorage.setItem("ouro-timer:spoonjoy-cook-timer:cook-timers-test:1", JSON.stringify({
+      status: "paused", duration: 60, remainingMs: 15_000,
+    }));
+    render(<CookStepTimer timer={pasta} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("timer")).toHaveTextContent("0:15");
+    expect(window.localStorage.getItem("spoonjoy-cook-timers:v1:cook-timers-test")).toBeNull();
+  });
+
+  it("removes only the legacy step whose native transfer persisted", async () => {
+    const otherStep = { status: "paused", durationSeconds: 120, remainingMs: 90_000 };
+    window.localStorage.setItem("spoonjoy-cook-timers:v1:cook-timers-test", JSON.stringify({
+      "1": { status: "paused", durationSeconds: 60, remainingMs: 45_000 },
+      "99": otherStep,
+    }));
+    render(<CookStepTimer timer={pasta} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByRole("timer")).toHaveTextContent("0:45");
+    expect(JSON.parse(window.localStorage.getItem("spoonjoy-cook-timers:v1:cook-timers-test")!)).toEqual({ "99": otherStep });
+  });
+
+  it("keeps legacy data when native persistence fails while making the timer usable in memory", async () => {
+    const legacy = JSON.stringify({ "1": { status: "paused", durationSeconds: 60, remainingMs: 45_000 } });
+    window.localStorage.setItem("spoonjoy-cook-timers:v1:cook-timers-test", legacy);
+    const write = Storage.prototype.setItem;
+    const blocked = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith("ouro-timer:")) throw new DOMException("Full", "QuotaExceededError");
+      write.call(this, key, value);
+    });
+    try {
+      render(<CookStepTimer timer={pasta} />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByRole("timer")).toHaveTextContent("0:45");
+      expect(screen.getByRole("button", { name: "Resume timer" })).toBeInTheDocument();
+      expect(window.localStorage.getItem("spoonjoy-cook-timers:v1:cook-timers-test")).toBe(legacy);
+    } finally {
+      blocked.mockRestore();
+    }
+  });
+
   it("runs a step's timer with Spoonjoy's words, and the tray follows it on another step", () => {
     const onGoToStep = vi.fn();
     render(
