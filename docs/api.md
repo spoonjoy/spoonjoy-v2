@@ -152,6 +152,7 @@ External clients that run outside the Spoonjoy browser session use bearer creden
 Supported entry points:
 
 - Native account settings and bootstrap sync: `GET /api/v1/me`, `GET /api/v1/me/sync`, `GET /api/v1/me/chefs`, `GET /api/v1/me/export`, `PATCH /api/v1/me`, `DELETE /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
+- Cooking now, the recipes the signed-in cook has in progress: `GET /api/v1/cooking-now` (see Cooking now below)
 - Native Apple app sign-in: `POST /api/v1/auth/apple/native` and `POST /api/v1/auth/password/native`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
@@ -526,6 +527,7 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `DELETE` | `/api/v1/me/apns-devices/{deviceId}` | Authenticated chef | `account:write` |
 | `GET` | `/api/v1/me/connections` | Authenticated chef | `tokens:read` |
 | `DELETE` | `/api/v1/me/connections/{connectionId}` | Authenticated chef | `tokens:write` |
+| `GET` | `/api/v1/cooking-now` | Authenticated chef | `kitchen:read` |
 | `GET` | `/api/v1/shopping-list` | Authenticated chef | `shopping_list:read` |
 | `GET` | `/api/v1/shopping-list/sync` | Authenticated chef | `shopping_list:read` |
 | `POST` | `/api/v1/shopping-list/items` | Authenticated chef | `shopping_list:write` |
@@ -537,6 +539,35 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/tokens` | Authenticated chef | `tokens:read` |
 | `POST` | `/api/v1/tokens` | Authenticated chef | `tokens:write` |
 | `DELETE` | `/api/v1/tokens/{credentialId}` | Authenticated chef | `tokens:write` |
+
+## Cooking now
+
+`GET /api/v1/cooking-now` lists the recipes the signed-in cook has in progress, most recently touched first, at most 50. It takes a browser session or a bearer token with `kitchen:read`, so the web Kitchen and the native app read the same list.
+
+```json
+{
+  "ok": true,
+  "requestId": "req_...",
+  "data": {
+    "recipes": [{
+      "recipe": { "id": "recipe_1", "title": "Lemon Pasta", "coverImageUrl": null, "href": "/recipes/recipe_1", "canonicalUrl": "https://spoonjoy.app/recipes/recipe_1" },
+      "activeStepId": "step_3",
+      "activeStepIndex": 2,
+      "stepCount": 7,
+      "checkedCount": 5,
+      "totalCount": 12,
+      "allCheckedAt": null,
+      "touchedAt": "2026-10-24T18:00:00.000Z",
+      "expiresAt": "2026-10-27T18:00:00.000Z"
+    }]
+  }
+}
+```
+
+- A card reads "Step `activeStepIndex + 1` of `stepCount`" and shows `checkedCount` of `totalCount` (checked ingredients plus checked step outputs). `activeStepId` names the step so a client can open cook mode on it even after the steps were reordered; it is null for progress saved before steps were kept by id.
+- The list is written by the cook-session endpoints, never by clients: every accepted `POST /api/cook-sessions/{recipeId}/start` and `PATCH /api/cook-sessions/{recipeId}` updates the cook's row for that recipe. A recipe is listed while something is checked or its current step is past the first.
+- A recipe leaves the list when the cook clears progress (a write that takes the checked count from some to none; it comes back when the cook checks something or moves to another step), when the cook logs a cook of it (`POST /api/v1/recipes/{id}/spoons`, the web cook dialog or MCP; a later cook-session write lists it again), 30 minutes after everything is checked (`allCheckedAt`), 3 days after its last touch, or when the recipe is deleted. `expiresAt` is when it leaves unless it is touched again.
+- Timers are not part of the list: cook sessions do not store them.
 
 ## Sync And Mutations
 
