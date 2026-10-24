@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import { Checklist, type ChecklistItemData } from '~/components/ouro/checklist/checklist'
 import type { IngredientIconKey } from '~/lib/ingredient-affordances'
 import { formatAmount, scaleQuantity } from '~/lib/quantity'
@@ -44,10 +45,55 @@ export interface IngredientListProps {
   onStepOutputToggle: (id: string) => void
 }
 
+/** How long a row takes to slide to its new place when a check reorders the list. */
+export const SINK_DURATION_MS = 320
+
 /**
- * A step's ingredients as Ouro HX's `Checklist`: the outputs of earlier steps first, then each
- * ingredient with its scaled amount and aisle. Ticking a row is the cook's progress; the
- * checklist draws the tick and the strike.
+ * Unchecked rows first, then checked ones, each group in recipe order: a ticked ingredient sinks
+ * to the bottom so what is left to add stays on top (Ari's ask).
+ */
+export function uncheckedFirst<T extends { checked: boolean }>(items: readonly T[]): T[] {
+  return [...items.filter((item) => !item.checked), ...items.filter((item) => item.checked)]
+}
+
+/**
+ * Slides each checklist row from where it was to where a reorder put it. React keeps a row's
+ * element when its place changes, so the element's last measured top is its old place. Rows only
+ * move when the order changes, and never with `prefers-reduced-motion: reduce`.
+ */
+function useSinkMotion(order: string) {
+  const root = useRef<HTMLDivElement>(null)
+  const tops = useRef(new Map<Element, number>())
+  const lastOrder = useRef(order)
+
+  useLayoutEffect(() => {
+    const list = root.current
+    if (!list) return
+    const origin = list.getBoundingClientRect().top
+    const rows = [...list.querySelectorAll('[data-slot="checklist-row"]')]
+    const next = new Map(rows.map((row) => [row, row.getBoundingClientRect().top - origin] as const))
+    const reordered = lastOrder.current !== order
+    lastOrder.current = order
+    const previous = tops.current
+    tops.current = next
+    if (!reordered || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    for (const [row, top] of next) {
+      const from = previous.get(row)
+      if (from === undefined || from === top) continue
+      row.animate([{ transform: `translateY(${from - top}px)` }, { transform: 'none' }], {
+        duration: SINK_DURATION_MS,
+        easing: 'cubic-bezier(0.2, 0, 0, 1)',
+      })
+    }
+  })
+
+  return root
+}
+
+/**
+ * A step's ingredients as Ouro HX's `Checklist`: the outputs of earlier steps, then each
+ * ingredient with its scaled amount and aisle, with checked rows sunk below the unchecked ones.
+ * Ticking a row is the cook's progress; the checklist draws the tick and the strike.
  */
 export function IngredientList({
   ingredients,
@@ -58,12 +104,8 @@ export function IngredientList({
   checkedStepOutputIds,
   onStepOutputToggle,
 }: IngredientListProps) {
-  if (ingredients.length === 0 && stepOutputUses.length === 0) {
-    return null
-  }
-
   const outputIds = new Set(stepOutputUses.map((reference) => reference.id))
-  const items: ChecklistItemData[] = [
+  const items: ChecklistItemData[] = uncheckedFirst([
     ...stepOutputUses.map((reference) => ({
       id: reference.id,
       label: formatStepReferenceName(reference),
@@ -77,10 +119,16 @@ export function IngredientList({
       value: formatScaledAmount(ingredient, scaleFactor) || undefined,
       checked: checkedIds.has(ingredient.id),
     })),
-  ]
+  ])
+  const root = useSinkMotion(items.map((item) => item.id).join('\n'))
+
+  if (items.length === 0) {
+    return null
+  }
 
   return (
     <Checklist
+      ref={root}
       label="Ingredients"
       items={items}
       onCheckedChange={(id) => (outputIds.has(id) ? onStepOutputToggle(id) : onToggle(id))}

@@ -88,6 +88,26 @@ function pageTop(locator: Locator) {
   });
 }
 
+/**
+ * Whether every checked row of the checklist holding `box` sits below every unchecked one, in
+ * the DOM and on screen once rows stop moving (Ari: a ticked ingredient sinks to the bottom).
+ */
+function checkedRowsSunk(box: Locator) {
+  return box.evaluate(async (element) => {
+    const list = element.closest('[data-ouro="checklist"]')!;
+    const rows = [...list.querySelectorAll<HTMLElement>('[data-slot="checklist-row"]')];
+    await Promise.allSettled(rows.flatMap((row) => row.getAnimations({ subtree: true }).map((animation) => animation.finished)));
+    const states = rows.map((row) => ({
+      checked: row.querySelector('[role="checkbox"]')!.getAttribute("aria-checked") === "true",
+      top: row.getBoundingClientRect().top,
+    }));
+    const unchecked = states.filter((state) => !state.checked);
+    const checked = states.filter((state) => state.checked);
+    const domOrder = states.every((state, index) => !state.checked || states.slice(index).every((later) => later.checked));
+    return checked.length > 0 && domOrder && checked.every((row) => unchecked.every((other) => row.top > other.top));
+  });
+}
+
 // The whole page as the cook sees it, saved under test-results/ (the journeys-report artifact).
 async function savePageScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`${name}-${testInfo.project.name}.png`);
@@ -165,6 +185,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       await expect(syncStatus(page)).toHaveText("Progress synced");
       await expect(clearProgress).toBeVisible();
       await savePageScreenshot(page, testInfo, "recipe-after-first-check");
+      await expect.poll(() => checkedRowsSunk(jasmineRice)).toBe(true);
 
       // Clear progress and the sync line already had their room, so the first check (Ari's report:
       // the page jumped down) shifts neither the Steps heading nor step 1.
@@ -178,6 +199,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
         await expect(clearProgress).toBeVisible();
         expect(await pageTop(stepsHeading)).toBe(stepsHeadingBefore);
         expect(await pageTop(stepOneTitle)).toBe(stepOneTitleBefore);
+        await expect.poll(() => checkedRowsSunk(jasmineRice)).toBe(true);
       });
       await expectAccessible();
     });
