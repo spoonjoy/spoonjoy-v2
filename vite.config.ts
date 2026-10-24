@@ -229,7 +229,17 @@ function resolveSourceSha(): string {
   }
 }
 
+// Outside production, Base UI warns when a `render` prop is a function whose name starts with an
+// uppercase letter. Minifying can rename HX NumberField's `unlabelled` stepper render function to
+// such a name ("St"), and a build made with NODE_ENV=development, as CI's e2e job makes, then
+// fails its console gate. Function names are kept in those builds until HX passes an anonymous
+// function (ourostack/ouro-ui#180); a production build, where Base UI never warns, is unchanged.
+export function keepsFunctionNames(nodeEnv: string | undefined): boolean {
+  return nodeEnv !== undefined && nodeEnv !== "production";
+}
+
 export default defineConfig(({ command }) => ({
+  esbuild: { keepNames: keepsFunctionNames(process.env.NODE_ENV) },
   define: {
     __SPOONJOY_SOURCE_SHA__: JSON.stringify(resolveSourceSha()),
   },

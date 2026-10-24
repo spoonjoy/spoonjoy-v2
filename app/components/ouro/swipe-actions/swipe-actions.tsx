@@ -55,7 +55,11 @@ export interface SwipeAction {
 
 /** Props for {@link SwipeActions}. */
 export interface SwipeActionsProps {
-  /** Names the row for its actions button: "Braised short ribs" gives "Actions for Braised short ribs". Always required. */
+  /**
+   * Names the row for its actions button: "Braised short ribs" gives "Actions for Braised short ribs". It is always required.
+   *
+   * @claim "It is always required" registry/ouro/components/ouro/swipe-actions/swipe-actions.test-d.ts verify:fileLine(registry/ouro/components/ouro/swipe-actions/swipe-actions.test-d.ts, /\{\schildren:\s"Row"\s\}>\(\)\.not\.toExtend<SwipeActionsProps>/)
+   */
   label: string;
   /** The row itself, usually an `Item`. It may be a link (`<Item href>`): a tap follows it and a swipe does not. */
   children: ReactNode;
@@ -133,6 +137,8 @@ function Strip({
           type="button"
           data-tone={toneOf(action)}
           data-primary={action === primary ? "" : undefined}
+          data-ouro-control="swipe-actions"
+          data-ouro-part="action"
           className={cn(actionClass, actionTones[toneOf(action)], action !== primary && fadeClass)}
           onClick={() => onAction(action)}
         >
@@ -201,6 +207,14 @@ function Strip({
  *     </SwipeActions>
  *   ))}
  * </ItemGroup>
+ * @claim "The first action of each side" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > runs the primary action on a full swipe of either side)
+ * @claim "The first action of each side" registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx::SwipeActions on a phone > commits the primary action with a full swipe, once, and closes the row)
+ * @claim "The first action of each side" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > does not run the primary action when a full swipe is flicked back, and opens the side instead of nothing)
+ * @claim "The swipe is for touch and" registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx::SwipeActions on a phone > opens the actions as a menu on a long press, for a touch that cannot swipe)
+ * @claim "The swipe is for touch and" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > opens every action as a menu at the finger on a long press, and that press is not a tap or a swipe)
+ * @claim "A flick alone never runs an" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > does not run the primary action when a full swipe is flicked back, and opens the side instead of nothing)
+ * @claim "A flick alone never runs an" registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.test.tsx::SwipeActions > opens on a short flick toward the actions and closes on a flick back, whatever the distance)
+ * @claim "A row that is a link" registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx verify:testExists(registry/ouro/components/ouro/swipe-actions/swipe-actions.touch.test.tsx::SwipeActions on a phone > does not follow the link on a swipe, closes an open row on a tap, and follows the link on the next tap)
  */
 export function SwipeActions(props: SwipeActionsProps): JSX.Element {
   const {
@@ -548,7 +562,7 @@ export function SwipeActions(props: SwipeActionsProps): JSX.Element {
           <div data-ouro-swipe-actions-menu="" className={menuClass}>
             <Menu
               trigger={
-                <Button variant="plain" tone="secondary" size="sm" aria-label={actionsLabel.replaceAll("{label}", label)}>
+                <Button variant="plain" tone="secondary" size="sm" aria-label={actionsLabel.replaceAll("{label}", label)} data-ouro-control="swipe-actions" data-ouro-part="menu">
                   <EllipsisIcon />
                 </Button>
               }

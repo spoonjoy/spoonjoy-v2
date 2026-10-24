@@ -370,9 +370,6 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     savedInCookbookIds,
     hasIngredientsInShoppingList,
     spoons,
-    // What the cooks' relative times ("3 hr ago") are measured from, so the server's render and
-    // the browser's hydration agree.
-    renderedAt: Date.now(),
     coverHistory: isOwner
       ? recipeCoverHistoryFor({ ...recipe, covers: coverHistoryCovers })
       : [],

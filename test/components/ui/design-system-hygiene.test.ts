@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { render, screen } from "@testing-library/react";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 
 const APP_AND_STORY_FILES = [
   "app/components",
@@ -35,15 +35,38 @@ function listTextFiles(dirs: string[]): string[] {
   return found;
 }
 
-// All265 installed files were individually matched to the qualified v1.0.2 public
-// manifest at 22f0b72388250d475bf8a34c60f8a164a0c3e932, reversing ONLY the CLI alias
-// transformation. This digest is of the TAG'S selected sorted (path, SHA256) pairs,
-// not a blanket path-prefix trust rule or a hash regenerated from arbitrary app edits.
-const publishedPaths = new Set(listTextFiles(["app/components/ouro", "app/lib/ouro"]));
+// Every file the HX CLI installs from v1.2.3 (tag commit
+// 9669728d40c12476c2e7aa77ed06fef87c4faf83), whatever its extension or folder: components, lib
+// modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
+// (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
+// below pins the map itself, including the CLI's omission of the checker's leading docs comment.
+const installed = JSON.parse(readSourceFile(".github/ouro-hx-installed.json")) as {
+  tag: string;
+  tagCommit: string;
+  files: Record<string, string>;
+};
+const installedFiles = Object.keys(installed.files).sort();
+// Spoonjoy's own files inside the folders HX installs into.
+const SPOONJOY_FILES_IN_HX_FOLDERS = ["e2e/ouro-census/census.baseline.json"];
+const HX_FOLDERS = ["app/components/ouro", "app/lib/ouro", "e2e/ouro", "e2e/ouro-census"];
+const publishedPaths = new Set(installedFiles);
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+// The CLI rewrites HX's registry aliases to the app's; this reverses only that.
 const normalizedRegistrySource = (source: string) => source
   .replaceAll("~/components/ouro/", "@/registry/ouro/components/ouro/")
   .replaceAll("~/lib/ouro/", "@/registry/ouro/lib/ouro/");
+function listAllFiles(dirs: string[]): string[] {
+  const found: string[] = [];
+  function walk(relativeDir: string) {
+    for (const entry of readdirSync(resolve(process.cwd(), relativeDir))) {
+      const relativePath = `${relativeDir}/${entry}`;
+      if (statSync(resolve(process.cwd(), relativePath)).isDirectory()) walk(relativePath);
+      else found.push(relativePath);
+    }
+  }
+  dirs.forEach(walk);
+  return found;
+}
 function hasAppTrackingViolation(file: string, source: string) {
   return !publishedPaths.has(file) && source.includes("tracking-[-");
 }
@@ -52,12 +75,26 @@ describe("Spoonjoy UI design-system hygiene", () => {
   it("does not ship or hide the retired Catalyst source directory", () => {
     expect(existsSync(resolve(process.cwd(), "app/components/ui"))).toBe(false);
   });
-  it("exempts only the exact unmodified installed public registry inventory", () => {
-    const pairs = [...publishedPaths].sort().map((file) => [
-      file, sha256(normalizedRegistrySource(readSourceFile(file))),
-    ]);
-    expect(pairs).toHaveLength(265);
-    expect(sha256(JSON.stringify(pairs))).toBe("ca799f79b090f2587fd41aac94252414418775122d32e10fbac8310093b8adbf");
+  it("does not ship an app-owned Button wrapper", () => {
+    expect(existsSync(resolve(process.cwd(), "app/components/button.tsx"))).toBe(false);
+  });
+  it("pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes", () => {
+    expect(installed.tag).toBe("v1.2.3");
+    expect(installed.tagCommit).toBe("9669728d40c12476c2e7aa77ed06fef87c4faf83");
+    expect(installedFiles).toHaveLength(547);
+    expect(sha256(JSON.stringify(installedFiles.map((file) => [file, installed.files[file]]))))
+      .toBe("a47fa1f50ed2d8eecdce77053e7929451914abd9e1ff05e54f5d78a84cee7857");
+    const actual = Object.fromEntries(installedFiles.map((file) => [
+      file,
+      existsSync(resolve(process.cwd(), file)) ? sha256(normalizedRegistrySource(readSourceFile(file))) : null,
+    ]));
+    expect(actual).toEqual(installed.files);
+  });
+
+  it("keeps no unpinned file in the folders HX installs into", () => {
+    const unpinned = listAllFiles(HX_FOLDERS)
+      .filter((file) => !publishedPaths.has(file) && !SPOONJOY_FILES_IN_HX_FOLDERS.includes(file));
+    expect(unpinned).toEqual([]);
   });
 
   it("rejects prohibited app-authored tracking even under a registry-looking prefix", () => {
@@ -164,8 +201,8 @@ describe("Spoonjoy UI design-system hygiene", () => {
     const stepNew = readSourceFile("app/routes/recipes.$id.steps.new.tsx");
 
     expect(css).not.toContain(".sj-form-section {\n  border");
-    expect(cookbookPage).toContain('className="border-b border-[var(--sj-border)] py-6"');
-    expect(cookbookPage).not.toContain('className="border-t border-[var(--sj-border)] py-6"');
+    expect(cookbookPage).not.toMatch(/\bborder(?:-[\w[\]()-]+)?\b/);
+    expect(cookbookPage).not.toContain("SettingsPanel");
     expect(shoppingList).not.toContain('<header className="border-b border-[var(--sj-border-strong)] pb-6">');
     expect(stepNew).not.toContain("Step Number:");
   });

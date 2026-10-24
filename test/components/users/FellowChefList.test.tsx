@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router";
 import { FellowChefList } from "~/components/users/FellowChefList";
 import type { FellowChefRow } from "~/lib/fellow-chefs.server";
 
-type FellowChefDisplayRow = FellowChefRow & { latestInteractionLabel: string };
+type FellowChefDisplayRow = FellowChefRow;
 
 function row(overrides: Partial<FellowChefDisplayRow>): FellowChefDisplayRow {
   return {
@@ -13,7 +13,6 @@ function row(overrides: Partial<FellowChefDisplayRow>): FellowChefDisplayRow {
     photoUrl: null,
     interactionCounts: { spoons: 0, forks: 0, cookbookSaves: 0 },
     latestInteractionAt: new Date("2026-05-01T00:00:00Z"),
-    latestInteractionLabel: "2 months ago",
     ...overrides,
   };
 }
@@ -21,7 +20,7 @@ function row(overrides: Partial<FellowChefDisplayRow>): FellowChefDisplayRow {
 function renderList(rows: FellowChefDisplayRow[], emptyStateText = "no rows yet") {
   return render(
     <MemoryRouter>
-      <FellowChefList rows={rows} emptyStateText={emptyStateText} />
+      <FellowChefList label="Fellow chefs" rows={rows} emptyStateText={emptyStateText} />
     </MemoryRouter>,
   );
 }
@@ -53,10 +52,11 @@ describe("FellowChefList", () => {
         latestInteractionAt: new Date(Date.now() - 60 * 1000), // ~1 minute ago
       }),
     ]);
-    const link = screen.getByRole("link", { name: /rowan/i });
+    const link = screen.getByRole("link", { name: "rowan" });
     expect(link).toHaveAttribute("href", "/users/rowan");
-    const img = screen.getByRole("img", { name: "rowan" });
-    expect(img.querySelector("img")).toHaveAttribute("src", "https://example.com/rowan.png");
+    expect(screen.getByRole("list", { name: "Fellow chefs" })).toContainElement(link);
+    // The title names the row, so the avatar is decorative.
+    expect(document.querySelector('img[src="https://example.com/rowan.png"]')).toHaveAttribute("alt", "");
     expect(screen.getByText("3 spoons · 1 fork · 2 saves")).toBeInTheDocument();
   });
 
@@ -102,21 +102,21 @@ describe("FellowChefList", () => {
         interactionCounts: { spoons: 1, forks: 0, cookbookSaves: 0 },
       }),
     ]);
-    const img = screen.getByRole("img", { name: "dakota" });
-    expect(img.querySelector("img")).toHaveAttribute("src", "/images/chef-rj.png");
+    expect(document.querySelector('img[src="/images/chef-rj.png"]')).toHaveAttribute("alt", "");
   });
 
-  it("renders the server-frozen relative-time label", () => {
+  it("says how long ago the chef last cooked from the kitchen, with HX RelativeTime", () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-05-03T00:00:00Z"));
     renderList([
       row({
         chefId: "u-e",
         username: "everly",
         latestInteractionAt: new Date("2026-05-01T00:00:00Z"),
-        latestInteractionLabel: "frozen activity label",
         interactionCounts: { spoons: 1, forks: 0, cookbookSaves: 0 },
       }),
     ]);
-    expect(screen.getByText("frozen activity label")).toBeInTheDocument();
+    clock.mockRestore();
+    expect(document.querySelector("time")).toHaveAttribute("datetime", "2026-05-01T00:00:00.000Z");
   });
 
   it("renders multiple rows in order", () => {

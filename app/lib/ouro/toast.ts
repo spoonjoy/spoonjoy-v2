@@ -18,6 +18,7 @@ export interface ToastOptions {
    * `secondary`, the default, has no icon. Sonner's `error` is `destructive` and its
    * `info` is `primary`.
    * @default "secondary"
+   * @claim "`secondary`, the default, has no icon" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > marks the tone and shows an icon for every tone but secondary)
    */
   tone?:
     | "primary"
@@ -38,6 +39,9 @@ export interface ToastOptions {
    * A toast with an `action` stays until it is dismissed unless you pass a duration: a
    * timed Undo can run out before a keyboard or screen reader user reaches it (WCAG 2.2.1).
    * @default 5000, or until dismissed with an action
+   * @claim "or until dismissed with an action" registry/ouro/lib/ouro/toast.ts verify:fileLine(registry/ouro/lib/ouro/toast.ts, /const\sDEFAULT_DURATION\s=\s5000;/) verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > keeps a toast that has an action until it is dismissed, unless duration is given)
+   * @claim "A toast with an `action` stays" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > keeps a toast that has an action until it is dismissed, unless duration is given)
+   * @claim "A toast with an `action` stays" https://www.w3.org/TR/WCAG22/#timing-adjustable verify:urlOk(https://www.w3.org/TR/WCAG22/#timing-adjustable)
    */
   duration?: number | undefined;
   /** An id of your own. A toast with the id of one still showing replaces it in place. */
@@ -64,7 +68,11 @@ export interface ToastRecord {
   tone: ToneName;
   description: ReactNode;
   action: ToastAction | undefined;
-  /** Milliseconds; 0 keeps the toast until it is dismissed. */
+  /**
+   * Milliseconds; 0 keeps the toast until it is dismissed.
+   *
+   * @claim "Milliseconds; 0 keeps the toast until" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > dismisses itself after duration; 0 and Infinity keep it)
+   */
   timeout: number;
 }
 
@@ -86,9 +94,18 @@ const renamed: Readonly<Record<string, ToneName>> = { error: "destructive", dang
 
 /** How many toasts wait for a Toaster before the oldest is dropped. */
 const MAX_PENDING = 20;
-/** How long a toast may wait for a Toaster before development warns that none is mounted. */
+/**
+ * How long a toast may wait for a Toaster before development warns that none is mounted.
+ *
+ * @claim "How long a toast may wait" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > warns when no Toaster mounts)
+ */
 const MISSING_TOASTER_MS = 1000;
-/** How long a toast with no action stays, in milliseconds. */
+/**
+ * How long a toast with no action stays, in milliseconds.
+ *
+ * @claim "How long a toast with no" registry/ouro/lib/ouro/toast.ts verify:fileLine(registry/ouro/lib/ouro/toast.ts, /const\sDEFAULT_DURATION\s=\s5000;/)
+ * @claim "How long a toast with no" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > keeps a toast that has an action until it is dismissed, unless duration is given)
+ */
 const DEFAULT_DURATION = 5000;
 
 /** The mounted Toasters, in mount order. The first shows toasts; the others wait to take over. */
@@ -119,6 +136,17 @@ let missingCheck: ReturnType<typeof setTimeout> | undefined;
  * toast("Recipe saved", { tone: "success" });
  * toast("Recipe deleted", { action: { label: "Undo", onClick: restore } });
  * toast("Couldn't save", { tone: "destructive", description: "Check your connection." });
+ * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > closes one toast with toast.dismiss(id), and all with toast.dismiss())
+ * @claim "Up to three show at once" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > closes one toast with toast.dismiss(id), and all with toast.dismiss())
+ * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > queues: up to three show, and later ones wait, out of the page, until a slot frees)
+ * @claim "Up to three show at once" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > queues: up to three show, and later ones wait, out of the page, until a slot frees)
+ * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > starts a waiting toast's countdown only when it shows, so it shows for its full duration and is announced once)
+ * @claim "Up to three show at once" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > starts a waiting toast's countdown only when it shows, so it shows for its full duration and is announced once)
+ * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > moves a destructive toast ahead of other waiting toasts, without pushing out a shown one)
+ * @claim "Up to three show at once" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > moves a destructive toast ahead of other waiting toasts, without pushing out a shown one)
+ * @claim "Returns the toast's id; `toast.dismiss(id)` closes" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::pausing > pauses while the pointer is over the toasts, and resumes after)
+ * @claim "Up to three show at once" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::pausing > pauses while the pointer is over the toasts, and resumes after)
+ * @claim "Hovering or focusing them (or pressing" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::pausing > pauses while the pointer is over the toasts, and resumes after)
  */
 export function toast(message: string, options: ToastOptions = {}): string {
   const { tone: toneOption = "secondary", description, action, duration: durationOption, id = `ouro-toast-${++count}` } = options;
@@ -191,6 +219,7 @@ function scheduleMissingCheck(): void {
 
 /**
  * Closes the toast with this id, or every toast with no id.
+ * @claim "Closes the toast with this id" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::toast() > closes one toast with toast.dismiss(id), and all with toast.dismiss())
  */
 toast.dismiss = function dismiss(id?: string): void {
   const sink = sinks[0];
@@ -223,6 +252,8 @@ toast.info = sonnerAlias("info", "primary") as unknown as { 'Use toast("Heads up
  * function and whether this Toaster is the one showing toasts.
  *
  * @internal
+ * @claim "The first one connected shows toasts" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::Toaster > hands toasts to the next Toaster after the first unmounts)
+ * @claim "Another waits, and takes over when" registry/ouro/components/ouro/toast/toaster.test.tsx verify:testExists(registry/ouro/components/ouro/toast/toaster.test.tsx::Toaster > shows toasts in one Toaster only, warns when a second is rendered, and lets the second take over when the first unmounts)
  */
 export function connectToaster(next: ToasterSink): { disconnect: () => void; active: boolean } {
   sinks = [...sinks, next];

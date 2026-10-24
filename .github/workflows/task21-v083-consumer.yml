@@ -1,11 +1,11 @@
-name: Task24 real v1.0.2 CLI and strict consumer proof
+name: Real Ouro HX CLI and strict consumer proof
 on:
   push:
-    branches: [ouro/adopt-v102-20261017]
+    branches: [feat/test-kitchen, feat/hx-v120-items]
 permissions:
   contents: read
 concurrency:
-  group: task24-v102-${{ github.ref }}
+  group: hx-v120-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   binding:
@@ -49,8 +49,8 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: task24-v102-real-cli-${{ github.run_id }}
-          path: ${{ runner.temp }}/task24-v102-cli/
+          name: hx-v120-real-cli-${{ github.run_id }}
+          path: ${{ runner.temp }}/hx-v120-cli/
           if-no-files-found: error
   strict:
     needs: binding
@@ -84,8 +84,8 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: task24-v102-strict-${{ github.run_id }}
+          name: hx-v120-strict-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/task24-v102-strict/
+            ${{ runner.temp }}/hx-v120-strict/
             coverage/coverage-final.json
           if-no-files-found: error

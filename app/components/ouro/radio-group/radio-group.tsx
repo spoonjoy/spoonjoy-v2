@@ -6,6 +6,7 @@ import type { JSX, ReactNode, Ref } from "react";
 import { Field } from "~/components/ouro/field/field";
 import { choicesClass, contractWarnings } from "~/components/ouro/field/field-styles";
 import { devThrow } from "~/lib/ouro/dev";
+import { controlRef } from "~/lib/ouro/control-ref";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { FieldOwnerContext, useField, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
@@ -37,11 +38,16 @@ export interface RadioGroupOwnProps {
   /**
    * What is wrong, from your server action or client check, shown under the choices; every
    * radio gets `aria-invalid`. A message is text or a React node (one with a link); an empty string or array means valid.
+   * @claim "What is wrong, from your server" registry/ouro/components/ouro/radio-group/radio-group.test.tsx verify:testExists(registry/ouro/components/ouro/radio-group/radio-group.test.tsx::RadioGroup > disables every radio with disabled, and marks them invalid with error)
    */
   error?: ReadonlyErrorMessages | undefined;
   /** A choice must be picked to submit the form: the group gets `aria-required`, and the legend a marker. */
   required?: boolean | undefined;
-  /** Disables every radio and fades the group. */
+  /**
+   * Disables every radio and fades the group.
+   *
+   * @claim "Disables every radio and fades the" registry/ouro/components/ouro/radio-group/radio-group.test.tsx verify:testExists(registry/ouro/components/ouro/radio-group/radio-group.test.tsx::RadioGroup > disables every radio with disabled, and marks them invalid with error)
+   */
   disabled?: boolean | undefined;
   /** The form field name the chosen value submits under. */
   name?: string | undefined;
@@ -85,7 +91,11 @@ export interface RadioGroupOwnProps {
 export type RadioGroupProps = RadioGroupOwnProps &
   (
     | {
-        /** The choices, one radio each, in order. */
+        /**
+         * The choices, one radio each, in order.
+         *
+         * @claim "The choices, one radio each, in" registry/ouro/components/ouro/radio-group/radio-group.test.tsx verify:testExists(registry/ouro/components/ouro/radio-group/radio-group.test.tsx::RadioGroup > renders a radio for each option, each named by its label and described by its description)
+         */
         options: RadioGroupOption[];
         /** Not with `options`: pass the choices one way. */
         children?: never;
@@ -102,7 +112,11 @@ export type RadioGroupProps = RadioGroupOwnProps &
 export interface RadioProps {
   /** What the group submits when this radio is picked, and the group's `value` then. */
   value: string;
-  /** The choice's name, shown to the right of the radio. Required: every control needs a name. */
+  /**
+   * The choice's name, shown to the right of the radio. Required: every control needs a name.
+   *
+   * @claim "Required: every control needs a name" registry/ouro/components/ouro/radio-group/radio-group.test-d.ts verify:fileLine(registry/ouro/components/ouro/radio-group/radio-group.test-d.ts, /expectTypeOf<\{\svalue:\s"small"\s\}>\(\)\.not\.toExtend<RadioProps>/)
+   */
   label: string;
   /** Hides the label visually; screen readers still read it as the radio's name. */
   hideLabel?: boolean | undefined;
@@ -117,7 +131,12 @@ export interface RadioProps {
 
   /** Not a prop. The group's `value` picks the radio: `<RadioGroup value="small">`. */
   checked?: { 'Use <RadioGroup value="small">': never };
-  /** Not a prop. The group's `name` applies to every radio: `<RadioGroup name="size">`. */
+  /**
+   * Not a prop. The group's `name` applies to every radio: `<RadioGroup name="size">`.
+   *
+   * @claim "The group's `name` applies to every" registry/ouro/components/ouro/radio-group/radio-group.test.tsx verify:testExists(registry/ouro/components/ouro/radio-group/radio-group.test.tsx::RadioGroup > submits name=value for the chosen radio)
+   * @claim "The group's `name` applies to every" registry/ouro/components/ouro/radio-group/radio-group.test-d.ts verify:fileLine(registry/ouro/components/ouro/radio-group/radio-group.test-d.ts, /expectTypeOf<\{\svalue:\s"small";\slabel:\s"Small";\sname:\s"size"\s\}>\(\)\.not\.toExtend<RadioProps>/)
+   */
   name?: { 'Use <RadioGroup name="size">': never };
 }
 
@@ -125,6 +144,8 @@ export interface RadioProps {
 const groupOwner = { name: "RadioGroup", data: "radio-group", layout: "group" } as const;
 /** Field's messages and root name Radio, and put the radio before its label. */
 const radioOwner = { name: "Radio", data: "radio", layout: "inline" } as const;
+/** Marks the hidden input that Base UI submits a radio with. */
+const markInput = controlRef("radio-group", "hidden-input");
 
 /** The radio, inside its Field item: it takes its name and description ids from the field. */
 function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | undefined }): JSX.Element {
@@ -133,6 +154,9 @@ function RadioCircle({ value, ref }: { value: string; ref: Ref<HTMLElement> | un
     <BaseRadio.Root
       value={value}
       ref={ref}
+      inputRef={markInput}
+      data-ouro-control="radio-group"
+      data-ouro-part="circle"
       // Set here, not left to Base UI's effects, so the server HTML names and describes the radio.
       aria-labelledby={field.labelId}
       aria-describedby={field.describedBy}

@@ -16,6 +16,12 @@ import AccountSettings, { action } from "~/routes/account.settings";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { photoVariantKeys } from "~/lib/photo-variants";
 
+// HX's image field under Profile photo keeps its own status region; these are the page's.
+function pageStatuses(): HTMLElement[] {
+  return screen.queryAllByRole("status").filter((element) => !element.closest('[data-testid="profile-photo-section"]'));
+}
+
+
 const PASSWORD = "testPassword123";
 const FORMAT_ERROR = "Username can only use letters, numbers, periods, underscores and hyphens";
 
@@ -361,7 +367,8 @@ describe("Account settings - identity", () => {
       await userEvents.type(usernameField, "chef_renamed");
       await userEvents.click(screen.getByRole("button", { name: "Save" }));
 
-      expect(await screen.findByRole("status")).toHaveTextContent("Account details saved.");
+      await waitFor(() => expect(pageStatuses()).toHaveLength(1));
+      expect(pageStatuses()[0]).toHaveTextContent("Account details saved.");
       await waitFor(() => expect(screen.queryByLabelText("Username")).not.toBeInTheDocument());
       expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
       expect(within(screen.getByTestId("user-info-section")).getByText("chef_renamed")).toBeInTheDocument();
@@ -381,7 +388,7 @@ describe("Account settings - identity", () => {
 
       expect(await findShownAlert()).toHaveTextContent("This username is already taken");
       expect(screen.getByLabelText("Username")).toBeInTheDocument();
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(pageStatuses()).toHaveLength(0);
       // It is not repeated under the profile photo.
       expect(within(screen.getByTestId("profile-photo-section")).queryByText("This username is already taken")).not.toBeInTheDocument();
     });
@@ -398,7 +405,8 @@ describe("Account settings - identity", () => {
       expect(screen.getByLabelText("Current password")).toBeInTheDocument();
       await userEvents.click(screen.getByRole("button", { name: "Change password" }));
 
-      expect(await screen.findByRole("status")).toHaveTextContent("Your password has been changed successfully.");
+      await waitFor(() => expect(pageStatuses()).toHaveLength(1));
+      expect(pageStatuses()[0]).toHaveTextContent("Your password has been changed successfully.");
       await waitFor(() => expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument());
       expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
@@ -418,7 +426,8 @@ describe("Account settings - identity", () => {
       await userEvents.click(await screen.findByRole("button", { name: "Set password" }));
       await userEvents.click(screen.getByRole("button", { name: "Set password" }));
 
-      expect(await screen.findByRole("status")).toHaveTextContent("Your password has been set successfully");
+      await waitFor(() => expect(pageStatuses()).toHaveLength(1));
+      expect(pageStatuses()[0]).toHaveTextContent("Your password has been set successfully");
       await waitFor(() => expect(screen.queryByLabelText("New password")).not.toBeInTheDocument());
       expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
     });

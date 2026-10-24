@@ -73,13 +73,15 @@ export function PopoverRoot(props: BasePopover.Root.Props): JSX.Element {
 export function PopoverTrigger({ style, ...props }: BasePopover.Trigger.Props): JSX.Element {
   usePopoverPart("PopoverTrigger", "…");
   const noScale = (own?: CSSProperties): CSSProperties => ({ ...own, ["--ouro-press-scale" as string]: 1 });
-  return <BasePopover.Trigger {...props} style={typeof style === "function" ? (state) => noScale(style(state)) : noScale(style)} />;
+  return <BasePopover.Trigger {...(props.render === undefined ? { className: "forced-colors:border forced-colors:border-solid", "data-ouro-control": "popover", "data-ouro-part": "trigger" } : {})} {...props} style={typeof style === "function" ? (state) => noScale(style(state)) : noScale(style)} />;
 }
 
 /**
  * Part: moves the popover to the end of `<body>`, in its own stacking context at the
  * `--ouro-layer` z-index (50 by default, from ouro-base.css), like Dialog and Sheet.
  * Raise it in a `:root` rule of your own after the Ouro tokens: `:root { --ouro-layer: 60; }`.
+ * @claim "Part: moves the popover to the" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover stacking > puts the portal on the --ouro-layer level, as its own stacking context)
+ * @claim "Part: moves the popover to the" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
  */
 export function PopoverPortal(props: Omit<BasePopover.Portal.Props, "className">): JSX.Element {
   usePopoverPart("PopoverPortal", "…");
@@ -88,7 +90,11 @@ export function PopoverPortal(props: Omit<BasePopover.Portal.Props, "className">
 
 /** Props for {@link PopoverPositioner}. */
 export type PopoverPositionerProps = Omit<BasePopover.Positioner.Props, "className" | "side" | "align"> & {
-  /** The side of the trigger the popover sits on; it flips when there is no room. @default "bottom" */
+  /**
+   * The side of the trigger the popover sits on; it flips when there is no room. @default "bottom"
+   *
+   * @claim "it flips when there is no room" https://base-ui.com/react/components/popover verify:urlOk(https://base-ui.com/react/components/popover)
+   */
   side?: FloatingSide | (string & { 'Use "top", "bottom", "left" or "right"': never }) | undefined;
   /** How the popover lines up with the trigger along that side. @default "center" */
   align?: FloatingAlign | (string & { 'Use "start", "center" or "end": left is "start", right is "end"': never }) | undefined;
@@ -97,6 +103,8 @@ export type PopoverPositionerProps = Omit<BasePopover.Positioner.Props, "classNa
 /**
  * Part: places the popover beside its trigger (or `anchor`), 8px away and at least 8px
  * from the screen edges, and flips it to the other side when there is no room.
+ * @claim "Part: places the popover beside its" registry/ouro/components/ouro/popover/popover-parts.tsx verify:fileLine(registry/ouro/components/ouro/popover/popover-parts.tsx, /sideOffset=\{8\}\scollisionPadding=\{8\}/)
+ * @claim "Part: places the popover beside its" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > opens below its trigger as a non-modal dialog named by its title)
  */
 export function PopoverPositioner({ side: sideProp, align: alignProp, ...props }: PopoverPositionerProps): JSX.Element {
   usePopoverPart("PopoverPositioner", "…");
@@ -128,6 +136,9 @@ export type PopoverPopupProps = Omit<BasePopover.Popup.Props, "className"> & { c
  * Part: the popover panel, 18rem wide (never wider than the screen allows) with 1rem of
  * padding. It grows from the trigger over 200ms on the ease-out token and fades; reduced motion
  * keeps only the fade. Put a `PopoverTitle` first: it names the popover.
+ * @claim "Part: the popover panel, 18rem wide" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > is 18rem wide by default, and className sets layout)
+ * @claim "It grows from the trigger over" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover motion > grows from the trigger's side on the ease-out token and fades)
+ * @claim "It grows from the trigger over" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover motion > drops the scale under reduced motion and keeps the fade)
  */
 export function PopoverPopup(props: PopoverPopupProps): JSX.Element {
   useAppearanceClassNameCheck(
@@ -167,14 +178,18 @@ export type PopoverTitleProps = Omit<BasePopover.Title.Props, "className"> & {
   visuallyHidden?: boolean | undefined;
 };
 
-/** Part: the popover's title, which names it. Every popover needs one. */
+/**
+ * Part: the popover's title, which names it. Every popover needs one.
+ *
+ * @claim "Every popover needs one" registry/ouro/components/ouro/popover/popover.test.tsx verify:fileLine(registry/ouro/components/ouro/popover/popover.test.tsx, /warns\swhen\sthe\stitle\sis\smissing/)
+ */
 export function PopoverTitle({ visuallyHidden, ...props }: PopoverTitleProps): JSX.Element {
   usePopoverPart("PopoverTitle", "<PopoverTitle>…</PopoverTitle>…");
   return (
     <BasePopover.Title
       {...props}
       data-ouro-popover-title=""
-      className={visuallyHidden ? "sr-only" : "m-0 text-sm leading-5 font-semibold text-popover-foreground"}
+      className={visuallyHidden ? "sr-only" : "m-0 font-[family-name:var(--font-heading,inherit)] text-sm leading-5 font-semibold text-popover-foreground"}
     />
   );
 }
@@ -195,8 +210,10 @@ export function PopoverDescription(props: Omit<BasePopover.Description.Props, "c
  * Part: closes the popover. Pass your button as `render={<Button>Done</Button>}`. With no
  * `render` it is the screen-reader close button `Popover` uses: hidden until it has
  * keyboard focus, so phone screen-reader users, who have no Escape key, can close it.
+ * @claim "With no `render` it is the" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover > has a close button for screen readers, hidden until it has keyboard focus, labelled by closeLabel)
+ * @claim "With no `render` it is the" registry/ouro/components/ouro/popover/popover.test.tsx verify:testExists(registry/ouro/components/ouro/popover/popover.test.tsx::Popover parts > PopoverTitle hides visually, and PopoverClose without render is the screen-reader close button)
  */
 export function PopoverClose(props: BasePopover.Close.Props): JSX.Element {
   usePopoverPart("PopoverClose", "<PopoverTitle>…</PopoverTitle><PopoverClose>Close</PopoverClose>");
-  return <BasePopover.Close {...(props.render === undefined ? { className: popoverCloseClass } : {})} {...props} />;
+  return <BasePopover.Close {...(props.render === undefined ? { className: popoverCloseClass, "data-ouro-control": "popover", "data-ouro-part": "close" } : {})} {...props} />;
 }

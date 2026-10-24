@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { ToastProvider } from "~/components/feedback/toast";
+import { Toaster } from "~/components/ouro/toast/toaster";
 import { NotificationsSection } from "~/components/notifications-section";
 
 vi.mock("~/lib/push-client", () => ({
@@ -29,9 +29,9 @@ function renderWithToast(props: Partial<Parameters<typeof NotificationsSection>[
     initialPreferences: props.initialPreferences ?? DEFAULT_PREFS,
   };
   return render(
-    <ToastProvider>
+    <>
       <NotificationsSection {...merged} />
-    </ToastProvider>,
+    <Toaster /></>,
   );
 }
 
@@ -55,6 +55,9 @@ describe("NotificationsSection", () => {
     (isPushSupported as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ supported: true });
     renderWithToast({ initiallySubscribed: false });
     expect(screen.getByRole("button", { name: /enable notifications/i })).toBeInTheDocument();
+    const section = screen.getByRole("heading", { name: "Notifications", level: 2 }).closest("section");
+    expect(section).toHaveClass("border", "border-border");
+    expect(section).not.toHaveClass("border-b", "border-t");
   });
 
   it("renders 'Notifications enabled' label + Disable button when initiallySubscribed", () => {
@@ -96,7 +99,7 @@ describe("NotificationsSection", () => {
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
     await waitFor(() =>
-      expect(screen.getByText(/permission was denied|unable to enable/i)).toBeInTheDocument(),
+      expect(screen.getByRole("alert")).toHaveTextContent(/permission was denied|unable to enable/i),
     );
   });
 
@@ -123,7 +126,7 @@ describe("NotificationsSection", () => {
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
     await waitFor(() =>
-      expect(screen.getByText(/unable to enable notifications/i)).toBeInTheDocument(),
+      expect(screen.getByRole("alert")).toHaveTextContent(/unable to enable notifications/i),
     );
   });
 
@@ -136,7 +139,7 @@ describe("NotificationsSection", () => {
     renderWithToast({ initiallySubscribed: true });
     fireEvent.click(screen.getByRole("button", { name: /disable/i }));
     await waitFor(() =>
-      expect(screen.getByText(/unable to disable/i)).toBeInTheDocument(),
+      expect(screen.getByRole("alert")).toHaveTextContent(/unable to disable/i),
     );
     expect(
       screen.getByRole("button", { name: /disable/i }),
@@ -214,7 +217,7 @@ describe("NotificationsSection — preference toggles", () => {
     // Rolled back to ON.
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
     await waitFor(() =>
-      expect(screen.getByText(/unable to update notification preferences/i)).toBeInTheDocument(),
+      expect(screen.getByRole("alert")).toHaveTextContent(/unable to update notification preferences/i),
     );
   });
 
@@ -227,7 +230,7 @@ describe("NotificationsSection — preference toggles", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
     await waitFor(() =>
-      expect(screen.getByText(/unable to update notification preferences/i)).toBeInTheDocument(),
+      expect(screen.getByRole("alert")).toHaveTextContent(/unable to update notification preferences/i),
     );
   });
 

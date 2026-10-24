@@ -1,19 +1,22 @@
+import { Empty } from "~/components/ouro/empty/empty";
 import type { Route } from "./+types/recipes.$id.steps.new";
 import { redirect, data, useActionData, useLoaderData, useNavigate, useFetcher } from "react-router";
 import { getIngredientParserEnv, getRequestDb } from "~/lib/route-platform.server";
 import { revalidateUnlessIngredientParse } from "~/lib/ingredient-parse-revalidation";
 import { requireUserId } from "~/lib/session.server";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Fieldset } from "~/components/ouro/field/fieldset";
 import { Form } from "~/components/ouro/form/form";
 import { Link } from "~/components/ouro/link/link";
 import { Select } from "~/components/ouro/select/select";
 import { TextArea } from "~/components/ouro/text-field/text-area";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
-import { CookbookHeader, CookbookPage, RuledEmptyState } from "~/components/cookbook/page";
-import { ChecklistRow } from "~/components/shopping/checklist-row";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
+import { Item } from "~/components/ouro/item/item";
+import { ItemGroup } from "~/components/ouro/item/item-group";
 import {
   validateStepTitle,
   validateStepDescription,
@@ -463,13 +466,14 @@ export default function NewStep() {
 
   return (
     <CookbookPage>
-      <CookbookHeader
+      <PageHeader
         eyebrow={`Step ${nextStepNum}`}
         title="Add Step"
-        action={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
-      >
-        <Text>Write the next bit of method for {recipe.title}.</Text>
-      </CookbookHeader>
+        actions={<Link href={`/recipes/${recipe.id}/edit`} className="inline-flex min-h-11 items-center">← Back to recipe</Link>}
+        size="lg"
+        divider
+        description={`Write the next bit of method for ${recipe.title}.`}
+      />
 
       <div className="mt-8 max-w-4xl">
         {/* The save's messages land on the fields by name; "general" shows at the top of the form. */}
@@ -484,7 +488,7 @@ export default function NewStep() {
 
             {nextStepNum === 1 ? (
               <Fieldset legend="Uses output from">
-                <Text className="italic">No previous steps available</Text>
+                <Text tone="muted" className="italic">No previous steps available</Text>
               </Fieldset>
             ) : availableSteps.length > 0 && (
               <Select
@@ -557,28 +561,28 @@ export default function NewStep() {
 
               {ingredients.length === 0 ? (
                 // Parsed ingredients waiting for "Add All" are not "none yet".
-                !parsedListShown && <RuledEmptyState title="No ingredients added yet" />
+                !parsedListShown && <Empty headingLevel={2} align="start" title="No ingredients added yet" />
               ) : (
-                <ul className="sj-list-ruled mt-4 list-none p-0">
+                <ItemGroup aria-label="Ingredients" variant="divided" className="mt-4">
                   {ingredients.map((ingredient, index) => (
-                    <li key={`${ingredient.ingredientName}-${index}`}>
-                      <ChecklistRow
-                        name={ingredient.ingredientName}
-                        quantity={`${ingredient.quantity} ${ingredient.unit}`}
-                        action={
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            onClick={() => handleRemoveIngredient(index)}
-                            aria-label={`Remove ${ingredient.ingredientName}`}
-                          >
-                            Remove
-                          </Button>
-                        }
-                      />
-                    </li>
+                    <Item
+                      key={`${ingredient.ingredientName}-${index}`}
+                          size="sm"
+                      title={ingredient.ingredientName}
+                      description={`${ingredient.quantity} ${ingredient.unit}`}
+                      actions={
+                        <Button
+                          type="button"
+                          variant="soft" tone="destructive"
+                          onClick={() => handleRemoveIngredient(index)}
+                          aria-label={`Remove ${ingredient.ingredientName}`}
+                        >
+                          Remove
+                        </Button>
+                      }
+                    />
                   ))}
-                </ul>
+                </ItemGroup>
               )}
             </section>
 

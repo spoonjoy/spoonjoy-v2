@@ -1,25 +1,22 @@
 import { useRef, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "~/components/button";
-import { Text } from "~/components/text";
+import { Button } from "~/components/ouro/button/button";
+import { NumberField } from "~/components/ouro/number-field/number-field";
+import { Pagination } from "~/components/ouro/pagination/pagination";
+import { Text } from "~/components/ouro/text/text";
 import { CookStepTimer, CookTimerTray } from "~/components/recipe/CookTimers";
-import { IngredientList, type Ingredient } from "~/components/recipe/IngredientList";
-import { ScaleSelector } from "~/components/recipe/ScaleSelector";
+import { IngredientList, type Ingredient, type StepReference } from "~/components/recipe/IngredientList";
 import { StepCard } from "~/components/recipe/StepCard";
-import type { StepReference } from "~/components/recipe/StepOutputUseCallout";
 import { StepsSectionHeading } from "~/components/recipe/StepsSectionHeading";
-import type { CookTimersController } from "~/hooks/use-cook-timers";
+import type { CookTimer } from "~/lib/cook-timers";
 import { useViewportTopVar } from "~/hooks/use-viewport-top-var";
 import {
+  SCALE_RANGE,
   clampStepIndex,
   stepIngredients,
   stepOutputUses,
   type CookController,
   type CookModeStep,
 } from "~/components/cook/cook-controller";
-
-const cookModeExitClass =
-  "inline-flex min-h-12 min-w-11 items-center justify-center px-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:min-h-11 sm:px-2";
 
 export interface RecipeCookViewProps {
   controller: CookController;
@@ -60,9 +57,7 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
         onIngredientToggle={controller.toggleIngredient}
         onStepOutputToggle={controller.toggleStepOutput}
         onScaleChange={controller.setScale}
-        onPrevious={() => controller.goToStep(clampStepIndex(activeStepIndex - 1, recipe.steps.length))}
-        onNext={() => controller.goToStep(clampStepIndex(activeStepIndex + 1, recipe.steps.length))}
-        onStepSelect={controller.goToStep}
+        onStepSelect={(index) => controller.goToStep(clampStepIndex(index, recipe.steps.length))}
         onExit={controller.exitCookMode}
         timers={controller.timers}
         onGoToStepNum={(stepNum) => {
@@ -73,22 +68,13 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
     );
   }
 
-  /* istanbul ignore next -- @preserve browser scroll navigation */
-  const handleStepReferenceClick = (stepNumber: number) => {
-    // Scroll to the referenced step
-    const stepElement = document.getElementById(`step-${stepNumber}`);
-    if (stepElement) {
-      stepElement.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
   return (
     <div id="steps" className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 print:max-w-none print:px-0 print:py-4">
       <StepsSectionHeading hasProgress={progressChecked > 0} onClearProgress={controller.clearProgress} />
 
       {recipe.steps.length === 0 ? (
         <div className="border-y border-dashed border-[var(--sj-border-strong)] py-8 text-center">
-          <Text className="mb-4">No steps added yet</Text>
+          <Text tone="muted" className="mb-4">No steps added yet</Text>
           {emptyStepsAction}
         </div>
       ) : (
@@ -106,7 +92,6 @@ export function RecipeCookView({ controller, emptyStepsAction, children }: Recip
                 onIngredientToggle={controller.toggleIngredient}
                 checkedStepOutputIds={checkedStepOutputIds}
                 onStepOutputToggle={controller.toggleStepOutput}
-                onStepReferenceClick={handleStepReferenceClick}
               />
             </div>
           ))}
@@ -133,8 +118,6 @@ function CookModePanel({
   onIngredientToggle,
   onStepOutputToggle,
   onScaleChange,
-  onPrevious,
-  onNext,
   onStepSelect,
   onExit,
   timers,
@@ -154,11 +137,9 @@ function CookModePanel({
   onIngredientToggle: (id: string) => void;
   onStepOutputToggle: (id: string) => void;
   onScaleChange: (value: number) => void;
-  onPrevious: () => void;
-  onNext: () => void;
   onStepSelect: (index: number) => void;
   onExit: () => void;
-  timers: CookTimersController;
+  timers: readonly CookTimer[];
   onGoToStepNum: (stepNum: number) => void;
 }) {
   const stepTitle = step.stepTitle ?? `Step ${step.stepNum}`;
@@ -172,8 +153,6 @@ function CookModePanel({
   const pageProgressLabel = pageProgressTotal > 0
     ? `${pageProgressChecked} of ${pageProgressTotal} checked`
     : "No checklist items";
-  const isFirstStep = activeStepIndex === 0;
-  const isLastStep = activeStepIndex >= stepCount - 1;
   const pageLabel = `Step ${activeStepIndex + 1} of ${stepCount}`;
   // On a tall or half-open foldable, fold.css ends the step's row on the fold; it needs to know
   // where the pager starts.
@@ -201,16 +180,12 @@ function CookModePanel({
               {recipeProgressLabel}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onExit}
-            className={cookModeExitClass}
-          >
+          <Button variant="plain" tone="secondary" onClick={onExit}>
             Exit cook mode
-          </button>
+          </Button>
         </header>
 
-        <CookTimerTray controller={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
+        <CookTimerTray timers={timers} currentStepNum={step.stepNum} onGoToStep={onGoToStepNum} />
 
         <div
           ref={pagerRef}
@@ -233,7 +208,7 @@ function CookModePanel({
             <p className="text-base/6 text-[var(--sj-ink-soft)] mt-7 max-w-3xl whitespace-pre-wrap text-xl/9 text-[var(--sj-ink)] sm:text-2xl/10">
               {step.description}
             </p>
-            <CookStepTimer stepNum={step.stepNum} controller={timers} />
+            <CookStepTimer timer={timers.find((timer) => timer.stepNum === step.stepNum)} />
           </article>
 
           {/* A <div>, not <aside>: this ingredient checklist and scale selector are core
@@ -276,61 +251,32 @@ function CookModePanel({
             </div>
 
             <div className="mx-auto w-full max-w-[24rem]">
-              <ScaleSelector value={scaleFactor} onChange={onScaleChange} />
+              <NumberField
+                label="Scale"
+                value={scaleFactor}
+                {...SCALE_RANGE}
+                format={{ maximumFractionDigits: 2 }}
+                decrementLabel="Decrease scale"
+                incrementLabel="Increase scale"
+                onValueChange={(next) => {
+                  if (next !== null) onScaleChange(next);
+                }}
+              />
             </div>
           </div>
         </div>
 
         <footer className="z-10 shrink-0 border-t border-[var(--sj-border)] bg-[var(--sj-page)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-            <Button
-              type="button"
-              plain
-              aria-label="Previous step"
-              disabled={isFirstStep}
-              onClick={onPrevious}
-              className="justify-self-start"
-            >
-              <ChevronLeft data-slot="icon" aria-hidden="true" />
-              <span className="hidden sm:inline">Previous step</span>
-              <span className="sm:hidden">Prev</span>
-            </Button>
-            <nav
-              aria-label="Cook steps"
-              className="hidden items-center gap-2 sm:flex"
-            >
-              {Array.from({ length: stepCount }, (_, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => onStepSelect(index)}
-                  aria-label={`Step ${index + 1}${index === activeStepIndex ? " current" : ""}`}
-                  aria-current={index === activeStepIndex ? "step" : undefined}
-                  className="group grid size-11 place-items-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`size-2.5 rounded-full transition ${
-                      index === activeStepIndex
-                        ? "bg-[var(--sj-ink)]"
-                        : "bg-[var(--sj-border-strong)] group-hover:bg-[var(--sj-ink-soft)]"
-                    }`}
-                  />
-                </button>
-              ))}
-            </nav>
-            <Button
-              type="button"
-              aria-label="Next step"
-              disabled={isLastStep}
-              onClick={onNext}
-              className="justify-self-end"
-            >
-              <span className="hidden sm:inline">Next step</span>
-              <span className="sm:hidden">Next</span>
-              <ChevronRight data-slot="icon" aria-hidden="true" />
-            </Button>
-          </div>
+          <Pagination
+            label="Cook steps"
+            page={activeStepIndex + 1}
+            pageCount={stepCount}
+            onPageChange={(page) => onStepSelect(page - 1)}
+            previousLabel="Previous step"
+            nextLabel="Next step"
+            pageLabel="Step {page}"
+            summaryLabel="Step {page} of {pageCount}"
+          />
         </footer>
       </div>
     </section>

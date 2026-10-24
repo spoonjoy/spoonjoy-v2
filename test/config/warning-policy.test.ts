@@ -915,7 +915,7 @@ jobs:
       "node scripts/run-with-warning-policy.mjs -- pnpm exec wrangler d1 migrations apply DB --local --env qa",
     );
     expect(packageJson.scripts?.["verify:clean:generated-contract"]).toBe(
-      "node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts'",
+      "node scripts/run-with-warning-policy.mjs -- sh -c 'pnpm run api:playground:generate && git diff --exit-code -- app/lib/generated/api-v1-playground.ts && pnpm run provenance:generate --check'",
     );
     expect(packageJson.scripts?.["verify:clean:test:coverage"]).toBe(
       "node scripts/run-with-warning-policy.mjs -- pnpm run test:coverage",

@@ -77,7 +77,7 @@ describe("/users/:identifier/kitchen-visitors route", () => {
       expect(data.total).toBe(1);
       expect(data.rows).toHaveLength(1);
       expect(data.rows[0].username).toBe(visitor.username);
-      expect(data.rows[0].latestInteractionLabel).toMatch(/ago|just now/);
+      expect(data.rows[0]).not.toHaveProperty("latestInteractionLabel");
     });
 
     it("marks viewerIsOwner true when the session user matches the profile", async () => {
@@ -263,7 +263,6 @@ describe("/users/:identifier/kitchen-visitors route", () => {
                 latestInteractionAt: new Date(
                   Date.now() - 60 * 1000,
                 ).toISOString(),
-                latestInteractionLabel: "1 minute ago",
               },
             ],
             total: 1,
@@ -279,7 +278,7 @@ describe("/users/:identifier/kitchen-visitors route", () => {
           "/users/alpha",
         );
       });
-      expect(screen.getByText("1 minute ago")).toBeInTheDocument();
+      expect(screen.getByText("1 minute ago", { selector: "time" })).toBeInTheDocument();
     });
 
     it("renders Next link when total exceeds one page", async () => {

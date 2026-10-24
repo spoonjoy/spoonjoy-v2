@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Button } from './button'
+import { Button } from '~/components/ouro/button/button'
 
 export type OAuthProvider = 'google' | 'github' | 'apple'
 
@@ -41,23 +41,6 @@ export function OAuthButton({ provider, className, redirectTo }: OAuthButtonProp
     <Button href={href} reloadDocument className={clsx('w-full', className)}>
       {label}
     </Button>
-  )
-}
-
-interface OAuthDividerProps {
-  className?: string
-}
-
-export function OAuthDivider({ className }: OAuthDividerProps) {
-  return (
-    <div
-      data-testid="oauth-separator"
-      className={clsx('flex items-center', className)}
-    >
-      <div className="flex-1 border-t border-[var(--sj-border)]" />
-      <span className="px-4 text-sm text-[var(--sj-ink-soft)]">or</span>
-      <div className="flex-1 border-t border-[var(--sj-border)]" />
-    </div>
   )
 }
 

@@ -10,13 +10,17 @@ import { sessionStorage } from "~/lib/session.server";
 import { cleanupDatabase } from "../helpers/cleanup";
 import { faker } from "@faker-js/faker";
 import { data as routerData, redirect } from "react-router";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
-import { ToastProvider } from "~/components/feedback/toast";
+import { useDockSuppressed } from "~/components/navigation";
+import { share } from "~/lib/ouro/share";
+import { Toaster } from "~/components/ouro/toast/toaster";
 
 vi.mock("~/components/navigation", () => ({
-  shareContent: vi.fn(async () => ({ success: true, method: "native" })),
   useDockSuppressed: vi.fn(),
 }));
+vi.mock("~/lib/ouro/share", async () => {
+  const actual = await vi.importActual<typeof import("~/lib/ouro/share")>("~/lib/ouro/share");
+  return { ...actual, share: vi.fn(async () => "shared" as const) };
+});
 
 // Helper to extract data from React Router's data() response
 function extractResponseData(response: any): { data: any; status: number } {
@@ -89,7 +93,7 @@ describe("Cookbooks $id Route", () => {
   let cookbookId: string;
 
   beforeEach(async () => {
-    vi.mocked(shareContent).mockClear();
+    vi.mocked(share).mockClear();
     vi.mocked(useDockSuppressed).mockClear();
     await cleanupDatabase();
     const email = faker.internet.email();
@@ -1308,7 +1312,7 @@ describe("Cookbooks $id Route", () => {
       expect(screen.getByRole("link", { name: "← Back to cookbooks" })).toHaveAttribute("href", "/cookbooks");
       fireEvent.click(screen.getByRole("button", { name: "Share" }));
       await waitFor(() => {
-        expect(vi.mocked(shareContent)).toHaveBeenCalledWith({
+        expect(vi.mocked(share)).toHaveBeenCalledWith({
           title: "My Test Cookbook",
           text: "My Test Cookbook by testchef on Spoonjoy.",
           url: "https://spoonjoy.app/cookbooks/cookbook-1",
@@ -1523,7 +1527,7 @@ describe("Cookbooks $id Route", () => {
 
       render(<Stub initialEntries={["/cookbooks/cookbook-1"]} />);
 
-      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools Open +" });
+      const ownerToolsToggle = await screen.findByRole("button", { name: "Owner tools" });
       expect(ownerToolsToggle).toBeInTheDocument();
       expect(ownerToolsToggle).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("button", { name: "Edit title" })).not.toBeInTheDocument();
@@ -1532,7 +1536,7 @@ describe("Cookbooks $id Route", () => {
 
       await openOwnerTools();
 
-      expect(screen.getByRole("button", { name: "Owner tools Close" })).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("button", { name: "Owner tools" })).toHaveAttribute("aria-expanded", "true");
       expect(await screen.findByRole("button", { name: "Edit title" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete cookbook" })).toBeInTheDocument();
       // Each row's button names its recipe, so rows are told apart by name.
@@ -1850,9 +1854,9 @@ describe("Cookbooks $id Route", () => {
         ]);
 
         render(
-          <ToastProvider>
+          <>
             <Stub initialEntries={["/cookbooks/cookbook-1"]} />
-          </ToastProvider>,
+          <Toaster /></>,
         );
       }
 
@@ -1992,9 +1996,10 @@ describe("Cookbooks $id Route", () => {
             },
           ]);
           render(
-            <ToastProvider>
+            <>
               <Stub initialEntries={["/cookbooks/cookbook-1"]} />
-            </ToastProvider>,
+              <Toaster />
+            </>,
           );
           return { loads: () => loads, sent };
         }
@@ -2092,7 +2097,7 @@ describe("Cookbooks $id Route", () => {
           fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
           fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-          expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't be reached/ })).toBeInTheDocument();
+          expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't be reached");
           expect(sent).toEqual(["intent=delete"]);
           await waitFor(() => {
             expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -2113,7 +2118,8 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("dialog", { name: /Spoonjoy couldn't save that just now/ })).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        // A destructive toast speaks through an alert; the toast itself is hidden from assistive tech.
+        expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now.");
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();

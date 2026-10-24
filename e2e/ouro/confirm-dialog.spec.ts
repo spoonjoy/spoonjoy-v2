@@ -1,7 +1,8 @@
 import { expect, test } from "../ouro-fixtures";
-import { openStory } from "./story";
+import { holdClock, openStory } from "./story";
 
 test("Cancel has focus first; confirming shows the busy state, then closes", async ({ page }) => {
+  await page.clock.install();
   await openStory(page, "overlays-confirmdialog--destructive");
   await page.getByRole("button", { name: "Delete recipe" }).click();
   const dialog = page.getByRole("alertdialog", { name: "Delete recipe?" });
@@ -9,8 +10,12 @@ test("Cancel has focus first; confirming shows the busy state, then closes", asy
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
 
   const confirm = dialog.getByRole("button", { name: "Delete" });
+  // The story's action takes 1.2s of the page's clock, which stands still while the spec reads the busy state.
+  await holdClock(page);
   await confirm.click();
+ 
   await expect(confirm).toHaveAttribute("aria-busy", "true");
+  await page.clock.resume();
   await expect(dialog).toBeHidden({ timeout: 5000 });
 });
 

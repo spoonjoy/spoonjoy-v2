@@ -7,7 +7,7 @@ import ShoppingList from "~/routes/shopping-list";
 
 /** Real app UI/controller and real Router; only the remote data store is a fixture.
  * The touch/browser files mock the server-only export module, never SwipeActions,
- * ConfirmDialog, Menu, ChecklistRow, Motion or the app controller.
+ * ConfirmDialog, Menu, Checklist, Motion or the app controller.
  */
 export async function shoppingRemovalFixture(direction: "ltr" | "rtl" = "ltr") {
   await import("~/components/motion/motion-features");

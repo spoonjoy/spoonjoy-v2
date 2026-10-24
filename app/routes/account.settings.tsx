@@ -1,3 +1,4 @@
+import { Card } from "~/components/ouro/card/card";
 import type { Route } from "./+types/account.settings";
 import { useLoaderData, useActionData, useRevalidator, useFetcher, Form as RouterForm } from "react-router";
 import { useState, useEffect } from "react";
@@ -9,8 +10,8 @@ import {
   type AccountSettingsLoaderData,
 } from "~/lib/account-settings.server";
 import { LogOut } from "lucide-react";
-import { Text } from "~/components/text";
-import { Button } from "~/components/button";
+import { Text } from "~/components/ouro/text/text";
+import { Button } from "~/components/ouro/button/button";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Form } from "~/components/ouro/form/form";
 import { TextField } from "~/components/ouro/text-field/text-field";
@@ -20,7 +21,8 @@ import { NotificationsSection } from "~/components/notifications-section";
 import { AddPasskeyButton } from "~/components/auth/AddPasskeyButton";
 import { ProfilePhotoField } from "~/components/account/ProfilePhotoField";
 import { AccountDataSection } from "~/components/account/AccountDataSection";
-import { CookbookPage, CookbookHeader, SettingsPanel } from "~/components/cookbook/page";
+import { CookbookPage } from "~/components/cookbook/page";
+import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 
 export function meta({}: Route.MetaArgs) {
@@ -136,24 +138,23 @@ export default function AccountSettings() {
   return (
     <CookbookPage>
       <div className="mx-auto max-w-4xl">
-      <CookbookHeader
+      <PageHeader
         eyebrow="Kitchen identity"
         title="Account settings"
-        action={(
+        actions={(
           // Desktop logs out from its top navigation; a phone logs out here. A plain form post,
           // so it works before the page hydrates and the next page loads fresh.
           <RouterForm method="post" action="/logout" className="m-0 lg:hidden" onSubmit={clearCookProgressCache}>
-            <Button type="submit" plain>
+            <Button type="submit" variant="outline" tone="secondary">
               <LogOut data-slot="icon" className="size-4" />
               Log out
             </Button>
           </RouterForm>
         )}
-      >
-        <Text className="mt-4 max-w-2xl leading-7">
-          Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents.
-        </Text>
-      </CookbookHeader>
+        size="lg"
+        divider
+        description="Keep your chef profile, sign-in methods, and photo ready for family, guests, and agents."
+      />
 
       <OAuthError error={oauthError} className="mt-4" />
 
@@ -174,16 +175,16 @@ export default function AccountSettings() {
 
       {/* User Info Section (the anchor brings a chef back here after "Sign in again") */}
       <div id="user-info">
-      <SettingsPanel
-        testId="user-info-section"
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4"
+        data-testid="user-info-section"
         title="User information"
         action={!isEditing ? (
-            <Button plain onClick={() => setIsEditing(true)}>
+            <Button variant="outline" tone="secondary" onClick={() => setIsEditing(true)}>
               Edit
             </Button>
         ) : null}
       >
-        <Text>The email and username attached to your kitchen.</Text>
+        <Text tone="muted">The email and username attached to your kitchen.</Text>
         {isEditing ? (
           <Form method="post" errors={userInfoErrors} render={<RouterForm />} className="mt-4 gap-4">
             <input type="hidden" name="intent" value="updateUserInfo" />
@@ -200,7 +201,7 @@ export default function AccountSettings() {
                 autoComplete="current-password"
               />
             ) : (
-              <Text size="sm" className="leading-6">
+              <Text tone="muted" size="sm" className="leading-6">
                 To change your email, you need to have signed in within the last 10 minutes. If it has been longer,
                 sign in again first.
               </Text>
@@ -209,7 +210,7 @@ export default function AccountSettings() {
               <Button type="submit">
                 Save
               </Button>
-              <Button type="button" plain onClick={() => setIsEditing(false)}>
+              <Button type="button" variant="outline" tone="secondary" onClick={() => setIsEditing(false)}>
                 Cancel
               </Button>
             </div>
@@ -219,35 +220,35 @@ export default function AccountSettings() {
           <RouterForm method="post" className="mt-3">
             <input type="hidden" name="intent" value="reauthenticate" />
             <input type="hidden" name="for" value="email" />
-            <Button type="submit" plain>
+            <Button type="submit" variant="outline" tone="secondary">
               Sign in again
             </Button>
           </RouterForm>
         ) : null}
         {!isEditing && (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="min-w-0 border-y border-[var(--sj-border)] py-4"><Text className="[overflow-wrap:anywhere]">
+            <div className="min-w-0 border-y border-[var(--sj-border)] py-4"><Text tone="muted" className="[overflow-wrap:anywhere]">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Email</span>
               {user.email}
             </Text></div>
-            <div className="min-w-0 border-y border-[var(--sj-border)] py-4"><Text className="[overflow-wrap:anywhere]">
+            <div className="min-w-0 border-y border-[var(--sj-border)] py-4"><Text tone="muted" className="[overflow-wrap:anywhere]">
               <span className="font-sj-ui block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)]">Username</span>
               {user.username}
             </Text></div>
           </div>
         )}
-      </SettingsPanel>
+      </Card>
       </div>
 
       {/* Profile Photo Section */}
-      <SettingsPanel testId="profile-photo-section" title="Profile photo">
-        <Text className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="profile-photo-section" title="Profile photo">
+        <Text tone="muted" className="mt-1">Make your kitchen feel human before anyone reads a recipe.</Text>
         <ProfilePhotoField photoUrl={user.photoUrl} />
-      </SettingsPanel>
+      </Card>
 
       {/* OAuth Providers Section */}
-      <SettingsPanel testId="oauth-providers-section" title="Connected accounts">
-        <Text className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="oauth-providers-section" title="Connected accounts">
+        <Text tone="muted" className="mt-1">Use OAuth when it helps, but never make it the only way in unless you choose to.</Text>
 
         {/* Warning when can't unlink */}
         {!canUnlinkOAuth && user.oauthAccounts.length > 0 && (
@@ -277,7 +278,7 @@ export default function AccountSettings() {
                           {capitalizeProvider(provider)}
                         </strong></Text>
                       )}
-                      <Text size="sm">{account!.providerUsername}</Text>
+                      <Text tone="muted" size="sm">{account!.providerUsername}</Text>
                     </>
                   ) : (
                     <Text tone="default"><strong className="font-medium">
@@ -288,13 +289,13 @@ export default function AccountSettings() {
                 {isLinked ? (
                   isShowingUnlinkConfirm ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <Text size="sm">Are you sure?</Text>
+                      <Text tone="muted" size="sm">Are you sure?</Text>
                       <RouterForm method="post" className="inline">
                         <input type="hidden" name="intent" value="unlinkOAuth" />
                         <input type="hidden" name="provider" value={provider} />
                         <Button
                           type="submit"
-                          variant="destructive"
+                          variant="soft" tone="destructive"
                           aria-label={`Confirm unlink ${capitalizeProvider(provider)}`}
                         >
                           Confirm
@@ -302,7 +303,7 @@ export default function AccountSettings() {
                       </RouterForm>
                       <Button
                         type="button"
-                        plain
+                        variant="outline" tone="secondary"
                         onClick={() => setUnlinkingProvider(null)}
                       >
                         Cancel
@@ -311,7 +312,7 @@ export default function AccountSettings() {
                   ) : (
                     <Button
                       type="button"
-                      plain
+                      variant="outline" tone="secondary"
                       aria-label={`Unlink ${capitalizeProvider(provider)}`}
                       disabled={!canUnlinkOAuth}
                       onClick={() => setUnlinkingProvider(provider)}
@@ -325,7 +326,7 @@ export default function AccountSettings() {
                     <input type="hidden" name="provider" value={provider} />
                     <Button
                       type="submit"
-                      plain
+                      variant="outline" tone="secondary"
                       aria-label={`Link ${capitalizeProvider(provider)}`}
                     >
                       Link
@@ -336,10 +337,10 @@ export default function AccountSettings() {
             );
           })}
         </div>
-      </SettingsPanel>
+      </Card>
 
-      <SettingsPanel testId="api-access-section" title="API and app access">
-        <Text className="mt-1">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="api-access-section" title="API and app access">
+        <Text tone="muted" className="mt-1">
           Revoke personal, delegated, and OAuth app access without exposing token secrets.
         </Text>
 
@@ -357,7 +358,7 @@ export default function AccountSettings() {
                   >
                     <div className="min-w-0">
                       <Text tone="default"><strong className="font-medium">{credential.name}</strong></Text>
-                      <Text size="sm" className="break-words">
+                      <Text tone="muted" size="sm" className="break-words">
                         {credential.tokenPrefix}... · {credential.scopes.join(", ") || "No scopes"}
                       </Text>
                       <p className="text-base/6 text-[var(--sj-ink-soft)] text-xs">
@@ -369,7 +370,7 @@ export default function AccountSettings() {
                     <RouterForm method="post">
                       <input type="hidden" name="intent" value="revokeApiCredential" />
                       <input type="hidden" name="credentialId" value={credential.id} />
-                      <Button type="submit" variant="destructive" aria-label={`Revoke ${credential.name}`}>
+                      <Button type="submit" variant="soft" tone="destructive" aria-label={`Revoke ${credential.name}`}>
                         Revoke
                       </Button>
                     </RouterForm>
@@ -377,7 +378,7 @@ export default function AccountSettings() {
                 ))}
               </div>
             ) : (
-              <Text size="sm" className="mt-2">No active bearer credentials.</Text>
+              <Text tone="muted" size="sm" className="mt-2">No active bearer credentials.</Text>
             )}
           </div>
 
@@ -396,7 +397,7 @@ export default function AccountSettings() {
                     >
                       <div className="min-w-0">
                         <Text tone="default"><strong className="font-medium">{appName}</strong></Text>
-                        <Text size="sm" className="break-words">
+                        <Text tone="muted" size="sm" className="break-words">
                           {connection.resource || "REST API"} · {connection.scopes.join(", ") || "No scopes"}
                         </Text>
                         <p className="text-base/6 text-[var(--sj-ink-soft)] break-words text-xs">Issued by {connection.issuer}</p>
@@ -412,7 +413,7 @@ export default function AccountSettings() {
                         {connection.connectionKeys.map((connectionKey) => (
                           <input key={connectionKey} type="hidden" name="connectionKey" value={connectionKey} />
                         ))}
-                        <Button type="submit" variant="destructive" aria-label={`Disconnect ${appName} from ${connection.issuer}`}>
+                        <Button type="submit" variant="soft" tone="destructive" aria-label={`Disconnect ${appName} from ${connection.issuer}`}>
                           Disconnect
                         </Button>
                       </RouterForm>
@@ -421,15 +422,15 @@ export default function AccountSettings() {
                 })}
               </div>
             ) : (
-              <Text size="sm" className="mt-2">No active OAuth app connections.</Text>
+              <Text tone="muted" size="sm" className="mt-2">No active OAuth app connections.</Text>
             )}
           </div>
         </div>
-      </SettingsPanel>
+      </Card>
 
       {/* Passkeys Section */}
-      <SettingsPanel testId="passkeys-section" title="Passkeys">
-        <Text className="mt-1">
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="passkeys-section" title="Passkeys">
+        <Text tone="muted" className="mt-1">
           Sign in without a password using your device's biometrics or a security key.
         </Text>
 
@@ -464,7 +465,7 @@ export default function AccountSettings() {
                       />
                       <div className="flex flex-wrap gap-2">
                         <Button type="submit">Save</Button>
-                        <Button type="button" plain onClick={() => setRenamingPasskeyId(null)}>
+                        <Button type="button" variant="outline" tone="secondary" onClick={() => setRenamingPasskeyId(null)}>
                           Cancel
                         </Button>
                       </div>
@@ -474,24 +475,24 @@ export default function AccountSettings() {
                       <div>
                         <Text tone="default"><strong className="font-medium">{label}</strong></Text>
                         {passkey.createdAt && (
-                          <Text size="sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
+                          <Text tone="muted" size="sm">Added {formatPasskeyDate(passkey.createdAt)}</Text>
                         )}
                       </div>
                       {isConfirming ? (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Text size="sm">Are you sure?</Text>
+                          <Text tone="muted" size="sm">Are you sure?</Text>
                           <RouterForm method="post" className="inline">
                             <input type="hidden" name="intent" value="removePasskey" />
                             <input type="hidden" name="credentialId" value={passkey.id} />
                             <Button
                               type="submit"
-                              variant="destructive"
+                              variant="soft" tone="destructive"
                               aria-label={`Confirm remove ${label}`}
                             >
                               Confirm
                             </Button>
                           </RouterForm>
-                          <Button type="button" plain onClick={() => setRemovingPasskeyId(null)}>
+                          <Button type="button" variant="outline" tone="secondary" onClick={() => setRemovingPasskeyId(null)}>
                             Cancel
                           </Button>
                         </div>
@@ -499,7 +500,7 @@ export default function AccountSettings() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
-                            plain
+                            variant="outline" tone="secondary"
                             aria-label={`Rename ${label}`}
                             onClick={() => setRenamingPasskeyId(passkey.id)}
                           >
@@ -507,7 +508,7 @@ export default function AccountSettings() {
                           </Button>
                           <Button
                             type="button"
-                            plain
+                            variant="outline" tone="secondary"
                             aria-label={`Remove ${label}`}
                             disabled={!canRemovePasskey}
                             onClick={() => setRemovingPasskeyId(passkey.id)}
@@ -527,11 +528,11 @@ export default function AccountSettings() {
         <div className="mt-4">
           <AddPasskeyButton onAdded={revalidator.revalidate} />
         </div>
-      </SettingsPanel>
+      </Card>
 
       {/* Password Section */}
-      <SettingsPanel testId="password-section" title="Password">
-        <Text className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
+      <Card as="section" headingLevel={2} stackBelow="sm" className="my-4" data-testid="password-section" title="Password">
+        <Text tone="muted" className="mt-1">A first-class fallback for any client, browser, or future importer.</Text>
         {passwordAnswer?.success && passwordAnswer.message ? (
           <div role="status" className="mt-4 text-sm text-[var(--sj-herb)]">{passwordAnswer.message}</div>
         ) : null}
@@ -561,22 +562,22 @@ export default function AccountSettings() {
                   <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Change password
                   </Button>
-                  <Button type="button" plain onClick={cancelPasswordForm}>
+                  <Button type="button" variant="outline" tone="secondary" onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
               </Form>
             ) : passwordFormState === "removeConfirm" ? (
               <div className="space-y-4">
-                <Text>Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
+                <Text tone="muted">Are you sure you want to remove your password? You will only be able to sign in using your linked OAuth accounts.</Text>
                 <RouterForm method="post" className="grid gap-4">
                   <input type="hidden" name="intent" value="removePassword" />
                   <TextField label="Current password" type="password" name="currentPassword" autoComplete="current-password" />
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" variant="destructive">
+                    <Button type="submit" variant="soft" tone="destructive">
                       Confirm
                     </Button>
-                    <Button type="button" plain onClick={() => setPasswordFormState("idle")}>
+                    <Button type="button" variant="outline" tone="secondary" onClick={() => setPasswordFormState("idle")}>
                       Cancel
                     </Button>
                   </div>
@@ -584,11 +585,11 @@ export default function AccountSettings() {
               </div>
             ) : (
               <div className="flex flex-wrap gap-3">
-                <Button type="button" plain onClick={() => openPasswordForm("change")}>
+                <Button type="button" variant="outline" tone="secondary" onClick={() => openPasswordForm("change")}>
                   Change password
                 </Button>
                 {canRemovePassword && (
-                  <Button type="button" variant="destructive" onClick={() => setPasswordFormState("removeConfirm")}>
+                  <Button type="button" variant="soft" tone="destructive" onClick={() => setPasswordFormState("removeConfirm")}>
                     Remove password
                   </Button>
                 )}
@@ -610,17 +611,17 @@ export default function AccountSettings() {
                   <Button type="submit" disabled={passwordFetcher.state !== "idle"} aria-busy={passwordFetcher.state !== "idle"}>
                     Set password
                   </Button>
-                  <Button type="button" plain onClick={cancelPasswordForm}>
+                  <Button type="button" variant="outline" tone="secondary" onClick={cancelPasswordForm}>
                     Cancel
                   </Button>
                 </div>
               </Form>
             ) : (
               <div>
-                <Text className="mb-4">
+                <Text tone="muted" className="mb-4">
                   You don't have a password set. Set one to enable email/password login.
                 </Text>
-                <Button type="button" plain onClick={() => openPasswordForm("set")}>
+                <Button type="button" variant="outline" tone="secondary" onClick={() => openPasswordForm("set")}>
                   Set password
                 </Button>
               </div>
@@ -630,32 +631,32 @@ export default function AccountSettings() {
 
         <div className="mt-6 border-t border-[var(--sj-border)] pt-4" data-testid="sign-out-everywhere">
           <Text tone="default"><strong className="font-medium">Sign out everywhere</strong></Text>
-          <Text size="sm" className="mt-1">
+          <Text tone="muted" size="sm" className="mt-1">
             Signs you out of every other browser and device, including the Spoonjoy iPhone app, and disconnects every app,
             agent and API token, including Claude. You stay signed in here; reconnect what you still use afterwards.
           </Text>
           {isConfirmingSignOutEverywhere ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Text size="sm">Are you sure?</Text>
+              <Text tone="muted" size="sm">Are you sure?</Text>
               <RouterForm method="post" className="inline" onSubmit={() => setIsConfirmingSignOutEverywhere(false)}>
                 <input type="hidden" name="intent" value="signOutEverywhere" />
-                <Button type="submit" variant="destructive" aria-label="Confirm sign out everywhere">
+                <Button type="submit" variant="soft" tone="destructive" aria-label="Confirm sign out everywhere">
                   Confirm
                 </Button>
               </RouterForm>
-              <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(false)}>
+              <Button type="button" variant="outline" tone="secondary" onClick={() => setIsConfirmingSignOutEverywhere(false)}>
                 Cancel
               </Button>
             </div>
           ) : (
             <div className="mt-3">
-              <Button type="button" plain onClick={() => setIsConfirmingSignOutEverywhere(true)}>
+              <Button type="button" variant="outline" tone="secondary" onClick={() => setIsConfirmingSignOutEverywhere(true)}>
                 Sign out everywhere
               </Button>
             </div>
           )}
         </div>
-      </SettingsPanel>
+      </Card>
 
       <NotificationsSection
         initiallySubscribed={notifications.pushSubscribed}

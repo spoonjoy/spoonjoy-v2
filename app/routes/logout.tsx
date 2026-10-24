@@ -3,9 +3,9 @@ import { Form as RouterForm, data, redirect, useActionData } from "react-router"
 import { destroyUserSession, getUserId } from "~/lib/session.server";
 import { resolveIssuerOrigin } from "~/lib/oauth-metadata.server";
 import { AuthPage } from "~/components/auth/auth-page";
-import { Button } from "~/components/button";
+import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
-import { Text } from "~/components/text";
+import { Text } from "~/components/ouro/text/text";
 import { Form } from "~/components/ouro/form/form";
 import { useFormMessage } from "~/hooks/use-form-errors";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
@@ -59,13 +59,13 @@ export default function Logout() {
       description="Sign in again on any device to pick up where you left off."
     >
       <div className="w-full max-w-sm">
-        <Text className="mt-4">This signs you out in this browser only.</Text>
+        <Text tone="muted" className="mt-4">This signs you out in this browser only.</Text>
         <Form method="post" errors={formErrors} render={<RouterForm />} className="mt-6" onSubmit={clearCookProgressCache}>
           <Button type="submit" className="w-full">
             Log out
           </Button>
         </Form>
-        <Text align="center" className="mt-6">
+        <Text tone="muted" align="center" className="mt-6">
           <Link href="/">Stay signed in</Link>
         </Text>
       </div>

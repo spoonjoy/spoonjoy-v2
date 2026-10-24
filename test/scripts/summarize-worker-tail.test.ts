@@ -716,7 +716,7 @@ describe("Journeys workflow tail wiring", () => {
 
     // The census artifact is one merged JSON file of control identities, uploaded on every run.
     const census = step("Upload the HX census");
-    expect(census.with?.path).toBe("hx-census-actual.json");
+    expect(census.with?.path).toBe("census-actual.json");
     expect(census.if).toBe("always() && env.SUITE == 'journeys' && steps.suite.outcome != 'skipped'");
 
     const uploads = allUploads.filter((upload) => upload !== census);

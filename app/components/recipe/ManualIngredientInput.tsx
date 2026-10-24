@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button } from '~/components/button'
+import { Button } from '~/components/ouro/button/button'
 import { Field } from '~/components/ouro/field/field'
 import { FieldControl } from '~/components/ouro/field/field-parts'
 import { TextField } from '~/components/ouro/text-field/text-field'
@@ -68,7 +68,7 @@ export function ManualIngredientInput({
   }
 
   return (
-    <div role="group" aria-label="Add an ingredient" onKeyDown={handleKeyDown}>
+    <div role="group" aria-label="Add an ingredient">
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_2fr_auto] gap-4 items-end">
         {/* Ouro UI's TextField has no number type, so the quantity is its Field and control. */}
         <Field label="Quantity" disabled={isDisabled}>
@@ -77,6 +77,7 @@ export function ManualIngredientInput({
             type="number"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
+            onKeyDown={handleKeyDown}
             step="any"
             min={QUANTITY_MIN}
             max={QUANTITY_MAX}
@@ -89,6 +90,7 @@ export function ManualIngredientInput({
           aria-required="true"
           value={unit}
           onChange={(e) => setUnit(e.target.value)}
+          onKeyDown={handleKeyDown}
           maxLength={UNIT_NAME_MAX_LENGTH}
           placeholder="cup"
           disabled={isDisabled}
@@ -99,6 +101,7 @@ export function ManualIngredientInput({
           aria-required="true"
           value={ingredientName}
           onChange={(e) => setIngredientName(e.target.value)}
+          onKeyDown={handleKeyDown}
           maxLength={INGREDIENT_NAME_MAX_LENGTH}
           placeholder="flour"
           disabled={isDisabled}

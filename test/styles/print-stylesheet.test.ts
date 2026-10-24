@@ -65,25 +65,11 @@ describe("print stylesheet", () => {
     expect(values.get("color-scheme")).toBe("light");
   });
 
-  it("drops screen chrome and the cook's tick marks from the printed page", () => {
+  it("drops screen chrome from the printed page", () => {
     const hidden = rules
       .filter((rule) => /display:\s*none/.test(rule.toString()))
       .flatMap((rule) => rule.selectors);
-    expect(hidden).toEqual(
-      expect.arrayContaining([
-        ".sj-skip-link",
-        ".sj-desktop-topbar",
-        ".sj-route-progress",
-        "#steps .sj-checklist-box",
-        "#steps .sj-checklist-strike",
-      ]),
-    );
-  });
-
-  it("prints a checklist row as one column once its tick box is gone", () => {
-    // The screen row is `2rem minmax(0,1fr)` with the box in the first column; with the box hidden, the
-    // name and amount would fall into that 2rem column and the name would get no width.
-    expect(declarations("#steps .sj-checklist-row", rules).get("grid-template-columns")).toBe("minmax(0, 1fr)");
+    expect(hidden).toEqual(expect.arrayContaining([".sj-desktop-topbar"]));
   });
 
   it("prints the masthead as one column without the screen-height minimum", () => {

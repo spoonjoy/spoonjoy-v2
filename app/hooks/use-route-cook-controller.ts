@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useNavigation } from "react-router";
 import type { CookController, CookRecipe } from "~/components/cook/cook-controller";
 import { clampStepIndex, stepIngredients, stepOutputUses, toggledId } from "~/components/cook/cook-controller";
 import { useCookSessionSync } from "~/hooks/use-cook-session-sync";
-import { useCookTimers } from "~/hooks/use-cook-timers";
+import { cookTimers } from "~/lib/cook-timers";
 import { useScreenWakeLock } from "~/hooks/use-screen-wake-lock";
 import {
   DEFAULT_COOK_PROGRESS,
@@ -471,11 +471,7 @@ export function useRouteCookController(loaderData: RecipeDetailLoaderData): Rout
 
   const cookMode = isCookMode && steps.length > 0;
 
-  const cookTimerSteps = useMemo(
-    () => steps.map((step) => ({ stepNum: step.stepNum, label: step.stepTitle ?? "", durationMinutes: step.duration })),
-    [steps],
-  );
-  const timers = useCookTimers(recipe.id, cookTimerSteps);
+  const timers = useMemo(() => cookTimers(recipe.id, steps), [recipe.id, steps]);
   useScreenWakeLock(cookMode);
 
   return {

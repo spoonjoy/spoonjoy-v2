@@ -20,16 +20,18 @@ import {
   handleRecipeDetailAction,
   loadRecipeDetail,
 } from "~/lib/recipe-detail.server";
-import { Button } from "~/components/button";
-import { useToast } from "~/components/feedback/toast";
+import { Button } from "~/components/ouro/button/button";
+import { toast } from "~/lib/ouro/toast";
+import { Collapsible } from "~/components/ouro/collapsible/collapsible";
 import { ConfirmDialog } from "~/components/ouro/dialog/confirm-dialog";
 import { Dialog as OuroDialog } from "~/components/ouro/dialog/dialog";
 import { Form } from "~/components/ouro/form/form";
 import { useFormErrors, useFormMessage } from "~/hooks/use-form-errors";
 import { TextField } from "~/components/ouro/text-field/text-field";
-import { Heading } from "~/components/heading";
-import { Link } from "~/components/navigation/app-link";
-import { Text } from "~/components/text";
+import { Heading } from "~/components/ouro/text/heading";
+import { Link } from "~/components/ouro/link/link";
+import { Text } from "~/components/ouro/text/text";
+import { Toggle } from "~/components/ouro/toggle/toggle";
 import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
@@ -39,7 +41,9 @@ import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
 import { SpoonsStrip } from "~/components/recipe/SpoonsStrip";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
-import { shareContent, useDockSuppressed } from "~/components/navigation";
+import { useDockSuppressed } from "~/components/navigation";
+import { ShareButton } from "~/components/ouro/share-button/share-button";
+import type { ShareResult } from "~/lib/ouro/share";
 import { useBackNavigation } from "~/hooks/use-back-navigation";
 import { confirmCookSessionRecipeDeletion } from "~/hooks/use-cook-session-sync";
 import { getCookProgressStorageKey, useRouteCookController } from "~/hooks/use-route-cook-controller";
@@ -147,15 +151,6 @@ type RecipeDetailActionData = {
   error?: unknown;
 };
 
-const recipeMastheadLinkClass =
-  "inline-flex min-h-11 items-center gap-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] no-underline transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]";
-
-const recipeMastheadActionClass =
-  "inline-flex min-h-12 min-w-11 items-center justify-center px-2 font-sj-ui text-xs font-bold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] transition hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)] sm:min-h-11 sm:px-2";
-
-const recipeMastheadPrimaryActionClass =
-  "text-[var(--sj-action)] hover:text-[var(--sj-tomato)]";
-
 const COVER_PROCESSING_POLL_INTERVAL_MS = 3000;
 
 export function applyCreatedCookbookState(
@@ -217,7 +212,6 @@ export default function RecipeDetail() {
   const cookbooks = loaderData.cookbooks ?? EMPTY_COOKBOOKS;
   const savedInCookbookIds = loaderData.savedInCookbookIds ?? EMPTY_SAVED_COOKBOOK_IDS;
   const spoons = loaderData.spoons ?? EMPTY_SPOONS;
-  const renderedAt = loaderData.renderedAt;
   const coverHistory = loaderData.coverHistory ?? [];
   const spoonImages = loaderData.spoonImages ?? [];
   const isOriginCookCandidate = loaderData.isOriginCookCandidate ?? false;
@@ -227,7 +221,6 @@ export default function RecipeDetail() {
   const addToListFetcher = useFetcher();
   const createCookbookFetcher = useFetcher<typeof action>();
   const posthog = usePostHog();
-  const { showToast } = useToast();
   // Cook progress, cook mode and timers: the view below draws them, the controller owns them.
   const cookController = useRouteCookController(loaderData);
   const { scaleFactor, setScale: handleScaleChange, enterCookMode } = cookController;
@@ -298,23 +291,16 @@ export default function RecipeDetail() {
     };
   }, [activeCoverProcessing?.coverId, revalidator]);
 
-  const handleShare = useCallback(async () => {
-    /* istanbul ignore next -- @preserve browser share API */
-    const result = await shareContent({
-      title: recipe.title,
-      text: recipe.description ?? `Check out this recipe: ${recipe.title}`,
-      url: typeof window !== "undefined" ? window.location.href : `/recipes/${recipe.id}`,
-    });
-
+  const handleShared = useCallback((result: ShareResult) => {
     /* istanbul ignore next -- @preserve PostHog client-only analytics */
     if (posthog) {
       posthog.capture("recipe_shared", {
         recipe_id: recipe.id,
-        share_method: result.method,
-        share_success: result.success,
+        share_method: result === "shared" ? "native" : "clipboard",
+        share_success: result === "shared" || result === "copied",
       });
     }
-  }, [recipe.id, recipe.title, recipe.description, posthog]);
+  }, [recipe.id, posthog]);
 
   // State for Save modal (bottom sheet)
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -349,8 +335,8 @@ export default function RecipeDetail() {
 
     lastHandledLoggedSpoonId.current = loggedSpoonId;
     setIsSpoonDialogOpen(false);
-    showToast({ message: "Cook logged." });
-  }, [actionData, showToast]);
+    toast("Cook logged.", { tone: "success" });
+  }, [actionData]);
 
   useEffect(() => {
     if (actionData?.intent === "createSpoon" && typeof actionData.error === "string") {
@@ -419,73 +405,40 @@ export default function RecipeDetail() {
 
   const headerMasthead = (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <Link href="/recipes" onClick={handleBackToRecipes} className={recipeMastheadLinkClass}>
+      <Link href="/recipes" onClick={handleBackToRecipes} tone="secondary">
         <ArrowLeft className="size-4" aria-hidden="true" />
         Recipes
       </Link>
-      <div
-        className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-[var(--sj-border)] py-1 sm:border-t-0 sm:py-0"
-        data-testid="recipe-header-actions"
-      >
-        <Link
-          href="#cook"
-          onClick={handleEnterCookMode}
-          className={`${recipeMastheadActionClass} ${recipeMastheadPrimaryActionClass}`}
-          data-testid="recipe-header-cook-action"
-        >
+      <div className="flex flex-wrap items-center gap-2" data-testid="recipe-header-actions">
+        <Button href="#cook" onClick={handleEnterCookMode} data-testid="recipe-header-cook-action">
           Cook mode
-        </Link>
-        <button
-          type="button"
-          onClick={handleOpenSaveModal}
-          className={`${recipeMastheadActionClass} bg-transparent`}
-          data-testid="recipe-header-save-action"
-        >
+        </Button>
+        <Button variant="outline" tone="secondary" onClick={handleOpenSaveModal} data-testid="recipe-header-save-action">
           Save
-        </button>
-        <button
-          type="button"
-          onClick={handleAddToList}
-          aria-pressed={isAlreadyInList}
-          className={`${recipeMastheadActionClass} bg-transparent`}
-          data-testid="recipe-header-list-action"
-        >
+        </Button>
+        <Button variant="outline" tone="secondary" onClick={handleAddToList} aria-pressed={isAlreadyInList} data-testid="recipe-header-list-action">
           {addToListLabel}
-        </button>
-        <button
-          type="button"
-          onClick={handleShare}
-          className={`${recipeMastheadActionClass} bg-transparent`}
+        </Button>
+        <ShareButton
+          variant="plain"
           data-testid="recipe-header-share-action"
-        >
-          Share
-        </button>
+          title={recipe.title}
+          text={recipe.description ?? `Check out this recipe: ${recipe.title}`}
+          onShare={handleShared}
+        />
         {isOwner ? (
-          <Link
-            href={`/recipes/${recipe.id}/edit`}
-            className={recipeMastheadActionClass}
-            data-testid="recipe-header-edit-action"
-          >
+          <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary" data-testid="recipe-header-edit-action">
             Edit
-          </Link>
+          </Button>
         ) : null}
         {isAuthenticated ? (
-          <button
-            type="button"
-            onClick={openSpoonDialog}
-            className={`${recipeMastheadActionClass} bg-transparent`}
-            data-testid="recipe-header-log-cook-action"
-          >
+          <Button variant="outline" tone="secondary" onClick={openSpoonDialog} data-testid="recipe-header-log-cook-action">
             Log cook
-          </button>
+          </Button>
         ) : (
-          <Link
-            href={loginRedirect}
-            className={recipeMastheadActionClass}
-            data-testid="recipe-header-log-cook-action"
-          >
+          <Button href={loginRedirect} variant="outline" tone="secondary" data-testid="recipe-header-log-cook-action">
             Log cook
-          </Link>
+          </Button>
         )}
         {!isOwner && (
           isAuthenticated ? (
@@ -494,18 +447,12 @@ export default function RecipeDetail() {
               recipeTitle={recipe.title}
               sourceChefUsername={recipe.chef.username}
               isOwner={false}
-              triggerClassName={recipeMastheadActionClass}
-              triggerStyle="text"
               triggerTestId="recipe-header-fork-action"
             />
           ) : (
-            <Link
-              href={loginRedirect}
-              className={recipeMastheadActionClass}
-              data-testid="recipe-header-fork-action"
-            >
+            <Button href={loginRedirect} variant="outline" tone="secondary" data-testid="recipe-header-fork-action">
               Fork
-            </Link>
+            </Button>
           )
         )}
       </div>
@@ -529,15 +476,13 @@ export default function RecipeDetail() {
 
     lastHandledAddToListSubmissionCount.current = addToListSubmissionCount.current;
     if (unavailable) {
-      showToast({ message: unavailable });
+      toast(unavailable, { tone: "destructive" });
       return;
     }
     renewAddToListToken();
     setIsAlreadyInList(true);
-    showToast({
-      message: `${ingredientCount} items added at ${scaleFactor}x`,
-    });
-  }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, showToast, renewAddToListToken]);
+    toast(`${ingredientCount} items added at ${scaleFactor}x`, { tone: "success" });
+  }, [addToListFetcher.state, addToListFetcher.data, ingredientCount, scaleFactor, renewAddToListToken]);
 
   // The tab bar is hidden in cook mode so it never covers the step controls.
   useDockSuppressed(showOwnerTools || isCookMode);
@@ -632,15 +577,11 @@ export default function RecipeDetail() {
 
   return (
     <div className="sj-page pb-24">
-      {cookController.timers.active.length > 0 ? (
-        <div className="sticky top-0 z-20 bg-[var(--sj-page)]">
-          <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-            <CookTimerTray controller={cookController.timers} />
-          </div>
+      <div className="sticky top-0 z-20 bg-[var(--sj-page)]">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <CookTimerTray timers={cookController.timers} />
         </div>
-      ) : (
-        <CookTimerTray controller={cookController.timers} />
-      )}
+      </div>
       {/* Recipe Header with prominent image */}
       <RecipeHeader
         title={recipe.title}
@@ -665,21 +606,10 @@ export default function RecipeDetail() {
       {isOwner && (
         <div className="print:hidden" data-testid="recipe-owner-tools">
           <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-            <button
-              type="button"
-              className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-4 border-b border-[var(--sj-border)] bg-transparent py-3 text-left font-sj-ui text-xs font-semibold uppercase tracking-[0.16em] text-[var(--sj-ink-soft)] hover:text-[var(--sj-ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sj-brass)]"
-              aria-expanded={showOwnerTools}
-              aria-controls="recipe-owner-maintenance"
-              onClick={() => setShowOwnerTools((visible) => !visible)}
-            >
-              <span>Manage recipe</span>
-              <span className="text-[var(--sj-ink)]">{showOwnerTools ? "Close" : "Open +"}</span>
-            </button>
-
-            {showOwnerTools ? (
-              <div id="recipe-owner-maintenance" className="border-b border-[var(--sj-border)] py-5">
+            <Collapsible title="Manage recipe" open={showOwnerTools} onOpenChange={setShowOwnerTools}>
+              <div id="recipe-owner-maintenance" className="py-5">
                 <div className="flex flex-wrap gap-3">
-                  <Button href={`/recipes/${recipe.id}/edit`} plain>
+                  <Button href={`/recipes/${recipe.id}/edit`} variant="outline" tone="secondary">
                     Edit recipe
                   </Button>
                   <ForkRecipeButton
@@ -690,7 +620,7 @@ export default function RecipeDetail() {
                   />
                   <Button
                     type="button"
-                    variant="destructive"
+                    variant="soft" tone="destructive"
                     onClick={() => setIsDeleteDialogOpen(true)}
                   >
                     Delete
@@ -705,7 +635,7 @@ export default function RecipeDetail() {
                   <RecipeCoverHistory covers={coverHistory} spoonImages={spoonImages} />
                 </div>
               </div>
-            ) : null}
+            </Collapsible>
           </div>
         </div>
       )}
@@ -773,27 +703,20 @@ export default function RecipeDetail() {
                 {availableCookbooks.map((cookbook) => {
                   const isSaved = savedCookbookIds.has(cookbook.id);
                   return (
-                    <button
+                    <Toggle
                       key={cookbook.id}
-                      onClick={() => handleToggleCookbookSave(cookbook.id)}
-                      aria-pressed={isSaved}
-                      className={`sj-instant-state w-full border-y px-4 py-3 text-left ${
-                        isSaved
-                          ? "border-[var(--sj-brass)] bg-[color-mix(in_srgb,var(--sj-brass)_14%,var(--sj-panel-solid))] hover:bg-[color-mix(in_srgb,var(--sj-brass)_20%,var(--sj-panel-solid))]"
-                          : "border-[var(--sj-border)] bg-transparent hover:bg-[var(--sj-flour)]"
-                      }`}
+                      label={cookbook.title}
+                      variant="outline"
+                      pressed={isSaved}
+                      onPressedChange={() => handleToggleCookbookSave(cookbook.id)}
+                      className="w-full justify-start"
                       data-testid={`cookbook-item-${cookbook.id}`}
-                    >
-                      <Text className="flex items-center justify-between">
-                        <span>{cookbook.title}</span>
-                        {isSaved && <span className="text-[var(--sj-brass)]" aria-hidden="true">✓</span>}
-                      </Text>
-                    </button>
+                    />
                   );
                 })}
               </div>
             ) : (
-              <Text align="center" className="py-8">
+              <Text tone="muted" align="center" className="py-8">
                 No cookbooks yet. Create your first one below!
               </Text>
             )}
@@ -832,14 +755,13 @@ export default function RecipeDetail() {
           </Heading>
           <SpoonsStrip
             spoons={spoons}
-            now={renderedAt}
             emptyAction={
               isAuthenticated ? (
-                <Button type="button" plain onClick={openSpoonDialog}>
+                <Button type="button" variant="outline" tone="secondary" onClick={openSpoonDialog}>
                   Log the first cook
                 </Button>
               ) : (
-                <Button href={loginRedirect} plain>
+                <Button href={loginRedirect} variant="outline" tone="secondary">
                   Log the first cook
                 </Button>
               )

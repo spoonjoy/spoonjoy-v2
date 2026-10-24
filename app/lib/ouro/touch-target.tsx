@@ -14,6 +14,7 @@ import type { JSX } from "react";
  *   <TouchTarget />
  *   Save
  * </button>
+ * @claim "With a fine pointer it is" registry/ouro/lib/ouro/touch-target.tsx verify:fileLine(registry/ouro/lib/ouro/touch-target.tsx, /hidden\ssize-\[max\(100%,44px\)\]\s-translate-1\/2\spointer-coarse:block/)
  */
 export function TouchTarget(): JSX.Element {
   return (
