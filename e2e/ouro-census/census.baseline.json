@@ -2329,6 +2329,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Copy code\" [code-block/copy] in main",
+          "count": 2
+        },
+        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
@@ -8374,6 +8378,14 @@
     },
     "mcp": {
       "default": [
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in main",
+          "count": 2
+        },
+        {
+          "identity": "generic \"TOKEN=sj_your_token_here claude mcp add --transport http \\\\ spoonjoy \\\\ https://spoonjoy.app/mcp \\\\ --header \\\"Authorization: Bearer $TOKEN\\\"\" [code-block/code] in main",
+          "count": 1
+        },
         {
           "identity": "link \"API guide\" [link/root] in main",
           "count": 1
