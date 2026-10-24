@@ -51,8 +51,10 @@ export function KitchenHome({
 
   return (
     <CookbookPage>
-      <section>
-        <header className="grid gap-6 border-b border-[var(--sj-border-strong)] pb-7 lg:grid-cols-[4.5rem_minmax(0,1fr)_auto] lg:items-end">
+      {/* On a foldable held like a book, the kitchen's name and its cookbooks sit on the left page and the
+          recipe index runs down the right. */}
+      <section data-fold-book="index">
+        <header data-fold-page="left" className="grid gap-6 border-b border-[var(--sj-border-strong)] pb-7 lg:grid-cols-[4.5rem_minmax(0,1fr)_auto] lg:items-end">
           <div className="lg:contents">
             <Avatar
               name={kitchenUser.username}
@@ -95,11 +97,13 @@ export function KitchenHome({
           </div>
         </header>
 
-        <div className="mt-10">
+        <div className="mt-10" data-fold-page="right">
           <RecipeIndex recipes={displayRecipes} isOwner={isOwner} onShare={handleShareRecipe} />
         </div>
 
-        <CookbookShelf cookbooks={cookbooks} isOwner={isOwner} onShare={handleShareCookbook} />
+        <div data-fold-page="left">
+          <CookbookShelf cookbooks={cookbooks} isOwner={isOwner} onShare={handleShareCookbook} />
+        </div>
       </section>
     </CookbookPage>
   );
