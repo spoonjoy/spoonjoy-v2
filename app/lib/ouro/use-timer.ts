@@ -90,7 +90,8 @@ export interface TimerControls {
   reset: () => void;
 }
 
-type Stored =
+/** A countdown's saved state, for importing progress from another timer implementation. */
+export type TimerState =
   | { status: "running"; duration: number; endsAt: number }
   | { status: "paused"; duration: number; remainingMs: number }
   | { status: "done"; duration: number; endedAt: number };
@@ -102,7 +103,7 @@ interface DoneListener {
 }
 
 interface Entry {
-  stored: Stored | null;
+  stored: TimerState | null;
   loaded: boolean;
   persist: boolean;
   listeners: Set<() => void>;
@@ -151,7 +152,7 @@ function entryFor(key: string, persist: boolean): Entry {
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 /** A stored timer, or null for anything malformed: storage is the page's, and anyone may write it. */
-function parse(raw: string | null): Stored | null {
+function parse(raw: string | null): TimerState | null {
   if (!raw) return null;
   let value: unknown;
   try {
@@ -159,6 +160,10 @@ function parse(raw: string | null): Stored | null {
   } catch {
     return null;
   }
+  return parseState(value);
+}
+
+function parseState(value: unknown): TimerState | null {
   if (!value || typeof value !== "object") return null;
   const timer = value as Record<string, unknown>;
   if (!finite(timer["duration"]) || timer["duration"] <= 0) return null;
@@ -169,7 +174,7 @@ function parse(raw: string | null): Stored | null {
   return null;
 }
 
-function read(key: string): Stored | null {
+function read(key: string): TimerState | null {
   try {
     return parse(localStorage.getItem(PREFIX + key));
   } catch {
@@ -177,13 +182,15 @@ function read(key: string): Stored | null {
   }
 }
 
-function write(key: string, entry: Entry): void {
-  if (!entry.persist) return;
+function write(key: string, entry: Pick<Entry, "persist" | "stored">): boolean {
+  if (!entry.persist) return true;
   try {
     if (entry.stored) localStorage.setItem(PREFIX + key, JSON.stringify(entry.stored));
     else localStorage.removeItem(PREFIX + key);
+    return true;
   } catch {
     // Storage may be full or blocked; the timer still runs in this page.
+    return false;
   }
 }
 
@@ -213,11 +220,60 @@ function settle(key: string, entry: Entry, alert: boolean): void {
   for (const listener of listeners) listener.hear({ endedAt: stored.endsAt }, listener === alerter);
 }
 
-function update(key: string, entry: Entry, stored: Stored | null): void {
+function update(key: string, entry: Entry, stored: TimerState | null): boolean {
   entry.stored = stored;
-  write(key, entry);
+  const persisted = write(key, entry);
   settle(key, entry, true);
   notify(entry);
+  return persisted;
+}
+
+/**
+ * Imports a saved countdown, leaving an existing native timer intact.
+ * A false return means storage is unavailable: keep the original saved data. When a write fails,
+ * mounted readers still receive the import in memory. An unreadable store is left untouched.
+ * Invalid state throws before changing the timer.
+ *
+ * @group Feedback
+ * @see https://ourostack.github.io/ouro-ui/docs/use-timer
+ * @example
+ * restoreTimer("pasta", { status: "paused", duration: 600, remainingMs: 120000 });
+ * @claim "Imports a saved countdown" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > restores a %s snapshot without changing its original time)
+ * @claim "Imports a saved countdown" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > preserves an existing stored timer instead of replacing it with an import)
+ * @claim "A false return means storage is unavailable" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > reports a failed import write while a mounted timer still works in memory)
+ * @claim "An unreadable store is left untouched" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > does not overwrite storage when an import cannot check for an existing timer)
+ * @claim "Invalid state throws before changing" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > rejects an invalid snapshot before changing an existing timer)
+ */
+export function restoreTimer(timerId: string, state: TimerState): boolean {
+  const imported = parseState(state);
+  if (!imported) throw new TypeError("[ouro-ui] useTimer: invalid timer state. Fix: pass a running, paused or done state with a positive duration and finite times.");
+  try {
+    if (parse(localStorage.getItem(PREFIX + timerId))) return true;
+  } catch {
+    return false;
+  }
+  const entry = entries.get(timerId);
+  if (!entry) return write(timerId, { persist: true, stored: imported });
+  entry.loaded = true;
+  return update(timerId, entry, entry.stored ?? imported);
+}
+
+/**
+ * Cancels or dismisses a timer by its timerId, including when its screen is not mounted.
+ * Mounted readers return to idle. A false return means storage could not forget the timer;
+ * mounted state still resets.
+ *
+ * @group Feedback
+ * @see https://ourostack.github.io/ouro-ui/docs/use-timer
+ * @example
+ * resetTimer("pasta");
+ * @claim "Cancels or dismisses a timer" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > resets a stored timer with no mounted reader)
+ * @claim "Mounted readers return to idle" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > resets every mounted reader and its pending completion by timer id)
+ * @claim "A false return means storage could" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > reports a blocked reset write while resetting mounted state)
+ */
+export function resetTimer(timerId: string): boolean {
+  const entry = entries.get(timerId);
+  return entry ? update(timerId, entry, null) : write(timerId, { persist: true, stored: null });
 }
 
 /** Follows the timers other tabs change. */
@@ -232,7 +288,7 @@ function onStorage(event: StorageEvent): void {
   notify(entry);
 }
 
-function remainingOf(stored: Stored | null, duration: number, now: number): number {
+function remainingOf(stored: TimerState | null, duration: number, now: number): number {
   if (!stored) return duration;
   if (stored.status === "running") return Math.min(stored.duration, Math.max(0, Math.ceil((stored.endsAt - now) / 1000)));
   if (stored.status === "paused") return Math.ceil(stored.remainingMs / 1000);
@@ -291,18 +347,20 @@ export function useTimer({ duration, timerId, onDone, fallback }: TimerOptions):
       // Settled after this commit, once every component that shows the timer has subscribed, so a
       // timer that ended while the page was closed alerts through the right one (a Timer over a tray).
       queueMicrotask(() => {
-        if (entries.get(key) === entry) settle(key, entry, true);
+        if (entry.listeners.size > 0) settle(key, entry, true);
       });
       onChange();
       return () => {
         entry.listeners.delete(onChange);
         entry.done.delete(done);
-        if (entry.listeners.size === 0) {
-          clearTimeout(entry.timeout);
-          entry.timeout = undefined;
-          // A timer kept in storage is read again next time; one without a timerId ends with its component.
-          entries.delete(key);
-        }
+        queueMicrotask(() => {
+          if (entry.listeners.size === 0 && entries.get(key) === entry) {
+            clearTimeout(entry.timeout);
+            entry.timeout = undefined;
+            // A later mount reads storage again; a same-commit replacement keeps this entry.
+            entries.delete(key);
+          }
+        });
       };
     },
     [key, timerId],
@@ -317,7 +375,7 @@ export function useTimer({ duration, timerId, onDone, fallback }: TimerOptions):
   const now = useSyncExternalStore(status === "running" ? subscribeClock : still, readClock, readClock);
 
   const change = useCallback(
-    (next: (current: Stored | null, now: number) => Stored | null) => {
+    (next: (current: TimerState | null, now: number) => TimerState | null) => {
       const entry = entryFor(key, timerId !== undefined);
       update(key, entry, next(entry.stored, Date.now()));
     },

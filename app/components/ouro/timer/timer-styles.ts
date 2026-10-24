@@ -137,7 +137,10 @@ export function registerView(key: string): () => void {
   return () => {
     const left = views.get(key)! - 1;
     views.set(key, left);
-    if (left === 0) stopAlert(key);
+    // A commit unmounts the old view before mounting its replacement.
+    queueMicrotask(() => {
+      if (views.get(key) === 0) stopAlert(key);
+    });
   };
 }
 

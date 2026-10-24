@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "~/lib/ouro/testing/act";
-import { formatDuration, useTimer, type TimerControls, type TimerDoneEvent, type TimerOptions } from "~/lib/ouro/use-timer";
+import { formatDuration, resetTimer, restoreTimer, useTimer, type TimerControls, type TimerDoneEvent, type TimerOptions, type TimerState } from "~/lib/ouro/use-timer";
 
 const roots: Root[] = [];
 let mounted: Element[] = [];
@@ -43,6 +43,168 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   localStorage.clear();
+});
+
+describe("timer state transfer", () => {
+  it.each([
+    ["running", { status: "running", duration: 60, endsAt: Date.UTC(2026, 0, 1, 12, 0, 25) }, 25],
+    ["paused", { status: "paused", duration: 60, remainingMs: 12_500 }, 13],
+    ["done", { status: "done", duration: 60, endedAt: Date.UTC(2026, 0, 1, 11, 59, 59) }, 0],
+  ] as const)("restores a %s snapshot without changing its original time", async (status, snapshot, remaining) => {
+    const timerId = `restore-${status}`;
+    expect(restoreTimer(timerId, snapshot)).toBe(true);
+    const { state } = await renderTimer({ duration: 90, timerId });
+    expect(state.current).toMatchObject({ status, duration: 60, remaining });
+    expect(JSON.parse(localStorage.getItem(`ouro-timer:${timerId}`)!)).toEqual(snapshot);
+  });
+
+  it("preserves an existing stored timer instead of replacing it with an import", async () => {
+    localStorage.setItem("ouro-timer:already-stored", JSON.stringify({ status: "paused", duration: 60, remainingMs: 15_000 }));
+    expect(restoreTimer("already-stored", { status: "done", duration: 10, endedAt: Date.now() })).toBe(true);
+    const { state } = await renderTimer({ duration: 90, timerId: "already-stored" });
+    expect(state.current).toMatchObject({ status: "paused", duration: 60, remaining: 15 });
+  });
+
+  it("updates mounted readers on import and preserves their newer native state", async () => {
+    const { state } = await renderTimer({ duration: 90, timerId: "restore-mounted" });
+    await act(async () => {
+      expect(restoreTimer("restore-mounted", { status: "paused", duration: 60, remainingMs: 20_500 })).toBe(true);
+    });
+    expect(state.current).toMatchObject({ status: "paused", duration: 60, remaining: 21 });
+    await act(async () => {
+      expect(restoreTimer("restore-mounted", { status: "done", duration: 10, endedAt: Date.now() })).toBe(true);
+    });
+    expect(state.current).toMatchObject({ status: "paused", duration: 60, remaining: 21 });
+  });
+
+  it("reports a failed import write while a mounted timer still works in memory", async () => {
+    const { state } = await renderTimer({ duration: 90, timerId: "restore-blocked" });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+    await act(async () => {
+      expect(restoreTimer("restore-blocked", { status: "paused", duration: 60, remainingMs: 25_000 })).toBe(false);
+    });
+    expect(state.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+    expect(localStorage.getItem("ouro-timer:restore-blocked")).toBeNull();
+    const joined = await renderTimer({ duration: 90, timerId: "restore-blocked" });
+    expect(joined.state.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+    await act(async () => {
+      expect(restoreTimer("restore-blocked", { status: "done", duration: 10, endedAt: Date.now() })).toBe(false);
+    });
+    expect(state.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+    expect(joined.state.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+  });
+
+  it("retains an unpersisted import when its only reader is replaced in one commit", async () => {
+    const options = { duration: 90, timerId: "restore-replacement" };
+    const first = await renderTimer(options);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+    await act(async () => {
+      expect(restoreTimer("restore-replacement", { status: "paused", duration: 60, remainingMs: 25_000 })).toBe(false);
+    });
+    expect(first.state.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+    const replacement = { current: first.state.current };
+    await act(async () => first.root.render(
+      <Probe key="replacement" options={options} report={(timer) => { replacement.current = timer; }} />,
+    ));
+    expect(replacement.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+    await act(async () => replacement.current.reset());
+    expect(replacement.current).toMatchObject({ status: "idle", remaining: 90 });
+  });
+
+  it("keeps replacement controls working through rapid last-reader changes", async () => {
+    const options = { duration: 90, timerId: "restore-reentry" };
+    expect(restoreTimer("restore-reentry", { status: "paused", duration: 60, remainingMs: 25_000 })).toBe(true);
+    const first = await renderTimer(options);
+    const replacement = { current: first.state.current };
+    await act(async () => {
+      flushSync(() => first.root.render(null));
+      queueMicrotask(() => flushSync(() => first.root.render(
+        <Probe key="replacement" options={options} report={(timer) => { replacement.current = timer; }} />,
+      )));
+      flushSync(() => first.root.render(<Probe key="temporary" options={options} report={() => {}} />));
+      flushSync(() => first.root.render(null));
+    });
+    expect(replacement.current).toMatchObject({ status: "paused", duration: 60, remaining: 25 });
+    await act(async () => replacement.current.reset());
+    expect(replacement.current).toMatchObject({ status: "idle", remaining: 90 });
+  });
+
+  it("finishes an imported running timer at its original deadline", async () => {
+    const onDone = vi.fn();
+    const { state } = await renderTimer({ duration: 90, timerId: "restore-deadline", onDone });
+    const endsAt = Date.now() + 2500;
+    await act(async () => {
+      expect(restoreTimer("restore-deadline", { status: "running", duration: 60, endsAt })).toBe(true);
+    });
+    await advance(2499);
+    expect(state.current).toMatchObject({ status: "running", remaining: 1 });
+    expect(onDone).not.toHaveBeenCalled();
+    await advance(1);
+    expect(state.current).toMatchObject({ status: "done", remaining: 0, endedAt: endsAt });
+    expect(onDone).toHaveBeenCalledExactlyOnceWith({ endedAt: endsAt, first: true });
+  });
+
+  it("does not repeat a completion callback for an imported done timer", async () => {
+    const onDone = vi.fn();
+    const { state } = await renderTimer({ duration: 90, timerId: "restore-history", onDone });
+    await act(async () => {
+      expect(restoreTimer("restore-history", { status: "done", duration: 60, endedAt: Date.now() - 1000 })).toBe(true);
+    });
+    await advance(1000);
+    expect(state.current.status).toBe("done");
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("reports an unavailable import without creating an inactive timer", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
+    expect(restoreTimer("restore-inactive-blocked", { status: "paused", duration: 60, remainingMs: 25_000 })).toBe(false);
+    expect(localStorage.getItem("ouro-timer:restore-inactive-blocked")).toBeNull();
+  });
+
+  it("does not overwrite storage when an import cannot check for an existing timer", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
+    const write = vi.spyOn(Storage.prototype, "setItem");
+    expect(restoreTimer("restore-unreadable", { status: "paused", duration: 60, remainingMs: 25_000 })).toBe(false);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid snapshot before changing an existing timer", () => {
+    const snapshot: TimerState = { status: "paused", duration: 60, remainingMs: 20_000 };
+    expect(restoreTimer("restore-invalid", snapshot)).toBe(true);
+    expect(() => restoreTimer("restore-invalid", { status: "paused", duration: 0, remainingMs: 1 })).toThrow(/state/);
+    expect(JSON.parse(localStorage.getItem("ouro-timer:restore-invalid")!)).toEqual(snapshot);
+  });
+
+  it("resets every mounted reader and its pending completion by timer id", async () => {
+    const onDone = vi.fn();
+    const first = await renderTimer({ duration: 2, timerId: "reset-mounted", onDone });
+    const second = await renderTimer({ duration: 2, timerId: "reset-mounted" });
+    await act(async () => first.state.current.start());
+    await advance(500);
+    await act(async () => { expect(resetTimer("reset-mounted")).toBe(true); });
+    expect(first.state.current).toMatchObject({ status: "idle", remaining: 2 });
+    expect(second.state.current).toMatchObject({ status: "idle", remaining: 2 });
+    expect(localStorage.getItem("ouro-timer:reset-mounted")).toBeNull();
+    await advance(3000);
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("resets a stored timer with no mounted reader", async () => {
+    expect(restoreTimer("reset-inactive", { status: "paused", duration: 60, remainingMs: 25_000 })).toBe(true);
+    expect(resetTimer("reset-inactive")).toBe(true);
+    expect(localStorage.getItem("ouro-timer:reset-inactive")).toBeNull();
+    const { state } = await renderTimer({ duration: 90, timerId: "reset-inactive" });
+    expect(state.current).toMatchObject({ status: "idle", remaining: 90 });
+  });
+
+  it("reports a blocked reset write while resetting mounted state", async () => {
+    const { state } = await renderTimer({ duration: 2, timerId: "reset-blocked" });
+    await act(async () => state.current.start());
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
+    await act(async () => { expect(resetTimer("reset-blocked")).toBe(false); });
+    expect(state.current).toMatchObject({ status: "idle", remaining: 2 });
+    expect(resetTimer("reset-inactive-blocked")).toBe(false);
+  });
 });
 
 describe("useTimer", () => {
