@@ -44,6 +44,7 @@ model User {
   oauthRefreshTokens       OAuthRefreshToken[]
   spoons                   RecipeSpoon[]
   imageGenLedger           ImageGenLedger[]
+  cookingNow               CookingNow[]
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -425,6 +426,7 @@ model Recipe {
   cookbooks          RecipeInCookbook[]
   spoons             RecipeSpoon[]
   covers             RecipeCover[]      @relation("RecipeCoverHistory")
+  cookingNow         CookingNow[]
   activeCoverId      String?
   activeCover        RecipeCover?       @relation("RecipeActiveCover", fields: [activeCoverId], references: [id], onDelete: SetNull)
   activeCoverVariant String?
@@ -592,6 +594,31 @@ model ShoppingListItem {
   @@index([shoppingListId, deletedAt, sortIndex])
   @@index([unitId])
   @@index([ingredientRefId])
+}
+
+// The recipes a cook has in progress, one row per (user, recipe), for GET /api/v1/cooking-now. The
+// Worker writes it after every cook-session start or progress write (app/lib/cooking-now.server.ts);
+// the CookSession Durable Object stays the server of record for progress. Times are epoch
+// milliseconds. `listed` is false after Clear progress, until the cook checks something or moves
+// to another step.
+model CookingNow {
+  userId          String
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId        String
+  recipe          Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  attemptId       String
+  revision        Int
+  listed          Boolean @default(true)
+  activeStepId    String?
+  activeStepIndex Int
+  stepCount       Int
+  checkedCount    Int
+  totalCount      Int
+  allCheckedAt    BigInt?
+  touchedAt       BigInt
+
+  @@id([userId, recipeId])
+  @@index([userId, touchedAt])
 }
 
 model RecipeSpoon {

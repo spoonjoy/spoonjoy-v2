@@ -230,7 +230,7 @@ describe("/developers/playground", () => {
         { name: "cookedAt", required: false, accept: "" },
       ],
     });
-    expect(data.manifest.operations.length).toBe(78);
+    expect(data.manifest.operations.length).toBe(79);
   });
 
   it("uses the configured public origin for playground OG URLs", async () => {
@@ -256,6 +256,7 @@ describe("/developers/playground", () => {
       "Cookbooks",
       "Chefs",
       "Account",
+      "Cooking",
       "Shopping List",
       "Tokens",
       "OAuth",

@@ -1,4 +1,5 @@
 import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
+import { listCookingNow } from "~/lib/cooking-now.server";
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import {
@@ -672,6 +673,8 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.photo.remove";
     case "GET me-chefs":
       return "account.chefs.read";
+    case "GET cooking-now":
+      return "cooking-now.read";
     case "GET me-notification-preferences":
       return "account.notification-preferences.read";
     case "PATCH me-notification-preferences":
@@ -3763,6 +3766,34 @@ function parseSyncCursor(url: URL): SyncCursor | null {
     throw new ApiV1Error("invalid_cursor", "cursor must be an ISO datetime or Spoonjoy sync cursor");
   }
   return { updatedAt, id: null, raw: trimmed };
+}
+
+async function handleCookingNowRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const origin = publicContentOrigin(args);
+  const rows = await listCookingNow(db, principal.id);
+  return apiV1PrivateSuccess(requestId, {
+    recipes: rows.map((row) => {
+      const href = `/recipes/${row.recipe.id}`;
+      return {
+        recipe: {
+          id: row.recipe.id,
+          title: row.recipe.title,
+          coverImageUrl: recipeCoverApiFields(row.recipe, origin).coverImageUrl,
+          href,
+          canonicalUrl: canonicalUrl(origin, href),
+        },
+        activeStepId: row.activeStepId,
+        activeStepIndex: row.activeStepIndex,
+        stepCount: row.stepCount,
+        checkedCount: row.checkedCount,
+        totalCount: row.totalCount,
+        allCheckedAt: row.allCheckedAt?.toISOString() ?? null,
+        touchedAt: row.touchedAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+      };
+    }),
+  });
 }
 
 async function handleShoppingListRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -7946,6 +7977,12 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "DELETE" && segments[0] === "me" && segments[1] === "connections" && segments.length === 3) {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleOAuthConnectionDisconnect(args, requestId, principal, segments[2]);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "cooking-now") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleCookingNowRead(args, requestId, principal);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

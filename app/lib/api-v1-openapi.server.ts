@@ -829,6 +829,27 @@ const schemas = {
     cookbook: { oneOf: [objectSchema(["id", "title"], { id: shortTextSchema, title: shortTextSchema }), { type: "null" }] },
     label: shortTextSchema,
   }),
+  CookingNowRecipe: objectSchema(["id", "title", "coverImageUrl", "href", "canonicalUrl"], {
+    id: shortTextSchema,
+    title: shortTextSchema,
+    coverImageUrl: nullableStringSchema,
+    href: shortTextSchema,
+    canonicalUrl: shortTextSchema,
+  }),
+  CookingNowEntry: objectSchema(["recipe", "activeStepId", "activeStepIndex", "stepCount", "checkedCount", "totalCount", "allCheckedAt", "touchedAt", "expiresAt"], {
+    recipe: ref("CookingNowRecipe"),
+    activeStepId: nullableStringSchema,
+    activeStepIndex: { type: "integer", minimum: 0 },
+    stepCount: { type: "integer", minimum: 0 },
+    checkedCount: { type: "integer", minimum: 0 },
+    totalCount: { type: "integer", minimum: 0 },
+    allCheckedAt: nullableDateTimeSchema,
+    touchedAt: dateTimeSchema,
+    expiresAt: dateTimeSchema,
+  }),
+  CookingNow: objectSchema(["recipes"], {
+    recipes: { type: "array", maxItems: 50, items: ref("CookingNowEntry") },
+  }),
   NativeChefs: objectSchema(["viewer", "fellowChefs", "chefsUsingMyRecipes", "activity"], {
     viewer: ref("NativeChefRef"),
     fellowChefs: ref("NativeChefList"),
@@ -1625,6 +1646,7 @@ const schemas = {
   AccountExportEnvelope: successEnvelope(ref("AccountExport")),
   NotificationPreferencesEnvelope: successEnvelope(ref("NotificationPreferences")),
   NativeChefsEnvelope: successEnvelope(ref("NativeChefs")),
+  CookingNowEnvelope: successEnvelope(ref("CookingNow")),
   PublicProfileEnvelope: successEnvelope(ref("PublicProfile")),
   PublicProfileGraphEnvelope: successEnvelope(ref("PublicProfileGraph")),
   NotificationPreferencesMutationEnvelope: successEnvelope(ref("NotificationPreferencesMutationData")),
@@ -1844,6 +1866,9 @@ const operationMeta: Record<ResourcePath, Partial<Record<HttpMethod, OperationCo
   },
   "/api/v1/me/connections/{connectionId}": {
     DELETE: { operationId: "deleteApiV1MeConnection", tags: ["Account"], summary: "Disconnect an OAuth app connection", auth: "bearer", scopes: ["tokens:write"], success: { 200: "DisconnectOAuthConnectionEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "not_found", "method_not_allowed", "rate_limited", "internal_error"], parameters: [pathParameters.connectionId] },
+  },
+  "/api/v1/cooking-now": {
+    GET: { operationId: "getApiV1CookingNow", tags: ["Cooking"], summary: "List the recipes the signed-in cook has in progress, most recently touched first", auth: "bearer", scopes: ["kitchen:read"], success: { 200: "CookingNowEnvelope" }, errors: ["authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
   },
   "/api/v1/shopping-list": {
     GET: { operationId: "getApiV1ShoppingList", tags: ["Shopping List"], summary: "Read the authenticated shopping list", auth: "bearer", scopes: ["shopping_list:read"], success: { 200: "ShoppingListEnvelope" }, errors: ["validation_error", "authentication_required", "invalid_token", "insufficient_scope", "method_not_allowed", "rate_limited", "internal_error"] },
@@ -2658,6 +2683,29 @@ const responseExamples: Record<string, unknown> = {
     },
   },
   NativeChefsEnvelope: { ok: true, requestId: "req_example", data: exampleNativeChefs },
+  CookingNowEnvelope: {
+    ok: true,
+    requestId: "req_example",
+    data: {
+      recipes: [{
+        recipe: {
+          id: "recipe_1",
+          title: "Lemon Pasta",
+          coverImageUrl: null,
+          href: "/recipes/recipe_1",
+          canonicalUrl: "https://spoonjoy.app/recipes/recipe_1",
+        },
+        activeStepId: "step_3",
+        activeStepIndex: 2,
+        stepCount: 7,
+        checkedCount: 5,
+        totalCount: 12,
+        allCheckedAt: null,
+        touchedAt: exampleTimestamp,
+        expiresAt: exampleTimestamp,
+      }],
+    },
+  },
   PublicProfileEnvelope: { ok: true, requestId: "req_example", data: examplePublicProfile },
   PublicProfileGraphEnvelope: { ok: true, requestId: "req_example", data: examplePublicProfileGraph },
   NotificationPreferencesEnvelope: { ok: true, requestId: "req_example", data: exampleNotificationPreferences },
@@ -4527,6 +4575,7 @@ const SDK_PATHS = new Set([
   "/api/v1/me/notification-preferences",
   "/api/v1/me/connections",
   "/api/v1/me/connections/{connectionId}",
+  "/api/v1/cooking-now",
   "/api/v1/shopping-list",
   "/api/v1/shopping-list/sync",
   "/api/v1/shopping-list/items",

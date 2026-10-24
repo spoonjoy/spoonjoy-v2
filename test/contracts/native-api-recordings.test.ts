@@ -25,6 +25,8 @@ import type { PrismaClient as PrismaClientType } from "@prisma/client";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { createUser } from "~/lib/auth.server";
 import { buildApiV1OpenApiDocument } from "~/lib/api-v1-openapi.server";
+import { recordCookingNow } from "~/lib/cooking-now.server";
+import type { D1ReadDatabase } from "~/lib/d1-read.server";
 import { getLocalDb } from "~/lib/db.server";
 import * as recipeImport from "~/lib/recipe-import.server";
 import * as recipeWrites from "~/lib/api-v1-recipe-writes.server";
@@ -582,6 +584,18 @@ async function recordNativeSession() {
     endpoint: "GET /api/v1/users/{identifier}/fellow-chefs",
   });
   await api("me-chefs", "GET", "me/chefs", { token: chef, endpoint: "GET /api/v1/me/chefs" });
+  // Cooking now: the Worker records a row after each cook-session write; record one directly.
+  await recordCookingNow(d1Binding as D1ReadDatabase, {
+    userId: chefUser.id,
+    recipeId,
+    attemptId: "11111111-1111-4111-8111-111111111111",
+    revision: 1,
+    activeStepId: stepId,
+    activeStepIndex: 0,
+    checkedCount: 1,
+    touchedAt: Date.now(),
+  });
+  await api("cooking-now", "GET", "cooking-now", { token: chef, endpoint: "GET /api/v1/cooking-now" });
   await api("me-sync", "GET", "me/sync", { token: chef, query: { limit: "20" }, endpoint: "GET /api/v1/me/sync" });
 
   // Recipe import: without the import provider's secret the API answers with a blocker, and with it
