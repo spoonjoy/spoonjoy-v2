@@ -211,12 +211,25 @@ describe("Clear progress", () => {
     expect(await listed()).toEqual([recipeId]);
   });
 
-  it("treats a step kept by id that moved as a step change", async () => {
+  it("treats another step at the same position as a step change", async () => {
     await recordCookingNow(d1.binding, write({ revision: 1, checkedCount: 1, activeStepIndex: 1, activeStepId: stepIds[1] }));
     await recordCookingNow(d1.binding, write({ revision: 2, checkedCount: 0, activeStepIndex: 1, activeStepId: stepIds[1] }));
-    await recordCookingNow(d1.binding, write({ revision: 3, checkedCount: 0, activeStepIndex: 1, activeStepId: null }));
+    await recordCookingNow(d1.binding, write({ revision: 3, checkedCount: 0, activeStepIndex: 1, activeStepId: stepIds[2] }));
 
     expect(await listed()).toEqual([recipeId]);
+  });
+
+  it("does not count naming a step for the first time as moving to it", async () => {
+    // A new session has no step id; the page's first write names the step it is on.
+    await recordCookingNow(d1.binding, write({ revision: 1, checkedCount: 0, activeStepIndex: 0, activeStepId: null }));
+    await recordCookingNow(d1.binding, write({ revision: 2, checkedCount: 0, activeStepIndex: 0, activeStepId: stepIds[0] }));
+    expect(await listed()).toEqual([]);
+
+    // Nor is forgetting the id of the step it stays on.
+    await recordCookingNow(d1.binding, write({ revision: 3, checkedCount: 1, activeStepIndex: 1, activeStepId: stepIds[1] }));
+    await recordCookingNow(d1.binding, write({ revision: 4, checkedCount: 0, activeStepIndex: 1, activeStepId: stepIds[1] }));
+    await recordCookingNow(d1.binding, write({ revision: 5, checkedCount: 0, activeStepIndex: 1, activeStepId: null }));
+    expect(await listed()).toEqual([]);
   });
 });
 

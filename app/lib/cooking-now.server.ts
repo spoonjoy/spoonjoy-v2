@@ -49,8 +49,9 @@ export interface CookingNowWrite {
 // applies again so a retry, or a start that resumed the session, still touches the row.
 //
 // `listed`: checking something lists the recipe; going from some checked to none (Clear progress)
-// unlists it; moving to another step lists it again; anything else leaves it as it was. A new row
-// is listed when it has any progress.
+// unlists it; moving to another step lists it again; anything else leaves it as it was. A step id
+// appearing or disappearing at the same position is not a move: a new session has no step id, and
+// the page's first write names the step it is on. A new row is listed when it has any progress.
 const UPSERT_SQL = `INSERT INTO "CookingNow" (
     "userId", "recipeId", "attemptId", "revision", "listed", "activeStepId", "activeStepIndex",
     "stepCount", "checkedCount", "totalCount", "allCheckedAt", "touchedAt"
@@ -73,7 +74,7 @@ const UPSERT_SQL = `INSERT INTO "CookingNow" (
       WHEN excluded."checkedCount" > 0 THEN 1
       WHEN "CookingNow"."checkedCount" > 0 THEN 0
       WHEN excluded."activeStepIndex" <> "CookingNow"."activeStepIndex"
-        OR excluded."activeStepId" IS NOT "CookingNow"."activeStepId" THEN 1
+        OR excluded."activeStepId" <> "CookingNow"."activeStepId" THEN 1
       ELSE "CookingNow"."listed"
     END,
     "attemptId" = excluded."attemptId",
