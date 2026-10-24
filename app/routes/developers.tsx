@@ -241,6 +241,7 @@ const externalGuideSteps = [
       "GET /api/v1/me",
       "GET /api/v1/me/sync",
       "GET /api/v1/me/chefs",
+      "GET /api/v1/cooking-now",
       "GET /api/v1/me/export",
       "PATCH /api/v1/me",
       "DELETE /api/v1/me",

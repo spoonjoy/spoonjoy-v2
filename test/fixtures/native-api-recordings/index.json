@@ -245,6 +245,11 @@
     "status": 200
   },
   {
+    "name": "cooking-now",
+    "endpoint": "GET /api/v1/cooking-now",
+    "status": 200
+  },
+  {
     "name": "me-sync",
     "endpoint": "GET /api/v1/me/sync",
     "status": 200

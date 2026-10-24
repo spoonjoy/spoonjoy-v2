@@ -1451,6 +1451,20 @@ describe("API v1 mutation and validation telemetry", () => {
       forbidden: [cookie],
     });
 
+    const readCookingNow = await loader(routeArgs(apiRequest(
+      "http://localhost/api/v1/cooking-now",
+      "req_account_operation_cooking_now_read",
+      { Cookie: cookie },
+    ), "cooking-now").args);
+    expect(readCookingNow.status).toBe(200);
+    expectAccountOperation({
+      routeTemplate: "/api/v1/cooking-now",
+      requestId: "req_account_operation_cooking_now_read",
+      operation: "cooking-now.read",
+      status: 200,
+      forbidden: [cookie],
+    });
+
     const readNotifications = await loader(routeArgs(apiRequest(
       "http://localhost/api/v1/me/notification-preferences",
       "req_account_operation_notifications_read",

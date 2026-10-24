@@ -1,4 +1,22 @@
 {
+  "$allowedRegressions": [
+    {
+      "project": "desktop-chrome",
+      "journey": "developers-playground",
+      "state": "default",
+      "from": 112,
+      "to": 113,
+      "reason": "The developer playground lists one button per API operation; GET /api/v1/cooking-now is a new operation, so its list gains one of the same unmarked operation buttons."
+    },
+    {
+      "project": "iphone-webkit",
+      "journey": "developers-playground",
+      "state": "default",
+      "from": 111,
+      "to": 112,
+      "reason": "The developer playground lists one button per API operation; GET /api/v1/cooking-now is a new operation, so its list gains one of the same unmarked operation buttons."
+    }
+  ],
   "desktop-chrome": {
     "account-deleted": {
       "default": [
@@ -1494,6 +1512,10 @@
         },
         {
           "identity": "button \"GET /api/v1/cookbooks: Search public cookbooks\" [-/-] in region \"Operations\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"GET /api/v1/cooking-now: List the recipes the signed-in cook has in progress, most recently touched first\" [-/-] in region \"Operations\"",
           "count": 1
         },
         {
@@ -6736,6 +6758,10 @@
         },
         {
           "identity": "button \"GET /api/v1/cookbooks: Search public cookbooks\" [-/-] in region \"Operations\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"GET /api/v1/cooking-now: List the recipes the signed-in cook has in progress, most recently touched first\" [-/-] in region \"Operations\"",
           "count": 1
         },
         {
