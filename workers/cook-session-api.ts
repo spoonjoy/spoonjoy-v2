@@ -7,6 +7,9 @@
 // the recipe in D1 (it exists, is not deleted, the submitted step is one of its steps, and only
 // ids that belong to it are passed on) so the object never has to trust client-supplied recipe
 // content.
+import { recordCookingNow } from "../app/lib/cooking-now.server";
+import { d1Binding } from "../app/lib/d1-read.server";
+import { isD1Unavailable } from "../app/lib/d1-write-retry.server";
 import {
   COOK_EXPECTED_USER_HEADER,
   COOK_INTERNAL_ORIGIN,
@@ -18,6 +21,7 @@ import {
   isCookRecipeId,
   parseCookPatchBody,
   type CookPatchBody,
+  type CookState,
 } from "./cook-session-protocol";
 
 export type CookProtocolOperation = "detail" | "start" | "patch";
@@ -167,6 +171,56 @@ async function forwardToCookSession(
   return new Response(response.body, { status: response.status, headers: response.headers });
 }
 
+function isCookState(value: unknown): value is CookState {
+  if (typeof value !== "object" || value === null) return false;
+  const state = value as Partial<CookState>;
+  return typeof state.attemptId === "string" &&
+    typeof state.revision === "number" &&
+    typeof state.progress === "object" && state.progress !== null &&
+    Array.isArray(state.progress.checkedIngredientIds) &&
+    Array.isArray(state.progress.checkedStepOutputIds);
+}
+
+/**
+ * After a start or a progress write the object accepted, records the session's state in the
+ * cook's Cooking now list (app/lib/cooking-now.server.ts). The write is already in the object, so
+ * the answer never depends on this: when D1 stays unavailable or the row cannot be written, the
+ * list misses this one write and the next write puts it right.
+ */
+async function recordCookingNowAfter(
+  response: Response,
+  env: CloudflareEnvironment,
+  userId: string,
+  recipeId: string,
+): Promise<Response> {
+  if (!response.ok) return response;
+  const text = await response.text();
+  const answer = new Response(text, { status: response.status, headers: response.headers });
+  const d1 = d1Binding(env.DB);
+  let state: unknown;
+  try {
+    state = (JSON.parse(text) as { state?: unknown }).state;
+  } catch {
+    return answer;
+  }
+  if (!d1 || !isCookState(state)) return answer;
+  try {
+    await recordCookingNow(d1, {
+      userId,
+      recipeId,
+      attemptId: state.attemptId,
+      revision: state.revision,
+      activeStepId: state.progress.activeStepId ?? null,
+      activeStepIndex: state.progress.activeStepIndex,
+      checkedCount: state.progress.checkedIngredientIds.length + state.progress.checkedStepOutputIds.length,
+      touchedAt: Date.now(),
+    });
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "cooking_now_record_skipped", unavailable: isD1Unavailable(error) }));
+  }
+  return answer;
+}
+
 export async function handleCookSessionProtocolRequest(
   request: Request,
   env: CloudflareEnvironment,
@@ -195,7 +249,12 @@ export async function handleCookSessionProtocolRequest(
   if (operation === "start") {
     if (text !== "" && text !== "{}") return invalidRequest();
     if (!await recipeExists(db, recipeId)) return recipeNotFound();
-    return forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "POST", "/start");
+    return recordCookingNowAfter(
+      await forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "POST", "/start"),
+      env,
+      userId,
+      recipeId,
+    );
   }
 
   const body = text === null ? null : parseCookPatchBody(text);
@@ -203,5 +262,10 @@ export async function handleCookSessionProtocolRequest(
   if (!await recipeExists(db, recipeId)) return recipeNotFound();
   const bounds = await recipeBounds(db, recipeId);
   if (!changesFitRecipe(body, bounds)) return invalidRequest();
-  return forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "PATCH", "", JSON.stringify(fitChangesToRecipe(body, bounds)));
+  return recordCookingNowAfter(
+    await forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "PATCH", "", JSON.stringify(fitChangesToRecipe(body, bounds))),
+    env,
+    userId,
+    recipeId,
+  );
 }
