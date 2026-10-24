@@ -889,6 +889,34 @@ describe("deploy", () => {
     expect(log).toHaveBeenLastCalledWith("Deployed\nwarning\n");
   });
 
+  // After a 10007 the script exists with its Durable Object migrations applied, but Cloudflare's
+  // reads can lag: the next deploy then sends the migrations again and is refused (code 10079).
+  const migrationTagLag = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
+    stdout: "",
+    stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Actor migration tag precondition failed, got tag '' when expected tag is 'v1_cook_session'. Please make sure the tags match and try again. [code: 10079]\n",
+  });
+
+  it("deploys again when a retry finds the half-made script's migrations already applied (code 10079)", async () => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(migrationTagLag)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+    expect(log).toHaveBeenCalledWith(`::warning::Cloudflare had not yet caught up with ${IDENTITY.workerName}'s Durable Object migrations (code 10079); deploying again in 15 s.`);
+    expect(log).toHaveBeenLastCalledWith("Deployed\n");
+  });
+
+  it("does not retry a migration tag refusal on a first deploy", async () => {
+    const exec = vi.fn().mockRejectedValueOnce(migrationTagLag);
+    const sleep = vi.fn(async () => {});
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(migrationTagLag);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   const internalAuthServerError = Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), {
     stdout: "",
     stderr: "A request to the Cloudflare API (/accounts/x/workers/scripts) failed.\n  Internal authentication error: internal server error [code: 10500]\n",

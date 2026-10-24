@@ -118,6 +118,9 @@ export const MAX_RUN_WORKERS = 100;
 export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
 const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
 const INTERNAL_AUTH_SERVER_ERROR_PATTERN = /Internal authentication error: internal server error\s+\[code: 10500\]/;
+// A deploy that ended in 10007 has usually made the script and applied its Durable Object
+// migrations; while Cloudflare's reads lag, the next deploy sends them again and is refused.
+const MIGRATION_TAG_LAG_PATTERN = /Actor migration tag precondition failed, got tag '' when expected tag is '[^']+'.*\[code: 10079\]/s;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const MIGRATION_FILE_PATTERN = /^\d{4}_[A-Za-z0-9_.-]+\.sql$/;
@@ -525,6 +528,7 @@ export async function deploy({ env, exec, fs, sleep, log }) {
   const state = readState(fs);
   assertWranglerIsRunScoped(fs, state);
   const args = ["exec", "wrangler", "deploy", "--env", "qa", "--secrets-file", SECRETS_FILE];
+  let scriptMayExist = false;
   for (let attempt = 0; ; attempt += 1) {
     try {
       const { stdout, stderr } = await exec("pnpm", args, { maxBuffer: 64 * 1024 * 1024 });
@@ -537,7 +541,10 @@ export async function deploy({ env, exec, fs, sleep, log }) {
         ? `Cloudflare did not yet know ${state.workerName} (code 10007)`
         : INTERNAL_AUTH_SERVER_ERROR_PATTERN.test(output)
           ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${state.workerName}`
-          : undefined;
+          : scriptMayExist && MIGRATION_TAG_LAG_PATTERN.test(output)
+            ? `Cloudflare had not yet caught up with ${state.workerName}'s Durable Object migrations (code 10079)`
+            : undefined;
+      if (SCRIPT_NOT_FOUND_PATTERN.test(output)) scriptMayExist = true;
       if (!reason || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
       const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
       log(`::warning::${reason}; deploying again in ${delay / 1000} s.`);
