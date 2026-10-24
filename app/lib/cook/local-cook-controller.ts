@@ -60,7 +60,7 @@ export function useLocalCookController(recipe: CookRecipe, storage?: CookProgres
     });
   }, [storage, restored, recipe.id, checkedIngredientIds, checkedStepOutputIds, activeStepIndex, scaleFactor]);
 
-  const timers = useMemo(() => cookTimers(`local:${recipe.id}`, recipe.steps), [recipe.id, recipe.steps]);
+  const timers = useMemo(() => cookTimers(`local:${recipe.id}`, recipe.steps, null), [recipe.id, recipe.steps]);
 
   return {
     recipe,

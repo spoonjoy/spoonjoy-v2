@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { Timer } from "~/components/ouro/timer/timer";
 import { TimerTray } from "~/components/ouro/timer/timer-tray";
 import { useTimer, type TimerDoneEvent } from "~/lib/ouro/use-timer";
-import type { CookTimer } from "~/lib/cook-timers";
+import { restoreCookTimer, type CookTimer } from "~/lib/cook-timers";
 
 const LABELS = {
   start: "Start timer",
@@ -17,6 +17,9 @@ const FRESH_MS = 60_000;
 
 /** The current step's timer, inside the cook-mode step page. */
 export function CookStepTimer({ timer }: { timer: CookTimer | undefined }) {
+  useEffect(() => {
+    if (timer) restoreCookTimer(timer);
+  }, [timer]);
   if (!timer) return null;
   return (
     <Timer
@@ -115,6 +118,7 @@ function CookTimerAlerts({ timers }: { timers: readonly CookTimer[] }) {
 
 function CookTimerWatch({ timer, onFinished }: { timer: CookTimer; onFinished: (timer: CookTimer, endedAt: number | null) => void }) {
   const { status, endedAt } = useTimer({ duration: timer.duration, timerId: timer.timerId });
+  useEffect(() => { restoreCookTimer(timer); }, [timer]);
   const done = status === "done";
   useEffect(() => onFinished(timer, done ? endedAt : null), [timer, done, endedAt, onFinished]);
   return null;

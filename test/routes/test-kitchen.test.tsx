@@ -200,8 +200,8 @@ describe("Test Kitchen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start timer" }));
     fireEvent.click(screen.getByRole("button", { name: "Pause timer" }));
     fireEvent.click(screen.getByRole("button", { name: "Exit cook mode" }));
-    const remove = Storage.prototype.removeItem;
-    const blocked = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (this: Storage, key) {
+    const remove = window.localStorage.removeItem;
+    const blocked = vi.spyOn(window.localStorage, "removeItem").mockImplementation(function (this: Storage, key) {
       if (key.startsWith("ouro-timer:")) throw new DOMException("Blocked", "SecurityError");
       remove.call(this, key);
     });

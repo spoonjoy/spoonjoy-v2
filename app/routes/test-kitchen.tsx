@@ -20,6 +20,9 @@ import { pageProvenance } from "~/lib/ouro-provenance.server";
 import { scaleServingsText } from "~/lib/quantity";
 import { TEST_KITCHEN } from "~/lib/test-kitchen/content";
 import { resetTestKitchen, testKitchenProgressStorage } from "~/lib/test-kitchen/storage";
+import { resetTimer } from "~/lib/ouro/use-timer";
+import type { CookTimer } from "~/lib/cook-timers";
+import { Alert } from "~/components/ouro/alert/alert";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -62,6 +65,7 @@ export function TestKitchenPage({ provenance }: { provenance: PageProvenance }) 
   const [xray, setXray] = useState(() => searchParams.has("xray"));
   // Resetting starts the kitchen over: a new controller, reading the storage it just emptied.
   const [visit, setVisit] = useState(0);
+  const [resetWarning, setResetWarning] = useState(false);
 
   return (
     <>
@@ -69,11 +73,14 @@ export function TestKitchenPage({ provenance }: { provenance: PageProvenance }) 
         key={visit}
         xray={xray}
         onXrayChange={setXray}
-        onReset={() => {
+        onReset={(timers) => {
+          const results = timers.map((timer) => resetTimer(timer.timerId));
+          setResetWarning(results.includes(false));
           resetTestKitchen();
           setVisit((current) => current + 1);
         }}
       />
+      {resetWarning ? <Alert tone="destructive" title="Some timer resets could not be saved. They may return after a reload." /> : null}
       <Inspector open={xray} onOpenChange={setXray} sourceHref={sourceHrefFor(provenance)} />
     </>
   );
@@ -82,7 +89,7 @@ export function TestKitchenPage({ provenance }: { provenance: PageProvenance }) 
 function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
   xray: boolean;
   onXrayChange: (open: boolean) => void;
-  onReset: () => void;
+  onReset: (timers: readonly CookTimer[]) => void;
 }) {
   const controller = useLocalCookController(TEST_KITCHEN.recipe, testKitchenProgressStorage);
   const { recipe, cover } = TEST_KITCHEN;
@@ -117,7 +124,7 @@ function TestKitchenRecipe({ xray, onXrayChange, onReset }: {
             checked={xray}
             onCheckedChange={onXrayChange}
           />
-          <Button variant="outline" tone="secondary" onClick={onReset}>Reset the kitchen</Button>
+          <Button variant="outline" tone="secondary" onClick={() => onReset(controller.timers)}>Reset the kitchen</Button>
         </div>
       </section>
 

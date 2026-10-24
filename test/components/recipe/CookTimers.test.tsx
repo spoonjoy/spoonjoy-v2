@@ -84,8 +84,8 @@ describe("cook-mode timers", () => {
   it("keeps legacy data when native persistence fails while making the timer usable in memory", async () => {
     const legacy = JSON.stringify({ "1": { status: "paused", durationSeconds: 60, remainingMs: 45_000 } });
     window.localStorage.setItem("spoonjoy-cook-timers:v1:cook-timers-test", legacy);
-    const write = Storage.prototype.setItem;
-    const blocked = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+    const write = window.localStorage.setItem;
+    const blocked = vi.spyOn(window.localStorage, "setItem").mockImplementation(function (this: Storage, key, value) {
       if (key.startsWith("ouro-timer:")) throw new DOMException("Full", "QuotaExceededError");
       write.call(this, key, value);
     });

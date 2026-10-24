@@ -1,6 +1,6 @@
 {
   "guide": "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
-  "ouroTag": "v1.2.3",
+  "ouroTag": "v1.2.4",
   "root": {
     "file": "app/root.tsx",
     "sources": [
@@ -933,6 +933,7 @@
         "app/lib/test-kitchen/storage.ts"
       ],
       "components": [
+        "alert",
         "aspect-ratio",
         "button",
         "checklist",
@@ -947,6 +948,9 @@
         "timer-tray"
       ],
       "renders": {
+        "alert": [
+          "app/routes/test-kitchen.tsx"
+        ],
         "aspect-ratio": [
           "app/routes/test-kitchen.tsx"
         ],
