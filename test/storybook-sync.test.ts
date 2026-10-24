@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STORIES_DIR = path.join(__dirname, '../stories')
@@ -93,7 +94,30 @@ function readStory(relativePath: string): string {
   return fs.readFileSync(storyPath(relativePath), 'utf8')
 }
 
+function hasRemovedOutlineProp(content: string): boolean {
+  const source = ts.createSourceFile('story.tsx', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let found = false
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node))
+      && node.tagName.getText(source) === 'Button'
+      && node.attributes.properties.some((prop) => ts.isJsxAttribute(prop) && prop.name.getText(source) === 'outline')) {
+      found = true
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return found
+}
+
 describe('Storybook curation', () => {
+  it.each([
+    ['<Button outline>Old</Button>', true],
+    ['<Button outline={false}>Old</Button>', true],
+    ['<Button variant="outline">Quiet</Button>', false],
+    ['<Button title="outline">Named</Button>', false],
+  ] as const)('distinguishes the retired outline prop in %s', (content, invalid) => {
+    expect(hasRemovedOutlineProp(content)).toBe(invalid)
+  })
   it('keeps the current curated product surfaces', () => {
     for (const file of requiredStoryFiles) {
       expect(fs.existsSync(storyPath(file)), `${file} should exist`).toBe(true)
@@ -145,7 +169,7 @@ describe('Storybook curation', () => {
       const content = readStory(file)
 
       expect(content, `${file} should not pass removed color props to Button`).not.toMatch(/<Button\b[^>]*\bcolor=/)
-      expect(content, `${file} should not use the removed Button outline prop`).not.toMatch(/<Button\b[^>]*\boutline\b/)
+      expect(hasRemovedOutlineProp(content), `${file} should not use the removed Button outline prop`).toBe(false)
       expect(content, `${file} should not refer to old buttonColor demo plumbing`).not.toContain('buttonColor')
       expect(content, `${file} should not advertise the retired exhaustive color catalog`).not.toContain('21 color')
     }
