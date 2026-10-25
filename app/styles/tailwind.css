@@ -184,13 +184,26 @@
   --ring: var(--sj-on-photo);
 }
 
-/* A charcoal panel (the developer playground's Response) under photo-white text: HX controls in it
-   take their text, border and focus ring from these tokens, so a plain button isn't charcoal on
-   charcoal. */
+/* A charcoal panel (the developer playground's Response, the shaded landing hero) under photo-white
+   text: HX controls in it take their text, border and focus ring from these tokens, so a plain or
+   outline button isn't charcoal on charcoal. */
 .sj-on-charcoal {
   --foreground: var(--sj-on-photo);
   --border: var(--sj-photo-line);
   --ring: var(--sj-on-photo);
+}
+
+/* The shade over the signed-out landing photo. The photo has white plates and bright greens under
+   the text, and on a phone the text runs the full width, where the side gradient is almost clear.
+   The 68% charcoal wash alone keeps photo-white text above 4.5:1 even over a white pixel. The two
+   gradients are load-bearing too: a pressed outline button's 14% light wash needs their extra shade
+   at the left and bottom, where the buttons sit (e2e/journeys/landing-readability.journey.ts
+   measures the real pixels). */
+.sj-landing-hero-shade {
+  background:
+    linear-gradient(90deg, rgb(34 32 28 / 0.82), rgb(34 32 28 / 0.34) 58%, rgb(34 32 28 / 0.1)),
+    linear-gradient(0deg, rgb(34 32 28 / 0.56), transparent 42%),
+    color-mix(in srgb, var(--sj-photo-charcoal) 68%, transparent);
 }
 
 /* Keep the action weight through Tailwind's token without changing other controls. */

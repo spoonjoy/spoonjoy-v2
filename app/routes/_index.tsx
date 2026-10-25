@@ -174,18 +174,19 @@ export default function Index() {
             {...HERO_IMAGE_PROPS}
             className="absolute inset-0 h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(34,32,28,0.82),rgba(34,32,28,0.34)_58%,rgba(34,32,28,0.10)),linear-gradient(0deg,rgba(34,32,28,0.56),transparent_42%)]" />
+          <div className="sj-landing-hero-shade absolute inset-0" />
           <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] sm:min-h-[clamp(32rem,70svh,42rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-12 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24">
-            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo-muted)]">
+            <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo)]">
               The Recipe App
             </p>
             <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
               Your food should look as good as it tastes.
             </h1>
-            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]">
+            <p className="text-base/6 text-[var(--sj-ink-soft)] mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo)]">
               Spoonjoy is a photo-first kitchen for the recipes you actually cook, the notes you learn by doing, and the cookbooks that grow out of real meals.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            {/* Photo-white labels, borders and focus rings for the outline buttons on the shaded photo. */}
+            <div className="sj-on-charcoal mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/signup">Start Your Kitchen</Button>
               <Button href="/login" variant="outline" tone="secondary">Log in</Button>
               <Button href="/search" variant="outline" tone="secondary">

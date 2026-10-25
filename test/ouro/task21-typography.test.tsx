@@ -234,7 +234,7 @@ for (const theme of ["light", "dark"] as const) {
       await page.viewport(width, 900);
       const actual = compareDelivered(title, `${heading} mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20`);
       expect(actual.fontSize).toBe(width >= 1280 ? "96px" : width >= 1024 ? "72px" : width >= 640 ? "60px" : "36px");
-      measurements.push({ width, title: actual, copy: compareDelivered(copy, `${text} mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo-muted)]`) });
+      measurements.push({ width, title: actual, copy: compareDelivered(copy, `${text} mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo)]`) });
     }
     await annotate(`T21_PHOTO_TYPE ${JSON.stringify({ theme, measurements })}`);
   });
