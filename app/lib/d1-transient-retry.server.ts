@@ -1,4 +1,5 @@
 import { qaErrorLogsEnabled } from "./qa-error-logs.server";
+import { consoleSlowCallReporter, firstTable, watchSlowCall, type SlowCallReporter } from "./slow-call.server";
 
 /**
  * Retries D1 reads that fail with a transient D1 error.
@@ -26,7 +27,9 @@ import { qaErrorLogsEnabled } from "./qa-error-logs.server";
  * (d1-write-retry.server.ts).
  *
  * Each transient failure, retried or not, is reported to `onTransientError` with no SQL and no
- * bound values, so the per-run QA Worker can log it for the Journeys tail summary.
+ * bound values, so the per-run QA Worker can log it for the Journeys tail summary. Each try that
+ * waits longer than a second is reported to `onSlowCall` (slow-call.server.ts) with the first table
+ * its SQL names, for the same summary.
  */
 
 export type D1TransientOperation = "read" | "write";
@@ -57,6 +60,7 @@ export interface D1TransientRetryOptions {
   delaysMs?: readonly number[];
   sleep?: (ms: number) => Promise<void>;
   onTransientError?: (report: D1TransientErrorReport) => void;
+  onSlowCall?: SlowCallReporter;
 }
 
 export const DEFAULT_D1_RETRY_DELAYS_MS: readonly number[] = [50, 150, 400];
@@ -100,13 +104,14 @@ async function withRetry<T>(
   options: D1TransientRetryOptions,
   operation: D1TransientOperation,
   call: string,
+  table: string | null,
   run: () => Promise<T>,
 ): Promise<T> {
   const delays = options.delaysMs ?? DEFAULT_D1_RETRY_DELAYS_MS;
   const sleep = options.sleep ?? realSleep;
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await run();
+      return await watchSlowCall({ call: `d1.${call}`, operation, table, attempt }, run, options.onSlowCall);
     } catch (error) {
       const kind = d1TransientKind(error);
       if (!kind) throw error;
@@ -149,8 +154,9 @@ function unwrap(statement: RetryableD1Statement): { inner: RetryableD1Statement;
 
 function wrapStatement(inner: RetryableD1Statement, sql: string, options: D1TransientRetryOptions): WrappedStatement {
   const operation: D1TransientOperation = isReadOnlySql(sql) ? "read" : "write";
+  const table = firstTable(sql);
   const forward = (call: "first" | "all" | "raw" | "run") =>
-    (...args: unknown[]) => withRetry(options, operation, call, () => inner[call](...args));
+    (...args: unknown[]) => withRetry(options, operation, call, table, () => inner[call](...args));
   return {
     [WRAPPED]: { inner, sql },
     bind: (...values: unknown[]) => wrapStatement(inner.bind(...values), sql, options),
@@ -178,7 +184,8 @@ export function withD1TransientRetry<T>(db: T, options: D1TransientRetryOptions 
         return (statements: RetryableD1Statement[]) => {
           const parts = statements.map(unwrap);
           const readOnly = parts.every((part) => part.sql !== null && isReadOnlySql(part.sql));
-          return withRetry(options, readOnly ? "read" : "write", "batch", () =>
+          const table = parts[0]?.sql ? firstTable(parts[0].sql) : null;
+          return withRetry(options, readOnly ? "read" : "write", "batch", table, () =>
             binding.batch(parts.map((part) => part.inner)));
         };
       }
@@ -191,17 +198,20 @@ export function withD1TransientRetry<T>(db: T, options: D1TransientRetryOptions 
 /**
  * The Worker's environment with its D1 binding wrapped, for workers/app.ts to use for the whole
  * request, so every consumer of `env.DB`, React Router's load context included, retries. A
- * per-run QA Worker (SPOONJOY_QA_ERROR_LOGS=1) logs each transient failure as one JSON line with
- * no SQL and no values, which the Journeys tail summary counts; nothing is logged elsewhere.
+ * per-run QA Worker (SPOONJOY_QA_ERROR_LOGS=1) logs each transient failure and each try that waits
+ * over a second as one JSON line with no SQL and no values, which the Journeys tail summary reads;
+ * nothing is logged, and no timer runs, elsewhere.
  */
 export function withTransientD1Retry<E extends { DB?: unknown; SPOONJOY_QA_ERROR_LOGS?: string }>(
   env: E,
-  options: Omit<D1TransientRetryOptions, "onTransientError"> = {},
+  options: Omit<D1TransientRetryOptions, "onTransientError" | "onSlowCall"> = {},
 ): E {
   if (!env.DB) return env;
-  const onTransientError = qaErrorLogsEnabled(env)
+  const qaLogs = qaErrorLogsEnabled(env);
+  const onTransientError = qaLogs
     ? (report: D1TransientErrorReport) => console.warn(JSON.stringify(report))
     : undefined;
-  const DB = withD1TransientRetry(env.DB, { ...options, onTransientError });
+  const onSlowCall = qaLogs ? consoleSlowCallReporter() : undefined;
+  const DB = withD1TransientRetry(env.DB, { ...options, onTransientError, onSlowCall });
   return DB === env.DB ? env : { ...env, DB };
 }

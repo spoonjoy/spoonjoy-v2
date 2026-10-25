@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "../warning-policy";
 import {
   d1TransientKind,
@@ -11,6 +11,7 @@ import {
   type RetryableD1Database,
   type RetryableD1Statement,
 } from "~/lib/d1-transient-retry.server";
+import type { SlowCallReport } from "~/lib/slow-call.server";
 
 const NETWORK_LOST = new Error("D1_ERROR: Network connection lost.");
 const STARTUP_FAILED = new Error("D1_ERROR: Internal error while starting up D1 DB storage.");
@@ -269,5 +270,85 @@ describe("withTransientD1Retry", () => {
     const qa = fakeD1([NETWORK_LOST]);
     await withTransientD1Retry({ DB: qa.db, SPOONJOY_QA_ERROR_LOGS: "1" }, { delaysMs: [0] })
       .DB.prepare("SELECT secret FROM T WHERE v = ?").bind("value").all();
+  });
+});
+
+describe("D1 tries that wait over a second", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A binding whose calls wait until the test settles them, one by one, in order. */
+  function pendingD1() {
+    const pending: Array<{ resolve: (value: unknown) => void; reject: (error: unknown) => void }> = [];
+    const wait = () => new Promise((resolve, reject) => pending.push({ resolve, reject }));
+    const statement = (): RetryableD1Statement => ({
+      bind: () => statement(),
+      first: wait,
+      all: wait,
+      raw: wait,
+      run: wait,
+    });
+    const db: RetryableD1Database = { prepare: () => statement(), batch: wait as RetryableD1Database["batch"] };
+    return { db, pending };
+  }
+
+  it("reports each try that is still waiting after a second, naming the call and table, then how it ended", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { db, pending } = pendingD1();
+    const slow: SlowCallReport[] = [];
+    const wrapped = withD1TransientRetry(db, { delaysMs: [0], sleep: async () => {}, onSlowCall: (report) => slow.push(report) });
+
+    const read = wrapped.prepare('SELECT "sessionVersion" FROM "User" WHERE "id" = ?').bind("user-1").first();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(slow).toEqual([
+      { event: "slow_call", call: "d1.first", operation: "read", table: "User", attempt: 1, waitedMs: 1000, settled: false, outcome: null },
+    ]);
+
+    // The first try fails with a transient error after 1.5 s; the retry answers at once.
+    await vi.advanceTimersByTimeAsync(500);
+    pending[0].reject(NETWORK_LOST);
+    await vi.advanceTimersByTimeAsync(0);
+    pending[1].resolve({ sessionVersion: 1 });
+    await expect(read).resolves.toEqual({ sessionVersion: 1 });
+    expect(slow.slice(1)).toEqual([
+      { event: "slow_call", call: "d1.first", operation: "read", table: "User", attempt: 1, waitedMs: 1500, settled: true, outcome: "error" },
+    ]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("names a batch by its first statement's table and a write as a write", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { db, pending } = pendingD1();
+    const slow: SlowCallReport[] = [];
+    const wrapped = withD1TransientRetry(db, { onSlowCall: (report) => slow.push(report) });
+
+    void wrapped.batch([wrapped.prepare('SELECT id FROM "Cookbook" WHERE id = ?'), wrapped.prepare('SELECT 1 FROM "Recipe"')]);
+    void wrapped.prepare('UPDATE "User" SET name = ?').bind("x").run();
+    void wrapped.batch([db.prepare("SELECT 1")]);
+    void wrapped.batch([]);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(slow.map(({ call, operation, table }) => ({ call, operation, table }))).toEqual([
+      { call: "d1.batch", operation: "read", table: "Cookbook" },
+      { call: "d1.run", operation: "write", table: "User" },
+      { call: "d1.batch", operation: "write", table: null },
+      { call: "d1.batch", operation: "read", table: null },
+    ]);
+    expect(pending).toHaveLength(4);
+  });
+
+  it("logs a waiting try as one JSON line on a per-run QA Worker only, and runs no timer elsewhere", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const quiet = pendingD1();
+    void withTransientD1Retry({ DB: quiet.db }).DB.prepare("SELECT 1 FROM T").all();
+    expect(vi.getTimerCount()).toBe(0);
+
+    expectConsoleWarning(JSON.stringify({
+      event: "slow_call", call: "d1.all", operation: "read", table: "T", attempt: 1, waitedMs: 1000, settled: false, outcome: null,
+    }));
+    const qa = pendingD1();
+    void withTransientD1Retry({ DB: qa.db, SPOONJOY_QA_ERROR_LOGS: "1" }).DB.prepare("SELECT secret FROM T WHERE v = ?").bind("value").all();
+    await vi.advanceTimersByTimeAsync(1000);
   });
 });
