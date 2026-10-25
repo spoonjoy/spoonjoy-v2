@@ -4,6 +4,7 @@ import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { hidesChef, loadRequestViewerHides } from "~/lib/moderation.server";
 import {
   listFellowChefs,
   DEFAULT_LIMIT,
@@ -80,6 +81,11 @@ export async function loader({
     throw new Response("User not found", { status: 404 });
   }
 
+  const hides = await loadRequestViewerHides(context, currentUserId);
+  if (hidesChef(hides, profileUser.id)) {
+    throw new Response("User not found", { status: 404 });
+  }
+
   if (!userByUsername && identifier === profileUser.id) {
     return redirect(`/users/${profileUser.username}/fellow-chefs`);
   }
@@ -97,7 +103,7 @@ export async function loader({
   return {
     profileUsername: profileUser.username,
     viewerIsOwner: currentUserId === profileUser.id,
-    rows: result.rows.map((row) => ({
+    rows: result.rows.filter((row) => !hidesChef(hides, row.chefId)).map((row) => ({
       ...row,
       latestInteractionAt: row.latestInteractionAt.toISOString(),
     })),

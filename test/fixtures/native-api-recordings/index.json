@@ -330,6 +330,31 @@
     "status": 200
   },
   {
+    "name": "report-create",
+    "endpoint": "POST /api/v1/reports",
+    "status": 201
+  },
+  {
+    "name": "report-create-again",
+    "endpoint": "POST /api/v1/reports",
+    "status": 200
+  },
+  {
+    "name": "block-create",
+    "endpoint": "POST /api/v1/blocks",
+    "status": 200
+  },
+  {
+    "name": "blocks-list",
+    "endpoint": "GET /api/v1/blocks",
+    "status": 200
+  },
+  {
+    "name": "block-delete",
+    "endpoint": "DELETE /api/v1/blocks/{chefId}",
+    "status": 200
+  },
+  {
     "name": "recipe-spoon-delete",
     "endpoint": "DELETE /api/v1/recipes/{id}/spoons/{spoonId}",
     "status": 200

@@ -15,7 +15,8 @@ export type EmailPurpose =
   | "change_email_confirm"
   | "change_email_notice"
   | "email_changed_notice"
-  | "reset_password";
+  | "reset_password"
+  | "content_report";
 
 /** The Cloudflare Email Service binding's send call (the subset Spoonjoy uses). */
 export interface SendEmailBinding {

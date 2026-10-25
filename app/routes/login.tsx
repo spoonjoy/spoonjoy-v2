@@ -1,6 +1,6 @@
 import type { Route } from "./+types/login";
 import { useRef } from "react";
-import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { authenticateUserByEmailOrUsername, authenticateUserByEmailOrUsernameOnD1 } from "~/lib/auth.server";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -18,6 +18,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
+import { useRedirectToWithHash } from "~/hooks/use-redirect-hash";
 
 interface ActionData {
   errors?: {
@@ -124,8 +125,7 @@ export default function Login() {
   const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
   const loaderData = useLoaderData<LoaderData | null>();
   const oauthProviders = loaderData?.oauthProviders ?? [];
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") ?? undefined;
+  const redirectTo = useRedirectToWithHash();
   // The identifier field is uncontrolled so React never writes to it. A
   // controlled `value` would reset anything typed before hydration: after
   // hydration any re-render of the input (a focus change, a router update)

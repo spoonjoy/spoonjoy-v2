@@ -198,6 +198,13 @@ export async function enqueueNotification(
     authSecret: string;
   }>;
   try {
+    // 1b. A recipient who blocked the actor hears nothing from them (moderation.server.ts).
+    const blocked = await db.chefBlock.findUnique({
+      where: { blockerId_blockedId: { blockerId: input.recipientId, blockedId: input.actorId } },
+      select: { blockerId: true },
+    });
+    if (blocked) return { eventId: null, queuedSends: 0 };
+
     // 2. Always log the event, once. Its id is chosen before the first try, so a retry after a
     // lost answer finds the row the earlier try wrote instead of adding a second.
     const id = await notificationEventId(input);

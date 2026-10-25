@@ -1,5 +1,5 @@
 import type { Route } from "./+types/signup";
-import { Form as RouterForm, redirect, data, useActionData, useLoaderData, useSearchParams } from "react-router";
+import { Form as RouterForm, redirect, data, useActionData, useLoaderData } from "react-router";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { createUser, emailExists } from "~/lib/auth.server";
 import { D1_WRITE_UNAVAILABLE_MESSAGE, d1UnavailableHeaders, isD1Unavailable } from "~/lib/d1-write-retry.server";
@@ -19,6 +19,7 @@ import { Button } from "~/components/ouro/button/button";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 import { useFormErrors } from "~/hooks/use-form-errors";
+import { useRedirectToWithHash } from "~/hooks/use-redirect-hash";
 
 interface ActionData {
   errors?: {
@@ -156,8 +157,7 @@ export default function Signup() {
   const actionData = useActionData<ActionData>();
   const loaderData = useLoaderData<LoaderData | null>();
   const oauthProviders = loaderData?.oauthProviders ?? [];
-  const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") ?? undefined;
+  const redirectTo = useRedirectToWithHash();
   const formErrors = useFormErrors(actionData?.errors, undefined, actionData);
 
   return (

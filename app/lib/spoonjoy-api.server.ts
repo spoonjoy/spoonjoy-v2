@@ -108,6 +108,7 @@ import {
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import { retryD1Write as retryApiTokenRevoke } from "~/lib/d1-write-retry.server";
+import { assertAcceptableText } from "~/lib/objectionable-terms";
 import {
   addRecipeToCookbook,
   asCompatibleCookbookD1Database,
@@ -1097,9 +1098,12 @@ function parseStep(value: unknown, index: number) {
   const raw = value as Record<string, unknown>;
   const rawIngredients = Array.isArray(raw.ingredients) ? raw.ingredients : [];
 
+  const title = optionalString(raw.title);
+  const description = requiredString(raw, "description");
+  assertAcceptableText(title, description);
   return {
-    title: optionalString(raw.title),
-    description: requiredString(raw, "description"),
+    title,
+    description,
     duration: optionalPositiveNumber(raw.duration),
     ingredients: rawIngredients.map((ingredient, ingredientIndex) => parseIngredient(ingredient, ingredientIndex)),
   };
@@ -2525,6 +2529,7 @@ const createRecipeTool: SpoonjoyApiOperation = {
     const { owner, title, imageUrl, created, coverId } = await withRaceRetry(async () => {
       const email = requireOwnerEmail(args, context);
       const title = requiredString(args, "title");
+      assertAcceptableText(optionalString(args.description));
       const imageUrl = optionalString(args.imageUrl);
       const steps = parseSteps(args.steps);
 
@@ -2741,7 +2746,10 @@ const updateRecipeTool: SpoonjoyApiOperation = {
         if (!titleUniqueness.valid) throw new Error(titleUniqueness.error);
         data.title = title;
       }
-      if (description !== undefined) data.description = description;
+      if (description !== undefined) {
+        assertAcceptableText(description);
+        data.description = description;
+      }
       if (servings !== undefined) data.servings = servings;
       if (sourceUrl !== undefined) data.sourceUrl = sourceUrl;
 
@@ -3203,6 +3211,7 @@ const createCookbookTool: SpoonjoyApiOperation = {
   async handle(args, context) {
     const email = requireOwnerEmail(args, context);
     const title = requiredString(args, "title");
+    assertAcceptableText(title);
     const idempotencyKey = optionalWriteKey(args.idempotencyKey);
 
     const owner = await getOrCreateOwner(context, email);

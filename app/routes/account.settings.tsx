@@ -24,6 +24,13 @@ import { AccountDataSection } from "~/components/account/AccountDataSection";
 import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
+import { BlockedChefsSection, type BlockedChefRow } from "~/components/moderation/BlockedChefsSection";
+import { useSectionFocus } from "~/hooks/use-section-focus";
+import { listBlockedChefs } from "~/lib/moderation.server";
+import { getRequestDb } from "~/lib/route-platform.server";
+
+// The sections a `?section=` link can open at (the apps link to delete-account).
+const SETTINGS_SECTIONS = ["delete-account", "blocked-chefs", "user-info"] as const;
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -33,7 +40,9 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-  return loadAccountSettings({ request, context });
+  const settings = await loadAccountSettings({ request, context });
+  const blocked = await listBlockedChefs(await getRequestDb(context), settings.user.id);
+  return { ...settings, blockedChefs: blocked.map(({ chef }) => ({ id: chef.id, username: chef.username })) };
 }
 
 export async function action({ request, context }: Route.ActionArgs): Promise<AccountSettingsActionResponse> {
@@ -65,7 +74,8 @@ const USER_INFO_INTENTS = ["updateUserInfo"] as const;
 const DELETE_INTENTS = ["deleteAccount"] as const;
 
 export default function AccountSettings() {
-  const { user, oauthError, notifications } = useLoaderData<AccountSettingsLoaderData>();
+  const { user, oauthError, notifications, blockedChefs = [] } = useLoaderData<AccountSettingsLoaderData & { blockedChefs?: BlockedChefRow[] }>();
+  useSectionFocus(SETTINGS_SECTIONS);
   const actionData = useActionData<AccountSettingsActionResult>();
   const [initialActionData] = useState(actionData);
   const userInfoAnswer = useIntentAnswer(actionData, USER_INFO_INTENTS);
@@ -662,6 +672,8 @@ export default function AccountSettings() {
         initiallySubscribed={notifications.pushSubscribed}
         initialPreferences={notifications.preferences}
       />
+
+      <BlockedChefsSection chefs={blockedChefs} />
 
       <AccountDataSection
         username={user.username}

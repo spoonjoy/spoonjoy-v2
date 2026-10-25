@@ -6275,7 +6275,71 @@
           "count": 1
         },
         {
+          "identity": "link \"Support\" [link/root] in main",
+          "count": 1
+        },
+        {
           "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
+    "support": {
+      "default": [
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy Policy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Settings, Blocked chefs\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Settings, Your data\" [link/root] in main",
+          "count": 2
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Terms of Service\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"terms\" [link/root] in main",
           "count": 1
         }
       ]
@@ -11305,7 +11369,67 @@
           "count": 1
         },
         {
+          "identity": "link \"Support\" [link/root] in main",
+          "count": 1
+        },
+        {
           "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
+    "support": {
+      "default": [
+        {
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy Policy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Settings, Blocked chefs\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Settings, Your data\" [link/root] in main",
+          "count": 2
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Terms of Service\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"terms\" [link/root] in main",
           "count": 1
         }
       ]

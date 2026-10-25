@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient, RecipeCover } from "@prisma/client";
+import { NO_HIDES, hidesFromRows, loadViewerHides, viewerHidesQuery, type ViewerHides } from "~/lib/moderation.server";
 import { d1ReadBatch, groupRows, type D1Query, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
 import {
   CHEF_CARD_COLUMNS,
@@ -65,6 +66,8 @@ export interface RecipeDetailReads {
   coverHistoryCovers: RecipeCover[];
   // Owner-only: spoons with photos, newest first.
   spoonImages: RecipeSpoonImage[];
+  // What the viewer blocked or reported (app/lib/moderation.server.ts).
+  hides: ViewerHides;
 }
 
 export interface RecipeDetailReadInput {
@@ -81,6 +84,7 @@ const NO_READS: Omit<RecipeDetailReads, "recipe"> = {
   isOriginCookCandidate: false,
   coverHistoryCovers: [],
   spoonImages: [],
+  hides: NO_HIDES,
 };
 
 export async function readRecipeDetailWithPrisma(
@@ -147,6 +151,7 @@ export async function readRecipeDetailWithPrisma(
     isOriginCookCandidate: originCookCandidate,
     coverHistoryCovers,
     spoonImages,
+    hides: await loadViewerHides(database, userId),
   };
 }
 
@@ -216,6 +221,7 @@ export async function readRecipeDetailFromD1(
     priorSpoonRows,
     coverRows,
     spoonImageRows,
+    hideRows,
   ] = await d1ReadBatch(db, [
     [
       `SELECT ${selectColumns(RECIPE_COLUMNS, "r")},
@@ -322,6 +328,7 @@ export async function readRecipeDetailFromD1(
           userId,
         ]
       : NO_ROWS,
+    userId ? viewerHidesQuery(userId) : NO_ROWS,
   ]);
 
   const recipeRow = recipeRows[0];
@@ -388,5 +395,6 @@ export async function readRecipeDetailFromD1(
           chef: mapModel(CHEF_CARD_COLUMNS, row, "chef_"),
         }))
       : [],
+    hides: userId ? hidesFromRows(hideRows) : NO_HIDES,
   };
 }

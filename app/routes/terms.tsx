@@ -6,7 +6,7 @@ import { Heading } from "~/components/ouro/text/heading";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
 
-const LAST_UPDATED = "May 29, 2026";
+const LAST_UPDATED = "October 24, 2026";
 const CONTACT_EMAIL = "ari@spoonjoy.app";
 
 export function meta({}: Route.MetaArgs) {
@@ -58,6 +58,21 @@ export default function Terms() {
             <li>Access other users’ private data, or scrape the service in ways that harm it.</li>
             <li>Post content that is abusive, deceptive, or otherwise harmful.</li>
           </ul>
+        </Section>
+
+        <Section title="Objectionable content and abusive users">
+          <Text tone="muted">
+            Spoonjoy has zero tolerance for objectionable content and abusive users. Don’t post
+            content that is hateful, harassing, sexually explicit, violent, or otherwise
+            objectionable, and don’t abuse other chefs. Spoonjoy filters objectionable words in
+            titles, descriptions and notes when they are saved.
+          </Text>
+          <Text tone="muted">
+            Anyone can report a recipe, cookbook, cook or chef, and block a chef, from that
+            chef’s pages; see <Link href="/support">Support</Link>. We review every report within
+            24 hours. We remove content that breaks these terms, and we eject the chefs who
+            posted it by deleting their accounts.
+          </Text>
         </Section>
 
         <Section title="Your content">

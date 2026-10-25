@@ -133,6 +133,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch answers only D1WriteUnavailableError (the approve or deny write ran out of retries, which retryD1Write reports) with a retryable 503 the page shows, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
   },
   {
+    file: "app/routes/moderation.tsx",
+    category: "rethrow",
+    reason:
+      "Catch answers only ModerationError (an unknown target, a self-block or an unknown reason) with the 4xx the report and block forms show, and re-throws every other error to the route layer's handleError (entry.server.tsx), which captures it.",
+  },
+  {
     file: "app/lib/account-revocation.server.ts",
     category: "rethrow",
     reason:

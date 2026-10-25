@@ -153,6 +153,7 @@ Supported entry points:
 
 - Native account settings and bootstrap sync: `GET /api/v1/me`, `GET /api/v1/me/sync`, `GET /api/v1/me/chefs`, `GET /api/v1/me/export`, `PATCH /api/v1/me`, `DELETE /api/v1/me`, `POST /api/v1/me/photo`, `DELETE /api/v1/me/photo`, `GET /api/v1/me/notification-preferences`, `PATCH /api/v1/me/notification-preferences`, `POST /api/v1/me/apns-devices`, `DELETE /api/v1/me/apns-devices/{deviceId}`, `GET /api/v1/me/connections`, and `DELETE /api/v1/me/connections/{connectionId}`
 - Cooking now, the recipes the signed-in cook has in progress: `GET /api/v1/cooking-now` (see Cooking now below)
+- Reporting and blocking: `POST /api/v1/reports`, `GET /api/v1/blocks`, `POST /api/v1/blocks`, and `DELETE /api/v1/blocks/{chefId}` (see Reports and blocks below)
 - Native Apple app sign-in: `POST /api/v1/auth/apple/native` and `POST /api/v1/auth/password/native`
 - Bearer credentials: `GET /api/v1/tokens`, `POST /api/v1/tokens`, and `DELETE /api/v1/tokens/{credentialId}`
 - OAuth/DCR clients: `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`, and `POST /oauth/revoke`
@@ -528,6 +529,10 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 | `GET` | `/api/v1/me/connections` | Authenticated chef | `tokens:read` |
 | `DELETE` | `/api/v1/me/connections/{connectionId}` | Authenticated chef | `tokens:write` |
 | `GET` | `/api/v1/cooking-now` | Authenticated chef | `kitchen:read` |
+| `POST` | `/api/v1/reports` | Authenticated chef | `kitchen:write` |
+| `GET` | `/api/v1/blocks` | Authenticated chef | `account:read` |
+| `POST` | `/api/v1/blocks` | Authenticated chef | `account:write` |
+| `DELETE` | `/api/v1/blocks/{chefId}` | Authenticated chef | `account:write` |
 | `GET` | `/api/v1/shopping-list` | Authenticated chef | `shopping_list:read` |
 | `GET` | `/api/v1/shopping-list/sync` | Authenticated chef | `shopping_list:read` |
 | `POST` | `/api/v1/shopping-list/items` | Authenticated chef | `shopping_list:write` |
@@ -568,6 +573,14 @@ API v1 is rate limited by IP and credential before authentication work. Anonymou
 - The list is written by the cook-session endpoints, never by clients: every accepted `POST /api/cook-sessions/{recipeId}/start` and `PATCH /api/cook-sessions/{recipeId}` updates the cook's row for that recipe. A recipe is listed while something is checked or its current step is past the first.
 - A recipe leaves the list when the cook clears progress (a write that takes the checked count from some to none; it comes back when the cook checks something or moves to another step), when the cook logs a cook of it (`POST /api/v1/recipes/{id}/spoons`, the web cook dialog or MCP; a later cook-session write lists it again), 30 minutes after everything is checked (`allCheckedAt`), 3 days after its last touch, or when the recipe is deleted. `expiresAt` is when it leaves unless it is touched again.
 - Timers are not part of the list: cook sessions do not store them.
+
+## Reports and blocks
+
+Chefs report objectionable content to Spoonjoy's moderators and block chefs. Both hide content from the caller at once: every public read the caller makes (search, recipe and cookbook lists and pages, cook logs, profiles and chef lists) leaves out what they reported and everything by a chef they blocked or reported, and a hidden recipe, cookbook or profile answers `not_found`. A blocked chef's forks, saves and cooks no longer notify the blocker.
+
+`POST /api/v1/reports` takes `{ "targetType": "recipe" | "cookbook" | "spoon" | "chef", "targetId": "...", "reason": "spam" | "offensive" | "harassment" | "copyright" | "other", "details"?: "at most 1000 characters" }` and answers `201` with `data.report: { id, status }` (status `open`). Reporting the same target again while that report is open answers `200` with the same report. An unknown or deleted target is `not_found`; your own content is a `validation_error`. Moderators review every report within 24 hours.
+
+`GET /api/v1/blocks` answers `data.blocks: [{ chef: { id, username, photoUrl }, createdAt }]`, newest first. `POST /api/v1/blocks` takes `{ "chefId": "..." }` and answers `data.block` in the same shape; blocking again is fine, blocking yourself is a `validation_error` and an unknown chef is `not_found`. `DELETE /api/v1/blocks/{chefId}` answers `data: { unblocked: true }`, whether or not the chef was blocked.
 
 ## Sync And Mutations
 

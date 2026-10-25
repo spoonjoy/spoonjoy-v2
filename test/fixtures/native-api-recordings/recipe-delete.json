@@ -4,7 +4,7 @@
   "status": 200,
   "body": {
     "ok": true,
-    "requestId": "opaque_119",
+    "requestId": "opaque_124",
     "data": {
       "deleted": true,
       "recipe": {
@@ -13,7 +13,7 @@
         "updatedAt": "2026-01-01T00:00:00.000Z"
       },
       "mutation": {
-        "clientMutationId": "opaque_120",
+        "clientMutationId": "opaque_125",
         "replayed": false
       }
     }
