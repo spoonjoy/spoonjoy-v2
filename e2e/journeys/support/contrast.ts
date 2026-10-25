@@ -22,7 +22,10 @@ export const TEXT_CONTRAST = 4.5;
 /** WCAG 1.4.3: large text. */
 export const LARGE_TEXT_CONTRAST = 3;
 
-/** Parses a computed CSS colour: rgb(), rgba() or color(srgb ...). Anything else throws. */
+const NUMBER = "(-?[\\d.]+(?:e[+-]?\\d+)?%?|none)";
+const OKLAB = new RegExp(`^(oklab|oklch)\\(\\s*${NUMBER}\\s+${NUMBER}\\s+${NUMBER}(?:\\s*/\\s*${NUMBER})?\\s*\\)$`, "i");
+
+/** Parses a computed CSS colour: rgb(), rgba(), color(srgb ...), oklab() or oklch(). Anything else throws. */
 export function parseCssColor(value: string): Rgba {
   const text = value.trim();
   const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(text);
@@ -31,7 +34,41 @@ export function parseCssColor(value: string): Rgba {
   if (srgb) {
     return { r: unit(Number(srgb[1])) * 255, g: unit(Number(srgb[2])) * 255, b: unit(Number(srgb[3])) * 255, a: parseAlpha(srgb[4]) };
   }
+  const ok = OKLAB.exec(text);
+  if (ok) {
+    const lightness = component(ok[2], 1);
+    let a = component(ok[3], 0.4);
+    let b = component(ok[4], 0.4);
+    if (ok[1].toLowerCase() === "oklch") {
+      const hue = (component(ok[4], 1) * Math.PI) / 180;
+      [a, b] = [a * Math.cos(hue), a * Math.sin(hue)];
+    }
+    return { ...oklabToSrgb(lightness, a, b), a: ok[5] === undefined || ok[5] === "none" ? 1 : parseAlpha(ok[5]) };
+  }
   throw new Error(`Unknown colour format "${value}": its contrast can't be measured.`);
+}
+
+// A CSS Color 4 component: a number, a percentage of `full`, or `none` (zero).
+function component(value: string, full: number): number {
+  if (value === "none") return 0;
+  return value.endsWith("%") ? (Number(value.slice(0, -1)) / 100) * full : Number(value);
+}
+
+// OKLab to gamma-encoded sRGB (0 to 255), clipped to the sRGB gamut as a browser paints it.
+// Matrices from CSS Color 4, section 18.
+function oklabToSrgb(lightness: number, a: number, b: number): Rgb {
+  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const encode = (linearValue: number) => {
+    const c = unit(linearValue);
+    return (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055) * 255;
+  };
+  return {
+    r: encode(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    g: encode(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    b: encode(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+  };
 }
 
 function parseAlpha(value: string | undefined): number {

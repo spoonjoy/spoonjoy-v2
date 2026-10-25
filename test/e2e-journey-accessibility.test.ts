@@ -1,11 +1,12 @@
 // @vitest-environment node
 // The journeys' accessibility gate (e2e/journeys/support/accessibility.ts) fails closed: every axe
-// violation of any impact, every check axe could not decide, and every contrast measurement that
-// fell short or could not be taken. The contrast arithmetic it judges with is
-// e2e/journeys/support/contrast.ts.
+// violation of any impact, every check axe could not decide that no stronger measurement settled
+// (e2e/journeys/support/undecided-checks.ts), and every contrast measurement that fell short or
+// could not be taken. The contrast arithmetic it judges with is e2e/journeys/support/contrast.ts.
 import { describe, expect, it } from "vitest";
-import type { NodeResult, Result } from "axe-core";
+import type { CheckResult, NodeResult, Result } from "axe-core";
 import { auditFailures, classifyAxeResults, describeAuditFailures, type SchemeAudit } from "../e2e/journeys/support/accessibility";
+import { planVerification } from "../e2e/journeys/support/undecided-checks";
 import {
   composite,
   contrastRatio,
@@ -41,7 +42,26 @@ describe("contrast", () => {
     expect(parseCssColor("rgb(10 20 30 / 25%)")).toEqual({ r: 10, g: 20, b: 30, a: 0.25 });
     expect(parseCssColor("color(srgb 1 0 0.5 / 0.4)")).toEqual({ r: 255, g: 0, b: 127.5, a: 0.4 });
     expect(parseCssColor("color(srgb 1.2 -0.1 0)")).toEqual({ r: 255, g: 0, b: 0, a: 1 });
-    expect(() => parseCssColor("oklch(0.5 0.1 30)")).toThrow(/Unknown colour format/);
+    expect(() => parseCssColor("color(display-p3 1 0 0)")).toThrow(/Unknown colour format/);
+  });
+
+  it("parses OKLab and OKLCH colours into sRGB", () => {
+    const close = (value: { r: number; g: number; b: number; a: number }, expected: [number, number, number, number]) => {
+      expect(value.r).toBeCloseTo(expected[0], 0);
+      expect(value.g).toBeCloseTo(expected[1], 0);
+      expect(value.b).toBeCloseTo(expected[2], 0);
+      expect(value.a).toBeCloseTo(expected[3], 5);
+    };
+    close(parseCssColor("oklab(1 0 0)"), [255, 255, 255, 1]);
+    close(parseCssColor("oklab(0 0 0 / 0.1)"), [0, 0, 0, 0.1]);
+    // CSS Color 4's sRGB red, in both forms.
+    close(parseCssColor("oklab(0.627955 0.224863 0.125846)"), [255, 0, 0, 1]);
+    close(parseCssColor("oklch(0.627955 0.257683 29.2339 / 50%)"), [255, 0, 0, 0.5]);
+    close(parseCssColor("oklch(62.7955% 64.42% 29.2339)"), [255, 0, 0, 1]);
+    close(parseCssColor("oklch(0.5 none none)"), [99, 99, 99, 1]);
+    close(parseCssColor("oklab(0.5 none 0 / none)"), [99, 99, 99, 1]);
+    // Outside sRGB: clipped to it, as painted.
+    close(parseCssColor("oklch(0.9 0.4 145)"), [0, 255, 0, 1]);
   });
 
   it("computes WCAG luminance and contrast", () => {
@@ -96,27 +116,89 @@ describe("contrast", () => {
 
 describe("classifyAxeResults", () => {
   it("keeps every violation, whatever its impact", () => {
-    const { audit, contrastToMeasure } = classifyAxeResults("light", {
+    const { audit, contrastToMeasure, toVerify } = classifyAxeResults("light", {
       violations: [result("heading-order", [node(["h3"], "Heading order invalid")], "moderate"), result("region", [node(["p"])], null)],
       incomplete: [],
     });
     expect(contrastToMeasure).toEqual([]);
+    expect(toVerify).toEqual([]);
     expect(audit.violations).toEqual([
       { rule: "heading-order", impact: "moderate", help: "heading-order help", target: "h3", message: "Heading order invalid" },
       { rule: "region", impact: "serious", help: "region help", target: "p", message: "" },
     ]);
   });
 
-  it("sends undecided contrast to be measured and keeps every other undecided check as a failure", () => {
+  it("sends undecided contrast to be measured, other settleable checks to be verified, and keeps the rest as failures", () => {
     const hero = node(["#hero > p"], "Element's background color could not be determined due to a background image");
-    const { audit, contrastToMeasure } = classifyAxeResults("dark", {
+    const toggle = node(["#box"], "", { all: [check("no-implicit-explicit-label", "Check that the <label> does not need be part of the ARIA checkbox field's name")] });
+    const { audit, contrastToMeasure, toVerify } = classifyAxeResults("dark", {
       violations: [],
-      incomplete: [result("color-contrast", [hero]), result("aria-valid-attr-value", [node([["iframe", "#x"]] as unknown as NodeResult["target"], "", { failureSummary: "Fix: id missing" })])],
+      incomplete: [
+        result("color-contrast", [hero]),
+        result("aria-toggle-field-name", [toggle]),
+        result("aria-valid-attr-value", [node([["iframe", "#x"]] as unknown as NodeResult["target"], "", { failureSummary: "Fix: id missing" })]),
+      ],
     });
     expect(contrastToMeasure).toEqual([{ node: hero, axeReason: "Element's background color could not be determined due to a background image" }]);
+    expect(toVerify).toEqual([
+      {
+        finding: {
+          rule: "aria-toggle-field-name",
+          impact: "minor",
+          help: "aria-toggle-field-name help",
+          target: "#box",
+          message: "Check that the <label> does not need be part of the ARIA checkbox field's name",
+        },
+        verification: { kind: "toggle-label-text", selector: "#box", related: [] },
+      },
+    ]);
     expect(audit.unresolved).toEqual([
       { rule: "aria-valid-attr-value", impact: "minor", help: "aria-valid-attr-value help", target: "iframe >>> #x", message: "Fix: id missing" },
     ]);
+    expect(audit.verified).toEqual([]);
+  });
+});
+
+function check(id: string, message = "", extra: Partial<CheckResult> = {}): CheckResult {
+  return { id, impact: "serious", message, data: null, relatedNodes: [], ...extra } as CheckResult;
+}
+
+describe("planVerification", () => {
+  it("verifies a toggle's label text only for the label check", () => {
+    expect(planVerification("aria-toggle-field-name", node(["#a"], "", { all: [check("no-implicit-explicit-label")] }))).toEqual({
+      kind: "toggle-label-text",
+      selector: "#a",
+      related: [],
+    });
+    expect(planVerification("aria-toggle-field-name", node(["#a"], "something else"))).toBeNull();
+  });
+
+  it("verifies a popup trigger's aria-controls only when axe could not tell whether the popup exists", () => {
+    const popup = check("aria-valid-attr-value", "", { data: { messageKey: "controlsWithinPopup", needsReview: 'aria-controls="x"' } });
+    expect(planVerification("aria-valid-attr-value", node(["#t"], "", { all: [popup] }))).toEqual({ kind: "closed-popup-controls", selector: "#t", related: [] });
+    const other = check("aria-valid-attr-value", "", { data: { messageKey: "noId" } });
+    expect(planVerification("aria-valid-attr-value", node(["#t"], "", { all: [other] }))).toBeNull();
+    expect(planVerification("aria-valid-attr-value", node(["#t"], "", { all: [check("aria-valid-attr-value")] }))).toBeNull();
+    expect(planVerification("aria-valid-attr-value", node(["#t"]))).toBeNull();
+  });
+
+  it("verifies focus in a hidden region against every focusable element axe found there", () => {
+    const related = (target: NodeResult["target"]) => ({ html: "", target });
+    const modal = check("focusable-modal-open", "", { relatedNodes: [related(["#g1"]), related(["#g2"])] });
+    const again = check("focusable-not-tabbable", "", { relatedNodes: [related(["#g2"])] });
+    expect(planVerification("aria-hidden-focus", node(["#shell"], "", { all: [modal, again] }))).toEqual({
+      kind: "hidden-focus",
+      selector: "#shell",
+      related: ["#g1", "#g2"],
+    });
+    expect(planVerification("aria-hidden-focus", node(["#shell"], "", { all: [check("focusable-modal-open")] }))).toBeNull();
+    const framed = check("focusable-modal-open", "", { relatedNodes: [related([["iframe", "#g"]] as unknown as NodeResult["target"])] });
+    expect(planVerification("aria-hidden-focus", node(["#shell"], "", { all: [framed] }))).toBeNull();
+  });
+
+  it("has no stronger measurement for other rules or for elements in a frame", () => {
+    expect(planVerification("form-field-multiple-labels", node(["#f"], "Multiple label elements"))).toBeNull();
+    expect(planVerification("aria-toggle-field-name", node([["iframe", "#a"]] as unknown as NodeResult["target"], "", { all: [check("no-implicit-explicit-label")] }))).toBeNull();
   });
 });
 
@@ -125,7 +207,11 @@ describe("auditFailures", () => {
     scheme: "light",
     violations: [],
     unresolved: [],
-    contrast: [{ target: "#a", axeReason: "bg image", passed: true, ratio: 7.1, required: 4.5 }],
+    contrast: [
+      { target: "#a", axeReason: "bg image", passed: true, ratio: 7.1, required: 4.5 },
+      { target: "#behind", axeReason: "bg image", passed: true, inactive: "behind div.backdrop, and hidden from assistive technology by div#shell" },
+    ],
+    verified: [{ rule: "aria-toggle-field-name", impact: "serious", help: "", target: "#box", message: "", measured: "all visible label text is in its name" }],
   };
 
   it("passes a page with no findings and only passing measurements", () => {
@@ -149,6 +235,7 @@ describe("auditFailures", () => {
         { target: "#hero p", axeReason: "bg gradient", passed: false, error: "line 1 is covered by div.scrim" },
         { target: "#ok", axeReason: "bg image", passed: true, ratio: 9, required: 4.5 },
       ],
+      verified: [],
     };
     expect(auditFailures(failing)).toEqual([
       "[dark] violation link-name (no impact): a.x: Links must have text",
