@@ -11,6 +11,7 @@ import {
 import { captureSafeClientEvent, latencyBucket, responseStatusClass } from "~/lib/analytics";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { getUserId } from "~/lib/session.server";
+import { CodeBlock } from "~/components/ouro/code-block/code-block";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Checkbox } from "~/components/ouro/checkbox/checkbox";
 import { Collapsible } from "~/components/ouro/collapsible/collapsible";
@@ -614,9 +615,7 @@ export function ResponsePanel({ response, onClear }: { response: PlaygroundRespo
           </div>
         </div>
       ) : null}
-      <pre role="region" tabIndex={0} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
-        {response ? response.body : "No response yet."}
-      </pre>
+      <CodeBlock aria-label="Response body" code={response ? response.body : "No response yet."} wrap copy={false} className="mt-4 min-h-64" />
     </section>
   );
 }
@@ -1089,9 +1088,7 @@ export default function DeveloperPlayground() {
                   <div className="grid gap-3 lg:grid-cols-3">
                     {operationPolicies.map(([label, policy]) => (
                       <Collapsible key={label} title={label}>
-                        <pre role="region" tabIndex={0} aria-label={`${selected.label} ${label.toLowerCase()}`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
-                          {JSON.stringify(policy, null, 2)}
-                        </pre>
+                        <CodeBlock aria-label={`${selected.label} ${label.toLowerCase()}`} code={JSON.stringify(policy, null, 2)} wrap className="mt-3" />
                       </Collapsible>
                     ))}
                   </div>
@@ -1235,9 +1232,7 @@ export default function DeveloperPlayground() {
                   {pkceVerifier ? <CopyButton variant="plain" value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
                 </div>
                 {pkceVerifier ? (
-                  <pre role="region" tabIndex={0} aria-label="PKCE and state bundle" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3 font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
-                    {`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`}
-                  </pre>
+                  <CodeBlock aria-label="PKCE and state bundle" code={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} wrap copy={false} />
                 ) : null}
                 <TextField
                   label="OAuth callback URL"
@@ -1305,9 +1300,7 @@ export default function DeveloperPlayground() {
                         />
                       );
                     })}
-                    <pre role="region" tabIndex={0} aria-label={bodyLabel} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-3 font-mono text-sm/6 font-normal text-[var(--sj-ink-soft)]">
-                      {bodyText}
-                    </pre>
+                    <CodeBlock aria-label={bodyLabel} code={bodyText} wrap />
                   </div>
                 ) : (
                   <TextArea
@@ -1335,9 +1328,7 @@ export default function DeveloperPlayground() {
                 <CopyButton variant="plain" value={path} label="Copy path" />
                 <CopyButton variant="plain" value={curl} label={authMode === "session" ? "Copy fetch" : "Copy curl"} />
               </div>
-              <pre role="region" tabIndex={0} aria-label={authMode === "session" ? "Generated browser fetch snippet" : "Generated curl command"} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-                {curl}
-              </pre>
+              <CodeBlock aria-label={authMode === "session" ? "Generated browser fetch snippet" : "Generated curl command"} code={curl} wrap copy={false} />
             </div>
 
             <div className="mt-5 grid gap-3 border-y border-[var(--sj-border)] py-5">
@@ -1355,9 +1346,7 @@ export default function DeveloperPlayground() {
 	                  <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Example payloads</p>
 	                  {selected.responseExamples.map((example) => (
                     <Collapsible key={`${selected.id}-${example.status}-${example.name}`} title={`${example.status} ${example.label}`}>
-	                      <pre role="region" tabIndex={0} aria-label={`${selected.label} ${example.status} ${example.label} response example`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
-	                        {example.example}
-	                      </pre>
+	                      <CodeBlock aria-label={`${selected.label} ${example.status} ${example.label} response example`} code={example.example} wrap className="mt-3" />
                     </Collapsible>
 	                  ))}
 	                </div>
@@ -1445,9 +1434,7 @@ export default function DeveloperPlayground() {
             <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
               {scenario.notes.map((note) => <li key={note}>- {note}</li>)}
             </ul>
-            <pre role="region" tabIndex={0} aria-label={`${scenario.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-              {scenario.sample}
-            </pre>
+            <CodeBlock aria-label={`${scenario.title} sample`} code={scenario.sample} wrap />
             <div>
 	              <CopyButton variant="plain" value={scenario.sample} label={`Copy ${scenario.title} sample`} />
             </div>
@@ -1466,9 +1453,7 @@ export default function DeveloperPlayground() {
             <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
               {flow.notes.map((note) => <li key={note}>- {note}</li>)}
             </ul>
-            <pre role="region" tabIndex={0} aria-label={`${flow.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-              {flow.sample}
-            </pre>
+            <CodeBlock aria-label={`${flow.title} sample`} code={flow.sample} wrap />
             <div>
 	              <CopyButton variant="plain" value={flow.sample} label={`Copy ${flow.title} sample`} />
             </div>

@@ -19,6 +19,7 @@ import { captureSafeClientEvent } from "~/lib/analytics";
 import { API_V1_PLAYGROUND_MANIFEST, type ApiV1PlaygroundManifest } from "~/lib/generated/api-v1-playground";
 import { OG_IMAGE_HEIGHT, OG_IMAGE_WIDTH, PAGE_OG_CARDS, absoluteUrlFromPreferredBase, pageOgPath } from "~/lib/og-metadata";
 import { Button } from "~/components/ouro/button/button";
+import { CodeBlock } from "~/components/ouro/code-block/code-block";
 import { Badge } from "~/components/ouro/badge/badge";
 import { Link } from "~/components/ouro/link/link";
 import { Text } from "~/components/ouro/text/text";
@@ -602,9 +603,7 @@ export default function Developers() {
               Anonymous public reads work immediately. For the first external token, use delegated approval: the client shows an approval URL, the chef signs into Spoonjoy, and polling returns a one-time-display bearer token.
             </Text>
           </div>
-          <pre role="region" tabIndex={0} aria-label="First successful calls sample" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-            {terminalQuickstart}
-          </pre>
+          <CodeBlock aria-label="First successful calls sample" code={terminalQuickstart} wrap />
         </div>
       </SectionShell>
 
@@ -668,9 +667,7 @@ export default function Developers() {
                 </div>
                 <div className="min-w-0 space-y-3">
                   <p className="text-sm/6 text-[var(--sj-ink-soft)]">{step.body}</p>
-                  <pre role="region" tabIndex={0} aria-label={`${step.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-                    {step.sample}
-                  </pre>
+                  <CodeBlock aria-label={`${step.title} sample`} code={step.sample} wrap />
                 </div>
               </article>
             ))}
@@ -691,9 +688,7 @@ export default function Developers() {
               {nativeDogfoodChecklist.map((item) => <li key={item}>- {item}</li>)}
             </ul>
           </div>
-          <pre role="region" tabIndex={0} aria-label="Spoonjoy Apple native quickstart sample" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-            {nativeDogfoodSample}
-          </pre>
+          <CodeBlock aria-label="Spoonjoy Apple native quickstart sample" code={nativeDogfoodSample} wrap />
         </div>
       </SectionShell>
 
@@ -712,9 +707,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{path.body}</p>
-                <pre role="region" tabIndex={0} aria-label={`${path.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-                  {path.sample}
-                </pre>
+                <CodeBlock aria-label={`${path.title} sample`} code={path.sample} wrap />
               </div>
             </article>
           ))}
@@ -736,9 +729,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{step.body}</p>
-                <pre role="region" tabIndex={0} aria-label={`${step.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-                  {step.sample}
-                </pre>
+                <CodeBlock aria-label={`${step.title} sample`} code={step.sample} wrap />
               </div>
             </article>
           ))}
@@ -752,18 +743,14 @@ export default function Developers() {
             <Text tone="muted" className="mt-2">
               /api/v1 REST resources return ok, requestId, and data or error fields. Raw OpenAPI documents are the exception.
             </Text>
-            <pre role="region" tabIndex={0} aria-label="API v1 REST response shape example" className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-              {`{ "ok": true, "requestId": "req_example", "data": {} }\n{ "ok": false, "requestId": "req_example", "error": { "code": "invalid_token", "status": 401 } }`}
-            </pre>
+            <CodeBlock aria-label="API v1 REST response shape example" code={`{ "ok": true, "requestId": "req_example", "data": {} }\n{ "ok": false, "requestId": "req_example", "error": { "code": "invalid_token", "status": 401 } }`} wrap className="mt-4" />
           </article>
           <article className="border-y border-[var(--sj-border)] py-5">
             <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Protocol exceptions</h3>
             <Text tone="muted" className="mt-2">
               OAuth endpoints use OAuth token/error JSON except 429 rate limits, delegated /api/tools/* helpers use the legacy helper envelope, and /mcp uses JSON-RPC result/error objects.
             </Text>
-            <pre role="region" tabIndex={0} aria-label="Protocol exceptions example" className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-              {`OAuth: { "access_token": "sj_...", "refresh_token": "ort_..." }\nAgent helper: { "ok": true, "data": { "status": "pending" } }\nMCP: { "jsonrpc": "2.0", "result": {} }`}
-            </pre>
+            <CodeBlock aria-label="Protocol exceptions example" code={`OAuth: { "access_token": "sj_...", "refresh_token": "ort_..." }\nAgent helper: { "ok": true, "data": { "status": "pending" } }\nMCP: { "jsonrpc": "2.0", "result": {} }`} wrap className="mt-4" />
           </article>
         </div>
       </SectionShell>
@@ -794,9 +781,7 @@ export default function Developers() {
                 <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
                   {flow.notes.map((note) => <li key={note}>- {note}</li>)}
                 </ul>
-                <pre role="region" tabIndex={0} aria-label={`${flow.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-                  {flow.sample}
-                </pre>
+                <CodeBlock aria-label={`${flow.title} sample`} code={flow.sample} wrap />
               </div>
             </article>
           ))}
@@ -835,9 +820,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{scenario.body}</p>
-                <pre role="region" tabIndex={0} aria-label={`${scenario.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
-                  {scenario.sample}
-                </pre>
+                <CodeBlock aria-label={`${scenario.title} sample`} code={scenario.sample} wrap />
               </div>
             </article>
           ))}

@@ -3144,6 +3144,7 @@
       "components": [
         "badge",
         "button",
+        "code-block",
         "heading",
         "link",
         "page-header",
@@ -3154,6 +3155,9 @@
           "app/routes/developers.tsx"
         ],
         "button": [
+          "app/routes/developers.tsx"
+        ],
+        "code-block": [
           "app/routes/developers.tsx"
         ],
         "heading": [
@@ -3188,6 +3192,7 @@
         "button",
         "checkbox",
         "choice-card",
+        "code-block",
         "collapsible",
         "copy-button",
         "empty",
@@ -3210,6 +3215,9 @@
           "app/routes/developers.playground.tsx"
         ],
         "choice-card": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "code-block": [
           "app/routes/developers.playground.tsx"
         ],
         "collapsible": [
