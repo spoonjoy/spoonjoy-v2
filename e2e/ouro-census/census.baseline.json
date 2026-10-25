@@ -1257,6 +1257,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Copy code\" [code-block/copy] in main",
+          "count": 34
+        },
+        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
@@ -1457,6 +1461,10 @@
     "developers-playground": {
       "default": [
         {
+          "identity": "button \"\" [code-block/copy] in main",
+          "count": 10
+        },
+        {
           "identity": "button \"200 Example\" [collapsible/trigger] in main",
           "count": 1
         },
@@ -1523,6 +1531,10 @@
         {
           "identity": "button \"Copy Spoonjoy Apple native dogfood sample\" [copy-button/trigger] in main",
           "count": 1
+        },
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in main",
+          "count": 8
         },
         {
           "identity": "button \"Copy curl\" [copy-button/trigger] in main",
@@ -7507,6 +7519,10 @@
     "developers": {
       "default": [
         {
+          "identity": "button \"Copy code\" [code-block/copy] in main",
+          "count": 34
+        },
+        {
           "identity": "link \"Agent clients\" [link/root] in main",
           "count": 1
         },
@@ -7707,6 +7723,10 @@
     "developers-playground": {
       "default": [
         {
+          "identity": "button \"\" [code-block/copy] in main",
+          "count": 10
+        },
+        {
           "identity": "button \"200 Example\" [collapsible/trigger] in main",
           "count": 1
         },
@@ -7769,6 +7789,10 @@
         {
           "identity": "button \"Copy Spoonjoy Apple native dogfood sample\" [copy-button/trigger] in main",
           "count": 1
+        },
+        {
+          "identity": "button \"Copy code\" [code-block/copy] in main",
+          "count": 8
         },
         {
           "identity": "button \"Copy curl\" [copy-button/trigger] in main",
