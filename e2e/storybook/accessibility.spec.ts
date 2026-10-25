@@ -29,10 +29,14 @@ for (const story of stories) {
   for (const scheme of COLOR_SCHEMES) {
     test(`${story.title} / ${story.name} (${scheme})`, async ({ page }, testInfo) => {
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto(`iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story&globals=theme:${scheme}`);
-      // Rendered, as Ouro UI's specs wait for a story (e2e/ouro/story.ts); the audit then waits
+      // a11y.manual stops the a11y addon running its own axe after the render, which would clash
+      // with this run ("Axe is already running").
+      await page.goto(`iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story&globals=theme:${scheme};a11y.manual:!true`);
+      // Rendered, as Ouro UI's specs wait for a story (e2e/ouro/story.ts), and in the theme asked
+      // for: the theme decorator sets the class on <html> after the render. The audit then waits
       // for fonts, images and animations to settle.
       await page.locator("#storybook-root > *").first().waitFor();
+      await page.waitForFunction((dark) => document.documentElement.classList.contains("dark") === dark, scheme === "dark");
 
       const audit = await auditShownScheme(page, { scope: SCOPE });
       if (audit.scheme !== scheme) throw new Error(`The story showed its ${audit.scheme} theme, not its ${scheme} one.`);

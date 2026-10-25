@@ -11,7 +11,9 @@ const preview: Preview = {
   parameters: {
     controls: {
       matchers: {
-        color: /(background|color)$/i,
+        // Not a bare `color`: Ouro UI components declare `color` as a typed hint that is not a
+        // prop (an object type), and a colour control on it makes Storybook warn.
+        color: /^(background|.+Color)$/,
         date: /Date$/i,
       },
     },
