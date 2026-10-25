@@ -25,7 +25,9 @@
 # Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
 # d1_transient_error report (app/lib/d1-transient-retry.server.ts) or a d1_write_retry report
 # (app/lib/d1-write-retry.server.ts): only their fixed fields are read, and only counts leave the
-# program.
+# program. Likewise `stalledRequests`, `slowCalls` and `placements` read only the fixed fields of
+# the slow_call lines (app/lib/slow-call.server.ts) and placement lines (workers/app.ts) a per-run
+# QA Worker writes, each checked against its expected shape.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
@@ -47,6 +49,37 @@ def d1_write_retry_reports:
     | (if type == "string" then (try fromjson catch null) else . end)
     | select(type == "object" and .event == "d1_write_retry")
     | { outcome: (if .outcome == "retry" or .outcome == "applied" or .outcome == "gave_up" then .outcome else "other" end) }];
+
+# The slow_call reports in an event's log lines (app/lib/slow-call.server.ts): a D1 call or a
+# cook-session Durable Object call that waited over a second, with only their fixed fields, each
+# checked against the shape the Worker writes.
+def ident: if type == "string" and test("^[A-Za-z_][A-Za-z0-9_.]{0,63}$") then . else null end;
+def count_or_null: if type == "number" and . >= 0 then floor else null end;
+def slow_call_reports:
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == "slow_call")
+    | { call: (.call | ident),
+        operation: (if .operation == "read" or .operation == "write" then .operation else null end),
+        table: (.table | ident),
+        attempt: (.attempt | count_or_null),
+        waitedMs: (.waitedMs | count_or_null),
+        settled: (.settled == true),
+        outcome: (if .outcome == "ok" or .outcome == "error" then .outcome else null end) }];
+
+# Where Smart Placement ran the request, from the Worker's placement log line: `local-<colo>` or
+# `remote-<colo>`, "none" when the request had no cf-placement header, "other" for any other
+# value, and "unlogged" when the event has no such line (a Durable Object invocation, or a Worker
+# that does not log it).
+def placement_of:
+  ([(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == "placement")
+    | .placement
+    | if . == null then "none" elif type == "string" and test("^(?:local|remote)-[A-Z]{3,4}$") then . else "other" end]
+   | first) // "unlogged";
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:
@@ -152,6 +185,10 @@ def invocation: {
   cpuTime: (.cpuTime // null),
   wallTime: (.wallTime // null),
   eventTimestamp: (.eventTimestamp // null),
+  # Whether a Worker request or a Durable Object ran ("stateless", "durableObject"), and which
+  # class: fixed identifiers from Cloudflare, null when absent or not an identifier.
+  executionModel: (.executionModel | ident),
+  entrypoint: (.entrypoint | ident),
   exceptions: [(.exceptions // [])[] | { name: ((.name // null) | if . == null then null else tostring | .[0:100] end), message: ((.message // "") | redact_message) }]
 };
 
@@ -184,6 +221,10 @@ def cpu_budget_ms: 10;
 def by_path: group_by(path_pattern)
   | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
   | sort_by(-(.wallTime.p95 // 0));
+
+def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000;
+
+def with_wait_evidence: invocation + { placement: placement_of, slowCalls: (slow_call_reports | .[0:10]) };
 
 . as $events
 | ([range(0; $events | length) | select(($events[.].event.response.status // 0) >= 500)] | .[0:50]) as $serverErrorIndexes
@@ -221,7 +262,26 @@ def by_path: group_by(path_pattern)
   # generate a response" (a 500 with Error 1101 to the browser), whatever the outcome.
   hungInvocations: ([.[] | select(any((.exceptions // [])[]; (.message // "") | tostring | test("code had hung|would never generate a response")))] | length),
   # Requests that waited over 2 s on under 5 ms of CPU: stuck on a promise or on I/O, not working.
-  stalledInvocations: ([.[] | select((.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000)] | length),
+  stalledInvocations: ([.[] | select(stalled)] | length),
+  # The first 20 of them, each with where it ran and the calls it reported waiting on, so a stall
+  # names the D1 call (and table) or the Durable Object call that held it. A stall with no slow
+  # call waited somewhere else.
+  stalledRequests: ([.[] | select(stalled) | with_wait_evidence] | .[0:20]),
+  # Every call that waited over a second, stalled request or not: how many, by call, and the first
+  # 40 requests that made one.
+  slowCalls: ([.[] | select(slow_call_reports | length > 0)] as $slow
+    | [$slow[] | slow_call_reports[] | select(.settled | not)] as $waits
+    | { total: ($waits | length),
+        byCall: ($waits | map(.call // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
+        requests: ([$slow[] | with_wait_evidence] | .[0:40]) }),
+  # Where Smart Placement ran requests, in order of first use, so a move from one location to
+  # another can be lined up with the stalls.
+  placements: (map({ placement: placement_of, eventTimestamp: (.eventTimestamp // null) })
+    | group_by(.placement)
+    | map({ placement: .[0].placement, count: length,
+            firstEventTimestamp: ([.[] | .eventTimestamp | select(type == "number")] | min),
+            lastEventTimestamp: ([.[] | .eventTimestamp | select(type == "number")] | max) })
+    | sort_by(.firstEventTimestamp // 0)),
   firstExceptions: [$exceptionIndexes[] | with_error_logs(.)],
   # Transient D1 failures the Worker reported: retried ones a later attempt may have absorbed,
   # and ones that reached the caller (a write whose outcome is unknown, or a read out of retries).
