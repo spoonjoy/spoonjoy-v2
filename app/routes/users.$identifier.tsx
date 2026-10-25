@@ -230,7 +230,7 @@ export default function UserProfile() {
     <CookbookPage>
       <section className="mx-auto max-w-6xl">
         <header className="sj-rule-block flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <Avatar
               name={chefDisplayName(profile.username)}
               src={resolveChefAvatarUrl(profile.photoUrl)}
@@ -238,9 +238,10 @@ export default function UserProfile() {
               initials={profile.username.charAt(0).toUpperCase()}
               size="2xl"
             />
-            <div>
+            <div className="min-w-0">
               <p className="sj-eyebrow">Chef profile</p>
-              <h1 className="font-sj-display text-2xl/8 font-semibold tracking-normal text-[var(--sj-ink)] mt-2 text-5xl/12 tracking-normal">
+              {/* Usernames are one long word, so let them break anywhere instead of running off a phone screen. */}
+              <h1 data-testid="chef-profile-name" className="font-sj-display mt-2 text-4xl/10 font-semibold tracking-normal text-[var(--sj-ink)] [overflow-wrap:anywhere] sm:text-5xl/12">
                 {chefDisplayName(profile.username)}
               </h1>
               <Text tone="muted" size="sm" className="mt-1">

@@ -339,6 +339,29 @@ describe("Users $identifier Route", () => {
   });
 
   describe("component", () => {
+    it("lets a long username wrap instead of running off a phone screen", async () => {
+      const Stub = createTestRoutesStub([
+        {
+          path: "/users/:identifier",
+          Component: UserProfile,
+          loader: () => ({
+            profile: { id: "user-1", username: "johnnyappleseed", photoUrl: null, joinedAt: "2026-10-01T12:00:00.000Z" },
+            isOwner: false,
+            recipes: [],
+            cookbooks: [],
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/users/johnnyappleseed"]} />);
+      const heading = await screen.findByTestId("chef-profile-name");
+      expect(heading.className).toContain("[overflow-wrap:anywhere]");
+      expect(heading.className).not.toContain("text-2xl");
+      // The flex column must be allowed to shrink, or the heading overflows before it can wrap.
+      expect(heading.parentElement?.className).toContain("min-w-0");
+      expect(heading.parentElement?.parentElement?.className).toContain("min-w-0");
+    });
+
     it("shows the month the chef joined in the viewer's own timezone", async () => {
       // 03:00 UTC on 1 June is still the evening of 31 May in Los Angeles.
       const Stub = createTestRoutesStub([
