@@ -138,6 +138,8 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
   it("rebinds HX controls on a charcoal panel to photo-white, through tokens alone", () => {
     expect(ON_CHARCOAL).toEqual({
       "--foreground": "var(--sj-on-photo)",
+      "--muted": "color-mix(in srgb, var(--sj-on-photo) 8%, var(--sj-photo-charcoal))",
+      "--muted-foreground": "color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal))",
       "--border": "var(--sj-photo-line)",
       "--ring": "var(--sj-on-photo)",
     });

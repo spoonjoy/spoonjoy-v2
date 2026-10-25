@@ -226,30 +226,38 @@ export async function showColorScheme(page: Page, scheme: ColorScheme): Promise<
   await settle(page);
 }
 
-/** Audits the page in the theme it is showing now. */
-export async function auditShownScheme(page: Page, options: AuditOptions = {}): Promise<SchemeAudit> {
+type Recorder = (finding: AxeFinding, outcome: { passed: boolean; detail: string }) => void;
+
+interface FocusWalk {
+  record: Recorder;
+  finding: AxeFinding;
+  verification: Verification;
+}
+
+function recorder(audit: SchemeAudit): Recorder {
+  return (finding, outcome) => {
+    if (outcome.passed) audit.verified.push({ ...finding, measured: outcome.detail });
+    else audit.unresolved.push({ ...finding, message: `${finding.message} (measured: ${outcome.detail})` });
+  };
+}
+
+/**
+ * Everything but the tab-order walk, in the theme the page shows now. The walk moves focus, and Tab
+ * can close a popup, so it runs after every other measurement (walkFocus).
+ */
+async function measureShownScheme(page: Page, options: AuditOptions): Promise<{ audit: SchemeAudit; walks: FocusWalk[] }> {
   await settle(page);
   const scheme = await shownScheme(page);
   const results = await runAxe(page, options.target);
   const { audit, contrastToMeasure, toVerify } = classifyAxeResults(scheme, results);
-  if (contrastToMeasure.length === 0 && toVerify.length === 0) return audit;
-  const record = (finding: AxeFinding, outcome: { passed: boolean; detail: string }) => {
-    if (outcome.passed) audit.verified.push({ ...finding, measured: outcome.detail });
-    else audit.unresolved.push({ ...finding, message: `${finding.message} (measured: ${outcome.detail})` });
-  };
+  const record = recorder(audit);
+  const walks = toVerify.filter((each) => each.verification.kind === "hidden-focus").map((each) => ({ ...each, record }));
+  if (contrastToMeasure.length === 0 && toVerify.length === walks.length) return { audit, walks };
   await saveScroll(page);
   try {
-    // The other checks first, while the page is as axe saw it (a toast can leave in seconds). The
-    // tab-order walk moves focus and puts it back; the page settles again before measuring, since
-    // focus can open a tooltip.
+    // The checks that only look first, while the page is as axe saw it.
     for (const { finding, verification } of toVerify.filter((each) => each.verification.kind !== "hidden-focus")) {
       record(finding, await verify(page, verification));
-    }
-    const focus = toVerify.filter((each) => each.verification.kind === "hidden-focus");
-    if (focus.length > 0) {
-      const outcomes = await verifyHiddenFocus(page, focus.map((each) => each.verification));
-      focus.forEach(({ finding }, index) => record(finding, outcomes[index]));
-      await settle(page);
     }
     for (const { node, axeReason } of contrastToMeasure) {
       const selector = selectorOf(node);
@@ -262,6 +270,20 @@ export async function auditShownScheme(page: Page, options: AuditOptions = {}): 
   } finally {
     await restoreScroll(page);
   }
+  return { audit, walks };
+}
+
+/** One tab-order walk settles every hidden region found in either theme. */
+async function walkFocus(page: Page, walks: readonly FocusWalk[]): Promise<void> {
+  if (walks.length === 0) return;
+  const outcomes = await verifyHiddenFocus(page, walks.map((each) => each.verification));
+  walks.forEach(({ record, finding }, index) => record(finding, outcomes[index]));
+}
+
+/** Audits the page in the theme it is showing now. */
+export async function auditShownScheme(page: Page, options: AuditOptions = {}): Promise<SchemeAudit> {
+  const { audit, walks } = await measureShownScheme(page, options);
+  await walkFocus(page, walks);
   return audit;
 }
 
@@ -296,14 +318,15 @@ export async function auditAccessibility(page: Page, options: AuditOptions = {})
   try {
     const first = await shownScheme(page);
     const second: ColorScheme = first === "dark" ? "light" : "dark";
-    const audits = [await auditShownScheme(page, options)];
+    const measured = [await measureShownScheme(page, options)];
     await showColorScheme(page, second);
     try {
-      audits.push(await auditShownScheme(page, options));
+      measured.push(await measureShownScheme(page, options));
     } finally {
       await showColorScheme(page, first);
     }
-    return audits;
+    await walkFocus(page, measured.flatMap((each) => each.walks));
+    return measured.map((each) => each.audit);
   } finally {
     // Focus goes back where it was, which lets the notifications go on.
     if (held) {

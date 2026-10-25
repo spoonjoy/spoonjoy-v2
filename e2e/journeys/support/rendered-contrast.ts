@@ -10,8 +10,8 @@
 // that stops a measurement (a colour format the parser does not know, a line that cannot be brought
 // into view, an image that does not load, more than one faded ancestor) is an error, never a pass.
 // Text covered by an open modal dialog's layer and hidden from assistive technology (the page
-// behind the dialog) is inactive, which WCAG 1.4.3 exempts, and is recorded as such; it passes only
-// when every line is.
+// behind the dialog) is inactive, which WCAG 1.4.3 exempts. An inactive line is skipped: the
+// element is judged by its other lines, and passes as inactive only when it has no other line.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { formatRgb, parseCssColor, requiredTextContrast, worstContrastOver, type Rgb, type Rgba } from "./contrast";
@@ -319,11 +319,12 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
       covers = coversOf(line.rect);
     }
     if (covers.length > 0) {
-      // Inactive only behind an open modal dialog, with the text hidden from assistive technology
-      // and every point of the line under a layer the page can name.
+      // Inactive only behind an open modal dialog that hides the text from assistive technology,
+      // with what covers it a layer the page can name. (A dialog over part of the line leaves the
+      // rest showing, still behind the dialog and as inactive.)
       const hidden = element.closest('[aria-hidden="true"], [inert]');
       const modal = helpers.modalOver(element);
-      if (hidden && modal && covers.length === pointsOf(line.rect).length && covers.every((cover) => cover !== "nothing")) {
+      if (hidden && modal && covers.every((cover) => cover !== "nothing")) {
         return { inactive: `behind ${name(covers[0])} while ${helpers.describe(modal)} is open, and hidden from assistive technology by ${helpers.describe(hidden)}` };
       }
       return { blocker: `line ${index + 1} is covered by ${name(covers[0])}` };

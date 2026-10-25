@@ -211,23 +211,22 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
       else (document.activeElement as HTMLElement | null)?.blur?.();
     }
     await frame();
-    // The walk must leave the page as axe saw it: the same popups open and each region still
-    // hidden. Moving focus can close a popup, and then the walk measured another page. (Where focus
-    // ends up is the page's call: a modal dialog takes focus back from <body>.)
+    // Tab can close a popup (a select's list closes as focus leaves it), as it would for a person;
+    // each landing was judged when it happened. The gate walks after everything else is measured,
+    // so nothing else sees the changed page. The record says when the walk changed it.
     const openAfter = openPopups();
-    const unchanged = openAfter.length === openBefore.length && openBefore.every((node) => openAfter.includes(node));
+    const closed = openBefore.filter((node) => !openAfter.includes(node)).length;
     return regions.map((matches, index) => {
       if (matches.length !== 1) return { passed: false, detail: `the hidden region matches ${matches.length} elements` };
       if (landed[index].length > 0) return { passed: false, detail: `the tab order lands inside the hidden region on ${landed[index].join(", ")}` };
       if (!complete) return { passed: false, detail: "the tab order never came back to a stop it had already seen, so not every stop was seen" };
-      if (!unchanged) return { passed: false, detail: `the walk opened or closed a popup (${openBefore.length} open before, ${openAfter.length} after), so the page changed while it was measured` };
-      if (!matches[0].isConnected || matches[0].closest('[aria-hidden="true"]') === null) {
-        return { passed: false, detail: "the region was no longer hidden after the walk, so the page changed while it was measured" };
-      }
       const skipped = related[index].filter((node) => !reached.has(node)).length;
       return {
         passed: true,
-        detail: `the tab order went both ways (${steps} steps) until it came back to a stop it had seen, without landing inside it; of the ${related[index].length} focusable elements axe found there, ${skipped} were never reached`,
+        detail:
+          `the tab order went both ways (${steps} steps) until it came back to a stop it had seen, without landing inside it while it was hidden; ` +
+          `of the ${related[index].length} focusable elements axe found there, ${skipped} were never reached` +
+          (closed > 0 ? `; Tab closed ${closed} popup(s) on the way` : ""),
       };
     });
   }, selectors);
