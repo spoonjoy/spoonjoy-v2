@@ -312,6 +312,25 @@ describe("Cloudflare worker app", () => {
     expect(response.headers.get("X-Frame-Options")).toBe("DENY");
   });
 
+  it("logs where Smart Placement ran each request on a per-run QA Worker only", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const placed = () => new Request("https://spoonjoy.app/health", { headers: { "cf-placement": "remote-IAD" } });
+      await worker.fetch(placed(), versionedEnvironment(), context());
+      expect(log).not.toHaveBeenCalled();
+
+      const qa = { ...versionedEnvironment(), SPOONJOY_QA_ERROR_LOGS: "1" } as CloudflareEnvironment;
+      await worker.fetch(placed(), qa, context());
+      await worker.fetch(new Request("https://spoonjoy.app/health"), qa, context());
+      expect(log.mock.calls).toEqual([
+        [JSON.stringify({ event: "placement", placement: "remote-IAD" })],
+        [JSON.stringify({ event: "placement", placement: null })],
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("threads runtime PostHog host configuration into Worker CSP headers", async () => {
     requestHandler.mockClear();
 

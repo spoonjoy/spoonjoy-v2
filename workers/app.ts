@@ -5,6 +5,8 @@ import { ApiAuthError, authenticateApiRequest } from "../app/lib/api-auth.server
 import { d1Binding } from "../app/lib/d1-read.server";
 import { withTransientD1Retry } from "../app/lib/d1-transient-retry.server";
 import { runWithD1WriteRetryReporter } from "../app/lib/d1-write-retry.server";
+import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
+import { requestPlacement } from "../app/lib/slow-call.server";
 import { getDb } from "../app/lib/db.server";
 import { handleMcpRouteRequest } from "../app/lib/mcp/http-mcp-route.server";
 import { oauthCorsPreflightResponse } from "../app/lib/oauth-cors.server";
@@ -350,6 +352,11 @@ async function handleFetch(request: Request, env: CloudflareEnvironment, ctx: Ex
 
 export default {
   async fetch(request, rawEnv, ctx) {
+    // A per-run QA Worker logs where Smart Placement ran each request, so the Journeys tail
+    // summary can line placement changes up with requests that stalled.
+    if (qaErrorLogsEnabled(rawEnv)) {
+      console.log(JSON.stringify({ event: "placement", placement: requestPlacement(request) }));
+    }
     const env = withTransientD1Retry(rawEnv);
     // A per-run QA Worker logs each write retry for the Journeys tail summary.
     return runWithD1WriteRetryReporter(rawEnv, () => handleFetch(request, env, ctx));
