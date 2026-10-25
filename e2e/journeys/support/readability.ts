@@ -5,9 +5,9 @@
 //     painted behind each glyph line. It screenshots each line box with the glyphs hidden (their
 //     fill made transparent, so the colour, `currentColor` state layers and the photo underneath
 //     are unchanged), composites the text colour over every pixel and keeps the worst one. It
-//     then screenshots the line with the glyphs shown and counts pixels painted exactly in the
-//     text colour, so a layer drawn over the text (which elementFromPoint can miss) shows up as
-//     missing glyphs. Text whose own web font hasn't loaded fails: it would measure a fallback.
+//     then screenshots the line with the glyphs shown and requires glyph pixels in every
+//     one-em-wide slice of the line, so a layer drawn over any part of the text (which
+//     elementFromPoint can miss) shows up as missing glyphs. Text whose own web font hasn't loaded fails: it would measure a fallback.
 //   - measureFocusIndicator(locator): the focused element's outline, compared pixel for pixel with
 //     the same spot with the outline hidden, along the middle of each straight edge.
 //   - coveringElements(locator): what sits on top of the element at its centre and corners, for an
@@ -139,16 +139,30 @@ export interface TextContrast {
   pixels: number;
   /** The pixel behind the text where the worst contrast was found. */
   worstBackground: string;
-  /** The fewest pixels, on any one line, painted in the text colour where the background was not. */
-  fewestGlyphPixels: number;
+  /** Pixels painted at least GLYPH_COVERAGE of the way from the background to the text colour. */
+  glyphPixels: number;
+  /** One-em-wide slices of the text's lines with no glyph pixel: text hidden or covered there. */
+  emptySlices: number;
 }
 
-/** A line must show at least this many pixels in the text colour to count as painted. */
-export const MIN_GLYPH_PIXELS = 5;
-// How far, per 0-255 channel, a fully covered glyph pixel may be from the composited text colour.
-const GLYPH_TOLERANCE = 6;
-// How far a pixel must move between the hidden and shown screenshots to count as glyph.
-const GLYPH_CHANGE = 24;
+// A glyph pixel moves from the background at least this far towards the composited text colour
+// (antialiased edges move part way), and stays on that line: anything drawn over the text pushes
+// it off, so it doesn't count.
+const GLYPH_COVERAGE = 0.6;
+const GLYPH_OVERSHOOT = 1.2;
+const GLYPH_OFF_LINE = 12;
+
+// How far `actual` moved from `background` towards `expected` (0 = not at all, 1 = all the way),
+// and how far, per 0-255 channel, it strayed from that straight line.
+export function glyphCoverage(background: Rgb, expected: Rgb, actual: Rgb): { coverage: number; offLine: number } {
+  const d = [expected.r - background.r, expected.g - background.g, expected.b - background.b];
+  const v = [actual.r - background.r, actual.g - background.g, actual.b - background.b];
+  const length = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+  if (length < 1) return { coverage: 0, offLine: 0 };
+  const coverage = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / length;
+  const offLine = Math.max(...v.map((value, index) => Math.abs(value - coverage * d[index])));
+  return { coverage, offLine };
+}
 
 interface TextRun {
   color: string;
@@ -219,6 +233,7 @@ export async function measureTextContrast(page: Page, locator: Locator, label: s
   if (colors.size !== 1) throw new Error(`${label} mixes text colours (${[...colors].join(", ")}); measure each part separately.`);
   const fallback = runs.find((each) => !each.fontLoaded);
   if (fallback) throw new Error(`${label}: its font "${fallback.family}" has not loaded, so the text would be measured in a fallback font.`);
+  const lines = runs.flatMap((each) => each.rects.map((rect) => ({ rect, em: each.fontSize })));
   const run = runs[0];
   const parsed = parseCssColor(run.color);
   const text: Rgba = { ...parsed, a: parsed.a * run.opacity };
@@ -237,12 +252,14 @@ export async function measureTextContrast(page: Page, locator: Locator, label: s
   let minimum = Number.POSITIVE_INFINITY;
   let worstBackground: Rgb = { r: 0, g: 0, b: 0 };
   let pixels = 0;
-  let fewestGlyphPixels = Number.POSITIVE_INFINITY;
-  for (const [index, rect] of rects.entries()) {
+  let glyphPixels = 0;
+  let emptySlices = 0;
+  for (const [index, { rect, em }] of lines.entries()) {
     const hidden = backgrounds[index];
     const shown = await screenshotPixels(page, rect, `${label}, line ${index + 1} with its text`);
     if (shown.width !== hidden.width || shown.height !== hidden.height) throw new Error(`${label}, line ${index + 1}: the two screenshots differ in size.`);
-    let glyphPixels = 0;
+    const sliceCount = Math.max(1, Math.floor(rect.width / em));
+    const painted = Array.from({ length: sliceCount }, () => false);
     for (let row = 0; row < hidden.height; row += 1) {
       for (let column = 0; column < hidden.width; column += 1) {
         const background = pixelAt(hidden, column, row);
@@ -253,13 +270,14 @@ export async function measureTextContrast(page: Page, locator: Locator, label: s
           minimum = ratio;
           worstBackground = background;
         }
-        const actual = pixelAt(shown, column, row);
-        const moved = Math.max(Math.abs(actual.r - background.r), Math.abs(actual.g - background.g), Math.abs(actual.b - background.b));
-        const off = Math.max(Math.abs(actual.r - expected.r), Math.abs(actual.g - expected.g), Math.abs(actual.b - expected.b));
-        if (moved >= GLYPH_CHANGE && off <= GLYPH_TOLERANCE) glyphPixels += 1;
+        const { coverage, offLine } = glyphCoverage(background, expected, pixelAt(shown, column, row));
+        if (coverage >= GLYPH_COVERAGE && coverage <= GLYPH_OVERSHOOT && offLine <= GLYPH_OFF_LINE) {
+          glyphPixels += 1;
+          painted[Math.min(sliceCount - 1, Math.floor((column / hidden.width) * sliceCount))] = true;
+        }
       }
     }
-    fewestGlyphPixels = Math.min(fewestGlyphPixels, glyphPixels);
+    emptySlices += painted.filter((slice) => !slice).length;
   }
   if (pixels === 0 || !Number.isFinite(minimum)) throw new Error(`${label}: no pixels behind the text were measured.`);
   return {
@@ -271,7 +289,8 @@ export async function measureTextContrast(page: Page, locator: Locator, label: s
     lines: rects.length,
     pixels,
     worstBackground: `rgb(${worstBackground.r}, ${worstBackground.g}, ${worstBackground.b})`,
-    fewestGlyphPixels,
+    glyphPixels,
+    emptySlices,
   };
 }
 
