@@ -11,19 +11,21 @@
 //     name is not empty.
 //   - aria-hidden-focus ("Check that focusable elements are not tabbable in the current state"):
 //     axe finds focusable elements inside an aria-hidden region while a modal is open and cannot
-//     tell whether a keyboard can reach them. Settled when focusing each of them leaves focus
-//     outside the hidden region: it is inert and takes no focus, or it is a focus guard that sends
-//     focus on. Focus is put back afterwards.
+//     tell whether a keyboard can reach them. Settled by walking the page's tab order from the
+//     focused element, forwards and backwards, round to where it started, the way Tab and Shift+Tab
+//     move focus: each step focuses the next element in tab order and follows wherever focus goes
+//     (a focus guard sends it on). Passes when focus never lands inside the hidden region. Focus is
+//     put back afterwards.
 //   - form-field-multiple-labels ("Multiple label elements is not widely supported in assistive
 //     technologies"): a field with more than one <label>, such as a file field whose drop zone is
 //     a label around the input. Settled when the field's name comes from aria-labelledby, which
 //     assistive technology uses instead of any <label>, and it names one of the field's own visible
 //     labels, so which <label> a screen reader would pick never matters.
 //   - aria-valid-attr-value with aria-haspopup ("Unable to determine if aria-controls referenced ID
-//     exists"): a popup trigger whose aria-controls names a popup that is not on the page. Settled
-//     when the trigger says the popup is closed (aria-expanded="false"), the state in which axe
-//     accepts a missing aria-controls target on any other control. Open popups are checked by axe
-//     directly: with aria-expanded="true", a missing target is a violation.
+//     exists"): a popup trigger whose aria-controls may name a popup that is not on the page.
+//     Settled when every element it names is on the page, or when the trigger says the popup is
+//     closed (aria-expanded="false"), the state in which axe accepts a missing aria-controls target
+//     on any other control.
 import type { Page } from "@playwright/test";
 import type { CheckResult, NodeResult, Result } from "axe-core";
 
@@ -122,50 +124,88 @@ async function verifyClosedPopupControls(page: Page, selector: string): Promise<
   return page.locator(selector).evaluate((trigger) => {
     const expanded = trigger.getAttribute("aria-expanded");
     const controls = (trigger.getAttribute("aria-controls") ?? "").split(/\s+/).filter(Boolean);
+    if (controls.length === 0) return { passed: false, detail: "aria-controls names nothing" };
     const missing = controls.filter((id) => !document.getElementById(id));
-    if (expanded !== "false") return { passed: false, detail: `aria-controls names ${missing.join(", ")}, not on the page, and aria-expanded is ${expanded === null ? "unset" : `"${expanded}"`}` };
-    return { passed: true, detail: `its popup is closed (aria-expanded="false"), so ${missing.join(", ")} is not on the page yet` };
+    if (missing.length === 0) return { passed: true, detail: `every element aria-controls names is on the page: ${controls.join(", ")}` };
+    if (expanded === "false") return { passed: true, detail: `its popup is closed (aria-expanded="false"), so ${missing.join(", ")} is not on the page yet` };
+    return { passed: false, detail: `aria-controls names ${missing.join(", ")}, not on the page, and aria-expanded is ${expanded === null ? "unset" : `"${expanded}"`}` };
   });
 }
 
-// Focuses each focusable element axe found in the hidden region and records where focus ends up.
-// Runs with the scroll saved by the caller; focus goes back where it was.
-async function verifyHiddenFocus(page: Page, selector: string, related: string[]): Promise<VerificationOutcome> {
-  return page.evaluate(
-    async ({ selector, related }) => {
-      const describe = (node: Element | null) => (node ? `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}` : "nothing");
-      const region = document.querySelector(selector);
-      if (!region) return { passed: false, detail: "the hidden region is no longer on the page" };
-      const before = document.activeElement as HTMLElement | null;
-      const reached: string[] = [];
-      const outcomes: string[] = [];
-      try {
-        for (const target of related) {
-          const node = document.querySelector<HTMLElement>(target);
-          if (!node) return { passed: false, detail: `${target} is no longer on the page` };
-          node.focus({ preventScroll: true });
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const active = document.activeElement;
-          if (active && region.contains(active)) reached.push(`${target} (focus stayed on ${describe(active)})`);
-          else outcomes.push(active === node ? `${target} kept focus` : `${target} sent focus to ${describe(active)}`);
-        }
-      } finally {
-        if (before && typeof before.focus === "function") before.focus({ preventScroll: true });
-        else (document.activeElement as HTMLElement | null)?.blur?.();
+/**
+ * Walks the page's tab order from the focused element, forwards and then backwards, round to where
+ * it started, and records which of the hidden regions focus landed in. Each step focuses the next
+ * element in tab order (positive tabindex first, then document order; the element focused before
+ * is the event's relatedTarget, as with Tab) and follows wherever focus goes, so a focus guard
+ * sends it on as it would. One walk settles every hidden region on the page; focus goes back where
+ * it was. Run it after everything that only looks: moving focus can open a tooltip.
+ */
+export async function verifyHiddenFocus(page: Page, verifications: readonly Verification[]): Promise<VerificationOutcome[]> {
+  const selectors = verifications.map((each) => each.selector);
+  return page.evaluate(async (selectors) => {
+    const FOCUSABLE = 'a[href], area[href], button, input:not([type="hidden"]), select, textarea, summary, iframe, audio[controls], video[controls], [contenteditable]:not([contenteditable="false"]), [tabindex]';
+    const regions = selectors.map((selector) => document.querySelectorAll(selector));
+    const describe = (node: Element) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}${node.getAttribute("aria-label") ? `[aria-label="${node.getAttribute("aria-label")}"]` : ""}`;
+    const tabOrder = () => {
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (node) => node.tabIndex >= 0 && !(node as HTMLButtonElement).disabled && !node.closest("[inert]") && node.checkVisibility({ visibilityProperty: true }),
+      );
+      const positive = candidates.filter((node) => node.tabIndex > 0).sort((a, b) => a.tabIndex - b.tabIndex);
+      return [...positive, ...candidates.filter((node) => node.tabIndex === 0)];
+    };
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const before = document.activeElement as HTMLElement | null;
+    const landed = selectors.map(() => [] as string[]);
+    let steps = 0;
+    const walk = async (direction: 1 | -1) => {
+      const seen = new Set<Element>();
+      const start = document.activeElement;
+      if (start && start !== document.body) seen.add(start);
+      const limit = tabOrder().length * 2 + 4;
+      for (let step = 0; step < limit; step += 1) {
+        const order = tabOrder();
+        if (order.length === 0) return true;
+        const current = document.activeElement as HTMLElement | null;
+        const at = current ? order.indexOf(current) : -1;
+        const next = at === -1 ? order[direction === 1 ? 0 : order.length - 1] : order[(at + direction + order.length) % order.length];
+        next.focus({ preventScroll: true });
+        await frame();
+        steps += 1;
+        const active = document.activeElement;
+        if (!active || active === document.body) continue;
+        regions.forEach((matches, index) => {
+          const region = matches.length === 1 ? matches[0] : null;
+          if (region && (region === active || region.contains(active)) && !landed[index].includes(describe(active))) landed[index].push(describe(active));
+        });
+        if (seen.has(active)) return true;
+        seen.add(active);
       }
-      if (reached.length > 0) return { passed: false, detail: `keyboard focus can land inside the hidden region: ${reached.join(", ")}` };
-      return { passed: true, detail: `focus never stays inside it: ${outcomes.join("; ")}` };
-    },
-    { selector, related },
-  );
+      return false;
+    };
+    let complete = false;
+    try {
+      const forwards = await walk(1);
+      before?.focus({ preventScroll: true });
+      complete = forwards && (await walk(-1));
+    } finally {
+      if (before && before !== document.body && typeof before.focus === "function") before.focus({ preventScroll: true });
+      else (document.activeElement as HTMLElement | null)?.blur?.();
+    }
+    return regions.map((matches, index) => {
+      if (matches.length !== 1) return { passed: false, detail: `the hidden region matches ${matches.length} elements` };
+      if (landed[index].length > 0) return { passed: false, detail: `the tab order lands inside the hidden region on ${landed[index].join(", ")}` };
+      if (!complete) return { passed: false, detail: "the tab order did not come back round, so not every stop was seen" };
+      return { passed: true, detail: `the tab order went round the page both ways (${steps} steps) without landing inside it` };
+    });
+  }, selectors);
 }
 
-/** Runs one stronger measurement. Anything that stops it is a failure, never a pass. */
+/** Runs one stronger measurement that only looks. Hidden-focus checks go to verifyHiddenFocus(). */
 export async function verify(page: Page, verification: Verification): Promise<VerificationOutcome> {
   const count = await page.locator(verification.selector).count();
   if (count !== 1) return { passed: false, detail: `the selector matches ${count} elements` };
   if (verification.kind === "toggle-label-text") return verifyToggleLabelText(page, verification.selector);
   if (verification.kind === "labelledby-name") return verifyLabelledbyName(page, verification.selector);
   if (verification.kind === "closed-popup-controls") return verifyClosedPopupControls(page, verification.selector);
-  return verifyHiddenFocus(page, verification.selector, verification.related);
+  return (await verifyHiddenFocus(page, [verification]))[0];
 }

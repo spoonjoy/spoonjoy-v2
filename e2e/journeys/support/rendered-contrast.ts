@@ -79,17 +79,39 @@ function installHelpers(): void {
     range.selectNodeContents(node);
     return Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
   };
-  const lines = (element: Element) => textNodes(element).flatMap((node, run) => rectsOf(node).map((rect) => ({ run, rect })));
+  // A form field's text is its value, not a text node: it is measured over the field's content
+  // box, the area inside its border and padding where the value is drawn.
+  const NOT_TEXT_INPUTS = new Set(["checkbox", "radio", "range", "color", "file", "hidden", "image"]);
+  const isField = (element: Element): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
+    (element instanceof HTMLInputElement && !NOT_TEXT_INPUTS.has(element.type)) || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement;
+  const contentBox = (element: Element) => {
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const left = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const top = box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+    const right = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
+    return new DOMRect(left, top, right - left, bottom - top);
+  };
+  const sources = (element: Element): Array<{ styled: Element; rects: () => DOMRect[] }> => {
+    if (isField(element)) {
+      const value = element instanceof HTMLSelectElement ? (element.selectedOptions[0]?.text ?? "") : element.value;
+      if (!/\S/.test(value) || getComputedStyle(element).visibility !== "visible") return [];
+      return [{ styled: element, rects: () => [contentBox(element)].filter((rect) => rect.width > 0 && rect.height > 0) }];
+    }
+    return textNodes(element).map((node) => ({ styled: node.parentElement as Element, rects: () => rectsOf(node) }));
+  };
+  const lines = (element: Element) => sources(element).flatMap((source, run) => source.rects().map((rect) => ({ run, rect })));
   const runs = (element: Element) =>
-    textNodes(element).map((node) => {
-      const parent = node.parentElement as Element;
+    sources(element).map((source) => {
+      const parent = source.styled;
       const style = getComputedStyle(parent);
       const run = {
         fill: style.getPropertyValue("-webkit-text-fill-color") || style.color,
         opacity: 1,
         fontSize: parseFloat(style.fontSize),
         fontWeight: Number(style.fontWeight),
-        lines: rectsOf(node).length,
+        lines: source.rects().length,
         blocker: undefined as string | undefined,
       };
       const clip = style.getPropertyValue("-webkit-background-clip") || style.backgroundClip;
@@ -184,23 +206,39 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
     }
     if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} cannot be scrolled fully into view` };
 
-    const { rect } = line;
-    const middle = rect.top + rect.height / 2;
-    const points = [rect.left + Math.min(2, rect.width / 2), rect.left + rect.width / 2, rect.right - Math.min(2, rect.width / 2)];
-    for (const x of points) {
-      const top = helpers.topAt(element, x, middle);
-      if (top && (top === element || element.contains(top))) continue;
-      const cover = top ? helpers.describe(top) : "nothing the page can name";
+    // What covers the line at its start, middle or end, if anything. A line in view can still sit
+    // under a fixed bar, so a covered line is centred once and checked again.
+    const pointsOf = (rect: DOMRect) => {
+      const middle = rect.top + rect.height / 2;
+      return [rect.left + Math.min(2, rect.width / 2), rect.left + rect.width / 2, rect.right - Math.min(2, rect.width / 2)].map((x) => [x, middle] as const);
+    };
+    const coverOf = (rect: DOMRect) => {
+      for (const [x, y] of pointsOf(rect)) {
+        const top = helpers.topAt(element, x, y);
+        if (top && (top === element || element.contains(top))) continue;
+        return top ? helpers.describe(top) : "nothing the page can name";
+      }
+      return null;
+    };
+    let cover = coverOf(line.rect);
+    if (cover !== null) {
+      element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+      line = helpers.lines(element)[index];
+      if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} is covered by ${cover} and cannot be moved clear of it` };
+      cover = coverOf(line.rect);
+    }
+    if (cover !== null) {
       const hidden = element.closest('[aria-hidden="true"], [inert]');
       if (hidden) return { inactive: `behind ${cover}, and hidden from assistive technology by ${helpers.describe(hidden)}` };
       return { blocker: `line ${index + 1} is covered by ${cover}` };
     }
+    const points = pointsOf(line.rect);
 
     // Wait for whatever is painted behind the text: an <img>, or a CSS background image.
     const loads: Array<Promise<unknown>> = [];
     const waiting: string[] = [];
-    for (const x of points) {
-      for (const layer of document.elementsFromPoint(x, middle)) {
+    for (const [x, y] of points) {
+      for (const layer of document.elementsFromPoint(x, y)) {
         if (layer instanceof HTMLImageElement && !layer.complete) {
           waiting.push(layer.currentSrc || layer.src);
           loads.push(new Promise((resolve) => {

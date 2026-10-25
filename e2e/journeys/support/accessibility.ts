@@ -17,7 +17,7 @@ import type { AxeResults, CheckResult, NodeResult, Result } from "axe-core";
 import { runAxe, type AxeScope } from "./axe";
 import { formatRatio } from "./contrast";
 import { measureTextContrast, restoreScroll, saveScroll, type ContrastMeasurement } from "./rendered-contrast";
-import { planVerification, verify, type Verification } from "./undecided-checks";
+import { planVerification, verify, verifyHiddenFocus, type Verification } from "./undecided-checks";
 
 export type { ContrastMeasurement } from "./rendered-contrast";
 
@@ -144,7 +144,8 @@ export function classifyAxeResults(scheme: ColorScheme, results: Pick<AxeResults
  * Waits until the page has stopped changing what it paints: web fonts loaded, the images in view
  * loaded and every finite animation or transition finished (a theme switch starts colour
  * transitions), including ones those start. Endless animations, such as a spinner, are left
- * running. If the page has not settled in time, the error names what it was still waiting for.
+ * running, and so are animations on elements the browser does not render. If the page has not
+ * settled in time, the error names what it was still waiting for.
  */
 export async function settle(page: Page): Promise<void> {
   const pending = await page.evaluate(async (timeout) => {
@@ -178,9 +179,13 @@ export async function settle(page: Page): Promise<void> {
         ),
       );
       for (;;) {
+        // Only what paints: an animation in a subtree the browser skips (a closed disclosure's
+        // hidden="until-found" panel, which is content-visibility: hidden) never advances.
         const finite = document.getAnimations().filter((animation) => {
           const end = animation.effect?.getComputedTiming().endTime;
-          return animation.playState === "running" && typeof end === "number" && Number.isFinite(end);
+          const target = (animation.effect as KeyframeEffect | null)?.target;
+          const painted = !target || target.checkVisibility();
+          return animation.playState === "running" && typeof end === "number" && Number.isFinite(end) && painted;
         });
         if (finite.length === 0) break;
         await Promise.all(
@@ -205,6 +210,7 @@ export async function settle(page: Page): Promise<void> {
     throw new Error(`The page had not settled after ${SETTLE_TIMEOUT_MS / 1000} s, so it could not be checked. Still waiting for: ${pending.slice(0, 10).join("; ")}`);
   }
 }
+
 async function shownScheme(page: Page): Promise<ColorScheme> {
   return (await page.evaluate(() => document.documentElement.classList.contains("dark"))) ? "dark" : "light";
 }
@@ -237,12 +243,17 @@ export async function auditShownScheme(page: Page, options: AuditOptions = {}): 
           : await measureTextContrast(page, selector, axeReason),
       );
     }
-    // Focus checks move focus, so they run after everything that only looks.
-    const ordered = [...toVerify].sort((a, b) => Number(a.verification.kind === "hidden-focus") - Number(b.verification.kind === "hidden-focus"));
-    for (const { finding, verification } of ordered) {
-      const outcome = await verify(page, verification);
+    const record = (finding: AxeFinding, outcome: { passed: boolean; detail: string }) => {
       if (outcome.passed) audit.verified.push({ ...finding, measured: outcome.detail });
       else audit.unresolved.push({ ...finding, message: `${finding.message} (measured: ${outcome.detail})` });
+    };
+    const looking = toVerify.filter((each) => each.verification.kind !== "hidden-focus");
+    for (const { finding, verification } of looking) record(finding, await verify(page, verification));
+    // Focus checks move focus, so they run last, in one walk with the keyboard.
+    const focus = toVerify.filter((each) => each.verification.kind === "hidden-focus");
+    if (focus.length > 0) {
+      const outcomes = await verifyHiddenFocus(page, focus.map((each) => each.verification));
+      focus.forEach(({ finding }, index) => record(finding, outcomes[index]));
     }
   } finally {
     await restoreScroll(page);
