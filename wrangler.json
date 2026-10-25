@@ -152,6 +152,7 @@
         "SPOONJOY_AI_DAILY_GENERATION_BUDGET": "1000",
         "SPOONJOY_API_EVENT_SAMPLE_RATE": "1",
         "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
+        "SPOONJOY_MODERATOR_USERNAMES": "arimendelow",
         "COOK_SESSION_BOOTSTRAP_MODE": "1",
         "COOK_SESSION_PROTOCOL": "v1",
         "SPOONJOY_CSP_MODE": "enforce",

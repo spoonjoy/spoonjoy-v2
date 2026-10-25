@@ -96,6 +96,7 @@ describe("/moderation", () => {
     const recipe = await db.recipe.create({ data: createTestRecipe(author.user.id) });
     await post(reporter.cookie, { intent: "report", targetType: "recipe", targetId: recipe.id, reason: "spam", details: "ads" });
 
+    await db.contentReport.create({ data: { reporterId: reporter.user.id, targetType: "recipe", targetId: "gone", reason: "spam" } });
     const result = (await load(mod.cookie, "someone, THE_MOD")) as Awaited<ReturnType<typeof loader>>;
     expect(result.reports).toEqual([
       expect.objectContaining({
@@ -106,6 +107,7 @@ describe("/moderation", () => {
         chef: "author_chef",
         href: `/recipes/${recipe.id}`,
       }),
+      expect.objectContaining({ chef: null, targetType: "recipe" }),
     ]);
   });
 
@@ -180,8 +182,10 @@ describe("/moderation", () => {
 
   it("falls back to no username when the chef row is gone", async () => {
     const me = await chef();
-    vi.spyOn(db.user, "findUnique").mockResolvedValueOnce(null);
     const other = await chef();
+    const findUnique = db.user.findUnique.bind(db.user);
+    vi.spyOn(db.user, "findUnique").mockImplementation(((query: { select?: Record<string, boolean> }) =>
+      query.select && Object.keys(query.select).join() === "username" ? Promise.resolve(null) : findUnique(query as never)) as never);
     expect(answer(await post(me.cookie, { intent: "block", chefId: other.user.id })).body).toEqual({ intent: "block", success: true });
   });
 

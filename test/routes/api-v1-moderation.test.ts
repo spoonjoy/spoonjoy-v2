@@ -6,6 +6,7 @@ import { action, loader } from "~/routes/api.v1.$";
 import { createApiCredential } from "~/lib/api-auth.server";
 import { getLocalDb } from "~/lib/db.server";
 import { cleanupDatabase } from "../helpers/cleanup";
+import { expectConsoleError } from "../warning-policy";
 import { createTestRecipe, createTestUser } from "../utils";
 
 type Db = Awaited<ReturnType<typeof getLocalDb>>;
@@ -84,6 +85,26 @@ describe("API v1 moderation", () => {
         : findUnique(query as never)) as never);
     const response = await call(token, "POST", "reports", { targetType: "chef", targetId: author.id, reason: "spam" });
     expect(response.status).toBe(201);
+  });
+
+  it("refuses an objectionable cookbook title, and rethrows unexpected report failures", async () => {
+    const { token } = await chefWithToken();
+    const refused = await json(await call(token, "POST", "cookbooks", { title: "porn" }));
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.code).toBe("validation_error");
+
+    const author = await db.user.create({ data: createTestUser() });
+    const down = new Error("D1 down");
+    down.stack = "Error: D1 down";
+    vi.spyOn(db.contentReport, "create").mockRejectedValueOnce(down);
+    expectConsoleError("[api-v1] internal_error", {
+      requestId: "req_moderation",
+      method: "POST",
+      path: "/api/v1/reports",
+      error: { name: "Error", message: "D1 down", stack: "Error: D1 down" },
+    });
+    const failed = await call(token, "POST", "reports", { targetType: "chef", targetId: author.id, reason: "spam" });
+    expect(failed.status).toBe(500);
   });
 
   it("blocks, lists and unblocks chefs", async () => {
