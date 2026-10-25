@@ -68,7 +68,7 @@ export default function AgentConnectLookup() {
   const view = actionData ?? loaderData;
 
   return (
-    <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
+    <div className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
       <p className="font-sj-ui text-xs font-semibold uppercase tracking-[0.18em] text-[var(--sj-ink-soft)]">
         Agent access
       </p>
@@ -92,6 +92,6 @@ export default function AgentConnectLookup() {
           <Button type="submit">Continue</Button>
         </div>
       </Form>
-    </main>
+    </div>
   );
 }

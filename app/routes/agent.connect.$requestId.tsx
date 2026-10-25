@@ -211,7 +211,7 @@ export default function AgentConnect() {
   const requester = connection.requester;
 
   return (
-    <main className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
+    <div className="mx-auto flex min-h-[70svh] w-full max-w-xl flex-col justify-center px-6 py-12">
       <p className={LABEL}>Agent access</p>
       <Heading level={1} size="xl" className="mt-3">{connectionTitle(connection.status)}</Heading>
       <Text tone="muted" size="lg" className="mt-5 leading-7">
@@ -359,6 +359,6 @@ export default function AgentConnect() {
           </div>
         </Form>
       )}
-    </main>
+    </div>
   );
 }
