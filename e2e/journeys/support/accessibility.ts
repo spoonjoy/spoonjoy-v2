@@ -266,18 +266,52 @@ export async function auditShownScheme(page: Page, options: AuditOptions = {}): 
 }
 
 /**
+ * Holds the page's notifications while it is checked. A notification leaves by itself after a few
+ * seconds, sooner than checking both themes takes, so it could leave halfway through and the check
+ * would judge a page that is gone. F6 moves focus to the notifications, as a keyboard user would,
+ * and Ouro UI's toasts stay while they have focus. They are checked as that user sees them. Returns
+ * the element to give focus back to, or null when there was nothing to hold.
+ */
+async function holdNotifications(page: Page) {
+  const showing = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[data-ouro="toaster"] [role="dialog"]')).some((toast) => toast.checkVisibility({ visibilityProperty: true })),
+  );
+  if (!showing) return null;
+  const before = await page.evaluateHandle(() => document.activeElement);
+  await page.keyboard.press("F6");
+  try {
+    await page.waitForFunction(() => document.activeElement?.matches('[data-ouro="toaster"]') === true, undefined, { timeout: 5_000 });
+  } catch {
+    throw new Error("F6 did not move focus to the notifications, so they could not be held while the page was checked.");
+  }
+  return before;
+}
+
+/**
  * Audits the page in both themes: the one it shows first, then the other, switched through the
- * system colour scheme, which is then put back.
+ * system colour scheme, which is then put back. Notifications are held while it does.
  */
 export async function auditAccessibility(page: Page, options: AuditOptions = {}): Promise<SchemeAudit[]> {
-  const first = await shownScheme(page);
-  const second: ColorScheme = first === "dark" ? "light" : "dark";
-  const audits = [await auditShownScheme(page, options)];
-  await showColorScheme(page, second);
+  const held = await holdNotifications(page);
   try {
-    audits.push(await auditShownScheme(page, options));
+    const first = await shownScheme(page);
+    const second: ColorScheme = first === "dark" ? "light" : "dark";
+    const audits = [await auditShownScheme(page, options)];
+    await showColorScheme(page, second);
+    try {
+      audits.push(await auditShownScheme(page, options));
+    } finally {
+      await showColorScheme(page, first);
+    }
+    return audits;
   } finally {
-    await showColorScheme(page, first);
+    // Focus goes back where it was, which lets the notifications go on.
+    if (held) {
+      await held.evaluate((element) => {
+        if (element instanceof HTMLElement && element !== document.body) element.focus({ preventScroll: true });
+        else (document.activeElement as HTMLElement | null)?.blur();
+      });
+      await held.dispose();
+    }
   }
-  return audits;
 }

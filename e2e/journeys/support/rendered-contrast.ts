@@ -257,10 +257,15 @@ function installHelpers(): void {
     }
   };
   // An open modal dialog that does not hold the element: a <dialog> shown with showModal(), or a
-  // shown aria-modal element.
+  // shown dialog role that does not say it is modeless (aria-modal="false", as a toast does).
+  // Base UI's modal dialogs leave out aria-modal and hide the rest of the page instead, which the
+  // caller checks.
   const modalOver = (element: Element) =>
-    Array.from(document.querySelectorAll('dialog, [aria-modal="true"]')).find(
-      (modal) => !modal.contains(element) && (modal instanceof HTMLDialogElement ? modal.matches(":modal") : modal.checkVisibility({ visibilityProperty: true })),
+    Array.from(document.querySelectorAll('dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]')).find(
+      (modal) =>
+        !modal.contains(element) &&
+        modal.getAttribute("aria-modal") !== "false" &&
+        (modal instanceof HTMLDialogElement ? modal.matches(":modal") : modal.checkVisibility({ visibilityProperty: true })),
     ) ?? null;
   page.__sjContrast = { describe, lines, runs, emptyField, hideText, unfade, restore, coverAt, modalOver };
 }

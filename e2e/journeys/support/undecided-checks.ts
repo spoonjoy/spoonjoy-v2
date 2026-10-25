@@ -158,6 +158,10 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
     };
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const before = document.activeElement as HTMLElement | null;
+    // The popups open now (dialogs, menus, listboxes), to check the walk closed none of them.
+    const POPUPS = 'dialog[open], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+    const openPopups = () => Array.from(document.querySelectorAll(POPUPS)).filter((node) => node.checkVisibility({ visibilityProperty: true }));
+    const openBefore = openPopups();
     const landed = selectors.map(() => [] as string[]);
     let steps = 0;
     const walk = async (direction: 1 | -1) => {
@@ -207,14 +211,16 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
       else (document.activeElement as HTMLElement | null)?.blur?.();
     }
     await frame();
-    // The walk must leave the page as axe saw it: focus back where it was and each region still
-    // hidden. Moving focus can close a popup, and then the walk measured another page.
-    const restored = document.activeElement === (before ?? document.body) || (before === null && document.activeElement === document.body);
+    // The walk must leave the page as axe saw it: the same popups open and each region still
+    // hidden. Moving focus can close a popup, and then the walk measured another page. (Where focus
+    // ends up is the page's call: a modal dialog takes focus back from <body>.)
+    const openAfter = openPopups();
+    const unchanged = openAfter.length === openBefore.length && openBefore.every((node) => openAfter.includes(node));
     return regions.map((matches, index) => {
       if (matches.length !== 1) return { passed: false, detail: `the hidden region matches ${matches.length} elements` };
       if (landed[index].length > 0) return { passed: false, detail: `the tab order lands inside the hidden region on ${landed[index].join(", ")}` };
       if (!complete) return { passed: false, detail: "the tab order never came back to a stop it had already seen, so not every stop was seen" };
-      if (!restored) return { passed: false, detail: "focus did not go back where it was after the walk, so the page changed while it was measured" };
+      if (!unchanged) return { passed: false, detail: `the walk opened or closed a popup (${openBefore.length} open before, ${openAfter.length} after), so the page changed while it was measured` };
       if (!matches[0].isConnected || matches[0].closest('[aria-hidden="true"]') === null) {
         return { passed: false, detail: "the region was no longer hidden after the walk, so the page changed while it was measured" };
       }

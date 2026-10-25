@@ -22,7 +22,7 @@ test.describe("text axe cannot judge", () => {
     const audit = await auditShownScheme(page);
     expect(audit.contrast).toHaveLength(1);
     expect(audit.contrast[0].passed).toBe(true);
-    expect(describeAuditFailures([audit])).toBe("");
+    expect(describeAuditFailures([audit])).toBeNull();
   });
 
   test("applies a faded group's opacity once", async ({ page }) => {

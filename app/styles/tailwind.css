@@ -193,9 +193,12 @@
 
 /* A charcoal panel (the developer playground's Response, the shaded landing hero) under photo-white
    text: HX controls in it take their text, border and focus ring from these tokens, so a plain or
-   outline button isn't charcoal on charcoal. */
+   outline button isn't charcoal on charcoal. A muted surface, such as HX CodeBlock's, is a lighter
+   charcoal, so photo-white text stays readable on it. */
 .sj-on-charcoal {
   --foreground: var(--sj-on-photo);
+  --muted: color-mix(in srgb, var(--sj-on-photo) 8%, var(--sj-photo-charcoal));
+  --muted-foreground: color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal));
   --border: var(--sj-photo-line);
   --ring: var(--sj-on-photo);
 }
