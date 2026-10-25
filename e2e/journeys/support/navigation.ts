@@ -1,5 +1,6 @@
 // Small navigation helpers shared by the round-trip journeys.
 import type { Locator, Page } from "@playwright/test";
+import { expect } from "./journey";
 
 // React Router sets this global while hydrating the document, after React's root event listeners
 // exist. Waiting for it after a full document load means the next tap goes through the app
@@ -7,6 +8,26 @@ import type { Locator, Page } from "@playwright/test";
 // page load, which would start a new in-app history.
 export async function waitForHydration(page: Page): Promise<void> {
   await page.waitForFunction(() => "__reactRouterDataRouter" in window);
+}
+
+// Opens a disclosure (an Ouro Collapsible) and waits until its panel has finished opening. A tool
+// inside counts as visible as soon as the panel starts growing, because clipping does not hide it;
+// Playwright then scrolls the clipped panel to reach the tool, and the growing panel moves the tool
+// out from under the tap (Journeys runs 40235473342, 40254061734 and 40259231909). The panel has
+// finished when its height transition is over and it shows all its content.
+export async function openDisclosure(toggle: Locator): Promise<void> {
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const panelId = await toggle.getAttribute("aria-controls");
+  if (!panelId) throw new Error("An open disclosure's toggle names no panel in aria-controls.");
+  await toggle.page().waitForFunction(
+    (id) => {
+      const panel = document.getElementById(id);
+      return panel instanceof HTMLElement && panel.getAnimations().length === 0 && panel.clientHeight >= panel.scrollHeight;
+    },
+    panelId,
+    { timeout: 5_000 },
+  );
 }
 
 // The root layout registers the service worker once per full page load until a registration

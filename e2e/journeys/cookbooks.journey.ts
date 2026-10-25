@@ -13,7 +13,7 @@
 // fork title, and the fork is picked and checked by its own recipe id.
 import { test, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { pathUrl, seededRecipeLink, waitForHydration } from "./support/navigation";
+import { openDisclosure, pathUrl, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 
 const SALMON = "/recipes/qa-kitchen-recipe-salmon";
@@ -64,17 +64,7 @@ function ownerToolsToggle(page: Page) {
 // Opens the owner tools and waits until the panel has finished opening, so a tap on a tool lands
 // on the tool and not on a panel still sliding into place.
 async function openOwnerTools(page: Page) {
-  await ownerToolsToggle(page).click();
-  await expect(ownerToolsToggle(page)).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByRole("button", { name: "Edit title", exact: true })).toBeVisible();
-  // A tool is "visible" as soon as the panel starts growing, because clipping does not hide it.
-  // Playwright then scrolls the clipped panel to reach the tool, and the growing panel moves the
-  // tool out from under the tap. The panel has finished when its height transition is over and it
-  // shows all its content.
-  await page.waitForFunction(() => {
-    const panel = document.getElementById("cookbook-owner-tools")?.closest("[data-ouro-collapsible-panel]");
-    return panel instanceof HTMLElement && panel.getAnimations().length === 0 && panel.clientHeight >= panel.scrollHeight;
-  }, undefined, { timeout: 5_000 });
+  await openDisclosure(ownerToolsToggle(page));
 }
 
 test.describe("Cookbooks", () => {
