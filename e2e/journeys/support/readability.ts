@@ -19,17 +19,10 @@
 // screen or an empty sample is an error, never a pass.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
+import { composite, contrastRatio, isLargeText, LARGE_TEXT_CONTRAST, parseCssColor, TEXT_CONTRAST, type Rgb, type Rgba } from "./contrast";
 
-export interface Rgb {
-  r: number;
-  g: number;
-  b: number;
-}
-
-export interface Rgba extends Rgb {
-  /** 0 to 1. */
-  a: number;
-}
+// The colour arithmetic is shared with the accessibility gate's (support/contrast.ts).
+export { composite, contrastRatio, LARGE_TEXT_CONTRAST, parseCssColor, relativeLuminance, TEXT_CONTRAST, type Rgb, type Rgba } from "./contrast";
 
 interface Box {
   x: number;
@@ -38,64 +31,8 @@ interface Box {
   height: number;
 }
 
-// WCAG 2.2 large text: at least 24 CSS px, or at least 18.66 px (14 pt) and bold.
-const LARGE_TEXT_PX = 24;
-const LARGE_BOLD_TEXT_PX = 18.66;
-
-export const TEXT_CONTRAST = 4.5;
-export const LARGE_TEXT_CONTRAST = 3;
+/** WCAG 1.4.11: a control's boundary against what is around it. */
 export const NON_TEXT_CONTRAST = 3;
-
-/** Parses a computed CSS colour: rgb(), rgba() or color(srgb ...). Anything else throws. */
-export function parseCssColor(value: string): Rgba {
-  const text = value.trim();
-  const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(text);
-  if (rgb) {
-    return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]), a: parseAlpha(rgb[4]) };
-  }
-  const srgb = /^color\(\s*srgb\s+([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/.exec(text);
-  if (srgb) {
-    return {
-      r: clamp(Number(srgb[1])) * 255,
-      g: clamp(Number(srgb[2])) * 255,
-      b: clamp(Number(srgb[3])) * 255,
-      a: parseAlpha(srgb[4]),
-    };
-  }
-  throw new Error(`Unknown colour format "${value}": the contrast can't be measured.`);
-}
-
-function parseAlpha(value: string | undefined): number {
-  if (value === undefined) return 1;
-  return value.endsWith("%") ? Number(value.slice(0, -1)) / 100 : Number(value);
-}
-
-function clamp(value: number): number {
-  return Math.min(1, Math.max(0, value));
-}
-
-function channel(value: number): number {
-  const c = value / 255;
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
-
-export function relativeLuminance({ r, g, b }: Rgb): number {
-  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-}
-
-export function contrastRatio(a: Rgb, b: Rgb): number {
-  const [light, dark] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
-  return (light + 0.05) / (dark + 0.05);
-}
-
-/** `top` painted over an opaque `bottom`. */
-export function composite(top: Rgba, bottom: Rgb): Rgb {
-  return {
-    r: top.r * top.a + bottom.r * (1 - top.a),
-    g: top.g * top.a + bottom.g * (1 - top.a),
-    b: top.b * top.a + bottom.b * (1 - top.a),
-  };
-}
 
 interface Pixels {
   data: Buffer;
@@ -239,7 +176,7 @@ export async function measureTextContrast(page: Page, locator: Locator, label: s
   const run = runs[0];
   const parsed = parseCssColor(run.color);
   const text: Rgba = { ...parsed, a: parsed.a * run.opacity };
-  const largeText = runs.every((each) => each.fontSize >= LARGE_TEXT_PX || (each.fontSize >= LARGE_BOLD_TEXT_PX && each.fontWeight >= 700));
+  const largeText = runs.every((each) => isLargeText(each.fontSize, each.fontWeight));
 
   await setGlyphsHidden(locator, true);
   const backgrounds: Pixels[] = [];

@@ -17,7 +17,7 @@ describe("parseCssColor", () => {
   });
 
   it("throws on a format it can't measure", () => {
-    expect(() => parseCssColor("oklab(0.5 0 0)")).toThrow(/Unknown colour format/);
+    expect(() => parseCssColor("lab(50% 0 0)")).toThrow(/Unknown colour format/);
     expect(() => parseCssColor("currentcolor")).toThrow(/Unknown colour format/);
   });
 });
