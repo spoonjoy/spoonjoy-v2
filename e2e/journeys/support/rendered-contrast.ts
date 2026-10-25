@@ -25,6 +25,8 @@ export interface ContrastMeasurement {
   worstBackground?: string;
   lines?: number;
   pixels?: number;
+  /** Set when there was no text to judge, and why. */
+  note?: string;
   /** Set when the text is inactive (behind an overlay, hidden from assistive technology). */
   inactive?: string;
   /** Why the text could not be measured. A measurement that could not be taken fails. */
@@ -93,11 +95,20 @@ function installHelpers(): void {
     const bottom = box.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
     return new DOMRect(left, top, right - left, bottom - top);
   };
-  const sources = (element: Element): Array<{ styled: Element; rects: () => DOMRect[] }> => {
+  // Date and time fields draw their parts (or blanks) even with no value.
+  const DRAWN_WHEN_EMPTY = new Set(["date", "datetime-local", "month", "time", "week"]);
+  const fieldText = (element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): "value" | "placeholder" | "empty" => {
+    const value = element instanceof HTMLSelectElement ? (element.selectedOptions[0]?.text ?? "") : element.value;
+    if (/\S/.test(value) || (element instanceof HTMLInputElement && DRAWN_WHEN_EMPTY.has(element.type))) return "value";
+    return "placeholder" in element && /\S/.test(element.placeholder) ? "placeholder" : "empty";
+  };
+  const emptyField = (element: Element) => isField(element) && fieldText(element) === "empty";
+  const sources = (element: Element): Array<{ styled: Element; pseudo?: string; rects: () => DOMRect[] }> => {
     if (isField(element)) {
-      const value = element instanceof HTMLSelectElement ? (element.selectedOptions[0]?.text ?? "") : element.value;
-      if (!/\S/.test(value) || getComputedStyle(element).visibility !== "visible") return [];
-      return [{ styled: element, rects: () => [contentBox(element)].filter((rect) => rect.width > 0 && rect.height > 0) }];
+      const shown = fieldText(element);
+      if (shown === "empty" || getComputedStyle(element).visibility !== "visible") return [];
+      const rects = () => [contentBox(element)].filter((rect) => rect.width > 0 && rect.height > 0);
+      return [{ styled: element, pseudo: shown === "placeholder" ? "::placeholder" : undefined, rects }];
     }
     return textNodes(element).map((node) => ({ styled: node.parentElement as Element, rects: () => rectsOf(node) }));
   };
@@ -105,7 +116,7 @@ function installHelpers(): void {
   const runs = (element: Element) =>
     sources(element).map((source) => {
       const parent = source.styled;
-      const style = getComputedStyle(parent);
+      const style = getComputedStyle(parent, source.pseudo);
       const run = {
         fill: style.getPropertyValue("-webkit-text-fill-color") || style.color,
         opacity: 1,
@@ -165,26 +176,56 @@ function installHelpers(): void {
       if (overlay) override(node, "visibility", "hidden");
     }
   };
-  // What is painted on top of the point, with the element's own pointer-events forced on, since
-  // elementFromPoint skips an element that ignores the pointer.
-  const topAt = (element: Element, x: number, y: number) => {
+  // Whether a layer paints anything of its own over the point: a background colour or image, a
+  // backdrop filter, replaced content (an image, video, canvas, svg or frame), or text at the point,
+  // its own or in its ::before or ::after. A transparent layer, such as a link stretched over a
+  // card to make it one target, hides nothing.
+  const transparent = (color: string) => /^rgba?\(.*,\s*0\)$|^transparent$|\/\s*0\)$/.test(color.trim());
+  const paintsAt = (layer: Element, x: number, y: number) => {
+    if (layer instanceof HTMLImageElement || layer instanceof HTMLVideoElement || layer instanceof HTMLCanvasElement || layer instanceof SVGElement || layer instanceof HTMLIFrameElement) return true;
+    for (const pseudo of [undefined, "::before", "::after"]) {
+      const style = getComputedStyle(layer, pseudo);
+      if (pseudo && (style.content === "none" || style.content === "normal")) continue;
+      if (!transparent(style.backgroundColor) || style.backgroundImage !== "none") return true;
+      if ((style.getPropertyValue("backdrop-filter") || "none") !== "none") return true;
+      if (pseudo && style.content !== '""' && style.content !== "''") return true;
+    }
+    return Array.from(layer.childNodes).some((node) => {
+      if (node.nodeType !== Node.TEXT_NODE || !/\S/.test(node.textContent ?? "")) return false;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return Array.from(range.getClientRects()).some((rect) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+    });
+  };
+  // The first layer that paints over the point above the element, or null when the element (or
+  // its own content) is the first. The element's pointer-events are forced on, since hit testing
+  // skips an element that ignores the pointer.
+  const coverAt = (element: Element, x: number, y: number): Element | "nothing" | null => {
     for (const node of [element, ...Array.from(element.querySelectorAll("*"))]) override(node, "pointer-events", "auto");
     try {
-      return document.elementFromPoint(x, y);
+      const layers = document.elementsFromPoint(x, y);
+      if (layers.length === 0) return "nothing";
+      for (const layer of layers) {
+        if (layer === element || element.contains(layer)) return null;
+        if (layer.contains(element)) return null;
+        if (paintsAt(layer, x, y)) return layer;
+      }
+      return "nothing";
     } finally {
       restore();
     }
   };
-  page.__sjContrast = { describe, lines, runs, hideText, restore, topAt };
+  page.__sjContrast = { describe, lines, runs, emptyField, hideText, restore, coverAt };
 }
 
 interface Helpers {
   describe(node: Element): string;
   lines(element: Element): Array<{ run: number; rect: DOMRect }>;
   runs(element: Element): TextRun[];
+  emptyField(element: Element): boolean;
   hideText(element: Element): void;
   restore(): void;
-  topAt(element: Element, x: number, y: number): Element | null;
+  coverAt(element: Element, x: number, y: number): Element | "nothing" | null;
 }
 
 // Brings line `index` of the element's text into view and returns its box, or why it can't be
@@ -214,9 +255,9 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
     };
     const coverOf = (rect: DOMRect) => {
       for (const [x, y] of pointsOf(rect)) {
-        const top = helpers.topAt(element, x, y);
-        if (top && (top === element || element.contains(top))) continue;
-        return top ? helpers.describe(top) : "nothing the page can name";
+        const cover = helpers.coverAt(element, x, y);
+        if (cover === null) continue;
+        return cover === "nothing" ? "nothing the page can name" : helpers.describe(cover);
       }
       return null;
     };
@@ -315,7 +356,11 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
   if (count !== 1) return { ...base, passed: false, error: `the selector matches ${count} elements` };
   await page.evaluate(installHelpers);
   const runs = await locator.evaluate((element) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.runs(element));
-  if (runs.length === 0) return { ...base, passed: false, error: "it has no visible text" };
+  if (runs.length === 0) {
+    const empty = await locator.evaluate((element) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.emptyField(element));
+    if (empty) return { ...base, passed: true, note: "it is an empty field with no placeholder, so it shows no text" };
+    return { ...base, passed: false, error: "it has no visible text" };
+  }
   const colors: Rgba[] = [];
   for (const run of runs) {
     if (run.blocker) return { ...base, passed: false, error: run.blocker };

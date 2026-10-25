@@ -167,7 +167,13 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
         if (order.length === 0) return true;
         const current = document.activeElement as HTMLElement | null;
         const at = current ? order.indexOf(current) : -1;
-        const next = at === -1 ? order[direction === 1 ? 0 : order.length - 1] : order[(at + direction + order.length) % order.length];
+        // Focus on an element outside the tab order (a dialog's popup, tabindex -1) moves on to
+        // the next element after it in the document, as Tab does; from <body>, to the first.
+        const follows = (node: Element) =>
+          !!current && current !== document.body && (current.compareDocumentPosition(node) & (direction === 1 ? Node.DOCUMENT_POSITION_FOLLOWING : Node.DOCUMENT_POSITION_PRECEDING)) !== 0;
+        const fromOutside = direction === 1 ? order.find(follows) : [...order].reverse().find(follows);
+        const next =
+          at === -1 ? (fromOutside ?? order[direction === 1 ? 0 : order.length - 1]) : order[(at + direction + order.length) % order.length];
         next.focus({ preventScroll: true });
         await frame();
         steps += 1;
