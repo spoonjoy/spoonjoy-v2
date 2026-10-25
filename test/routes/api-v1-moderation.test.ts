@@ -89,9 +89,9 @@ describe("API v1 moderation", () => {
 
   it("refuses an objectionable cookbook title, and rethrows unexpected report failures", async () => {
     const { token } = await chefWithToken();
-    const refused = await json(await call(token, "POST", "cookbooks", { title: "porn" }));
+    const refused = await json(await call(token, "POST", "cookbooks", { clientMutationId: "m1", title: "porn" }));
     expect(refused.status).toBe(400);
-    expect(refused.body.error.code).toBe("validation_error");
+    expect(refused.body.error).toMatchObject({ code: "validation_error", message: expect.stringContaining("community rules") });
 
     const author = await db.user.create({ data: createTestUser() });
     const down = new Error("D1 down");
