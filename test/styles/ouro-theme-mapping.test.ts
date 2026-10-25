@@ -2,7 +2,7 @@
 // onto Spoonjoy's --sj-* palette in one block, so Ouro components look like the rest of the app and
 // follow dark mode. This checks that block: every colour is a --sj-* variable, and every text colour
 // Ouro UI puts on a surface passes WCAG AA 4.5:1 in both themes.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -58,6 +58,8 @@ function contrast(a: string, b: string): number {
 // Each text colour Ouro UI uses (text-*) and the surfaces it sits on.
 const PAIRS = [
   ["--foreground", "--background"],
+  ["--card-foreground", "--card"],
+  ["--muted-foreground", "--card"],
   ["--popover-foreground", "--popover"],
   ["--muted-foreground", "--popover"],
   ["--muted-foreground", "--background"],
@@ -81,6 +83,8 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     expect(MAPPING).toEqual({
       "--background": "var(--sj-paper)",
       "--foreground": "var(--sj-ink)",
+      "--card": "var(--sj-panel-solid)",
+      "--card-foreground": "var(--sj-ink)",
       "--popover": "var(--sj-panel-solid)",
       "--popover-foreground": "var(--sj-ink)",
       "--primary": "var(--sj-brass)",
@@ -153,6 +157,46 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
       const panel = color(theme, "--sj-photo-charcoal");
       expect(contrast(color(theme, "--foreground", ON_CHARCOAL), panel)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(color(theme, "--ring", ON_CHARCOAL), panel)).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
+// Tailwind emits nothing for a colour utility whose --color-* token is missing, so a missed token
+// leaves an HX surface transparent with no error (the install card's bg-card did exactly that).
+// Every theme colour an HX component's source names must therefore resolve through @theme inline
+// to a token in the mapping above.
+describe("theme colours Ouro UI's components use", () => {
+  const ROOT = resolve(__dirname, "../..");
+  const sources = (directory: string): string[] =>
+    readdirSync(resolve(ROOT, directory), { recursive: true, encoding: "utf8" })
+      .filter((file) => /\.tsx?$/.test(file) && !/\.(test|stories)\.|\.test-d\./.test(file))
+      .map((file) => readFileSync(resolve(ROOT, directory, file), "utf8"));
+  const THEME = CSS.slice(CSS.indexOf("@theme inline {"));
+  const SHADCN_COLOURS = new Set(
+    Object.keys(MAPPING)
+      .concat(["--warning", "--warning-foreground"])
+      .map((name) => name.slice(2))
+      // Not colours: the radius and heading font, and the action fills HX reads as bg-(--ouro-action).
+      .filter((name) => name !== "radius" && name !== "font-heading" && !name.startsWith("ouro-")),
+  );
+  const UTILITY = /(?<![\w-])(?:bg|text|border|ring|outline|fill|stroke|divide|placeholder|caret|decoration)-([a-z]+(?:-[a-z]+)*)(?=[\s"'`/:)\]]|$)/g;
+  const used = new Set<string>();
+  for (const source of [...sources("app/components/ouro"), ...sources("app/lib/ouro")]) {
+    for (const match of source.matchAll(UTILITY)) {
+      const name = match[1];
+      if (SHADCN_COLOURS.has(name) || ["card", "card-foreground", "sidebar", "chart"].some((token) => name === token || name.startsWith(`${token}-`))) used.add(name);
+    }
+  }
+
+  it("finds the card colours the install card relies on", () => {
+    expect(used).toContain("card");
+    expect(used).toContain("card-foreground");
+  });
+
+  for (const name of [...used].sort()) {
+    it(`defines --color-${name} and its --${name} mapping`, () => {
+      expect(THEME, `--color-${name} in @theme inline`).toMatch(new RegExp(`--color-${name}:\\s*var\\(--${name}\\);`));
+      expect(MAPPING[`--${name}`] ?? (name.startsWith("warning") ? "ouro-base" : undefined), `--${name} is mapped`).toBeDefined();
     });
   }
 });
