@@ -5,10 +5,13 @@
 // top of it, and screenshotted with the glyphs hidden (their fill made transparent, so the colour,
 // `currentColor` borders and state layers and the photo underneath are unchanged). The text
 // colour, with the opacity it is painted at, is composited over every pixel of that screenshot and
-// the worst ratio is kept. Anything that stops a measurement (a colour format the parser does not
-// know, a line that cannot be brought into view, an image that does not load) is an error, never a
-// pass. Text that sits behind an overlay and is hidden from assistive technology (the page behind
-// an open dialog) is inactive, which WCAG 1.4.3 exempts, and is recorded as such.
+// the worst ratio is kept. Text inside a faded ancestor (opacity below 1) is screenshotted twice,
+// as painted and with that ancestor at full opacity, so the fade is applied once (contrast.ts). Anything
+// that stops a measurement (a colour format the parser does not know, a line that cannot be brought
+// into view, an image that does not load, more than one faded ancestor) is an error, never a pass.
+// Text covered by an open modal dialog's layer and hidden from assistive technology (the page
+// behind the dialog) is inactive, which WCAG 1.4.3 exempts, and is recorded as such; it passes only
+// when every line is.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { formatRgb, parseCssColor, requiredTextContrast, worstContrastOver, type Rgb, type Rgba } from "./contrast";
@@ -42,6 +45,7 @@ interface Box {
 
 interface TextRun {
   fill: string;
+  /** The opacity of the one faded ancestor the text is inside, or 1. */
   opacity: number;
   fontSize: number;
   fontWeight: number;
@@ -127,12 +131,18 @@ function installHelpers(): void {
       };
       const clip = style.getPropertyValue("-webkit-background-clip") || style.backgroundClip;
       if (clip === "text") run.blocker = `${describe(parent)} paints its text with background-clip: text`;
+      const faded: Element[] = [];
       for (let each: Element | null = parent; each; each = each.parentElement) {
         const computed = getComputedStyle(each);
-        run.opacity *= Number(computed.opacity);
+        if (Number(computed.opacity) < 1) {
+          faded.push(each);
+          run.opacity = Number(computed.opacity);
+        }
         if (computed.filter !== "none") run.blocker = `${describe(each)} has filter: ${computed.filter}`;
         if (computed.mixBlendMode !== "normal") run.blocker = `${describe(each)} has mix-blend-mode: ${computed.mixBlendMode}`;
       }
+      // One faded group can be undone for a second screenshot; nested ones cannot be separated.
+      if (faded.length > 1) run.blocker = `its text is inside ${faded.length} faded ancestors (${faded.map(describe).join(", ")})`;
       return run;
     });
   // Inline style overrides with their previous values, so they can be put back exactly.
@@ -154,26 +164,45 @@ function installHelpers(): void {
     }
     saved.clear();
   };
-  // Hides what is drawn with the text: the glyphs, their decorations, and decorative overlays
-  // drawn over the text inside the element (a strike across a checked item's label): hidden from
-  // assistive technology, holding no text, absolutely positioned, ignoring the pointer and coming
-  // after the text, so painted on top of it. Everything behind the text keeps painting.
-  const hideText = (element: Element) => {
+  // Whether every colour a layer paints is transparent or its own text colour: a line drawn with
+  // the text, as a strike-through is, and not a veil or a glow.
+  const GRADIENT_WORDS = new Set(["none", "linear-gradient", "repeating-linear-gradient", "calc", "to", "left", "right", "top", "bottom", "center", "deg", "turn", "rad", "px", "em", "rem", "lh", "e"]);
+  const COLOR = /(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^()]*\)|transparent/g;
+  const paintsOnlyTextColor = (style: CSSStyleDeclaration) =>
+    transparent(style.backgroundColor) &&
+    (style.getPropertyValue("backdrop-filter") || "none") === "none" &&
+    style.boxShadow === "none" &&
+    parseFloat(style.borderTopWidth) + parseFloat(style.borderRightWidth) + parseFloat(style.borderBottomWidth) + parseFloat(style.borderLeftWidth) === 0 &&
+    Array.from(style.backgroundImage.matchAll(COLOR)).every(([color]) => transparent(color) || color === style.color) &&
+    // Nothing else that could name a colour or an image: only gradient syntax is left.
+    (style.backgroundImage.replace(COLOR, "").replace(/currentcolor/gi, "").match(/[a-z][a-z-]*/gi) ?? []).every((word) => GRADIENT_WORDS.has(word.toLowerCase()));
+  // A line drawn over the text inside the element in the text's own colour (a strike across a
+  // checked item's label): hidden from assistive technology, holding no text, absolutely
+  // positioned, ignoring the pointer, coming after the text, so painted on top of it, and painting
+  // nothing but the text's colour. It is part of the text, as a text decoration would be.
+  const drawnWithText = (element: Element, node: Element) => {
     const first = textNodes(element)[0];
+    if (node === element || !first || !element.contains(node)) return false;
+    const style = getComputedStyle(node);
+    return (
+      node.getAttribute("aria-hidden") === "true" &&
+      !/\S/.test(node.textContent ?? "") &&
+      (style.position === "absolute" || style.position === "fixed") &&
+      style.pointerEvents === "none" &&
+      style.color === getComputedStyle(first.parentElement as Element).color &&
+      paintsOnlyTextColor(style) &&
+      (first.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+    );
+  };
+  // Hides what is drawn with the text: the glyphs, their decorations and any line drawnWithText.
+  // Everything behind the text, and any other overlay, keeps painting.
+  const hideText = (element: Element) => {
     for (const node of [element, ...Array.from(element.querySelectorAll("*"))]) {
       override(node, "-webkit-text-fill-color", "transparent");
       override(node, "text-decoration-color", "transparent");
       override(node, "text-emphasis-color", "transparent");
       override(node, "text-shadow", "none");
-      if (node === element || !first) continue;
-      const style = getComputedStyle(node);
-      const overlay =
-        node.getAttribute("aria-hidden") === "true" &&
-        !/\S/.test(node.textContent ?? "") &&
-        (style.position === "absolute" || style.position === "fixed") &&
-        style.pointerEvents === "none" &&
-        (first.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-      if (overlay) override(node, "visibility", "hidden");
+      if (drawnWithText(element, node)) override(node, "visibility", "hidden");
     }
   };
   // Whether a layer paints anything of its own over the point: a background colour or image, a
@@ -197,16 +226,22 @@ function installHelpers(): void {
       return Array.from(range.getClientRects()).some((rect) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
     });
   };
-  // The first layer that paints over the point above the element, or null when the element (or
-  // its own content) is the first. The element's pointer-events are forced on, since hit testing
-  // skips an element that ignores the pointer.
+  // The first layer that paints over the point above the element's text, or null when the text
+  // (the element, or a part of it that holds its text) is the first. A layer inside the element
+  // that holds none of its text, such as a veil drawn over it, covers it like any other, unless it
+  // is drawnWithText. The element's pointer-events are forced on, since hit testing skips an
+  // element that ignores the pointer.
   const coverAt = (element: Element, x: number, y: number): Element | "nothing" | null => {
+    const texts = textNodes(element);
+    // Before pointer-events change, which drawnWithText reads.
+    const drawn = new Set(Array.from(element.querySelectorAll("*")).filter((node) => drawnWithText(element, node)));
     for (const node of [element, ...Array.from(element.querySelectorAll("*"))]) override(node, "pointer-events", "auto");
     try {
       const layers = document.elementsFromPoint(x, y);
       if (layers.length === 0) return "nothing";
       for (const layer of layers) {
-        if (layer === element || element.contains(layer)) return null;
+        if (layer === element || texts.some((text) => layer.contains(text))) return null;
+        if (drawn.has(layer)) continue;
         if (layer.contains(element)) return null;
         if (paintsAt(layer, x, y)) return layer;
       }
@@ -215,7 +250,19 @@ function installHelpers(): void {
       restore();
     }
   };
-  page.__sjContrast = { describe, lines, runs, emptyField, hideText, restore, coverAt };
+  // Puts the faded ancestor of one text run at full opacity, for the second screenshot.
+  const unfade = (element: Element, run: number) => {
+    for (let each: Element | null = sources(element)[run]?.styled ?? null; each; each = each.parentElement) {
+      if (Number(getComputedStyle(each).opacity) < 1) override(each, "opacity", "1");
+    }
+  };
+  // An open modal dialog that does not hold the element: a <dialog> shown with showModal(), or a
+  // shown aria-modal element.
+  const modalOver = (element: Element) =>
+    Array.from(document.querySelectorAll('dialog, [aria-modal="true"]')).find(
+      (modal) => !modal.contains(element) && (modal instanceof HTMLDialogElement ? modal.matches(":modal") : modal.checkVisibility({ visibilityProperty: true })),
+    ) ?? null;
+  page.__sjContrast = { describe, lines, runs, emptyField, hideText, unfade, restore, coverAt, modalOver };
 }
 
 interface Helpers {
@@ -224,8 +271,10 @@ interface Helpers {
   runs(element: Element): TextRun[];
   emptyField(element: Element): boolean;
   hideText(element: Element): void;
+  unfade(element: Element, run: number): void;
   restore(): void;
   coverAt(element: Element, x: number, y: number): Element | "nothing" | null;
+  modalOver(element: Element): Element | null;
 }
 
 // Brings line `index` of the element's text into view and returns its box, or why it can't be
@@ -253,25 +302,26 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
       const middle = rect.top + rect.height / 2;
       return [rect.left + Math.min(2, rect.width / 2), rect.left + rect.width / 2, rect.right - Math.min(2, rect.width / 2)].map((x) => [x, middle] as const);
     };
-    const coverOf = (rect: DOMRect) => {
-      for (const [x, y] of pointsOf(rect)) {
-        const cover = helpers.coverAt(element, x, y);
-        if (cover === null) continue;
-        return cover === "nothing" ? "nothing the page can name" : helpers.describe(cover);
-      }
-      return null;
-    };
-    let cover = coverOf(line.rect);
-    if (cover !== null) {
+    // Each covered point, with the layer over it, or "nothing" when the element is not hit there
+    // at all (clipped away, for instance).
+    const coversOf = (rect: DOMRect) => pointsOf(rect).map(([x, y]) => helpers.coverAt(element, x, y)).filter((cover) => cover !== null);
+    const name = (cover: Element | "nothing") => (cover === "nothing" ? "nothing the page can name" : helpers.describe(cover));
+    let covers = coversOf(line.rect);
+    if (covers.length > 0) {
       element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
       line = helpers.lines(element)[index];
-      if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} is covered by ${cover} and cannot be moved clear of it` };
-      cover = coverOf(line.rect);
+      if (!line || !inside(line.rect)) return { blocker: `line ${index + 1} is covered by ${name(covers[0])} and cannot be moved clear of it` };
+      covers = coversOf(line.rect);
     }
-    if (cover !== null) {
+    if (covers.length > 0) {
+      // Inactive only behind an open modal dialog, with the text hidden from assistive technology
+      // and every point of the line under a layer the page can name.
       const hidden = element.closest('[aria-hidden="true"], [inert]');
-      if (hidden) return { inactive: `behind ${cover}, and hidden from assistive technology by ${helpers.describe(hidden)}` };
-      return { blocker: `line ${index + 1} is covered by ${cover}` };
+      const modal = helpers.modalOver(element);
+      if (hidden && modal && covers.length === pointsOf(line.rect).length && covers.every((cover) => cover !== "nothing")) {
+        return { inactive: `behind ${name(covers[0])} while ${helpers.describe(modal)} is open, and hidden from assistive technology by ${helpers.describe(hidden)}` };
+      }
+      return { blocker: `line ${index + 1} is covered by ${name(covers[0])}` };
     }
     const points = pointsOf(line.rect);
 
@@ -318,7 +368,8 @@ async function pixelsIn(page: Page, box: Box): Promise<Uint8Array> {
   let bottom = Math.floor(box.y + box.height);
   if (right <= x) [x, right] = [Math.floor(box.x), Math.ceil(box.x + box.width)];
   if (bottom <= y) [y, bottom] = [Math.floor(box.y), Math.ceil(box.y + box.height)];
-  const png = await page.screenshot({ clip: { x, y, width: right - x, height: bottom - y }, animations: "disabled", caret: "hide", scale: "css" });
+  // Device pixels: averaging them into CSS pixels would soften the darkest and lightest ones.
+  const png = await page.screenshot({ clip: { x, y, width: right - x, height: bottom - y }, animations: "disabled", caret: "hide", scale: "device" });
   const { data } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
 }
@@ -365,8 +416,7 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
   for (const run of runs) {
     if (run.blocker) return { ...base, passed: false, error: run.blocker };
     try {
-      const fill = parseCssColor(run.fill);
-      colors.push({ ...fill, a: fill.a * run.opacity });
+      colors.push(parseCssColor(run.fill));
     } catch (error) {
       return { ...base, passed: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -375,24 +425,34 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
   const lines = runs.reduce((sum, run) => sum + run.lines, 0);
   let worst: { margin: number; ratio: number; required: number; background: Rgb; run: number } | null = null;
   let pixels = 0;
+  let inactive: string | undefined;
   for (let index = 0; index < lines; index += 1) {
     const line = await lineInView(locator, index);
-    if ("inactive" in line) return { ...base, passed: true, inactive: line.inactive };
+    if ("inactive" in line) {
+      inactive ??= line.inactive;
+      continue;
+    }
     if ("blocker" in line) return { ...base, passed: false, textColor: runs[0].fill, error: line.blocker };
+    const run = runs[line.run];
     await locator.evaluate((element) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.hideText(element));
     let rgba: Uint8Array;
+    let unfaded: Uint8Array | undefined;
     try {
       rgba = await pixelsIn(page, line.box);
+      if (run.opacity < 1) {
+        await locator.evaluate((element, which) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.unfade(element, which), line.run);
+        unfaded = await pixelsIn(page, line.box);
+      }
     } finally {
       await page.evaluate(() => (window as unknown as { __sjContrast: Helpers }).__sjContrast.restore());
     }
-    const run = runs[line.run];
     const required = requiredTextContrast(run.fontSize, run.fontWeight);
-    const each = worstContrastOver(colors[line.run], rgba);
+    const each = worstContrastOver(colors[line.run], rgba, unfaded && { opacity: run.opacity, unfaded });
     pixels += each.pixels;
     const margin = each.ratio / required;
     if (!worst || margin < worst.margin) worst = { margin, ratio: each.ratio, required, background: each.background, run: line.run };
   }
+  if (!worst && inactive) return { ...base, passed: true, inactive };
   if (!worst) return { ...base, passed: false, error: "no line of its text could be measured" };
   return {
     ...base,

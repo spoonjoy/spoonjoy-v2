@@ -27,25 +27,28 @@ const require = createRequire(import.meta.url);
 
 export const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
-export interface AxeScope {
-  /** What to scan; the whole document when unset. */
-  include?: string;
-  /** Selectors to leave out. */
-  exclude?: string[];
-  /** Rules to turn off. */
-  disabledRules?: string[];
-}
+/**
+ * What axe checks. "page" is the whole document with every rule. "story" is exactly what
+ * Storybook's own a11y addon checks for a story (@storybook/addon-a11y's a11yRunner): the body
+ * without Storybook's chrome, and without its one rule off by default, `region`, since a
+ * component on its own is not in a page's landmarks. There is no other way to leave anything out.
+ */
+export type AxeTarget = "page" | "story";
 
-export async function runAxe(page: Page, scope: AxeScope = {}): Promise<AxeResults> {
+const STORY = {
+  include: [["body"]],
+  exclude: [[".sb-wrapper"], ["#storybook-docs"], ["#storybook-highlights-root"]],
+  rules: { region: { enabled: false } },
+};
+
+export async function runAxe(page: Page, target: AxeTarget = "page"): Promise<AxeResults> {
   await page.evaluate(axeSource);
   return page.evaluate(
-    ({ include, exclude, disabledRules }) => {
+    ({ story }) => {
       const axe = (window as unknown as { axe: typeof import("axe-core") }).axe;
-      const excluded = (exclude ?? []).map((selector) => [selector]);
-      const context = include ? { include: [[include]], exclude: excluded } : excluded.length > 0 ? { exclude: excluded } : document;
-      const rules = Object.fromEntries((disabledRules ?? []).map((id) => [id, { enabled: false }]));
-      return axe.run(context, { resultTypes: ["violations", "incomplete"], preload: false, rules });
+      const context = story ? { include: story.include, exclude: story.exclude } : document;
+      return axe.run(context, { resultTypes: ["violations", "incomplete"], preload: false, rules: story?.rules ?? {} });
     },
-    scope,
+    { story: target === "story" ? STORY : null },
   ) as Promise<AxeResults>;
 }

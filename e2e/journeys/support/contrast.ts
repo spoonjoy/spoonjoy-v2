@@ -123,14 +123,30 @@ export interface WorstContrast {
 /**
  * The worst contrast between `text` (composited over each pixel, so a translucent colour is judged
  * as painted) and every pixel of an RGBA buffer. An empty buffer throws: no pixels is no evidence.
+ *
+ * Text inside an ancestor with `opacity` below 1 is not simply its colour faded over the
+ * screenshot, since the screenshot is already faded the same way. For that text, `faded` gives the
+ * ancestor's opacity and the same pixels painted with it at full opacity (Q). The page paints the
+ * whole group at that opacity over what is behind it, so the text pixel is P + opacity × a × (T − Q),
+ * where P is the pixel as painted, T the text colour and a its own alpha. Without `faded`, Q is P
+ * and this is the plain composite.
  */
-export function worstContrastOver(text: Rgba, rgba: Uint8Array): WorstContrast {
+export function worstContrastOver(text: Rgba, rgba: Uint8Array, faded?: { opacity: number; unfaded: Uint8Array }): WorstContrast {
   if (rgba.length === 0 || rgba.length % 4 !== 0) throw new Error(`Expected RGBA pixels, got ${rgba.length} bytes.`);
+  if (faded && faded.unfaded.length !== rgba.length) throw new Error(`The unfaded pixels (${faded.unfaded.length} bytes) do not match the painted ones (${rgba.length} bytes).`);
+  const weight = (faded?.opacity ?? 1) * text.a;
+  const clamp = (value: number) => Math.min(255, Math.max(0, value));
   let ratio = Number.POSITIVE_INFINITY;
   let background: Rgb = { r: 0, g: 0, b: 0 };
   for (let offset = 0; offset < rgba.length; offset += 4) {
     const pixel = { r: rgba[offset], g: rgba[offset + 1], b: rgba[offset + 2] };
-    const each = contrastRatio(composite(text, pixel), pixel);
+    const under = faded ? { r: faded.unfaded[offset], g: faded.unfaded[offset + 1], b: faded.unfaded[offset + 2] } : pixel;
+    const painted = {
+      r: clamp(pixel.r + weight * (text.r - under.r)),
+      g: clamp(pixel.g + weight * (text.g - under.g)),
+      b: clamp(pixel.b + weight * (text.b - under.b)),
+    };
+    const each = contrastRatio(painted, pixel);
     if (each < ratio) {
       ratio = each;
       background = pixel;

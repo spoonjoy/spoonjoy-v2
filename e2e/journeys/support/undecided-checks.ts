@@ -97,7 +97,8 @@ async function verifyToggleLabelText(page: Page, selector: string): Promise<Veri
         const text = node.textContent?.trim();
         const parent = node.parentElement;
         if (!text || !parent || !parent.checkVisibility({ visibilityProperty: true })) continue;
-        if (control.contains(node) || reached.some((each) => each.contains(node))) continue;
+        // The control's own text too: a name from aria-labelledby replaces it.
+        if (reached.some((each) => each.contains(node))) continue;
         missing.push(text);
       }
     }
@@ -141,10 +142,12 @@ async function verifyClosedPopupControls(page: Page, selector: string): Promise<
  * it was. Run it after everything that only looks: moving focus can open a tooltip.
  */
 export async function verifyHiddenFocus(page: Page, verifications: readonly Verification[]): Promise<VerificationOutcome[]> {
-  const selectors = verifications.map((each) => each.selector);
+  const selectors = verifications.map((each) => ({ region: each.selector, related: each.related }));
   return page.evaluate(async (selectors) => {
     const FOCUSABLE = 'a[href], area[href], button, input:not([type="hidden"]), select, textarea, summary, iframe, audio[controls], video[controls], [contenteditable]:not([contenteditable="false"]), [tabindex]';
-    const regions = selectors.map((selector) => document.querySelectorAll(selector));
+    const regions = selectors.map(({ region }) => document.querySelectorAll(region));
+    // The focusable elements axe found inside each region.
+    const related = selectors.map(({ related }) => related.flatMap((selector) => Array.from(document.querySelectorAll(selector))));
     const describe = (node: Element) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}${node.getAttribute("aria-label") ? `[aria-label="${node.getAttribute("aria-label")}"]` : ""}`;
     const tabOrder = () => {
       const candidates = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
@@ -179,6 +182,7 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
         steps += 1;
         const active = document.activeElement;
         if (!active || active === document.body) continue;
+        reached.add(active);
         // Landing counts when focus is still hidden from assistive technology once it has moved:
         // a control that drops its aria-hidden when it takes focus (a collapsed toast's Dismiss
         // button) is announced like any other.
@@ -192,6 +196,7 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
       }
       return false;
     };
+    const reached = new Set<Element>();
     let complete = false;
     try {
       const forwards = await walk(1);
@@ -201,11 +206,23 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
       if (before && before !== document.body && typeof before.focus === "function") before.focus({ preventScroll: true });
       else (document.activeElement as HTMLElement | null)?.blur?.();
     }
+    await frame();
+    // The walk must leave the page as axe saw it: focus back where it was and each region still
+    // hidden. Moving focus can close a popup, and then the walk measured another page.
+    const restored = document.activeElement === (before ?? document.body) || (before === null && document.activeElement === document.body);
     return regions.map((matches, index) => {
       if (matches.length !== 1) return { passed: false, detail: `the hidden region matches ${matches.length} elements` };
       if (landed[index].length > 0) return { passed: false, detail: `the tab order lands inside the hidden region on ${landed[index].join(", ")}` };
-      if (!complete) return { passed: false, detail: "the tab order did not come back round, so not every stop was seen" };
-      return { passed: true, detail: `the tab order went round the page both ways (${steps} steps) without landing inside it` };
+      if (!complete) return { passed: false, detail: "the tab order never came back to a stop it had already seen, so not every stop was seen" };
+      if (!restored) return { passed: false, detail: "focus did not go back where it was after the walk, so the page changed while it was measured" };
+      if (!matches[0].isConnected || matches[0].closest('[aria-hidden="true"]') === null) {
+        return { passed: false, detail: "the region was no longer hidden after the walk, so the page changed while it was measured" };
+      }
+      const skipped = related[index].filter((node) => !reached.has(node)).length;
+      return {
+        passed: true,
+        detail: `the tab order went both ways (${steps} steps) until it came back to a stop it had seen, without landing inside it; of the ${related[index].length} focusable elements axe found there, ${skipped} were never reached`,
+      };
     });
   }, selectors);
 }

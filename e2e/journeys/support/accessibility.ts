@@ -14,7 +14,7 @@
 //     it back. A page that does not follow the switch fails: its other theme went unchecked.
 import type { Page } from "@playwright/test";
 import type { AxeResults, CheckResult, NodeResult, Result } from "axe-core";
-import { runAxe, type AxeScope } from "./axe";
+import { runAxe, type AxeTarget } from "./axe";
 import { formatRatio } from "./contrast";
 import { measureTextContrast, restoreScroll, saveScroll, type ContrastMeasurement } from "./rendered-contrast";
 import { planVerification, verify, verifyHiddenFocus, type Verification } from "./undecided-checks";
@@ -49,7 +49,7 @@ export interface VerifiedFinding extends AxeFinding {
 }
 
 export interface AuditOptions {
-  scope?: AxeScope;
+  target?: AxeTarget;
 }
 
 const SETTLE_TIMEOUT_MS = 10_000;
@@ -230,7 +230,7 @@ export async function showColorScheme(page: Page, scheme: ColorScheme): Promise<
 export async function auditShownScheme(page: Page, options: AuditOptions = {}): Promise<SchemeAudit> {
   await settle(page);
   const scheme = await shownScheme(page);
-  const results = await runAxe(page, options.scope);
+  const results = await runAxe(page, options.target);
   const { audit, contrastToMeasure, toVerify } = classifyAxeResults(scheme, results);
   if (contrastToMeasure.length === 0 && toVerify.length === 0) return audit;
   const record = (finding: AxeFinding, outcome: { passed: boolean; detail: string }) => {

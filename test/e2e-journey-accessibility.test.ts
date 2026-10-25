@@ -102,6 +102,21 @@ describe("contrast", () => {
     expect(worst.ratio).toBeCloseTo(contrastRatio({ r: 127.5, g: 127.5, b: 127.5 }, { r: 0, g: 0, b: 0 }));
   });
 
+  it("applies a faded ancestor's opacity once, not again over pixels it already faded", () => {
+    // White text on a grey box at opacity 0.5 over black: the box paints rgb(64) and the text
+    // rgb(127.5), 2.59:1. Fading the text colour over the already faded box would claim 3.92:1.
+    const white = { r: 255, g: 255, b: 255, a: 1 };
+    const worst = worstContrastOver(white, new Uint8Array([64, 64, 64, 255]), { opacity: 0.5, unfaded: new Uint8Array([128, 128, 128, 255]) });
+    expect(worst.ratio).toBeCloseTo(contrastRatio({ r: 127.5, g: 127.5, b: 127.5 }, { r: 64, g: 64, b: 64 }));
+    expect(worst.ratio).toBeLessThan(3);
+    expect(worst.background).toEqual({ r: 64, g: 64, b: 64 });
+  });
+
+  it("refuses unfaded pixels that do not match the painted ones", () => {
+    const black = { r: 0, g: 0, b: 0, a: 1 };
+    expect(() => worstContrastOver(black, new Uint8Array([1, 2, 3, 255]), { opacity: 0.5, unfaded: new Uint8Array([]) })).toThrow(/do not match/);
+  });
+
   it("refuses to judge no pixels", () => {
     expect(() => worstContrastOver({ r: 0, g: 0, b: 0, a: 1 }, new Uint8Array([]))).toThrow(/Expected RGBA pixels, got 0 bytes/);
     expect(() => worstContrastOver({ r: 0, g: 0, b: 0, a: 1 }, new Uint8Array([1, 2, 3]))).toThrow(/got 3 bytes/);
