@@ -1409,7 +1409,8 @@ export default function DeveloperPlayground() {
                 label: operation.label,
                 description: (
                   <span className="grid gap-2">
-                    <span className="break-words font-mono text-xs/5">{operation.path}</span>
+                    {/* anywhere, not break-word: a long path must not widen the card under its check mark. */}
+                    <span className="font-mono text-xs/5 [overflow-wrap:anywhere]">{operation.path}</span>
                     <span className="flex flex-wrap gap-2">
                       <Badge tone={methodColor(operation.method)} variant="soft">{operation.method}</Badge>
                       <Badge tone={riskColor(operation.risk)} variant="soft">{operation.risk}</Badge>
