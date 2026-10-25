@@ -134,6 +134,10 @@
 .dark {
   --background: var(--sj-paper);
   --foreground: var(--sj-ink);
+  /* HX Card (and the install card built on it) paints bg-card. Without these it had no surface at
+     all, and page text showed through floating cards. */
+  --card: var(--sj-panel-solid);
+  --card-foreground: var(--sj-ink);
   --popover: var(--sj-panel-solid);
   --popover-foreground: var(--sj-ink);
   --primary: var(--sj-brass);
@@ -597,6 +601,8 @@ body:has(#cook) .sj-mobile-surface {
   /* Ouro UI's colour utilities (bg-primary, text-muted-foreground…), read from the mapping above. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
