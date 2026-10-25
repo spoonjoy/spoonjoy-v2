@@ -14,6 +14,11 @@
 //     tell whether a keyboard can reach them. Settled when focusing each of them leaves focus
 //     outside the hidden region: it is inert and takes no focus, or it is a focus guard that sends
 //     focus on. Focus is put back afterwards.
+//   - form-field-multiple-labels ("Multiple label elements is not widely supported in assistive
+//     technologies"): a field with more than one <label>, such as a file field whose drop zone is
+//     a label around the input. Settled when the field's name comes from aria-labelledby, which
+//     assistive technology uses instead of any <label>, and it names one of the field's own visible
+//     labels, so which <label> a screen reader would pick never matters.
 //   - aria-valid-attr-value with aria-haspopup ("Unable to determine if aria-controls referenced ID
 //     exists"): a popup trigger whose aria-controls names a popup that is not on the page. Settled
 //     when the trigger says the popup is closed (aria-expanded="false"), the state in which axe
@@ -22,7 +27,7 @@
 import type { Page } from "@playwright/test";
 import type { CheckResult, NodeResult, Result } from "axe-core";
 
-export type VerificationKind = "toggle-label-text" | "hidden-focus" | "closed-popup-controls";
+export type VerificationKind = "toggle-label-text" | "labelledby-name" | "hidden-focus" | "closed-popup-controls";
 
 export interface Verification {
   kind: VerificationKind;
@@ -54,6 +59,7 @@ export function planVerification(rule: Result["id"], node: NodeResult): Verifica
   if (rule === "aria-toggle-field-name" && checks.some((check) => check.id === "no-implicit-explicit-label")) {
     return { kind: "toggle-label-text", selector, related: [] };
   }
+  if (rule === "form-field-multiple-labels") return { kind: "labelledby-name", selector, related: [] };
   if (rule === "aria-valid-attr-value") {
     const data = checks.find((check) => check.id === "aria-valid-attr-value")?.data as { messageKey?: string } | null | undefined;
     if (data?.messageKey === "controlsWithinPopup") return { kind: "closed-popup-controls", selector, related: [] };
@@ -95,6 +101,20 @@ async function verifyToggleLabelText(page: Page, selector: string): Promise<Veri
     }
     if (missing.length > 0) return { passed: false, detail: `visible label text outside its name and description: ${missing.map((each) => `"${each}"`).join(", ")}` };
     return { passed: true, detail: `all visible label text is in its name ("${name}") or its description` };
+  });
+}
+
+async function verifyLabelledbyName(page: Page, selector: string): Promise<VerificationOutcome> {
+  return page.locator(selector).evaluate((field) => {
+    const ids = (field.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter(Boolean);
+    if (ids.length === 0) return { passed: false, detail: "its name does not come from aria-labelledby, so a screen reader picks one of its labels" };
+    const named = ids.map((id) => document.getElementById(id));
+    if (named.some((each) => each === null)) return { passed: false, detail: `aria-labelledby names ${ids.join(" ")}, not all on the page` };
+    const name = named.map((each) => (each as HTMLElement).textContent ?? "").join(" ").replace(/\s+/g, " ").trim();
+    const labels = Array.from((field as HTMLInputElement).labels ?? []);
+    const own = labels.find((label) => named.includes(label) && label.checkVisibility({ visibilityProperty: true }) && label.textContent?.trim());
+    if (!name || !own) return { passed: false, detail: `aria-labelledby does not name one of its ${labels.length} visible labels` };
+    return { passed: true, detail: `its name, "${name}", comes from aria-labelledby, which assistive technology uses instead of its ${labels.length} <label> elements, and is its visible label` };
   });
 }
 
@@ -145,6 +165,7 @@ export async function verify(page: Page, verification: Verification): Promise<Ve
   const count = await page.locator(verification.selector).count();
   if (count !== 1) return { passed: false, detail: `the selector matches ${count} elements` };
   if (verification.kind === "toggle-label-text") return verifyToggleLabelText(page, verification.selector);
+  if (verification.kind === "labelledby-name") return verifyLabelledbyName(page, verification.selector);
   if (verification.kind === "closed-popup-controls") return verifyClosedPopupControls(page, verification.selector);
   return verifyHiddenFocus(page, verification.selector, verification.related);
 }

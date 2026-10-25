@@ -196,8 +196,12 @@ describe("planVerification", () => {
     expect(planVerification("aria-hidden-focus", node(["#shell"], "", { all: [framed] }))).toBeNull();
   });
 
+  it("verifies where the name of a field with several labels comes from", () => {
+    expect(planVerification("form-field-multiple-labels", node(["#f"], "Multiple label elements"))).toEqual({ kind: "labelledby-name", selector: "#f", related: [] });
+  });
+
   it("has no stronger measurement for other rules or for elements in a frame", () => {
-    expect(planVerification("form-field-multiple-labels", node(["#f"], "Multiple label elements"))).toBeNull();
+    expect(planVerification("label", node(["#f"], "Form element does not have an implicit (wrapped) <label>"))).toBeNull();
     expect(planVerification("aria-toggle-field-name", node([["iframe", "#a"]] as unknown as NodeResult["target"], "", { all: [check("no-implicit-explicit-label")] }))).toBeNull();
   });
 });
