@@ -1,9 +1,9 @@
 // Base `test`/`expect` for the QA journeys, extended with four fixtures:
 //   - verifyAfterReload(assertion): reloads the page and re-runs the assertion, so a
 //     `@mutates` journey can prove its write survived a fresh document load.
-//   - expectAccessible(): runs an axe scan of the whole page (default tags, no excluded
-//     elements) and fails only on `serious`/`critical` impacts, printing rule ids and
-//     target selectors for anything that fails.
+//   - expectAccessible(): audits the whole page in both themes with support/accessibility.ts and
+//     fails on every axe violation, whatever its impact, and on every check axe could not decide
+//     that a pixel measurement did not settle. Each audit is attached to the test as JSON.
 //   - expectConsoleError(pattern, options?): registers, for the current test only, a RegExp
 //     that the console gate below should treat as expected rather than a failure. `options.url`
 //     optionally also constrains the match to an issue whose (redacted) source location
@@ -18,16 +18,13 @@
 //     test) needs to call it directly.
 //
 // The axe injection itself (page.evaluate of the axe source, not an injected <script> tag,
-// since QA's CSP would block that) lives in support/axe.ts and is shared with the explore
-// suite, which records every violation instead of failing.
+// since QA's CSP would block that) lives in support/axe.ts.
 import { test as base, expect } from "@playwright/test";
 import type { ConsoleMessage, Page, Request } from "@playwright/test";
-import { runAxe } from "./axe";
+import { auditAccessibility, describeAuditFailures } from "./accessibility";
 import { redactUrl, redactUrlsInText } from "./redact";
 import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
 import { RequestLedger, isTransportFailureLog } from "./recovered-requests";
-
-const FAILING_IMPACTS = new Set(["serious", "critical"]);
 
 // Escape hatch for the console gate: a message (console error text, or a pageerror's message)
 // matching any of these patterns is ignored, in every test, instead of failing it. Must start
@@ -250,21 +247,14 @@ export const test = base.extend<JourneyFixtures>({
     });
   },
 
-  expectAccessible: async ({ page }, use) => {
+  expectAccessible: async ({ page }, use, testInfo) => {
+    let audits = 0;
     await use(async () => {
-      const results = await runAxe(page);
-
-      const failing = results.violations.filter((violation) => FAILING_IMPACTS.has(violation.impact ?? ""));
-
-      if (failing.length > 0) {
-        const report = failing
-          .map((violation) => {
-            const targets = violation.nodes.map((node) => node.target.join(" ")).join(", ");
-            return `  [${violation.impact}] ${violation.id}: ${targets}`;
-          })
-          .join("\n");
-        throw new Error(`Accessibility violations (serious/critical impact):\n${report}`);
-      }
+      audits += 1;
+      const results = await auditAccessibility(page);
+      await testInfo.attach(`accessibility-${audits}`, { body: JSON.stringify(results, null, 2), contentType: "application/json" });
+      const failure = describeAuditFailures(results);
+      if (failure) throw new Error(failure);
     });
   },
 
