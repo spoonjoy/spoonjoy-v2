@@ -1617,6 +1617,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"Block a chef: hides their recipes, cookbooks, cooks and profile and stops their notifications\" [choice-card/input] in group \"Moderation\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Bootstrap native offline account data\" [choice-card/input] in group \"Account\"",
           "count": 1
         },
@@ -1753,6 +1757,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"List the chefs the authenticated chef blocked, newest first\" [choice-card/input] in group \"Moderation\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"List the chefs who have cooked, forked, or saved this chef's recipes\" [choice-card/input] in group \"Chefs\"",
           "count": 1
         },
@@ -1841,6 +1849,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"Report a recipe, cookbook, cook log or chef to Spoonjoy's moderators; hides it from the reporter at once and returns the reporter's open report about the same target when there is one\" [choice-card/input] in group \"Moderation\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Revoke a bearer credential\" [choice-card/input] in group \"Tokens\"",
           "count": 1
         },
@@ -1894,6 +1906,10 @@
         },
         {
           "identity": "radio \"Sync shopping-list changes\" [choice-card/input] in group \"Shopping List\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Unblock a chef\" [choice-card/input] in group \"Moderation\"",
           "count": 1
         },
         {
@@ -2851,6 +2867,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Report\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -2954,7 +2974,7 @@
         },
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 5
+          "count": 6
         },
         {
           "identity": "button \"\" [color-scheme-toggle/trigger] in banner",
@@ -6236,54 +6256,6 @@
         }
       ]
     },
-    "terms": {
-      "default": [
-        {
-          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
-          "count": 1
-        },
-        {
-          "identity": "button \"Log in\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Privacy Policy\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Sign up\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "link \"Support\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
-          "count": 1
-        }
-      ]
-    },
     "support": {
       "default": [
         {
@@ -6340,6 +6312,54 @@
         },
         {
           "identity": "link \"terms\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
+    "terms": {
+      "default": [
+        {
+          "identity": "button \"Color scheme\" [color-scheme-toggle/trigger] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy Policy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [navigation-menu/link] in navigation \"Main navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy kitchen\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Support\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
           "count": 1
         }
       ]
@@ -7843,6 +7863,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"Block a chef: hides their recipes, cookbooks, cooks and profile and stops their notifications\" [choice-card/input] in group \"Moderation\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Bootstrap native offline account data\" [choice-card/input] in group \"Account\"",
           "count": 1
         },
@@ -7979,6 +8003,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"List the chefs the authenticated chef blocked, newest first\" [choice-card/input] in group \"Moderation\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"List the chefs who have cooked, forked, or saved this chef's recipes\" [choice-card/input] in group \"Chefs\"",
           "count": 1
         },
@@ -8067,6 +8095,10 @@
           "count": 1
         },
         {
+          "identity": "radio \"Report a recipe, cookbook, cook log or chef to Spoonjoy's moderators; hides it from the reporter at once and returns the reporter's open report about the same target when there is one\" [choice-card/input] in group \"Moderation\"",
+          "count": 1
+        },
+        {
           "identity": "radio \"Revoke a bearer credential\" [choice-card/input] in group \"Tokens\"",
           "count": 1
         },
@@ -8120,6 +8152,10 @@
         },
         {
           "identity": "radio \"Sync shopping-list changes\" [choice-card/input] in group \"Shopping List\"",
+          "count": 1
+        },
+        {
+          "identity": "radio \"Unblock a chef\" [choice-card/input] in group \"Moderation\"",
           "count": 1
         },
         {
@@ -8825,6 +8861,10 @@
           "count": 1
         },
         {
+          "identity": "button \"Report\" [button/root] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Save\" [button/root] in main",
           "count": 1
         },
@@ -8904,7 +8944,7 @@
       "fork-dialog": [
         {
           "identity": "button \"\" [button/root] in main",
-          "count": 5
+          "count": 6
         },
         {
           "identity": "button \"\" [number-field/decrement] in main",
@@ -11334,50 +11374,6 @@
         }
       ]
     },
-    "terms": {
-      "default": [
-        {
-          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Privacy Policy\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
-          "count": 1
-        },
-        {
-          "identity": "link \"Sign up\" [button/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "link \"Skip to main content\" [skip-link/root] in -",
-          "count": 1
-        },
-        {
-          "identity": "link \"Spoonjoy\" [link/root] in banner",
-          "count": 1
-        },
-        {
-          "identity": "link \"Support\" [link/root] in main",
-          "count": 1
-        },
-        {
-          "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
-          "count": 1
-        }
-      ]
-    },
     "support": {
       "default": [
         {
@@ -11430,6 +11426,50 @@
         },
         {
           "identity": "link \"terms\" [link/root] in main",
+          "count": 1
+        }
+      ]
+    },
+    "terms": {
+      "default": [
+        {
+          "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Log in\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Privacy Policy\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Recipes\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Search\" [tab-bar/accessory] in navigation \"Spoonjoy navigation\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Sign up\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Skip to main content\" [skip-link/root] in -",
+          "count": 1
+        },
+        {
+          "identity": "link \"Spoonjoy\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Support\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"ari@spoonjoy.app\" [link/root] in main",
           "count": 1
         }
       ]
