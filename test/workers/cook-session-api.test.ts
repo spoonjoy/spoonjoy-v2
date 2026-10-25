@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleCookSessionProtocolRequest } from "../../workers/cook-session-api";
 import { expectConsoleWarning } from "../warning-policy";
 
@@ -237,5 +237,93 @@ describe("the Cooking now list after a cook-session write", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ state });
+  });
+});
+
+describe("cook-session calls that wait over a second", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A namespace whose object answers only when the test releases it. */
+  function slowEnvironment(qaLogs: boolean) {
+    const answers: Array<(response: Response) => void> = [];
+    const env = {
+      COOK_SESSIONS: {
+        idFromName: () => "object-1",
+        get: () => ({ fetch: () => new Promise<Response>((resolve) => answers.push(resolve)) }),
+      },
+      DB: { prepare: () => ({ bind() { return this; }, first: async () => ({ id: "recipe-1" }), all: async () => ({ results: [] }) }) },
+      ...(qaLogs ? { SPOONJOY_QA_ERROR_LOGS: "1" } : {}),
+    } as unknown as CloudflareEnvironment;
+    return { env, answers };
+  }
+
+  it.each([
+    ["detail", "read"],
+    ["start", "write"],
+  ] as const)("logs a %s still waiting on the object after a second, on a per-run QA Worker", async (operation, kind) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { env, answers } = slowEnvironment(true);
+
+    const pending = handleCookSessionProtocolRequest(request(operation), env, "user-1", operation, { requireExpectedUser: true });
+    expectConsoleWarning(JSON.stringify({
+      event: "slow_call", call: "cook_session.fetch", operation: kind, table: null, attempt: 1, waitedMs: 1000, settled: false, outcome: null,
+    }));
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expectConsoleWarning(JSON.stringify({
+      event: "slow_call", call: "cook_session.fetch", operation: kind, table: null, attempt: 1, waitedMs: 2900, settled: true, outcome: "ok",
+    }));
+    await vi.advanceTimersByTimeAsync(1900);
+    answers[0](Response.json({ state: null }, { status: 404 }));
+    expect((await pending).status).toBe(404);
+  });
+
+  it("logs a patch as a write, and runs no timer without the QA switch", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const quiet = slowEnvironment(false);
+    void handleCookSessionProtocolRequest(request("detail"), quiet.env, "user-1", "detail", { requireExpectedUser: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(quiet.answers).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const { env, answers } = slowEnvironment(true);
+    void handleCookSessionProtocolRequest(request("patch"), env, "user-1", "patch", { requireExpectedUser: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answers).toHaveLength(1);
+    expectConsoleWarning(JSON.stringify({
+      event: "slow_call", call: "cook_session.fetch", operation: "write", table: null, attempt: 1, waitedMs: 1000, settled: false, outcome: null,
+    }));
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+
+  it("numbers the replayed read as the second try", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    let handles = 0;
+    const answers: Array<(response: Response) => void> = [];
+    const env = {
+      COOK_SESSIONS: {
+        idFromName: () => "object-1",
+        get: () => ({
+          fetch: () => handles++ === 0
+            ? Promise.reject(storageReset())
+            : new Promise<Response>((resolve) => answers.push(resolve)),
+        }),
+      },
+      SPOONJOY_QA_ERROR_LOGS: "1",
+    } as unknown as CloudflareEnvironment;
+
+    const pending = handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
+    await vi.advanceTimersByTimeAsync(100);
+    expectConsoleWarning(JSON.stringify({
+      event: "slow_call", call: "cook_session.fetch", operation: "read", table: null, attempt: 2, waitedMs: 1000, settled: false, outcome: null,
+    }));
+    await vi.advanceTimersByTimeAsync(1000);
+    expectConsoleWarning(JSON.stringify({
+      event: "slow_call", call: "cook_session.fetch", operation: "read", table: null, attempt: 2, waitedMs: 1000, settled: true, outcome: "ok",
+    }));
+    answers[0](Response.json({ state: null }));
+    expect((await pending).status).toBe(200);
   });
 });
