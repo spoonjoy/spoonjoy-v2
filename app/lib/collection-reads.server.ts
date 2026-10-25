@@ -29,7 +29,7 @@ export interface PublicRecipe {
   title: string;
   description: string | null;
   servings: string | null;
-  chef: { username: string };
+  chef: { id: string; username: string };
   coverImageUrl: string | null;
   coverProvenanceLabel: string | null;
 }
@@ -46,7 +46,7 @@ type CoverDisplayRecipe = Parameters<typeof getRecipeCoverDisplay>[0];
 type CoverList = Parameters<typeof getRecipeCoverDisplay>[1];
 
 function toPublicRecipe(
-  recipe: CoverDisplayRecipe & { title: string; description: string | null; servings: string | null; chef: { username: string } },
+  recipe: CoverDisplayRecipe & { title: string; description: string | null; servings: string | null; chef: { id: string; username: string } },
   covers: CoverList,
 ): PublicRecipe {
   const coverDisplay = getRecipeCoverDisplay(recipe, covers);
@@ -95,7 +95,7 @@ export async function readPublicRecipesWithPrisma(
         : {}),
     },
     include: {
-      chef: { select: { username: true } },
+      chef: { select: { id: true, username: true } },
       covers: { orderBy: [{ createdAt: "desc" }, { id: "desc" }] },
     },
     orderBy: query ? undefined : [{ updatedAt: "desc" }, { id: "desc" }],
@@ -114,6 +114,7 @@ const PUBLIC_RECIPE_COLUMNS: ColumnSpec<{
   activeCoverId: string | null;
   activeCoverVariant: string | null;
   coverMode: string;
+  chefId: string;
   chefUsername: string;
 }> = {
   id: "string",
@@ -123,11 +124,12 @@ const PUBLIC_RECIPE_COLUMNS: ColumnSpec<{
   activeCoverId: "string?",
   activeCoverVariant: "string?",
   coverMode: "string",
+  chefId: "string",
   chefUsername: "string",
 };
 
 const PUBLIC_RECIPE_SELECT = `SELECT r."id", r."title", r."description", r."servings",
-    r."activeCoverId", r."activeCoverVariant", r."coverMode", u."username" AS "chefUsername",
+    r."activeCoverId", r."activeCoverVariant", r."coverMode", r."chefId", u."username" AS "chefUsername",
     ${selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_")}
   FROM "Recipe" r
   JOIN "User" u ON u."id" = r."chefId"
@@ -166,10 +168,10 @@ export async function readPublicRecipesFromD1(
         : [`${PUBLIC_RECIPE_SELECT} WHERE r."deletedAt" IS NULL ORDER BY r."updatedAt" DESC, r."id" DESC LIMIT ?`, limit],
   ]);
   const recipes = rows!.map((row) => {
-    const { chefUsername, ...recipe } = mapModel(PUBLIC_RECIPE_COLUMNS, row);
+    const { chefId, chefUsername, ...recipe } = mapModel(PUBLIC_RECIPE_COLUMNS, row);
     // Display uses only the active cover, and the join requires it to belong to the recipe.
     const covers = row.cover_id === null ? [] : [mapModel(RECIPE_COVER_COLUMNS, row, "cover_")];
-    return { ...recipe, chef: { username: chefUsername }, covers };
+    return { ...recipe, chef: { id: chefId, username: chefUsername }, covers };
   });
 
   return (query ? inSearchOrder(recipes, recipeIds) : recipes).map(({ covers, ...recipe }) =>

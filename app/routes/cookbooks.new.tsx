@@ -21,6 +21,7 @@ import {
   retryD1Write,
 } from "~/lib/d1-write-retry.server";
 import { useWriteToken } from "~/hooks/use-write-token";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 
 interface ActionData {
   errors?: {
@@ -52,6 +53,8 @@ export async function action({ request, context }: Route.ActionArgs) {
   // Validation
   if (!title || title.trim().length === 0) {
     errors.title = "Title is required";
+  } else if (containsObjectionableContent(title)) {
+    errors.title = OBJECTIONABLE_CONTENT_MESSAGE;
   }
 
   if (Object.keys(errors).length > 0) {

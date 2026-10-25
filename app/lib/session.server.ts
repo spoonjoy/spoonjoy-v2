@@ -318,7 +318,9 @@ export async function requireUserId(
   const check = await checkSessionOnce(request, env);
   if (!check.identity) {
     const url = new URL(request.url);
-    const searchParams = new URLSearchParams([["redirectTo", url.pathname]]);
+    // The path and query come back after sign-in; the browser carries the fragment to the login
+    // page, which adds it (useRedirectToWithHash).
+    const searchParams = new URLSearchParams([["redirectTo", `${url.pathname}${url.search}`]]);
     const headers = new Headers({ Location: `${redirectTo}?${searchParams}` });
     if (check.stale) {
       headers.set("Set-Cookie", await sessionStorageForEnv(env, request).destroySession(check.session));

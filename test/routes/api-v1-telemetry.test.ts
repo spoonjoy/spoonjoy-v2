@@ -1465,6 +1465,27 @@ describe("API v1 mutation and validation telemetry", () => {
       forbidden: [cookie],
     });
 
+    const otherChef = await db.user.create({ data: createTestUser() });
+    const report = apiJsonRequest("POST", "reports", "req_account_operation_report", { Cookie: cookie }, {
+      targetType: "chef",
+      targetId: otherChef.id,
+      reason: "spam",
+    });
+    expect((await action(routeArgs(report.request, "reports").args)).status).toBe(201);
+    expectAccountOperation({ routeTemplate: "/api/v1/reports", requestId: "req_account_operation_report", operation: "moderation.report.create", status: 201, forbidden: [cookie] });
+
+    const block = apiJsonRequest("POST", "blocks", "req_account_operation_block", { Cookie: cookie }, { chefId: otherChef.id });
+    expect((await action(routeArgs(block.request, "blocks").args)).status).toBe(200);
+    expectAccountOperation({ routeTemplate: "/api/v1/blocks", requestId: "req_account_operation_block", operation: "moderation.block.create", status: 200, forbidden: [cookie] });
+
+    const readBlocks = await loader(routeArgs(apiRequest("http://localhost/api/v1/blocks", "req_account_operation_blocks_read", { Cookie: cookie }), "blocks").args);
+    expect(readBlocks.status).toBe(200);
+    expectAccountOperation({ routeTemplate: "/api/v1/blocks", requestId: "req_account_operation_blocks_read", operation: "moderation.blocks.read", status: 200, forbidden: [cookie] });
+
+    const unblock = apiJsonRequest("DELETE", `blocks/${otherChef.id}`, "req_account_operation_unblock", { Cookie: cookie }, {});
+    expect((await action(routeArgs(unblock.request, `blocks/${otherChef.id}`).args)).status).toBe(200);
+    expectAccountOperation({ routeTemplate: "/api/v1/blocks/{chefId}", requestId: "req_account_operation_unblock", operation: "moderation.block.delete", status: 200, forbidden: [cookie, otherChef.id] });
+
     const readNotifications = await loader(routeArgs(apiRequest(
       "http://localhost/api/v1/me/notification-preferences",
       "req_account_operation_notifications_read",

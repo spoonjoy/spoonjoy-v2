@@ -12,6 +12,7 @@ import { getRequestDb } from "~/lib/route-platform.server";
 import { listFellowChefs, listKitchenVisitors } from "~/lib/fellow-chefs.server";
 import { chefActivity, chefRef } from "~/lib/chef-activity.server";
 import { requireUserId } from "~/lib/session.server";
+import { hidesChef, loadViewerHides } from "~/lib/moderation.server";
 import { LocalDate } from "~/components/ouro/local-date/local-date";
 
 export function meta({}: Route.MetaArgs) {
@@ -29,17 +30,22 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     select: { id: true, username: true, photoUrl: true },
   });
   const viewerRef = chefRef(viewer);
-  const [fellowChefs, chefsUsingMyRecipes, activity] = await Promise.all([
+  const [fellowChefs, chefsUsingMyRecipes, activity, hides] = await Promise.all([
     listFellowChefs(database, userId),
     listKitchenVisitors(database, userId),
     chefActivity(database, userId, viewerRef),
+    loadViewerHides(database, userId),
   ]);
+  const visible = <T extends { chefId: string }>(list: { rows: T[]; total: number }) => ({
+    ...list,
+    rows: list.rows.filter((row) => !hidesChef(hides, row.chefId)),
+  });
 
   return {
     viewer: viewerRef,
-    fellowChefs,
-    chefsUsingMyRecipes,
-    activity,
+    fellowChefs: visible(fellowChefs),
+    chefsUsingMyRecipes: visible(chefsUsingMyRecipes),
+    activity: activity.filter((row) => !hidesChef(hides, row.otherChef.id)),
   };
 }
 

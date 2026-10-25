@@ -5,6 +5,8 @@ import { Form, redirect, useLoaderData } from "react-router";
 import { Settings } from "lucide-react";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { hidesChef, loadRequestViewerHides, withoutHidden } from "~/lib/moderation.server";
+import { ReportOrBlockButton } from "~/components/moderation/ReportOrBlockButton";
 import { Avatar } from "~/components/ouro/avatar/avatar";
 import { Button } from "~/components/ouro/button/button";
 import { Heading } from "~/components/ouro/text/heading";
@@ -94,12 +96,19 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     throw new Response("User not found", { status: 404 });
   }
 
+  // A chef the viewer blocked or reported is hidden from them, as if there were no such chef.
+  const hides = await loadRequestViewerHides(context, currentUserId);
+  if (hidesChef(hides, profileUser.id)) {
+    throw new Response("User not found", { status: 404 });
+  }
+
   if (matchedBy === "id") {
     return redirect(`/users/${profileUser.username}${after ? `?after=${encodeURIComponent(after)}` : ""}`);
   }
 
-  const recipes = recipeRows.slice(0, PROFILE_RECIPE_LIMIT);
-  const nextCursor = recipeRows.length > PROFILE_RECIPE_LIMIT ? recipes[recipes.length - 1]!.id : null;
+  const pageRows = recipeRows.slice(0, PROFILE_RECIPE_LIMIT);
+  const nextCursor = recipeRows.length > PROFILE_RECIPE_LIMIT ? pageRows[pageRows.length - 1]!.id : null;
+  const recipes = withoutHidden(hides, pageRows, (recipe) => ({ type: "recipe", id: recipe.id, chefId: profileUser.id }));
 
   const recipesWithCover = recipes.map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);
@@ -110,7 +119,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     };
   });
 
-  const cookbooksWithCover = cookbooks.map(({ recipes: cookbookRecipes, ...cookbook }) => ({
+  const cookbooksWithCover = withoutHidden(hides, cookbooks, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: profileUser.id })).map(({ recipes: cookbookRecipes, ...cookbook }) => ({
     ...cookbook,
     recipes: cookbookRecipes.map((item) => ({
       ...item,
@@ -122,7 +131,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     })),
   }));
 
-  const recentSpoons = recentSpoonsRaw.map((spoon) => {
+  const recentSpoons = withoutHidden(hides, recentSpoonsRaw, (spoon) => ({ type: "spoon", id: spoon.id, chefId: spoon.chef.id })).map((spoon) => {
     const coverDisplay = getRecipeCoverDisplay(spoon.recipe, spoon.recipe.covers);
     return {
       id: spoon.id,
@@ -167,6 +176,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
     canonicalUrl,
     ogImageUrl,
     isOwner: currentUserId === profileUser.id,
+    isAuthenticated: currentUserId !== null,
     recipes: recipesWithCover,
     recipeCount,
     after,
@@ -196,6 +206,7 @@ export default function UserProfile() {
   const {
     profile,
     isOwner,
+    isAuthenticated = false,
     recipes: firstPage,
     recipeCount = firstPage.length,
     after = null,
@@ -260,6 +271,17 @@ export default function UserProfile() {
               <Form method="post" action="/logout" onSubmit={clearCookProgressCache}>
                 <Button type="submit" variant="soft" tone="destructive">Log out</Button>
               </Form>
+            </div>
+          ) : isAuthenticated ? (
+            <div className="flex items-center gap-2">
+              <ReportOrBlockButton
+                targetType="chef"
+                targetId={profile.id}
+                chefId={profile.id}
+                chefUsername={profile.username}
+                targetLabel={`@${profile.username}`}
+                triggerTestId="profile-report-action"
+              />
             </div>
           ) : null}
         </header>

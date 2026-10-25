@@ -57,6 +57,8 @@ export interface SearchOptions {
   query?: string | null;
   scope?: SearchScope;
   viewerId?: string | null;
+  /** The chef whose blocks and reports hide results (moderation.server.ts); defaults to viewerId. */
+  hideFor?: string | null;
   ownerId?: string | null;
   limit?: number;
 }
@@ -280,7 +282,12 @@ function entityTypesForSearch(scope: SearchScope, viewerId: string | null | unde
   return scopedTypes.filter((type) => type !== "shopping-list-item");
 }
 
-function buildWhereClause(entityTypes: SearchEntityType[], ownerId: string | null | undefined, viewerId: string | null | undefined) {
+function buildWhereClause(
+  entityTypes: SearchEntityType[],
+  ownerId: string | null | undefined,
+  viewerId: string | null | undefined,
+  hideFor: string | null | undefined,
+) {
   const values: Array<string | number> = [...entityTypes];
   const placeholders = entityTypes.map(() => "?").join(", ");
   const conditions = [`entityType IN (${placeholders})`];
@@ -295,6 +302,14 @@ function buildWhereClause(entityTypes: SearchEntityType[], ownerId: string | nul
     values.push(viewerId);
   } else {
     conditions.push("entityType != 'shopping-list-item'");
+  }
+
+  if (hideFor) {
+    // Search entity types are named like report target types (recipe, cookbook, chef).
+    conditions.push(`ownerId NOT IN (SELECT "blockedId" FROM "ChefBlock" WHERE "blockerId" = ?
+      UNION SELECT "targetId" FROM "ContentReport" WHERE "reporterId" = ? AND "targetType" = 'chef')`);
+    conditions.push(`NOT EXISTS (SELECT 1 FROM "ContentReport" WHERE "reporterId" = ? AND "targetType" = entityType AND "targetId" = entityId)`);
+    values.push(hideFor, hideFor, hideFor);
   }
 
   return { sql: conditions.join(" AND "), values };
@@ -961,7 +976,7 @@ function planSearch(options: SearchOptions): SearchPlan | null {
     return null;
   }
 
-  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId);
+  const where = buildWhereClause(entityTypes, options.ownerId, options.viewerId, options.hideFor ?? options.viewerId);
 
   if (terms.length === 1) {
     return {

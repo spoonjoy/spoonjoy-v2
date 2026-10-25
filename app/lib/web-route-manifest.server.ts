@@ -64,6 +64,9 @@ export const WEB_ROUTE_MANIFEST = [
   route("routes/redwood-functions-auth-oauth.tsx", "/.redwood/functions/auth/oauth", "api-or-oauth"),
   route("routes/privacy.tsx", "/privacy", "platform-asset"),
   route("routes/terms.tsx", "/terms", "platform-asset"),
+  route("routes/support.tsx", "/support", "platform-asset"),
+  // Report and block forms post here; moderators review the queue in the browser.
+  route("routes/moderation.tsx", "/moderation", "intentional-exclude"),
   // A web showcase with no counterpart in the apps, so it stays in the browser.
   route("routes/test-kitchen.tsx", "/test-kitchen", "platform-asset"),
   route("routes/search.tsx", "/search", "user-product", { universalLink: true }),

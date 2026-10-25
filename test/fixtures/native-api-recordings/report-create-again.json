@@ -1,0 +1,15 @@
+{
+  "name": "report-create-again",
+  "endpoint": "POST /api/v1/reports",
+  "status": 200,
+  "body": {
+    "ok": true,
+    "requestId": "opaque_118",
+    "data": {
+      "report": {
+        "id": "id_025",
+        "status": "open"
+      }
+    }
+  }
+}

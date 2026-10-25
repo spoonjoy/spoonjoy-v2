@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { Request as UndiciRequest } from "undici";
+import { NO_HIDES } from "~/lib/moderation.server";
 import { getLocalDb } from "~/lib/db.server";
 import { readRecipeDetailFromD1, readRecipeDetailWithPrisma } from "~/lib/recipe-detail-reads.server";
 import { createUserSessionCookie } from "~/lib/session.server";
@@ -206,6 +207,7 @@ describe("recipe detail reads", () => {
       isOriginCookCandidate: false,
       coverHistoryCovers: [],
       spoonImages: [],
+      hides: NO_HIDES,
     };
     await expect(readRecipeDetailFromD1(d1.binding, { recipeId: "missing", userId: owner.id })).resolves.toEqual(empty);
     await expect(readRecipeDetailWithPrisma(db, { recipeId: "missing", userId: owner.id })).resolves.toEqual(empty);

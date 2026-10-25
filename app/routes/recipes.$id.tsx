@@ -36,6 +36,7 @@ import { RecipeHeader } from "~/components/recipe/RecipeHeader";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { RecipeProvenance } from "~/components/recipe/RecipeProvenance";
 import { ForkRecipeButton } from "~/components/recipe/ForkRecipeButton";
+import { ReportOrBlockButton } from "~/components/moderation/ReportOrBlockButton";
 import { RecipeCoverHistory } from "~/components/recipe/RecipeCoverHistory";
 import { RecipePhotoStudio } from "~/components/recipe/RecipePhotoStudio";
 import { SpoonDialog } from "~/components/recipe/SpoonDialog";
@@ -173,10 +174,10 @@ export function applyCreatedCookbookState(
   };
 }
 
-function recipeNotFoundDetails(error: unknown): { deleted: boolean } | null {
+function recipeNotFoundDetails(error: unknown): { deleted: boolean; hidden: boolean } | null {
   if (!isRouteErrorResponse(error) || error.status !== 404) return null;
-  const body = (error.data && typeof error.data === "object" ? error.data : {}) as { deleted?: unknown };
-  return { deleted: body.deleted === true };
+  const body = (error.data && typeof error.data === "object" ? error.data : {}) as { deleted?: unknown; hidden?: unknown };
+  return { deleted: body.deleted === true, hidden: body.hidden === true };
 }
 
 // A missing or deleted recipe gets a recipe-specific page; any other error (including one from a
@@ -457,6 +458,16 @@ export default function RecipeDetail() {
             </Button>
           )
         )}
+        {!isOwner && isAuthenticated ? (
+          <ReportOrBlockButton
+            targetType="recipe"
+            targetId={recipe.id}
+            chefId={recipe.chef.id}
+            chefUsername={recipe.chef.username}
+            targetLabel="this recipe"
+            triggerTestId="recipe-header-report-action"
+          />
+        ) : null}
       </div>
     </div>
   );

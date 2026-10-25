@@ -97,6 +97,8 @@ declare global {
     /** "apply" lets the photo sweep move unreferenced photos to quarantine; "off" stops it; anything else is a dry run. */
     PHOTO_SWEEP_MODE?: string;
     SPOONJOY_CSP_MODE?: string;
+    /** Comma-separated usernames who may review /moderation. */
+    SPOONJOY_MODERATOR_USERNAMES?: string;
     /** "1" only on a per-run QA Worker: handleError writes one scrubbed console.error line per error. */
     SPOONJOY_QA_ERROR_LOGS?: string;
     /** Share of successful fast API reads that send an analytics event (0 to 1; unset = 1). */

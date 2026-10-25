@@ -1,5 +1,6 @@
 import type { Cookbook, PrismaClient, Recipe, RecipeCover, RecipeInCookbook } from "@prisma/client";
 import { d1Count, d1ReadBatch, type D1ReadDatabase, type D1Row } from "~/lib/d1-read.server";
+import { NO_HIDES, hidesFromRows, loadViewerHides, viewerHidesQuery, type ViewerHides } from "~/lib/moderation.server";
 import { COOKBOOK_COLUMNS, mapModel, RECIPE_COVER_COLUMNS, selectColumns } from "~/lib/d1-models.server";
 import {
   COOKBOOK_PREVIEW_RECIPES,
@@ -16,6 +17,8 @@ export type KitchenUserWhere = { id: string } | { username: string };
 type RecipeCoverFields = Pick<Recipe, "activeCoverId" | "activeCoverVariant" | "coverMode">;
 
 export interface KitchenHomeRows {
+  /** What the viewer blocked or reported (app/lib/moderation.server.ts). */
+  hides: ViewerHides;
   viewer: { id: string; username: string; email: string; photoUrl: string | null } | null;
   kitchenUser: { id: string; username: string; photoUrl: string | null } | null;
   recipes: Array<
@@ -60,7 +63,7 @@ export async function readKitchenHomeWithPrisma(
   });
 
   if (!kitchenUser) {
-    return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [] };
+    return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [], hides: NO_HIDES };
   }
 
   const [recipes, cookbooks, cookingNow] = await Promise.all([
@@ -106,7 +109,7 @@ export async function readKitchenHomeWithPrisma(
     viewer?.id === kitchenUser.id ? listCookingNow(database, kitchenUser.id, now) : Promise.resolve([]),
   ]);
 
-  return { viewer, kitchenUser, recipes, cookbooks, cookingNow };
+  return { viewer, kitchenUser, recipes, cookbooks, cookingNow, hides: await loadViewerHides(database, viewerId) };
 }
 
 function kitchenUserCondition(where: KitchenUserWhere): { sql: string; value: string } {
@@ -155,7 +158,7 @@ export async function readKitchenHomeFromD1(
   const owner = kitchenUserCondition(kitchenUserWhere);
   const ownerId = `(SELECT "id" FROM "User" WHERE ${owner.sql})`;
   const coverSelect = selectColumns(RECIPE_COVER_COLUMNS, "rc", "cover_");
-  const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows, cookingNowRows] = await d1ReadBatch(db, [
+  const [viewerRows, kitchenUserRows, recipeRows, cookbookRows, previewRows, cookingNowRows, hideRows] = await d1ReadBatch(db, [
     viewerId
       ? [`SELECT "id", "username", "email", "photoUrl" FROM "User" WHERE "id" = ? LIMIT 1`, viewerId]
       : [`SELECT NULL AS "id" WHERE 0`],
@@ -182,6 +185,7 @@ export async function readKitchenHomeFromD1(
     viewerId
       ? cookingNowD1Query({ sql: `cn."userId" = ? AND cn."userId" = ${ownerId}`, values: [viewerId, owner.value] }, now)
       : [`SELECT NULL AS "id" WHERE 0`],
+    viewerId ? viewerHidesQuery(viewerId) : [`SELECT NULL AS "id" WHERE 0`],
   ]);
 
   const viewerRow = viewerRows[0];
@@ -196,7 +200,7 @@ export async function readKitchenHomeFromD1(
 
   const kitchenUserRow = kitchenUserRows[0];
   if (!kitchenUserRow) {
-    return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [] };
+    return { viewer, kitchenUser: null, recipes: [], cookbooks: [], cookingNow: [], hides: NO_HIDES };
   }
   const kitchenUser = {
     id: requiredString(kitchenUserRow.id, "id"),
@@ -223,5 +227,12 @@ export async function readKitchenHomeFromD1(
     };
   });
 
-  return { viewer, kitchenUser, recipes, cookbooks, cookingNow: cookingNowRowsFromD1(cookingNowRows) };
+  return {
+    viewer,
+    kitchenUser,
+    recipes,
+    cookbooks,
+    cookingNow: cookingNowRowsFromD1(cookingNowRows),
+    hides: viewerId ? hidesFromRows(hideRows!) : NO_HIDES,
+  };
 }

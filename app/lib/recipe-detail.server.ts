@@ -1,4 +1,5 @@
 import type { AppLoadContext } from "react-router";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { data, redirect } from "react-router";
 import { deferBackgroundTask } from "~/lib/background-task.server";
 import { getRequestDb } from "~/lib/route-platform.server";
@@ -46,6 +47,7 @@ import { createSpoonOnD1, spoonInsertStatement } from "~/lib/recipe-spoon-d1.ser
 import { coverRegenerationStatement, readOwnedRecipeForCoverJobOnD1 } from "~/lib/recipe-cover-jobs-d1.server";
 import { scheduleAiPlaceholderCover, type SchedulePlaceholderInput } from "~/lib/ai-placeholder-cover.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
+import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifySpoonOnMyRecipe } from "~/lib/notification-triggers.server";
 import { fanoutFellowChefOriginCook } from "~/lib/notification-fanout.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
@@ -257,6 +259,8 @@ export interface RecipeNotFoundData {
   message: "Recipe not found";
   // True when the recipe existed and was deleted; false when there is no such recipe.
   deleted: boolean;
+  // True when the viewer blocked or reported the recipe or its chef.
+  hidden?: boolean;
 }
 
 // A recipe link can outlive its recipe. The page says whether the recipe was deleted (product audit
@@ -286,6 +290,12 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
 
   if (!recipe) {
     throw await recipeNotFoundResponse(context, id);
+  }
+
+  const { hides } = reads;
+  if (hidesContent(hides, "recipe", recipe.id, recipe.chefId)) {
+    const body: RecipeNotFoundData = { message: "Recipe not found", deleted: false, hidden: true };
+    throw Response.json(body, { status: 404 });
   }
 
   const isOwner = userId !== null && recipe.chefId === userId;
@@ -344,7 +354,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     );
   }
 
-  const spoonsRaw = reads.spoons;
+  const spoonsRaw = withoutHidden(hides, reads.spoons, (spoon) => ({ type: "spoon", id: spoon.id, chefId: spoon.chef.id }));
   const originCookCandidate = reads.isOriginCookCandidate;
   const spoons = spoonsRaw.map((spoon) => ({
     id: spoon.id,
@@ -354,7 +364,7 @@ export async function loadRecipeDetail({ request, params, context }: RecipeDetai
     nextTime: spoon.nextTime,
     chef: spoon.chef,
   }));
-  const spoonImages = reads.spoonImages;
+  const spoonImages = withoutHidden(hides, reads.spoonImages, (spoon) => ({ type: "spoon", id: spoon.id, chefId: spoon.chef.id }));
   const { activeCover: _activeCover, ...recipeForClient } = recipe;
 
   return {
@@ -1439,6 +1449,10 @@ async function handleRecipeDetailActionOnD1(
         await assertActiveRecipeOnD1(d1, recipeId);
         return { kind: "response", response: data({ error: "Title is required", intent: "createCookbookAndSave" }, { status: 400 }) };
       }
+      if (containsObjectionableContent(title)) {
+        await assertActiveRecipeOnD1(d1, recipeId);
+        return { kind: "response", response: data({ error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "createCookbookAndSave" }, { status: 400 }) };
+      }
       try {
         const newCookbook = await createCookbookWithRecipeOnD1(d1, { userId, recipeId, title });
         return { kind: "newCookbook", newCookbook };
@@ -1535,6 +1549,9 @@ async function handleRecipeDetailIntent(
     const title = formData.get("title")?.toString()?.trim();
     if (!title) {
       return data({ error: "Title is required", intent: "createCookbookAndSave" }, { status: 400 });
+    }
+    if (containsObjectionableContent(title)) {
+      return data({ error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "createCookbookAndSave" }, { status: 400 });
     }
     let newCookbook: { id: string; title: string };
     try {

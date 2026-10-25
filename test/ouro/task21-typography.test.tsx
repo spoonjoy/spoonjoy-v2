@@ -28,6 +28,7 @@ vi.mock("~/lib/cooking-now-entries.server", () => ({ cookingNowEntry: vi.fn(), r
 vi.mock("~/lib/recipe-cover.server", () => ({ getRecipeCoverDisplay: vi.fn() }));
 vi.mock("~/lib/collection-reads.server", () => ({ readPublicRecipesFromD1: vi.fn(), readPublicRecipesWithPrisma: vi.fn() }));
 vi.mock("~/lib/account-settings.server", () => ({ loadAccountSettings: vi.fn(), handleAccountSettingsAction: vi.fn() }));
+vi.mock("~/lib/moderation.server", () => ({ hidesChef: vi.fn(), listBlockedChefs: vi.fn(), loadRequestViewerHides: vi.fn(), withoutHidden: vi.fn() }));
 vi.mock("~/lib/search.server", () => ({ normalizeSearchScope: vi.fn(), searchSpoonjoy: vi.fn(), searchSpoonjoyFromD1: vi.fn() }));
 
 const originalViewport = { width: innerWidth, height: innerHeight };

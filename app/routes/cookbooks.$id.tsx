@@ -7,6 +7,7 @@ import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
 import { requestD1 } from "~/lib/d1-read.server";
 import { readCookbookPageFromD1, readCookbookPageWithPrisma } from "~/lib/cookbook-page-reads.server";
 import { getUserId, requireUserId } from "~/lib/session.server";
+import { hidesContent, withoutHidden } from "~/lib/moderation.server";
 import { notifyCookbookSaveOfMine } from "~/lib/notification-triggers.server";
 import { getVapidConfig, type VapidEnv } from "~/lib/env.server";
 import {
@@ -101,6 +102,7 @@ import { productActivationPendingWebResponse } from "~/lib/saved-recipe-cutover.
 import { d1UnavailableWebResponse, retryD1Write } from "~/lib/d1-write-retry.server";
 import { revalidateUnlessNetworkFailure, submitOrReportLostRequest } from "~/lib/network-failure";
 import { useResendLostSubmission } from "~/hooks/use-resend-lost-submission";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 
 export function meta({ data }: Route.MetaArgs) {
   if (!data) {
@@ -139,11 +141,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const d1 = requestD1(context);
   const readInput = { cookbookId: id, viewerId: userId };
-  const { cookbook, availableRecipes } = d1
+  const { cookbook, availableRecipes, hides } = d1
     ? await readCookbookPageFromD1(d1, readInput)
     : await readCookbookPageWithPrisma(await getRequestDb(context), readInput);
 
   if (!cookbook) {
+    throw new Response("Cookbook not found", { status: 404 });
+  }
+  // A cookbook the viewer reported, or whose author they blocked or reported, is hidden from them.
+  if (hidesContent(hides, "cookbook", cookbook.id, cookbook.authorId)) {
     throw new Response("Cookbook not found", { status: 404 });
   }
 
@@ -152,7 +158,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 
   const cookbookWithCovers = {
     ...cookbook,
-    recipes: cookbook.recipes.map((item) => {
+    recipes: withoutHidden(hides, cookbook.recipes, (item) => ({ type: "recipe", id: item.recipe.id, chefId: item.recipe.chef.id })).map((item) => {
       const coverDisplay = getRecipeCoverDisplay(item.recipe, item.recipe.covers);
       return {
         ...item,
@@ -245,6 +251,9 @@ async function handleCookbookAction(
     const title = formData.get("title")?.toString() || "";
     if (!title.trim()) {
       return data({ error: "Title is required", intent: "updateTitle" }, { status: 400 });
+    }
+    if (containsObjectionableContent(title)) {
+      return data({ error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "updateTitle" }, { status: 400 });
     }
     try {
       // Sets a fixed title, so it simply runs again after a transient D1 error.

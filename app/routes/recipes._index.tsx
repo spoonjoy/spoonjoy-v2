@@ -11,6 +11,7 @@ import { Text } from "~/components/ouro/text/text";
 import { CookbookPage } from "~/components/cookbook/page";
 import { getRequestDb } from "~/lib/route-platform.server";
 import { getUserId } from "~/lib/session.server";
+import { loadRequestViewerHides, withoutHidden } from "~/lib/moderation.server";
 import { useUrlSyncedInput } from "~/hooks/useUrlSyncedInput";
 import { CoverProvenanceBadge } from "~/components/recipe/CoverProvenanceBadge";
 import { requestD1 } from "~/lib/d1-read.server";
@@ -49,14 +50,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     ? await readPublicRecipesFromD1(d1, input)
     : await readPublicRecipesWithPrisma(await getRequestDb(context), input);
   const hasMore = !query && rows.length > PUBLIC_RECIPE_LIMIT;
-  const recipes = rows.slice(0, PUBLIC_RECIPE_LIMIT);
+  const page = rows.slice(0, PUBLIC_RECIPE_LIMIT);
+  // The cursor is the last row read, so a page whose recipes were all hidden still leads on.
+  const hides = await loadRequestViewerHides(context, userId);
 
   return {
     query,
     isAuthenticated: Boolean(userId),
-    recipes,
+    recipes: withoutHidden(hides, page, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id })),
     after,
-    nextCursor: hasMore ? recipes[recipes.length - 1]!.id : null,
+    nextCursor: hasMore ? page[page.length - 1]!.id : null,
   };
 }
 

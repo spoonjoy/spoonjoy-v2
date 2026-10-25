@@ -714,6 +714,23 @@ async function recordNativeSession() {
   });
   await api("me-export", "GET", "me/export", { token: chef, endpoint: "GET /api/v1/me/export" });
 
+  // Moderation: the friend reports the chef's recipe (again answers the same open report), then
+  // blocks, lists and unblocks the chef.
+  await api("report-create", "POST", "reports", {
+    token: friend,
+    body: { targetType: "recipe", targetId: recipeId, reason: "offensive", details: "Contract report." },
+    endpoint: "POST /api/v1/reports",
+    status: 201,
+  });
+  await api("report-create-again", "POST", "reports", {
+    token: friend,
+    body: { targetType: "recipe", targetId: recipeId, reason: "offensive" },
+    endpoint: "POST /api/v1/reports",
+  });
+  await api("block-create", "POST", "blocks", { token: friend, body: { chefId: chefUser.id }, endpoint: "POST /api/v1/blocks" });
+  await api("blocks-list", "GET", "blocks", { token: friend, endpoint: "GET /api/v1/blocks" });
+  await api("block-delete", "DELETE", `blocks/${chefUser.id}`, { token: friend, endpoint: "DELETE /api/v1/blocks/{chefId}" });
+
   // Deletes, last: they remove what the reads above recorded.
   await api("recipe-spoon-delete", "DELETE", `recipes/${recipeId}/spoons/${jsonSpoon.data.spoon.id}`, {
     token: chef,

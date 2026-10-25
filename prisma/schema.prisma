@@ -45,6 +45,9 @@ model User {
   spoons                   RecipeSpoon[]
   imageGenLedger           ImageGenLedger[]
   cookingNow               CookingNow[]
+  contentReports           ContentReport[]
+  blocksMade               ChefBlock[]               @relation("ChefBlocker")
+  blocksReceived           ChefBlock[]               @relation("ChefBlocked")
 
   pushSubscriptions      PushSubscription[]
   nativePushDevices      NativePushDevice[]
@@ -619,6 +622,39 @@ model CookingNow {
 
   @@id([userId, recipeId])
   @@index([userId, touchedAt])
+}
+
+// A signed-in chef's report about a recipe, chef, cook log (spoon) or cookbook (App Store
+// guideline 1.2). The target is polymorphic, so it has no foreign key. Migration 0036 adds CHECK
+// constraints on targetType, reason and status, and a partial unique index: one open report per
+// reporter and target.
+model ContentReport {
+  id           String    @id @default(cuid())
+  reporterId   String
+  reporter     User      @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType   String
+  targetId     String
+  targetChefId String?
+  reason       String
+  details      String?
+  status       String    @default("open")
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+
+  @@index([reporterId])
+  @@index([status, createdAt])
+}
+
+// A chef hiding another chef's content from themselves.
+model ChefBlock {
+  blockerId String
+  blocker   User     @relation("ChefBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("ChefBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
 }
 
 model RecipeSpoon {

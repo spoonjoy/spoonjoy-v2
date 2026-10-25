@@ -1,3 +1,4 @@
+import { OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 // @vitest-environment node
 // The recipe page's action with a D1 binding: saving to a cookbook, taking a recipe out, making a
 // cookbook from the Save dialog, deleting a cook, the owner's cover choices and moving the recipe
@@ -95,6 +96,10 @@ describe("recipes.$id action on a D1 binding", () => {
     const untitled = await post({ intent: "createCookbookAndSave", title: "   " });
     expect(untitled.init?.status).toBe(400);
     expect(untitled.data).toEqual({ error: "Title is required", intent: "createCookbookAndSave" });
+
+    const objectionable = await post({ intent: "createCookbookAndSave", title: "porn picks" });
+    expect(objectionable.init?.status).toBe(400);
+    expect(objectionable.data).toEqual({ error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "createCookbookAndSave" });
 
     // The recipe is checked before the title, as on the Prisma path.
     await db.recipe.update({ where: { id: recipeId }, data: { deletedAt: new Date() } });

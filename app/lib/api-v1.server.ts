@@ -1,5 +1,21 @@
 import { authenticateUserByEmailOrUsername } from "~/lib/auth.server";
 import { listCookingNow } from "~/lib/cooking-now.server";
+import { containsObjectionableContent, OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
+import {
+  blockChef,
+  hidesChef,
+  hidesContent,
+  loadRequestViewerHides,
+  withoutHidden,
+  type ViewerHides,
+  createContentReport,
+  listBlockedChefs,
+  ModerationError,
+  notifyModerators,
+  unblockChef,
+  type BlockedChef,
+  type ModerationEnv,
+} from "~/lib/moderation.server";
 import { chefActivity, chefRef as chefActivityRef, type ChefRef } from "~/lib/chef-activity.server";
 import { settleStuckCoverGenerations, stuckCoverStore } from "~/lib/recipe-cover-stuck.server";
 import {
@@ -675,6 +691,14 @@ function apiV1OperationFor(method: string, path: string): string | undefined {
       return "account.chefs.read";
     case "GET cooking-now":
       return "cooking-now.read";
+    case "POST reports":
+      return "moderation.report.create";
+    case "GET blocks":
+      return "moderation.blocks.read";
+    case "POST blocks":
+      return "moderation.block.create";
+    case "DELETE block":
+      return "moderation.block.delete";
     case "GET me-notification-preferences":
       return "account.notification-preferences.read";
     case "PATCH me-notification-preferences":
@@ -1235,6 +1259,7 @@ async function handleSearch(args: ApiV1RouteArgs, requestId: string, principal: 
     query,
     scope,
     viewerId,
+    hideFor: principal?.id ?? null,
     limit,
   });
 
@@ -1788,6 +1813,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
   const page = recipes.slice(0, limit);
   const hasMore = recipes.length > limit;
   const nextCursor = hasMore && page.length > 0 ? listCursorFor(page[page.length - 1]!) : null;
+  const hides = await apiViewerHides(args, principal);
 
   return apiV1Success(requestId, {
     query: query || null,
@@ -1795,7 +1821,7 @@ async function handleRecipeList(args: ApiV1RouteArgs, requestId: string, princip
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    recipes: page.map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
+    recipes: withoutHidden(hides, page, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id })).map((recipe) => recipeSummary({ ...recipe, ...recipeCoverApiFields(recipe, origin) }, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
@@ -1804,7 +1830,7 @@ async function handleRecipeDetail(args: ApiV1RouteArgs, requestId: string, princ
   // One D1 batch where the binding exists, instead of Prisma's query per relation level.
   const d1 = requestD1(args.context);
   const recipe = d1 ? await loadApiRecipeFromD1(d1, id) : await loadRecipeById(await getRequestDb(args.context), id);
-  if (!recipe) {
+  if (!recipe || hidesContent(await apiViewerHides(args, principal), "recipe", recipe.id, recipe.chef.id)) {
     throw new ApiV1Error("not_found", "Recipe not found");
   }
 
@@ -2064,13 +2090,14 @@ async function handleRecipeSpoonList(args: ApiV1RouteArgs, requestId: string, pr
   const page = spoons.slice(0, limit);
   const hasMore = spoons.length > limit;
   const nextCursor = hasMore && page.length > 0 ? spoonListCursorFor(page[page.length - 1]!) : null;
+  const hides = await apiViewerHides(args, principal);
 
   return apiV1Success(requestId, {
     limit,
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    spoons: page.map((spoon) => spoonPayload(spoon, origin)),
+    spoons: withoutHidden(hides, page, (spoon) => ({ type: "spoon", id: spoon.id, chefId: spoon.chefId })).map((spoon) => spoonPayload(spoon, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
@@ -3322,6 +3349,7 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
   const page = cookbooks.slice(0, limit);
   const hasMore = cookbooks.length > limit;
   const nextCursor = hasMore && page.length > 0 ? listCursorFor(page[page.length - 1]!) : null;
+  const hides = await apiViewerHides(args, principal);
 
   return apiV1Success(requestId, {
     query: query || null,
@@ -3329,7 +3357,7 @@ async function handleCookbookList(args: ApiV1RouteArgs, requestId: string, princ
     cursor: cursor?.raw ?? null,
     nextCursor,
     hasMore,
-    cookbooks: page.map((cookbook) => cookbookSummary(cookbook, origin)),
+    cookbooks: withoutHidden(hides, page, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: cookbook.author.id })).map((cookbook) => cookbookSummary(cookbook, origin)),
   }, 200, principal ? authenticatedPublicCacheHeaders() : publicCacheHeaders());
 }
 
@@ -3337,7 +3365,7 @@ async function handleCookbookDetail(args: ApiV1RouteArgs, requestId: string, pri
   const db = await getRequestDb(args.context);
   const origin = publicContentOrigin(args);
   const cookbook = await loadCookbookById(db, id);
-  if (!cookbook) {
+  if (!cookbook || hidesContent(await apiViewerHides(args, principal), "cookbook", cookbook.id, cookbook.author.id)) {
     throw new ApiV1Error("not_found", "Cookbook not found");
   }
 
@@ -3387,7 +3415,7 @@ async function handleCookbookCreate(args: ApiV1RouteArgs, requestId: string, pri
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["clientMutationId", "title"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
-  const title = nonblankString(body.title, "title");
+  const title = acceptableText(nonblankString(body.title, "title"), "title");
   const origin = publicContentOrigin(args);
 
   const createdResult = async (db: ApiV1WriteDb, cookbookId: string): Promise<ApiV1IdempotentMutationResult> => ({
@@ -3432,7 +3460,7 @@ async function handleCookbookUpdate(args: ApiV1RouteArgs, requestId: string, pri
   const body = await parseApiV1JsonBody(args.request);
   assertKnownFields(body, ["clientMutationId", "title"]);
   const clientMutationId = nonblankString(body.clientMutationId, "clientMutationId");
-  const title = nonblankString(body.title, "title");
+  const title = acceptableText(nonblankString(body.title, "title"), "title");
   const origin = publicContentOrigin(args);
 
   return await runIdempotentApiV1Mutation(args, requestId, principal, body, clientMutationId, "cookbooks.update", async (db) => {
@@ -3794,6 +3822,65 @@ async function handleCookingNowRead(args: ApiV1RouteArgs, requestId: string, pri
       };
     }),
   });
+}
+
+/** What the caller hid: chefs they blocked or reported and content they reported. */
+async function apiViewerHides(args: ApiV1RouteArgs, principal: ApiPrincipal | null): Promise<ViewerHides> {
+  return loadRequestViewerHides(args.context, principal?.id);
+}
+
+function moderationApiError(error: unknown): never {
+  if (error instanceof ModerationError) {
+    throw new ApiV1Error(error.code, error.message);
+  }
+  throw error;
+}
+
+function blockedChefPayload(block: BlockedChef, origin: string) {
+  return {
+    chef: { id: block.chef.id, username: block.chef.username, photoUrl: publicAssetUrl(origin, block.chef.photoUrl) },
+    createdAt: block.createdAt.toISOString(),
+  };
+}
+
+async function handleReportCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["targetType", "targetId", "reason", "details"]);
+  const db = await getRequestDb(args.context);
+  const filed = await createContentReport(db, {
+    reporterId: principal.id,
+    targetType: body.targetType,
+    targetId: body.targetId,
+    reason: body.reason,
+    details: body.details,
+  }).catch(moderationApiError);
+  const reporter = await db.user.findUnique({ where: { id: principal.id }, select: { username: true } });
+  const notify = notifyModerators(db, apiV1CloudflareFor(args)?.env as ModerationEnv | undefined, filed, reporter?.username ?? principal.id);
+  const waitUntil = apiV1WaitUntilFor(args);
+  if (waitUntil) waitUntil(notify);
+  else await notify;
+  return apiV1PrivateSuccess(requestId, { report: filed.report }, filed.created ? 201 : 200);
+}
+
+async function handleBlocksRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const db = await getRequestDb(args.context);
+  const origin = publicContentOrigin(args);
+  const blocks = await listBlockedChefs(db, principal.id);
+  return apiV1PrivateSuccess(requestId, { blocks: blocks.map((block) => blockedChefPayload(block, origin)) });
+}
+
+async function handleBlockCreate(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
+  const body = await parseApiV1JsonBody(args.request);
+  assertKnownFields(body, ["chefId"]);
+  const db = await getRequestDb(args.context);
+  const block = await blockChef(db, principal.id, body.chefId).catch(moderationApiError);
+  return apiV1PrivateSuccess(requestId, { block: blockedChefPayload(block, publicContentOrigin(args)) });
+}
+
+async function handleBlockDelete(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal, chefId: string) {
+  const db = await getRequestDb(args.context);
+  await unblockChef(db, principal.id, chefId);
+  return apiV1PrivateSuccess(requestId, { unblocked: true });
 }
 
 async function handleShoppingListRead(args: ApiV1RouteArgs, requestId: string, principal: ApiPrincipal) {
@@ -5317,12 +5404,14 @@ async function handleUserProfile(args: ApiV1RouteArgs, requestId: string, princi
     ? await readChefProfileFromD1(d1, readInput)
     : await readChefProfileWithPrisma(await getRequestDb(args.context), readInput);
   const profileUser = rows.profileUser;
-  if (!profileUser) {
+  const hides = await apiViewerHides(args, principal);
+  if (!profileUser || hidesChef(hides, profileUser.id)) {
     throw new ApiV1Error("not_found", "Chef not found", { resource: "user", identifier });
   }
 
-  const recipes = rows.recipes.slice(0, API_V1_PROFILE_RECIPE_LIMIT);
-  const recipesNextCursor = rows.recipes.length > API_V1_PROFILE_RECIPE_LIMIT ? recipes[recipes.length - 1]!.id : null;
+  const recipePage = rows.recipes.slice(0, API_V1_PROFILE_RECIPE_LIMIT);
+  const recipesNextCursor = rows.recipes.length > API_V1_PROFILE_RECIPE_LIMIT ? recipePage[recipePage.length - 1]!.id : null;
+  const recipes = withoutHidden(hides, recipePage, (recipe) => ({ type: "recipe", id: recipe.id, chefId: profileUser.id }));
   const href = profileHref(profileUser.username);
   const recipeLink = (id: string) => {
     const recipeHref = `/recipes/${id}`;
@@ -5350,7 +5439,7 @@ async function handleUserProfile(args: ApiV1RouteArgs, requestId: string, princi
     })),
     recipeCount: rows.recipeCount,
     recipesNextCursor,
-    cookbooks: rows.cookbooks.map((cookbook) => {
+    cookbooks: withoutHidden(hides, rows.cookbooks, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: profileUser.id })).map((cookbook) => {
       const cookbookHref = `/cookbooks/${cookbook.id}`;
       return {
         id: cookbook.id,
@@ -5366,7 +5455,7 @@ async function handleUserProfile(args: ApiV1RouteArgs, requestId: string, princi
         canonicalUrl: canonicalUrl(origin, cookbookHref),
       };
     }),
-    recentSpoons: rows.recentSpoons.map((spoon) => ({
+    recentSpoons: withoutHidden(hides, rows.recentSpoons, (spoon) => ({ type: "spoon", id: spoon.id, chefId: spoon.chef.id })).map((spoon) => ({
       id: spoon.id,
       cookedAt: spoon.cookedAt.toISOString(),
       photoUrl: publicAssetUrl(origin, spoon.photoUrl),
@@ -5401,7 +5490,8 @@ async function handleUserChefGraph(
   const profileUser =
     (await db.user.findUnique({ where: { username: identifier }, select: userSelect })) ??
     (await db.user.findUnique({ where: { id: identifier }, select: userSelect }));
-  if (!profileUser) {
+  const hides = await apiViewerHides(args, principal);
+  if (!profileUser || hidesChef(hides, profileUser.id)) {
     throw new ApiV1Error("not_found", "Chef not found", { resource: "user", identifier });
   }
 
@@ -5423,7 +5513,7 @@ async function handleUserChefGraph(
     pageSize,
     total: result.total,
     nextCursor: hasMore ? String(page + 1) : null,
-    rows: result.rows.map((row) => {
+    rows: result.rows.filter((row) => !hidesChef(hides, row.chefId)).map((row) => {
       const rowHref = profileHref(row.username);
       return {
         chefId: row.chefId,
@@ -5455,7 +5545,8 @@ async function handleNativeChefsRead(args: ApiV1RouteArgs, requestId: string, pr
     username: chef.username,
     photoUrl: publicAssetUrl(origin, chef.photoUrl),
   });
-  const chefRows = (rows: FellowChefRow[]) => rows.map((row) => ({
+  const hides = await apiViewerHides(args, principal);
+  const chefRows = (rows: FellowChefRow[]) => rows.filter((row) => !hidesChef(hides, row.chefId)).map((row) => ({
     chefId: row.chefId,
     username: row.username,
     photoUrl: publicAssetUrl(origin, row.photoUrl),
@@ -5472,7 +5563,7 @@ async function handleNativeChefsRead(args: ApiV1RouteArgs, requestId: string, pr
       viewer: chefRefData(chefActivityRef(viewer)),
       fellowChefs: { total: fellowChefs.total, rows: chefRows(fellowChefs.rows) },
       chefsUsingMyRecipes: { total: chefsUsingMyRecipes.total, rows: chefRows(chefsUsingMyRecipes.rows) },
-      activity: activity.map((row) => ({
+      activity: activity.filter((row) => !hidesChef(hides, row.otherChef.id)).map((row) => ({
         id: row.id,
         kind: row.kind,
         direction: row.direction,
@@ -7124,6 +7215,14 @@ function hasOwnField(body: Record<string, unknown>, field: string): boolean {
   return Object.prototype.hasOwnProperty.call(body, field);
 }
 
+/** Rejects a write whose text carries a term from the objectionable-content filter. */
+function acceptableText(value: string, field: string): string {
+  if (containsObjectionableContent(value)) {
+    throw new ApiV1Error("validation_error", `${field}: ${OBJECTIONABLE_CONTENT_MESSAGE}`);
+  }
+  return value;
+}
+
 function nonblankString(value: unknown, field: string, maxLength = MAX_SHORT_TEXT_LENGTH) {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ApiV1Error("validation_error", `${field} must be a nonblank string`);
@@ -7983,6 +8082,30 @@ export async function handleApiV1Request(args: ApiV1RouteArgs): Promise<Response
     if (args.request.method === "GET" && path === "cooking-now") {
       const principal = await authorize(path) as ApiPrincipal;
       const response = await handleCookingNowRead(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "reports") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleReportCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "GET" && path === "blocks") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleBlocksRead(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "POST" && path === "blocks") {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleBlockCreate(args, requestId, principal);
+      return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
+    }
+
+    if (args.request.method === "DELETE" && segments[0] === "blocks" && segments.length === 2) {
+      const principal = await authorize(path) as ApiPrincipal;
+      const response = await handleBlockDelete(args, requestId, principal, segments[1]);
       return observeApiV1Response(args, { requestId, path, response, startedAt, principal });
     }
 

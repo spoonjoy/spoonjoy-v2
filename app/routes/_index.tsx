@@ -9,6 +9,7 @@ import {
   type KitchenUserWhere,
 } from "~/lib/kitchen-home.server";
 import { getUserId } from "~/lib/session.server";
+import { hidesChef, withoutHidden } from "~/lib/moderation.server";
 import { Button } from "~/components/ouro/button/button";
 import { KitchenHome, absoluteKitchenUrl } from "~/components/cookbook/KitchenHome";
 import { getRecipeCoverDisplay } from "~/lib/recipe-cover.server";
@@ -97,7 +98,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const d1 = requestD1(context);
   const renderedAt = Date.now();
   const readInput = { viewerId: currentUserId, kitchenUserWhere, now: renderedAt };
-  const { viewer, kitchenUser, recipes, cookbooks, cookingNow } = d1
+  const { viewer, kitchenUser, recipes, cookbooks, cookingNow, hides } = d1
     ? await readKitchenHomeFromD1(d1, readInput)
     : await readKitchenHomeWithPrisma(await getRequestDb(context), readInput);
 
@@ -118,7 +119,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     };
   }
 
-  const recipesWithCover = recipes.map(({ covers, ...rest }) => {
+  // Another chef's kitchen the viewer blocked or reported is hidden, as if there were none.
+  if (hidesChef(hides, kitchenUser.id)) {
+    throw new Response("Kitchen not found", { status: 404 });
+  }
+
+  const recipesWithCover = withoutHidden(hides, recipes, (recipe) => ({ type: "recipe", id: recipe.id, chefId: kitchenUser.id })).map(({ covers, ...rest }) => {
     const coverDisplay = getRecipeCoverDisplay(rest, covers);
     return {
       ...rest,
@@ -127,7 +133,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     };
   });
 
-  const cookbooksWithCover = cookbooks.map(({ recipes: cookbookRecipes, ...cookbook }) => ({
+  const cookbooksWithCover = withoutHidden(hides, cookbooks, (cookbook) => ({ type: "cookbook", id: cookbook.id, chefId: kitchenUser.id })).map(({ recipes: cookbookRecipes, ...cookbook }) => ({
     ...cookbook,
     recipes: cookbookRecipes.map((item) => ({
       ...item,

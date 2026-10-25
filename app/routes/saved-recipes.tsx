@@ -16,6 +16,7 @@ import {
   type SavedRecipe,
 } from "~/lib/collection-reads.server";
 import { requireUserId } from "~/lib/session.server";
+import { loadRequestViewerHides, withoutHidden } from "~/lib/moderation.server";
 import { DrawerSearch } from "./my-recipes";
 import { RecipesSectionNav } from "~/components/navigation";
 
@@ -52,9 +53,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     ? await readSavedRecipesFromD1(d1, userId)
     : await readSavedRecipesWithPrisma(await getRequestDb(context), userId);
 
+  const hides = await loadRequestViewerHides(context, userId);
+
   return {
     query,
-    recipes: recipes.filter((recipe) => matchesSavedRecipeQuery(recipe, query)),
+    recipes: withoutHidden(hides, recipes, (recipe) => ({ type: "recipe", id: recipe.id, chefId: recipe.chef.id }))
+      .filter((recipe) => matchesSavedRecipeQuery(recipe, query)),
   };
 }
 
