@@ -614,7 +614,7 @@ export function ResponsePanel({ response, onClear }: { response: PlaygroundRespo
           </div>
         </div>
       ) : null}
-      <pre tabIndex={-1} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
+      <pre role="region" tabIndex={0} aria-label="Response body" className="mt-4 min-h-64 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 text-[var(--sj-on-photo-muted)]">
         {response ? response.body : "No response yet."}
       </pre>
     </section>
@@ -1089,7 +1089,7 @@ export default function DeveloperPlayground() {
                   <div className="grid gap-3 lg:grid-cols-3">
                     {operationPolicies.map(([label, policy]) => (
                       <Collapsible key={label} title={label}>
-                        <pre tabIndex={-1} aria-label={`${selected.label} ${label.toLowerCase()}`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
+                        <pre role="region" tabIndex={0} aria-label={`${selected.label} ${label.toLowerCase()}`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
                           {JSON.stringify(policy, null, 2)}
                         </pre>
                       </Collapsible>
@@ -1235,7 +1235,7 @@ export default function DeveloperPlayground() {
                   {pkceVerifier ? <CopyButton variant="plain" value={`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`} label="Copy bundle" /> : null}
                 </div>
                 {pkceVerifier ? (
-                  <pre tabIndex={-1} aria-label="PKCE and state bundle" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3 font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
+                  <pre role="region" tabIndex={0} aria-label="PKCE and state bundle" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] p-3 font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
                     {`code_verifier=${pkceVerifier}\nstate=${params.state}\ncode_challenge=${params.code_challenge}`}
                   </pre>
                 ) : null}
@@ -1305,7 +1305,7 @@ export default function DeveloperPlayground() {
                         />
                       );
                     })}
-                    <pre tabIndex={-1} aria-label={bodyLabel} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-3 font-mono text-sm/6 font-normal text-[var(--sj-ink-soft)]">
+                    <pre role="region" tabIndex={0} aria-label={bodyLabel} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-paper)] px-3 py-3 font-mono text-sm/6 font-normal text-[var(--sj-ink-soft)]">
                       {bodyText}
                     </pre>
                   </div>
@@ -1335,7 +1335,7 @@ export default function DeveloperPlayground() {
                 <CopyButton variant="plain" value={path} label="Copy path" />
                 <CopyButton variant="plain" value={curl} label={authMode === "session" ? "Copy fetch" : "Copy curl"} />
               </div>
-              <pre tabIndex={-1} aria-label={authMode === "session" ? "Generated browser fetch snippet" : "Generated curl command"} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+              <pre role="region" tabIndex={0} aria-label={authMode === "session" ? "Generated browser fetch snippet" : "Generated curl command"} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                 {curl}
               </pre>
             </div>
@@ -1355,7 +1355,7 @@ export default function DeveloperPlayground() {
 	                  <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Example payloads</p>
 	                  {selected.responseExamples.map((example) => (
                     <Collapsible key={`${selected.id}-${example.status}-${example.name}`} title={`${example.status} ${example.label}`}>
-	                      <pre tabIndex={-1} aria-label={`${selected.label} ${example.status} ${example.label} response example`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
+	                      <pre role="region" tabIndex={0} aria-label={`${selected.label} ${example.status} ${example.label} response example`} className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs/5 font-normal text-[var(--sj-ink-soft)]">
 	                        {example.example}
 	                      </pre>
                     </Collapsible>
@@ -1445,7 +1445,7 @@ export default function DeveloperPlayground() {
             <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
               {scenario.notes.map((note) => <li key={note}>- {note}</li>)}
             </ul>
-            <pre tabIndex={-1} aria-label={`${scenario.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+            <pre role="region" tabIndex={0} aria-label={`${scenario.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
               {scenario.sample}
             </pre>
             <div>
@@ -1466,7 +1466,7 @@ export default function DeveloperPlayground() {
             <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
               {flow.notes.map((note) => <li key={note}>- {note}</li>)}
             </ul>
-            <pre tabIndex={-1} aria-label={`${flow.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+            <pre role="region" tabIndex={0} aria-label={`${flow.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
               {flow.sample}
             </pre>
             <div>

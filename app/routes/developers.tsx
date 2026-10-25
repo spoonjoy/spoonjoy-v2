@@ -602,7 +602,7 @@ export default function Developers() {
               Anonymous public reads work immediately. For the first external token, use delegated approval: the client shows an approval URL, the chef signs into Spoonjoy, and polling returns a one-time-display bearer token.
             </Text>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+          <pre role="region" tabIndex={0} aria-label="First successful calls sample" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
             {terminalQuickstart}
           </pre>
         </div>
@@ -668,7 +668,7 @@ export default function Developers() {
                 </div>
                 <div className="min-w-0 space-y-3">
                   <p className="text-sm/6 text-[var(--sj-ink-soft)]">{step.body}</p>
-                  <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+                  <pre role="region" tabIndex={0} aria-label={`${step.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                     {step.sample}
                   </pre>
                 </div>
@@ -691,7 +691,7 @@ export default function Developers() {
               {nativeDogfoodChecklist.map((item) => <li key={item}>- {item}</li>)}
             </ul>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+          <pre role="region" tabIndex={0} aria-label="Spoonjoy Apple native quickstart sample" className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
             {nativeDogfoodSample}
           </pre>
         </div>
@@ -712,7 +712,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{path.body}</p>
-                <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+                <pre role="region" tabIndex={0} aria-label={`${path.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                   {path.sample}
                 </pre>
               </div>
@@ -736,7 +736,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{step.body}</p>
-                <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+                <pre role="region" tabIndex={0} aria-label={`${step.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                   {step.sample}
                 </pre>
               </div>
@@ -752,7 +752,7 @@ export default function Developers() {
             <Text tone="muted" className="mt-2">
               /api/v1 REST resources return ok, requestId, and data or error fields. Raw OpenAPI documents are the exception.
             </Text>
-            <pre className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+            <pre role="region" tabIndex={0} aria-label="API v1 REST response shape example" className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
               {`{ "ok": true, "requestId": "req_example", "data": {} }\n{ "ok": false, "requestId": "req_example", "error": { "code": "invalid_token", "status": 401 } }`}
             </pre>
           </article>
@@ -761,7 +761,7 @@ export default function Developers() {
             <Text tone="muted" className="mt-2">
               OAuth endpoints use OAuth token/error JSON except 429 rate limits, delegated /api/tools/* helpers use the legacy helper envelope, and /mcp uses JSON-RPC result/error objects.
             </Text>
-            <pre className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+            <pre role="region" tabIndex={0} aria-label="Protocol exceptions example" className="mt-4 overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
               {`OAuth: { "access_token": "sj_...", "refresh_token": "ort_..." }\nAgent helper: { "ok": true, "data": { "status": "pending" } }\nMCP: { "jsonrpc": "2.0", "result": {} }`}
             </pre>
           </article>
@@ -794,7 +794,7 @@ export default function Developers() {
                 <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
                   {flow.notes.map((note) => <li key={note}>- {note}</li>)}
                 </ul>
-                <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+                <pre role="region" tabIndex={0} aria-label={`${flow.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                   {flow.sample}
                 </pre>
               </div>
@@ -835,7 +835,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{scenario.body}</p>
-                <pre className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
+                <pre role="region" tabIndex={0} aria-label={`${scenario.title} sample`} className="overflow-x-auto whitespace-pre-wrap border border-[var(--sj-border)] bg-[var(--sj-photo-charcoal)] p-4 font-mono text-xs/5 text-[var(--sj-on-photo)]">
                   {scenario.sample}
                 </pre>
               </div>
