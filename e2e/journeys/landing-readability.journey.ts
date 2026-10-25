@@ -11,6 +11,7 @@
 // an explicit choice stored the way the theme toggle stores it, set against the opposite system
 // setting, so the stored choice is what the page must follow.
 import type { Locator, Page, TestInfo } from "@playwright/test";
+import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { test, expect } from "./support/journey";
 import { waitForHydration } from "./support/navigation";
 import {
@@ -31,9 +32,9 @@ interface Measurements {
 }
 
 async function openLanding(page: Page, scheme: Scheme): Promise<void> {
-  await page.addInitScript((choice) => {
-    localStorage.setItem("ouro-color-scheme", choice);
-  }, scheme);
+  await page.addInitScript(({ key, choice }) => {
+    localStorage.setItem(key, choice);
+  }, { key: THEME_STORAGE_KEY, choice: scheme });
   await page.emulateMedia({ colorScheme: scheme === "dark" ? "light" : "dark" });
   await page.goto("/");
   await waitForHydration(page);
