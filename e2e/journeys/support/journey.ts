@@ -107,9 +107,8 @@ function matchesExpectation(issue: ConsoleIssue, expectation: ExpectedConsolePat
 
 /**
  * Splits `issues` into the ones no registered `expectations` pattern accounts for, and lists
- * which `expectations` (if any) never matched anything. Each expectation can absorb at most one
- * issue's worth of matching — this only affects which issue an expectation is credited against
- * when several would match, not whether the check passes.
+ * which `expectations` (if any) never matched anything. Each expectation absorbs at most one
+ * issue, so a diagnostic that can legitimately repeat needs one registration per allowed copy.
  */
 function resolveConsoleExpectations(
   issues: ConsoleIssue[],
