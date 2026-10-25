@@ -10,6 +10,8 @@
 //     elementFromPoint can miss) shows up as missing glyphs. Text whose own web font hasn't loaded fails: it would measure a fallback.
 //   - measureFocusIndicator(locator): the focused element's outline, compared pixel for pixel with
 //     the same spot with the outline hidden, along the middle of each straight edge.
+//   - measureBoundaryContrast(locator): whether a control's shape shows, the contrast between its
+//     painted edge (border, or fill where the border is clear) and the pixels just outside it.
 //   - coveringElements(locator): what sits on top of the element at its centre and corners, for an
 //     element that must not be hidden under a fixed bar.
 //
@@ -374,6 +376,144 @@ export async function measureFocusIndicator(page: Page, locator: Locator, label:
   }
   if (points.length === 0 || !Number.isFinite(minimum)) throw new Error(`${label}: no outline pixels were measured.`);
   return { ...result, minimum, pixels: points.length };
+}
+
+/** Raw RGBA pixels of a screenshot of `clip` (CSS px), `scale` image pixels per CSS pixel. */
+export interface PixelGrid {
+  data: Uint8Array;
+  width: number;
+  height: number;
+  scale: number;
+  clip: Box;
+}
+
+export interface EdgeContrast {
+  /** The worst, over every point along the straight edges, of the boundary's contrast with what is just outside. */
+  minimum: number;
+  points: number;
+  edge: "top" | "bottom" | "left" | "right";
+  inside: Rgb;
+  outside: Rgb;
+}
+
+// The pixel just outside the edge is this far out, past any antialiased edge pixel and inside a
+// focus outline's 2px offset.
+const OUTSIDE_DISTANCE = 1.5;
+
+/**
+ * The contrast between a component's boundary and the pixels around it (WCAG 1.4.11), for a box
+ * drawn into `pixels`. At each image pixel along the middle of each straight edge (the rounded
+ * corners are skipped), the boundary is the pixel in the edge band (the border width, at least
+ * 1 CSS px: the border if it is painted, else the fill under it) that contrasts most with the
+ * pixel OUTSIDE_DISTANCE outside the edge; the result is the worst such point.
+ */
+export function edgeContrast(pixels: PixelGrid, box: Box, borderWidth: number, radius: number): EdgeContrast {
+  const at = (x: number, y: number): Rgb => {
+    const column = Math.floor((x - pixels.clip.x) * pixels.scale);
+    const row = Math.floor((y - pixels.clip.y) * pixels.scale);
+    if (column < 0 || row < 0 || column >= pixels.width || row >= pixels.height) {
+      throw new Error(`The edge sample (${x}, ${y}) is outside the screenshot.`);
+    }
+    const offset = (row * pixels.width + column) * 4;
+    return { r: pixels.data[offset], g: pixels.data[offset + 1], b: pixels.data[offset + 2] };
+  };
+  const step = 1 / pixels.scale;
+  const band = Math.max(1, borderWidth);
+  const depths: number[] = [];
+  for (let depth = step / 2; depth < band; depth += step) depths.push(depth);
+  const skip = radius + 1;
+  const right = box.x + box.width;
+  const bottom = box.y + box.height;
+  // Each edge: a point on it at `t` along its length, and its outward normal.
+  const edges = [
+    { edge: "top", from: box.x + skip, to: right - skip, point: (t: number) => [t, box.y], normal: [0, -1] },
+    { edge: "bottom", from: box.x + skip, to: right - skip, point: (t: number) => [t, bottom], normal: [0, 1] },
+    { edge: "left", from: box.y + skip, to: bottom - skip, point: (t: number) => [box.x, t], normal: [-1, 0] },
+    { edge: "right", from: box.y + skip, to: bottom - skip, point: (t: number) => [right, t], normal: [1, 0] },
+  ] as const;
+  let worst: EdgeContrast | null = null;
+  let points = 0;
+  for (const { edge, from, to, point, normal } of edges) {
+    for (let t = from + step / 2; t <= to; t += step) {
+      const [x, y] = point(t);
+      const outside = at(x + normal[0] * OUTSIDE_DISTANCE, y + normal[1] * OUTSIDE_DISTANCE);
+      let best = { ratio: 0, inside: outside };
+      for (const depth of depths) {
+        const inside = at(x - normal[0] * depth, y - normal[1] * depth);
+        const ratio = contrastRatio(inside, outside);
+        if (ratio > best.ratio) best = { ratio, inside };
+      }
+      points += 1;
+      if (!worst || best.ratio < worst.minimum) worst = { minimum: best.ratio, points: 0, edge, inside: best.inside, outside };
+    }
+  }
+  if (!worst) throw new Error(`The box ${JSON.stringify(box)} has no straight edge to measure past its ${radius}px corners.`);
+  return { ...worst, points };
+}
+
+export interface BoundaryContrast {
+  label: string;
+  /** The worst contrast between the component's boundary (border or fill) and the pixels just outside it, unrounded. */
+  minimum: number;
+  points: number;
+  edge: string;
+  borderColor: string;
+  backgroundColor: string;
+  /** The boundary and outside pixels at the worst point. */
+  worstBoundary: string;
+  worstOutside: string;
+}
+
+function rgbText({ r, g, b }: Rgb): string {
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/**
+ * Whether the component's shape can be seen: the contrast between its painted boundary (its
+ * border, or its fill where the border is clear) and the pixels just outside it, as painted, in
+ * its current state. Measure text first in the same state: its screenshots finish the state's
+ * transitions, and an element that moves while it is measured is an error.
+ */
+export async function measureBoundaryContrast(page: Page, locator: Locator, label: string): Promise<BoundaryContrast> {
+  const read = () =>
+    locator.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const outline = computed.outlineStyle !== "none" && parseFloat(computed.outlineWidth) > 0;
+      return {
+        box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        borderWidth: Math.max(...["Top", "Right", "Bottom", "Left"].map((side) => parseFloat(computed.getPropertyValue(`border-${side.toLowerCase()}-width`)) || 0)),
+        radius: Math.max(...["top-left", "top-right", "bottom-left", "bottom-right"].map((corner) => parseFloat(computed.getPropertyValue(`border-${corner}-radius`)) || 0)),
+        borderColor: computed.borderTopColor,
+        backgroundColor: computed.backgroundColor,
+        outlineGap: outline ? parseFloat(computed.outlineOffset) : null,
+      };
+    });
+  const before = await read();
+  if (before.outlineGap !== null && before.outlineGap < 2) {
+    throw new Error(`${label}'s outline is ${before.outlineGap}px from its edge, where the pixels outside the boundary are sampled.`);
+  }
+  const reach = OUTSIDE_DISTANCE + 1;
+  const shot = await screenshotPixels(
+    page,
+    { x: before.box.x - reach, y: before.box.y - reach, width: before.box.width + 2 * reach, height: before.box.height + 2 * reach },
+    `${label}'s edges`,
+  );
+  const after = await read();
+  if (JSON.stringify(after.box) !== JSON.stringify(before.box)) {
+    throw new Error(`${label} moved while its edges were measured (${JSON.stringify(before.box)} then ${JSON.stringify(after.box)}).`);
+  }
+  const result = edgeContrast(shot, before.box, before.borderWidth, before.radius);
+  return {
+    label,
+    minimum: result.minimum,
+    points: result.points,
+    edge: result.edge,
+    borderColor: before.borderColor,
+    backgroundColor: before.backgroundColor,
+    worstBoundary: rgbText(result.inside),
+    worstOutside: rgbText(result.outside),
+  };
 }
 
 /**
