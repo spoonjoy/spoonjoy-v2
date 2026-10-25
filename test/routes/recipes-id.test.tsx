@@ -2687,6 +2687,7 @@ describe("Recipes $id Route", () => {
       const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
       expect(createdCookbook).toBeInTheDocument();
       expect(createdCookbook).toHaveAttribute("aria-pressed", "true");
+      expect(createdCookbook).toHaveFocus();
       await closeSaveModal(user);
     });
 

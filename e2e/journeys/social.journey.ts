@@ -69,11 +69,23 @@ async function openLogCook(page: Page) {
   return dialog;
 }
 
+function notifications(page: Page) {
+  return page.getByRole("region", { name: "Notifications" });
+}
+
 async function saveCook(page: Page) {
   const dialog = logCookDialog(page);
   await dialog.getByRole("button", { name: "Log cook", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "Cook logged.", exact: true })).toBeVisible();
+  await expect(notifications(page).getByRole("dialog", { name: "Cook logged.", exact: true })).toBeVisible();
   await expect(dialog).toBeHidden();
+}
+
+// "Cook logged." leaves by itself after five seconds, sooner than checking the page in both
+// themes takes, so it could leave halfway through. F6 moves focus to the notifications, as a
+// keyboard user would, and they stay while they have focus.
+async function holdNotifications(page: Page) {
+  await page.keyboard.press("F6");
+  await expect(notifications(page)).toBeFocused();
 }
 
 // One cook on the recipe page, by its note.
@@ -218,6 +230,7 @@ test.describe("Social, in a British locale in Kiritimati", () => {
 
     const cook = cookRow(page, note);
     await expect(cook).toBeVisible();
+    await holdNotifications(page);
     await expectAccessible();
 
     await verifyAfterReload(async () => {
@@ -310,6 +323,7 @@ test.describe("Social, in Los Angeles", () => {
     await expect(cook).toBeVisible();
     await expect(cookTime).toHaveText("3 hours ago");
     await expect(cookTime).toHaveAttribute("datetime", cookedAt.toISOString());
+    await holdNotifications(page);
     await expectAccessible();
 
     await verifyAfterReload(async () => {

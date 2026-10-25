@@ -241,6 +241,14 @@ export default function RecipeDetail() {
   // Track view start time for engagement metrics
   const viewStartTime = useRef<number>(Date.now());
   const lastHandledCreatedCookbookId = useRef<string | null>(null);
+  // "Create & Save" disables itself while it submits and stays disabled once the title clears, so
+  // focus would fall to the page behind the dialog. The new cookbook's toggle takes it instead.
+  const [cookbookToFocus, setCookbookToFocus] = useState<string | null>(null);
+  const focusCreatedCookbook = useCallback((toggle: HTMLButtonElement | null) => {
+    if (!toggle) return;
+    toggle.focus();
+    setCookbookToFocus(null);
+  }, []);
   const addToListSubmissionCount = useRef(0);
   const lastHandledAddToListSubmissionCount = useRef(0);
   // One add per tap that succeeds: a tap after a 503, or a double tap, carries the same token and
@@ -523,6 +531,7 @@ export default function RecipeDetail() {
       setAvailableCookbooks(nextState.cookbooks);
       setSavedCookbookIds(nextState.savedCookbookIds);
       setNewCookbookTitle("");
+      setCookbookToFocus(result.newCookbook.id);
       lastHandledCreatedCookbookId.current = result.newCookbook.id;
     }
   }, [createCookbookFetcher.data, availableCookbooks, savedCookbookIds]);
@@ -718,6 +727,7 @@ export default function RecipeDetail() {
                   return (
                     <Toggle
                       key={cookbook.id}
+                      ref={cookbook.id === cookbookToFocus ? focusCreatedCookbook : undefined}
                       label={cookbook.title}
                       variant="outline"
                       pressed={isSaved}
