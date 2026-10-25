@@ -2,7 +2,7 @@
 // heading, description and three actions sit on a food photo under a dark gradient, so their
 // contrast depends on the photo, not just the theme's tokens. "Log in" and "Search Recipes" used to
 // be outline buttons with the page's dark ink and border on that dark photo, and on a phone the tab
-// bar hid "Search Recipes".
+// bar looked to sit over "Search Recipes" (a full-page capture), so coverage is checked too.
 //
 // For each piece of hero text and each action, this measures the contrast of the text against the
 // pixels actually painted behind it (support/readability.ts), at rest and, for the actions, on
@@ -15,6 +15,7 @@ import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { test, expect } from "./support/journey";
 import { waitForHydration } from "./support/navigation";
 import {
+  MIN_GLYPH_PIXELS,
   NON_TEXT_CONTRAST,
   coveringElements,
   measureFocusIndicator,
@@ -42,6 +43,7 @@ async function openLanding(page: Page, scheme: Scheme): Promise<void> {
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "the page's color-scheme").toBe(scheme);
 
   // The measurements need the real typeface and the decoded photo under the text.
+  // measureTextContrast also fails any text whose own web font isn't loaded.
   expect(await page.evaluate(async () => (await document.fonts.ready).status), "web fonts").toBe("loaded");
   const photo = page.getByRole("img", { name: "Dinner table with shared dishes" });
   await expect(photo).toBeVisible();
@@ -52,8 +54,15 @@ async function openLanding(page: Page, scheme: Scheme): Promise<void> {
 function recordText(measurements: Measurements, result: TextContrast): void {
   measurements.text.push(result);
   expect
-    .soft(result.minimum, `${result.label}: worst contrast ${result.minimum}:1 against ${result.worstBackground} (text ${result.textColor}, needs ${result.required}:1)`)
+    .soft(result.minimum, `${result.label}: worst contrast ${result.minimum.toFixed(3)}:1 against ${result.worstBackground} (text ${result.textColor}, needs ${result.required}:1)`)
     .toBeGreaterThanOrEqual(result.required);
+  expect
+    .soft(result.fewestGlyphPixels, `${result.label}: pixels painted in the text colour on its emptiest line (nothing may cover the glyphs)`)
+    .toBeGreaterThanOrEqual(MIN_GLYPH_PIXELS);
+}
+
+async function matches(locator: Locator, selector: string): Promise<boolean> {
+  return locator.evaluate((element, state) => element.matches(state), selector);
 }
 
 async function recordCovered(measurements: Measurements, locator: Locator, what: string): Promise<void> {
@@ -76,11 +85,13 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
     recordText(measurements, await measureTextContrast(page, action, `${name} at rest`));
 
     await action.hover();
+    expect(await matches(action, ":hover"), `${name} is hovered`).toBe(true);
     recordText(measurements, await measureTextContrast(page, action, `${name} on hover`));
 
     // Press without activating: release away from the link.
     await page.mouse.down();
     try {
+      expect(await matches(action, ":active"), `${name} is pressed`).toBe(true);
       recordText(measurements, await measureTextContrast(page, action, `${name} pressed`));
     } finally {
       await page.mouse.move(0, 0);
@@ -102,7 +113,7 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
     expect.soft(ring.outlineStyle, `${name}'s focus outline style`).not.toBe("none");
     expect.soft(ring.outlineWidth, `${name}'s focus outline width`).toBeGreaterThanOrEqual(2);
     expect
-      .soft(ring.minimum, `${name}'s focus outline (${ring.outlineColor}): worst contrast ${ring.minimum}:1 against what it covers, needs ${NON_TEXT_CONTRAST}:1`)
+      .soft(ring.minimum, `${name}'s focus outline (${ring.outlineColor}): worst contrast ${ring.minimum.toFixed(3)}:1 against what it covers, needs ${NON_TEXT_CONTRAST}:1`)
       .toBeGreaterThanOrEqual(NON_TEXT_CONTRAST);
     await action.blur();
   });
