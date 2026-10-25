@@ -185,8 +185,9 @@ export default function Index() {
             <p className="text-base/6 text-[var(--sj-ink-soft)] mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo)]">
               Spoonjoy is a photo-first kitchen for the recipes you actually cook, the notes you learn by doing, and the cookbooks that grow out of real meals.
             </p>
-            {/* Photo-white labels, borders and focus rings for the outline buttons on the shaded photo. */}
-            <div className="sj-on-charcoal mt-8 flex flex-col gap-3 sm:flex-row">
+            {/* Photo-white labels, borders and focus rings for the outline buttons, and a light amber main
+                action, so every button's edge shows on the shaded photo. */}
+            <div className="sj-on-charcoal sj-landing-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
               <Button href="/signup">Start Your Kitchen</Button>
               <Button href="/login" variant="outline" tone="secondary">Log in</Button>
               <Button href="/search" variant="outline" tone="secondary">
