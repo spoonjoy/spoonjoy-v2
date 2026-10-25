@@ -2,7 +2,7 @@
 // heading, description and three actions sit on a food photo under a dark gradient, so their
 // contrast depends on the photo, not just the theme's tokens. "Log in" and "Search Recipes" used to
 // be outline buttons with the page's dark ink and border on that dark photo, and on a phone the tab
-// bar looked to sit over "Search Recipes" (a full-page capture), so coverage is checked too.
+// bar sits over "Search Recipes" at the top of the page, so coverage is checked too.
 //
 // For each piece of hero text and each action, this measures the contrast of the text against the
 // pixels actually painted behind it (support/readability.ts), at rest and, for the actions, on
@@ -15,7 +15,6 @@ import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { test, expect } from "./support/journey";
 import { waitForHydration } from "./support/navigation";
 import {
-  MIN_GLYPH_PIXELS,
   NON_TEXT_CONTRAST,
   coveringElements,
   measureFocusIndicator,
@@ -43,8 +42,10 @@ async function openLanding(page: Page, scheme: Scheme): Promise<void> {
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), "the page's color-scheme").toBe(scheme);
 
   // The measurements need the real typeface and the decoded photo under the text.
-  // measureTextContrast also fails any text whose own web font isn't loaded.
-  expect(await page.evaluate(async () => (await document.fonts.ready).status), "web fonts").toBe("loaded");
+  // Wait for web fonts; measureTextContrast then fails any text whose own web font isn't loaded.
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
   const photo = page.getByRole("img", { name: "Dinner table with shared dishes" });
   await expect(photo).toBeVisible();
   await photo.evaluate((image) => (image as HTMLImageElement).decode());
@@ -57,8 +58,8 @@ function recordText(measurements: Measurements, result: TextContrast): void {
     .soft(result.minimum, `${result.label}: worst contrast ${result.minimum.toFixed(3)}:1 against ${result.worstBackground} (text ${result.textColor}, needs ${result.required}:1)`)
     .toBeGreaterThanOrEqual(result.required);
   expect
-    .soft(result.fewestGlyphPixels, `${result.label}: pixels painted in the text colour on its emptiest line (nothing may cover the glyphs)`)
-    .toBeGreaterThanOrEqual(MIN_GLYPH_PIXELS);
+    .soft(result.emptySlices, `${result.label}: one-em slices of its lines with no glyph painted (nothing may cover the text)`)
+    .toBe(0);
 }
 
 async function matches(locator: Locator, selector: string): Promise<boolean> {
