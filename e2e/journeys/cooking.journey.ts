@@ -375,9 +375,11 @@ test.describe("Cooking Lemon Herb Rice", () => {
       // Two tabs save one cook session, so a save can carry a revision the other tab already
       // replaced. The server answers 409 with its state and the tab replays its change on top
       // (app/lib/cook-session-sync.ts); the steps asserted below are the contract. Some browsers log
-      // that 409, so accept exactly that diagnostic for this session's URL, in either tab.
+      // that 409, so accept exactly that diagnostic for this session's URL, in either tab. WebKit has logged
+      // it twice in tab one, and each allowance covers one copy, so allow up to two.
       const conflict = /^Failed to load resource: the server responded with a status of 409(?: \((?:Conflict)?\))?$/;
       const sessionUrl = /\/api\/cook-sessions\/qa-kitchen-recipe-lemon-rice$/;
+      expectConsoleError(conflict, { url: sessionUrl, optional: true });
       expectConsoleError(conflict, { url: sessionUrl, optional: true });
       const isReplayedConflict = (issue: { text: string; location?: string }) => conflict.test(issue.text) && sessionUrl.test(issue.location ?? "");
 
