@@ -7,10 +7,16 @@
 //
 //   1. ratchet               an exemption claims.config.json adds must have a reason and be named
 //                            in the pull request's description
-//   2. lint --pr             the title and body: each factual sentence carries its source
-//   3. check --network=changed
+//   2. check --network=changed
 //                            every surface, every claim's check, and the addresses the pull
 //                            request adds to the URL cache fetched again
+//   3. lint --pr --network   the title and body: each factual sentence carries its source, and
+//                            each address they cite is fetched now
+//
+// The body's addresses are fetched rather than read from claims-urls.json because the full check
+// fails a cached address that no surface cites, and a pull request's description is no surface:
+// an address cited only there could be neither left out of the cache nor kept in it. The lint
+// writes what it fetched to the cache file on disk, so it runs after the check reads that file.
 //
 // All three run, and the command fails when any of them does.
 import { spawnSync } from "node:child_process";
@@ -18,7 +24,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const CHECKER = "app/lib/ouro/claims-check.mjs";
-export const STEPS = [["ratchet"], ["lint", "--pr"], ["check", "--network=changed"]];
+export const STEPS = [["ratchet"], ["check", "--network=changed"], ["lint", "--pr", "--network"]];
 
 /** The pull request's title and body from a pull_request event; throws for any other event. */
 export function pullRequestText(event) {
