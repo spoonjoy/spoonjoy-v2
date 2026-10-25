@@ -4,7 +4,10 @@
 //   - measureTextContrast(locator): the WCAG contrast of an element's text against the pixels
 //     painted behind each glyph line. It screenshots each line box with the glyphs hidden (their
 //     fill made transparent, so the colour, `currentColor` state layers and the photo underneath
-//     are unchanged), composites the text colour over every pixel and keeps the worst one.
+//     are unchanged), composites the text colour over every pixel and keeps the worst one. It
+//     then screenshots the line with the glyphs shown and counts pixels painted exactly in the
+//     text colour, so a layer drawn over the text (which elementFromPoint can miss) shows up as
+//     missing glyphs. Text whose own web font hasn't loaded fails: it would measure a fallback.
 //   - measureFocusIndicator(locator): the focused element's outline, compared pixel for pixel with
 //     the same spot with the outline hidden, along the middle of each straight edge.
 //   - coveringElements(locator): what sits on top of the element at its centre and corners, for an
@@ -92,10 +95,6 @@ export function composite(top: Rgba, bottom: Rgb): Rgb {
   };
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
 interface Pixels {
   data: Buffer;
   width: number;
@@ -130,7 +129,7 @@ function pixelAt(pixels: Pixels, column: number, row: number): Rgb {
 
 export interface TextContrast {
   label: string;
-  /** The worst contrast between the text colour and any pixel behind its glyph lines. */
+  /** The worst contrast between the text colour and any pixel behind its glyph lines, unrounded. */
   minimum: number;
   /** The contrast WCAG AA asks of this text: 3 for large text, 4.5 otherwise. */
   required: number;
@@ -140,20 +139,36 @@ export interface TextContrast {
   pixels: number;
   /** The pixel behind the text where the worst contrast was found. */
   worstBackground: string;
+  /** The fewest pixels, on any one line, painted in the text colour where the background was not. */
+  fewestGlyphPixels: number;
 }
+
+/** A line must show at least this many pixels in the text colour to count as painted. */
+export const MIN_GLYPH_PIXELS = 5;
+// How far, per 0-255 channel, a fully covered glyph pixel may be from the composited text colour.
+const GLYPH_TOLERANCE = 6;
+// How far a pixel must move between the hidden and shown screenshots to count as glyph.
+const GLYPH_CHANGE = 24;
 
 interface TextRun {
   color: string;
   opacity: number;
   fontSize: number;
   fontWeight: number;
+  family: string;
+  fontLoaded: boolean;
   rects: Box[];
 }
 
 // Every visible text run inside the element, with the colour its glyphs are filled with.
 async function textRuns(locator: Locator): Promise<TextRun[]> {
   return locator.evaluate((element) => {
-    const runs: Array<{ color: string; opacity: number; fontSize: number; fontWeight: number; rects: Array<{ x: number; y: number; width: number; height: number }> }> = [];
+    const runs: Array<{ color: string; opacity: number; fontSize: number; fontWeight: number; family: string; fontLoaded: boolean; rects: Array<{ x: number; y: number; width: number; height: number }> }> = [];
+    // FontFaceSet.check (is this font loaded?), bound once; it is not Playwright's checkbox check().
+    const fontIsLoaded = document.fonts.check.bind(document.fonts);
+    const loadedFamilies = new Set(
+      Array.from(document.fonts).filter((face) => face.status === "loaded").map((face) => face.family.replace(/^["']|["']$/g, "")),
+    );
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (!node.textContent?.trim()) continue;
@@ -172,7 +187,12 @@ async function textRuns(locator: Locator): Promise<TextRun[]> {
         .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
       // -webkit-text-fill-color is what fills the glyphs; it resolves to `color` unless set.
       const fill = style.getPropertyValue("-webkit-text-fill-color") || style.color;
-      runs.push({ color: fill, opacity, fontSize: parseFloat(style.fontSize), fontWeight: Number(style.fontWeight), rects });
+      // The family the text asks for first, which must be a loaded web font, not a fallback.
+      const family = style.fontFamily.split(",")[0].trim().replace(/^["']|["']$/g, "");
+      const fontLoaded =
+        loadedFamilies.has(family) &&
+        fontIsLoaded(`${style.fontStyle} ${style.fontWeight} ${style.fontSize} "${family}"`, node.textContent);
+      runs.push({ color: fill, opacity, fontSize: parseFloat(style.fontSize), fontWeight: Number(style.fontWeight), family, fontLoaded, rects });
     }
     return runs;
   });
@@ -197,43 +217,61 @@ export async function measureTextContrast(page: Page, locator: Locator, label: s
   if (rects.length === 0) throw new Error(`${label} has no visible text to measure.`);
   const colors = new Set(runs.map((run) => `${run.color} @${run.opacity}`));
   if (colors.size !== 1) throw new Error(`${label} mixes text colours (${[...colors].join(", ")}); measure each part separately.`);
+  const fallback = runs.find((each) => !each.fontLoaded);
+  if (fallback) throw new Error(`${label}: its font "${fallback.family}" has not loaded, so the text would be measured in a fallback font.`);
   const run = runs[0];
   const parsed = parseCssColor(run.color);
   const text: Rgba = { ...parsed, a: parsed.a * run.opacity };
   const largeText = runs.every((each) => each.fontSize >= LARGE_TEXT_PX || (each.fontSize >= LARGE_BOLD_TEXT_PX && each.fontWeight >= 700));
 
   await setGlyphsHidden(locator, true);
-  let minimum = Number.POSITIVE_INFINITY;
-  let worstBackground: Rgb = { r: 0, g: 0, b: 0 };
-  let pixels = 0;
+  const backgrounds: Pixels[] = [];
   try {
     for (const [index, rect] of rects.entries()) {
-      const shot = await screenshotPixels(page, rect, `${label}, line ${index + 1}`);
-      for (let row = 0; row < shot.height; row += 1) {
-        for (let column = 0; column < shot.width; column += 1) {
-          const background = pixelAt(shot, column, row);
-          const ratio = contrastRatio(composite(text, background), background);
-          pixels += 1;
-          if (ratio < minimum) {
-            minimum = ratio;
-            worstBackground = background;
-          }
-        }
-      }
+      backgrounds.push(await screenshotPixels(page, rect, `${label}, line ${index + 1}`));
     }
   } finally {
     await setGlyphsHidden(locator, false);
   }
+
+  let minimum = Number.POSITIVE_INFINITY;
+  let worstBackground: Rgb = { r: 0, g: 0, b: 0 };
+  let pixels = 0;
+  let fewestGlyphPixels = Number.POSITIVE_INFINITY;
+  for (const [index, rect] of rects.entries()) {
+    const hidden = backgrounds[index];
+    const shown = await screenshotPixels(page, rect, `${label}, line ${index + 1} with its text`);
+    if (shown.width !== hidden.width || shown.height !== hidden.height) throw new Error(`${label}, line ${index + 1}: the two screenshots differ in size.`);
+    let glyphPixels = 0;
+    for (let row = 0; row < hidden.height; row += 1) {
+      for (let column = 0; column < hidden.width; column += 1) {
+        const background = pixelAt(hidden, column, row);
+        const expected = composite(text, background);
+        const ratio = contrastRatio(expected, background);
+        pixels += 1;
+        if (ratio < minimum) {
+          minimum = ratio;
+          worstBackground = background;
+        }
+        const actual = pixelAt(shown, column, row);
+        const moved = Math.max(Math.abs(actual.r - background.r), Math.abs(actual.g - background.g), Math.abs(actual.b - background.b));
+        const off = Math.max(Math.abs(actual.r - expected.r), Math.abs(actual.g - expected.g), Math.abs(actual.b - expected.b));
+        if (moved >= GLYPH_CHANGE && off <= GLYPH_TOLERANCE) glyphPixels += 1;
+      }
+    }
+    fewestGlyphPixels = Math.min(fewestGlyphPixels, glyphPixels);
+  }
   if (pixels === 0 || !Number.isFinite(minimum)) throw new Error(`${label}: no pixels behind the text were measured.`);
   return {
     label,
-    minimum: round2(minimum),
+    minimum,
     required: largeText ? LARGE_TEXT_CONTRAST : TEXT_CONTRAST,
     largeText,
     textColor: run.color,
     lines: rects.length,
     pixels,
     worstBackground: `rgb(${worstBackground.r}, ${worstBackground.g}, ${worstBackground.b})`,
+    fewestGlyphPixels,
   };
 }
 
@@ -243,7 +281,7 @@ export interface FocusIndicator {
   outlineStyle: string;
   outlineWidth: number;
   outlineColor: string;
-  /** The worst contrast between an outline pixel and the same pixel without the outline. */
+  /** The worst contrast between an outline pixel and the same pixel without the outline, unrounded. */
   minimum: number;
   pixels: number;
 }
@@ -316,11 +354,12 @@ export async function measureFocusIndicator(page: Page, locator: Locator, label:
     minimum = Math.min(minimum, ratio);
   }
   if (points.length === 0 || !Number.isFinite(minimum)) throw new Error(`${label}: no outline pixels were measured.`);
-  return { ...result, minimum: round2(minimum), pixels: points.length };
+  return { ...result, minimum, pixels: points.length };
 }
 
 /**
- * What is painted on top of the element at its centre and just inside each corner, described by
+ * What is painted on top of the element at its centre, just inside each corner and at the middle
+ * of each edge, described by
  * tag, id, class and label. An empty list means nothing covers it. A point outside the viewport
  * counts as covered: the person can't see it there.
  */
@@ -334,6 +373,10 @@ export async function coveringElements(locator: Locator): Promise<string[]> {
       ["top right", rect.right - inset, rect.top + inset],
       ["bottom left", rect.left + inset, rect.bottom - inset],
       ["bottom right", rect.right - inset, rect.bottom - inset],
+      ["top edge", rect.x + rect.width / 2, rect.top + inset],
+      ["bottom edge", rect.x + rect.width / 2, rect.bottom - inset],
+      ["left edge", rect.left + inset, rect.y + rect.height / 2],
+      ["right edge", rect.right - inset, rect.y + rect.height / 2],
     ];
     const describe = (node: Element) => {
       const label = node.getAttribute("aria-label");
