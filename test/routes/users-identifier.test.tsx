@@ -357,6 +357,9 @@ describe("Users $identifier Route", () => {
       const heading = await screen.findByTestId("chef-profile-name");
       expect(heading.className).toContain("[overflow-wrap:anywhere]");
       expect(heading.className).not.toContain("text-2xl");
+      // At 30px a typical username fits beside the avatar on a 390pt phone; 36px split "johnnyappleseed" mid-word.
+      expect(heading.className).toContain("text-3xl/9");
+      expect(heading.className).toContain("sm:text-5xl/12");
       // The flex column must be allowed to shrink, or the heading overflows before it can wrap.
       expect(heading.parentElement?.className).toContain("min-w-0");
       expect(heading.parentElement?.parentElement?.className).toContain("min-w-0");
