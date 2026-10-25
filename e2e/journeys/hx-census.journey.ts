@@ -5,6 +5,10 @@
 // controls equal e2e/ouro-census/census.baseline.json (and, for an enrolled journey, every control
 // is HX's).
 //
+// Each state is also audited for accessibility after it is counted (the `accessibleState` fixture
+// below, support/accessibility.ts), in both themes, so every page and state the census lists is
+// checked, not only the ones the other journeys stop on.
+//
 // The census reads the seeded QA kitchen before any other journey changes QA data, so the Journeys
 // workflow runs it alone first (`pnpm run test:journeys:census`), then everything else
 // (`pnpm run test:journeys:after-census`). The kit tags its tests @ouro-census.
@@ -16,7 +20,7 @@ import { waitForHydration } from "./support/navigation";
 
 const NOT_FOUND_PATH = "/hx-census-page-that-does-not-exist";
 
-const test = journeyTest.extend<{ notFoundDocument: void }>({
+const test = journeyTest.extend<{ notFoundDocument: void; accessibleState: void }>({
   // The "not found" journey's document answers 404, which some browsers also log as a console error.
   notFoundDocument: [
     async ({ expectConsoleError }, use) => {
@@ -25,6 +29,15 @@ const test = journeyTest.extend<{ notFoundDocument: void }>({
         optional: true,
       });
       await use();
+    },
+    { auto: true },
+  ],
+  // Runs after the kit has counted the state's controls, so the census's measurement is unchanged.
+  // A state that already failed is not audited: its page may not be the state's page.
+  accessibleState: [
+    async ({ expectAccessible }, use, testInfo) => {
+      await use();
+      if (testInfo.status === testInfo.expectedStatus) await expectAccessible();
     },
     { auto: true },
   ],
