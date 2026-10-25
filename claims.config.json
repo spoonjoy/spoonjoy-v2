@@ -35,6 +35,11 @@
       "match": "^test/(?!ouro/).*\\.test\\.tsx?$",
       "job": "coverage",
       "reason": "the coverage job runs every unit test under test/ with full coverage (pnpm run verify:clean:test:coverage, vitest.config.ts) in the merge queue before anything lands"
+    },
+    {
+      "match": "^e2e/storybook/.*\\.spec\\.ts$",
+      "job": "build-storybook",
+      "reason": "the build-storybook job runs every spec under e2e/storybook against the built Storybook (pnpm run verify:clean:test:e2e:storybook-a11y, playwright.storybook.config.ts) before anything lands"
     }
   ],
   "requiredChecks": ".github/required-checks.json",

@@ -86,13 +86,5 @@
   "https://github.com/ourostack/ouro-ui/pull/122": {
     "status": 200,
     "checked": "2026-10-22"
-  },
-  "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/40229345269": {
-    "status": 200,
-    "checked": "2026-10-25"
-  },
-  "https://github.com/spoonjoy/spoonjoy-v2/actions/runs/40229345308": {
-    "status": 200,
-    "checked": "2026-10-25"
   }
 }
