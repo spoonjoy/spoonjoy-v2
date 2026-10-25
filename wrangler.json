@@ -107,7 +107,10 @@
       },
       "observability": {
         "enabled": true,
-        "head_sampling_rate": 1
+        "head_sampling_rate": 1,
+        "traces": {
+          "enabled": true
+        }
       },
       "placement": {
         "mode": "smart"
