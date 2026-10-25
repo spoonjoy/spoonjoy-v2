@@ -112,7 +112,7 @@ describe("summarize-worker-tail.jq", () => {
       expect(Object.keys(invocation).sort()).toEqual(INVOCATION_KEYS);
       for (const exception of invocation.exceptions) expect(Object.keys(exception).sort()).toEqual(["message", "name"]);
     }
-    for (const entry of summary.byPath) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path", "wallTime"]);
+    for (const entry of summary.byPath) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path", "statuses", "wallTime"]);
     expect(Object.keys(summary.budget).sort()).toEqual(["cpuTimeP95Ms", "overBudget"]);
     for (const entry of summary.budget.overBudget) expect(Object.keys(entry).sort()).toEqual(["count", "cpuTime", "path"]);
 
@@ -305,6 +305,7 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath[0]).toEqual({
       path: "/recipes/:id.data",
       count: 5,
+      statuses: { "200": 5 },
       wallTime: { p50: 300, p95: 3840, max: 3840 },
       cpuTime: { p50: 22, p95: 27, max: 27 },
     });
@@ -319,9 +320,22 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath.find((entry: { path: string }) => entry.path === "/search")).toEqual({
       path: "/search",
       count: 1,
+      statuses: { "200": 1 },
       wallTime: { p50: null, p95: null, max: null },
       cpuTime: { p50: null, p95: null, max: null },
     });
+  });
+
+  it("counts each route's responses by HTTP status, so sign-in 429s from the rate limiter are on record", () => {
+    const post = (path: string, status: number | undefined) => ({
+      outcome: status === undefined ? "canceled" : "ok",
+      eventTimestamp: 1,
+      event: { request: { url: `https://qa.example${path}`, method: "POST" }, ...(status === undefined ? {} : { response: { status } }) },
+    });
+
+    const { summary } = summarize([post("/login.data", 202), post("/login.data", 202), post("/login.data", 429), post("/login.data", undefined)]);
+
+    expect(summary.byPath.find((entry: { path: string }) => entry.path === "/login.data")?.statuses).toEqual({ "202": 2, "429": 1, none: 1 });
   });
 
   it("lists the routes whose p95 CPU time is over the 10 ms budget, worst first", () => {
@@ -379,6 +393,7 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.byPath).toEqual([{
       path: "/health",
       count: count + 1,
+      statuses: { "200": count + 1 },
       cpuTime: { p50, p95, max: count },
       wallTime: { p50, p95, max: count },
     }]);
