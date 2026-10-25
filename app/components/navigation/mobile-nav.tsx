@@ -65,7 +65,7 @@ function homeIconWithCount(count: number) {
       <Home className="size-full" />
       <span
         data-testid="tab-cooking-now-count"
-        className="absolute -right-2.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-[var(--sj-brass)] px-1 font-sj-ui text-[0.625rem] font-bold leading-4 text-[var(--sj-photo-charcoal)]"
+        className="absolute -right-2.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-[var(--sj-brass)] px-1 font-sj-ui text-[0.625rem] font-bold leading-4 text-[var(--sj-paper)]"
       >
         {count}
       </span>
