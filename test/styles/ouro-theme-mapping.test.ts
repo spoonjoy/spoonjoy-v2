@@ -45,6 +45,14 @@ function color(theme: Record<string, string>, name: string, mapping = MAPPING): 
   return value;
 }
 
+// `top` at `weight` over `bottom`, channel by channel.
+function mixHex(top: string, bottom: string, weight: number): string {
+  const channel = (hex: string, index: number) => Number.parseInt(hex.slice(index, index + 2), 16);
+  return `#${[1, 3, 5]
+    .map((index) => Math.round(channel(top, index) * weight + channel(bottom, index) * (1 - weight)).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
 function luminance(hex: string): number {
   const channels = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
   const [r, g, b] = channels.map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
@@ -137,7 +145,7 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
 
   it("gives the landing hero's actions a stronger photo line and a light amber main action, through tokens alone", () => {
     expect(LANDING_ACTIONS).toEqual({
-      "--border": "var(--sj-on-photo-soft)",
+      "--border": "var(--sj-on-photo-muted)",
       "--ouro-action": "var(--sj-photo-action)",
       "--ouro-action-foreground": "var(--sj-on-photo-action)",
       "--ouro-action-hover": "var(--sj-photo-action-hover)",
@@ -166,12 +174,15 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
         expect(contrast(color(theme, text, TAB_BAR), color(theme, surface, TAB_BAR))).toBeGreaterThanOrEqual(4.5);
       });
     }
-    for (const fill of ["--ouro-action", "--ouro-action-hover", "--ouro-action-active"] as const) {
-      it(`passes 4.5:1 for the landing hero's main action label on ${fill}, and 3:1 for that fill on the photo shade, in the ${themeName} theme`, () => {
-        const fillColor = color(theme, fill, LANDING_ACTIONS);
-        expect(contrast(color(theme, "--ouro-action-foreground", LANDING_ACTIONS), fillColor)).toBeGreaterThanOrEqual(4.5);
-        // The photo shade's own colour; the journey measures the real photo pixels.
-        expect(contrast(fillColor, color(theme, "--sj-photo-charcoal"))).toBeGreaterThanOrEqual(3);
+    // HX Button paints a state layer in the label colour over the fill: 8% on hover, 14% pressed.
+    for (const [state, fill, layer] of [
+      ["at rest", "--ouro-action", 0],
+      ["on hover", "--ouro-action-hover", 0.08],
+      ["pressed", "--ouro-action-active", 0.14],
+    ] as const) {
+      it(`passes 4.5:1 for the landing hero's main action label ${state}, under its state layer, in the ${themeName} theme`, () => {
+        const label = color(theme, "--ouro-action-foreground", LANDING_ACTIONS);
+        expect(contrast(label, mixHex(label, color(theme, fill, LANDING_ACTIONS), layer))).toBeGreaterThanOrEqual(4.5);
       });
     }
     it(`passes 4.5:1 for a control's text on a charcoal panel, and 3:1 for its focus ring, in the ${themeName} theme`, () => {
