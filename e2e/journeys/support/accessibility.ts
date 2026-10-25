@@ -233,8 +233,24 @@ export async function auditShownScheme(page: Page, options: AuditOptions = {}): 
   const results = await runAxe(page, options.scope);
   const { audit, contrastToMeasure, toVerify } = classifyAxeResults(scheme, results);
   if (contrastToMeasure.length === 0 && toVerify.length === 0) return audit;
+  const record = (finding: AxeFinding, outcome: { passed: boolean; detail: string }) => {
+    if (outcome.passed) audit.verified.push({ ...finding, measured: outcome.detail });
+    else audit.unresolved.push({ ...finding, message: `${finding.message} (measured: ${outcome.detail})` });
+  };
   await saveScroll(page);
   try {
+    // The other checks first, while the page is as axe saw it (a toast can leave in seconds). The
+    // tab-order walk moves focus and puts it back; the page settles again before measuring, since
+    // focus can open a tooltip.
+    for (const { finding, verification } of toVerify.filter((each) => each.verification.kind !== "hidden-focus")) {
+      record(finding, await verify(page, verification));
+    }
+    const focus = toVerify.filter((each) => each.verification.kind === "hidden-focus");
+    if (focus.length > 0) {
+      const outcomes = await verifyHiddenFocus(page, focus.map((each) => each.verification));
+      focus.forEach(({ finding }, index) => record(finding, outcomes[index]));
+      await settle(page);
+    }
     for (const { node, axeReason } of contrastToMeasure) {
       const selector = selectorOf(node);
       audit.contrast.push(
@@ -242,18 +258,6 @@ export async function auditShownScheme(page: Page, options: AuditOptions = {}): 
           ? { target: targetText(node), axeReason, passed: false, error: "it is inside a frame or shadow root, which this check cannot measure" }
           : await measureTextContrast(page, selector, axeReason),
       );
-    }
-    const record = (finding: AxeFinding, outcome: { passed: boolean; detail: string }) => {
-      if (outcome.passed) audit.verified.push({ ...finding, measured: outcome.detail });
-      else audit.unresolved.push({ ...finding, message: `${finding.message} (measured: ${outcome.detail})` });
-    };
-    const looking = toVerify.filter((each) => each.verification.kind !== "hidden-focus");
-    for (const { finding, verification } of looking) record(finding, await verify(page, verification));
-    // Focus checks move focus, so they run last, in one walk with the keyboard.
-    const focus = toVerify.filter((each) => each.verification.kind === "hidden-focus");
-    if (focus.length > 0) {
-      const outcomes = await verifyHiddenFocus(page, focus.map((each) => each.verification));
-      focus.forEach(({ finding }, index) => record(finding, outcomes[index]));
     }
   } finally {
     await restoreScroll(page);

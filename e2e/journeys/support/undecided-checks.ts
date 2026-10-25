@@ -14,8 +14,8 @@
 //     tell whether a keyboard can reach them. Settled by walking the page's tab order from the
 //     focused element, forwards and backwards, round to where it started, the way Tab and Shift+Tab
 //     move focus: each step focuses the next element in tab order and follows wherever focus goes
-//     (a focus guard sends it on). Passes when focus never lands inside the hidden region. Focus is
-//     put back afterwards.
+//     (a focus guard sends it on). Passes when focus never lands inside the hidden region while it
+//     is still hidden from assistive technology. Focus is put back afterwards.
 //   - form-field-multiple-labels ("Multiple label elements is not widely supported in assistive
 //     technologies"): a field with more than one <label>, such as a file field whose drop zone is
 //     a label around the input. Settled when the field's name comes from aria-labelledby, which
@@ -179,9 +179,13 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
         steps += 1;
         const active = document.activeElement;
         if (!active || active === document.body) continue;
+        // Landing counts when focus is still hidden from assistive technology once it has moved:
+        // a control that drops its aria-hidden when it takes focus (a collapsed toast's Dismiss
+        // button) is announced like any other.
+        const stillHidden = active.closest('[aria-hidden="true"]') !== null;
         regions.forEach((matches, index) => {
           const region = matches.length === 1 ? matches[0] : null;
-          if (region && (region === active || region.contains(active)) && !landed[index].includes(describe(active))) landed[index].push(describe(active));
+          if (stillHidden && region && (region === active || region.contains(active)) && !landed[index].includes(describe(active))) landed[index].push(describe(active));
         });
         if (seen.has(active)) return true;
         seen.add(active);
