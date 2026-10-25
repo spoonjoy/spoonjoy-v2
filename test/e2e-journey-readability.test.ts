@@ -2,7 +2,7 @@
 // computed colours parse exactly, an unknown format fails instead of passing, and contrast follows
 // WCAG 2.2's relative luminance, and a control's edge is compared with the pixels just outside it.
 import { describe, expect, it } from "vitest";
-import { composite, contrastRatio, edgeContrast, glyphCoverage, parseCssColor, relativeLuminance, type PixelGrid, type Rgb } from "../e2e/journeys/support/readability";
+import { OUTSIDE_DISTANCE, composite, contrastRatio, edgeContrast, glyphCoverage, parseCssColor, relativeLuminance, type PixelGrid, type Rgb } from "../e2e/journeys/support/readability";
 
 describe("parseCssColor", () => {
   it("reads the rgb() and rgba() forms browsers compute", () => {
@@ -109,6 +109,31 @@ describe("edgeContrast", () => {
   it("reads a 1px border on a clear button, not the photo inside it", () => {
     const paint = (x: number, y: number) => (inBox(x, y) && !inBox(x, y, 1) ? line : photo);
     expect(edgeContrast(grid(3, paint), box, 1, 0).minimum).toBeCloseTo(contrastRatio(line, photo), 5);
+  });
+
+  it("reads a one-image-pixel line at 3x as the edge, taking the band pixel that contrasts most", () => {
+    // Only the outermost third of the 1px border band is painted; the rest is the photo.
+    const paint = (x: number, y: number) => (inBox(x, y) && !inBox(x, y, 1 / 3) ? line : photo);
+    expect(edgeContrast(grid(3, paint), box, 1, 0).minimum).toBeCloseTo(contrastRatio(line, photo), 5);
+  });
+
+  it("samples between the edge and a focus outline 2px out, so a light ring can't stand in for a dark edge", () => {
+    expect(OUTSIDE_DISTANCE).toBeLessThan(2);
+    const ring = (x: number, y: number) => {
+      const out = Math.max(box.x - x, x - (box.x + box.width), box.y - y, y - (box.y + box.height));
+      return out >= 2 && out < 4;
+    };
+    for (const scale of [1, 3]) {
+      const paint = (x: number, y: number) => (inBox(x, y) ? charcoal : ring(x, y) ? line : photo);
+      expect(edgeContrast(grid(scale, paint), box, 1, 0).minimum).toBeCloseTo(contrastRatio(charcoal, photo), 5);
+    }
+  });
+
+  it("skips the antialiased pixel just outside the edge and compares with the photo beyond it", () => {
+    const blend = composite({ ...amber, a: 0.5 }, photo);
+    const halo = (x: number, y: number) => x >= box.x - 1 && x < box.x + box.width + 1 && y >= box.y - 1 && y < box.y + box.height + 1;
+    const paint = (x: number, y: number) => (inBox(x, y) ? amber : halo(x, y) ? blend : photo);
+    expect(edgeContrast(grid(1, paint), box, 1, 0).minimum).toBeCloseTo(contrastRatio(amber, photo), 5);
   });
 
   it("finds the one weak point along an edge", () => {
