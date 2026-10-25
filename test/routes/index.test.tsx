@@ -467,6 +467,10 @@ describe("Kitchen Index Route", () => {
       expect(screen.getByText("The Recipe App")).toBeInTheDocument();
       expect(screen.getByText(/Spoonjoy is a photo-first kitchen for the recipes you actually cook/i)).toBeInTheDocument();
       expect(screen.getByText("Collect")).toBeInTheDocument();
+      // The photo is shaded for photo-white text, and the outline buttons take photo-white tokens.
+      expect(hero!.querySelector(".sj-landing-hero-shade")).not.toBeNull();
+      expect(screen.getByRole("link", { name: "Log in" }).closest(".sj-on-charcoal")).not.toBeNull();
+      expect(screen.getByRole("link", { name: "Search Recipes" }).closest(".sj-on-charcoal")).not.toBeNull();
 
       const classTokens = Array.from(hero!.querySelectorAll<HTMLElement>("*"))
         .flatMap((element) => Array.from(element.classList));
