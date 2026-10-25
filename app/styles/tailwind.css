@@ -45,6 +45,13 @@
   --sj-photo-shade-soft: color-mix(in srgb, var(--sj-photo-charcoal) 42%, transparent);
   --sj-photo-glass: color-mix(in srgb, var(--sj-bone) 10%, transparent);
   --sj-photo-line: color-mix(in srgb, var(--sj-bone) 24%, transparent);
+  /* The main action on a shaded photo, in both themes: a light amber with a charcoal label. The
+     page's own action merges with the shaded photo in light mode (charcoal, 1:1) and clears 3:1 by
+     only 0.07 in dark mode (#b9854b amber, pressed on a phone), measured by
+     e2e/journeys/landing-readability.journey.ts. */
+  --sj-photo-action: #d6a46a;
+  --sj-photo-action-hover: #e2b57f;
+  --sj-on-photo-action: var(--sj-photo-charcoal);
   --sj-shadow: 0 24px 80px color-mix(in srgb, var(--sj-charcoal) 14%, transparent);
   --sj-shadow-soft: 0 12px 36px color-mix(in srgb, var(--sj-charcoal) 8%, transparent);
   --sj-radius-control: 0.375rem;
@@ -191,6 +198,19 @@
   --foreground: var(--sj-on-photo);
   --border: var(--sj-photo-line);
   --ring: var(--sj-on-photo);
+}
+
+/* The signed-out landing hero's actions, on the shaded photo with sj-on-charcoal: each button's
+   edge must show against the photo at 3:1 (WCAG 1.4.11), measured from the real pixels by
+   e2e/journeys/landing-readability.journey.ts. The outline buttons' 22–24% photo line measured
+   1.48–2.49:1, so they take the 76% muted photo-white (62% measured 3.09:1 pressed on desktop,
+   where the shrunken 1px border antialiases); the main action takes the photo action fill. */
+.sj-landing-hero-actions {
+  --border: var(--sj-on-photo-muted);
+  --ouro-action: var(--sj-photo-action);
+  --ouro-action-foreground: var(--sj-on-photo-action);
+  --ouro-action-hover: var(--sj-photo-action-hover);
+  --ouro-action-active: var(--sj-photo-action-hover);
 }
 
 /* The shade over the signed-out landing photo. The photo has white plates and bright greens under

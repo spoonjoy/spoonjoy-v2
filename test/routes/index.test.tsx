@@ -471,6 +471,10 @@ describe("Kitchen Index Route", () => {
       expect(hero!.querySelector(".sj-landing-hero-shade")).not.toBeNull();
       expect(screen.getByRole("link", { name: "Log in" }).closest(".sj-on-charcoal")).not.toBeNull();
       expect(screen.getByRole("link", { name: "Search Recipes" }).closest(".sj-on-charcoal")).not.toBeNull();
+      // Every action's edge shows on the photo: a light amber main action and a stronger photo line.
+      for (const name of ["Start Your Kitchen", "Log in", "Search Recipes"]) {
+        expect(screen.getByRole("link", { name }).closest(".sj-landing-hero-actions")).not.toBeNull();
+      }
 
       const classTokens = Array.from(hero!.querySelectorAll<HTMLElement>("*"))
         .flatMap((element) => Array.from(element.classList));

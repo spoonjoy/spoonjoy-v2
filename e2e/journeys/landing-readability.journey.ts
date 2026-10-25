@@ -6,7 +6,9 @@
 //
 // For each piece of hero text and each action, this measures the contrast of the text against the
 // pixels actually painted behind it (support/readability.ts), at rest and, for the actions, on
-// hover, pressed and with keyboard focus; checks the focus outline against what it is drawn over;
+// hover, pressed and with keyboard focus; measures each action's edge against the photo around it
+// in the same states, so every action looks like a button (in light mode the primary's charcoal
+// fill once merged with the shaded photo); checks the focus outline against what it is drawn over;
 // and checks that nothing covers an action once it is scrolled into view or focused. The theme is
 // an explicit choice stored the way the theme toggle stores it, set against the opposite system
 // setting, so the stored choice is what the page must follow.
@@ -17,8 +19,10 @@ import { waitForHydration } from "./support/navigation";
 import {
   NON_TEXT_CONTRAST,
   coveringElements,
+  measureBoundaryContrast,
   measureFocusIndicator,
   measureTextContrast,
+  type BoundaryContrast,
   type FocusIndicator,
   type TextContrast,
 } from "./support/readability";
@@ -27,6 +31,7 @@ type Scheme = "light" | "dark";
 
 interface Measurements {
   text: TextContrast[];
+  boundary: BoundaryContrast[];
   focus: FocusIndicator[];
   covered: Array<{ what: string; covered: string[] }>;
 }
@@ -50,6 +55,15 @@ async function openLanding(page: Page, scheme: Scheme): Promise<void> {
   await expect(photo).toBeVisible();
   await photo.evaluate((image) => (image as HTMLImageElement).decode());
   expect(await photo.evaluate((image) => (image as HTMLImageElement).naturalWidth), "the hero photo's width").toBeGreaterThan(0);
+}
+
+// The action's shape: a button whose fill or border merges with the photo reads as loose text.
+async function recordBoundary(page: Page, measurements: Measurements, action: Locator, label: string): Promise<void> {
+  const result = await measureBoundaryContrast(page, action, label);
+  measurements.boundary.push(result);
+  expect
+    .soft(result.minimum, `${label}: its edge (border ${result.borderColor}, fill ${result.backgroundColor}) is ${result.minimum.toFixed(3)}:1 against what is around it (${result.worstBoundary} next to ${result.worstOutside} on the ${result.edge} edge), needs ${NON_TEXT_CONTRAST}:1`)
+    .toBeGreaterThanOrEqual(NON_TEXT_CONTRAST);
 }
 
 function recordText(measurements: Measurements, result: TextContrast): void {
@@ -79,28 +93,31 @@ async function checkHeroText(page: Page, measurements: Measurements, locator: Lo
 }
 
 async function checkAction(page: Page, measurements: Measurements, action: Locator, name: string): Promise<void> {
-  await test.step(`${name} is readable at rest, on hover and pressed, and nothing covers it`, async () => {
+  await test.step(`${name} is readable and shaped like a button at rest, on hover and pressed, and nothing covers it`, async () => {
     await page.mouse.move(0, 0);
     await action.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await recordCovered(measurements, action, `${name}, scrolled into view`);
     recordText(measurements, await measureTextContrast(page, action, `${name} at rest`));
+    await recordBoundary(page, measurements, action, `${name} at rest`);
 
     await action.hover();
     expect(await matches(action, ":hover"), `${name} is hovered`).toBe(true);
     recordText(measurements, await measureTextContrast(page, action, `${name} on hover`));
+    await recordBoundary(page, measurements, action, `${name} on hover`);
 
     // Press without activating: release away from the link.
     await page.mouse.down();
     try {
       expect(await matches(action, ":active"), `${name} is pressed`).toBe(true);
       recordText(measurements, await measureTextContrast(page, action, `${name} pressed`));
+      await recordBoundary(page, measurements, action, `${name} pressed`);
     } finally {
       await page.mouse.move(0, 0);
       await page.mouse.up();
     }
   });
 
-  await test.step(`${name} shows a visible focus outline, stays readable and uncovered when focused from the top of the page`, async () => {
+  await test.step(`${name} shows a visible focus outline, stays readable, shaped like a button and uncovered when focused from the top of the page`, async () => {
     await page.evaluate(() => window.scrollTo(0, 0));
     // A key press first, so the browser treats the focus that follows as keyboard focus.
     await page.keyboard.press("Tab");
@@ -108,6 +125,7 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
     await expect(action).toBeFocused();
     await recordCovered(measurements, action, `${name}, focused`);
     recordText(measurements, await measureTextContrast(page, action, `${name} focused`));
+    await recordBoundary(page, measurements, action, `${name} focused`);
     const ring = await measureFocusIndicator(page, action, name);
     measurements.focus.push(ring);
     expect.soft(ring.focusVisible, `${name} matches :focus-visible`).toBe(true);
@@ -121,7 +139,7 @@ async function checkAction(page: Page, measurements: Measurements, action: Locat
 }
 
 async function heroIsReadable(page: Page, testInfo: TestInfo, scheme: Scheme): Promise<void> {
-  const measurements: Measurements = { text: [], focus: [], covered: [] };
+  const measurements: Measurements = { text: [], boundary: [], focus: [], covered: [] };
   try {
     await openLanding(page, scheme);
     await testInfo.attach(`landing-${scheme}-top`, { body: await page.screenshot({ animations: "disabled" }), contentType: "image/png" });
