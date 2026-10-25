@@ -17,10 +17,9 @@ const preview: Preview = {
     },
 
     a11y: {
-      // 'todo' - show a11y violations in the test UI only
-      // 'error' - fail CI on a11y violations
-      // 'off' - skip a11y checks entirely
-      test: 'todo',
+      // Violations fail a story's test. CI checks every story, in both themes and with the
+      // checks axe could not decide, in e2e/storybook/accessibility.spec.ts.
+      test: 'error',
     },
 
     backgrounds: {

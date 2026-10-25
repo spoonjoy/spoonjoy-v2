@@ -67,6 +67,16 @@ jobs:
           for _ in $(seq 50); do curl -sf http://127.0.0.1:6006/iframe.html > /dev/null && break; sleep 0.2; done
           OURO_E2E_URL=http://127.0.0.1:6006 pnpm run verify:clean:test:e2e:ouro
 
+      # Every story, in the light and the dark theme, through the journeys' accessibility gate
+      # (e2e/storybook/accessibility.spec.ts): any axe finding fails, including a check axe could
+      # not decide that a pixel measurement does not settle. It runs even when the specs above fail.
+      - name: ♿ Story accessibility in both themes
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -m http.server 6007 --bind 127.0.0.1 --directory storybook-static > "$RUNNER_TEMP/storybook-a11y-server.log" 2>&1 &
+          for _ in $(seq 50); do curl -sf http://127.0.0.1:6007/iframe.html > /dev/null && break; sleep 0.2; done
+          STORYBOOK_URL=http://127.0.0.1:6007 pnpm run verify:clean:test:e2e:storybook-a11y
+
       - name: Prepare Cloudflare Pages deploy directory
         if: github.ref == 'refs/heads/main'
         run: |
