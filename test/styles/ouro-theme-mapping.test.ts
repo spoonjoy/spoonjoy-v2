@@ -23,6 +23,7 @@ const MAPPING = block(":root,\n.dark", /(--[\w-]+):\s*([^;]+);/g);
 
 const TAB_BAR = block(".sj-tab-bar", /(--[\w-]+):\s*([^;]+);/g);
 const ON_CHARCOAL = block(".sj-on-charcoal", /(--[\w-]+):\s*([^;]+);/g);
+const LANDING_ACTIONS = block(".sj-landing-hero-actions", /(--[\w-]+):\s*([^;]+);/g);
 
 // A variable's colour in a theme, following var() references through the mapping and the palette,
 // and mixing a color-mix(in srgb, …) channel by channel.
@@ -134,6 +135,18 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     });
   });
 
+  it("gives the landing hero's actions a stronger photo line and a light amber main action, through tokens alone", () => {
+    expect(LANDING_ACTIONS).toEqual({
+      "--border": "var(--sj-on-photo-soft)",
+      "--ouro-action": "var(--sj-photo-action)",
+      "--ouro-action-foreground": "var(--sj-on-photo-action)",
+      "--ouro-action-hover": "var(--sj-photo-action-hover)",
+      "--ouro-action-active": "var(--sj-photo-action-hover)",
+    });
+    // After sj-on-charcoal, so its --border wins on the row that carries both classes.
+    expect(CSS.indexOf(".sj-landing-hero-actions {")).toBeGreaterThan(CSS.indexOf(".sj-on-charcoal {"));
+  });
+
   it("declares the mapping after the .dark palette, so it wins over ouro-base's defaults there", () => {
     expect(CSS.indexOf(":root,\n.dark {")).toBeGreaterThan(CSS.indexOf(".dark {"));
   });
@@ -151,6 +164,14 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     ] as const) {
       it(`passes 4.5:1 for the tab bar's ${text} on ${surface} in the ${themeName} theme`, () => {
         expect(contrast(color(theme, text, TAB_BAR), color(theme, surface, TAB_BAR))).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+    for (const fill of ["--ouro-action", "--ouro-action-hover", "--ouro-action-active"] as const) {
+      it(`passes 4.5:1 for the landing hero's main action label on ${fill}, and 3:1 for that fill on the photo shade, in the ${themeName} theme`, () => {
+        const fillColor = color(theme, fill, LANDING_ACTIONS);
+        expect(contrast(color(theme, "--ouro-action-foreground", LANDING_ACTIONS), fillColor)).toBeGreaterThanOrEqual(4.5);
+        // The photo shade's own colour; the journey measures the real photo pixels.
+        expect(contrast(fillColor, color(theme, "--sj-photo-charcoal"))).toBeGreaterThanOrEqual(3);
       });
     }
     it(`passes 4.5:1 for a control's text on a charcoal panel, and 3:1 for its focus ring, in the ${themeName} theme`, () => {
