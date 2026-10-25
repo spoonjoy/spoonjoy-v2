@@ -107,19 +107,15 @@ function matchesExpectation(issue: ConsoleIssue, expectation: ExpectedConsolePat
 
 /**
  * Splits `issues` into the ones no registered `expectations` pattern accounts for, and lists
- * which `expectations` (if any) never matched anything. An issue is credited to an expectation
- * that has not matched yet when one fits, so each registered pattern is satisfied by its own
- * issue; a repeat of an already-credited diagnostic (a browser logging the same 409 twice) is
- * still accounted for rather than failing the test.
+ * which `expectations` (if any) never matched anything. Each expectation absorbs at most one
+ * issue, so a diagnostic that can legitimately repeat needs one registration per allowed copy.
  */
 function resolveConsoleExpectations(
   issues: ConsoleIssue[],
   expectations: ExpectedConsolePattern[],
 ): { unmatched: ConsoleIssue[]; neverMatched: ExpectedConsolePattern[] } {
   const unmatched = issues.filter((issue) => {
-    const expectation =
-      expectations.find((candidate) => !candidate.matched && matchesExpectation(issue, candidate)) ??
-      expectations.find((candidate) => matchesExpectation(issue, candidate));
+    const expectation = expectations.find((candidate) => !candidate.matched && matchesExpectation(issue, candidate));
     if (!expectation) return true;
     expectation.matched = true;
     return false;
