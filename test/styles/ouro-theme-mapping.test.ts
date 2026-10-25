@@ -23,6 +23,7 @@ const MAPPING = block(":root,\n.dark", /(--[\w-]+):\s*([^;]+);/g);
 
 const TAB_BAR = block(".sj-tab-bar", /(--[\w-]+):\s*([^;]+);/g);
 const ON_CHARCOAL = block(".sj-on-charcoal", /(--[\w-]+):\s*([^;]+);/g);
+const LANDING_ACTIONS = block(".sj-landing-hero-actions", /(--[\w-]+):\s*([^;]+);/g);
 
 // A variable's colour in a theme, following var() references through the mapping and the palette,
 // and mixing a color-mix(in srgb, …) channel by channel.
@@ -42,6 +43,14 @@ function color(theme: Record<string, string>, name: string, mapping = MAPPING): 
   }
   expect(value, `${name} is a plain hex colour`).toMatch(/^#[0-9a-f]{6}$/i);
   return value;
+}
+
+// `top` at `weight` over `bottom`, channel by channel.
+function mixHex(top: string, bottom: string, weight: number): string {
+  const channel = (hex: string, index: number) => Number.parseInt(hex.slice(index, index + 2), 16);
+  return `#${[1, 3, 5]
+    .map((index) => Math.round(channel(top, index) * weight + channel(bottom, index) * (1 - weight)).toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 function luminance(hex: string): number {
@@ -134,6 +143,18 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     });
   });
 
+  it("gives the landing hero's actions a stronger photo line and a light amber main action, through tokens alone", () => {
+    expect(LANDING_ACTIONS).toEqual({
+      "--border": "var(--sj-on-photo-muted)",
+      "--ouro-action": "var(--sj-photo-action)",
+      "--ouro-action-foreground": "var(--sj-on-photo-action)",
+      "--ouro-action-hover": "var(--sj-photo-action-hover)",
+      "--ouro-action-active": "var(--sj-photo-action-hover)",
+    });
+    // After sj-on-charcoal, so its --border wins on the row that carries both classes.
+    expect(CSS.indexOf(".sj-landing-hero-actions {")).toBeGreaterThan(CSS.indexOf(".sj-on-charcoal {"));
+  });
+
   it("declares the mapping after the .dark palette, so it wins over ouro-base's defaults there", () => {
     expect(CSS.indexOf(":root,\n.dark {")).toBeGreaterThan(CSS.indexOf(".dark {"));
   });
@@ -151,6 +172,17 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     ] as const) {
       it(`passes 4.5:1 for the tab bar's ${text} on ${surface} in the ${themeName} theme`, () => {
         expect(contrast(color(theme, text, TAB_BAR), color(theme, surface, TAB_BAR))).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+    // HX Button paints a state layer in the label colour over the fill: 8% on hover, 14% pressed.
+    for (const [state, fill, layer] of [
+      ["at rest", "--ouro-action", 0],
+      ["on hover", "--ouro-action-hover", 0.08],
+      ["pressed", "--ouro-action-active", 0.14],
+    ] as const) {
+      it(`passes 4.5:1 for the landing hero's main action label ${state}, under its state layer, in the ${themeName} theme`, () => {
+        const label = color(theme, "--ouro-action-foreground", LANDING_ACTIONS);
+        expect(contrast(label, mixHex(label, color(theme, fill, LANDING_ACTIONS), layer))).toBeGreaterThanOrEqual(4.5);
       });
     }
     it(`passes 4.5:1 for a control's text on a charcoal panel, and 3:1 for its focus ring, in the ${themeName} theme`, () => {
