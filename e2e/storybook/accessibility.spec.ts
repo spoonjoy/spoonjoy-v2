@@ -5,7 +5,7 @@
 // body without Storybook's chrome, and without the landmark rule (`region`), since a component on
 // its own is not a page. Pages are checked whole by the journeys.
 import { readFileSync } from "node:fs";
-import { test } from "@playwright/test";
+import { test } from "../ouro-fixtures";
 import { COLOR_SCHEMES, auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
 
 interface IndexEntry {
@@ -30,13 +30,9 @@ for (const story of stories) {
     test(`${story.title} / ${story.name} (${scheme})`, async ({ page }, testInfo) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(`iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story&globals=theme:${scheme}`);
-      // The render, its play function and Storybook's own afterEach (where its a11y addon runs).
-      await page.waitForFunction(() => {
-        const phase = (window as unknown as { __STORYBOOK_PREVIEW__?: { currentRender?: { phase?: string } } }).__STORYBOOK_PREVIEW__?.currentRender?.phase;
-        return phase === "completed" || phase === "errored" || phase === "aborted";
-      });
-      const phase = await page.evaluate(() => (window as unknown as { __STORYBOOK_PREVIEW__?: { currentRender?: { phase?: string } } }).__STORYBOOK_PREVIEW__?.currentRender?.phase);
-      if (phase !== "completed") throw new Error(`The story did not finish rendering (${phase}).`);
+      // Rendered, as Ouro UI's specs wait for a story (e2e/ouro/story.ts); the audit then waits
+      // for fonts, images and animations to settle.
+      await page.locator("#storybook-root > *").first().waitFor();
 
       const audit = await auditShownScheme(page, { scope: SCOPE });
       if (audit.scheme !== scheme) throw new Error(`The story showed its ${audit.scheme} theme, not its ${scheme} one.`);
