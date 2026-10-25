@@ -115,6 +115,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "Catch retries a read that failed with a transient D1 error and re-throws every other error, and the last transient one, unchanged; the route layer's handleError (entry.server.tsx) captures the surfaced exception. A second catch only keeps a throwing reporter from changing the query's outcome.",
   },
   {
+    file: "app/lib/slow-call.server.ts",
+    category: "rethrow",
+    reason:
+      "One catch clears the slow-call timer and re-throws a call's synchronous error unchanged; the other only keeps a throwing reporter from changing the call's outcome. The caller's error handling sees every error as it was.",
+  },
+  {
     file: "app/lib/d1-write-retry.server.ts",
     category: "rethrow",
     reason:
