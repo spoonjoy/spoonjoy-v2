@@ -1,3 +1,4 @@
+import { OBJECTIONABLE_CONTENT_MESSAGE } from "~/lib/objectionable-terms";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Request as UndiciRequest, FormData as UndiciFormData } from "undici";
 import { cleanup, act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
@@ -2349,6 +2350,20 @@ describe("Recipes $id Route", () => {
         context: { cloudflare: { env: null } },
         params: { id: recipeId },
       } as any)).rejects.toMatchObject({ code: "P2003" });
+    });
+
+    it("answers 400 when a new cookbook's title breaks the community rules", async () => {
+      const result = await action({
+        request: await createFormRequest({ intent: "createCookbookAndSave", title: "porn picks" }, testUserId),
+        context: { cloudflare: { env: null } },
+        params: { id: recipeId },
+      } as any);
+
+      expect(result).toMatchObject({
+        data: { error: OBJECTIONABLE_CONTENT_MESSAGE, intent: "createCookbookAndSave" },
+        init: { status: 400 },
+      });
+      await expect(db.cookbook.count({ where: { authorId: testUserId } })).resolves.toBe(0);
     });
 
     it("answers 400 with the error when creating a cookbook with a title the user already has", async () => {
