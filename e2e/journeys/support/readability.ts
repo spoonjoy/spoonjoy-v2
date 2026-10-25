@@ -396,9 +396,11 @@ export interface EdgeContrast {
   outside: Rgb;
 }
 
-// The pixel just outside the edge is this far out, past any antialiased edge pixel and inside a
-// focus outline's 2px offset.
-const OUTSIDE_DISTANCE = 1.5;
+// The pixel just outside the edge is this far out, past any antialiased edge pixel. Its image pixel
+// can reach half a CSS pixel further at 1x, so a focus outline must start at least
+// OUTSIDE_DISTANCE + 0.5 px out, or the sample would read the outline as the photo.
+export const OUTSIDE_DISTANCE = 1.5;
+const OUTLINE_CLEARANCE = OUTSIDE_DISTANCE + 0.5;
 
 /**
  * The contrast between a component's boundary and the pixels around it (WCAG 1.4.11), for a box
@@ -490,7 +492,7 @@ export async function measureBoundaryContrast(page: Page, locator: Locator, labe
       };
     });
   const before = await read();
-  if (before.outlineGap !== null && before.outlineGap < 2) {
+  if (before.outlineGap !== null && before.outlineGap < OUTLINE_CLEARANCE) {
     throw new Error(`${label}'s outline is ${before.outlineGap}px from its edge, where the pixels outside the boundary are sampled.`);
   }
   const reach = OUTSIDE_DISTANCE + 1;
