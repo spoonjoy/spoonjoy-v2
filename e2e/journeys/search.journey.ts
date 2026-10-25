@@ -4,7 +4,7 @@
 // (a throwaway fork of Lemon Herb Rice) while these run, so these tests only assert on seeded
 // qa-kitchen records, located by name and seeded URL, and never on result counts or positions.
 import { test, expect } from "./support/journey";
-import { seededCookbookLink, seededRecipeLink } from "./support/navigation";
+import { seededCookbookLink, seededRecipeLink, waitForHydration } from "./support/navigation";
 import { personaStorageStatePath } from "./support/personas";
 
 const LEMON_RICE = "/recipes/qa-kitchen-recipe-lemon-rice";
@@ -49,11 +49,10 @@ test.describe("Search", () => {
     await page.getByLabel("Search terms", { exact: true }).press("Enter");
     await expect(page).toHaveURL(/[?&]q=lemon(?:&|$)/);
     await expect(page.getByRole("heading", { name: 'Results for "lemon"', exact: true })).toBeVisible();
-    // If the first search was a full-document submit (typed before hydration), wait until React
-    // Router has started hydrating this document before the second search. React Router sets
-    // this global while hydrating, after React's root event listeners exist, so Enter goes
-    // through the app's handler (a client-side navigation) rather than a native form submit.
-    await page.waitForFunction(() => "__reactRouterDataRouter" in window);
+    // If the first search was a full-document submit (typed before hydration), wait until this
+    // document has hydrated before the second search, so Enter goes through the app's handler (a
+    // client-side navigation) rather than a native form submit.
+    await waitForHydration(page);
 
     await page.getByLabel("Search terms", { exact: true }).fill("saffron");
     await page.getByLabel("Search terms", { exact: true }).press("Enter");

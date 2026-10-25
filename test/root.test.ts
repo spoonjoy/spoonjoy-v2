@@ -14,6 +14,10 @@ describe("root.tsx safe area and dock clearance", () => {
   it("leaves the phone tab bar's clearance to HX TabBar, which reserves it below the page", () => {
     expect(source).not.toMatch(/<main[^>]*pb-\[/);
   });
+
+  it("marks the document hydrated from Layout, which wraps App and the error boundary alike", () => {
+    expect(source).toMatch(/export function Layout\([^)]*\) \{[^}]*\n  useHydratedMark\(\);\n  return \(\n    <html/);
+  });
 });
 
 describe("root.tsx meta()", () => {

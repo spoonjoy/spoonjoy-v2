@@ -22,6 +22,7 @@
 import { test as base, expect } from "@playwright/test";
 import type { ConsoleMessage, Page, Request } from "@playwright/test";
 import { auditAccessibility, describeAuditFailures } from "./accessibility";
+import { waitForHydrationOnLoad } from "./app-ready";
 import { redactUrl, redactUrlsInText } from "./redact";
 import { isWebKitCancelledSameOriginFetch } from "./webkit-noise";
 import { RequestLedger, isTransportFailureLog } from "./recovered-requests";
@@ -240,6 +241,13 @@ interface JourneyFixtures {
 }
 
 export const test = base.extend<JourneyFixtures>({
+  // Every page.goto and page.reload waits for the app to hydrate, so no journey taps a page React
+  // has not wired up yet (support/app-ready.ts).
+  page: async ({ page }, use) => {
+    waitForHydrationOnLoad(page);
+    await use(page);
+  },
+
   verifyAfterReload: async ({ page }, use) => {
     await use(async (assertion) => {
       await page.reload({ waitUntil: "load" });

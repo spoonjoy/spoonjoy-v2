@@ -20,6 +20,7 @@
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
       "app/hooks/use-cooking-now.ts",
+      "app/hooks/use-hydrated-mark.ts",
       "app/hooks/use-unsaved-form-guard.ts",
       "app/lib/analytics-server.ts",
       "app/lib/analytics.ts",

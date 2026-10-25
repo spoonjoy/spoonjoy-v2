@@ -26,6 +26,7 @@ import { applyStorageSchemaMigration, THEME_STORAGE_KEY } from "~/lib/client-sto
 import { clearCookProgressCache } from "~/lib/cook-session-sync";
 import { useCookProgressCacheOwner } from "~/hooks/use-cook-session-sync";
 import { registerServiceWorkerOnPageLoad } from "~/lib/push-client";
+import { useHydratedMark } from "~/hooks/use-hydrated-mark";
 import { ColorSchemeProvider } from "~/lib/ouro/color-scheme";
 import { colorSchemeScript } from "~/lib/ouro/color-scheme-script";
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
@@ -271,6 +272,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Per-request CSP nonce (server-provided via NonceContext in entry.server).
   // Applied to every inline <script> below so script-src can drop 'unsafe-inline'.
   const nonce = useContext(NonceContext);
+  useHydratedMark();
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

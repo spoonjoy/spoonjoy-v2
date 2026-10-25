@@ -2,13 +2,10 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect } from "./journey";
 
-// React Router sets this global while hydrating the document, after React's root event listeners
-// exist. Waiting for it after a full document load means the next tap goes through the app
+// Waiting for hydration after a full document load means the next tap goes through the app
 // (client-side navigation, with React Router's history index) rather than a pre-hydration full
-// page load, which would start a new in-app history.
-export async function waitForHydration(page: Page): Promise<void> {
-  await page.waitForFunction(() => "__reactRouterDataRouter" in window);
-}
+// page load, which would start a new in-app history. See support/app-ready.ts.
+export { waitForHydration } from "./app-ready";
 
 // Opens a disclosure (an Ouro Collapsible) and waits until its panel has finished opening. A tool
 // inside counts as visible as soon as the panel starts growing, because clipping does not hide it;

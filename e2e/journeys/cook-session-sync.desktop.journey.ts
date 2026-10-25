@@ -7,6 +7,7 @@
 // project, so they are the same account — which is the point. Desktop only: an iPhone copy running
 // at the same time would need its own account and adds nothing device-specific.
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import type { Page } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { expectNoHydrationErrors } from "./support/hydration";
@@ -60,6 +61,7 @@ test.describe("Cook progress across devices", () => {
     // `page`, so its console is watched by hand, as in sessions.desktop.journey.ts.
     const otherContext = await browser.newContext();
     const otherPage = await otherContext.newPage();
+    waitForHydrationOnLoad(otherPage);
     const otherConsole = watchConsole(otherPage);
     try {
       // B sees A's check and scale, and still does after a reload.

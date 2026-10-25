@@ -9,6 +9,7 @@
 // postures emulate a touch screen of that size. The closed outer screen's size is not published;
 // 402 x 874 stands in for it. Desktop Chrome only: each test builds its own devices.
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import type { Browser, BrowserContextOptions, Page, TestInfo } from "@playwright/test";
 import { expectNoHydrationErrors } from "./support/hydration";
 import { waitForHydration } from "./support/navigation";
@@ -67,6 +68,7 @@ async function expectIngredientRowsSettled(page: Page) {
 async function photograph(browser: Browser, testInfo: TestInfo, posture: Posture) {
   const context = await browser.newContext({ ...posture.context, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
+  waitForHydrationOnLoad(page);
   const watcher = watchConsole(page);
   try {
     await page.goto(LEMON_RICE);
