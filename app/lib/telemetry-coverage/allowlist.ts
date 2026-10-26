@@ -118,7 +118,7 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
     file: "app/lib/slow-call.server.ts",
     category: "rethrow",
     reason:
-      "One catch clears the slow-call timer and re-throws a call's synchronous error unchanged; the other only keeps a throwing reporter from changing the call's outcome. The caller's error handling sees every error as it was.",
+      "One catch clears the slow-call timer and re-throws a call's synchronous error unchanged; another only keeps a throwing reporter from changing the call's outcome; the last turns a failed lookup of the isolate's location, evidence for a per-run QA Worker's log only, into a null location. The caller's error handling sees every error of its own call as it was.",
   },
   {
     file: "app/lib/d1-write-retry.server.ts",

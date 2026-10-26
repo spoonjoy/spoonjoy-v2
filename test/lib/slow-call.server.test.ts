@@ -4,7 +4,9 @@ import { expectConsoleWarning } from "../warning-policy";
 import {
   consoleSlowCallReporter,
   firstTable,
-  requestPlacement,
+  isolateColoReport,
+  isolateRequestReport,
+  resetIsolateForTests,
   SLOW_CALL_THRESHOLD_MS,
   watchSlowCall,
   type SlowCallClock,
@@ -193,15 +195,43 @@ describe("firstTable", () => {
   });
 });
 
-describe("requestPlacement", () => {
-  const withHeader = (value?: string) =>
-    new Request("https://qa.example/", { headers: value === undefined ? {} : { "cf-placement": value } });
+describe("isolate reports", () => {
+  afterEach(() => {
+    resetIsolateForTests();
+  });
 
-  it("keeps Smart Placement's local and remote values, and nothing else", () => {
-    expect(requestPlacement(withHeader("remote-IAD"))).toBe("remote-IAD");
-    expect(requestPlacement(withHeader("local-EWR"))).toBe("local-EWR");
-    expect(requestPlacement(withHeader("remote-iad"))).toBe("other");
-    expect(requestPlacement(withHeader("remote-IAD; secret"))).toBe("other");
-    expect(requestPlacement(withHeader())).toBeNull();
+  const arriving = (colo?: unknown) => Object.assign(new Request("https://qa.example/"), colo === undefined ? {} : { cf: { colo } });
+
+  it("gives the isolate one short random id and counts the requests it serves, with where each arrived", () => {
+    const first = isolateRequestReport(arriving("IAD"));
+    const second = isolateRequestReport(arriving("iad"));
+    const third = isolateRequestReport(arriving());
+
+    expect(first).toEqual({ event: "isolate_request", isolate: expect.stringMatching(/^[0-9a-f]{8}$/), request: 1, arrivedAt: "IAD" });
+    expect(second).toEqual({ ...first, request: 2, arrivedAt: null });
+    expect(third).toEqual({ ...first, request: 3, arrivedAt: null });
+
+    resetIsolateForTests();
+    expect(isolateRequestReport(arriving("EWR")).request).toBe(1);
+  });
+
+  it("reads where the isolate runs from the trace page, and reports null when it cannot", async () => {
+    const page = (text: string) => async () => new Response(text);
+
+    await expect(isolateColoReport("0a1b2c3d", page("fl=1\nh=www.cloudflare.com\ncolo=ORD\nloc=US\n")))
+      .resolves.toEqual({ event: "isolate_colo", isolate: "0a1b2c3d", runsIn: "ORD" });
+    await expect(isolateColoReport("0a1b2c3d", page("colo=<script>\n"))).resolves.toMatchObject({ runsIn: null });
+    await expect(isolateColoReport("0a1b2c3d", page("no colo here"))).resolves.toMatchObject({ runsIn: null });
+    await expect(isolateColoReport("0a1b2c3d", () => Promise.reject(new Error("offline")))).resolves.toMatchObject({ runsIn: null });
+  });
+
+  it("asks Cloudflare's public trace page by default", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("colo=SEA\n"));
+    try {
+      await expect(isolateColoReport("0a1b2c3d")).resolves.toMatchObject({ runsIn: "SEA" });
+      expect(fetchMock).toHaveBeenCalledWith("https://www.cloudflare.com/cdn-cgi/trace");
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 });

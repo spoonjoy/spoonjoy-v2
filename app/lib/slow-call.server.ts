@@ -120,15 +120,69 @@ export function firstTable(sql: string): string | null {
   return TABLE.exec(sql)?.[1] ?? null;
 }
 
-const PLACEMENT = /^(?:local|remote)-[A-Z]{3,4}$/;
+/**
+ * Where a request ran, for a per-run QA Worker's log. Cloudflare adds `cf-placement` only to the
+ * response, so the Worker cannot read Smart Placement's choice from its request. Instead each
+ * isolate gets a short random id and counts the requests it serves, so the tail summary can tell
+ * an isolate's first requests (a cold start, perhaps in a new location) from later ones, and the
+ * Worker looks up once per isolate where it actually runs (`isolateColoReport`).
+ */
+interface IsolateState {
+  id: string;
+  served: number;
+}
+
+let isolate: IsolateState | null = null;
+
+const COLO = /^[A-Z]{3,4}$/;
+
+function colo(value: unknown): string | null {
+  return typeof value === "string" && COLO.test(value) ? value : null;
+}
+
+export interface IsolateRequestReport {
+  event: "isolate_request";
+  /** A random id for the isolate serving this request, made when it served its first. */
+  isolate: string;
+  /** 1 for the isolate's first request. */
+  request: number;
+  /** The Cloudflare location the request arrived at, from `request.cf.colo`; null when unknown. */
+  arrivedAt: string | null;
+}
+
+/** Counts this request against the isolate serving it. Random ids cannot be made at startup. */
+export function isolateRequestReport(request: Request): IsolateRequestReport {
+  isolate ??= { id: crypto.randomUUID().slice(0, 8), served: 0 };
+  isolate.served += 1;
+  const cf = (request as Request & { cf?: { colo?: unknown } }).cf;
+  return { event: "isolate_request", isolate: isolate.id, request: isolate.served, arrivedAt: colo(cf?.colo) };
+}
+
+export interface IsolateColoReport {
+  event: "isolate_colo";
+  isolate: string;
+  /** The Cloudflare location this isolate runs in; null when the lookup failed. */
+  runsIn: string | null;
+}
 
 /**
- * Where Smart Placement ran this request, from Cloudflare's `cf-placement` request header:
- * `local-<colo>` when it ran where it arrived, `remote-<colo>` when it was sent elsewhere, null
- * without the header, and "other" for any other value, so only that fixed shape is logged.
+ * Where this isolate runs, from Cloudflare's public trace page, which reports the location a
+ * request reaches it from: for a subrequest, the location the Worker runs in. When it differs from
+ * where requests arrive, Smart Placement has moved them. Never throws.
  */
-export function requestPlacement(request: Request): string | null {
-  const value = request.headers.get("cf-placement");
-  if (value === null) return null;
-  return PLACEMENT.test(value) ? value : "other";
+export async function isolateColoReport(
+  isolateId: string,
+  fetchTrace: () => Promise<Response> = () => fetch("https://www.cloudflare.com/cdn-cgi/trace"),
+): Promise<IsolateColoReport> {
+  try {
+    const text = await (await fetchTrace()).text();
+    return { event: "isolate_colo", isolate: isolateId, runsIn: colo(/^colo=(.+)$/m.exec(text)?.[1]) };
+  } catch {
+    return { event: "isolate_colo", isolate: isolateId, runsIn: null };
+  }
+}
+
+/** Forgets the isolate's id and count, for tests. */
+export function resetIsolateForTests(): void {
+  isolate = null;
 }
