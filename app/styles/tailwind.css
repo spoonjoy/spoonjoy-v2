@@ -408,7 +408,8 @@ select {
 /* <main> holds Ouro UI's popups (root.tsx's PopupLayer), so it clips only sideways and makes no
    stacking context: a menu near its top or bottom edge shows whole, over the top bar and the phone
    tab bar. clip, unlike hidden, leaves the vertical axis visible and makes no scroll container;
-   flow-root keeps the block formatting context hidden gave, so margins still stay inside. */
+   flow-root keeps the block formatting context hidden gave, so margins still stay inside. On a
+   foldable's vertical fold, app/styles/fold.css clips both axes again. */
 .sj-desktop-surface,
 .sj-mobile-surface {
   display: flow-root;

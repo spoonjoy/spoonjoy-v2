@@ -15,6 +15,9 @@ async function submitLoginForm(page: Page, user: { username: string; password: S
   // Worker answered and with what status (429 is the sign-in rate limit), instead of only that the
   // page was still on /login 5 s after the tap (run 40235473342's "scratch 7" setup).
   const answered = page.waitForResponse(isLoginAction);
+  // If the tap throws, the wait rejects later, when the page closes; it is awaited only after the
+  // tap, so mark it handled here and let the tap's own error fail the test.
+  answered.catch(() => undefined);
   // The desktop header also has a "Log in" menu button; the form's submit is the one in <main>.
   await page.getByRole("main").getByRole("button", { name: "Log in", exact: true }).click();
   const response = await answered;

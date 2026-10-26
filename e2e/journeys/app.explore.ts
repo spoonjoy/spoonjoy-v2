@@ -156,9 +156,9 @@ async function runExploreTest(page: Page, personaName: string): Promise<void> {
       page.on("response", onResponse);
 
       try {
-        // The only call in this file allowed to throw past its own visit: a rejection here is
-        // a real navigation crash (DNS, timeout, target crashed), never just a non-2xx
-        // response, so it must still fail the test — see the catch block below.
+        // A rejection here is a real navigation crash (DNS, timeout, target crashed), never just a
+        // non-2xx response, so it must still fail the test (see the catch block below). The
+        // hydration wait, the settle and the audit below can throw too, and fail it the same way.
         const response = await page.goto(route, { waitUntil: "load" });
         // Hydrated, fonts and images in view loaded and animations finished, so late console,
         // pageerror and network events have arrived and the audit sees the finished page.

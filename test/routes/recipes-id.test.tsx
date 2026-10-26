@@ -2691,6 +2691,54 @@ describe("Recipes $id Route", () => {
       await closeSaveModal(user);
     });
 
+    it("does not move focus to a cookbook whose Create & Save answered after the dialog closed", async () => {
+      const user = userEvent.setup();
+      const mockData = {
+        recipe: {
+          id: "recipe-1",
+          title: "Save Modal Recipe",
+          description: null,
+          servings: null,
+          coverImageUrl: null,
+          chef: { id: "user-1", username: "testchef" },
+          steps: [],
+        },
+        isOwner: true,
+        cookbooks: [{ id: "cb-1", title: "Weeknights" }],
+        savedInCookbookIds: [],
+      };
+      let answer: (value: unknown) => void = () => {};
+      const loader = vi.fn(() => mockData);
+      const Stub = createTestRoutesStub([
+        {
+          path: "/recipes/:id",
+          Component: RecipeDetail,
+          loader,
+          action: () => new Promise((resolve) => {
+            answer = resolve;
+          }),
+        },
+      ]);
+
+      render(<Stub initialEntries={["/recipes/recipe-1"]} />);
+      await screen.findByRole("heading", { name: "Save Modal Recipe" });
+      await openSaveModalFromHeader();
+      await screen.findByRole("dialog", { name: "Save to cookbook" });
+      await user.type(screen.getByLabelText("Create new cookbook"), "Fresh Saves");
+      await user.click(screen.getByRole("button", { name: "Create & Save" }));
+      await closeSaveModal(user);
+
+      // The answer lands while the dialog is closed: the page reloads its data once it has.
+      answer({ success: true, newCookbook: { id: "cb-2", title: "Fresh Saves" } });
+      await waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+      await settleBrowserTasks();
+      await openSaveModalFromHeader();
+      const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
+      await waitFor(() => expect(screen.getByRole("dialog", { name: "Save to cookbook" })).toContainElement(document.activeElement as HTMLElement));
+      expect(createdCookbook).not.toHaveFocus();
+      await closeSaveModal(user);
+    });
+
     it("closes the save modal from Ouro UI's labelled Close button", async () => {
       const user = userEvent.setup();
       const mockData = {

@@ -362,6 +362,9 @@ export default function RecipeDetail() {
     }
 
     setCreateCookbookAnswer(undefined);
+    // A Create & Save that answered after the dialog closed leaves its toggle to focus; opening the
+    // dialog again starts from the dialog's own first focus instead.
+    setCookbookToFocus(null);
     setIsSaveModalOpen(true);
   }, [isAuthenticated, loginRedirect]);
 
