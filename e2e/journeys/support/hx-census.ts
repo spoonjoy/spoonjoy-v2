@@ -110,7 +110,7 @@ export const census: Journey[] = [
         id: "xray",
         action: async (page) => {
           await page.getByRole("switch", { name: "X-ray", exact: true }).click();
-          await expect(page.getByRole("group", { name: "X-ray", exact: true })).toBeVisible();
+          await expect(page.getByRole("region", { name: "X-ray", exact: true })).toBeVisible();
         },
       },
     ],

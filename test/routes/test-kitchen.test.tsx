@@ -221,21 +221,21 @@ describe("Test Kitchen", () => {
 
     const xray = screen.getByRole("switch", { name: "X-ray" });
     expect(xray).not.toBeChecked();
-    expect(screen.queryByRole("group", { name: "X-ray" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "X-ray" })).not.toBeInTheDocument();
 
     await user.click(xray);
-    expect(await screen.findByRole("group", { name: "X-ray" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "X-ray" })).toBeInTheDocument();
     expect(xray).toBeChecked();
 
-    await user.click(within(screen.getByRole("group", { name: "X-ray" })).getByRole("button", { name: /close/i }));
-    await waitFor(() => expect(screen.queryByRole("group", { name: "X-ray" })).not.toBeInTheDocument());
+    await user.click(within(screen.getByRole("region", { name: "X-ray" })).getByRole("button", { name: /close/i }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "X-ray" })).not.toBeInTheDocument());
     expect(xray).not.toBeChecked();
   });
 
   it("opens X-ray on arrival with ?xray", async () => {
     render(page("/test-kitchen?xray"));
 
-    expect(await screen.findByRole("group", { name: "X-ray" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "X-ray" })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "X-ray" })).toBeChecked();
   });
 

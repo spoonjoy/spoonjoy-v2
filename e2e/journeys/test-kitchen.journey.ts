@@ -36,7 +36,7 @@ test.describe("Test Kitchen", () => {
 
     const xray = page.getByRole("switch", { name: "X-ray", exact: true });
     await xray.click();
-    const bar = page.getByRole("group", { name: "X-ray", exact: true });
+    const bar = page.getByRole("region", { name: "X-ray", exact: true });
     await expect(bar).toBeVisible();
     await expect(page.locator('[data-ouro-control="inspector"][data-ouro-part="tag"]').first()).toBeAttached();
     // The list names every component with its docs and the source that renders it, at the commit
@@ -70,7 +70,7 @@ test.describe("Test Kitchen", () => {
   test("?xray opens X-ray on arrival", async ({ page }) => {
     await page.goto("/test-kitchen?xray");
     await waitForHydration(page);
-    await expect(page.getByRole("group", { name: "X-ray", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "X-ray", exact: true })).toBeVisible();
     await expect(page.getByRole("switch", { name: "X-ray", exact: true })).toHaveAttribute("aria-checked", "true");
   });
 });
