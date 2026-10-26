@@ -1,4 +1,4 @@
-// Base `test`/`expect` for the QA journeys, extended with four fixtures:
+// Base `test`/`expect` for the QA journeys, extended with five fixtures:
 //   - verifyAfterReload(assertion): reloads the page and re-runs the assertion, so a
 //     `@mutates` journey can prove its write survived a fresh document load.
 //   - expectAccessible(): runs an axe scan of the whole page (default tags, no excluded
@@ -16,6 +16,10 @@
 //     unexpected message, if any occurred. See watchConsole() below for the collection itself
 //     and why a test that opens its own browser context (e.g. sign-in.journey.ts's logout
 //     test) needs to call it directly.
+//   - openRequests: an `{ auto: true }` fixture that, when a test fails, attaches the page's
+//     requests that never finished (method, resource type, redacted URL and how long each has
+//     been open). The trace sanitizer drops the network log, so this is what names a resource
+//     holding a navigation's load event open.
 //
 // The axe injection itself (page.evaluate of the axe source, not an injected <script> tag,
 // since QA's CSP would block that) lives in support/axe.ts and is shared with the explore
@@ -231,12 +235,49 @@ export interface ExpectConsoleErrorOptions {
 }
 export type ExpectConsoleError = (pattern: RegExp, options?: ExpectConsoleErrorOptions) => void;
 
+export interface OpenRequest {
+  method: string;
+  resourceType: string;
+  url: string;
+  openMs: number;
+}
+
+// Tracks a page's requests from start to finish or failure; open() lists the rest, oldest first.
+export function watchRequests(page: Page, now: () => number = Date.now) {
+  const started = new Map<Request, number>();
+  const start = (request: Request) => started.set(request, now());
+  const end = (request: Request) => started.delete(request);
+  page.on("request", start);
+  page.on("requestfinished", end);
+  page.on("requestfailed", end);
+  return {
+    open(): OpenRequest[] {
+      const at = now();
+      return [...started]
+        .sort(([, a], [, b]) => a - b)
+        .map(([request, startedAt]) => ({
+          method: request.method(),
+          resourceType: request.resourceType(),
+          url: redactUrl(request.url()),
+          openMs: at - startedAt,
+        }));
+    },
+    dispose() {
+      page.off("request", start);
+      page.off("requestfinished", end);
+      page.off("requestfailed", end);
+    },
+  };
+}
+
 interface JourneyFixtures {
   verifyAfterReload: VerifyAfterReload;
   expectAccessible: ExpectAccessible;
   expectConsoleError: ExpectConsoleError;
   // No public value; this fixture only exists for its auto-run teardown.
   consoleGate: void;
+  // No public value; this fixture only attaches the open requests of a failed test.
+  openRequests: void;
   // Internal: the per-test store expectConsoleError writes to and consoleGate reads from a
   // test should never depend on this fixture directly.
   consoleExpectations: ExpectedConsolePattern[];
@@ -288,6 +329,20 @@ export const test = base.extend<JourneyFixtures>({
       await use();
       watcher.dispose();
       assertConsoleExpectationsMet(watcher.issues, consoleExpectations);
+    },
+    { auto: true },
+  ],
+
+  openRequests: [
+    async ({ page }, use, testInfo) => {
+      const requests = watchRequests(page);
+      await use();
+      requests.dispose();
+      if (testInfo.status === testInfo.expectedStatus) return;
+      await testInfo.attach("open-requests.json", {
+        body: JSON.stringify(requests.open(), null, 2),
+        contentType: "application/json",
+      });
     },
     { auto: true },
   ],
