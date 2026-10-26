@@ -138,8 +138,11 @@ async function verifyClosedPopupControls(page: Page, selector: string): Promise<
  * it started, and records which of the hidden regions focus landed in. Each step focuses the next
  * element in tab order (positive tabindex first, then document order; the element focused before
  * is the event's relatedTarget, as with Tab) and follows wherever focus goes, so a focus guard
- * sends it on as it would. One walk settles every hidden region on the page; focus goes back where
- * it was. Run it after everything that only looks: moving focus can open a tooltip.
+ * sends it on as it would. An element that does not take focus (a button in a disabled fieldset)
+ * leaves the order, as Tab skips it. A walk is complete only when focus is back on its first stop;
+ * one that circles elsewhere (a guard sending focus back to an earlier stop) never completes, and
+ * the check fails. One walk settles every hidden region on the page; focus goes back where it was.
+ * Run it after everything that only looks: moving focus can open a tooltip.
  */
 export async function verifyHiddenFocus(page: Page, verifications: readonly Verification[]): Promise<VerificationOutcome[]> {
   const selectors = verifications.map((each) => ({ region: each.selector, related: each.related }));
@@ -151,11 +154,14 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
     const describe = (node: Element) => `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}${node.getAttribute("aria-label") ? `[aria-label="${node.getAttribute("aria-label")}"]` : ""}`;
     const tabOrder = () => {
       const candidates = Array.from(document.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-        (node) => node.tabIndex >= 0 && !(node as HTMLButtonElement).disabled && !node.closest("[inert]") && node.checkVisibility({ visibilityProperty: true }),
+        (node) =>
+          node.tabIndex >= 0 && !(node as HTMLButtonElement).disabled && !node.closest("[inert]") && !refused.has(node) && node.checkVisibility({ visibilityProperty: true }),
       );
       const positive = candidates.filter((node) => node.tabIndex > 0).sort((a, b) => a.tabIndex - b.tabIndex);
       return [...positive, ...candidates.filter((node) => node.tabIndex === 0)];
     };
+    // Elements that kept focus out when the walk focused them.
+    const refused = new Set<Element>();
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const before = document.activeElement as HTMLElement | null;
     // The popups open now (dialogs, menus, listboxes), to check the walk closed none of them.
@@ -165,9 +171,9 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
     const landed = selectors.map(() => [] as string[]);
     let steps = 0;
     const walk = async (direction: 1 | -1) => {
-      const seen = new Set<Element>();
-      const start = document.activeElement;
-      if (start && start !== document.body) seen.add(start);
+      // The walk's first stop: where focus was when that is in the tab order, else the first
+      // element the walk lands on (focus on <main> after a skip link is outside the order).
+      let origin: Element | null = tabOrder().find((node) => node === document.activeElement) ?? null;
       const limit = tabOrder().length * 2 + 4;
       for (let step = 0; step < limit; step += 1) {
         const order = tabOrder();
@@ -181,10 +187,22 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
         const fromOutside = direction === 1 ? order.find(follows) : [...order].reverse().find(follows);
         const next =
           at === -1 ? (fromOutside ?? order[direction === 1 ? 0 : order.length - 1]) : order[(at + direction + order.length) % order.length];
+        // A focus event on it tells an element that took focus, even if a guard sent focus on at
+        // once (back to where it was, perhaps), from one that never took it.
+        let tookFocus = false;
+        const took = () => {
+          tookFocus = true;
+        };
+        next.addEventListener("focus", took);
         next.focus({ preventScroll: true });
+        next.removeEventListener("focus", took);
         await frame();
         steps += 1;
         const active = document.activeElement;
+        if (!tookFocus && active === current && next !== current) {
+          refused.add(next);
+          continue;
+        }
         if (!active || active === document.body) continue;
         reached.add(active);
         // Landing counts when focus is still hidden from assistive technology once it has moved:
@@ -195,8 +213,8 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
           const region = matches.length === 1 ? matches[0] : null;
           if (stillHidden && region && (region === active || region.contains(active)) && !landed[index].includes(describe(active))) landed[index].push(describe(active));
         });
-        if (seen.has(active)) return true;
-        seen.add(active);
+        if (origin === null) origin = active;
+        else if (active === origin) return true;
       }
       return false;
     };
@@ -219,12 +237,12 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
     return regions.map((matches, index) => {
       if (matches.length !== 1) return { passed: false, detail: `the hidden region matches ${matches.length} elements` };
       if (landed[index].length > 0) return { passed: false, detail: `the tab order lands inside the hidden region on ${landed[index].join(", ")}` };
-      if (!complete) return { passed: false, detail: "the tab order never came back to a stop it had already seen, so not every stop was seen" };
+      if (!complete) return { passed: false, detail: "the tab order never came back to where it started, so not every stop was seen" };
       const skipped = related[index].filter((node) => !reached.has(node)).length;
       return {
         passed: true,
         detail:
-          `the tab order went both ways (${steps} steps) until it came back to a stop it had seen, without landing inside it while it was hidden; ` +
+          `the tab order went both ways (${steps} steps) back to where it started, without landing inside it while it was hidden; ` +
           `of the ${related[index].length} focusable elements axe found there, ${skipped} were never reached` +
           (closed > 0 ? `; Tab closed ${closed} popup(s) on the way` : ""),
       };
