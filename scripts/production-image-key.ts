@@ -4,14 +4,17 @@
 //   report   the production Worker's secret names (never values), and the last 45 days of AI
 //            cover outcomes from production D1, by day, kind, status and failure reason.
 //   set-key  stores OPENAI_API_KEY (read from this process's environment, passed to wrangler on
-//            stdin, never on a command line) and IMAGE_PROVIDER_PRIMARY=openai in a new Worker
-//            version, then deploys it. The version copies the one production runs and carries its
-//            source tag, because Production Deploy refuses to release over an untagged version
-//            (a plain `wrangler secret put` deploys one).
+//            stdin, never on a command line), IMAGE_PROVIDER_PRIMARY=openai and
+//            IMAGE_PROVIDER_FALLBACKS=gemini in one new Worker version, then deploys it. The version
+//            copies the one production runs and carries its source tag, because Production Deploy
+//            refuses to release over an untagged version (a plain `wrangler secret put` deploys one).
 import { spawn } from "node:child_process";
 import { selectCurrentProductionVersion, selectExactVersionSourceSha } from "./deploy-production-canary";
 
-export const IMAGE_KEY_SECRETS = ["OPENAI_API_KEY", "IMAGE_PROVIDER_PRIMARY"] as const;
+export const IMAGE_KEY_SECRETS = ["OPENAI_API_KEY", "IMAGE_PROVIDER_PRIMARY", "IMAGE_PROVIDER_FALLBACKS"] as const;
+/** How many times set-key reads the version list for the version it just made. */
+export const VERSION_LIST_ATTEMPTS = 4;
+export const VERSION_LIST_RETRY_MS = 5_000;
 
 export const COVER_REPORT_SQL = `SELECT day, source, status, reason, COUNT(*) AS covers FROM (
   SELECT
@@ -61,8 +64,8 @@ export function secretNames(payload: string): string[] {
     .sort();
 }
 
-/** The id of the Worker's newest version, uploaded or not. */
-export function newestVersionId(payload: string): string {
+/** The ids of the Worker's versions made after `versionId`, oldest first. */
+export function versionsAfter(payload: string, versionId: string): string[] {
   const versions = rows(parseJson(payload, "Wrangler versions list"), "Wrangler versions list").map((row) => {
     const metadata = row.metadata as { created_on?: unknown } | undefined;
     const createdOn = Date.parse(String(metadata?.created_on));
@@ -71,14 +74,21 @@ export function newestVersionId(payload: string): string {
     }
     return { id: row.id, createdOn };
   });
-  if (versions.length === 0) throw new Error("Wrangler versions list had no versions.");
-  versions.sort((left, right) => right.createdOn - left.createdOn);
-  return versions[0].id;
+  const reference = versions.find((version) => version.id === versionId);
+  if (!reference) throw new Error(`Wrangler versions list does not include version ${versionId}.`);
+  return versions
+    .filter((version) => version.createdOn > reference.createdOn)
+    .sort((left, right) => left.createdOn - right.createdOn)
+    .map((version) => version.id);
+}
+
+export function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function createdVersionId(output: string): string {
   const match = /Created version ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/.exec(output);
-  if (!match) throw new Error("wrangler versions secret put did not report the version it created.");
+  if (!match) throw new Error("wrangler versions secret bulk did not report the version it created.");
   return match[1];
 }
 
@@ -114,13 +124,14 @@ export interface ImageKeyDeps {
   workersEnv: NodeJS.ProcessEnv;
   d1Env: NodeJS.ProcessEnv;
   log: (line: string) => void;
+  sleep: (ms: number) => Promise<void>;
 }
 
 export async function report({ run, workersEnv, d1Env, log }: ImageKeyDeps): Promise<{ names: string[]; covers: CoverReportRow[] }> {
   const names = secretNames(await run(["secret", "list", "--format", "json"], { env: workersEnv }));
   log(`Production Worker secrets (names only): ${names.join(", ") || "none"}.`);
   const missing = IMAGE_KEY_SECRETS.filter((name) => !names.includes(name));
-  log(missing.length === 0 ? "Production has OPENAI_API_KEY and IMAGE_PROVIDER_PRIMARY." : `Production lacks: ${missing.join(", ")}.`);
+  log(missing.length === 0 ? `Production has ${IMAGE_KEY_SECRETS.join(", ")}.` : `Production lacks: ${missing.join(", ")}.`);
   const covers = coverReportRows(
     await run(["d1", "execute", "DB", "--remote", "--json", "--command", COVER_REPORT_SQL], { env: d1Env }),
   );
@@ -130,7 +141,7 @@ export async function report({ run, workersEnv, d1Env, log }: ImageKeyDeps): Pro
 }
 
 export async function setImageKey(
-  { run, workersEnv, log }: ImageKeyDeps,
+  { run, workersEnv, log, sleep }: ImageKeyDeps,
   openAiKey: string | undefined,
 ): Promise<string> {
   const key = openAiKey?.trim() ?? "";
@@ -139,26 +150,37 @@ export async function setImageKey(
 
   const activeId = selectCurrentProductionVersion(await run(["deployments", "list", "--json"], env));
   // A new secret version copies the newest version, so it must be the one production runs: after a
-  // rolled-back release the newest version is the refused candidate.
-  const newestId = newestVersionId(await run(["versions", "list", "--json"], env));
-  if (newestId !== activeId) {
+  // rolled-back release, or while a release is uploading, the newest version is a candidate.
+  const pending = versionsAfter(await run(["versions", "list", "--json"], env), activeId);
+  if (pending.length > 0) {
     throw new Error(
-      `The newest Worker version (${newestId}) is not the one production runs (${activeId}), so a new secret version would not copy production's code. Release with Production Deploy first.`,
+      `Worker version ${pending.at(-1)} is newer than the one production runs (${activeId}), so a new secret version would not copy production's code. Release with Production Deploy first.`,
     );
   }
   const sourceSha = selectExactVersionSourceSha(await run(["versions", "view", activeId, "--json"], env), activeId);
   log(`Production runs version ${activeId}, built from ${sourceSha}.`);
 
+  // One version holds all three values, so production never runs with only some of them.
   const values: Record<(typeof IMAGE_KEY_SECRETS)[number], string> = {
     OPENAI_API_KEY: key,
     IMAGE_PROVIDER_PRIMARY: "openai",
+    IMAGE_PROVIDER_FALLBACKS: "gemini",
   };
-  let versionId = activeId;
-  for (const name of IMAGE_KEY_SECRETS) {
-    versionId = createdVersionId(
-      await run(["versions", "secret", "put", name, "--tag", sourceSha], { env: workersEnv, input: values[name] }),
-    );
-    log(`Stored ${name} in new version ${versionId}.`);
+  const versionId = createdVersionId(
+    await run(["versions", "secret", "bulk", "--tag", sourceSha], { env: workersEnv, input: JSON.stringify(values) }),
+  );
+  log(`Stored ${IMAGE_KEY_SECRETS.join(", ")} in new version ${versionId}.`);
+
+  // Deploy only if the new version is the only one made since production's, so it copied
+  // production's code and no release started meanwhile. The list can lag a just-made version.
+  for (let attempt = 1; ; attempt += 1) {
+    const made = versionsAfter(await run(["versions", "list", "--json"], env), activeId);
+    if (made.length === 1 && made[0] === versionId) break;
+    if (made.some((id) => id !== versionId)) {
+      throw new Error(`Other Worker versions (${made.filter((id) => id !== versionId).join(", ")}) appeared next to ${versionId}; not deploying it.`);
+    }
+    if (attempt === VERSION_LIST_ATTEMPTS) throw new Error(`Wrangler versions list never showed ${versionId}; not deploying it.`);
+    await sleep(VERSION_LIST_RETRY_MS);
   }
 
   await run(["versions", "deploy", `${versionId}@100%`, "-y"], env);
@@ -169,7 +191,10 @@ export async function setImageKey(
   if (selectExactVersionSourceSha(await run(["versions", "view", versionId, "--json"], env), versionId) !== sourceSha) {
     throw new Error(`Version ${versionId} does not carry production's source tag ${sourceSha}.`);
   }
-  log(`Production now runs ${versionId}, built from ${sourceSha}, with OPENAI_API_KEY and IMAGE_PROVIDER_PRIMARY=openai.`);
+  const names = secretNames(await run(["secret", "list", "--format", "json"], env));
+  const missing = IMAGE_KEY_SECRETS.filter((name) => !names.includes(name));
+  if (missing.length > 0) throw new Error(`Production runs ${versionId} but lacks ${missing.join(", ")}.`);
+  log(`Production now runs ${versionId}, built from ${sourceSha}, with ${IMAGE_KEY_SECRETS.join(", ")}.`);
   return versionId;
 }
 
@@ -209,7 +234,8 @@ export async function main(
     env = process.env,
     run = createWranglerRunner(),
     log = console.log,
-  }: { env?: NodeJS.ProcessEnv; run?: WranglerRunner; log?: (line: string) => void } = {},
+    sleep = waitMs,
+  }: { env?: NodeJS.ProcessEnv; run?: WranglerRunner; log?: (line: string) => void; sleep?: (ms: number) => Promise<void> } = {},
 ): Promise<void> {
   const [command] = argv;
   if (command !== "report" && command !== "set-key") {
@@ -220,6 +246,7 @@ export async function main(
     workersEnv: wranglerEnv(env, "CLOUDFLARE_WORKERS_API_TOKEN"),
     d1Env: wranglerEnv(env, "CLOUDFLARE_D1_API_TOKEN"),
     log,
+    sleep,
   };
   if (command === "set-key") await setImageKey(deps, env.OPENAI_API_KEY);
   await report(deps);

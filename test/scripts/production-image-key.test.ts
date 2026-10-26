@@ -8,12 +8,13 @@ import {
   createWranglerRunner,
   formatCoverReport,
   main,
-  newestVersionId,
   report,
   sanitizeReason,
   secretNames,
   setImageKey,
   wranglerEnv,
+  versionsAfter,
+  waitMs,
   type WranglerRunner,
 } from "../../scripts/production-image-key";
 
@@ -36,10 +37,11 @@ function deployments(versionId: string): string {
   ]);
 }
 
-function versionsList(newest: string): string {
+function versionsList(...extra: string[]): string {
   return JSON.stringify([
+    { id: "66666666-6666-4666-8666-666666666666", metadata: { created_on: "2026-09-01T00:00:00Z" } },
     { id: ACTIVE, metadata: { created_on: "2026-10-01T00:00:00Z" } },
-    { id: newest, metadata: { created_on: "2026-10-03T00:00:00Z" } },
+    ...extra.map((id, index) => ({ id, metadata: { created_on: `2026-10-0${index + 3}T00:00:00Z` } })),
   ]);
 }
 
@@ -64,51 +66,70 @@ const SECRETS = JSON.stringify([
   { name: "SESSION_SECRET", type: "secret_text" },
   { name: "OPENAI_API_KEY", type: "secret_text" },
   { name: "IMAGE_PROVIDER_PRIMARY", type: "secret_text" },
+  { name: "IMAGE_PROVIDER_FALLBACKS", type: "secret_text" },
 ]);
 
 interface FakeOptions {
   deployedAfter?: string;
-  newest?: string;
+  /** Versions listed after the active one before set-key makes its own. */
+  pendingBefore?: string[];
+  /** What each later versions list shows after the active one, one entry per call; the last repeats. */
+  listedAfter?: string[][];
   tagAfter?: string;
+  secrets?: string;
 }
 
-function fakeWrangler({ deployedAfter = PROVIDER_VERSION, newest = ACTIVE, tagAfter = SOURCE_SHA }: FakeOptions = {}) {
+function fakeWrangler({
+  deployedAfter = KEY_VERSION,
+  pendingBefore = [],
+  listedAfter = [[KEY_VERSION]],
+  tagAfter = SOURCE_SHA,
+  secrets = SECRETS,
+}: FakeOptions = {}) {
   let deployed = false;
+  let made = false;
+  let listCalls = 0;
   const calls: Array<{ args: readonly string[]; env: NodeJS.ProcessEnv; input?: string }> = [];
   const run: WranglerRunner = async (args, { env, input }) => {
     calls.push({ args, env, input });
     const command = args.slice(0, 3).join(" ");
     if (command.startsWith("deployments list")) return deployments(deployed ? deployedAfter : ACTIVE);
-    if (command.startsWith("versions list")) return newest === ACTIVE ? JSON.stringify([{ id: ACTIVE, metadata: { created_on: "2026-10-01T00:00:00Z" } }]) : versionsList(newest);
+    if (command.startsWith("versions list")) {
+      if (!made) return versionsList(...pendingBefore);
+      const shown = listedAfter[Math.min(listCalls, listedAfter.length - 1)];
+      listCalls += 1;
+      return versionsList(...shown);
+    }
     if (command.startsWith("versions view")) return versionView(args[2], args[2] === ACTIVE ? SOURCE_SHA : tagAfter);
-    if (command === "versions secret put") {
-      const id = args[3] === "OPENAI_API_KEY" ? KEY_VERSION : PROVIDER_VERSION;
-      return `✨ Success! Created version ${id} with secret ${args[3]}.`;
+    if (command === "versions secret bulk") {
+      made = true;
+      return `✨ Success! Created version ${KEY_VERSION} with 3 secrets.`;
     }
     if (command.startsWith("versions deploy")) {
       deployed = true;
       return "Deployed";
     }
-    if (command.startsWith("secret list")) return SECRETS;
+    if (command.startsWith("secret list")) return secrets;
     if (command.startsWith("d1 execute")) return D1_REPORT;
     throw new Error(`unexpected wrangler ${args.join(" ")}`);
   };
   return { run, calls };
 }
 
-function deps(run: WranglerRunner, log = vi.fn()) {
+function deps(run: WranglerRunner, log = vi.fn(), sleep = vi.fn(async () => undefined)) {
   return {
     run,
     workersEnv: wranglerEnv(ENV, "CLOUDFLARE_WORKERS_API_TOKEN"),
     d1Env: wranglerEnv(ENV, "CLOUDFLARE_D1_API_TOKEN"),
     log,
+    sleep,
   };
 }
 
 describe("scripts/production-image-key", () => {
   describe("parsing", () => {
     it("reads secret names only, sorted", () => {
-      expect(secretNames(SECRETS)).toEqual(["IMAGE_PROVIDER_PRIMARY", "OPENAI_API_KEY", "SESSION_SECRET"]);
+      expect(secretNames(SECRETS)).toEqual(["IMAGE_PROVIDER_FALLBACKS", "IMAGE_PROVIDER_PRIMARY", "OPENAI_API_KEY", "SESSION_SECRET"]);
       expect(secretNames(JSON.stringify([{ type: "secret_text" }]))).toEqual([]);
       expect(() => secretNames("not json")).toThrow("Wrangler secret list was not valid JSON.");
       expect(() => secretNames("{}")).toThrow("Wrangler secret list was not a list of rows.");
@@ -117,17 +138,22 @@ describe("scripts/production-image-key", () => {
       expect(() => secretNames("[null]")).toThrow("Wrangler secret list was not a list of rows.");
     });
 
-    it("finds the newest version by creation time", () => {
-      expect(newestVersionId(versionsList(KEY_VERSION))).toBe(KEY_VERSION);
-      expect(() => newestVersionId("[]")).toThrow("Wrangler versions list had no versions.");
-      expect(() => newestVersionId(JSON.stringify([{ id: ACTIVE }]))).toThrow("without an id or creation time");
-      expect(() => newestVersionId(JSON.stringify([{ metadata: { created_on: "2026-10-01T00:00:00Z" } }]))).toThrow(
+    it("lists the versions made after a version, oldest first", () => {
+      expect(versionsAfter(versionsList(KEY_VERSION, PROVIDER_VERSION), ACTIVE)).toEqual([KEY_VERSION, PROVIDER_VERSION]);
+      expect(versionsAfter(versionsList(), ACTIVE)).toEqual([]);
+      expect(() => versionsAfter(versionsList(), KEY_VERSION)).toThrow(`Wrangler versions list does not include version ${KEY_VERSION}.`);
+      expect(() => versionsAfter(JSON.stringify([{ id: ACTIVE }]), ACTIVE)).toThrow("without an id or creation time");
+      expect(() => versionsAfter(JSON.stringify([{ metadata: { created_on: "2026-10-01T00:00:00Z" } }]), ACTIVE)).toThrow(
         "without an id or creation time",
       );
     });
 
+    it("waits", async () => {
+      await expect(waitMs(1)).resolves.toBeUndefined();
+    });
+
     it("reads the version wrangler created", () => {
-      expect(createdVersionId(`✨ Success! Created version ${KEY_VERSION} with secret OPENAI_API_KEY.`)).toBe(KEY_VERSION);
+      expect(createdVersionId(`✨ Success! Created version ${KEY_VERSION} with 3 secrets.`)).toBe(KEY_VERSION);
       expect(() => createdVersionId("Success!")).toThrow("did not report the version it created");
     });
 
@@ -179,7 +205,7 @@ describe("scripts/production-image-key", () => {
       const log = vi.fn();
       const result = await report(deps(run, log));
       expect(result.names).toContain("OPENAI_API_KEY");
-      expect(log).toHaveBeenCalledWith("Production has OPENAI_API_KEY and IMAGE_PROVIDER_PRIMARY.");
+      expect(log).toHaveBeenCalledWith("Production has OPENAI_API_KEY, IMAGE_PROVIDER_PRIMARY, IMAGE_PROVIDER_FALLBACKS.");
       expect(log).toHaveBeenCalledWith("2026-10-25  spoon          succeeded     1");
       expect(calls[0].env.CLOUDFLARE_API_TOKEN).toBe("workers-token");
       expect(calls[1].env.CLOUDFLARE_API_TOKEN).toBe("d1-token");
@@ -191,29 +217,31 @@ describe("scripts/production-image-key", () => {
       const run: WranglerRunner = async (args) => (args[0] === "secret" ? "[]" : JSON.stringify([{ results: [] }]));
       await report(deps(run, log));
       expect(log).toHaveBeenCalledWith("Production Worker secrets (names only): none.");
-      expect(log).toHaveBeenCalledWith("Production lacks: OPENAI_API_KEY, IMAGE_PROVIDER_PRIMARY.");
+      expect(log).toHaveBeenCalledWith("Production lacks: OPENAI_API_KEY, IMAGE_PROVIDER_PRIMARY, IMAGE_PROVIDER_FALLBACKS.");
     });
   });
 
   describe("setImageKey", () => {
-    it("stores both values on stdin in tagged versions copied from production, then deploys", async () => {
+    it("stores all three values on stdin in one tagged version copied from production, then deploys it", async () => {
       const { run, calls } = fakeWrangler();
       const log = vi.fn();
-      await expect(setImageKey(deps(run, log), "  sk-test-key \n")).resolves.toBe(PROVIDER_VERSION);
+      await expect(setImageKey(deps(run, log), "  sk-test-key \n")).resolves.toBe(KEY_VERSION);
 
-      const puts = calls.filter((call) => call.args[0] === "versions" && call.args[1] === "secret");
-      expect(puts.map((call) => [call.args, call.input])).toEqual([
-        [["versions", "secret", "put", "OPENAI_API_KEY", "--tag", SOURCE_SHA], "sk-test-key"],
-        [["versions", "secret", "put", "IMAGE_PROVIDER_PRIMARY", "--tag", SOURCE_SHA], "openai"],
-      ]);
+      const bulk = calls.filter((call) => call.args[1] === "secret");
+      expect(bulk.map((call) => call.args)).toEqual([["versions", "secret", "bulk", "--tag", SOURCE_SHA]]);
+      expect(JSON.parse(bulk[0].input!)).toEqual({
+        OPENAI_API_KEY: "sk-test-key",
+        IMAGE_PROVIDER_PRIMARY: "openai",
+        IMAGE_PROVIDER_FALLBACKS: "gemini",
+      });
       // The key goes only to stdin: never in an argument, never in wrangler's environment.
       for (const call of calls) {
         expect(call.args.join(" ")).not.toContain("sk-test-key");
         expect(Object.values(call.env)).not.toContain("sk-test-key");
       }
-      expect(calls.find((call) => call.args[1] === "deploy")?.args).toEqual(["versions", "deploy", `${PROVIDER_VERSION}@100%`, "-y"]);
+      expect(calls.find((call) => call.args[1] === "deploy")?.args).toEqual(["versions", "deploy", `${KEY_VERSION}@100%`, "-y"]);
       expect(log).toHaveBeenLastCalledWith(
-        `Production now runs ${PROVIDER_VERSION}, built from ${SOURCE_SHA}, with OPENAI_API_KEY and IMAGE_PROVIDER_PRIMARY=openai.`,
+        `Production now runs ${KEY_VERSION}, built from ${SOURCE_SHA}, with OPENAI_API_KEY, IMAGE_PROVIDER_PRIMARY, IMAGE_PROVIDER_FALLBACKS.`,
       );
     });
 
@@ -224,25 +252,53 @@ describe("scripts/production-image-key", () => {
       expect(calls).toEqual([]);
     });
 
-    it("refuses when the newest version is not the one production runs", async () => {
-      const { run, calls } = fakeWrangler({ newest: KEY_VERSION });
+    it("refuses when a version newer than production's already exists", async () => {
+      const { run, calls } = fakeWrangler({ pendingBefore: [PROVIDER_VERSION] });
       await expect(setImageKey(deps(run), "sk-test-key")).rejects.toThrow(
-        `The newest Worker version (${KEY_VERSION}) is not the one production runs (${ACTIVE})`,
+        `Worker version ${PROVIDER_VERSION} is newer than the one production runs (${ACTIVE})`,
       );
       expect(calls.some((call) => call.args[1] === "secret")).toBe(false);
+    });
+
+    it("waits for the version list to show the new version before deploying", async () => {
+      const { run } = fakeWrangler({ listedAfter: [[], [KEY_VERSION]] });
+      const sleep = vi.fn(async () => undefined);
+      await expect(setImageKey(deps(run, vi.fn(), sleep), "sk-test-key")).resolves.toBe(KEY_VERSION);
+      expect(sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not deploy when the version list never shows the new version", async () => {
+      const { run, calls } = fakeWrangler({ listedAfter: [[]] });
+      await expect(setImageKey(deps(run), "sk-test-key")).rejects.toThrow(`Wrangler versions list never showed ${KEY_VERSION}; not deploying it.`);
+      expect(calls.some((call) => call.args[1] === "deploy")).toBe(false);
+    });
+
+    it("does not deploy when a release uploaded a version meanwhile", async () => {
+      const { run, calls } = fakeWrangler({ listedAfter: [[PROVIDER_VERSION, KEY_VERSION]] });
+      await expect(setImageKey(deps(run), "sk-test-key")).rejects.toThrow(
+        `Other Worker versions (${PROVIDER_VERSION}) appeared next to ${KEY_VERSION}; not deploying it.`,
+      );
+      expect(calls.some((call) => call.args[1] === "deploy")).toBe(false);
     });
 
     it("fails when production does not end up on the new version", async () => {
       const { run } = fakeWrangler({ deployedAfter: ACTIVE });
       await expect(setImageKey(deps(run), "sk-test-key")).rejects.toThrow(
-        `Production runs ${ACTIVE} after the deploy, not the new version ${PROVIDER_VERSION}.`,
+        `Production runs ${ACTIVE} after the deploy, not the new version ${KEY_VERSION}.`,
       );
     });
 
     it("fails when the new version lost production's source tag", async () => {
       const { run } = fakeWrangler({ tagAfter: "b".repeat(40) });
       await expect(setImageKey(deps(run), "sk-test-key")).rejects.toThrow(
-        `Version ${PROVIDER_VERSION} does not carry production's source tag ${SOURCE_SHA}.`,
+        `Version ${KEY_VERSION} does not carry production's source tag ${SOURCE_SHA}.`,
+      );
+    });
+
+    it("fails when the deployed version lacks a value", async () => {
+      const { run } = fakeWrangler({ secrets: JSON.stringify([{ name: "OPENAI_API_KEY" }]) });
+      await expect(setImageKey(deps(run), "sk-test-key")).rejects.toThrow(
+        `Production runs ${KEY_VERSION} but lacks IMAGE_PROVIDER_PRIMARY, IMAGE_PROVIDER_FALLBACKS.`,
       );
     });
   });
@@ -255,7 +311,7 @@ describe("scripts/production-image-key", () => {
 
       const setKey = fakeWrangler();
       await main(["set-key"], { env: ENV, run: setKey.run, log: vi.fn() });
-      expect(setKey.calls.filter((call) => call.args[1] === "secret").map((call) => call.input)).toEqual(["sk-test-key", "openai"]);
+      expect(setKey.calls.filter((call) => call.args[1] === "secret").map((call) => JSON.parse(call.input!).OPENAI_API_KEY)).toEqual(["sk-test-key"]);
       expect(setKey.calls.at(-1)?.args[0]).toBe("d1");
     });
 
@@ -294,9 +350,9 @@ describe("scripts/production-image-key", () => {
 
     it("rejects on a non-zero exit, naming only the command", async () => {
       const child = fakeChild();
-      const result = createWranglerRunner((() => child) as never)(["versions", "secret", "put", "OPENAI_API_KEY"], { env: {} });
+      const result = createWranglerRunner((() => child) as never)(["versions", "secret", "bulk", "--tag"], { env: {} });
       child.emit("close", 1);
-      await expect(result).rejects.toThrow("wrangler versions secret put exited with code 1.");
+      await expect(result).rejects.toThrow("wrangler versions secret bulk exited with code 1.");
     });
 
     it("rejects when the process cannot start", async () => {

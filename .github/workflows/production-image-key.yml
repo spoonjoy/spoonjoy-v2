@@ -2,9 +2,10 @@ name: Production Image Key
 
 # Reports whether production's AI covers work (the Worker's secret names and the last 45 days of
 # cover outcomes), and with mode set-key stores the GitHub production environment secret
-# OPENAI_API_KEY, and IMAGE_PROVIDER_PRIMARY=openai, in production's Worker without a Cloudflare
-# login (scripts/production-image-key.ts). The new Worker version copies the one production runs
-# and keeps its source tag, so the next Production Deploy accepts it.
+# OPENAI_API_KEY, with IMAGE_PROVIDER_PRIMARY=openai and IMAGE_PROVIDER_FALLBACKS=gemini, in
+# production's Worker without a Cloudflare login (scripts/production-image-key.ts). The one new
+# Worker version copies the one production runs and keeps its source tag, so the next Production
+# Deploy accepts it.
 
 on:
   workflow_dispatch:

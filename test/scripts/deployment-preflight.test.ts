@@ -4989,7 +4989,7 @@ describe("deployment docs", () => {
       "wrangler secret list --env qa",
       "wrangler secret put SESSION_SECRET --env qa",
       "POSTHOG_DISABLED=true",
-      "IMAGE_PROVIDER_PRIMARY=gemini",
+      "IMAGE_PROVIDER_PRIMARY=sample",
       "OAuth callback",
       "WebAuthn",
       "codex-qa-seed-",
