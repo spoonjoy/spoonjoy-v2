@@ -10,6 +10,7 @@ import { useBackdropAnchor } from "~/lib/ouro/use-backdrop-anchor";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useKeyboardScrollable } from "~/lib/ouro/use-keyboard-scrollable";
 import { cn } from "~/lib/ouro/cn";
+import { PortalScope } from "~/lib/ouro/portal-container";
 import { footerClass, iosBackdrop, sheetHint } from "~/components/ouro/sheet/sheet-styles";
 import { dialogSizes, dialogSizeWarning, type DialogSize } from "~/components/ouro/dialog/dialog-styles";
 
@@ -124,7 +125,11 @@ export function DialogTrigger(props: BaseDialog.Trigger.Props): JSX.Element {
  */
 export function DialogPortal(props: Omit<BaseDialog.Portal.Props, "className">): JSX.Element {
   useDialogPart("DialogPortal", "…");
-  return <BaseDialog.Portal {...props} data-ouro="dialog-portal" className="relative isolate z-(--ouro-layer)" />;
+  return (
+    <BaseDialog.Portal {...props} data-ouro="dialog-portal" className="relative isolate z-(--ouro-layer)">
+      <PortalScope>{props.children}</PortalScope>
+    </BaseDialog.Portal>
+  );
 }
 
 /**

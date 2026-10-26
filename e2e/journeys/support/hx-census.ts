@@ -18,6 +18,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { CensusState, Journey as OuroCensusJourney } from "../../ouro-census/census-page.mjs";
 import { KITCHEN } from "../../../scripts/seed-qa-kitchen.mjs";
 import { expect } from "./journey";
+import { openDisclosure } from "./navigation";
 import { personaStorageStatePath, type PersonaName } from "./personas";
 
 export type CensusPersona = "signed-out" | PersonaName;
@@ -46,9 +47,7 @@ async function openDialog(trigger: Locator, dialog: Locator) {
 }
 
 async function openRecipeMaintenance(page: Page) {
-  const toggle = page.getByRole("button", { name: /^Manage recipe/ });
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openDisclosure(page.getByRole("button", { name: /^Manage recipe/ }));
   return page.locator("#recipe-owner-maintenance");
 }
 
@@ -58,9 +57,7 @@ async function enterCookMode(page: Page) {
 }
 
 async function openCookbookOwnerTools(page: Page) {
-  const toggle = page.getByRole("button", { name: /^Owner tools/ });
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await openDisclosure(page.getByRole("button", { name: /^Owner tools/ }));
 }
 
 async function openUsesOutput(page: Page) {
@@ -113,7 +110,7 @@ export const census: Journey[] = [
         id: "xray",
         action: async (page) => {
           await page.getByRole("switch", { name: "X-ray", exact: true }).click();
-          await expect(page.getByRole("group", { name: "X-ray", exact: true })).toBeVisible();
+          await expect(page.getByRole("region", { name: "X-ray", exact: true })).toBeVisible();
         },
       },
     ],

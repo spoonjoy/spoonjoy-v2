@@ -214,7 +214,7 @@ function CloseIcon(): JSX.Element {
  * @claim "A dialog that presents itself for" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::automatic presentation > renders the bottom sheet at 390px)
  * @claim "It stacks above the page at" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
- * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded axe finds nothing)
+ * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded the accessibility gate finds nothing)
  */
 export function Dialog(props: DialogProps): JSX.Element {
   const {

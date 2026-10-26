@@ -254,11 +254,11 @@ const SCOPE_LABELS: Record<string, string> = {
 
 function ConnectorConsentShell({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-[calc(100svh-5rem)] px-5 py-8 sm:px-8 sm:py-10">
+    <div className="min-h-[calc(100svh-5rem)] px-5 py-8 sm:px-8 sm:py-10">
       <section className="mx-auto w-full max-w-2xl">
         {children}
       </section>
-    </main>
+    </div>
   );
 }
 

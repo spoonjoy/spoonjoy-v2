@@ -89,8 +89,10 @@ export const Featured: Story = {
               boxSizing: "border-box",
               padding: 16,
               borderRadius: "var(--radius)",
-              background: "var(--muted)",
-              color: "var(--foreground)",
+              // A card, not muted: muted text on --muted falls short of 4.5:1 in some shadcn themes.
+              border: "1px solid var(--border)",
+              background: "var(--card)",
+              color: "var(--card-foreground)",
               textDecoration: "none",
             }}
           >

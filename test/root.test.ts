@@ -14,6 +14,26 @@ describe("root.tsx safe area and dock clearance", () => {
   it("leaves the phone tab bar's clearance to HX TabBar, which reserves it below the page", () => {
     expect(source).not.toMatch(/<main[^>]*pb-\[/);
   });
+
+  it("marks the document hydrated from Layout, which wraps App and the error boundary alike", () => {
+    expect(source).toMatch(/export function Layout\([^)]*\) \{[^}]*\n  useHydratedMark\(\);\n  return \(\n    <html/);
+  });
+
+  it("renders Ouro UI's popups last in <main>, in App and the error boundary alike", () => {
+    expect(source).toContain("<OuroProvider linkComponent={OuroRouterLink} portalContainer={popups}>");
+    expect(source).toContain("<PopupLayerContext.Provider value={popups}>");
+    expect(source.match(/<PopupLayer \/>\n\s*<\/main>/g)).toHaveLength(2);
+    expect(source.match(/^\s*<main\b/gm)).toHaveLength(2);
+  });
+
+  it("puts no stacking context or vertical clip around the popups, so they show whole over the bars", () => {
+    expect(source).not.toMatch(/sj-app-shell[^"]*\bisolate\b/);
+    const css = readFileSync("app/styles/tailwind.css", "utf8");
+    const main = css.match(/\.sj-desktop-surface,\n\.sj-mobile-surface \{([^}]*)\}/)?.[1];
+    expect(main).toContain("overflow-x: clip;");
+    expect(main).toContain("display: flow-root;");
+    expect(main).not.toMatch(/isolation|overflow:|overflow-y|transform|filter|contain/);
+  });
 });
 
 describe("root.tsx meta()", () => {

@@ -1078,6 +1078,17 @@ describe("/developers/playground", () => {
     expect(screen.getByLabelText("Response body")).toHaveTextContent("No response yet.");
   });
 
+  it("gives each sample one copy button, named for what it copies", async () => {
+    const data = await playgroundData();
+    await renderPlayground(data);
+
+    await screen.findByRole("heading", { name: data.manifest.clientScenarios[0]!.title });
+    expect(screen.queryAllByRole("button", { name: "Copy code" })).toEqual([]);
+    for (const { title } of [...data.manifest.clientScenarios, ...data.manifest.authFlows]) {
+      expect(screen.getAllByRole("button", { name: `Copy ${title} sample` })).toHaveLength(1);
+    }
+  });
+
   it("renders portable curl for bearer mode and body requests", () => {
     const root = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "GET /api/v1")!;
     const createToken = PLAYGROUND_OPERATIONS.find((operation) => operation.id === "POST /api/v1/tokens")!;

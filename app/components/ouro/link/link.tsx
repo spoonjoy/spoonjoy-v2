@@ -92,6 +92,15 @@ const standalone =
   "pointer-coarse:not-in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:items-center";
 const alwaysStandalone = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:items-center";
 
+// In running text an outline would cover the next character (a comma right after the link), so
+// focus thickens the underline in the ring's colour. The outline stays, transparent, because
+// forced colours show it and drop the underline's colour.
+const inTextFocus =
+  "in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:focus-visible:outline-transparent " +
+  "in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:focus-visible:decoration-ring " +
+  "in-[:is(p,label,dt,dd,[data-ouro=text],[data-ouro-text])]:focus-visible:decoration-2";
+const inlineFocus = "focus-visible:outline-transparent focus-visible:decoration-ring focus-visible:decoration-2";
+
 const tones = {
   primary: "text-primary",
   secondary: "text-foreground",
@@ -127,6 +136,9 @@ function linkHint(token: string): string {
  * `<p>`, a `<label>`, a `Text`, a field's description or error) stays as tall as its line;
  * `inline` says the same anywhere else. With a mouse every link is as tall as its text.
  *
+ * Keyboard focus draws an outline around a link that stands alone. In running text it thickens
+ * the underline in the ring's colour instead, since an outline would cover the next character.
+ *
  * @group Text
  * @see https://ourostack.github.io/ouro-ui/docs/link
  *
@@ -138,6 +150,7 @@ function linkHint(token: string): string {
  * <Text size="sm"><Link href="/forgot" inline={false}>Forgot password?</Link></Text>
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
  * @claim "On a touch screen a link" registry/ouro/components/ouro/link/link.touch.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.touch.test.tsx::gives a link on its own line a 44px box, centred on its text)
+ * @claim "Keyboard focus draws an outline" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link > marks keyboard focus in running text with a thick underline in the ring's colour, not an outline drawn over the next character)
  * @claim "With a mouse every link is" registry/ouro/components/ouro/link/link.test.tsx verify:testExists(registry/ouro/components/ouro/link/link.test.tsx::Link with a mouse > is as tall as its text with a fine pointer, standing alone or in a sentence)
  */
 export function Link(props: LinkProps): JSX.Element {
@@ -188,7 +201,7 @@ export function Link(props: LinkProps): JSX.Element {
       rel={external ? safeRel(rel) : rel}
       data-ouro="link"
       data-inline={inlineProp ? "" : undefined}
-      className={cn(base, inlineProp === undefined ? standalone : !inlineProp && alwaysStandalone, tones[tone], className)}
+      className={cn(base, inlineProp === undefined ? [standalone, inTextFocus] : inlineProp ? inlineFocus : alwaysStandalone, tones[tone], className)}
     >
       {children}
       {external && (

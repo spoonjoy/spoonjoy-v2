@@ -15,6 +15,7 @@ import {
 import { lastInput } from "~/lib/ouro/last-input";
 import { useMergedRef } from "~/lib/ouro/refs";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 
 export type { FloatingAlign as TooltipAlign, FloatingSide as TooltipSide } from "~/lib/ouro/floating";
 
@@ -198,6 +199,7 @@ export function Tooltip(props: TooltipProps): JSX.Element {
     }
   }, []);
 
+  const portal = usePortalContainer("Tooltip");
   return (
     <BaseTooltip.Root
       onOpenChange={(next, details) => {
@@ -207,19 +209,21 @@ export function Tooltip(props: TooltipProps): JSX.Element {
       }}
     >
       <BaseTooltip.Trigger {...forwarded} render={children} ref={mergedRef} />
-      <BaseTooltip.Portal data-ouro="tooltip-portal" className={floatingPortalClass}>
-        <BaseTooltip.Positioner side={side} align={align} sideOffset={6} collisionPadding={8} data-ouro="tooltip-positioner">
-          <BaseTooltip.Popup
-            ref={checkContent}
-            data-ouro="tooltip"
-            className={
-              floatingMotionClass +
-              " box-border max-w-xs rounded-md bg-foreground px-2 py-1 text-xs leading-4 text-balance text-background [--ouro-floating-duration:var(--ouro-duration-fast)] data-instant:duration-0"
-            }
-          >
-            {content}
-          </BaseTooltip.Popup>
-        </BaseTooltip.Positioner>
+      <BaseTooltip.Portal {...portal} data-ouro="tooltip-portal" className={floatingPortalClass}>
+        <PortalScope>
+          <BaseTooltip.Positioner side={side} align={align} sideOffset={6} collisionPadding={8} data-ouro="tooltip-positioner">
+            <BaseTooltip.Popup
+              ref={checkContent}
+              data-ouro="tooltip"
+              className={
+                floatingMotionClass +
+                " box-border max-w-xs rounded-md bg-foreground px-2 py-1 text-xs leading-4 text-balance text-background [--ouro-floating-duration:var(--ouro-duration-fast)] data-instant:duration-0"
+              }
+            >
+              {content}
+            </BaseTooltip.Popup>
+          </BaseTooltip.Positioner>
+        </PortalScope>
       </BaseTooltip.Portal>
     </BaseTooltip.Root>
   );

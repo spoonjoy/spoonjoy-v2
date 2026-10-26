@@ -1257,6 +1257,142 @@
           "count": 1
         },
         {
+          "identity": "button \"Copy Auth failures sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Bootstrap the native offline cache sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Browser extension OAuth sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Cloudflare Worker sync bridge sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Cron shopping-list export/import sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Delegated approval link sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Delegated token: OAuth/PKCE sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Delegated token: approval link sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy External REST client sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy First-party native token: Spoonjoy Apple app sign-in sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Manage native account settings sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Manage owner recipe covers sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Native mobile OAuth sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No third-party password-token API sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No token: signed-in browser sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No-code connector profile sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy OAuth/PKCE app sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy OAuth/PKCE delegated app sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Perform an idempotent shopping-list mutation sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Personal token: signed-in chef creates one sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Public BI snapshot export sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Public chef profiles sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Read the public Chef graph sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Recipe blog embeds sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Recipe spoon endpoints sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Remote MCP client sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Same-origin browser session sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Sync a private shopping list sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Use bearer only outside the session sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Use your Spoonjoy session sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the API v1 REST response shape example\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the Spoonjoy Apple native quickstart sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the first successful calls sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the protocol exceptions example\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
           "identity": "button \"Log in\" [button/root] in banner",
           "count": 1
         },
@@ -1456,6 +1592,10 @@
     },
     "developers-playground": {
       "default": [
+        {
+          "identity": "button \"\" [code-block/copy] in main",
+          "count": 10
+        },
         {
           "identity": "button \"200 Example\" [collapsible/trigger] in main",
           "count": 1
@@ -2349,8 +2489,12 @@
           "count": 1
         },
         {
-          "identity": "button \"Copy code\" [code-block/copy] in main",
-          "count": 2
+          "identity": "button \"Copy the Claude Code command\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the MCP endpoint\" [code-block/copy] in main",
+          "count": 1
         },
         {
           "identity": "button \"Log in\" [button/root] in banner",
@@ -5285,7 +5429,7 @@
           "count": 1
         },
         {
-          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in -",
+          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in main",
           "count": 1
         },
         {
@@ -6033,11 +6177,11 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
@@ -6223,15 +6367,15 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 3: Combine\" [select/option] in -",
+          "identity": "option \"Step 3: Combine\" [select/option] in main",
           "count": 1
         },
         {
@@ -6559,11 +6703,11 @@
       ],
       "xray": [
         {
-          "identity": "button \"23 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"23 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
-          "identity": "button \"Close\" [inspector/close] in group \"X-ray\"",
+          "identity": "button \"Close\" [inspector/close] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -6648,7 +6792,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 21
+          "count": 13
         },
         {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
@@ -7507,6 +7651,142 @@
     "developers": {
       "default": [
         {
+          "identity": "button \"Copy Auth failures sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Bootstrap the native offline cache sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Browser extension OAuth sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Cloudflare Worker sync bridge sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Cron shopping-list export/import sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Delegated approval link sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Delegated token: OAuth/PKCE sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Delegated token: approval link sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy External REST client sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy First-party native token: Spoonjoy Apple app sign-in sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Manage native account settings sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Manage owner recipe covers sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Native mobile OAuth sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No third-party password-token API sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No token: signed-in browser sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy No-code connector profile sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy OAuth/PKCE app sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy OAuth/PKCE delegated app sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Perform an idempotent shopping-list mutation sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Personal token: signed-in chef creates one sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Public BI snapshot export sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Public chef profiles sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Read the public Chef graph sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Recipe blog embeds sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Recipe spoon endpoints sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Remote MCP client sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Same-origin browser session sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Sync a private shopping list sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Use bearer only outside the session sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy Use your Spoonjoy session sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the API v1 REST response shape example\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the Spoonjoy Apple native quickstart sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the first successful calls sample\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the protocol exceptions example\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
           "identity": "link \"Agent clients\" [link/root] in main",
           "count": 1
         },
@@ -7706,6 +7986,10 @@
     },
     "developers-playground": {
       "default": [
+        {
+          "identity": "button \"\" [code-block/copy] in main",
+          "count": 10
+        },
         {
           "identity": "button \"200 Example\" [collapsible/trigger] in main",
           "count": 1
@@ -8487,8 +8771,12 @@
     "mcp": {
       "default": [
         {
-          "identity": "button \"Copy code\" [code-block/copy] in main",
-          "count": 2
+          "identity": "button \"Copy the Claude Code command\" [code-block/copy] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"Copy the MCP endpoint\" [code-block/copy] in main",
+          "count": 1
         },
         {
           "identity": "generic \"TOKEN=sj_your_token_here claude mcp add --transport http \\\\ spoonjoy \\\\ https://spoonjoy.app/mcp \\\\ --header \\\"Authorization: Bearer $TOKEN\\\"\" [code-block/code] in main",
@@ -10783,11 +11071,11 @@
           "count": 1
         },
         {
-          "identity": "menuitem \"Close\" [menu/close] in -",
+          "identity": "menuitem \"Close\" [menu/close] in main",
           "count": 1
         },
         {
-          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in -",
+          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in main",
           "count": 1
         },
         {
@@ -11247,11 +11535,11 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
@@ -11341,15 +11629,15 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 3: Combine\" [select/option] in -",
+          "identity": "option \"Step 3: Combine\" [select/option] in main",
           "count": 1
         },
         {
@@ -11669,11 +11957,11 @@
       ],
       "xray": [
         {
-          "identity": "button \"19 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"19 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
-          "identity": "button \"Close\" [inspector/close] in group \"X-ray\"",
+          "identity": "button \"Close\" [inspector/close] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -11750,7 +12038,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 17
+          "count": 3
         },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",

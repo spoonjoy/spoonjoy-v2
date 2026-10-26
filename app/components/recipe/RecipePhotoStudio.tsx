@@ -124,12 +124,13 @@ export function RecipePhotoStudio({
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3
+          {/* h2: the recipe title is the page's h1 and the Manage recipe disclosure above has no heading. */}
+          <h2
             id="recipe-photo-studio-heading"
             className="font-sj-display text-xl font-semibold leading-7 text-[var(--sj-ink)]"
           >
             Photos
-          </h3>
+          </h2>
           <p className="font-sj-ui text-sm font-semibold text-[var(--sj-brass)]">
             {titleLabel}
           </p>

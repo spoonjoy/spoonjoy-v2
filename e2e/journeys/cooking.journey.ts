@@ -13,6 +13,7 @@
 // open the recipe from the chef's kitchen home (a scratch cook's home lists no recipes) and change
 // no progress, so the chef's progress on Lemon Herb Rice stays untouched.
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { cookProgressSaved, resetCookProgress } from "./support/cook-progress";
 import { expectNoHydrationErrors } from "./support/hydration";
@@ -395,6 +396,7 @@ test.describe("Cooking Lemon Herb Rice", () => {
       // Tab two: the same cook (same browser context), its own sessionStorage. A fresh tab starts
       // at the account's step, then moves on to step 3 without moving tab one.
       const second = await page.context().newPage();
+      waitForHydrationOnLoad(second);
       const secondConsole = watchConsole(second);
       try {
         const secondPanel = second.getByTestId("cook-mode-panel");

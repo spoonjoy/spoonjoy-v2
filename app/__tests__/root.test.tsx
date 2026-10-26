@@ -19,7 +19,7 @@ function CurrentRootLayoutBehavior({ userId }: { userId: string | null }) {
 
   return (
     <ColorSchemeProvider storageKey="spoonjoy-theme">
-      <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+      <div className="sj-app-shell relative flex min-h-svh w-full flex-col">
         <header className="sj-desktop-topbar sticky top-0 z-30 hidden items-center px-4 lg:flex">
           <nav data-testid="desktop-navbar">Desktop Navbar</nav>
         </header>

@@ -11,16 +11,17 @@ const preview: Preview = {
   parameters: {
     controls: {
       matchers: {
-        color: /(background|color)$/i,
+        // Not a bare `color`: Ouro UI components declare `color` as a typed hint that is not a
+        // prop (an object type), and a colour control on it makes Storybook warn.
+        color: /^(background|.+Color)$/,
         date: /Date$/i,
       },
     },
 
     a11y: {
-      // 'todo' - show a11y violations in the test UI only
-      // 'error' - fail CI on a11y violations
-      // 'off' - skip a11y checks entirely
-      test: 'todo',
+      // Violations fail a story's test. CI checks every story, in both themes and with the
+      // checks axe could not decide, in e2e/storybook/accessibility.spec.ts.
+      test: 'error',
     },
 
     backgrounds: {

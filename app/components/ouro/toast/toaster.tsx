@@ -12,6 +12,7 @@ import { connectToaster, type ToastRecord } from "~/lib/ouro/toast";
 import { TouchTarget } from "~/lib/ouro/touch-target";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useDrag, type DragState } from "~/lib/ouro/use-drag";
+import { PortalScope } from "~/lib/ouro/portal-container";
 import {
   actionClass,
   closeClass,
@@ -143,9 +144,11 @@ export function Toaster(props: ToasterProps): JSX.Element | null {
       <Connect onActive={setActive} />
       {active && (
         <Toast.Portal className={portalClass}>
-          <Toast.Viewport aria-label={label} data-ouro="toaster" className={cn(viewportClass, className)} onFocus={rememberEntry}>
-            <ToastList closeLabel={closeLabel} />
-          </Toast.Viewport>
+          <PortalScope>
+            <Toast.Viewport aria-label={label} data-ouro="toaster" className={cn(viewportClass, className)} onFocus={rememberEntry}>
+              <ToastList closeLabel={closeLabel} />
+            </Toast.Viewport>
+          </PortalScope>
         </Toast.Portal>
       )}
     </Toast.Provider>
@@ -331,6 +334,8 @@ function ToastItem({ item, closeLabel }: { item: ToastObject; closeLabel: string
           <Toast.Description render={<div />} data-ouro-toast-description="" className="m-0 text-sm text-muted-foreground" />
         </div>
         <Toast.Action data-ouro-control="toaster" data-ouro-part="action" className={actionClass} />
+        {/* Base UI hides this from assistive technology while the stack is closed, and shows it
+            within the event that focuses it (Tab, F6), so keyboard focus never lands on it hidden. */}
         <Toast.Close aria-label={closeLabel} data-ouro-control="toaster" data-ouro-part="close" className={closeClass}>
           <TouchTarget />
           <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="size-4">

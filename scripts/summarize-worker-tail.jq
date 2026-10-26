@@ -234,8 +234,13 @@ def timestamps: [.[] | .eventTimestamp | select(type == "number")];
 # CPU (outcome `exceededCpu`, Error 1102), so a route whose p95 CPU is over it fails requests.
 def cpu_budget_ms: 10;
 
+# How many invocations answered with each HTTP status ("none" when the event has no response, as
+# when the client went away first), so a run's 429s from the sign-in rate limiter are on record.
+def status_counts: map((.event.response.status // null) | if . == null then "none" else tostring end)
+  | group_by(.) | map({ key: .[0], value: length }) | from_entries;
+
 def by_path: group_by(path_pattern)
-  | map({ path: (.[0] | path_pattern), count: length, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
+  | map({ path: (.[0] | path_pattern), count: length, statuses: status_counts, wallTime: timing("wallTime"), cpuTime: timing("cpuTime") })
   | sort_by(-(.wallTime.p95 // 0));
 
 def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000;

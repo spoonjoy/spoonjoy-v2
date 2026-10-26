@@ -152,6 +152,24 @@ describe("/developers route", () => {
     expect(serialized).not.toContain("body");
   });
 
+  it("names every code sample's copy button for its sample", async () => {
+    const data = loader({} as any);
+    const Stub = createTestRoutesStub([
+      { path: "/developers", Component: Developers, loader: () => data },
+    ]);
+
+    render(<Stub initialEntries={["/developers"]} />);
+
+    await screen.findByRole("heading", { name: "Spoonjoy Developer Platform" });
+    expect(screen.queryAllByRole("button", { name: "Copy code" })).toEqual([]);
+    for (const name of ["Copy the first successful calls sample", "Copy the Spoonjoy Apple native quickstart sample", "Copy the API v1 REST response shape example", "Copy the protocol exceptions example"]) {
+      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    }
+    for (const { title } of data.authFlows) {
+      expect(screen.getAllByRole("button", { name: `Copy ${title} sample` })).not.toEqual([]);
+    }
+  });
+
   it("renders the API reference, auth model, and integration guidance without Pebble-specific framing", async () => {
     const data = loader({} as any);
     const Stub = createTestRoutesStub([

@@ -130,7 +130,7 @@ export type ConfirmDialogProps = ConfirmDialogWithTriggerProps | ConfirmDialogCo
  * />
  * @claim "It stacks above the page at" registry/ouro/components/ouro/dialog/dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/dialog.test.tsx::Dialog stacking above the app's fixed bars > puts the portal on the --ouro-layer level, as its own stacking context)
  * @claim "It stacks above the page at" registry/ouro/theme/ouro-base.css verify:fileLine(registry/ouro/theme/ouro-base.css, /^\s+--ouro-layer:\s50;/)
- * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded axe finds nothing)
+ * @claim "Testing accessibility: in WebKit, Base UI's" test/axe-exclude.test.tsx verify:testExists(test/axe-exclude.test.tsx::matches the open dialog's focus guards, and with them excluded the accessibility gate finds nothing)
  * @claim "It is always a centered dialog" registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx::ConfirmDialog > does not close on an outside press)
  * @claim "It is always a centered dialog" registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx verify:testExists(registry/ouro/components/ouro/dialog/confirm-dialog.test.tsx::ConfirmDialog > stays centered on a phone with side margins and stacks its actions with confirm at the bottom)
  */

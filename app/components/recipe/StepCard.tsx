@@ -58,7 +58,6 @@ export function StepCard({
           <p
             data-testid="step-number"
             className="font-sj-ui m-0 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sj-ink-soft)]"
-            aria-label={`Step ${stepNumber}`}
           >
             Step {stepNumber}
           </p>

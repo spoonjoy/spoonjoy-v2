@@ -8,6 +8,7 @@ import { currentHref } from "~/lib/ouro/current-path";
 import { floatingPortalClass } from "~/lib/ouro/floating";
 import { RouterLink } from "~/lib/ouro/router-link";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 
 /** One link inside a NavigationMenu panel. */
 export interface NavigationMenuLink {
@@ -304,6 +305,7 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
     if ((event.target as Element).closest("a[href]")) setValue(null);
   };
 
+  const portal = usePortalContainer("NavigationMenu");
   return (
     <BaseNavigationMenu.Root
       ref={ref}
@@ -365,12 +367,14 @@ export function NavigationMenuView(props: NavigationMenuViewProps): JSX.Element 
           ),
         )}
       </BaseNavigationMenu.List>
-      <BaseNavigationMenu.Portal data-ouro="navigation-menu-portal" className={floatingPortalClass}>
-        <BaseNavigationMenu.Positioner sideOffset={8} collisionPadding={16} className={positioner}>
-          <BaseNavigationMenu.Popup data-ouro="navigation-menu-popup" data-ouro-instant={instant ? "" : undefined} className={popup}>
-            <BaseNavigationMenu.Viewport className="relative h-full w-full overflow-hidden rounded-[inherit]" />
-          </BaseNavigationMenu.Popup>
-        </BaseNavigationMenu.Positioner>
+      <BaseNavigationMenu.Portal {...portal} data-ouro="navigation-menu-portal" className={floatingPortalClass}>
+        <PortalScope>
+          <BaseNavigationMenu.Positioner sideOffset={8} collisionPadding={16} className={positioner}>
+            <BaseNavigationMenu.Popup data-ouro="navigation-menu-popup" data-ouro-instant={instant ? "" : undefined} className={popup}>
+              <BaseNavigationMenu.Viewport className="relative h-full w-full overflow-hidden rounded-[inherit]" />
+            </BaseNavigationMenu.Popup>
+          </BaseNavigationMenu.Positioner>
+        </PortalScope>
       </BaseNavigationMenu.Portal>
     </BaseNavigationMenu.Root>
   );

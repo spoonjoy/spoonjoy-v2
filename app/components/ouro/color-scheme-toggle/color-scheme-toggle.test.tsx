@@ -71,8 +71,9 @@ describe("ColorSchemeToggle", () => {
       </ColorSchemeProvider>,
     );
     await userEvent.click(trigger);
+    await expect.element(page.getByRole("menu")).toBeVisible();
     await userEvent.click(option("Dark"));
-    expect(dark()).toBe(true);
+    await expect.poll(dark).toBe(true);
     expect(localStorage.getItem("ouro-color-scheme")).toBe("dark");
     await expect.poll(() => trigger.getAttribute("data-scheme")).toBe("dark");
     expect(trigger.querySelector("svg circle")).toBeNull();
@@ -82,7 +83,7 @@ describe("ColorSchemeToggle", () => {
     await userEvent.click(trigger);
     await expect.element(option("Dark")).toHaveAttribute("aria-checked", "true");
     await userEvent.click(option("System"));
-    expect(dark()).toBe(false);
+    await expect.poll(dark).toBe(false);
     expect(localStorage.getItem("ouro-color-scheme")).toBe("system");
   });
 
@@ -108,17 +109,19 @@ describe("ColorSchemeToggle", () => {
     await expect.element(group).toBeVisible();
     await expect.element(page.getByRole("radio", { name: "System" })).toBeChecked();
     await userEvent.click(page.getByRole("radio", { name: "Dunkel" }));
-    expect(dark()).toBe(true);
+    await expect.poll(dark).toBe(true);
     await expect.element(page.getByRole("radio", { name: "Dunkel" })).toBeChecked();
     await userEvent.click(page.getByRole("radio", { name: "Hell" }));
-    expect(dark()).toBe(false);
+    await expect.poll(dark).toBe(false);
   });
 
   it("switches the page without a provider", async () => {
     const { trigger } = await render(<ColorSchemeToggle labels={{ dark: "Night" }} />);
     await userEvent.click(trigger);
+    // The menu opens, then the choice switches the page: each is waited for, not assumed.
+    await expect.element(page.getByRole("menu")).toBeVisible();
     await userEvent.click(option("Night"));
-    expect(dark()).toBe(true);
+    await expect.poll(dark).toBe(true);
     await expect.element(page.getByRole("menu")).not.toBeInTheDocument();
   });
 

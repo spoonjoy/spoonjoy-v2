@@ -14,6 +14,7 @@ import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { usePickerSheet } from "~/lib/ouro/use-sheet-presentation";
 import { controlRef } from "~/lib/ouro/control-ref";
 import { useMergedRef } from "~/lib/ouro/refs";
+import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 import {
   chipClass,
   chipRemoveClass,
@@ -517,15 +518,49 @@ function ListBody({
   );
 }
 
+const openDialogs = () => document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length;
+
+/**
+ * Keeps the page exposed to assistive technology while the list is open. Base UI hides the
+ * page around the input and the list with aria-hidden on the children of their ancestors,
+ * which leaves the page's links and fields focusable yet hidden and takes its heading away. A
+ * combobox list leaves the page as it is, so such a child that gains aria-hidden while the list
+ * is open loses it at once, unless a dialog has opened since, which hides the page itself.
+ * What the app hid before, and what it hides deeper in the page, stays hidden. It renders in
+ * the portal, which holds the list only while it is open.
+ */
+function KeepPageExposed(): null {
+  useLayoutEffect(
+    () => {
+      const dialogs = openDialogs();
+      const observer = new MutationObserver((records) => {
+        if (openDialogs() > dialogs) return;
+        const kept = [...document.querySelectorAll('[role="combobox"][aria-expanded="true"], [data-ouro="combobox-portal"]')];
+        for (const { target } of records) if (kept.some((element) => target.parentNode!.contains(element))) (target as Element).removeAttribute("aria-hidden");
+      });
+      observer.observe(document.body, { attributes: true, attributeFilter: ["aria-hidden"], subtree: true });
+      // Stryker disable next-line ArrowFunction: once the list closes nothing is around it to unhide, so an observer left connected changes nothing.
+      return () => observer.disconnect();
+    },
+    // Stryker disable next-line ArrayDeclaration: the effect reads nothing from render, so it runs once whatever its dependencies.
+    [],
+  );
+  return null;
+}
+
 /** The popup under (or over) the input, on wider screens and with a mouse. */
 function Popup({ loading, children }: { loading: boolean | undefined; children: ReactNode }): JSX.Element {
+  const portal = usePortalContainer("Combobox");
   return (
-    <BaseCombobox.Portal data-ouro="combobox-portal" className="relative isolate z-(--ouro-layer)">
-      <BaseCombobox.Positioner ref={markPopupDismiss} sideOffset={4} className="outline-none">
-        <BaseCombobox.Popup data-ouro="combobox-popup" aria-busy={loading || undefined} className={popupClass}>
-          {children}
-        </BaseCombobox.Popup>
-      </BaseCombobox.Positioner>
+    <BaseCombobox.Portal {...portal} data-ouro="combobox-portal" className="relative isolate z-(--ouro-layer)">
+      <PortalScope>
+        <KeepPageExposed />
+        <BaseCombobox.Positioner ref={markPopupDismiss} sideOffset={4} className="outline-none">
+          <BaseCombobox.Popup data-ouro="combobox-popup" aria-busy={loading || undefined} className={popupClass}>
+            {children}
+          </BaseCombobox.Popup>
+        </BaseCombobox.Positioner>
+      </PortalScope>
     </BaseCombobox.Portal>
   );
 }

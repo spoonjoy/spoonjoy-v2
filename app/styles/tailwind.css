@@ -193,9 +193,12 @@
 
 /* A charcoal panel (the developer playground's Response, the shaded landing hero) under photo-white
    text: HX controls in it take their text, border and focus ring from these tokens, so a plain or
-   outline button isn't charcoal on charcoal. */
+   outline button isn't charcoal on charcoal. A muted surface, such as HX CodeBlock's, is a lighter
+   charcoal, so photo-white text stays readable on it. */
 .sj-on-charcoal {
   --foreground: var(--sj-on-photo);
+  --muted: color-mix(in srgb, var(--sj-on-photo) 8%, var(--sj-photo-charcoal));
+  --muted-foreground: color-mix(in srgb, var(--sj-on-photo) 62%, var(--sj-photo-charcoal));
   --border: var(--sj-photo-line);
   --ring: var(--sj-on-photo);
 }
@@ -402,8 +405,18 @@ select {
   padding-right: env(safe-area-inset-right);
 }
 
+/* <main> holds Ouro UI's popups (root.tsx's PopupLayer), so it clips only sideways and makes no
+   stacking context: a menu near its top or bottom edge shows whole, over the top bar and the phone
+   tab bar. clip, unlike hidden, leaves the vertical axis visible and makes no scroll container;
+   flow-root keeps the block formatting context hidden gave, so margins still stay inside. On a
+   foldable's vertical fold, app/styles/fold.css clips both axes again. */
 .sj-desktop-surface,
-.sj-mobile-surface,
+.sj-mobile-surface {
+  display: flow-root;
+  position: relative;
+  overflow-x: clip;
+}
+
 .sj-page {
   position: relative;
   isolation: isolate;

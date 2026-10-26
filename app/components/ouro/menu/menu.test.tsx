@@ -1,4 +1,3 @@
-import axe from "axe-core";
 import { createRef, StrictMode, useState, type AnchorHTMLAttributes, type ReactNode } from "react";
 import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -22,7 +21,7 @@ import {
 import { OuroProvider } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
 import { isTransparent } from "~/lib/ouro/testing/color";
-import { axeExclude } from "~/lib/ouro/testing/axe";
+import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
 
 /** The colour behind an element: the nearest background around it that is not transparent. */
 function behind(element: Element): string {
@@ -39,10 +38,10 @@ function behind(element: Element): string {
 const roots: Root[] = [];
 let mounted: Element[] = [];
 
-async function render(node: ReactNode) {
+async function render(node: ReactNode, parent: Element = document.body) {
   const host = document.createElement("div");
   host.style.padding = "160px 400px";
-  document.body.append(host);
+  parent.append(host);
   mounted.push(host);
   const root = createRoot(host);
   roots.push(root);
@@ -555,33 +554,53 @@ describe("Menu items", () => {
     expect(document.body.textContent).not.toContain("Back");
   });
 
-  it("has no axe violations open, with every item type", async () => {
-    await openDropdown(
-      {},
-      <>
-        <MenuGroup label="Recipe">
-          <MenuItem shortcut={["mod", "e"]}>Edit</MenuItem>
-          <MenuItem tone="destructive">Delete</MenuItem>
-        </MenuGroup>
-        <MenuSeparator />
-        <MenuCheckboxItem defaultChecked>Pin</MenuCheckboxItem>
-        <MenuRadioGroup label="Sort" defaultValue="a">
-          <MenuRadioItem value="a">A</MenuRadioItem>
-        </MenuRadioGroup>
-        <MenuSub label="Share">
-          <MenuItem>Copy link</MenuItem>
-        </MenuSub>
-      </>,
+  it("passes the accessibility gate open, with every item type, in light and dark, inside the page's main landmark", async () => {
+    // As an app places it: in the page's main, under its heading, with popups rendered inside main (OuroProvider's portalContainer).
+    const main = document.createElement("main");
+    main.innerHTML = "<h1>Recipes</h1>";
+    document.body.append(main);
+    mounted.push(main);
+    await render(
+      <OuroProvider portalContainer={main}>
+        <Menu trigger={<Button>Actions</Button>}>
+          <MenuGroup label="Recipe">
+            <MenuItem shortcut={["mod", "e"]}>Edit</MenuItem>
+            <MenuItem tone="destructive">Delete</MenuItem>
+          </MenuGroup>
+          <MenuSeparator />
+          <MenuCheckboxItem defaultChecked>Pin</MenuCheckboxItem>
+          <MenuRadioGroup label="Sort" defaultValue="a">
+            <MenuRadioItem value="a">A</MenuRadioItem>
+          </MenuRadioGroup>
+          <MenuSub label="Share">
+            <MenuItem>Copy link</MenuItem>
+          </MenuSub>
+        </Menu>
+      </OuroProvider>,
+      main,
     );
+    await userEvent.click(trigger());
+    await settled();
     for (const scheme of ["light", "dark"]) {
       document.documentElement.classList.toggle("dark", scheme === "dark");
-      const result = await axe.run(
-        { include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) },
-        { resultTypes: ["violations"], rules: { region: { enabled: false }, "landmark-one-main": { enabled: false }, "page-has-heading-one": { enabled: false } } },
-      );
-      expect(result.violations.map((violation) => violation.id)).toEqual([]);
+      expect(describeFindings(await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) }))).toBe("");
     }
     document.documentElement.classList.remove("dark");
+  });
+
+  it("warns when its open menu renders outside every landmark of a page that has a main", async () => {
+    const main = document.body.appendChild(document.createElement("main"));
+    mounted.push(main);
+    await render(
+      <Menu trigger={<Button>Actions</Button>}>
+        <MenuItem>Edit</MenuItem>
+      </Menu>,
+    );
+    await userEvent.click(trigger());
+    await settled();
+    expect(warnings()).toEqual([
+      "[ouro-ui] Menu: the open popup renders outside every landmark, so screen reader users who move by landmark miss it. Fix: <OuroProvider portalContainer={popups}> around the app, with <div ref={popups} /> inside <main>.",
+    ]);
   });
 });
 
@@ -609,6 +628,8 @@ describe("Menu presentation", () => {
     const sub = menus()[1]!;
     expect(sub.getAttribute("data-ouro-presentation")).toBe("sheet");
     await expect.poll(() => Math.round(sub.getBoundingClientRect().bottom)).toBe(innerHeight);
+    // The submenu's sheet goes back with Back; only the menu's own sheet ends with Close.
+    expect(sub.querySelector("[data-ouro-menu-close]")).toBeNull();
     await userEvent.click(item("Return"));
     await expect.poll(() => menus().length).toBe(1);
     expect(menu()).not.toBeNull();

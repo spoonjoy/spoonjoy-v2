@@ -1,4 +1,5 @@
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
+import { waitForHydrationOnLoad } from "./support/app-ready";
 import { persona } from "./support/personas";
 import { signInThroughForm } from "./support/sign-in";
 import { Secret, fillSecret } from "./support/secret";
@@ -58,6 +59,7 @@ test.describe("Sign-in", () => {
     // stored persona sessions that signed-in journeys start from.
     const context = await browser.newContext();
     const page = await context.newPage();
+    waitForHydrationOnLoad(page);
     // This page isn't the fixture-provided `page`, so the auto-used consoleGate fixture in
     // support/journey.ts never sees it; watch it the same way by hand instead. try/finally
     // keeps dispose()/context.close() running even if an assertion below fails (instead of

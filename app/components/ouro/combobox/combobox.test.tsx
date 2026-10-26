@@ -7,6 +7,8 @@ import { Combobox, type ComboboxProps } from "~/components/ouro/combobox/combobo
 import { Form } from "~/components/ouro/form/form";
 import { act } from "~/lib/ouro/testing/act";
 import { pressTab } from "~/lib/ouro/testing/tab";
+import { audit, axeExclude, describeFindings } from "~/lib/ouro/testing/axe";
+import { OuroProvider } from "~/lib/ouro/ouro-provider";
 
 /** The colour behind an element: the nearest background around it that is not transparent. */
 function behind(element: Element): string {
@@ -107,6 +109,77 @@ describe("Combobox", () => {
     } finally {
       await commands.emulateMedia({ forcedColors: "none" });
     }
+  });
+
+  it("leaves the rest of the page exposed while its list is open, so the gate passes from the page's main landmark", async () => {
+    const main = document.createElement("main");
+    main.innerHTML = '<h1>Recipes</h1><a href="#notes">Notes</a><span> for each recipe</span><span aria-hidden="true" data-ornament="">~</span>';
+    document.body.append(main);
+    mounted.push(main);
+    const host = document.createElement("div");
+    main.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    await act(async () =>
+      root.render(
+        <OuroProvider portalContainer={main}>
+          <div className="grid gap-4">
+            <Combobox label="Herb" name="herb" items={herbs} />
+            <Combobox label="Garnish" name="garnish" items={herbs} />
+          </div>
+        </OuroProvider>,
+      ),
+    );
+    // What the page hides outside the list is what it hid before the list opened.
+    const hidden = () => [...main.querySelectorAll('[aria-hidden="true"]')].filter((element) => !element.closest('[data-ouro="combobox-portal"]'));
+    const before = hidden();
+    await userEvent.click(host.querySelector<HTMLInputElement>('input[role="combobox"]')!);
+    await expect.poll(popup).not.toBeNull();
+    await expect.poll(hidden).toEqual(before);
+    // The list lies over the middle of main, where axe reads the background of the block the link
+    // sits in, as on an app's page whose main reaches past the list (main holds no text of its own).
+    const list = popup()!.getBoundingClientRect();
+    main.style.height = `${2 * (list.top + list.height / 2 - main.getBoundingClientRect().top)}px`;
+    const middle = main.getBoundingClientRect();
+    expect(popup()!.contains(document.elementFromPoint(middle.left + middle.width / 2, middle.top + middle.height / 2))).toBe(true);
+    expect(describeFindings(await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) }))).toBe("");
+    // What the list hides itself, what the page hides inside what Base UI marked, what a dialog
+    // opened over the list hides, and what anything hides once the list is closed, stays hidden.
+    const option = popup()!.querySelector('[role="option"]')!;
+    option.setAttribute("aria-hidden", "true");
+    const note = main.querySelector("h1")!.appendChild(document.createElement("span"));
+    note.setAttribute("aria-hidden", "true");
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(option.getAttribute("aria-hidden")).toBe("true");
+    expect(note.getAttribute("aria-hidden")).toBe("true");
+    option.removeAttribute("aria-hidden");
+    const heading = main.querySelector("h1")!;
+    expect(heading.hasAttribute("data-base-ui-inert")).toBe(true);
+    const dialog = document.body.appendChild(document.createElement("div"));
+    dialog.setAttribute("role", "dialog");
+    heading.setAttribute("aria-hidden", "true");
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(heading.getAttribute("aria-hidden")).toBe("true");
+    dialog.remove();
+    heading.removeAttribute("aria-hidden");
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(popup).toBeNull();
+    const link = main.querySelector("a")!;
+    link.setAttribute("data-base-ui-inert", "");
+    link.setAttribute("aria-hidden", "true");
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(link.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("warns when its open list renders outside every landmark of a page that has a main", async () => {
+    const main = document.body.appendChild(document.createElement("main"));
+    mounted.push(main);
+    const { input } = await render(<Combobox label="Herb" name="herb" items={herbs} />);
+    await userEvent.click(input);
+    await expect.poll(popup).not.toBeNull();
+    expect(warn.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      "[ouro-ui] Combobox: the open popup renders outside every landmark, so screen reader users who move by landmark miss it. Fix: <OuroProvider portalContainer={popups}> around the app, with <div ref={popups} /> inside <main>.",
+    ]);
   });
 
   it("filters the items as you type and picks one", async () => {

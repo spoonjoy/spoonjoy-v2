@@ -8,7 +8,7 @@
 // key), except for one deliberate parse on the Add Step page, which must not take the page down.
 import { test as journeyTest, expect } from "./support/journey";
 import type { Page } from "@playwright/test";
-import { pathUrl, waitForHydration } from "./support/navigation";
+import { openDisclosure, pathUrl, waitForHydration } from "./support/navigation";
 import { scratchStorageStatePath } from "./support/personas";
 import { requiredLabel } from "./support/forms";
 import { recordCookSyncRequests } from "./support/cook-sync-evidence";
@@ -65,7 +65,7 @@ async function expectCookProgressSynced(page: Page) {
 }
 
 async function openMaintenance(page: Page) {
-  await page.getByRole("button", { name: /^Manage recipe/ }).click();
+  await openDisclosure(page.getByRole("button", { name: /^Manage recipe/ }));
   return page.locator("#recipe-owner-maintenance");
 }
 

@@ -17,6 +17,7 @@ import {
   type FloatingSide,
 } from "~/lib/ouro/floating";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
+import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 import { popoverCloseClass } from "~/components/ouro/popover/popover-styles";
 
 export type { FloatingAlign as PopoverAlign, FloatingSide as PopoverSide } from "~/lib/ouro/floating";
@@ -85,7 +86,12 @@ export function PopoverTrigger({ style, ...props }: BasePopover.Trigger.Props): 
  */
 export function PopoverPortal(props: Omit<BasePopover.Portal.Props, "className">): JSX.Element {
   usePopoverPart("PopoverPortal", "…");
-  return <BasePopover.Portal {...props} data-ouro="popover-portal" className={floatingPortalClass} />;
+  const portal = usePortalContainer("Popover");
+  return (
+    <BasePopover.Portal {...portal} {...props} data-ouro="popover-portal" className={floatingPortalClass}>
+      <PortalScope>{props.children}</PortalScope>
+    </BasePopover.Portal>
+  );
 }
 
 /** Props for {@link PopoverPositioner}. */

@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { Link } from "~/components/ouro/link/link";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
@@ -197,6 +197,42 @@ describe("Link", () => {
     const { link } = await render(<Link href="/x">Go</Link>);
     link.focus();
     expect(getComputedStyle(link).outlineStyle).toBe("solid");
+  });
+
+  it("marks keyboard focus in running text with a thick underline in the ring's colour, not an outline drawn over the next character", async () => {
+    const { host } = await render(
+      <>
+        <span data-rest="">Rest</span>
+        <Link href="/alone">Alone</Link>
+        <p>
+          From <Link href="/ari">Ari</Link>, with lemon.
+        </p>
+        <div>
+          From <Link href="/inline" inline>Sam</Link>, with salt.
+        </div>
+        <p>
+          <Link href="/own" inline={false}>On its own</Link>
+        </p>
+      </>,
+    );
+    const focused = (href: string) => {
+      const link = host.querySelector<HTMLAnchorElement>(`a[href="${href}"]`)!;
+      link.focus();
+      // The underline's colour eases in; its end is what focus shows.
+      for (const animation of link.getAnimations()) animation.finish();
+      const style = getComputedStyle(link);
+      return { outline: `${style.outlineStyle} ${style.outlineColor}`, underline: `${style.textDecorationThickness} ${style.textDecorationColor}` };
+    };
+    const ring = getComputedStyle(host.querySelector('a[href="/alone"]')!).outlineColor;
+    // Hover darkens a resting underline, and the pointer rests where an earlier test left it, which
+    // can be over a link here: it rests on text that is no link instead.
+    await userEvent.hover(host.querySelector("[data-rest]")!);
+    const alone = focused("/alone");
+    expect(alone.outline).toBe(`solid ${ring}`);
+    // A transparent outline draws nothing, and forced colours show it, as they drop the underline's colour.
+    expect(focused("/ari")).toEqual({ outline: "solid rgba(0, 0, 0, 0)", underline: `2px ${ring}` });
+    expect(focused("/inline")).toEqual({ outline: "solid rgba(0, 0, 0, 0)", underline: `2px ${ring}` });
+    expect(focused("/own")).toEqual(alone);
   });
 
   it("lets app layout classes win", async () => {

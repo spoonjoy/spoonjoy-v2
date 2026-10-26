@@ -1,6 +1,6 @@
 {
   "guide": "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
-  "ouroTag": "v1.2.4",
+  "ouroTag": "v1.2.6",
   "root": {
     "file": "app/root.tsx",
     "sources": [
@@ -20,6 +20,7 @@
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
       "app/hooks/use-cooking-now.ts",
+      "app/hooks/use-hydrated-mark.ts",
       "app/hooks/use-unsaved-form-guard.ts",
       "app/lib/analytics-server.ts",
       "app/lib/analytics.ts",
@@ -3144,6 +3145,7 @@
       "components": [
         "badge",
         "button",
+        "code-block",
         "heading",
         "link",
         "page-header",
@@ -3154,6 +3156,9 @@
           "app/routes/developers.tsx"
         ],
         "button": [
+          "app/routes/developers.tsx"
+        ],
+        "code-block": [
           "app/routes/developers.tsx"
         ],
         "heading": [
@@ -3188,6 +3193,7 @@
         "button",
         "checkbox",
         "choice-card",
+        "code-block",
         "collapsible",
         "copy-button",
         "empty",
@@ -3210,6 +3216,9 @@
           "app/routes/developers.playground.tsx"
         ],
         "choice-card": [
+          "app/routes/developers.playground.tsx"
+        ],
+        "code-block": [
           "app/routes/developers.playground.tsx"
         ],
         "collapsible": [
