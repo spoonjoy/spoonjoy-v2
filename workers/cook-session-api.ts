@@ -10,6 +10,8 @@
 import { recordCookingNow } from "../app/lib/cooking-now.server";
 import { d1Binding } from "../app/lib/d1-read.server";
 import { isD1Unavailable } from "../app/lib/d1-write-retry.server";
+import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
+import { consoleSlowCallReporter, watchSlowCall, type SlowCallReporter } from "../app/lib/slow-call.server";
 import {
   COOK_EXPECTED_USER_HEADER,
   COOK_INTERNAL_ORIGIN,
@@ -145,18 +147,24 @@ async function forwardToCookSession(
   recipeId: string,
   method: string,
   suffix: string,
-  body?: string,
+  body: string | undefined,
+  onSlowCall: SlowCallReporter | undefined,
 ): Promise<Response> {
   const id = namespace.idFromName(cookSessionObjectName(userId, recipeId));
   const headers = new Headers({ [COOK_PROTOCOL_HEADER]: "1" });
   if (body !== undefined) headers.set("Content-Type", "application/json");
-  const send = () => namespace.get(id).fetch(new Request(
-    `${COOK_INTERNAL_ORIGIN}${COOK_SESSION_PREFIX}/${recipeId}${suffix}`,
-    { method, headers, body },
-  ));
+  // A per-run QA Worker reports a call to the object that waits over a second (slow-call.server.ts).
+  const send = (attempt: number) => watchSlowCall<Response>(
+    { call: "cook_session.fetch", operation: method === "GET" ? "read" : "write", attempt },
+    () => namespace.get(id).fetch(new Request(
+      `${COOK_INTERNAL_ORIGIN}${COOK_SESSION_PREFIX}/${recipeId}${suffix}`,
+      { method, headers, body },
+    )),
+    onSlowCall,
+  );
   let response: Response;
   try {
-    response = await send();
+    response = await send(1);
   } catch (error) {
     const failure = error as Error & { retryable?: boolean; overloaded?: boolean };
     if (method !== "GET" || !(error instanceof Error) || failure.retryable !== true || failure.overloaded === true) {
@@ -165,7 +173,7 @@ async function forwardToCookSession(
     // A reset can leave the old stub broken. Only replay a read, once, with a fresh stub;
     // writes might already have committed, and overloaded objects need less traffic, not more.
     await new Promise((resolve) => setTimeout(resolve, 100));
-    response = await send();
+    response = await send(2);
   }
   // Copy into a fresh Response so the Worker can add its security and version headers.
   return new Response(response.body, { status: response.status, headers: response.headers });
@@ -240,9 +248,10 @@ export async function handleCookSessionProtocolRequest(
   if (!env.COOK_SESSIONS) return cookProtocolUnavailableResponse();
   // Authentication already read D1, so the binding is present here.
   const db = env.DB as unknown as CookD1Database;
+  const onSlowCall = qaErrorLogsEnabled(env) ? consoleSlowCallReporter() : undefined;
 
   if (operation === "detail") {
-    return forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "GET", "");
+    return forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "GET", "", undefined, onSlowCall);
   }
 
   const text = await readBoundedText(request);
@@ -250,7 +259,7 @@ export async function handleCookSessionProtocolRequest(
     if (text !== "" && text !== "{}") return invalidRequest();
     if (!await recipeExists(db, recipeId)) return recipeNotFound();
     return recordCookingNowAfter(
-      await forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "POST", "/start"),
+      await forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "POST", "/start", undefined, onSlowCall),
       env,
       userId,
       recipeId,
@@ -263,7 +272,9 @@ export async function handleCookSessionProtocolRequest(
   const bounds = await recipeBounds(db, recipeId);
   if (!changesFitRecipe(body, bounds)) return invalidRequest();
   return recordCookingNowAfter(
-    await forwardToCookSession(env.COOK_SESSIONS, userId, recipeId, "PATCH", "", JSON.stringify(fitChangesToRecipe(body, bounds))),
+    await forwardToCookSession(
+      env.COOK_SESSIONS, userId, recipeId, "PATCH", "", JSON.stringify(fitChangesToRecipe(body, bounds)), onSlowCall,
+    ),
     env,
     userId,
     recipeId,

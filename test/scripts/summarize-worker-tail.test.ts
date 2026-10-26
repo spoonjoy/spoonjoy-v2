@@ -79,7 +79,7 @@ function hostileEvent(overrides: TailEvent = {}): TailEvent {
   };
 }
 
-const INVOCATION_KEYS = ["cpuTime", "eventTimestamp", "exceptions", "method", "outcome", "path", "status", "wallTime"];
+const INVOCATION_KEYS = ["cpuTime", "entrypoint", "eventTimestamp", "exceptions", "executionModel", "method", "outcome", "path", "status", "wallTime"];
 
 describe("summarize-worker-tail.jq", () => {
   it("copies only allowlisted fields, so no header, cookie, body, log, cf or query value leaves the tail", () => {
@@ -89,16 +89,20 @@ describe("summarize-worker-tail.jq", () => {
       "budget",
       "byPath",
       "complete",
+      "d1ReadReissues",
       "d1TransientErrors",
       "firstEventTimestamp",
       "firstExceptions",
       "hungInvocations",
+      "isolates",
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
       "serverErrorInvocations",
+      "slowCalls",
       "slowest",
       "stalledInvocations",
+      "stalledRequests",
       "tailAliveAtStop",
       "tailReconnects",
       "totalInvocations",
@@ -216,6 +220,18 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.d1TransientErrors).toEqual({ total: 4, retried: 1, notRetried: 3, notRetriedWrites: 2, writeOperations: none });
     expect(raw).not.toContain(CANARIES.logLine);
     expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0, writeOperations: none });
+  });
+
+  it("counts the D1 reads sent again after stalling, how many the re-issued try answered and how many failed both times, reading only that field", () => {
+    const line = (answeredBy: unknown) => JSON.stringify({ event: "d1_read_reissue", call: "batch", table: "Cookbook", attempt: 1, answeredBy, sql: CANARIES.query });
+    const { summary, raw } = summarize([
+      { outcome: "ok", logs: [{ level: "warn", message: [line("reissue")] }, { level: "warn", message: [line("original")] }, { level: "warn", message: [line("neither")] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [{ event: "d1_read_reissue", answeredBy: CANARIES.body }] }, { level: "warn", message: ["not json"] }] },
+    ]);
+
+    expect(summary.d1ReadReissues).toEqual({ total: 4, answeredByReissue: 1, failedBoth: 1 });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
   });
 
   it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
@@ -393,9 +409,9 @@ describe("summarize-worker-tail.jq", () => {
 
     expect(summary.serverErrorInvocations).toHaveLength(50);
     expect(summary.serverErrorInvocations.slice(0, 3)).toEqual([
-      { outcome: "ok", path: "/login.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 3, exceptions: [] },
-      { outcome: "ok", path: "/recipes/cmg1abcdefghijklmnopqrstu.data", method: "POST", status: 502, cpuTime: 9, wallTime: 40, eventTimestamp: 4, exceptions: [] },
-      { outcome: "exception", path: "/shopping-list.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 5, exceptions: [] },
+      { outcome: "ok", path: "/login.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 3, executionModel: null, entrypoint: null, exceptions: [] },
+      { outcome: "ok", path: "/recipes/cmg1abcdefghijklmnopqrstu.data", method: "POST", status: 502, cpuTime: 9, wallTime: 40, eventTimestamp: 4, executionModel: null, entrypoint: null, exceptions: [] },
+      { outcome: "exception", path: "/shopping-list.data", method: "POST", status: 500, cpuTime: 9, wallTime: 40, eventTimestamp: 5, executionModel: null, entrypoint: null, exceptions: [] },
     ]);
     expect(summary.serverErrorInvocations.map((entry: { status: number }) => entry.status)).not.toContain(404);
   });
@@ -450,11 +466,140 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.stalledInvocations).toBe(2);
   });
 
+  describe("what a stalled request waited on", () => {
+    const slowCall = (fields: Record<string, unknown>) =>
+      JSON.stringify({ event: "slow_call", operation: "read", table: null, attempt: 1, settled: false, outcome: null, ...fields });
+    const served = (isolate: unknown, request: unknown, arrivedAt: unknown) => JSON.stringify({ event: "isolate_request", isolate, request, arrivedAt });
+    const runsIn = (isolate: unknown, colo: unknown) => JSON.stringify({ event: "isolate_colo", isolate, runsIn: colo });
+    const request = (path: string, cpuTime: number, wallTime: number, eventTimestamp: number, messages: unknown[], extra: TailEvent = {}) => ({
+      outcome: "canceled",
+      cpuTime,
+      wallTime,
+      eventTimestamp,
+      logs: messages.map((message) => ({ level: "warn", message: [message] })),
+      event: { request: { url: `https://qa.example${path}`, method: "GET" } },
+      ...extra,
+    });
+
+    it("attaches each stalled request's slow calls and where it ran, so the stall names the call it waited on", () => {
+      // Run 40241845409: GET /cookbooks/:id.data waited 5,395 ms on 1 ms of CPU and was cancelled.
+      const { summary } = summarize([
+        request("/search", 30, 1400, 10, [
+          served("0a1b2c3d", 1, "IAD"),
+          runsIn("0a1b2c3d", "IAD"),
+          slowCall({ call: "d1.first", table: "User", waitedMs: 1002, operation: "write", attempt: 2 }),
+        ]),
+        request("/api/cook-sessions/qa-kitchen-recipe-lemon-rice", 2, 3902, 20, [
+          served("0a1b2c3d", 2, "IAD"),
+          slowCall({ call: "cook_session.fetch", waitedMs: 1000 }),
+          slowCall({ call: "cook_session.fetch", waitedMs: 3890, settled: true, outcome: "ok" }),
+        ]),
+        request("/api/cook-sessions/qa-kitchen-recipe-lemon-rice", 1, 3800, 21, [], { executionModel: "durableObject", entrypoint: "CookSession" }),
+        request("/cookbooks/cmg1abcdefghijklmnopqrstu.data", 1, 5395, 30, [
+          served("ffee0011", 1, "IAD"),
+          slowCall({ call: "d1.batch", table: "Cookbook", waitedMs: 1001 }),
+        ]),
+        request("/health", 1, 20, 40, [served("ffee0011", 2, "EWR"), runsIn("ffee0011", "ORD")]),
+      ]);
+
+      expect(summary.stalledInvocations).toBe(3);
+      expect(summary.stalledRequests.map((entry: { path: string; ranOn: unknown; slowCalls: unknown[] }) => [entry.path, entry.ranOn, entry.slowCalls])).toEqual([
+        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", { isolate: "0a1b2c3d", request: 2, arrivedAt: "IAD", runsIn: "IAD" }, [
+          { call: "cook_session.fetch", operation: "read", table: null, attempt: 1, waitedMs: 1000, settled: false, outcome: null },
+          { call: "cook_session.fetch", operation: "read", table: null, attempt: 1, waitedMs: 3890, settled: true, outcome: "ok" },
+        ]],
+        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", null, []],
+        ["/cookbooks/cmg1abcdefghijklmnopqrstu.data", { isolate: "ffee0011", request: 1, arrivedAt: "IAD", runsIn: "ORD" }, [
+          { call: "d1.batch", operation: "read", table: "Cookbook", attempt: 1, waitedMs: 1001, settled: false, outcome: null },
+        ]],
+      ]);
+      expect(summary.stalledRequests[1]).toMatchObject({ executionModel: "durableObject", entrypoint: "CookSession" });
+      for (const entry of summary.stalledRequests) {
+        expect(Object.keys(entry).sort()).toEqual([...INVOCATION_KEYS, "ranOn", "slowCalls"].sort());
+      }
+
+      // A slow call counts once, when it was reported waiting, whether or not the request stalled.
+      expect(summary.slowCalls.total).toBe(3);
+      expect(summary.slowCalls.byCall).toEqual({ "cook_session.fetch": 1, "d1.batch": 1, "d1.first": 1 });
+      expect(summary.slowCalls.requests.map((entry: { path: string }) => entry.path)).toEqual([
+        "/search",
+        "/api/cook-sessions/qa-kitchen-recipe-lemon-rice",
+        "/cookbooks/cmg1abcdefghijklmnopqrstu.data",
+      ]);
+      expect(summary.slowCalls.requests[0].slowCalls).toEqual([
+        { call: "d1.first", operation: "write", table: "User", attempt: 2, waitedMs: 1002, settled: false, outcome: null },
+      ]);
+
+      expect(summary.isolates).toEqual([
+        { isolate: "0a1b2c3d", runsIn: "IAD", arrivedAt: ["IAD"], requests: 2, firstEventTimestamp: 10, lastEventTimestamp: 20 },
+        { isolate: "ffee0011", runsIn: "ORD", arrivedAt: ["EWR", "IAD"], requests: 2, firstEventTimestamp: 30, lastEventTimestamp: 40 },
+      ]);
+    });
+
+    it("reads only the fixed fields of slow-call and isolate lines, each checked against its shape", () => {
+      const { summary, raw } = summarize([
+        request("/recipes/cmg1abcdefghijklmnopqrstu.data", 1, 4000, 1, [
+          served(CANARIES.hex, "1", CANARIES.cf),
+          runsIn(CANARIES.hex, CANARIES.cf),
+          runsIn(42, "ORD"),
+          JSON.stringify({
+            event: "slow_call",
+            call: `SELECT * FROM "User" WHERE email = '${CANARIES.email}'`,
+            operation: "delete",
+            table: `User; ${CANARIES.logLine}`,
+            attempt: "2",
+            waitedMs: -5,
+            settled: "yes",
+            outcome: CANARIES.body,
+            sql: CANARIES.query,
+          }),
+          { event: "slow_call", call: "d1.raw", operation: "read", table: "Recipe", attempt: 1.5, waitedMs: 1200.7, settled: true, outcome: "error" },
+        ], { executionModel: `durable ${CANARIES.hex}`, entrypoint: 42 }),
+      ]);
+
+      expect(summary.stalledRequests[0]).toMatchObject({
+        ranOn: { isolate: null, request: null, arrivedAt: null, runsIn: null },
+        executionModel: null,
+        entrypoint: null,
+      });
+      expect(summary.isolates).toEqual([]);
+      expect(summary.stalledRequests[0].slowCalls).toEqual([
+        { call: null, operation: null, table: null, attempt: null, waitedMs: null, settled: false, outcome: null },
+        { call: "d1.raw", operation: "read", table: "Recipe", attempt: 1, waitedMs: 1200, settled: true, outcome: "error" },
+      ]);
+      expect(summary.slowCalls.byCall).toEqual({ unknown: 1 });
+      for (const [name, canary] of Object.entries(CANARIES)) {
+        expect(raw, `${name} canary leaked`).not.toContain(canary);
+      }
+    });
+
+    it("keeps the first 20 stalled requests and the first 40 requests with a slow call", () => {
+      const events = Array.from({ length: 45 }, (_, index) =>
+        request(`/r${index}`, 1, 3000, index, [slowCall({ call: "d1.first", waitedMs: 1000 })]));
+
+      const { summary } = summarize(events);
+
+      expect(summary.stalledInvocations).toBe(45);
+      expect(summary.stalledRequests).toHaveLength(20);
+      expect(summary.slowCalls.total).toBe(45);
+      expect(summary.slowCalls.requests).toHaveLength(40);
+      expect(summary.slowCalls.requests[39].path).toBe("/r39");
+    });
+
+    it("reports nothing to attach for a tail without the lines", () => {
+      const { summary } = summarize([{ outcome: "ok", event: { request: { url: "https://qa.example/", method: "GET" } } }]);
+
+      expect(summary.stalledRequests).toEqual([]);
+      expect(summary.slowCalls).toEqual({ total: 0, byCall: {}, requests: [] });
+      expect(summary.isolates).toEqual([]);
+    });
+  });
+
   it("tolerates events without a request", () => {
     const { summary } = summarize([{ outcome: "exceededCpu", exceptions: [] }]);
 
     expect(summary.nonOkInvocations).toEqual([
-      { outcome: "exceededCpu", path: "", method: null, status: null, cpuTime: null, wallTime: null, eventTimestamp: null, exceptions: [] },
+      { outcome: "exceededCpu", path: "", method: null, status: null, cpuTime: null, wallTime: null, eventTimestamp: null, executionModel: null, entrypoint: null, exceptions: [] },
     ]);
   });
 });
