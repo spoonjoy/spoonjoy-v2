@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 // Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
-const acceptedHead = "c8d29d69b1023f8c3209b127117d59c94f9c5e66";
-const tag = "v1.2.4";
-const tagCommit = "b10393e1015eaf0f0aceb98212660bfe17f1f6fd";
+const acceptedHead = "51757ba613d2099ccb7545a0de24697297447a58";
+const tag = "v1.2.5";
+const tagCommit = "cb25b43011af2af878941a87b741ad390b884030";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -66,7 +66,8 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// Paths introduced by the initial v1.2.0 CLI run; this patch updates existing files.
+// Paths introduced by the initial v1.2.0 CLI run and by v1.2.5 (portal-container and the axe
+// helper's own test); every other path in this patch updates an existing file.
 const expectedNew = [
   "app/components/ouro/breadcrumb/breadcrumb.stories.tsx",
   "app/components/ouro/breadcrumb/breadcrumb.test-d.ts",
@@ -179,8 +180,11 @@ const expectedNew = [
   "app/lib/ouro/feedback.ts",
   "app/lib/ouro/focus-handoff.test.tsx",
   "app/lib/ouro/focus-handoff.ts",
+  "app/lib/ouro/portal-container.test.tsx",
+  "app/lib/ouro/portal-container.ts",
   "app/lib/ouro/share.test.ts",
   "app/lib/ouro/share.ts",
+  "app/lib/ouro/testing/axe.test.ts",
   "app/lib/ouro/use-install-prompt.test.tsx",
   "app/lib/ouro/use-install-prompt.ts",
   "app/lib/ouro/use-timer.test.tsx",
