@@ -26,6 +26,13 @@ import { consoleSlowCallReporter, firstTable, watchSlowCall, type SlowCallReport
  * operations that know they are safe to run again do so through `retryD1Write`
  * (d1-write-retry.server.ts).
  *
+ * A read can also stall without failing: in Journeys runs on QA, single D1 calls have waited 1 to
+ * 5 seconds on no CPU while other D1 calls of the same moment answered in milliseconds (run
+ * 40241845409's cookbook page waited 5.4 s and its journey failed). So a read-only try that has
+ * not settled after `readReissueMs` is sent once more, and whichever answer arrives first is used;
+ * the other is ignored. A write is never sent again this way, because the first may still apply.
+ * Each re-issue is reported to `onReadReissue`.
+ *
  * Each transient failure, retried or not, is reported to `onTransientError` with no SQL and no
  * bound values, so the per-run QA Worker can log it for the Journeys tail summary. Each try that
  * waits longer than a second is reported to `onSlowCall` (slow-call.server.ts) with the first table
@@ -61,9 +68,29 @@ export interface D1TransientRetryOptions {
   sleep?: (ms: number) => Promise<void>;
   onTransientError?: (report: D1TransientErrorReport) => void;
   onSlowCall?: SlowCallReporter;
+  /** How long a read-only try may wait before it is sent once more; 0 turns re-issuing off. */
+  readReissueMs?: number;
+  onReadReissue?: (report: D1ReadReissueReport) => void;
+}
+
+export interface D1ReadReissueReport {
+  event: "d1_read_reissue";
+  /** The D1 call: first, all, raw, run or batch. */
+  call: string;
+  /** For a statement, the first table its SQL names; for a batch, its first statement's. */
+  table: string | null;
+  attempt: number;
+  /** Which try answered first: the original or the re-issued one. */
+  answeredBy: "original" | "reissue";
 }
 
 export const DEFAULT_D1_RETRY_DELAYS_MS: readonly number[] = [50, 150, 400];
+
+/**
+ * Longer than the slow D1 calls that still answer (about 1.0 to 1.2 s in Journeys runs), well
+ * under a journey's five-second wait.
+ */
+export const DEFAULT_D1_READ_REISSUE_MS = 1500;
 
 const TRANSIENT_KINDS: ReadonlyArray<[RegExp, D1TransientKind]> = [
   [/Network connection lost/i, "network_connection_lost"],
@@ -100,6 +127,58 @@ function mayRetry(kind: D1TransientKind, operation: D1TransientOperation): boole
 
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+function start<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return run();
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+/**
+ * Runs a read, sending it once more if it has not settled after `afterMs`, and settles with the
+ * first answer. A failure settles it only when no other try is still waiting; when both fail, the
+ * first failure is the one reported.
+ */
+function reissueStalledRead<T>(
+  run: () => Promise<T>,
+  afterMs: number,
+  onReissueAnswered: (answeredBy: D1ReadReissueReport["answeredBy"]) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let done = false;
+    let waiting = 0;
+    let reissued = false;
+    let firstError: { error: unknown } | null = null;
+    const settle = (which: D1ReadReissueReport["answeredBy"]) => (value: T) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (reissued) onReissueAnswered(which);
+      resolve(value);
+    };
+    const fail = (error: unknown) => {
+      waiting -= 1;
+      if (done) return;
+      firstError ??= { error };
+      if (waiting > 0) return;
+      done = true;
+      clearTimeout(timer);
+      reject(firstError.error);
+    };
+    const launch = (which: D1ReadReissueReport["answeredBy"]) => {
+      waiting += 1;
+      start(run).then(settle(which), fail);
+    };
+    // Cleared as soon as the read settles, so it fires only while the original is still waiting.
+    const timer = setTimeout(() => {
+      reissued = true;
+      launch("reissue");
+    }, afterMs);
+    launch("original");
+  });
+}
+
 async function withRetry<T>(
   options: D1TransientRetryOptions,
   operation: D1TransientOperation,
@@ -109,9 +188,19 @@ async function withRetry<T>(
 ): Promise<T> {
   const delays = options.delaysMs ?? DEFAULT_D1_RETRY_DELAYS_MS;
   const sleep = options.sleep ?? realSleep;
+  const reissueMs = options.readReissueMs ?? DEFAULT_D1_READ_REISSUE_MS;
   for (let attempt = 1; ; attempt += 1) {
+    const tryOnce = operation === "read" && reissueMs > 0
+      ? () => reissueStalledRead(run, reissueMs, (answeredBy) => {
+        try {
+          options.onReadReissue?.({ event: "d1_read_reissue", call, table, attempt, answeredBy });
+        } catch {
+          // Reporting is evidence only; it must never change the query's outcome.
+        }
+      })
+      : run;
     try {
-      return await watchSlowCall({ call: `d1.${call}`, operation, table, attempt }, run, options.onSlowCall);
+      return await watchSlowCall({ call: `d1.${call}`, operation, table, attempt }, tryOnce, options.onSlowCall);
     } catch (error) {
       const kind = d1TransientKind(error);
       if (!kind) throw error;
@@ -204,14 +293,14 @@ export function withD1TransientRetry<T>(db: T, options: D1TransientRetryOptions 
  */
 export function withTransientD1Retry<E extends { DB?: unknown; SPOONJOY_QA_ERROR_LOGS?: string }>(
   env: E,
-  options: Omit<D1TransientRetryOptions, "onTransientError" | "onSlowCall"> = {},
+  options: Omit<D1TransientRetryOptions, "onTransientError" | "onSlowCall" | "onReadReissue"> = {},
 ): E {
   if (!env.DB) return env;
   const qaLogs = qaErrorLogsEnabled(env);
-  const onTransientError = qaLogs
-    ? (report: D1TransientErrorReport) => console.warn(JSON.stringify(report))
-    : undefined;
+  const log = (report: object) => console.warn(JSON.stringify(report));
+  const onTransientError = qaLogs ? log : undefined;
   const onSlowCall = qaLogs ? consoleSlowCallReporter() : undefined;
-  const DB = withD1TransientRetry(env.DB, { ...options, onTransientError, onSlowCall });
+  const onReadReissue = qaLogs ? log : undefined;
+  const DB = withD1TransientRetry(env.DB, { ...options, onTransientError, onSlowCall, onReadReissue });
   return DB === env.DB ? env : { ...env, DB };
 }
