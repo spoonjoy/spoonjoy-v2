@@ -74,6 +74,8 @@ function describeFindings(findings: GateFinding[]): string {
  * axe could not decide unless a measurement passes it:
  *
  * - text contrast, only when the worst pixel behind the text meets WCAG 1.4.3 ({@link measureTextContrast});
+ * - a link in a block of text, only when, measured from a screenshot, its text color or its
+ *   background stands out 3:1 from its block's, or neither differs at all, as axe itself allows;
  * - a popup trigger's `aria-controls`, only when every element it names is on the page or the trigger is collapsed;
  * - focusable content hidden from assistive technology, only when Tab never focuses it while it is still hidden;
  * - an ARIA toggle inside a `<label>`, only when its name and description hold every word of the label;
@@ -89,6 +91,7 @@ function describeFindings(findings: GateFinding[]): string {
  * @claim "An accessibility scan that fails closed" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a violation whatever its impact: content outside every landmark is only moderate)
  * @claim "An accessibility scan that fails closed" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > measures text once its color transitions finish, as after a switch to dark)
  * @claim "text contrast, only when the worst" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes text over a gradient when every pixel behind it meets 4.5:1, and fails faint text over the same gradient)
+ * @claim "a link in a block of text," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > settles a link in running text whose block's background axe cannot read, as under an open list, by measuring the link against the text around it)
  * @claim "a popup trigger's `aria-controls`, only when" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a popup trigger whose expanded popup is missing, and passes it once the popup is there)
  * @claim "focusable content hidden from assistive technology," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a control hidden from assistive technology under a modal when Tab still reaches it, and passes it when the page is inert)
  * @claim "focusable content hidden from assistive technology," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a control hidden at rest that shows itself in the event that focuses it, as a toast's dismiss button does)
@@ -153,6 +156,15 @@ async function auditOnce(context: axe.ElementContext, last: boolean): Promise<Ga
       const verdict = verdicts[index]!.pass || root === item.element ? verdicts[index]! : (await measureTexts(item.element, [item], last))[0]!;
       measured.set(item.node, verdict);
     }
+  }
+  // A link in a block of text whose colors axe could not read, as when an open list lies over the
+  // block where axe reads its background: measured against the text around it from a screenshot.
+  for (const { rule, node } of undecided) {
+    const block = checksOf(node).find((check) => check.id === "link-in-text-block")?.relatedNodes?.[0];
+    if (rule.id !== "link-in-text-block" || !block) continue;
+    const link = elementOf(node);
+    const parent = elementOf(block);
+    measured.set(node, link && parent ? await measureLinkInText(link, parent) : gone());
   }
   // Focusable content hidden from assistive technology: one Tab walk around the page for all of it.
   // Walks move focus, which can show a tooltip, so they run after every other measurement.
@@ -528,6 +540,154 @@ async function measureTexts(root: Element, items: { element: Element; required: 
     pending = pending.filter((item) => !batch.includes(item));
   }
   return items.map((item) => verdicts.get(item)!);
+}
+
+// Whether an element lays out as a block, as axe counts one: an inline-block is one too.
+const isBlock = (element: Element) => {
+  const { display } = getComputedStyle(element);
+  return ["block", "list-item", "table", "flex", "grid", "inline-block"].includes(display) || display.startsWith("table-");
+};
+
+// An element's text color as painted: its own, times its opacity and every ancestor's.
+function paintedColor(element: Element): Rgba {
+  const color = toRgba(getComputedStyle(element).color);
+  return { ...color, a: color.a * paintedOpacity(element) };
+}
+
+// The boxes of the lines of text in `container` on the screen, of the elements `keep` lets in.
+function lineBoxes(container: Element, keep: (element: Element) => boolean): { element: Element; box: DOMRect }[] {
+  const lines: { element: Element; box: DOMRect }[] = [];
+  const range = document.createRange();
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const element = node.parentElement!;
+    if (!node.textContent!.trim() || !keep(element) || !element.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+    range.selectNodeContents(node);
+    for (const box of range.getClientRects()) {
+      if (box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0 && box.left < innerWidth && box.top < innerHeight) lines.push({ element, box });
+    }
+  }
+  return lines;
+}
+
+// A contrast ratio as axe states it: cut to two decimals.
+const cut = (ratio: number) => Math.floor(ratio * 100) / 100;
+
+// Settles axe's link-in-text-block check where axe could not read the colors, by axe's rule for
+// it with its options (3:1, the same color allowed), on what a screenshot shows: the link's color
+// against its block's, each painted over what is behind it, and, where something between the link
+// and the block paints a background of its own, the background behind the link's text against the
+// one behind the block's text around it (outside other links and inner blocks). A background is
+// the mean of the pixels behind those lines, glyphs hidden, that nothing else covers.
+async function measureLinkInText(link: Element, block: Element): Promise<Verdict> {
+  link.scrollIntoView({ block: "center", inline: "nearest" });
+  await settleTransitions();
+  const own = lineBoxes(link, () => true);
+  let painted = false;
+  for (let element: Element | null = link; element && element !== block; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    if (toRgba(style.backgroundColor).a > 0 || style.backgroundImage !== "none") painted = true;
+  }
+  // Without a background of its own, the link's text and the block's are on one surface.
+  const around = painted
+    ? lineBoxes(block, (element) => {
+        if (element.closest('a[href], [role="link"]')) return false;
+        for (let parent: Element | null = element; parent && parent !== block; parent = parent.parentElement) if (isBlock(parent)) return false;
+        return true;
+      })
+    : [];
+  const unseen = "axe could not judge whether it stands out from the text around it, and no text of it and around it shows to measure";
+  if (own.length === 0 || (painted && around.length === 0)) return { pass: false, reason: unseen };
+  // A still, transparent box over those lines: its screenshot is the page there.
+  const boxes = [...own, ...around].map(({ box }) => box);
+  const left = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.left))));
+  const top = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.top))));
+  const right = Math.min(innerWidth, Math.ceil(Math.max(...boxes.map((box) => box.right))));
+  const bottom = Math.min(innerHeight, Math.ceil(Math.max(...boxes.map((box) => box.bottom))));
+  const probe = document.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  Object.assign(probe.style, { position: "fixed", left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px`, pointerEvents: "none" });
+  const hide = document.createElement("style");
+  hide.textContent = hideGlyphs;
+  document.head.append(hide);
+  document.body.append(probe);
+  let context: CanvasRenderingContext2D;
+  try {
+    // A transformed or filtered page places a fixed box by itself, not by the screen.
+    const placed = probe.getBoundingClientRect();
+    if (Math.abs(placed.left - left) > 0.5 || Math.abs(placed.top - top) > 0.5) throw new Error("the page moves a fixed box away from where it is placed");
+    context = await screenshot(probe);
+  } catch (error) {
+    return { pass: false, reason: `axe could not judge whether it stands out from the text around it, and it could not be screenshotted: ${(error as Error).message.split("\n")[0]}` };
+  } finally {
+    probe.remove();
+    hide.remove();
+  }
+  const scale = context.canvas.width / (right - left);
+  // Whether an element paints nothing of its own, as Base UI's invisible backdrop under a modal
+  // menu or list, which lies over the whole screen: no background, border, shadow or own text.
+  const bare = new Map<Element, boolean>();
+  const paintsNothing = (element: Element) => {
+    let known = bare.get(element);
+    if (known === undefined) {
+      const style = getComputedStyle(element);
+      const borders = ["top", "right", "bottom", "left"].some((side) => Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0);
+      const text = [...element.childNodes].some((child) => child.nodeType === Node.TEXT_NODE && child.textContent!.trim());
+      const replaced = /^(img|svg|canvas|video|iframe|input|textarea|select|object|embed)$/.test(element.localName);
+      known = toRgba(style.backgroundColor).a === 0 && style.backgroundImage === "none" && !borders && style.boxShadow === "none" && !text && !replaced;
+      bare.set(element, known);
+    }
+    return known;
+  };
+  // Whether the line's own element, or what holds it, is the first thing that paints at a point.
+  const showsAt = (element: Element, x: number, y: number) => {
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit.contains(element) || element.contains(hit)) return true;
+      if (!paintsNothing(hit)) return false;
+    }
+    return false;
+  };
+  // The mean of the pixels behind the lines where the line's own element, or what holds it, shows.
+  const behind = (lines: { element: Element; box: DOMRect }[]): Rgba | null => {
+    const sum = { r: 0, g: 0, b: 0, count: 0 };
+    for (const { element, box } of lines) {
+      const x = Math.max(0, Math.floor((box.left - left) * scale));
+      const y = Math.max(0, Math.floor((box.top - top) * scale));
+      const width = Math.min(context.canvas.width, Math.ceil((box.right - left) * scale)) - x;
+      const height = Math.min(context.canvas.height, Math.ceil((box.bottom - top) * scale)) - y;
+      if (width <= 0 || height <= 0) continue;
+      const pixels = context.getImageData(x, y, width, height).data;
+      // Hit-tested once a screen pixel, at its centre.
+      const seen = new Map<string, boolean>();
+      for (let index = 0; index < pixels.length; index += 4) {
+        const pixel = index / 4;
+        const pointX = Math.floor(left + (x + (pixel % width) + 0.5) / scale) + 0.5;
+        const pointY = Math.floor(top + (y + Math.floor(pixel / width) + 0.5) / scale) + 0.5;
+        const key = `${pointX},${pointY}`;
+        if (!seen.has(key)) {
+          seen.set(key, showsAt(element, pointX, pointY));
+        }
+        if (!seen.get(key)) continue;
+        sum.r += pixels[index]!;
+        sum.g += pixels[index + 1]!;
+        sum.b += pixels[index + 2]!;
+        sum.count++;
+      }
+    }
+    return sum.count > 0 ? { r: sum.r / sum.count, g: sum.g / sum.count, b: sum.b / sum.count, a: 1 } : null;
+  };
+  const linkBackground = behind(own);
+  // Covered wholly, as by an open popup, the link shows nothing to tell apart.
+  if (!linkBackground) return { pass: true };
+  const blockBackground = painted ? behind(around) : linkBackground;
+  if (!blockBackground) return { pass: false, reason: unseen };
+  const text = cut(contrast(over(paintedColor(link), linkBackground), over(paintedColor(block), blockBackground)));
+  const background = cut(contrast(linkBackground, blockBackground));
+  if (text >= 3 || background >= 3 || (text === 1 && background === 1)) return { pass: true };
+  return {
+    pass: false,
+    reason: `measured ${text.toFixed(2)}:1 between its text and its block's text, and ${background.toFixed(2)}:1 between their backgrounds; needs 3:1 for either, or a style that does not rely on color, such as an underline`,
+  };
 }
 
 /** What hides an element from assistive technology. */

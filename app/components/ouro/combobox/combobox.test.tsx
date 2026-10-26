@@ -113,7 +113,7 @@ describe("Combobox", () => {
 
   it("leaves the rest of the page exposed while its list is open, so the gate passes from the page's main landmark", async () => {
     const main = document.createElement("main");
-    main.innerHTML = '<h1>Recipes</h1><a href="#notes">Notes</a><span aria-hidden="true" data-ornament="">~</span>';
+    main.innerHTML = '<h1>Recipes</h1><a href="#notes">Notes</a><span> for each recipe</span><span aria-hidden="true" data-ornament="">~</span>';
     document.body.append(main);
     mounted.push(main);
     const host = document.createElement("div");
@@ -136,6 +136,12 @@ describe("Combobox", () => {
     await userEvent.click(host.querySelector<HTMLInputElement>('input[role="combobox"]')!);
     await expect.poll(popup).not.toBeNull();
     await expect.poll(hidden).toEqual(before);
+    // The list lies over the middle of main, where axe reads the background of the block the link
+    // sits in, as on an app's page whose main reaches past the list (main holds no text of its own).
+    const list = popup()!.getBoundingClientRect();
+    main.style.height = `${2 * (list.top + list.height / 2 - main.getBoundingClientRect().top)}px`;
+    const middle = main.getBoundingClientRect();
+    expect(popup()!.contains(document.elementFromPoint(middle.left + middle.width / 2, middle.top + middle.height / 2))).toBe(true);
     expect(describeFindings(await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) }))).toBe("");
     // What the list hides itself, what the page hides inside what Base UI marked, what a dialog
     // opened over the list hides, and what anything hides once the list is closed, stays hidden.

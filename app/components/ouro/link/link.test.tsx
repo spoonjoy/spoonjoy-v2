@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { Link } from "~/components/ouro/link/link";
 import { OuroProvider, type OuroLinkComponent } from "~/lib/ouro/ouro-provider";
 import { act } from "~/lib/ouro/testing/act";
@@ -202,6 +202,7 @@ describe("Link", () => {
   it("marks keyboard focus in running text with a thick underline in the ring's colour, not an outline drawn over the next character", async () => {
     const { host } = await render(
       <>
+        <span data-rest="">Rest</span>
         <Link href="/alone">Alone</Link>
         <p>
           From <Link href="/ari">Ari</Link>, with lemon.
@@ -223,6 +224,9 @@ describe("Link", () => {
       return { outline: `${style.outlineStyle} ${style.outlineColor}`, underline: `${style.textDecorationThickness} ${style.textDecorationColor}` };
     };
     const ring = getComputedStyle(host.querySelector('a[href="/alone"]')!).outlineColor;
+    // Hover darkens a resting underline, and the pointer rests where an earlier test left it, which
+    // can be over a link here: it rests on text that is no link instead.
+    await userEvent.hover(host.querySelector("[data-rest]")!);
     const alone = focused("/alone");
     expect(alone.outline).toBe(`solid ${ring}`);
     // A transparent outline draws nothing, and forced colours show it, as they drop the underline's colour.

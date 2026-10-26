@@ -284,6 +284,35 @@ describe("audit", () => {
     expect(rules(await scanPage())).not.toContain("undecided aria-hidden-focus");
   });
 
+  it("settles a link in running text whose block's background axe cannot read, as under an open list, by measuring the link against the text around it", async () => {
+    // Each paragraph's text is all in elements, so axe reads its background at its middle, below
+    // its line, where a box lies over it.
+    const paragraph = (id: string, link: string, more = "", background = "#fff") =>
+      `<p style="position:relative;margin:0 0 8px;padding-bottom:48px;color:#111;background:${background};font-size:16px;line-height:24px"><span>Read </span><a id="${id}" href="#${id}" style="text-decoration:none;${link}">the notes</a><span id="${id}-after"> before you cook.</span>${more}` +
+      '<span style="position:absolute;left:calc(50% - 12px);top:24px;width:24px;height:24px;background:#333"></span></p>';
+    mountPage(
+      // The same color as the text, on white and on a gradient; a blue that stands out; a gray that does not.
+      paragraph("same", "color:inherit") +
+        paragraph("graded", "color:inherit", "", "linear-gradient(90deg,#fff,#ccc)") +
+        paragraph("blue", "color:#2563eb") +
+        paragraph("faint", "color:#333") +
+        // A background that stands out, beside a badge and a link whose dark backgrounds are not the paragraph's.
+        paragraph("highlit", "color:inherit;background:#7f7f7f", ' <span style="display:inline-block;background:#000;color:#fff">New</span> <a href="#more" style="background:#000;color:#fff">more</a>') +
+        // A background that does not, though a dark box covers the text after it.
+        paragraph("tinted", "color:inherit;background:#eee"),
+    );
+    // An open modal list's invisible backdrop over the whole screen, which paints nothing.
+    document.body.insertAdjacentHTML("beforeend", '<div data-base-ui-portal=""><div role="presentation" data-base-ui-inert="" style="position:fixed;inset:0"></div></div>');
+    const after = textBox(document.querySelector("#tinted-after")!);
+    document.querySelector("#tinted-after")!.insertAdjacentHTML("afterend", '<span id="cover" style="position:fixed;background:#000"></span>');
+    Object.assign(document.querySelector<HTMLElement>("#cover")!.style, { left: `${after.left + 8}px`, top: `${after.top}px`, width: `${after.width - 8}px`, height: `${after.height}px` });
+    const findings = (await scanPage()).filter((finding) => finding.rule === "link-in-text-block");
+    expect(findings.map((finding) => `${finding.undecided ? "undecided " : ""}${finding.rule} ${finding.target}: ${finding.summary}`)).toEqual([
+      expect.stringMatching(/^undecided link-in-text-block #faint: measured 1\.\d\d:1 between its text and its block's text, and 1\.00:1 between their backgrounds; needs 3:1 for either, or a style that does not rely on color, such as an underline$/),
+      expect.stringMatching(/^undecided link-in-text-block #tinted: measured 1\.00:1 between its text and its block's text, and 1\.\d\d:1 between their backgrounds; needs 3:1/),
+    ]);
+  });
+
   it("counts a popup's shadow on the text as the popup's, as it is drawn by the open popup", async () => {
     mountPage('<p id="beside" style="margin:0;color:#555;background:#fff;font-size:16px;line-height:24px">Beside the calendar</p>');
     document.body.insertAdjacentHTML("beforeend", '<div data-base-ui-portal=""><div role="dialog" aria-label="Calendar" style="position:fixed;width:120px;height:120px;background:#fff;box-shadow:0 0 16px 16px rgba(0,0,0,0.6)"></div></div>');
