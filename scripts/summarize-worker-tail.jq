@@ -52,7 +52,7 @@ def d1_write_retry_reports:
     | { outcome: (if .outcome == "retry" or .outcome == "applied" or .outcome == "gave_up" then .outcome else "other" end) }];
 
 # The slow_call reports in an event's log lines (app/lib/slow-call.server.ts): a D1 call or a
-# cook-session Durable Object call that waited over a second, with only their fixed fields, each
+# cook-session Durable Object call that waited past its threshold, with only their fixed fields, each
 # checked against the shape the Worker writes.
 def ident: if type == "string" and test("^[A-Za-z_][A-Za-z0-9_.]{0,63}$") then . else null end;
 def count_or_null: if type == "number" and . >= 0 then floor else null end;
@@ -70,13 +70,14 @@ def slow_call_reports:
         outcome: (if .outcome == "ok" or .outcome == "error" then .outcome else null end) }];
 
 # The d1_read_reissue reports (app/lib/d1-transient-retry.server.ts): a read-only D1 try that had
-# not settled by its deadline and was sent once more, with only which try answered first.
+# not settled by its deadline and was sent once more, with only which try answered first, or
+# "neither" when both failed.
 def d1_read_reissue_reports:
   [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
     | (.message // []) | if type == "array" then .[] else . end
     | (if type == "string" then (try fromjson catch null) else . end)
     | select(type == "object" and .event == "d1_read_reissue")
-    | { answeredBy: (if .answeredBy == "original" or .answeredBy == "reissue" then .answeredBy else "other" end) }];
+    | { answeredBy: (if .answeredBy == "original" or .answeredBy == "reissue" or .answeredBy == "neither" then .answeredBy else "other" end) }];
 
 # The isolate_request and isolate_colo lines a per-run QA Worker writes (app/lib/slow-call.server.ts):
 # which isolate served the request, its count of requests, the location the request arrived at,
@@ -283,7 +284,7 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
   # names the D1 call (and table) or the Durable Object call that held it. A stall with no slow
   # call waited somewhere else.
   stalledRequests: ([.[] | select(stalled) | with_wait_evidence] | .[0:20]),
-  # Every call that waited over a second, stalled request or not: how many, by call, and the first
+  # Every call that waited past its threshold, stalled request or not: how many, by call, and the first
   # 40 requests that made one.
   slowCalls: ([.[] | select(slow_call_reports | length > 0)] as $slow
     | [$slow[] | slow_call_reports[] | select(.settled | not)] as $waits
@@ -323,9 +324,11 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
           applied: ([$operations[] | select(.outcome == "applied")] | length),
           gaveUp: ([$operations[] | select(.outcome == "gave_up")] | length) } })),
   # Read-only D1 tries that stalled past their deadline and were sent again, and how many of them
-  # the re-issued try answered.
+  # the re-issued try answered, and how many failed both times.
   d1ReadReissues: ([.[] | d1_read_reissue_reports[]]
-    | { total: length, answeredByReissue: ([.[] | select(.answeredBy == "reissue")] | length) }),
+    | { total: length,
+        answeredByReissue: ([.[] | select(.answeredBy == "reissue")] | length),
+        failedBoth: ([.[] | select(.answeredBy == "neither")] | length) }),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints

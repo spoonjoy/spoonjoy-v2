@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "../warning-policy";
 import {
   d1TransientKind,
+  DEFAULT_D1_MAX_READ_REISSUES,
   DEFAULT_D1_READ_REISSUE_MS,
   DEFAULT_D1_RETRY_DELAYS_MS,
   isReadOnlySql,
@@ -341,11 +342,12 @@ describe("D1 tries that wait over a second", () => {
     expect(pending).toHaveLength(4);
   });
 
-  it("logs a waiting try as one JSON line on a per-run QA Worker only, and runs no timer elsewhere", async () => {
+  it("logs a waiting try as one JSON line on a per-run QA Worker only; elsewhere the only timer is the re-issue's", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const quiet = pendingD1();
-    void withTransientD1Retry({ DB: quiet.db }, { readReissueMs: 0 }).DB.prepare("SELECT 1 FROM T").all();
-    expect(vi.getTimerCount()).toBe(0);
+    void withTransientD1Retry({ DB: quiet.db }).DB.prepare("SELECT 1 FROM T").all();
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(DEFAULT_D1_READ_REISSUE_MS);
 
     expectConsoleWarning(JSON.stringify({
       event: "slow_call", call: "d1.all", operation: "read", table: "T", attempt: 1, waitedMs: 1000, settled: false, outcome: null,
@@ -460,7 +462,7 @@ describe("D1 reads that stall without failing", () => {
   it("waits for the other try when one fails, and reports the first failure when both do", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { db, sent } = stallingD1();
-    const { wrapped } = reissuing(db, { readReissueMs: 100 });
+    const { wrapped, reissues } = reissuing(db, { readReissueMs: 100 });
 
     const recovered = wrapped.prepare("SELECT 1 FROM T").raw();
     await vi.advanceTimersByTimeAsync(100);
@@ -476,6 +478,32 @@ describe("D1 reads that stall without failing", () => {
     await vi.advanceTimersByTimeAsync(0);
     sent[2].reject(UNIQUE);
     await expect(failed).rejects.toBe(second);
+    expect(reissues.map((report) => report.answeredBy)).toEqual(["reissue", "neither"]);
+  });
+
+  it("re-issues at most a few reads for one wrapped binding, and a new binding starts again", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { db, sent } = stallingD1();
+    const { wrapped, reissues } = reissuing(db, { readReissueMs: 100 });
+
+    for (let read = 0; read < DEFAULT_D1_MAX_READ_REISSUES + 1; read += 1) void wrapped.prepare("SELECT 1 FROM T").first();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sent).toHaveLength(2 * DEFAULT_D1_MAX_READ_REISSUES + 1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const spent = reissuing(db, { readReissueMs: 100, maxReadReissues: 0 }).wrapped;
+    void spent.prepare("SELECT 1 FROM T").first();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sent).toHaveLength(2 * DEFAULT_D1_MAX_READ_REISSUES + 2);
+
+    const next = reissuing(db, { readReissueMs: 100 });
+    const read = next.wrapped.prepare("SELECT 1 FROM T").first();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sent).toHaveLength(2 * DEFAULT_D1_MAX_READ_REISSUES + 4);
+    sent.at(-1)!.resolve({ ok: 1 });
+    await expect(read).resolves.toEqual({ ok: 1 });
+    expect(next.reissues).toEqual([{ event: "d1_read_reissue", call: "first", table: "T", attempt: 1, answeredBy: "reissue" }]);
+    expect(reissues).toEqual([]);
   });
 
   it("retries a transient failure of both tries as one failed attempt, re-issuing the next attempt too", async () => {
@@ -493,7 +521,10 @@ describe("D1 reads that stall without failing", () => {
     sent[3].resolve({ ok: 1 });
 
     await expect(read).resolves.toEqual({ ok: 1 });
-    expect(reissues).toEqual([{ event: "d1_read_reissue", call: "first", table: "T", attempt: 2, answeredBy: "reissue" }]);
+    expect(reissues).toEqual([
+      { event: "d1_read_reissue", call: "first", table: "T", attempt: 1, answeredBy: "neither" },
+      { event: "d1_read_reissue", call: "first", table: "T", attempt: 2, answeredBy: "reissue" },
+    ]);
   });
 
   it("re-issues a read whose call throws before it returns a promise only as a failure", async () => {

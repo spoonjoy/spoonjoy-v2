@@ -222,14 +222,14 @@ describe("summarize-worker-tail.jq", () => {
     expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0, writeOperations: none });
   });
 
-  it("counts the D1 reads sent again after stalling, and how many the re-issued try answered, reading only that field", () => {
+  it("counts the D1 reads sent again after stalling, how many the re-issued try answered and how many failed both times, reading only that field", () => {
     const line = (answeredBy: unknown) => JSON.stringify({ event: "d1_read_reissue", call: "batch", table: "Cookbook", attempt: 1, answeredBy, sql: CANARIES.query });
     const { summary, raw } = summarize([
-      { outcome: "ok", logs: [{ level: "warn", message: [line("reissue")] }, { level: "warn", message: [line("original")] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [line("reissue")] }, { level: "warn", message: [line("original")] }, { level: "warn", message: [line("neither")] }] },
       { outcome: "ok", logs: [{ level: "warn", message: [{ event: "d1_read_reissue", answeredBy: CANARIES.body }] }, { level: "warn", message: ["not json"] }] },
     ]);
 
-    expect(summary.d1ReadReissues).toEqual({ total: 3, answeredByReissue: 1 });
+    expect(summary.d1ReadReissues).toEqual({ total: 4, answeredByReissue: 1, failedBoth: 1 });
     expect(raw).not.toContain(CANARIES.query);
     expect(raw).not.toContain(CANARIES.body);
   });

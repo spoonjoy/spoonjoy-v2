@@ -113,11 +113,15 @@ export function consoleSlowCallReporter(): SlowCallReporter {
   return (report) => console.warn(JSON.stringify(report));
 }
 
-const TABLE = /\b(?:FROM|INTO|UPDATE|JOIN)\s+[`"[]?([A-Za-z_][A-Za-z0-9_]{0,63})/i;
+// Prisma names a table with its schema, as `main`.`User`, so an optional `main.` is skipped.
+const TABLE = /\b(?:FROM|INTO|UPDATE|JOIN)\s+(?:[`"[]?main[`"\]]?\.)?[`"[]?([A-Za-z_][A-Za-z0-9_]{0,63})/i;
 
-/** The first table a statement names, or null. Only an identifier ever leaves this function. */
+/**
+ * The first table a statement names, or null. String literals are blanked first, so a word inside
+ * one is never taken for a table. Only an identifier ever leaves this function.
+ */
 export function firstTable(sql: string): string | null {
-  return TABLE.exec(sql)?.[1] ?? null;
+  return TABLE.exec(sql.replace(/'(?:[^']|'')*'/g, "''"))?.[1] ?? null;
 }
 
 /**

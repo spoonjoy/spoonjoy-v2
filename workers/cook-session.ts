@@ -156,9 +156,9 @@ export class CookSession {
     return new Proxy(storage, {
       get(target, property) {
         if (property === "setAlarm") {
-          return (scheduledTime: number) => watchSlowCall(
+          return (...args: Parameters<CookSessionStorage["setAlarm"]>) => watchSlowCall(
             { call: "cook_session.set_alarm", operation: "write" },
-            () => target.setAlarm(scheduledTime),
+            () => target.setAlarm(...args),
             report,
             undefined,
             COOK_SESSION_SLOW_MS,

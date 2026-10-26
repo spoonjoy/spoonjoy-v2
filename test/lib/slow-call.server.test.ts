@@ -188,6 +188,10 @@ describe("firstTable", () => {
     ['UPDATE "Cookbook" SET title = ?', "Cookbook"],
     ["SELECT 1 FROM [Recipe]", "Recipe"],
     ["SELECT a.id FROM (SELECT 1) a JOIN Ingredient i ON 1", "Ingredient"],
+    ["SELECT `main`.`User`.`id` FROM `main`.`User` WHERE `main`.`User`.`id` = ?", "User"],
+    ['SELECT "id" FROM main."Recipe"', "Recipe"],
+    ["SELECT 'moved from home' AS note FROM Cookbook", "Cookbook"],
+    ["SELECT 'it''s from here' FROM Recipe", "Recipe"],
     ["SELECT ? AS value", null],
     ["FROM", null],
   ])("names the first table of %s", (sql, table) => {
