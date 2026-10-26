@@ -64,6 +64,30 @@ describe("OuroProvider and useOuro", () => {
     expect(received).toBe(container.querySelector("a"));
   });
 
+  it("gives its portalContainer to what it wraps, keeps an outer one when it sets none, and drops it when it sets null", async () => {
+    const popups = document.body.appendChild(document.createElement("div"));
+    const seen: unknown[] = [];
+    function Read() {
+      seen.push(useOuro().portalContainer);
+      return null;
+    }
+    await mount(
+      <>
+        <Read />
+        <OuroProvider portalContainer={popups}>
+          <Read />
+          <OuroProvider>
+            <Read />
+            <OuroProvider portalContainer={null}>
+              <Read />
+            </OuroProvider>
+          </OuroProvider>
+        </OuroProvider>
+      </>,
+    );
+    expect(seen).toEqual([undefined, popups, popups, undefined]);
+  });
+
   it("renders on the server without a crash", () => {
     const html = renderToString(
       <OuroProvider>

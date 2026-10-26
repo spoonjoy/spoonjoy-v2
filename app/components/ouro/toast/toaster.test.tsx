@@ -796,6 +796,37 @@ describe("toast()", () => {
     expect(Number(getComputedStyle(toastNamed("Third")!).zIndex)).toBeGreaterThan(Number(getComputedStyle(toastNamed("First")!).zIndex));
   });
 
+  it("hides the dismiss buttons and a destructive toast from assistive technology only while no key has focus in the toasts, and shows them in the same event that focuses one", async () => {
+    await render(<Toaster />);
+    // No countdown, so both stay while Tab walks through them.
+    await show("Recipe saved", { tone: "success", duration: Infinity });
+    await show("Couldn't sync", { tone: "destructive", action: { label: "Retry", onClick: () => {} } });
+    const close = (message: string) => toastNamed(message)!.querySelector<HTMLButtonElement>('[data-ouro-part="close"]')!;
+    // At rest the alert announces the destructive toast, and the region announces no dismiss button.
+    expect(close("Recipe saved").getAttribute("aria-hidden")).toBe("true");
+    expect(toastNamed("Couldn't sync")!.getAttribute("aria-hidden")).toBe("true");
+    // Tab shows each one within the event that focuses it: by the time the focus event reaches the
+    // document, the last listener, nothing focused is hidden.
+    const hiddenOnFocus: boolean[] = [];
+    const record = (event: FocusEvent) => hiddenOnFocus.push((event.target as Element).closest('[aria-hidden="true"]') !== null);
+    document.addEventListener("focusin", record);
+    const button = document.createElement("button");
+    button.textContent = "Before";
+    document.body.prepend(button);
+    mounted.push(button);
+    button.focus();
+    const reached = new Set<Element>();
+    for (let press = 0; press < 8; press++) {
+      await pressTab();
+      if (viewport()!.contains(document.activeElement)) reached.add(document.activeElement!);
+    }
+    document.removeEventListener("focusin", record);
+    expect(reached).toContain(close("Recipe saved"));
+    expect(reached).toContain(toastNamed("Couldn't sync"));
+    expect(hiddenOnFocus.length).toBeGreaterThanOrEqual(reached.size);
+    expect(hiddenOnFocus).not.toContain(true);
+  });
+
   it("is announced once: politely through the Notifications region, and a destructive toast assertively (Review Focus 5)", async () => {
     await render(<Toaster />);
     const announced = watchAnnouncements();

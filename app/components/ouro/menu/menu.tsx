@@ -31,6 +31,7 @@ import { RouterLink } from "~/lib/ouro/router-link";
 import { toneWarning } from "~/lib/ouro/tones";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useSheetPresentation } from "~/lib/ouro/use-sheet-presentation";
+import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 import { Kbd } from "~/components/ouro/kbd/kbd";
 import {
   menuBackdropClass,
@@ -347,33 +348,36 @@ function MenuSurface({
   closeLabel?: string | undefined;
 }): JSX.Element {
   const Positioner = context ? ContextMenu.Positioner : BaseMenu.Positioner;
+  const portal = usePortalContainer("Menu");
   return (
-    <BaseMenu.Portal data-ouro="menu-portal" className={floatingPortalClass}>
-      {sheet && <BaseMenu.Backdrop data-ouro="menu-backdrop" className={menuBackdropClass} />}
-      <Positioner
-        data-ouro="menu-positioner"
-        className={sheet ? menuSheetPositionerClass : menuPositionerClass}
-        sideOffset={context ? 0 : 4}
-        collisionPadding={8}
-        {...(side ? { side } : {})}
-        {...(align ? { align } : {})}
-      >
-        <BaseMenu.Popup
-          data-ouro="menu"
-          data-ouro-presentation={sheet ? "sheet" : "menu"}
-          className={cn(sheet ? menuSheetPopupClass : menuPopupClass, sheet ? undefined : className)}
+    <BaseMenu.Portal {...portal} data-ouro="menu-portal" className={floatingPortalClass}>
+      <PortalScope>
+        {sheet && <BaseMenu.Backdrop data-ouro="menu-backdrop" className={menuBackdropClass} />}
+        <Positioner
+          data-ouro="menu-positioner"
+          className={sheet ? menuSheetPositionerClass : menuPositionerClass}
+          sideOffset={context ? 0 : 4}
+          collisionPadding={8}
+          {...(side ? { side } : {})}
+          {...(align ? { align } : {})}
         >
-          <MenuContext.Provider value={{ sheet }}>{children}</MenuContext.Provider>
-          {sheet && closeLabel !== undefined && (
-            <>
-              <BaseMenu.Separator className={menuSeparatorClass} />
-              <BaseMenu.Item data-ouro-menu-close="" data-ouro-control="menu" data-ouro-part="close" className={menuItemClass}>
-                <span data-ouro-menu-label="">{closeLabel}</span>
-              </BaseMenu.Item>
-            </>
-          )}
-        </BaseMenu.Popup>
-      </Positioner>
+          <BaseMenu.Popup
+            data-ouro="menu"
+            data-ouro-presentation={sheet ? "sheet" : "menu"}
+            className={cn(sheet ? menuSheetPopupClass : menuPopupClass, sheet ? undefined : className)}
+          >
+            <MenuContext.Provider value={{ sheet }}>{children}</MenuContext.Provider>
+            {sheet && closeLabel !== undefined && (
+              <>
+                <BaseMenu.Separator className={menuSeparatorClass} />
+                <BaseMenu.Item data-ouro-menu-close="" data-ouro-control="menu" data-ouro-part="close" className={menuItemClass}>
+                  <span data-ouro-menu-label="">{closeLabel}</span>
+                </BaseMenu.Item>
+              </>
+            )}
+          </BaseMenu.Popup>
+        </Positioner>
+      </PortalScope>
     </BaseMenu.Portal>
   );
 }

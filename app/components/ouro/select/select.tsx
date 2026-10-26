@@ -20,6 +20,7 @@ import { controlRef } from "~/lib/ouro/control-ref";
 import { FieldOwnerContext, useField, useFormErrors, type ReadonlyErrorMessages } from "~/lib/ouro/use-field";
 import { useDevWarnings } from "~/lib/ouro/use-dev-messages";
 import { useMediaQuery } from "~/lib/ouro/use-media-query";
+import { PortalScope, usePortalContainer } from "~/lib/ouro/portal-container";
 
 export type { SelectOption, SelectOptionGroup, SelectOptions } from "~/components/ouro/select/select-styles";
 
@@ -190,6 +191,7 @@ function SelectControl({
     onValueChange?.(next);
   };
 
+  const portal = usePortalContainer("Select");
   return (
     <BaseSelect.Root<string, boolean>
       items={items}
@@ -219,44 +221,46 @@ function SelectControl({
       </BaseSelect.Trigger>
       {/* Base UI puts the portal inside a Dialog's or Sheet's portal when the Select is in one, where
           the dialog's layers sit at z-1000; 1000 above --ouro-layer clears them there and on the page. */}
-      <BaseSelect.Portal data-ouro="select-portal" className="relative isolate z-[calc(var(--ouro-layer)+1000)]">
-        {sheet && <BaseSelect.Backdrop data-ouro="select-backdrop" className={backdropClass} />}
-        <BaseSelect.Positioner
-          className={positionerClass}
-          sideOffset={4}
-          collisionPadding={8}
-          alignItemWithTrigger={!sheet}
-          data-ouro-presentation={presentation}
-        >
-          <BaseSelect.Popup className={popupClass} data-ouro="select-popup" data-ouro-presentation={presentation}>
-            {sheet && (
-              <div aria-hidden="true" className={sheetTitleClass}>
-                {label}
-              </div>
-            )}
-            <BaseSelect.List className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <SelectListScope>
-                {options
-                  ? options.map((entry) =>
-                      isGroup(entry) ? (
-                        <SelectGroup key={`group:${entry.label}`} label={entry.label}>
-                          {entry.options.map((option) => (
-                            <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ) : (
-                        <SelectItem key={entry.value} value={entry.value} disabled={entry.disabled}>
-                          {entry.label}
-                        </SelectItem>
-                      ),
-                    )
-                  : children}
-              </SelectListScope>
-            </BaseSelect.List>
-          </BaseSelect.Popup>
-        </BaseSelect.Positioner>
+      <BaseSelect.Portal {...portal} data-ouro="select-portal" className="relative isolate z-[calc(var(--ouro-layer)+1000)]">
+        <PortalScope>
+          {sheet && <BaseSelect.Backdrop data-ouro="select-backdrop" className={backdropClass} />}
+          <BaseSelect.Positioner
+            className={positionerClass}
+            sideOffset={4}
+            collisionPadding={8}
+            alignItemWithTrigger={!sheet}
+            data-ouro-presentation={presentation}
+          >
+            <BaseSelect.Popup className={popupClass} data-ouro="select-popup" data-ouro-presentation={presentation}>
+              {sheet && (
+                <div aria-hidden="true" className={sheetTitleClass}>
+                  {label}
+                </div>
+              )}
+              <BaseSelect.List className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <SelectListScope>
+                  {options
+                    ? options.map((entry) =>
+                        isGroup(entry) ? (
+                          <SelectGroup key={`group:${entry.label}`} label={entry.label}>
+                            {entry.options.map((option) => (
+                              <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        ) : (
+                          <SelectItem key={entry.value} value={entry.value} disabled={entry.disabled}>
+                            {entry.label}
+                          </SelectItem>
+                        ),
+                      )
+                    : children}
+                </SelectListScope>
+              </BaseSelect.List>
+            </BaseSelect.Popup>
+          </BaseSelect.Positioner>
+        </PortalScope>
       </BaseSelect.Portal>
     </BaseSelect.Root>
   );

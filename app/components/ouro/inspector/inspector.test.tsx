@@ -15,6 +15,10 @@ import { Menu, MenuItem } from "~/components/ouro/menu/menu";
 import { Popover } from "~/components/ouro/popover/popover";
 import { RadioGroup } from "~/components/ouro/radio-group/radio-group";
 import { Select } from "~/components/ouro/select/select";
+import { Heading } from "~/components/ouro/text/heading";
+import { Text } from "~/components/ouro/text/text";
+import { Link } from "~/components/ouro/link/link";
+import { measureTextContrast } from "~/lib/ouro/testing/axe";
 import { act } from "~/lib/ouro/testing/act";
 import { expectMotion, expectNoMotion, parseDuration } from "~/lib/ouro/testing/motion";
 
@@ -120,6 +124,268 @@ afterEach(async () => {
   await commands.emulateMedia({ reducedMotion: "no-preference" });
 });
 
+// Exact geometry, on a bare page: where X-ray breaks an outline's edges, and where it puts a tag.
+// The page's elements are fixed to the screen, and each line of text is placed by the box its
+// glyphs fill, the box X-ray reads, so every edge a test names is exact.
+describe("Inspector geometry", () => {
+  /** A component X-ray outlines, fixed at a box on the screen. */
+  function component(left: number, top: number, width: number, height: number) {
+    const element = document.body.appendChild(document.createElement("div"));
+    mounted.push(element);
+    element.setAttribute("data-ouro", "badge");
+    Object.assign(element.style, { position: "fixed", left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+    return element;
+  }
+
+  /** The box the glyphs of an element's text fill on the screen, as X-ray reads it. */
+  const glyphs = (element: Element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element.firstChild!);
+    return range.getClientRects()[0]!;
+  };
+
+  /** A line of text whose glyphs' box has its top left corner at `left`, `top`; `left` may name it by its width. */
+  function line(text: string, left: number | ((width: number) => number), top: number | ((height: number) => number), style: Partial<CSSStyleDeclaration> = {}) {
+    const span = document.body.appendChild(document.createElement("span"));
+    mounted.push(span);
+    Object.assign(span.style, { position: "fixed", left: "0px", top: "0px", whiteSpace: "pre", font: "16px/1 sans-serif" }, style);
+    span.textContent = text;
+    const box = glyphs(span);
+    const x = typeof left === "number" ? left : left(box.width);
+    const y = typeof top === "number" ? top : top(box.height);
+    span.style.left = `${x - box.left}px`;
+    span.style.top = `${y - box.top}px`;
+    return glyphs(span);
+  }
+
+  async function xray() {
+    await render(<Inspector open onOpenChange={() => {}} />);
+  }
+
+  const path = (index = 0) => outlines()[index]!.querySelector("path")!.getAttribute("d");
+
+  it("breaks each edge of an outline where a line of text crosses it, a pixel wider on each side, and nowhere else", async () => {
+    component(100, 200, 200, 100);
+    // Across the top edge: a short line inside a long one, before it in the page; a line that
+    // starts on the edge; a line that only touches the edge from above, one that starts a pixel
+    // below it, and one beyond the end.
+    const short = line("ab", 140, 190);
+    const long = line("a long line", 120, 192);
+    const onEdge = line("t", 230, 200);
+    line("x", 270, (height) => 200 - height);
+    line("y", 280, 201);
+    line("far", 340, 192);
+    // Across the bottom edge: one from a pixel inside the start, one over the end. Lines a person
+    // cannot see cross it too: blank, hidden and transparent ones.
+    const first = line("from", 101, 290);
+    const over = line("over the end", 280, 290);
+    const blank = line("   ", first.right + 4, 290);
+    const hidden = line("hidden", blank.right + 4, 290, { visibility: "hidden" });
+    line("faded", hidden.right + 4, 290, { opacity: "0" });
+    // Across the start edge: one line crosses it, one ends on it, one starts a pixel inside it.
+    const crossing = line("left", 80, 230);
+    line("abc", (width) => 100 - width, 260);
+    line("q", 101, 262);
+    // Across the end edge (its last pixel column is 299): one line crosses it, one ends on it, one
+    // starts past it.
+    const right = line("right", 290, 240);
+    line("def", (width) => 299 - width, 266);
+    line("z", 300, 268);
+    await xray();
+    await drawn(1);
+    expect([short.left > long.left, short.right < long.right]).toEqual([true, true]);
+    expect(over.right).toBeGreaterThan(300);
+    const across = (y: number, from: number, to: number) => `M${from - 100} ${y - 200 + 0.5}H${to - 100}`;
+    const down = (x: number, from: number, to: number) => `M${x - 100 + 0.5} ${from - 200}V${to - 200}`;
+    expect(path()).toBe(
+      [
+        across(200, 100, long.left - 1) + across(200, long.right + 1, onEdge.left - 1) + across(200, onEdge.right + 1, 300),
+        across(299, first.right + 1, over.left - 1),
+        down(100, 200, crossing.top - 1) + down(100, crossing.bottom + 1, 300),
+        down(299, 200, right.top - 1) + down(299, right.bottom + 1, over.top - 1),
+      ].join(""),
+    );
+  });
+
+  it("reads only the lines on the screen whose glyphs fill some area", async () => {
+    // A component taller than the screen, its start edge crossed by lines that end where the
+    // screen starts, start where it ends, fill no width or no height.
+    component(20, -50, 40, innerHeight + 100);
+    line("top", 10, (height) => -height);
+    line("bottom", 10, innerHeight);
+    line("\u200b", 20.5, 300);
+    line("flat", 10, 400, { transform: "scaleY(0)" });
+    await xray();
+    await drawn(1);
+    const height = innerHeight + 100;
+    expect(path()).toBe(`M0 0.5H40M0 ${height - 0.5}H40M0.5 0V${height}M39.5 0V${height}`);
+  });
+
+  /** Where the tag of the first outline sits, from its component's top left corner, and whether inside it or hidden. */
+  const spot = () => {
+    const tag = tags()[0]!;
+    return { at: tag.style.transform, inside: tag.hasAttribute("data-inside"), crowded: tag.hasAttribute("data-crowded") };
+  };
+  const at = (x: number, y: number, inside: boolean) => ({ at: `translate(${x}px, ${y}px)`, inside, crowded: false });
+
+  for (const dir of ["ltr", "rtl"] as const) {
+    it(`puts a tag in the first place by its component clear of text, ${dir}: above the start corner, inside it, above the end corner, inside it, inside the bottom start corner, below it; and hides it where none is`, async () => {
+      const element = component(100, 200, 200, 100);
+      element.dir = dir;
+      await xray();
+      await drawn(1);
+      const [width, height] = [tags()[0]!.offsetWidth, tags()[0]!.offsetHeight];
+      const [start, end] = dir === "ltr" ? [0, 200 - width] : [200 - width, 0];
+      // Each place in turn, from the component's corner, and a line of small text that fills it.
+      const places = [
+        [start, -height, false],
+        [start, 0, true],
+        [end, -height, false],
+        [end, 0, true],
+        [start, 100 - height, true],
+        [start, 100, false],
+      ] as const;
+      // Text that only touches the first place, above, before and after it, and the second place below.
+      line("a", 100 + start + 2, (lineHeight) => 200 - height - lineHeight, { font: "8px/1 sans-serif" });
+      line("b", (lineWidth) => 100 + start - lineWidth, 200 - height + 2, { font: "8px/1 sans-serif" });
+      line("c", 100 + start + width, 200 - height + 2, { font: "8px/1 sans-serif" });
+      line("d", 100 + start + 2, 200 + height, { font: "8px/1 sans-serif" });
+      // X-ray placed the tag again for that text, and its own tag's text does not push it on.
+      await frame();
+      await frame();
+      expect(spot()).toEqual(at(start, -height, false));
+      for (const [index, [x, y, inside]] of places.entries()) {
+        await expect.poll(spot, { message: `place ${index + 1}` }).toEqual(at(x, y, inside));
+        line("o", 100 + x + width / 2, 200 + y + height / 2 - 4, { font: "8px/1 sans-serif" });
+      }
+      await expect.poll(spot).toMatchObject({ crowded: true });
+      expect(getComputedStyle(tags()[0]!).visibility).toBe("hidden");
+    });
+  }
+
+  // Each component alone, where its tag goes by the edges of the screen and X-ray's bar.
+  const edges: [string, () => Promise<HTMLElement>, (width: number) => ReturnType<typeof at>][] = [
+    ["above its start corner at the screen's start", async () => component(0, 200, 200, 100), () => at(0, -16, false)],
+    ["above its end corner where the start one is off the screen", async () => component(-10, 200, 200, 100), (width) => at(200 - width, -16, false)],
+    [
+      "above its start corner at the screen's end, right to left",
+      async () => Object.assign(component(innerWidth - 200, 200, 200, 100), { dir: "rtl" }),
+      (width) => at(200 - width, -16, false),
+    ],
+    ["above its end corner where the start one is off the screen, right to left", async () => Object.assign(component(innerWidth - 190, 200, 200, 100), { dir: "rtl" }), () => at(0, -16, false)],
+    ["above its start corner where that reaches the top of the screen", async () => component(100, 16, 200, 100), () => at(0, -16, false)],
+    ["inside its start corner where above is off the screen", async () => component(100, 10, 200, 100), () => at(0, 0, true)],
+    [
+      "inside its start corner, down to the bottom of the screen, where above lies under X-ray's bar",
+      async () => {
+        const bar = page.getByRole("region", { name: "X-ray" }).element().getBoundingClientRect();
+        expect(bar.bottom).toBe(innerHeight - 16);
+        return component(bar.left, innerHeight - 16, 200, 16);
+      },
+      () => at(0, 0, true),
+    ],
+  ];
+  for (const [name, setup, expected] of edges) {
+    it(`keeps a tag on the screen and off X-ray's bar: ${name}`, async () => {
+      await xray();
+      await setup();
+      await drawn(1);
+      await expect.poll(spot).toEqual(expected(tags()[0]!.offsetWidth));
+    });
+  }
+
+  it("hides a tag that only fits off the bottom of the screen", async () => {
+    component(0, innerHeight - 10, 200, 16);
+    // Text over both places above it.
+    line("text over the places above", 0, innerHeight - 30, { font: "16px/1 sans-serif" });
+    await xray();
+    await drawn(1);
+    await expect.poll(spot).toMatchObject({ crowded: true });
+  });
+
+  /** A box at 100, 200, 200 by 100 on the screen that clips its overflow, with `content` inside. */
+  async function scroller(content: ReactNode, scroll: (element: HTMLElement) => void) {
+    const { host } = await render(
+      <div data-scroller="" style={{ position: "fixed", left: 100, top: 200, width: 200, height: 100, overflow: "hidden" }}>
+        {content}
+      </div>,
+    );
+    scroll(host.querySelector<HTMLElement>("[data-scroller]")!);
+  }
+
+  it("puts a tag neither above nor below a component whose top and bottom a scrolling box cuts", async () => {
+    await scroller(<div data-ouro="badge" style={{ marginTop: 100, height: 300 }} />, (element) => (element.scrollTop = 200));
+    await xray();
+    await drawn(1);
+    // Within its part that shows, 200 to 300 on the screen.
+    const box = document.querySelector('[data-ouro="badge"]')!.getBoundingClientRect();
+    const top = 200 - box.top;
+    await expect.poll(spot).toEqual(at(0, top, true));
+    const width = tags()[0]!.offsetWidth;
+    line("o", 104, 204, { font: "8px/1 sans-serif" });
+    line("o", 300 - width / 2, 204, { font: "8px/1 sans-serif" });
+    line("o", 104, 290, { font: "8px/1 sans-serif" });
+    await expect.poll(spot).toMatchObject({ crowded: true });
+  });
+
+  it("gives no place to the tag of a component scrolled just out of a box, so the next one's tag can sit there", async () => {
+    // Scrolled up so the first component's bottom meets the box's top, and the second's tag fits
+    // above it only if the first's tag takes no place there.
+    await scroller(
+      <>
+        <div data-ouro="badge" style={{ height: 40 }} />
+        <div data-ouro="badge" style={{ marginTop: 8, height: 40 }} />
+        <div style={{ height: 200 }} />
+      </>,
+      (element) => (element.scrollTop = 40),
+    );
+    await xray();
+    await drawn(2);
+    await expect.poll(() => outlines()[0]!.hasAttribute("data-clipped")).toBe(true);
+    await expect.poll(() => tags()[1]!.style.transform).toBe("translate(0px, -16px)");
+  });
+
+  it("gives no place to the tag of a component scrolled just out of a box sideways", async () => {
+    await scroller(
+      <div style={{ display: "flex", width: 400 }}>
+        <div data-ouro="badge" style={{ width: 40, height: 40, flex: "none" }} />
+        <div data-ouro="badge" style={{ marginLeft: 8, width: 100, height: 40, flex: "none" }} />
+      </div>,
+      (element) => (element.scrollLeft = 40),
+    );
+    await xray();
+    await drawn(2);
+    await expect.poll(() => outlines()[0]!.hasAttribute("data-clipped")).toBe(true);
+    await expect.poll(() => tags()[1]!.style.transform).toBe("translate(0px, -16px)");
+  });
+
+  it("keeps a tag clear of the tags placed before it", async () => {
+    component(100, 200, 100, 50);
+    component(120, 200, 100, 50);
+    await xray();
+    await drawn(2);
+    await expect.poll(() => tags().map((tag) => [tag.style.transform, tag.hasAttribute("data-inside")])).toEqual([
+      ["translate(0px, -16px)", false],
+      ["translate(0px, 0px)", true],
+    ]);
+  });
+
+  it("hides a tag whose centre an overlay's popup covers, though its component's corner shows", async () => {
+    component(100, 200, 200, 100);
+    await xray();
+    await drawn(1);
+    await expect.poll(spot).toEqual(at(0, -16, false));
+    const [width, height] = [tags()[0]!.offsetWidth, tags()[0]!.offsetHeight];
+    // A popup with no text, over the tag's centre alone: a quarter of the tag around it.
+    const popup = document.body.appendChild(document.createElement("div"));
+    mounted.push(popup);
+    popup.setAttribute("data-ouro", "popover-portal");
+    Object.assign(popup.style, { position: "fixed", left: `${100 + width / 4}px`, top: `${184 + height / 4}px`, width: `${width / 2}px`, height: `${height / 2}px` });
+    await expect.poll(() => tags()[0]!.hasAttribute("data-covered")).toBe(true);
+    expect(getComputedStyle(tags()[0]!).visibility).toBe("hidden");
+  });
+});
+
 describe("Inspector", () => {
   it("outlines every Ouro component on the page, each tagged with its item and linked to its docs", async () => {
     const { host } = await render(<Page />);
@@ -130,6 +396,50 @@ describe("Inspector", () => {
     expect(tags().map((tag) => tag.getAttribute("href"))).toEqual(["button", "badge", "checkbox"].map(docsHref));
     outlines().forEach((outline, index) => expect(onTarget(outline, components[index]!), `outline ${index}`).toBe(true));
   });
+
+  it("puts its bar in a landmark named by its label", async () => {
+    await render(<Page inspector={{ label: "Röntgen" }} />);
+    await drawn(3);
+    const bar = page.getByRole("region", { name: "Röntgen" });
+    await expect.element(bar.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other", async () => {
+    // A dense page: text right against the edges of the components above and below it, where a
+    // tag above a component's corner would land on the line before.
+    const { host } = await render(
+      <Page>
+        <div style={{ display: "grid", gap: 2 }}>
+          <Heading level={2}>Braised short ribs</Heading>
+          <Text>Brown the ribs, then braise them low for three hours.</Text>
+          <Badge>Make ahead</Badge>
+          <Text>Serves six, with polenta or mash.</Text>
+          <Link href="/recipes/polenta">Soft polenta</Link>
+          <Text size="sm">Keeps for four days in the fridge.</Text>
+        </div>
+      </Page>,
+    );
+    const texts = [...host.querySelectorAll<HTMLElement>("*")].filter((element) => [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim()) && element.checkVisibility());
+    const required = (element: Element) => {
+      const style = getComputedStyle(element);
+      const size = Number.parseFloat(style.fontSize);
+      return size >= 24 || (Number.parseInt(style.fontWeight, 10) >= 700 && size >= 18.66) ? 3 : 4.5;
+    };
+    for (const scheme of ["light", "dark"]) {
+      document.documentElement.classList.toggle("dark", scheme === "dark");
+      await act(() => setOpen(false));
+      for (const text of texts) expect(await measureTextContrast(text, required(text)), `${scheme}, before X-ray: ${text.textContent}`).toEqual({ pass: true });
+      await act(() => setOpen(true));
+      await drawn(pageRoots(host).length);
+      await settled();
+      for (const text of texts) expect(await measureTextContrast(text, required(text)), `${scheme}, under X-ray: ${text.textContent}`).toEqual({ pass: true });
+      const shown = tags().filter(live).map((tag) => tag.getBoundingClientRect());
+      for (const [index, a] of shown.entries()) {
+        for (const b of shown.slice(index + 1)) expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top, `${scheme}: two tags overlap`).toBe(true);
+      }
+    }
+    document.documentElement.classList.remove("dark");
+  }, 30_000);
 
   it("does not outline itself, an overlay's wrappers, a hidden component or a part apart from its component", async () => {
     const { host } = await render(
@@ -289,7 +599,7 @@ describe("Inspector", () => {
         return copy.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
       })
       .toBe(true);
-    expect(getComputedStyle(layer()!.querySelector('[role="group"]')!).visibility).toBe("hidden");
+    expect(getComputedStyle(layer()!.querySelector('section')!).visibility).toBe("hidden");
     await userEvent.click(page.getByRole("button", { name: "Copy link" }));
     expect(onCopy).toHaveBeenCalledOnce();
   }, 15_000);
@@ -423,11 +733,11 @@ describe("Inspector", () => {
     await userEvent.keyboard("{ArrowDown}");
     await expect.element(page.getByRole("listbox")).toBeVisible();
     await settled();
-    // The open list hides the page from assistive technology, X-ray included, but no modal dialog shuts it off.
-    expect(layer()!.closest('[aria-hidden="true"], [inert]')).not.toBeNull();
+    // The open list leaves the page, X-ray included, to assistive technology, and no modal dialog shuts it off.
+    expect(layer()!.closest('[aria-hidden="true"], [inert]')).toBeNull();
     await frame();
     expect(layer()!.hasAttribute("data-modal")).toBe(false);
-    expect(getComputedStyle(layer()!.querySelector('[role="group"]')!).visibility).toBe("visible");
+    expect(getComputedStyle(layer()!.querySelector('section')!).visibility).toBe("visible");
     expect(tags().slice(0, 4).map((tag) => tag.textContent)).toEqual(["button", "badge", "checkbox", "button"]);
   }, 15_000);
 
@@ -446,11 +756,11 @@ describe("Inspector", () => {
     await settled();
     await frame();
     expect(layer()!.hasAttribute("data-modal")).toBe(false);
-    const bar = layer()!.querySelector<HTMLElement>('[role="group"]')!;
+    const bar = layer()!.querySelector<HTMLElement>('section')!;
     expect(getComputedStyle(bar).visibility).toBe("visible");
     // The page's own components keep their tags.
     expect(tags().slice(0, 4).map((tag) => tag.textContent)).toEqual(["button", "badge", "checkbox", "button"]);
-    await userEvent.click(page.getByRole("group", { name: "X-ray" }).getByRole("button", { name: "Close" }));
+    await userEvent.click(page.getByRole("region", { name: "X-ray" }).getByRole("button", { name: "Close" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   }, 15_000);
 

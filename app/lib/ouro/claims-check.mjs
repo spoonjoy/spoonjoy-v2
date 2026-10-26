@@ -927,6 +927,13 @@ export async function verify(checks, context, sources = []) {
         fail(`${check.urlOk} follows a branch or tag, so it answers after the file changes and backs nothing in it. Pin it to a commit: https://github.com/<owner>/<repo>/blob/<40-character commit hash>/<path>#L<line>.`);
         continue;
       }
+      // Text outside the repository (a pull request's title and body, a draft) cannot commit a
+      // cache entry, as the full check fails one no file cites, so its links are fetched now.
+      if (context.outside) {
+        const status = await fetchStatus(check.urlOk);
+        if (status < 200 || status >= 400) fail(`${check.urlOk} answered ${status || "nothing"}.`);
+        continue;
+      }
       const before = cache[check.urlOk];
       if (network === true || (network === "changed" && context.refresh?.has(check.urlOk))) {
         const status = await fetchStatus(check.urlOk);
@@ -1269,8 +1276,7 @@ export async function main(argv, { root: defaultRoot = process.cwd(), hooks = {}
       claims.push(...result.claims);
       failures.push(...result.findings);
     }
-    failures.push(...(await verifyClaims(claims, context)));
-    saveUrlCache(context);
+    failures.push(...(await verifyClaims(claims, { ...context, outside: true })));
     const files = [];
     for (const file of positional) {
       const entry = classify(file, config);

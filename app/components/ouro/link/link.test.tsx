@@ -199,6 +199,38 @@ describe("Link", () => {
     expect(getComputedStyle(link).outlineStyle).toBe("solid");
   });
 
+  it("marks keyboard focus in running text with a thick underline in the ring's colour, not an outline drawn over the next character", async () => {
+    const { host } = await render(
+      <>
+        <Link href="/alone">Alone</Link>
+        <p>
+          From <Link href="/ari">Ari</Link>, with lemon.
+        </p>
+        <div>
+          From <Link href="/inline" inline>Sam</Link>, with salt.
+        </div>
+        <p>
+          <Link href="/own" inline={false}>On its own</Link>
+        </p>
+      </>,
+    );
+    const focused = (href: string) => {
+      const link = host.querySelector<HTMLAnchorElement>(`a[href="${href}"]`)!;
+      link.focus();
+      // The underline's colour eases in; its end is what focus shows.
+      for (const animation of link.getAnimations()) animation.finish();
+      const style = getComputedStyle(link);
+      return { outline: `${style.outlineStyle} ${style.outlineColor}`, underline: `${style.textDecorationThickness} ${style.textDecorationColor}` };
+    };
+    const ring = getComputedStyle(host.querySelector('a[href="/alone"]')!).outlineColor;
+    const alone = focused("/alone");
+    expect(alone.outline).toBe(`solid ${ring}`);
+    // A transparent outline draws nothing, and forced colours show it, as they drop the underline's colour.
+    expect(focused("/ari")).toEqual({ outline: "solid rgba(0, 0, 0, 0)", underline: `2px ${ring}` });
+    expect(focused("/inline")).toEqual({ outline: "solid rgba(0, 0, 0, 0)", underline: `2px ${ring}` });
+    expect(focused("/own")).toEqual(alone);
+  });
+
   it("lets app layout classes win", async () => {
     const { link } = await render(
       <Link href="/x" className="ms-2 inline-block">

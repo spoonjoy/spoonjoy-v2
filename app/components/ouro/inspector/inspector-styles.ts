@@ -69,28 +69,34 @@ const layerClass =
  */
 const outlineClass = "absolute top-0 left-0 will-change-transform data-clipped:invisible";
 
-/** An outline's frame in the primary color, cut (`clip-path`) to the part of its component that shows. @internal */
-const frameClass =
-  "absolute inset-0 box-border rounded-[3px] border border-solid border-[color-mix(in_oklab,var(--primary)_75%,transparent)] " +
-  "bg-[color-mix(in_oklab,var(--primary)_6%,transparent)]";
+/**
+ * An outline's frame: its edges, drawn in the primary color, with no fill and a gap wherever a line
+ * of text crosses them, cut (`clip-path`) to the part of its component that shows.
+ *
+ * @internal
+ * @claim "An outline's frame: its edges, drawn" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other)
+ * @claim "An outline's frame: its edges, drawn" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the outline and tag of a component scrolled out of view inside a box, and clips one partly out)
+ */
+const frameClass = "absolute inset-0 fill-none stroke-[color-mix(in_oklab,var(--primary)_75%,transparent)] [shape-rendering:crispEdges]";
 
 /**
- * An outline's name tag, a link to its docs, above the start corner of the part that shows (inside
- * it at the top of the screen, or where its top is cut). It hides, and takes no pointer, while
- * something else (a menu, a select list) lies over it or its corner.
+ * An outline's name tag, a link to its docs, by the part of its component that shows, where it
+ * covers no text and no other tag (above its start corner when that is clear). It hides, and
+ * takes no pointer, where nowhere is clear, and while something else (a menu, a select list) lies
+ * over it or its corner.
  *
  * @internal
  * @claim "It hides, and takes no pointer" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides the tag of a component an open select list covers, and leaves its options within reach)
  * @claim "It hides, and takes no pointer" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > hides a tag an overlay lies over though its component shows)
+ * @claim "where it covers no text and" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > leaves every line of the page's text as readable as it was, in light and dark: outlines step around text, and tags sit clear of text and of each other)
  */
 const tagClass =
-  "pointer-events-auto absolute start-0 bottom-full z-1 inline-flex max-w-48 items-center truncate rounded-t-sm rounded-e-sm px-1.5 " +
+  "pointer-events-auto absolute top-0 left-0 z-1 inline-flex max-w-48 items-center truncate rounded-sm px-1.5 " +
   "font-mono text-[11px] leading-4 font-medium text-primary-foreground no-underline bg-primary " +
-  "ltr:translate-x-(--ouro-inspector-left) rtl:translate-x-(--ouro-inspector-right) " +
-  "data-covered:invisible data-inside:top-(--ouro-inspector-top) data-inside:bottom-auto data-inside:rounded-none data-inside:rounded-ee-sm " +
+  "data-covered:invisible data-crowded:invisible " +
   "outline-ring outline-offset-1 focus-visible:outline-2 focus-visible:outline-solid pointer-fine:hover:underline";
 
-/** The bar at the bottom of the screen: what X-ray shows, the list and the way out. It steps aside while a dialog is open. @internal */
+/** The bar at the bottom of the screen, a landmark named by X-ray's label: what X-ray shows, the list and the way out. It steps aside while a dialog is open. @internal */
 const pillClass =
   "pointer-events-auto in-data-modal:invisible fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-1 " +
   "rounded-full bg-popover p-1 ps-4 text-sm leading-5 text-popover-foreground shadow-(--shadow-lg) ring-1 ring-border/60";
