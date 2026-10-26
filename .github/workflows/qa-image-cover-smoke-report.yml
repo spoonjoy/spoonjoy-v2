@@ -1,0 +1,47 @@
+name: QA Image Cover Smoke Report
+
+# A failed scheduled run only emails whoever last edited the schedule, so every run of the QA image-cover
+# smoke from June to October 2026 failed unnoticed. Each of main's smoke runs now keeps one open issue
+# instead: opened on the first failure, commented on each later one, closed by the next pass. Runs on
+# other branches leave it alone. This is its own workflow because the smoke workflow's preflight
+# (scripts/deployment-preflight.ts) requires every job in it to set up Node and pnpm.
+on:
+  workflow_run:
+    workflows: [QA Image Cover Smoke]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: qa-image-cover-smoke-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: report
+    if: github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.path == '.github/workflows/qa-image-cover-smoke.yml'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Open, update or close the failing-smoke issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SMOKE_RESULT: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          title="QA image-cover smoke failing"
+          label="qa-image-cover-smoke"
+          gh label create "$label" --force --color 8B4513 --description "QA image-cover smoke failures"
+          issue="$(gh issue list --state open --label "$label" --json number,title --jq "map(select(.title == \"$title\")) | first | .number // empty")"
+          if [ "$SMOKE_RESULT" = "success" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --reason completed --comment "Passed again: $RUN_URL"
+            fi
+          elif [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Failed again ($SMOKE_RESULT): $RUN_URL"
+          else
+            gh issue create --title "$title" --label "$label" --body "The daily QA image-cover smoke failed ($SMOKE_RESULT): $RUN_URL. Its log and the \`qa-image-cover-smoke-artifacts\` artifact show the failing step. Each later failure comments here, and the next passing run on main closes this issue."
+          fi
