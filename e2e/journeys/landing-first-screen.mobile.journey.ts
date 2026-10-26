@@ -3,16 +3,21 @@
 // into view or focused; this checks the first screen, before the visitor scrolls, on every phone
 // shape below: each action must lie wholly inside the viewport, above the bottom safe area, with
 // nothing (the fixed tab bar, the sticky header) painted over any of the nine points
-// support/readability.ts samples on it.
+// support/readability.ts samples on it, and with its label inside its own border.
 //
-// Playwright's iPhone devices leave Safari's own bars out of the viewport, so the viewport is the
-// part of the screen the page owns. The iPhone Duo entry follows the same rule, measured from Ari's
-// screenshot of one Duo screen in Safari (1398 x 2034 px, 2026-10-26): the header's 168 px and the
-// description's 96 px lines are 56 and 32 CSS px, so 3 px make one CSS px and the screen is 466 x 678.
-// Safari's toolbar takes the right-hand strip, leaving the page 1146 px, 382 wide; the Smart App
-// Banner takes the top 147 px. The tab bar's bottom edge sits 515 px into the page, and the tab bar
-// keeps max(1rem, env(safe-area-inset-bottom)) below it, so the page ends at 531, just above
-// Safari's floating address bar, which starts at 546.
+// Playwright's newer iPhone devices leave Safari's own bars out of the viewport, so the viewport is
+// the part of the screen the page owns. "iPhone SE" (320 x 568) is the narrowest width we support,
+// the width a 13 mini gives with Display Zoom; its height is the whole screen.
+//
+// The iPhone Duo entry is its closed outer screen, measured from Ari's screenshot of the landing page
+// in Safari on it (1398 x 2034 screenshot pixels, 2026-10-26). The header's 168 pixels and the
+// description's 96-pixel line spacing are 56 and 32 CSS px, so 3 screenshot pixels make one CSS px
+// and the screen is 466 x 678 CSS px, not the 669 x 951 inner screen app/lib/fold.ts describes.
+// Safari's toolbar takes a 252-pixel strip on the right, leaving the page 1146 pixels (382 CSS px)
+// wide, and the Smart App Banner takes the top 147 pixels. Measured in CSS px from the top of the
+// page below that banner, the tab bar's bottom edge is at 515, and the tab bar keeps
+// max(1rem, env(safe-area-inset-bottom)) below it, so the page ends at 531, above Safari's floating
+// address bar, which starts at 546.
 import { devices, type Browser, type BrowserContextOptions, type TestInfo } from "@playwright/test";
 import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
@@ -40,7 +45,7 @@ const DUO_SCREEN: Phone = {
   },
 };
 
-const PHONES: Phone[] = [phone("iPhone 13 Mini"), phone("iPhone 15"), phone("iPhone 15 Pro Max"), DUO_SCREEN];
+const PHONES: Phone[] = [phone("iPhone SE"), phone("iPhone 13 Mini"), phone("iPhone 15"), phone("iPhone 15 Pro Max"), DUO_SCREEN];
 
 const ACTIONS = ["Start Your Kitchen", "Log in", "Search Recipes"] as const;
 
@@ -51,6 +56,10 @@ interface Placement {
   usableBottom: number;
   viewportWidth: number;
   covered: string[];
+  /** The label's width and the room inside the action's border; a button never wraps its label. */
+  label: { scrollWidth: number; clientWidth: number };
+  /** Text in the action that is drawn in a fallback font because its web font has not loaded. */
+  fallbackFont: string[];
 }
 
 async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<Placement[]> {
@@ -66,7 +75,7 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     await page.goto("/");
     await waitForHydration(page);
     expect(await page.evaluate(() => document.documentElement.classList.contains("dark")), "the page shows the stored theme").toBe(scheme === "dark");
-    // The hero's height depends on its typeface and its photo.
+    // The hero's height depends on its typeface; the photo only has to be there for the screenshot.
     await page.evaluate(async () => {
       await document.fonts.ready;
     });
@@ -74,6 +83,7 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     await photo.evaluate((image) => (image as HTMLImageElement).decode());
     expect(await page.evaluate(() => window.scrollY), "the page is at its top").toBe(0);
 
+    // Playwright's WebKit reports a zero bottom safe area; a real phone may not.
     const usableBottom = await page.evaluate(() => {
       const probe = document.createElement("div");
       probe.style.cssText = "position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom)";
@@ -91,7 +101,20 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
         const rect = element.getBoundingClientRect();
         return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
       });
-      placements.push({ action: name, box, usableBottom, viewportWidth, covered: await coveringElements(action) });
+      const label = await action.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+      const fallbackFont = await action.evaluate((element) => {
+        const missing: string[] = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent?.trim();
+          if (!text || !node.parentElement) continue;
+          const style = getComputedStyle(node.parentElement);
+          const family = style.fontFamily.split(",")[0].trim();
+          if (!document.fonts.check(`${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${family}`, text)) missing.push(`${text} (${family})`);
+        }
+        return missing;
+      });
+      placements.push({ action: name, box, usableBottom, viewportWidth, covered: await coveringElements(action), label, fallbackFont });
     }
     const shot = testInfo.outputPath(`landing-first-screen-${device.name.replace(/\W+/g, "-")}-${scheme}.png`);
     await page.screenshot({ path: shot });
@@ -112,13 +135,15 @@ async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, sc
     for (const device of PHONES) {
       const placements = await firstScreen(browser, testInfo, device, scheme);
       results.push({ phone: device.name, placements });
-      for (const { action, box, usableBottom, viewportWidth, covered } of placements) {
+      for (const { action, box, usableBottom, viewportWidth, covered, label, fallbackFont } of placements) {
         const where = `${device.name}, ${scheme}: "${action}" (top ${box.top}, bottom ${box.bottom}, usable to ${usableBottom})`;
         expect.soft(box.top, `${where} starts on screen`).toBeGreaterThanOrEqual(0);
         expect.soft(box.bottom, `${where} ends above the bottom safe area`).toBeLessThanOrEqual(usableBottom);
         expect.soft(box.left, `${where} starts inside the left edge`).toBeGreaterThanOrEqual(0);
         expect.soft(box.right, `${where} ends inside the right edge`).toBeLessThanOrEqual(viewportWidth);
         expect.soft(covered, `${where}: what covers it`).toEqual([]);
+        expect.soft(label.scrollWidth, `${where}: its label fits inside its border (${label.clientWidth} px)`).toBeLessThanOrEqual(label.clientWidth);
+        expect.soft(fallbackFont, `${where}: text measured in a fallback font`).toEqual([]);
       }
     }
   } finally {
