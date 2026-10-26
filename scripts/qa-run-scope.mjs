@@ -268,10 +268,10 @@ export function generateVapidKeys(generate = generateKeyPairSync) {
   };
 }
 
-// The shared QA Worker's GOOGLE_API_KEY is not copied (secrets cannot be read back), so a run's
-// Worker has no image-generation key and skips AI placeholder covers, as the app does whenever
-// the key is absent. No journey asserts on a generated cover; the QA Image Cover Smoke workflow
-// covers that path against the shared QA Worker.
+// A run's Worker gets no image-provider key: QA makes covers from the sample images in QA's photo
+// bucket, never a paid generation call (IMAGE_PROVIDER_PRIMARY=sample in wrangler.json's env.qa,
+// app/lib/sample-cover-images.server.ts). No journey asserts on a generated cover; the QA Image
+// Cover Smoke workflow covers that path against the shared QA Worker.
 export function buildRunSecrets(identity, { random = randomBytes, vapid = generateVapidKeys } = {}) {
   const keys = vapid();
   return {

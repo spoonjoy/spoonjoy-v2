@@ -89,6 +89,16 @@ jobs:
 
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
+      # QA makes covers from these sample images instead of a paid generation call
+      # (IMAGE_PROVIDER_PRIMARY=sample in wrangler.json's env.qa), so the smoke still runs every
+      # step of our cover pipeline but the provider call costs nothing.
+      - name: Put the sample cover images in QA's photo bucket
+        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/qa-sample-covers.mjs
+
       - name: Run QA image-cover smoke
         if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
         env:

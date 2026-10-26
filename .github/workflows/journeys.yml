@@ -248,6 +248,15 @@ jobs:
           NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
         run: node scripts/qa-run-scope.mjs verify
 
+      # The run's Worker makes covers from these sample images instead of a paid generation call
+      # (IMAGE_PROVIDER_PRIMARY=sample in wrangler.json's env.qa); runs share QA's photo bucket.
+      - name: Put the sample cover images in QA's photo bucket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NODE_OPTIONS: ${{ env.SPOONJOY_CF_REQUEST_COUNTER }}
+        run: node scripts/qa-sample-covers.mjs
+
       # Workers-side evidence for every run: stream the QA Worker's invocation log while the
       # suite runs, so an outcome the browser can't see (exceededCpu, exceededMemory, an
       # exception) is on record. The raw stream holds request headers (cookies), so it stays in

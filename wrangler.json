@@ -150,6 +150,7 @@
       "vars": {
         "NODE_ENV": "production",
         "SPOONJOY_AI_DAILY_GENERATION_BUDGET": "1000",
+        "IMAGE_PROVIDER_PRIMARY": "sample",
         "SPOONJOY_API_EVENT_SAMPLE_RATE": "1",
         "SPOONJOY_BASE_URL": "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
         "SPOONJOY_MODERATOR_USERNAMES": "arimendelow",
