@@ -405,8 +405,17 @@ select {
   padding-right: env(safe-area-inset-right);
 }
 
+/* <main> holds Ouro UI's popups (root.tsx's PopupLayer), so it clips only sideways and makes no
+   stacking context: a menu near its top or bottom edge shows whole, over the top bar and the phone
+   tab bar. clip, unlike hidden, leaves the vertical axis visible and makes no scroll container;
+   flow-root keeps the block formatting context hidden gave, so margins still stay inside. */
 .sj-desktop-surface,
-.sj-mobile-surface,
+.sj-mobile-surface {
+  display: flow-root;
+  position: relative;
+  overflow-x: clip;
+}
+
 .sj-page {
   position: relative;
   isolation: isolate;

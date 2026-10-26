@@ -12,7 +12,7 @@ import {
   useLocation,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useRef, type RefObject } from "react";
 import { usePostHog } from "~/lib/use-posthog";
 import { getUserId } from "~/lib/session.server";
 import { NonceContext } from "~/lib/nonce";
@@ -186,6 +186,17 @@ export function AppNavbar({
   );
 }
 
+/**
+ * Where Ouro UI's floating popups (menus, select and combobox lists, popovers, tooltips) render:
+ * the last thing in <main>, so screen reader users who move by landmark reach them. Layout owns the
+ * ref, because OuroProvider wraps App and the error boundary alike; each one's <main> renders it.
+ */
+const PopupLayerContext = createContext<RefObject<HTMLDivElement | null>>({ current: null });
+
+function PopupLayer() {
+  return <div ref={useContext(PopupLayerContext)} />;
+}
+
 export default function App() {
   const { userId, oauthProviders } = useLoaderData<typeof loader>();
   const location = useLocation();
@@ -231,7 +242,9 @@ export default function App() {
   return (
     <DockContextProvider>
       <RouteProgress active={navigation.state !== "idle"} />
-      <div className="sj-app-shell relative isolate flex min-h-svh w-full flex-col">
+      {/* No isolation here or on <main>: popups render inside <main> and must stack over the top
+          bar and the phone tab bar, which a stacking context around them would stop. */}
+      <div className="sj-app-shell relative flex min-h-svh w-full flex-col">
         {userId ? null : <PhoneBrandBar />}
         <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
           <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
@@ -245,6 +258,7 @@ export default function App() {
           className="sj-desktop-surface sj-mobile-surface grow"
         >
           <Outlet />
+          <PopupLayer />
         </main>
       </div>
       <MobileNav isAuthenticated={!!userId} cookingNowCount={cookingNowCount} />
@@ -272,6 +286,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Per-request CSP nonce (server-provided via NonceContext in entry.server).
   // Applied to every inline <script> below so script-src can drop 'unsafe-inline'.
   const nonce = useContext(NonceContext);
+  const popups = useRef<HTMLDivElement>(null);
   useHydratedMark();
   return (
     <html lang="en" suppressHydrationWarning>
@@ -295,9 +310,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body className="m-0 bg-[var(--sj-page)] p-0 text-[var(--sj-ink)] antialiased">
         <ColorSchemeProvider storageKey={THEME_STORAGE_KEY}>
           {/* Ouro UI's links and link buttons navigate through React Router. */}
-          <OuroProvider linkComponent={OuroRouterLink}>
-            <SkipLink />
-            {children}
+          <OuroProvider linkComponent={OuroRouterLink} portalContainer={popups}>
+            <PopupLayerContext.Provider value={popups}>
+              <SkipLink />
+              {children}
+            </PopupLayerContext.Provider>
           </OuroProvider>
         </ColorSchemeProvider>
         <ScrollRestoration nonce={nonce} />
@@ -319,6 +336,7 @@ export function ErrorBoundary() {
   return (
     <main id="main" tabIndex={-1} className="sj-mobile-surface grow">
       <RouteErrorContent error={error} />
+      <PopupLayer />
     </main>
   );
 }
