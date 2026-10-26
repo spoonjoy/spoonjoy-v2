@@ -86,7 +86,9 @@ export function testChanged({
   }
   log(`${imported.length} test file(s) are affected by the changes since ${base} through imports.`);
   if (naming.length === 0) return run("pnpm", ["exec", "vitest", "run", "--changed", base]);
-  log(`${naming.length} more name a changed file: ${naming.join(", ")}`);
+  // A count, not the names: a name such as warning-policy.test.ts trips the warning gate this runs under,
+  // and Vitest names each file it runs anyway.
+  log(`${naming.length} more test file(s) name a changed file.`);
   return run("pnpm", ["exec", "vitest", "run", ...imported, ...naming]);
 }
 
