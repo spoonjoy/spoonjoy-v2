@@ -229,7 +229,7 @@ export default function McpPage() {
               or an OAuth access token bound to this resource.
             </p>
             <div className="mt-6">
-              <CodeBlock code={endpoint} wrap />
+              <CodeBlock code={endpoint} copyLabel="Copy the MCP endpoint" wrap />
             </div>
           </div>
 
@@ -289,7 +289,7 @@ export default function McpPage() {
             <p className="mb-4 max-w-3xl text-sm/6 text-[var(--sj-ink-soft)]">
               After you create a Spoonjoy token, add the remote server with an explicit bearer header:
             </p>
-            <CodeBlock code={'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'} />
+            <CodeBlock copyLabel="Copy the Claude Code command" code={'TOKEN=sj_your_token_here\nclaude mcp add --transport http \\\n  spoonjoy \\\n  https://spoonjoy.app/mcp \\\n  --header "Authorization: Bearer $TOKEN"'} />
           </div>
 
           {/* A <section aria-labelledby>, not <aside>: root.tsx already wraps every route in a

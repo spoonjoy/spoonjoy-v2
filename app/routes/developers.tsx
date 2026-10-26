@@ -603,7 +603,7 @@ export default function Developers() {
               Anonymous public reads work immediately. For the first external token, use delegated approval: the client shows an approval URL, the chef signs into Spoonjoy, and polling returns a one-time-display bearer token.
             </Text>
           </div>
-          <CodeBlock aria-label="First successful calls sample" code={terminalQuickstart} wrap />
+          <CodeBlock aria-label="First successful calls sample" copyLabel="Copy the first successful calls sample" code={terminalQuickstart} wrap />
         </div>
       </SectionShell>
 
@@ -667,7 +667,7 @@ export default function Developers() {
                 </div>
                 <div className="min-w-0 space-y-3">
                   <p className="text-sm/6 text-[var(--sj-ink-soft)]">{step.body}</p>
-                  <CodeBlock aria-label={`${step.title} sample`} code={step.sample} wrap />
+                  <CodeBlock aria-label={`${step.title} sample`} copyLabel={`Copy ${step.title} sample`} code={step.sample} wrap />
                 </div>
               </article>
             ))}
@@ -688,7 +688,7 @@ export default function Developers() {
               {nativeDogfoodChecklist.map((item) => <li key={item}>- {item}</li>)}
             </ul>
           </div>
-          <CodeBlock aria-label="Spoonjoy Apple native quickstart sample" code={nativeDogfoodSample} wrap />
+          <CodeBlock aria-label="Spoonjoy Apple native quickstart sample" copyLabel="Copy the Spoonjoy Apple native quickstart sample" code={nativeDogfoodSample} wrap />
         </div>
       </SectionShell>
 
@@ -707,7 +707,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{path.body}</p>
-                <CodeBlock aria-label={`${path.title} sample`} code={path.sample} wrap />
+                <CodeBlock aria-label={`${path.title} sample`} copyLabel={`Copy ${path.title} sample`} code={path.sample} wrap />
               </div>
             </article>
           ))}
@@ -729,7 +729,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{step.body}</p>
-                <CodeBlock aria-label={`${step.title} sample`} code={step.sample} wrap />
+                <CodeBlock aria-label={`${step.title} sample`} copyLabel={`Copy ${step.title} sample`} code={step.sample} wrap />
               </div>
             </article>
           ))}
@@ -743,14 +743,14 @@ export default function Developers() {
             <Text tone="muted" className="mt-2">
               /api/v1 REST resources return ok, requestId, and data or error fields. Raw OpenAPI documents are the exception.
             </Text>
-            <CodeBlock aria-label="API v1 REST response shape example" code={`{ "ok": true, "requestId": "req_example", "data": {} }\n{ "ok": false, "requestId": "req_example", "error": { "code": "invalid_token", "status": 401 } }`} wrap className="mt-4" />
+            <CodeBlock aria-label="API v1 REST response shape example" copyLabel="Copy the API v1 REST response shape example" code={`{ "ok": true, "requestId": "req_example", "data": {} }\n{ "ok": false, "requestId": "req_example", "error": { "code": "invalid_token", "status": 401 } }`} wrap className="mt-4" />
           </article>
           <article className="border-y border-[var(--sj-border)] py-5">
             <h3 className="font-sj-display text-2xl/7 font-semibold text-[var(--sj-ink)]">Protocol exceptions</h3>
             <Text tone="muted" className="mt-2">
               OAuth endpoints use OAuth token/error JSON except 429 rate limits, delegated /api/tools/* helpers use the legacy helper envelope, and /mcp uses JSON-RPC result/error objects.
             </Text>
-            <CodeBlock aria-label="Protocol exceptions example" code={`OAuth: { "access_token": "sj_...", "refresh_token": "ort_..." }\nAgent helper: { "ok": true, "data": { "status": "pending" } }\nMCP: { "jsonrpc": "2.0", "result": {} }`} wrap className="mt-4" />
+            <CodeBlock aria-label="Protocol exceptions example" copyLabel="Copy the protocol exceptions example" code={`OAuth: { "access_token": "sj_...", "refresh_token": "ort_..." }\nAgent helper: { "ok": true, "data": { "status": "pending" } }\nMCP: { "jsonrpc": "2.0", "result": {} }`} wrap className="mt-4" />
           </article>
         </div>
       </SectionShell>
@@ -781,7 +781,7 @@ export default function Developers() {
                 <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
                   {flow.notes.map((note) => <li key={note}>- {note}</li>)}
                 </ul>
-                <CodeBlock aria-label={`${flow.title} sample`} code={flow.sample} wrap />
+                <CodeBlock aria-label={`${flow.title} sample`} copyLabel={`Copy ${flow.title} sample`} code={flow.sample} wrap />
               </div>
             </article>
           ))}
@@ -820,7 +820,7 @@ export default function Developers() {
               </div>
               <div className="min-w-0 space-y-3">
                 <p className="text-sm/6 text-[var(--sj-ink-soft)]">{scenario.body}</p>
-                <CodeBlock aria-label={`${scenario.title} sample`} code={scenario.sample} wrap />
+                <CodeBlock aria-label={`${scenario.title} sample`} copyLabel={`Copy ${scenario.title} sample`} code={scenario.sample} wrap />
               </div>
             </article>
           ))}

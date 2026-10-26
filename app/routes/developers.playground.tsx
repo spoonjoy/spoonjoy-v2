@@ -1088,7 +1088,7 @@ export default function DeveloperPlayground() {
                   <div className="grid gap-3 lg:grid-cols-3">
                     {operationPolicies.map(([label, policy]) => (
                       <Collapsible key={label} title={label}>
-                        <CodeBlock aria-label={`${selected.label} ${label.toLowerCase()}`} code={JSON.stringify(policy, null, 2)} wrap className="mt-3" />
+                        <CodeBlock aria-label={`${selected.label} ${label.toLowerCase()}`} copyLabel={`Copy ${selected.label} ${label.toLowerCase()}`} code={JSON.stringify(policy, null, 2)} wrap className="mt-3" />
                       </Collapsible>
                     ))}
                   </div>
@@ -1300,7 +1300,7 @@ export default function DeveloperPlayground() {
                         />
                       );
                     })}
-                    <CodeBlock aria-label={bodyLabel} code={bodyText} wrap />
+                    <CodeBlock aria-label={bodyLabel} code={bodyText} wrap copy={false} />
                   </div>
                 ) : (
                   <TextArea
@@ -1346,7 +1346,7 @@ export default function DeveloperPlayground() {
 	                  <p className="font-sj-ui text-sm font-semibold text-[var(--sj-ink)]">Example payloads</p>
 	                  {selected.responseExamples.map((example) => (
                     <Collapsible key={`${selected.id}-${example.status}-${example.name}`} title={`${example.status} ${example.label}`}>
-	                      <CodeBlock aria-label={`${selected.label} ${example.status} ${example.label} response example`} code={example.example} wrap className="mt-3" />
+	                      <CodeBlock aria-label={`${selected.label} ${example.status} ${example.label} response example`} copyLabel={`Copy ${selected.label} ${example.status} ${example.label} response example`} code={example.example} wrap className="mt-3" />
                     </Collapsible>
 	                  ))}
 	                </div>
@@ -1435,7 +1435,7 @@ export default function DeveloperPlayground() {
             <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
               {scenario.notes.map((note) => <li key={note}>- {note}</li>)}
             </ul>
-            <CodeBlock aria-label={`${scenario.title} sample`} code={scenario.sample} wrap />
+            <CodeBlock aria-label={`${scenario.title} sample`} code={scenario.sample} wrap copy={false} />
             <div>
 	              <CopyButton variant="plain" value={scenario.sample} label={`Copy ${scenario.title} sample`} />
             </div>
@@ -1454,7 +1454,7 @@ export default function DeveloperPlayground() {
             <ul className="grid gap-1 text-sm/6 text-[var(--sj-ink-soft)]">
               {flow.notes.map((note) => <li key={note}>- {note}</li>)}
             </ul>
-            <CodeBlock aria-label={`${flow.title} sample`} code={flow.sample} wrap />
+            <CodeBlock aria-label={`${flow.title} sample`} code={flow.sample} wrap copy={false} />
             <div>
 	              <CopyButton variant="plain" value={flow.sample} label={`Copy ${flow.title} sample`} />
             </div>

@@ -36,7 +36,7 @@ describe("/mcp landing page", () => {
     const command = screen.getByText(/claude mcp add/);
     const codeBlock = command.closest<HTMLElement>('[data-ouro="code-block"]');
     expect(codeBlock).not.toBeNull();
-    if (codeBlock) expect(within(codeBlock).getByRole("button", { name: "Copy code" })).toBeInTheDocument();
+    if (codeBlock) expect(within(codeBlock).getByRole("button", { name: "Copy the Claude Code command" })).toBeInTheDocument();
     expect(pageText).toContain("Import through an agent");
     expect(pageText).toContain("create_recipe");
     expect(pageText).toContain("recipes");
