@@ -56,8 +56,9 @@ interface Placement {
   usableBottom: number;
   viewportWidth: number;
   covered: string[];
-  /** The label's width and the room inside the action's border; a button never wraps its label. */
-  label: { scrollWidth: number; clientWidth: number };
+  /** Where the label (its words and icon) and the inside of the action's border fall across the
+   * screen; a button never wraps its label, so a long one spills past the border. */
+  label: { left: number; right: number; innerLeft: number; innerRight: number };
   /** Text in the action that is drawn in a fallback font because its web font has not loaded. */
   fallbackFont: string[];
 }
@@ -101,7 +102,26 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
         const rect = element.getBoundingClientRect();
         return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
       });
-      const label = await action.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+      // The words and the icon only: the button's own decoration reaches a pixel past its padding on
+      // every phone, so the button's scrollWidth can't tell a spilled label. No label at all fails.
+      const label = await action.evaluate((element) => {
+        const rects: DOMRect[] = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          rects.push(...Array.from(range.getClientRects()));
+        }
+        element.querySelectorAll("svg").forEach((icon) => rects.push(icon.getBoundingClientRect()));
+        const box = element.getBoundingClientRect();
+        return {
+          left: rects.length ? Math.min(...rects.map((rect) => rect.left)) : NaN,
+          right: rects.length ? Math.max(...rects.map((rect) => rect.right)) : NaN,
+          innerLeft: box.left + element.clientLeft,
+          innerRight: box.left + element.clientLeft + element.clientWidth,
+        };
+      });
       const fallbackFont = await action.evaluate((element) => {
         const missing: string[] = [];
         // FontFaceSet.check (is this font loaded?), bound once; it is not Playwright's checkbox check().
@@ -144,7 +164,8 @@ async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, sc
         expect.soft(box.left, `${where} starts inside the left edge`).toBeGreaterThanOrEqual(0);
         expect.soft(box.right, `${where} ends inside the right edge`).toBeLessThanOrEqual(viewportWidth);
         expect.soft(covered, `${where}: what covers it`).toEqual([]);
-        expect.soft(label.scrollWidth, `${where}: its label fits inside its border (${label.clientWidth} px)`).toBeLessThanOrEqual(label.clientWidth);
+        expect.soft(label.left, `${where}: its label starts inside its border (at ${label.innerLeft})`).toBeGreaterThanOrEqual(label.innerLeft);
+        expect.soft(label.right, `${where}: its label ends inside its border (at ${label.innerRight})`).toBeLessThanOrEqual(label.innerRight);
         expect.soft(fallbackFont, `${where}: text measured in a fallback font`).toEqual([]);
       }
     }
