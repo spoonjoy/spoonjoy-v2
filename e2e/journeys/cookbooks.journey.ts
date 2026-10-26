@@ -67,6 +67,12 @@ async function openOwnerTools(page: Page) {
   await ownerToolsToggle(page).click();
   await expect(ownerToolsToggle(page)).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Edit title", exact: true })).toBeVisible();
+  // A tool is "visible" as soon as the panel starts growing, because clipping does not hide it.
+  // The panel has finished when its height transition is over and it shows all its content.
+  await page.waitForFunction(() => {
+    const panel = document.getElementById("cookbook-owner-tools")?.closest("[data-ouro-collapsible-panel]");
+    return panel instanceof HTMLElement && panel.getAnimations().length === 0 && panel.clientHeight >= panel.scrollHeight;
+  });
 }
 
 test.describe("Cookbooks", () => {
