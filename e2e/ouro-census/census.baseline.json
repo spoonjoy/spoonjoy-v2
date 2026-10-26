@@ -5297,7 +5297,7 @@
           "count": 1
         },
         {
-          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in -",
+          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in main",
           "count": 1
         },
         {
@@ -6045,11 +6045,11 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
@@ -6235,15 +6235,15 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 3: Combine\" [select/option] in -",
+          "identity": "option \"Step 3: Combine\" [select/option] in main",
           "count": 1
         },
         {
@@ -6571,11 +6571,11 @@
       ],
       "xray": [
         {
-          "identity": "button \"23 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"23 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
-          "identity": "button \"Close\" [inspector/close] in group \"X-ray\"",
+          "identity": "button \"Close\" [inspector/close] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -6660,7 +6660,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 21
+          "count": 13
         },
         {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
@@ -10807,11 +10807,11 @@
           "count": 1
         },
         {
-          "identity": "menuitem \"Close\" [menu/close] in -",
+          "identity": "menuitem \"Close\" [menu/close] in main",
           "count": 1
         },
         {
-          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in -",
+          "identity": "menuitem \"Delete jasmine rice\" [menu/item] in main",
           "count": 1
         },
         {
@@ -11271,11 +11271,11 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
@@ -11365,15 +11365,15 @@
           "count": 1
         },
         {
-          "identity": "option \"Step 1: Cook the rice\" [select/option] in -",
+          "identity": "option \"Step 1: Cook the rice\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 2: Make the dressing\" [select/option] in -",
+          "identity": "option \"Step 2: Make the dressing\" [select/option] in main",
           "count": 1
         },
         {
-          "identity": "option \"Step 3: Combine\" [select/option] in -",
+          "identity": "option \"Step 3: Combine\" [select/option] in main",
           "count": 1
         },
         {
@@ -11693,11 +11693,11 @@
       ],
       "xray": [
         {
-          "identity": "button \"19 components\" [inspector/list] in group \"X-ray\"",
+          "identity": "button \"19 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
-          "identity": "button \"Close\" [inspector/close] in group \"X-ray\"",
+          "identity": "button \"Close\" [inspector/close] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -11774,7 +11774,7 @@
         },
         {
           "identity": "link \"\" [inspector/tag] in -",
-          "count": 17
+          "count": 3
         },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
