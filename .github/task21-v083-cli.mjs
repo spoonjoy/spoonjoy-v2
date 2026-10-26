@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 // Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
-const acceptedHead = "a872f2390e5db28a1be82dee0bece85504f2d0ef";
-const tag = "v1.2.6";
-const tagCommit = "bb44a55770ca52bdd166372fc92e4aa3602781ce";
+const acceptedHead = "b7aa592260c8fc736ff076bb3ec46c48a3c8d1c7";
+const tag = "v1.2.8";
+const tagCommit = "cef017af04309b1102c869e32818b432ec5d8a6e";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -66,8 +66,9 @@ const installed = JSON.parse(readFileSync(".github/ouro-hx-installed.json", "utf
 assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
-// Paths introduced by the initial v1.2.0 CLI run and by v1.2.5 (portal-container and the axe
-// helper's own test); every other path in this patch updates an existing file.
+// Paths introduced by the initial v1.2.0 CLI run, by v1.2.5 (portal-container and the axe
+// helper's own test) and by v1.2.8 (the shared axe-core version check); every other path in this
+// patch updates an existing file.
 const expectedNew = [
   "app/components/ouro/breadcrumb/breadcrumb.stories.tsx",
   "app/components/ouro/breadcrumb/breadcrumb.test-d.ts",
@@ -184,11 +185,13 @@ const expectedNew = [
   "app/lib/ouro/portal-container.ts",
   "app/lib/ouro/share.test.ts",
   "app/lib/ouro/share.ts",
+  "app/lib/ouro/testing/axe-version.ts",
   "app/lib/ouro/testing/axe.test.ts",
   "app/lib/ouro/use-install-prompt.test.tsx",
   "app/lib/ouro/use-install-prompt.ts",
   "app/lib/ouro/use-timer.test.tsx",
   "app/lib/ouro/use-timer.ts",
+  "e2e/ouro-census/census-axe-version.mjs",
   "e2e/ouro-census/census-collect.d.mts",
   "e2e/ouro-census/census-collect.mjs",
   "e2e/ouro-census/census-compare.mjs",

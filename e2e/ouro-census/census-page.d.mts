@@ -49,7 +49,7 @@ declare function censusTests(options: {
   prepare?: (page: Page) => Promise<void>;
 }): void;
 
-/** The page's visible controls as a multiset, once two readings a moment apart agree. */
+/** The page's visible controls as a multiset, once two readings a moment apart agree. Throws, naming the version it found, when the app's axe-core is older than the kits' minimum. */
 declare function collectCensus(page: Page, options?: { attempts?: number; intervalMs?: number }): Promise<Multiset>;
 /** The installed components' names, the only valid markers. */
 declare function installedItems(componentsDir: string, readdir?: (directory: string) => string[]): string[];

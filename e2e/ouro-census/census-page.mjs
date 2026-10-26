@@ -3,6 +3,7 @@ import path from "node:path";
 import axe from "axe-core";
 import { BASELINE_PATH, checkCensusState, controlIdentity, EXPECTED_FILE, expectedFromJourneys, stringifyCensus, toMultiset, workerFileName } from "./census.mjs";
 import { animationsSettled, censusExclusions, collectInPage, interactiveSelector } from "./census-collect.mjs";
+import { requireAxe } from "./census-axe-version.mjs";
 
 /* global URL */
 
@@ -48,14 +49,19 @@ async function identitiesOnPage(page) {
 
 /**
  * The state's multiset of visible control identities, once two readings a moment apart agree (late
- * data and lazy sections can still add controls after hydration and animations).
+ * data and lazy sections can still add controls after hydration and animations). It throws on an
+ * axe-core older than the kits' minimum, naming the version it found, before it loads axe into the page.
  * @param {Page} page
  * @param {{ attempts?: number, intervalMs?: number }} [options]
  * @returns {Promise<Multiset>}
  * @claim "once two readings a moment apart agree" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > loads axe-core, waits for animations, and returns the visible controls once two readings agree)
  * @claim "once two readings a moment apart agree" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > reads 20 times, 250 ms apart, by default)
+ * @claim "It throws on an axe-core older than the kits' minimum" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > refuses an axe-core older than the kit's minimum before it loads axe into the page, naming the version it found)
  */
 export async function collectCensus(page, { attempts = SETTLE_ATTEMPTS, intervalMs = SETTLE_INTERVAL_MS } = {}) {
+  // The registry names axe-core without a version, so an app keeps the one it has; the census reads
+  // names with axe's own computation, so it needs the axe-core that audit needs.
+  requireAxe(axe.version, "Ouro census");
   await page.evaluate(axe.source);
   let previous = JSON.stringify(toMultiset(await identitiesOnPage(page)));
   for (let attempt = 0; attempt < attempts; attempt += 1) {

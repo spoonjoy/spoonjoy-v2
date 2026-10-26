@@ -3,6 +3,7 @@ export type { GateFinding, Verdict };
 
 import axe from "axe-core";
 import { page } from "vitest/browser";
+import { requireAxe } from "./axe-version";
 import { pressTab } from "./tab";
 
 // The export list comes first because the shadcn CLI drops comments before a file's
@@ -83,7 +84,8 @@ function describeFindings(findings: GateFinding[]): string {
  *
  * Anything else axe could not decide fails with axe's own message. A node that leaves the page
  * while it is measured means the page changed under the scan, so it scans the page again, and on
- * the third scan such a node fails.
+ * the third scan such a node fails. It throws on an axe-core older than the kit's minimum
+ * (axe-version.ts), naming the version it found.
  *
  * @example
  * const findings = await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) });
@@ -97,11 +99,15 @@ function describeFindings(findings: GateFinding[]): string {
  * @claim "focusable content hidden from assistive technology," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a control hidden at rest that shows itself in the event that focuses it, as a toast's dismiss button does)
  * @claim "an ARIA toggle inside a `<label>`, only" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a toggle inside a <label> whose text is its name and description, and fails one whose label says more)
  * @claim "Anything else axe could not decide" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails what axe could not decide and the kit does not measure, with axe's own message)
+ * @claim "It throws on an axe-core older than the kit's minimum" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > refuses an axe-core older than the kit's minimum, naming the version it needs and the version it found)
  * @claim "A node that leaves the page" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > scans the page again when a node it found leaves the page while it is measured, as a Searching… line does)
  * @claim "A node that leaves the page" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a node that leaves the page each time it is measured, three scans running)
  * @claim "a field with two labels, only when" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a field with two labels when aria-labelledby names it, and fails it when nothing settles which label names it)
  */
 async function audit(context: axe.ElementContext): Promise<GateFinding[]> {
+  // The registry names axe-core without a version, so an app keeps the one it has; an older one
+  // decides some checks differently (link-in-text-block among them), so it must not pass quietly.
+  requireAxe(axe.version, "audit");
   // A node that leaves the page while it is measured (a "Searching…" line once results come) means
   // the page changed under the scan: scan the page as it is now, and fail once it never holds still.
   for (let attempt = 1; ; attempt++) {
