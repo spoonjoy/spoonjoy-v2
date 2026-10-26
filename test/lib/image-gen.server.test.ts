@@ -153,7 +153,7 @@ describe("generatePlaceholderImage", () => {
     await generatePlaceholderImage("Pasta", "fresh and bright", deps);
     expect(runner.textToImage).toHaveBeenCalledWith(
       composePlaceholderPrompt("Pasta", "fresh and bright"),
-      { model: "dall-e-3" },
+      { model: "gpt-image-1-mini" },
     );
   });
 
@@ -169,7 +169,7 @@ describe("generatePlaceholderImage", () => {
 
     expect(runner.textToImage).toHaveBeenCalledWith(
       expect.stringContaining("Additional direction: use a blue linen napkin."),
-      { model: "dall-e-3" },
+      { model: "gpt-image-1-mini" },
     );
   });
 

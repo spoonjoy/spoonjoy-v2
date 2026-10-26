@@ -151,7 +151,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
 
     expect(runner.textToImage).toHaveBeenCalledWith(
       expect.stringContaining("Additional direction: brighter herbs and tighter crop."),
-      { model: "dall-e-3", signal: expect.any(AbortSignal) },
+      { model: "gpt-image-1-mini", signal: expect.any(AbortSignal) },
     );
     await expect(
       db.recipeCover.findUniqueOrThrow({
@@ -409,7 +409,10 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     expect(openAiFetch).toHaveBeenCalledTimes(1);
     const [request, init] = openAiFetch.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit | undefined];
     expect(String(request instanceof Request ? request.url : request)).toBe("https://api.openai.com/v1/images/generations");
-    expect(JSON.parse(String(init?.body))).toMatchObject({ model: "dall-e-3" });
+    // OpenAI no longer serves dall-e-3 to our key; gpt-image models return base64 without response_format.
+    const body = JSON.parse(String(init?.body));
+    expect(body).toMatchObject({ model: "gpt-image-1-mini", size: "1024x1024" });
+    expect(body).not.toHaveProperty("response_format");
     const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
     expect(cover).toMatchObject({ status: "ready", generationStatus: "succeeded" });
     expect(bucket.put).toHaveBeenCalledWith(
@@ -837,7 +840,7 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
           coverId,
           sourceType: "ai-placeholder",
           quotaKind: "placeholder",
-          model: "dall-e-3",
+          model: "gpt-image-1-mini",
         }),
       }),
     ]);
