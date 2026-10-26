@@ -250,14 +250,21 @@ async function main() {
     await page.getByRole('checkbox', { name: 'rice' }).click()
     await expect(page.getByRole('checkbox', { name: 'rice' })).toHaveAttribute('aria-checked', 'true')
     report.screenshots.push(await screenshot(page, outDir, '03-cook-mode'))
+    // A tab reopens cook mode on its recipe after a reload, so leave it before using the header.
+    await page.getByTestId('cook-mode-panel').getByRole('button', { name: 'Exit cook mode', exact: true }).click()
+    await expect(page.getByTestId('cook-mode-panel')).toBeHidden()
 
     await gotoApp(page, new URL(`/recipes/${recipeId}`, baseUrl).toString())
-    const addToListResponse = page.waitForResponse((response) => {
-      const request = response.request()
-      return request.method() === 'POST' && new URL(response.url()).pathname.startsWith('/shopping-list')
-    }, { timeout: 15_000 })
-    await page.getByTestId('recipe-header-list-action').click()
-    expect((await addToListResponse).ok()).toBe(true)
+    // Awaited together, so a failed click is reported instead of the response wait's rejection
+    // crashing the process before the cleanup below runs.
+    const [addToListResponse] = await Promise.all([
+      page.waitForResponse((response) => {
+        const request = response.request()
+        return request.method() === 'POST' && new URL(response.url()).pathname.startsWith('/shopping-list')
+      }, { timeout: 15_000 }),
+      page.getByTestId('recipe-header-list-action').click(),
+    ])
+    expect(addToListResponse.ok()).toBe(true)
     await expect(page.getByTestId('recipe-header-list-action')).toContainText(/in list/i, { timeout: 10_000 })
 
     await gotoApp(page, new URL('/shopping-list', baseUrl).toString())
