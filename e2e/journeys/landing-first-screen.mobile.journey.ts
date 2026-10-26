@@ -104,13 +104,15 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
       const label = await action.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
       const fallbackFont = await action.evaluate((element) => {
         const missing: string[] = [];
+        // FontFaceSet.check (is this font loaded?), bound once; it is not Playwright's checkbox check().
+        const fontIsLoaded = document.fonts.check.bind(document.fonts);
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const text = node.textContent?.trim();
           if (!text || !node.parentElement) continue;
           const style = getComputedStyle(node.parentElement);
           const family = style.fontFamily.split(",")[0].trim();
-          if (!document.fonts.check(`${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${family}`, text)) missing.push(`${text} (${family})`);
+          if (!fontIsLoaded(`${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${family}`, text)) missing.push(`${text} (${family})`);
         }
         return missing;
       });
