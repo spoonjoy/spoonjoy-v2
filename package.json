@@ -207,7 +207,7 @@
     "@vitest/coverage-v8": "4.1.12",
     "@vitest/ui": "4.1.12",
     "autoprefixer": "^10.4.23",
-    "axe-core": "4.11.1",
+    "axe-core": "4.13.0",
     "better-sqlite3": "13.0.0",
     "chromatic": "^11.28.0",
     "happy-dom": "21.0.4",

@@ -8,7 +8,7 @@
 // the Storybook check, and fails on every violation and every check axe could not decide.
 //
 // preload: false — by default axe fetches assets (stylesheets' CSSOM, media metadata) for the
-// handful of rules whose metadata declares `preload: true` (in axe-core 4.11: css-orientation-
+// handful of rules whose metadata declares `preload: true` (in axe-core 4.13: css-orientation-
 // lock and no-autoplay-audio); every other rule runs immediately without waiting on that fetch.
 // Here it fetched the Google Fonts sheet linked in app/root.tsx, which QA's CSP connect-src
 // correctly blocks (the app only ever allows that stylesheet via style-src and never fetches

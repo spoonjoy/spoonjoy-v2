@@ -226,8 +226,8 @@ importers:
         specifier: ^10.4.23
         version: 10.4.23(postcss@8.5.23)
       axe-core:
-        specifier: 4.11.1
-        version: 4.11.1
+        specifier: 4.13.0
+        version: 4.13.0
       better-sqlite3:
         specifier: 13.0.0
         version: 13.0.0
@@ -2109,8 +2109,8 @@ packages:
     peerDependencies:
       postcss: ^8.1.0
 
-  axe-core@4.11.1:
-    resolution: {integrity: sha512-BASOg+YwO2C+346x3LZOeoovTIoTrRqEsqMa6fmfAV0P+U9mFr9NsyOEpiYvFjbc64NMrSswhV50WdXzdb/Z5A==}
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
     engines: {node: '>=4'}
 
   babel-dead-code-elimination@1.0.12:
@@ -4684,7 +4684,7 @@ snapshots:
   '@storybook/addon-a11y@10.6.2(storybook@10.6.2(@types/react@19.2.10)(prettier@3.8.1)(react@19.2.4))':
     dependencies:
       '@storybook/global': 5.0.0
-      axe-core: 4.11.1
+      axe-core: 4.13.0
       storybook: 10.6.2(@types/react@19.2.10)(prettier@3.8.1)(react@19.2.4)
 
   '@storybook/addon-docs@10.6.2(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(storybook@10.6.2(@types/react@19.2.10)(prettier@3.8.1)(react@19.2.4))':
@@ -5178,7 +5178,7 @@ snapshots:
       postcss: 8.5.23
       postcss-value-parser: 4.2.0
 
-  axe-core@4.11.1: {}
+  axe-core@4.13.0: {}
 
   babel-dead-code-elimination@1.0.12:
     dependencies:
