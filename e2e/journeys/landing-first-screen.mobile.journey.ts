@@ -27,9 +27,8 @@ interface Phone {
   context: BrowserContextOptions;
 }
 
-function phone(name: keyof typeof devices): Phone {
-  const { viewport, screen, deviceScaleFactor, isMobile, hasTouch, userAgent } = devices[name];
-  return { name, context: { viewport, screen, deviceScaleFactor, isMobile, hasTouch, userAgent } };
+function phone(name: string): Phone {
+  return { name, context: { ...devices[name] } };
 }
 
 const DUO_SCREEN: Phone = {
