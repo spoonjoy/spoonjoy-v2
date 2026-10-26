@@ -305,3 +305,7 @@ beforeAll(async () => {
   await db.oAuth.deleteMany({});
   await db.user.deleteMany({});
 });
+
+
+// Random test text never spells a word the objectionable-content filter rejects.
+import "./support/random-test-text";
