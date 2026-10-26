@@ -35,8 +35,8 @@ describe("main", () => {
     expect(deps.readFile).toHaveBeenCalledWith("/event.json");
     expect(deps.run.mock.calls.map(([command, args]) => [command, args])).toEqual([
       [process.execPath, ["app/lib/ouro/claims-check.mjs", "ratchet"]],
+      [process.execPath, ["app/lib/ouro/claims-check.mjs", "lint", "--pr"]],
       [process.execPath, ["app/lib/ouro/claims-check.mjs", "check", "--network=changed"]],
-      [process.execPath, ["app/lib/ouro/claims-check.mjs", "lint", "--pr", "--network"]],
     ]);
     for (const [, , options] of deps.run.mock.calls) {
       expect(options.env).toEqual({
