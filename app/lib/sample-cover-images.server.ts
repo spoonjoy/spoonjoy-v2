@@ -46,20 +46,30 @@ function sampleContentType(key: string): NonNullable<GeneratedImageOutput["conte
 }
 
 /**
+ * The parts of the photo bucket the sample runner reads. The Workers R2 binding has them; the app's
+ * own `R2Bucket` declaration (app/cloudflare-env.d.ts) lists only get, put and delete.
+ */
+interface SampleImageBucket {
+  list(options: { prefix: string }): Promise<{ objects: Array<{ key: string }> }>;
+  get(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
+}
+
+/**
  * A runner that returns one of the bucket's sample images, chosen by `seed` (the recipe's id), for
  * both text-to-image and image edits. Its output goes through the same storage and cover updates
  * as a generated image.
  */
 export function createSampleImageRunner({ bucket, seed }: { bucket: R2Bucket; seed: string }): ImageGenRunner {
+  const samples = bucket as unknown as SampleImageBucket;
   async function sample(): Promise<GeneratedImageOutput> {
-    const listing = await bucket.list({ prefix: SAMPLE_COVER_PREFIX });
+    const listing = await samples.list({ prefix: SAMPLE_COVER_PREFIX });
     const keys = listing.objects.map((object) => object.key).sort();
     if (keys.length === 0) {
       throw new ImageGenError(`The photo bucket has no sample images under ${SAMPLE_COVER_PREFIX}`);
     }
     const key = keys[sampleIndex(seed, keys.length)];
     const contentType = sampleContentType(key);
-    const object = await bucket.get(key);
+    const object = await samples.get(key);
     if (!object) throw new ImageGenError(`Sample image ${key} is missing from the photo bucket`);
     return { bytes: new Uint8Array(await object.arrayBuffer()), contentType };
   }

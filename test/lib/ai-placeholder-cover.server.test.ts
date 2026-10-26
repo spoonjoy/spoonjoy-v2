@@ -35,10 +35,11 @@ const SAMPLE_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 7, 7]);
 
 // A photo bucket holding one QA sample image under samples/covers/.
 function sampleR2(): R2Bucket {
-  const bucket = mockR2();
-  vi.mocked(bucket.list).mockResolvedValue({ objects: [{ key: "samples/covers/roast-chicken.jpg" }] } as never);
-  vi.mocked(bucket.get).mockResolvedValue({ arrayBuffer: async () => SAMPLE_BYTES.slice().buffer } as never);
-  return bucket;
+  return {
+    ...mockR2(),
+    list: vi.fn(async () => ({ objects: [{ key: "samples/covers/roast-chicken.jpg" }] })),
+    get: vi.fn(async () => ({ arrayBuffer: async () => SAMPLE_BYTES.slice().buffer })),
+  } as unknown as R2Bucket;
 }
 
 function postHogFetchSpy() {

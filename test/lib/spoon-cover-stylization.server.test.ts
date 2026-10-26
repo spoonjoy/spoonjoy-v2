@@ -1228,9 +1228,11 @@ describe("scheduleSpoonCoverStylization", () => {
 
   it("stores a sample image from the bucket and never calls a paid provider when QA asks for samples", async () => {
     const sampleBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 5, 5]);
-    const bucket = mockR2();
-    vi.mocked(bucket.list).mockResolvedValue({ objects: [{ key: "samples/covers/crispy-chickpeas.webp" }] } as never);
-    vi.mocked(bucket.get).mockResolvedValue({ arrayBuffer: async () => sampleBytes.slice().buffer } as never);
+    const bucket = {
+      ...mockR2(),
+      list: vi.fn(async () => ({ objects: [{ key: "samples/covers/crispy-chickpeas.webp" }] })),
+      get: vi.fn(async () => ({ arrayBuffer: async () => sampleBytes.slice().buffer })),
+    } as unknown as R2Bucket;
     const originalFetch = globalThis.fetch;
     const networkFetch = vi.fn();
     globalThis.fetch = networkFetch as unknown as typeof fetch;

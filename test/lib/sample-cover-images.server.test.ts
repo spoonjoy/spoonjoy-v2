@@ -8,14 +8,18 @@ import {
 } from "~/lib/sample-cover-images.server";
 import { SAMPLE_COVER_PREFIX as UPLOAD_PREFIX } from "../../scripts/qa-sample-covers.mjs";
 
-function sampleBucket(objects: Record<string, Uint8Array | null>, listedKeys = Object.keys(objects)): R2Bucket {
+function sampleBucket(objects: Record<string, Uint8Array | null>) {
   return {
-    list: vi.fn(async () => ({ objects: listedKeys.map((key) => ({ key })) })),
+    list: vi.fn(async () => ({ objects: Object.keys(objects).map((key) => ({ key })) })),
     get: vi.fn(async (key: string) => {
       const bytes = objects[key];
-      return bytes ? { arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) } : null;
+      return bytes ? { arrayBuffer: async () => bytes.slice().buffer } : null;
     }),
-  } as unknown as R2Bucket;
+  };
+}
+
+function runnerFor(bucket: ReturnType<typeof sampleBucket>, seed: string) {
+  return createSampleImageRunner({ bucket: bucket as unknown as R2Bucket, seed });
 }
 
 describe("sample-cover-images.server", () => {
@@ -59,7 +63,7 @@ describe("sample-cover-images.server", () => {
     const sorted = [...keys].sort();
     const seed = "recipe-1";
     const expectedKey = sorted[sampleIndex(seed, sorted.length)];
-    const runner = createSampleImageRunner({ bucket, seed });
+    const runner = runnerFor(bucket, seed);
 
     const generated = await runner.textToImage("a prompt", { model: "sample-bucket" });
     const edited = await runner.imageToImage(new File([new Uint8Array([9])], "spoon.png"), "a prompt", { model: "sample-bucket" });
@@ -77,12 +81,12 @@ describe("sample-cover-images.server", () => {
     ["a.webp", "image/webp"],
   ])("labels %s as %s", async (name, contentType) => {
     const key = `${SAMPLE_COVER_PREFIX}${name}`;
-    const runner = createSampleImageRunner({ bucket: sampleBucket({ [key]: new Uint8Array([1]) }), seed: "r" });
+    const runner = runnerFor(sampleBucket({ [key]: new Uint8Array([1]) }), "r");
     await expect(runner.textToImage("p", { model: "m" })).resolves.toMatchObject({ contentType });
   });
 
   it("fails when the bucket has no sample images", async () => {
-    const runner = createSampleImageRunner({ bucket: sampleBucket({}), seed: "r" });
+    const runner = runnerFor(sampleBucket({}), "r");
     await expect(runner.textToImage("p", { model: "m" })).rejects.toThrow(
       `The photo bucket has no sample images under ${SAMPLE_COVER_PREFIX}`,
     );
@@ -90,13 +94,13 @@ describe("sample-cover-images.server", () => {
 
   it("fails on a sample that is not an image it can label", async () => {
     const key = `${SAMPLE_COVER_PREFIX}notes.txt`;
-    const runner = createSampleImageRunner({ bucket: sampleBucket({ [key]: new Uint8Array([1]) }), seed: "r" });
+    const runner = runnerFor(sampleBucket({ [key]: new Uint8Array([1]) }), "r");
     await expect(runner.textToImage("p", { model: "m" })).rejects.toThrow(`Sample image ${key} is not a JPEG, PNG or WebP file`);
   });
 
   it("fails when a listed sample has gone from the bucket", async () => {
     const key = `${SAMPLE_COVER_PREFIX}gone.jpg`;
-    const runner = createSampleImageRunner({ bucket: sampleBucket({ [key]: null }), seed: "r" });
+    const runner = runnerFor(sampleBucket({ [key]: null }), "r");
     await expect(runner.textToImage("p", { model: "m" })).rejects.toThrow(`Sample image ${key} is missing from the photo bucket`);
   });
 });
