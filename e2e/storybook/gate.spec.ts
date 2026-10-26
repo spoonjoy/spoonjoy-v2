@@ -85,12 +85,4 @@ test.describe("focus inside a hidden region", () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.detail).toMatch(/lands inside the hidden region on button#b/);
   });
-
-  test("fails when focus circles without coming back to where it started", async ({ page }) => {
-    await show(page, `<button id="s">Start</button><button id="a">A</button><button onfocus="document.getElementById('a').focus()">Guard</button><div id="r" aria-hidden="true"><button id="b" tabindex="-1">Inside</button></div>`);
-    await page.locator("#s").focus();
-    const [outcome] = await verifyHiddenFocus(page, [{ kind: "hidden-focus", selector: "#r", related: ["#b"] }]);
-    expect(outcome.passed).toBe(false);
-    expect(outcome.detail).toMatch(/never came back to where it started/);
-  });
 });

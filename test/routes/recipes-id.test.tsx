@@ -2724,15 +2724,16 @@ describe("Recipes $id Route", () => {
       await screen.findByRole("heading", { name: "Save Modal Recipe" });
       await openSaveModalFromHeader();
       await screen.findByRole("dialog", { name: "Save to cookbook" });
-      await user.type(screen.getByLabelText("Create new cookbook"), "Fresh Saves");
+      await user.type(screen.getByLabelText("Create new cookbook"), "Zesty Saves");
       await user.click(screen.getByRole("button", { name: "Create & Save" }));
       await closeSaveModal(user);
 
       // The answer lands while the dialog is closed: the page reloads its data once it has.
-      answer({ success: true, newCookbook: { id: "cb-2", title: "Fresh Saves" } });
+      answer({ success: true, newCookbook: { id: "cb-2", title: "Zesty Saves" } });
       await waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
       await settleBrowserTasks();
       await openSaveModalFromHeader();
+      // The new cookbook sorts after Weeknights, so the dialog's own first focus is not on it.
       const createdCookbook = await screen.findByTestId("cookbook-item-cb-2");
       await waitFor(() => expect(screen.getByRole("dialog", { name: "Save to cookbook" })).toContainElement(document.activeElement as HTMLElement));
       expect(createdCookbook).not.toHaveFocus();

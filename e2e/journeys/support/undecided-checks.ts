@@ -139,10 +139,11 @@ async function verifyClosedPopupControls(page: Page, selector: string): Promise<
  * element in tab order (positive tabindex first, then document order; the element focused before
  * is the event's relatedTarget, as with Tab) and follows wherever focus goes, so a focus guard
  * sends it on as it would. An element that does not take focus (a button in a disabled fieldset)
- * leaves the order, as Tab skips it. A walk is complete only when focus is back on its first stop;
- * one that circles elsewhere (a guard sending focus back to an earlier stop) never completes, and
- * the check fails. One walk settles every hidden region on the page; focus goes back where it was.
- * Run it after everything that only looks: moving focus can open a tooltip.
+ * leaves the order, as Tab skips it, rather than leaving focus where it was, which would look like
+ * the walk had come round. A walk is complete when focus lands on a stop it has seen: from there Tab
+ * goes round the same way again, inside a popup's focus trap too. One walk settles every hidden
+ * region on the page; focus goes back where it was. Run it after everything that only looks: moving
+ * focus can open a tooltip.
  */
 export async function verifyHiddenFocus(page: Page, verifications: readonly Verification[]): Promise<VerificationOutcome[]> {
   const selectors = verifications.map((each) => ({ region: each.selector, related: each.related }));
@@ -171,9 +172,9 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
     const landed = selectors.map(() => [] as string[]);
     let steps = 0;
     const walk = async (direction: 1 | -1) => {
-      // The walk's first stop: where focus was when that is in the tab order, else the first
-      // element the walk lands on (focus on <main> after a skip link is outside the order).
-      let origin: Element | null = tabOrder().find((node) => node === document.activeElement) ?? null;
+      const seen = new Set<Element>();
+      const start = document.activeElement;
+      if (start && start !== document.body) seen.add(start);
       const limit = tabOrder().length * 2 + 4;
       for (let step = 0; step < limit; step += 1) {
         const order = tabOrder();
@@ -213,8 +214,8 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
           const region = matches.length === 1 ? matches[0] : null;
           if (stillHidden && region && (region === active || region.contains(active)) && !landed[index].includes(describe(active))) landed[index].push(describe(active));
         });
-        if (origin === null) origin = active;
-        else if (active === origin) return true;
+        if (seen.has(active)) return true;
+        seen.add(active);
       }
       return false;
     };
@@ -237,12 +238,12 @@ export async function verifyHiddenFocus(page: Page, verifications: readonly Veri
     return regions.map((matches, index) => {
       if (matches.length !== 1) return { passed: false, detail: `the hidden region matches ${matches.length} elements` };
       if (landed[index].length > 0) return { passed: false, detail: `the tab order lands inside the hidden region on ${landed[index].join(", ")}` };
-      if (!complete) return { passed: false, detail: "the tab order never came back to where it started, so not every stop was seen" };
+      if (!complete) return { passed: false, detail: "the tab order never came back to a stop it had already seen, so not every stop was seen" };
       const skipped = related[index].filter((node) => !reached.has(node)).length;
       return {
         passed: true,
         detail:
-          `the tab order went both ways (${steps} steps) back to where it started, without landing inside it while it was hidden; ` +
+          `the tab order went both ways (${steps} steps) until it came back to a stop it had seen, without landing inside it while it was hidden; ` +
           `of the ${related[index].length} focusable elements axe found there, ${skipped} were never reached` +
           (closed > 0 ? `; Tab closed ${closed} popup(s) on the way` : ""),
       };
