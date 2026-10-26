@@ -112,6 +112,12 @@ export const OPENAI_IMAGE_EDIT_MODELS = [
   "gpt-image-1-mini",
 ] as const;
 
+/**
+ * The OpenAI model that draws a cover from text. OpenAI no longer serves dall-e-3 to our key, and
+ * gpt-image-1-mini answers a 1024x1024 image in about 12 seconds, inside IMAGE_ATTEMPT_TIMEOUT_MS.
+ */
+export const OPENAI_TEXT_TO_IMAGE_MODEL = "gpt-image-1-mini";
+
 export const IMAGE_PROMPT_ADDITION_MAX_LENGTH = 240;
 export const DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
 export const DEFAULT_GEMINI_IMAGE_TIMEOUT_MS = 30_000;
@@ -586,7 +592,7 @@ export async function generatePlaceholderImage(
     runnerResult = await runWithinBudget(
       deps.budget,
       deps.budget?.attemptTimeoutMs ?? null,
-      (signal) => deps.runner.textToImage(prompt, { model: deps.model ?? "dall-e-3", signal }),
+      (signal) => deps.runner.textToImage(prompt, { model: deps.model ?? OPENAI_TEXT_TO_IMAGE_MODEL, signal }),
     );
   } catch (cause) {
     throw new ImageGenError("Placeholder image generation failed", { cause });

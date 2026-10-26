@@ -110,7 +110,7 @@ describe("image-gen.server prompts and constants", () => {
     expect(prompt).not.toContain("make the sauce glossier!.");
   });
 
-  it("returns a text-only fallback prompt for DALL-E 3", () => {
+  it("returns a text-only fallback prompt for the text-to-image model", () => {
     const prompt = composeStylizationFallbackPrompt("Tomato Soup");
     expect(prompt).toContain("Restyle this photograph");
     expect(prompt).toContain("warm editorial cookbook photography");
@@ -141,7 +141,7 @@ describe("image-gen.server prompts and constants", () => {
 });
 
 describe("generatePlaceholderImage", () => {
-  it("calls textToImage with the composed prompt and the DALL-E 3 model", async () => {
+  it("calls textToImage with the composed prompt and the gpt-image-1-mini model", async () => {
     const runner = mockRunner();
     const deps: ImageGenDeps = {
       env: {},
@@ -153,7 +153,7 @@ describe("generatePlaceholderImage", () => {
     await generatePlaceholderImage("Pasta", "fresh and bright", deps);
     expect(runner.textToImage).toHaveBeenCalledWith(
       composePlaceholderPrompt("Pasta", "fresh and bright"),
-      { model: "dall-e-3" },
+      { model: "gpt-image-1-mini" },
     );
   });
 
@@ -169,7 +169,7 @@ describe("generatePlaceholderImage", () => {
 
     expect(runner.textToImage).toHaveBeenCalledWith(
       expect.stringContaining("Additional direction: use a blue linen napkin."),
-      { model: "dall-e-3" },
+      { model: "gpt-image-1-mini" },
     );
   });
 

@@ -9,6 +9,7 @@ import {
   DEFAULT_GEMINI_IMAGE_TIMEOUT_MS,
   generatePlaceholderImage,
   imageJobBudget,
+  OPENAI_TEXT_TO_IMAGE_MODEL,
   sanitizeImagePromptAddition,
   type ImageGenEnv,
   type ImageGenRunner,
@@ -28,7 +29,7 @@ import {
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 import { touchNativeSyncCookbooksForRecipeOperation } from "~/lib/native-sync-invalidation.server";
 
-const OPENAI_PLACEHOLDER_MODEL = "dall-e-3";
+const OPENAI_PLACEHOLDER_MODEL = OPENAI_TEXT_TO_IMAGE_MODEL;
 
 type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv & { DB?: unknown };
 type ImageGenRunnerFactory = (env: ImageGenerationSchedulerEnv) => ImageGenRunner | null;
