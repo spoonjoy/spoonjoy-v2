@@ -26,10 +26,16 @@ for (const story of stories) {
       // a11y.manual stops the a11y addon running its own axe after the render, which would clash
       // with this run ("Axe is already running").
       await page.goto(`iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story&globals=theme:${scheme};a11y.manual:!true`);
-      // Rendered, as Ouro UI's specs wait for a story (e2e/ouro/story.ts), and in the theme asked
-      // for: the theme decorator sets the class on <html> after the render. The audit then waits
-      // for fonts, images and animations to settle.
+      // Rendered, as Ouro UI's specs wait for a story (e2e/ouro/story.ts), with its play function
+      // done, which is when Storybook's a11y addon checks it, and in the theme asked for: the theme
+      // decorator sets the class on <html> after the render. The audit then waits for fonts,
+      // images and animations to settle.
       await page.locator("#storybook-root > *").first().waitFor();
+      const phase = await page.waitForFunction(() => {
+        const render = (window as { __STORYBOOK_PREVIEW__?: { currentRender?: { phase?: string } } }).__STORYBOOK_PREVIEW__?.currentRender;
+        return ["finished", "errored", "aborted"].includes(render?.phase ?? "") && render?.phase;
+      });
+      if ((await phase.jsonValue()) !== "finished") throw new Error(`The story's render ended ${String(await phase.jsonValue())}, not finished.`);
       await page.waitForFunction((dark) => document.documentElement.classList.contains("dark") === dark, scheme === "dark");
 
       const audit = await auditShownScheme(page, { target: "story" });
