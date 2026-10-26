@@ -50,7 +50,7 @@ wrangler secret put VAPID_PRIVATE_KEY --env qa
 wrangler secret put VAPID_SUBJECT --env qa
 ```
 
-Use `POSTHOG_DISABLED=true` for privacy-sensitive QA runs unless the point of the run is telemetry verification. Match image-provider policy with `IMAGE_PROVIDER_PRIMARY=gemini` and the same Gemini/OpenAI fallback variables used by production. QA OAuth callback configuration must include the QA origin for providers you enable there; WebAuthn passkey verification uses the QA request origin.
+Use `POSTHOG_DISABLED=true` for privacy-sensitive QA runs unless the point of the run is telemetry verification. QA makes AI covers from sample images, never a paid provider: `wrangler.json`'s `env.qa` sets `IMAGE_PROVIDER_PRIMARY=sample` (see `docs/deployment.md`). QA OAuth callback configuration must include the QA origin for providers you enable there; WebAuthn passkey verification uses the QA request origin.
 
 QA deploy and smoke flow:
 

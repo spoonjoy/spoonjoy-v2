@@ -3,6 +3,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCaptured, runInherited, testChanged, testsNamingPaths } from "../../scripts/test-changed.mjs";
+import { findUnexpectedWarnings } from "../../scripts/warning-gate.ts";
 
 const BASE = "b".repeat(40);
 const LIST_FILE = "/tmp/changed.json";
@@ -58,7 +59,20 @@ describe("testChanged", () => {
     });
     expect(testChanged(d)).toBe(0);
     expect(d.run.mock.calls).toEqual([LIST_CHANGED, LIST_ALL, ["pnpm", ["exec", "vitest", "run", "test/a.test.ts", "test/config/worker-observability.test.ts"]]]);
-    expect(d.log).toHaveBeenCalledWith("1 more name a changed file: test/config/worker-observability.test.ts");
+    expect(d.log).toHaveBeenCalledWith("1 more test file(s) name a changed file.");
+  });
+
+  it("logs nothing the warning gate rejects when a test with warning in its name names a changed file", () => {
+    const d = deps({
+      imported: [],
+      all: [{ file: "/repo/test/config/warning-policy.test.ts" }],
+      sources: { "test/config/warning-policy.test.ts": 'readFileSync("vitest.config.ts")' },
+      diff: "vitest.config.ts\n",
+    });
+    expect(testChanged(d)).toBe(0);
+    expect(d.run).toHaveBeenLastCalledWith("pnpm", ["exec", "vitest", "run", "test/config/warning-policy.test.ts"]);
+    const logged = d.log.mock.calls.map(([line]) => String(line)).join("\n");
+    expect(findUnexpectedWarnings(logged)).toEqual([]);
   });
 
   it("runs a test that only names a changed file even when no import reaches a test", () => {

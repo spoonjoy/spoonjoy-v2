@@ -1,0 +1,110 @@
+name: Production Image Key
+
+# Reports whether production's AI covers work (the Worker's secret names and the last 45 days of
+# cover outcomes), and with mode set-key stores the GitHub production environment secret
+# OPENAI_API_KEY, with IMAGE_PROVIDER_PRIMARY=openai and IMAGE_PROVIDER_FALLBACKS=gemini, in
+# production's Worker without a Cloudflare login (scripts/production-image-key.ts). The one new
+# Worker version copies the one production runs and keeps its source tag, so the next Production
+# Deploy accepts it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: report reads only; set-key stores the key, deploys it, then reports
+        required: true
+        default: report
+        type: choice
+        options:
+          - report
+          - set-key
+
+concurrency:
+  group: production-image-key
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
+
+jobs:
+  guard:
+    name: require trusted main
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reject non-main workflow code
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Production credentials are restricted to refs/heads/main."
+            exit 1
+          fi
+
+  image-key:
+    name: ${{ inputs.mode }}
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # A new Worker version copies the newest one, so never run while a release may be uploading.
+      - name: Wait for any in-flight Production Deploy
+        if: inputs.mode == 'set-key'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 40); do
+            busy="$(gh run list --workflow production-deploy.yml --repo "$GITHUB_REPOSITORY" --json status --jq '[.[] | select(.status != "completed")] | length')"
+            if [ "$busy" = "0" ]; then
+              echo "No Production Deploy is running."
+              exit 0
+            fi
+            echo "A Production Deploy is running; checking again in 30s ($attempt/40)."
+            sleep 30
+          done
+          echo "::error::A Production Deploy was still running after 20 minutes."
+          exit 1
+
+      - name: Store the key in production
+        if: inputs.mode == 'set-key'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: pnpm exec tsx scripts/production-image-key.ts set-key
+
+      - name: Report production's image key and cover outcomes
+        if: inputs.mode == 'report'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN }}
+          CLOUDFLARE_D1_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+        run: pnpm exec tsx scripts/production-image-key.ts report
