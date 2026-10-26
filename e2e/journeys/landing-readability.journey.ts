@@ -1,8 +1,8 @@
 // The signed-out landing hero is readable (read-only, signed out, both themes). Its eyebrow,
 // heading, description and three actions sit on a food photo under a dark gradient, so their
 // contrast depends on the photo, not just the theme's tokens. "Log in" and "Search Recipes" used to
-// be outline buttons with the page's dark ink and border on that dark photo, and on a phone the tab
-// bar sits over "Search Recipes" at the top of the page, so coverage is checked too.
+// be outline buttons with the page's dark ink and border on that dark photo. Coverage is checked
+// too; landing-first-screen.mobile.journey.ts checks the actions on a phone's first screen.
 //
 // For each piece of hero text and each action, this measures the contrast of the text against the
 // pixels actually painted behind it (support/readability.ts), at rest and, for the actions, on
