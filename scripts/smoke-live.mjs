@@ -244,7 +244,9 @@ async function main() {
 
     await gotoApp(page, new URL(`/recipes/${recipeId}#cook`, baseUrl).toString())
     await expect(page.getByTestId('cook-mode-panel')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('Step 1 of 1')).toBeVisible()
+    // The step shows its own "Step 1 of 1" label and the pager below repeats it, so scope to each.
+    await expect(page.getByTestId('cook-mode-pager').getByText('Step 1 of 1')).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Cook steps' }).getByText('Step 1 of 1')).toBeVisible()
     await page.getByRole('checkbox', { name: 'rice' }).click()
     await expect(page.getByRole('checkbox', { name: 'rice' })).toHaveAttribute('aria-checked', 'true')
     report.screenshots.push(await screenshot(page, outDir, '03-cook-mode'))

@@ -105,3 +105,36 @@ jobs:
           name: qa-image-cover-smoke-artifacts
           path: qa-image-cover-smoke-artifacts/
           retention-days: 14
+
+  # A failed scheduled run only emails whoever last edited the schedule, so every run of this smoke
+  # from June to October 2026 failed unnoticed. Main's runs keep one open issue instead: opened on the
+  # first failure, commented on each later one, closed by the next pass. Branch runs leave it alone.
+  report:
+    name: report
+    needs: smoke
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    timeout-minutes: 5
+    steps:
+      - name: Open, update or close the failing-smoke issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="QA image-cover smoke failing"
+          label="qa-image-cover-smoke"
+          gh label create "$label" --force --color 8B4513 --description "QA image-cover smoke failures"
+          issue="$(gh issue list --state open --label "$label" --json number,title --jq "map(select(.title == \"$title\")) | first | .number // empty")"
+          if [ "$SMOKE_RESULT" = "success" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --reason completed --comment "Passed again: $RUN_URL"
+            fi
+          elif [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "Failed again ($SMOKE_RESULT): $RUN_URL"
+          else
+            gh issue create --title "$title" --label "$label" --body "The daily QA image-cover smoke failed ($SMOKE_RESULT): $RUN_URL. Its log and the \`qa-image-cover-smoke-artifacts\` artifact show the failing step. Each later failure comments here, and the next passing run on main closes this issue."
+          fi
