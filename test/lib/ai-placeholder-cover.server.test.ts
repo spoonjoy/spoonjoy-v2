@@ -31,6 +31,16 @@ function mockR2(): R2Bucket {
   } as unknown as R2Bucket;
 }
 
+const SAMPLE_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 7, 7]);
+
+// A photo bucket holding one QA sample image under samples/covers/.
+function sampleR2(): R2Bucket {
+  const bucket = mockR2();
+  vi.mocked(bucket.list).mockResolvedValue({ objects: [{ key: "samples/covers/roast-chicken.jpg" }] } as never);
+  vi.mocked(bucket.get).mockResolvedValue({ arrayBuffer: async () => SAMPLE_BYTES.slice().buffer } as never);
+  return bucket;
+}
+
 function postHogFetchSpy() {
   return vi.fn(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
 }
@@ -296,6 +306,116 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
     });
     expect(errorSpy.error).not.toHaveBeenCalled();
     await expectPlaceholderFailed("missing_image_provider_config");
+  });
+
+  describe("where no person sees the cover (IMAGE_PROVIDER_PRIMARY=sample, as on QA)", () => {
+    const paidKeys = { OPENAI_API_KEY: "sk-test", GOOGLE_API_KEY: "google-test", GEMINI_API_KEY: "gemini-test" };
+
+    it("stores a sample image from the bucket and never calls a paid provider", async () => {
+      const originalFetch = globalThis.fetch;
+      const networkFetch = vi.fn();
+      globalThis.fetch = networkFetch as unknown as typeof fetch;
+      const fetchImpl = vi.fn() as unknown as typeof fetch;
+      const bucket = sampleR2();
+      try {
+        await scheduleAiPlaceholderCover({
+          db,
+          userId,
+          recipeId,
+          coverId,
+          title: "Pasta",
+          description: null,
+          env: { ...paidKeys, IMAGE_PROVIDER_PRIMARY: "sample", IMAGE_PROVIDER_FALLBACKS: "openai,gemini" },
+          fetchImpl,
+          bucket,
+          now: () => 4321,
+          logger: errorSpy,
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+
+      expect(networkFetch).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+      const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+      expect(cover).toMatchObject({ status: "ready", generationStatus: "succeeded", failureReason: null });
+      expect(cover.imageUrl).toMatch(/^\/photos\/covers\/4321-[a-f0-9-]+\.jpg$/);
+      expect(bucket.get).toHaveBeenCalledWith("samples/covers/roast-chicken.jpg");
+      expect(bucket.put).toHaveBeenCalledWith(
+        cover.imageUrl.replace("/photos/", ""),
+        SAMPLE_BYTES,
+        expect.objectContaining({ httpMetadata: { contentType: "image/jpeg" } }),
+      );
+      // The rest of the pipeline runs as for a generated cover: quota spent, cover made active.
+      await expect(db.imageGenLedger.count({ where: { userId, kind: "placeholder" } })).resolves.toBe(1);
+      await expect(
+        db.recipe.findUniqueOrThrow({ where: { id: recipeId }, select: { activeCoverId: true } }),
+      ).resolves.toEqual({ activeCoverId: coverId });
+      expect(errorSpy.error).not.toHaveBeenCalled();
+    });
+
+    it("fails the cover rather than pay for one when there is no bucket to sample", async () => {
+      const originalFetch = globalThis.fetch;
+      const networkFetch = vi.fn();
+      globalThis.fetch = networkFetch as unknown as typeof fetch;
+      try {
+        await scheduleAiPlaceholderCover({
+          db,
+          userId,
+          recipeId,
+          coverId,
+          title: "Pasta",
+          description: null,
+          env: { ...paidKeys, IMAGE_PROVIDER_PRIMARY: "sample" },
+          logger: errorSpy,
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      expect(networkFetch).not.toHaveBeenCalled();
+      await expectPlaceholderFailed("missing_image_provider_config");
+    });
+  });
+
+  it("generates with OpenAI when OPENAI_API_KEY is set and no provider is named, as in production", async () => {
+    const originalFetch = globalThis.fetch;
+    const openAiFetch = vi.fn(async () =>
+      new Response(JSON.stringify({ data: [{ b64_json: Buffer.from(GENERATED_BYTES).toString("base64") }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    globalThis.fetch = openAiFetch as unknown as typeof fetch;
+    const geminiFetch = vi.fn() as unknown as typeof fetch;
+    const bucket = mockR2();
+    try {
+      await scheduleAiPlaceholderCover({
+        db,
+        userId,
+        recipeId,
+        coverId,
+        title: "Pasta",
+        description: null,
+        env: { OPENAI_API_KEY: "sk-test", GOOGLE_API_KEY: "google-test" },
+        fetchImpl: geminiFetch,
+        bucket,
+        logger: errorSpy,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(geminiFetch).not.toHaveBeenCalled();
+    expect(openAiFetch).toHaveBeenCalledTimes(1);
+    const [request, init] = openAiFetch.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit | undefined];
+    expect(String(request instanceof Request ? request.url : request)).toBe("https://api.openai.com/v1/images/generations");
+    expect(JSON.parse(String(init?.body))).toMatchObject({ model: "dall-e-3" });
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover).toMatchObject({ status: "ready", generationStatus: "succeeded" });
+    expect(bucket.put).toHaveBeenCalledWith(
+      cover.imageUrl.replace("/photos/", ""),
+      GENERATED_BYTES,
+      expect.objectContaining({ httpMetadata: { contentType: "image/png" } }),
+    );
   });
 
   it("logs and swallows runner errors without throwing", async () => {

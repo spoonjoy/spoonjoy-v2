@@ -1226,6 +1226,75 @@ describe("scheduleSpoonCoverStylization", () => {
     expect(runner.imageToImage).toHaveBeenCalledTimes(1);
   });
 
+  it("stores a sample image from the bucket and never calls a paid provider when QA asks for samples", async () => {
+    const sampleBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 5, 5]);
+    const bucket = mockR2();
+    vi.mocked(bucket.list).mockResolvedValue({ objects: [{ key: "samples/covers/crispy-chickpeas.webp" }] } as never);
+    vi.mocked(bucket.get).mockResolvedValue({ arrayBuffer: async () => sampleBytes.slice().buffer } as never);
+    const originalFetch = globalThis.fetch;
+    const networkFetch = vi.fn();
+    globalThis.fetch = networkFetch as unknown as typeof fetch;
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    try {
+      await scheduleSpoonCoverStylization({
+        db,
+        userId,
+        recipeId,
+        coverId,
+        rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+        recipeTitle: "Stylize Me",
+        env: {
+          OPENAI_API_KEY: "sk-test",
+          GOOGLE_API_KEY: "google-test",
+          IMAGE_PROVIDER_PRIMARY: "sample",
+          IMAGE_PROVIDER_FALLBACKS: "openai,gemini",
+        },
+        fetchImpl,
+        bucket,
+        now: () => 5678,
+        logger: errorSpy,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(networkFetch).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover.stylizedImageUrl).toMatch(/^\/photos\/covers\/5678-[a-f0-9-]+\.webp$/);
+    expect(cover).toMatchObject({ status: "ready", generationStatus: "succeeded", failureReason: null });
+    expect(bucket.put).toHaveBeenCalledWith(
+      cover.stylizedImageUrl!.replace("/photos/", ""),
+      sampleBytes,
+      expect.objectContaining({ httpMetadata: { contentType: "image/webp" } }),
+    );
+    await expect(db.imageGenLedger.count({ where: { userId, kind: "stylization" } })).resolves.toBe(1);
+    expect(errorSpy.error).not.toHaveBeenCalled();
+  });
+
+  it("skips without paying when QA asks for samples but there is no bucket", async () => {
+    const originalFetch = globalThis.fetch;
+    const networkFetch = vi.fn();
+    globalThis.fetch = networkFetch as unknown as typeof fetch;
+    try {
+      await scheduleSpoonCoverStylization({
+        db,
+        userId,
+        recipeId,
+        coverId,
+        rawPhotoUrl: dataUrl("image/png", VALID_PNG_BYTES),
+        recipeTitle: "Stylize Me",
+        env: { OPENAI_API_KEY: "sk-test", IMAGE_PROVIDER_PRIMARY: "sample" },
+        logger: errorSpy,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(networkFetch).not.toHaveBeenCalled();
+    const cover = await db.recipeCover.findUniqueOrThrow({ where: { id: coverId } });
+    expect(cover.failureReason).toContain("missing_image_provider_config");
+    await expect(db.imageGenLedger.count({ where: { userId, kind: "stylization" } })).resolves.toBe(0);
+  });
+
   it("logs errors and leaves stylizedImageUrl null when the runner throws", async () => {
     const parentCover = await db.recipeCover.create({
       data: {

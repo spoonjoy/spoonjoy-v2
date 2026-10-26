@@ -20,6 +20,11 @@ import {
   type ImageGenerationSkipReason,
 } from "~/lib/image-gen-telemetry.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
+import {
+  createSampleImageRunner,
+  SAMPLE_IMAGE_MODEL,
+  usesSampleImages,
+} from "~/lib/sample-cover-images.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 import { touchNativeSyncCookbooksForRecipeOperation } from "~/lib/native-sync-invalidation.server";
 
@@ -27,7 +32,7 @@ const OPENAI_PLACEHOLDER_MODEL = "dall-e-3";
 
 type ImageGenerationSchedulerEnv = ImageGenEnv & PostHogServerEnv & { DB?: unknown };
 type ImageGenRunnerFactory = (env: ImageGenerationSchedulerEnv) => ImageGenRunner | null;
-type PlaceholderProvider = "openai" | "gemini";
+type PlaceholderProvider = "openai" | "gemini" | "sample";
 interface ResolvedPlaceholderRunner {
   runner: ImageGenRunner;
   model: string;
@@ -93,9 +98,18 @@ function resolvePlaceholderProviderOrder(env: ImageGenerationSchedulerEnv): Plac
 }
 
 function createDefaultRunner(
+  input: SchedulePlaceholderInput,
   env: ImageGenerationSchedulerEnv,
-  fetchImpl?: typeof fetch,
 ): ResolvedPlaceholderRunner | null {
+  if (usesSampleImages(env)) {
+    if (!input.bucket) return null;
+    return {
+      provider: "sample",
+      model: SAMPLE_IMAGE_MODEL,
+      runner: createSampleImageRunner({ bucket: input.bucket, seed: input.recipeId }),
+    };
+  }
+  const fetchImpl = input.fetchImpl;
   for (const provider of resolvePlaceholderProviderOrder(env)) {
     if (provider === "openai") {
       const apiKey = trimmed(env.OPENAI_API_KEY);
@@ -141,7 +155,7 @@ function resolveRunner(
       : { reason: "missing_runner" };
   }
 
-  const runner = createDefaultRunner(input.env, input.fetchImpl);
+  const runner = createDefaultRunner(input, input.env);
   return runner ?? { reason: "missing_image_provider_config" };
 }
 

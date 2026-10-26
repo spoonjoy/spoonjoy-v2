@@ -30,6 +30,12 @@ import {
   touchNativeSyncRecipeOperation,
 } from "~/lib/native-sync-invalidation.server";
 import { createOpenAIClient } from "~/lib/openai-client.server";
+import {
+  createSampleImageRunner,
+  SAMPLE_IMAGE_MODEL,
+  SAMPLE_IMAGE_PROVIDER,
+  usesSampleImages,
+} from "~/lib/sample-cover-images.server";
 import type { PostHogServerConfig, PostHogServerEnv } from "~/lib/analytics-server";
 
 const STYLIZATION_MODEL = "configured";
@@ -203,6 +209,17 @@ function resolveProviderAttempts(
   if (input.createRunner) {
     const runner = input.createRunner(input.env);
     return runner ? { runner } : { reason: "missing_runner" };
+  }
+
+  if (usesSampleImages(input.env)) {
+    if (!input.bucket) return { reason: "missing_image_provider_config" };
+    return {
+      imageEditAttempts: [{
+        provider: SAMPLE_IMAGE_PROVIDER,
+        model: SAMPLE_IMAGE_MODEL,
+        runner: createSampleImageRunner({ bucket: input.bucket, seed: input.recipeId }),
+      }],
+    };
   }
 
   const createAttempts = input.createImageEditAttempts ?? createDefaultImageEditAttempts;
