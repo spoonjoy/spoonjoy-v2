@@ -1,3 +1,5 @@
+import { qaErrorLogsEnabled } from "../app/lib/qa-error-logs.server";
+import { consoleSlowCallReporter, watchSlowCall, type SlowCallReporter } from "../app/lib/slow-call.server";
 import {
   COOK_INTERNAL_ORIGIN,
   COOK_PROTOCOL_HEADER,
@@ -80,17 +82,34 @@ async function clearBootstrapProbeStorage(storage: CookSessionStorage) {
   }
 }
 
+/**
+ * Inside the object, a per-run QA Worker reports a cook route whose handler, or whose `setAlarm`,
+ * takes longer than this (slow-call.server.ts). It is lower than the Worker's one second because
+ * a write normally takes about 20 ms, so the object's own waits show up before they stall a page.
+ */
+export const COOK_SESSION_SLOW_MS = 250;
+
 export class CookSession {
+  private readonly onSlowCall: SlowCallReporter | undefined;
+
   constructor(
     private readonly state: CookSessionState,
-    _env: Env,
-  ) {}
+    env: Env,
+  ) {
+    this.onSlowCall = qaErrorLogsEnabled(env) ? consoleSlowCallReporter() : undefined;
+  }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const cookRoute = internalCookRoute(request, url);
     if (cookRoute) {
-      return this.handleCookRoute(cookRoute, request);
+      return watchSlowCall(
+        { call: "cook_session.handle", operation: cookRoute.operation === "detail" ? "read" : "write" },
+        () => this.handleCookRoute(cookRoute, request),
+        this.onSlowCall,
+        undefined,
+        COOK_SESSION_SLOW_MS,
+      );
     }
 
     if (
@@ -129,8 +148,30 @@ export class CookSession {
     await expireIdleCookSession(this.state.storage, Date.now());
   }
 
-  private async handleCookRoute({ operation, recipeId }: InternalCookRoute, request: Request): Promise<Response> {
+  /** The object's storage, with each `setAlarm` timed on a per-run QA Worker. */
+  private cookStorage(): CookSessionStorage {
     const { storage } = this.state;
+    const report = this.onSlowCall;
+    if (!report) return storage;
+    return new Proxy(storage, {
+      get(target, property) {
+        if (property === "setAlarm") {
+          return (scheduledTime: number) => watchSlowCall(
+            { call: "cook_session.set_alarm", operation: "write" },
+            () => target.setAlarm(scheduledTime),
+            report,
+            undefined,
+            COOK_SESSION_SLOW_MS,
+          );
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+
+  private async handleCookRoute({ operation, recipeId }: InternalCookRoute, request: Request): Promise<Response> {
+    const storage = this.cookStorage();
     if (operation === "detail") {
       // No session yet is an ordinary answer (`state: null`), not an error: every signed-in
       // recipe visit asks, and most recipes have never been cooked by this user.
