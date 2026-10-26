@@ -89,14 +89,15 @@ describe("summarize-worker-tail.jq", () => {
       "budget",
       "byPath",
       "complete",
+      "d1ReadReissues",
       "d1TransientErrors",
       "firstEventTimestamp",
       "firstExceptions",
       "hungInvocations",
+      "isolates",
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
-      "placements",
       "serverErrorInvocations",
       "slowCalls",
       "slowest",
@@ -219,6 +220,18 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.d1TransientErrors).toEqual({ total: 4, retried: 1, notRetried: 3, notRetriedWrites: 2, writeOperations: none });
     expect(raw).not.toContain(CANARIES.logLine);
     expect(summarize([]).summary.d1TransientErrors).toEqual({ total: 0, retried: 0, notRetried: 0, notRetriedWrites: 0, writeOperations: none });
+  });
+
+  it("counts the D1 reads sent again after stalling, and how many the re-issued try answered, reading only that field", () => {
+    const line = (answeredBy: unknown) => JSON.stringify({ event: "d1_read_reissue", call: "batch", table: "Cookbook", attempt: 1, answeredBy, sql: CANARIES.query });
+    const { summary, raw } = summarize([
+      { outcome: "ok", logs: [{ level: "warn", message: [line("reissue")] }, { level: "warn", message: [line("original")] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [{ event: "d1_read_reissue", answeredBy: CANARIES.body }] }, { level: "warn", message: ["not json"] }] },
+    ]);
+
+    expect(summary.d1ReadReissues).toEqual({ total: 3, answeredByReissue: 1 });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
   });
 
   it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
@@ -456,7 +469,8 @@ describe("summarize-worker-tail.jq", () => {
   describe("what a stalled request waited on", () => {
     const slowCall = (fields: Record<string, unknown>) =>
       JSON.stringify({ event: "slow_call", operation: "read", table: null, attempt: 1, settled: false, outcome: null, ...fields });
-    const placement = (value: unknown) => JSON.stringify({ event: "placement", placement: value });
+    const served = (isolate: unknown, request: unknown, arrivedAt: unknown) => JSON.stringify({ event: "isolate_request", isolate, request, arrivedAt });
+    const runsIn = (isolate: unknown, colo: unknown) => JSON.stringify({ event: "isolate_colo", isolate, runsIn: colo });
     const request = (path: string, cpuTime: number, wallTime: number, eventTimestamp: number, messages: unknown[], extra: TailEvent = {}) => ({
       outcome: "canceled",
       cpuTime,
@@ -467,63 +481,67 @@ describe("summarize-worker-tail.jq", () => {
       ...extra,
     });
 
-    it("attaches each stalled request's slow calls and placement, so the stall names the call it waited on", () => {
+    it("attaches each stalled request's slow calls and where it ran, so the stall names the call it waited on", () => {
       // Run 40241845409: GET /cookbooks/:id.data waited 5,395 ms on 1 ms of CPU and was cancelled.
       const { summary } = summarize([
-        request("/cookbooks/cmg1abcdefghijklmnopqrstu.data", 1, 5395, 30, [
-          placement("remote-IAD"),
-          slowCall({ call: "d1.batch", table: "Cookbook", waitedMs: 1001 }),
+        request("/search", 30, 1400, 10, [
+          served("0a1b2c3d", 1, "IAD"),
+          runsIn("0a1b2c3d", "IAD"),
+          slowCall({ call: "d1.first", table: "User", waitedMs: 1002, operation: "write", attempt: 2 }),
         ]),
         request("/api/cook-sessions/qa-kitchen-recipe-lemon-rice", 2, 3902, 20, [
-          placement("local-EWR"),
+          served("0a1b2c3d", 2, "IAD"),
           slowCall({ call: "cook_session.fetch", waitedMs: 1000 }),
           slowCall({ call: "cook_session.fetch", waitedMs: 3890, settled: true, outcome: "ok" }),
         ]),
-        request("/search", 30, 1400, 10, [placement("local-EWR"), slowCall({ call: "d1.first", table: "User", waitedMs: 1002, operation: "write", attempt: 2 })]),
         request("/api/cook-sessions/qa-kitchen-recipe-lemon-rice", 1, 3800, 21, [], { executionModel: "durableObject", entrypoint: "CookSession" }),
-        request("/health", 1, 20, 40, [placement(null)]),
+        request("/cookbooks/cmg1abcdefghijklmnopqrstu.data", 1, 5395, 30, [
+          served("ffee0011", 1, "IAD"),
+          slowCall({ call: "d1.batch", table: "Cookbook", waitedMs: 1001 }),
+        ]),
+        request("/health", 1, 20, 40, [served("ffee0011", 2, "EWR"), runsIn("ffee0011", "ORD")]),
       ]);
 
       expect(summary.stalledInvocations).toBe(3);
-      expect(summary.stalledRequests.map((entry: { path: string; placement: string; slowCalls: unknown[] }) => [entry.path, entry.placement, entry.slowCalls])).toEqual([
-        ["/cookbooks/cmg1abcdefghijklmnopqrstu.data", "remote-IAD", [
-          { call: "d1.batch", operation: "read", table: "Cookbook", attempt: 1, waitedMs: 1001, settled: false, outcome: null },
-        ]],
-        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", "local-EWR", [
+      expect(summary.stalledRequests.map((entry: { path: string; ranOn: unknown; slowCalls: unknown[] }) => [entry.path, entry.ranOn, entry.slowCalls])).toEqual([
+        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", { isolate: "0a1b2c3d", request: 2, arrivedAt: "IAD", runsIn: "IAD" }, [
           { call: "cook_session.fetch", operation: "read", table: null, attempt: 1, waitedMs: 1000, settled: false, outcome: null },
           { call: "cook_session.fetch", operation: "read", table: null, attempt: 1, waitedMs: 3890, settled: true, outcome: "ok" },
         ]],
-        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", "unlogged", []],
+        ["/api/cook-sessions/qa-kitchen-recipe-lemon-rice", null, []],
+        ["/cookbooks/cmg1abcdefghijklmnopqrstu.data", { isolate: "ffee0011", request: 1, arrivedAt: "IAD", runsIn: "ORD" }, [
+          { call: "d1.batch", operation: "read", table: "Cookbook", attempt: 1, waitedMs: 1001, settled: false, outcome: null },
+        ]],
       ]);
-      expect(summary.stalledRequests[2]).toMatchObject({ executionModel: "durableObject", entrypoint: "CookSession" });
+      expect(summary.stalledRequests[1]).toMatchObject({ executionModel: "durableObject", entrypoint: "CookSession" });
       for (const entry of summary.stalledRequests) {
-        expect(Object.keys(entry).sort()).toEqual([...INVOCATION_KEYS, "placement", "slowCalls"].sort());
+        expect(Object.keys(entry).sort()).toEqual([...INVOCATION_KEYS, "ranOn", "slowCalls"].sort());
       }
 
       // A slow call counts once, when it was reported waiting, whether or not the request stalled.
       expect(summary.slowCalls.total).toBe(3);
       expect(summary.slowCalls.byCall).toEqual({ "cook_session.fetch": 1, "d1.batch": 1, "d1.first": 1 });
       expect(summary.slowCalls.requests.map((entry: { path: string }) => entry.path)).toEqual([
-        "/cookbooks/cmg1abcdefghijklmnopqrstu.data",
-        "/api/cook-sessions/qa-kitchen-recipe-lemon-rice",
         "/search",
+        "/api/cook-sessions/qa-kitchen-recipe-lemon-rice",
+        "/cookbooks/cmg1abcdefghijklmnopqrstu.data",
       ]);
-      expect(summary.slowCalls.requests[2].slowCalls).toEqual([
+      expect(summary.slowCalls.requests[0].slowCalls).toEqual([
         { call: "d1.first", operation: "write", table: "User", attempt: 2, waitedMs: 1002, settled: false, outcome: null },
       ]);
 
-      expect(summary.placements).toEqual([
-        { placement: "local-EWR", count: 2, firstEventTimestamp: 10, lastEventTimestamp: 20 },
-        { placement: "unlogged", count: 1, firstEventTimestamp: 21, lastEventTimestamp: 21 },
-        { placement: "remote-IAD", count: 1, firstEventTimestamp: 30, lastEventTimestamp: 30 },
-        { placement: "none", count: 1, firstEventTimestamp: 40, lastEventTimestamp: 40 },
+      expect(summary.isolates).toEqual([
+        { isolate: "0a1b2c3d", runsIn: "IAD", arrivedAt: ["IAD"], requests: 2, firstEventTimestamp: 10, lastEventTimestamp: 20 },
+        { isolate: "ffee0011", runsIn: "ORD", arrivedAt: ["EWR", "IAD"], requests: 2, firstEventTimestamp: 30, lastEventTimestamp: 40 },
       ]);
     });
 
-    it("reads only the fixed fields of slow-call and placement lines, each checked against its shape", () => {
+    it("reads only the fixed fields of slow-call and isolate lines, each checked against its shape", () => {
       const { summary, raw } = summarize([
         request("/recipes/cmg1abcdefghijklmnopqrstu.data", 1, 4000, 1, [
-          placement(`remote-${CANARIES.cf}`),
+          served(CANARIES.hex, "1", CANARIES.cf),
+          runsIn(CANARIES.hex, CANARIES.cf),
+          runsIn(42, "ORD"),
           JSON.stringify({
             event: "slow_call",
             call: `SELECT * FROM "User" WHERE email = '${CANARIES.email}'`,
@@ -539,7 +557,12 @@ describe("summarize-worker-tail.jq", () => {
         ], { executionModel: `durable ${CANARIES.hex}`, entrypoint: 42 }),
       ]);
 
-      expect(summary.stalledRequests[0]).toMatchObject({ placement: "other", executionModel: null, entrypoint: null });
+      expect(summary.stalledRequests[0]).toMatchObject({
+        ranOn: { isolate: null, request: null, arrivedAt: null, runsIn: null },
+        executionModel: null,
+        entrypoint: null,
+      });
+      expect(summary.isolates).toEqual([]);
       expect(summary.stalledRequests[0].slowCalls).toEqual([
         { call: null, operation: null, table: null, attempt: null, waitedMs: null, settled: false, outcome: null },
         { call: "d1.raw", operation: "read", table: "Recipe", attempt: 1, waitedMs: 1200, settled: true, outcome: "error" },
@@ -568,7 +591,7 @@ describe("summarize-worker-tail.jq", () => {
 
       expect(summary.stalledRequests).toEqual([]);
       expect(summary.slowCalls).toEqual({ total: 0, byCall: {}, requests: [] });
-      expect(summary.placements).toEqual([{ placement: "unlogged", count: 1, firstEventTimestamp: null, lastEventTimestamp: null }]);
+      expect(summary.isolates).toEqual([]);
     });
   });
 

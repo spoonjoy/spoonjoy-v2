@@ -25,9 +25,10 @@
 # Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
 # d1_transient_error report (app/lib/d1-transient-retry.server.ts) or a d1_write_retry report
 # (app/lib/d1-write-retry.server.ts): only their fixed fields are read, and only counts leave the
-# program. Likewise `stalledRequests`, `slowCalls` and `placements` read only the fixed fields of
-# the slow_call lines (app/lib/slow-call.server.ts) and placement lines (workers/app.ts) a per-run
-# QA Worker writes, each checked against its expected shape.
+# program, and so does `d1ReadReissues` for the d1_read_reissue lines. Likewise `stalledRequests`,
+# `slowCalls` and `isolates` read only the fixed fields of the slow_call, isolate_request and
+# isolate_colo lines (app/lib/slow-call.server.ts) a per-run QA Worker writes, each checked
+# against its expected shape.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
@@ -68,18 +69,32 @@ def slow_call_reports:
         settled: (.settled == true),
         outcome: (if .outcome == "ok" or .outcome == "error" then .outcome else null end) }];
 
-# Where Smart Placement ran the request, from the Worker's placement log line: `local-<colo>` or
-# `remote-<colo>`, "none" when the request had no cf-placement header, "other" for any other
-# value, and "unlogged" when the event has no such line (a Durable Object invocation, or a Worker
-# that does not log it).
-def placement_of:
-  ([(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+# The d1_read_reissue reports (app/lib/d1-transient-retry.server.ts): a read-only D1 try that had
+# not settled by its deadline and was sent once more, with only which try answered first.
+def d1_read_reissue_reports:
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
     | (.message // []) | if type == "array" then .[] else . end
     | (if type == "string" then (try fromjson catch null) else . end)
-    | select(type == "object" and .event == "placement")
-    | .placement
-    | if . == null then "none" elif type == "string" and test("^(?:local|remote)-[A-Z]{3,4}$") then . else "other" end]
-   | first) // "unlogged";
+    | select(type == "object" and .event == "d1_read_reissue")
+    | { answeredBy: (if .answeredBy == "original" or .answeredBy == "reissue" then .answeredBy else "other" end) }];
+
+# The isolate_request and isolate_colo lines a per-run QA Worker writes (app/lib/slow-call.server.ts):
+# which isolate served the request, its count of requests, the location the request arrived at,
+# and, once per isolate, the location the isolate runs in. Each field is checked against its shape.
+def isolate_id: if type == "string" and test("^[0-9a-f]{8}$") then . else null end;
+def colo_or_null: if type == "string" and test("^[A-Z]{3,4}$") then . else null end;
+def log_objects($event):
+  [(.logs // []) | if type == "array" then .[] else empty end | select(type == "object")
+    | (.message // []) | if type == "array" then .[] else . end
+    | (if type == "string" then (try fromjson catch null) else . end)
+    | select(type == "object" and .event == $event)];
+def isolate_request_of:
+  (log_objects("isolate_request") | first)
+  | if . == null then null
+    else { isolate: (.isolate | isolate_id), request: (.request | count_or_null), arrivedAt: (.arrivedAt | colo_or_null) } end;
+def isolate_colos:
+  [.[] | log_objects("isolate_colo")[] | { isolate: (.isolate | isolate_id), runsIn: (.runsIn | colo_or_null) } | select(.isolate != null)]
+  | map({ key: .isolate, value: .runsIn }) | from_entries;
 
 # The URL's path: scheme, authority (including any user:pass@), query and fragment removed.
 def request_path:
@@ -224,10 +239,11 @@ def by_path: group_by(path_pattern)
 
 def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" and .cpuTime < 5 and .wallTime > 2000;
 
-def with_wait_evidence: invocation + { placement: placement_of, slowCalls: (slow_call_reports | .[0:10]) };
-
 . as $events
-| ([range(0; $events | length) | select(($events[.].event.response.status // 0) >= 500)] | .[0:50]) as $serverErrorIndexes
+| ($events | isolate_colos) as $runsIn
+| def where_it_ran: isolate_request_of | if . == null then null else . + { runsIn: $runsIn[.isolate // ""] } end;
+  def with_wait_evidence: invocation + { ranOn: where_it_ran, slowCalls: (slow_call_reports | .[0:10]) };
+  ([range(0; $events | length) | select(($events[.].event.response.status // 0) >= 500)] | .[0:50]) as $serverErrorIndexes
 | ([range(0; $events | length) | select((($events[.].exceptions // []) | length) > 0)] | .[0:20]) as $exceptionIndexes
 # With keepErrorLogs: the error-level lines of each invocation in either list, in stream order, at
 # most per_invocation_log_cap per invocation and total_log_cap in all. An invocation in both lists
@@ -274,14 +290,18 @@ def with_wait_evidence: invocation + { placement: placement_of, slowCalls: (slow
     | { total: ($waits | length),
         byCall: ($waits | map(.call // "unknown") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
         requests: ([$slow[] | with_wait_evidence] | .[0:40]) }),
-  # Where Smart Placement ran requests, in order of first use, so a move from one location to
-  # another can be lined up with the stalls.
-  placements: (map({ placement: placement_of, eventTimestamp: (.eventTimestamp // null) })
-    | group_by(.placement)
-    | map({ placement: .[0].placement, count: length,
+  # The isolates that served requests, in order of first request (at most 50): where requests
+  # reached them, where they ran, and when, so cold isolates and Smart Placement moves can be lined
+  # up with the stalls. An isolate whose runsIn differs from arrivedAt served requests that Smart
+  # Placement moved.
+  isolates: ([.[] | { eventTimestamp: (.eventTimestamp // null), where: isolate_request_of } | select(.where.isolate != null)]
+    | group_by(.where.isolate)
+    | map({ isolate: .[0].where.isolate, runsIn: $runsIn[.[0].where.isolate],
+            arrivedAt: ([.[] | .where.arrivedAt | select(. != null)] | unique),
+            requests: length,
             firstEventTimestamp: ([.[] | .eventTimestamp | select(type == "number")] | min),
             lastEventTimestamp: ([.[] | .eventTimestamp | select(type == "number")] | max) })
-    | sort_by(.firstEventTimestamp // 0)),
+    | sort_by(.firstEventTimestamp // 0) | .[0:50]),
   firstExceptions: [$exceptionIndexes[] | with_error_logs(.)],
   # Transient D1 failures the Worker reported: retried ones a later attempt may have absorbed,
   # and ones that reached the caller (a write whose outcome is unknown, or a read out of retries).
@@ -302,6 +322,10 @@ def with_wait_evidence: invocation + { placement: placement_of, slowCalls: (slow
           retried: ([$operations[] | select(.outcome == "retry")] | length),
           applied: ([$operations[] | select(.outcome == "applied")] | length),
           gaveUp: ([$operations[] | select(.outcome == "gave_up")] | length) } })),
+  # Read-only D1 tries that stalled past their deadline and were sent again, and how many of them
+  # the re-issued try answered.
+  d1ReadReissues: ([.[] | d1_read_reissue_reports[]]
+    | { total: length, answeredByReissue: ([.[] | select(.answeredBy == "reissue")] | length) }),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints
