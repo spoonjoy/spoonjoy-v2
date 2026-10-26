@@ -28,12 +28,13 @@ export function runCaptured(command, args) {
 }
 
 /**
- * The test files whose source names one of the changed paths as a whole quoted string, such as
- * readFileSync("wrangler.json"): they read that file by path, which the import graph cannot see.
+ * The test files whose source names one of the changed paths in a quoted string, whole or after a
+ * directory (readFileSync("wrangler.json"), "../server.json"): they read that file by path, which
+ * the import graph cannot see. A path a test assembles from pieces is not found.
  */
 export function testsNamingPaths(testFiles, changedPaths, readFile) {
   if (changedPaths.length === 0) return [];
-  const quoted = changedPaths.map((changed) => new RegExp(`["'\`]${changed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'\`]`));
+  const quoted = changedPaths.map((changed) => new RegExp(`["'\`](?:[^"'\`\n]*/)?${changed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'\`]`));
   return testFiles.filter((file) => {
     const source = readFile(file);
     return quoted.some((pattern) => pattern.test(source));
@@ -68,7 +69,8 @@ export function testChanged({
     return files.map((entry) => path.relative(cwd, path.resolve(cwd, entry.file)));
   };
 
-  const diff = capture("git", ["diff", "--name-only", base, "HEAD"]);
+  // --no-renames lists a renamed file's old path too, and keeps git's rename-limit warning off stderr.
+  const diff = capture("git", ["diff", "--name-only", "--no-renames", base, "HEAD"]);
   if (diff.status !== 0) return diff.status;
   const changedPaths = diff.stdout.split("\n").filter(Boolean);
 

@@ -41,7 +41,7 @@ describe("testChanged", () => {
   it("runs the tests the changes reach through imports against the base commit", () => {
     const d = deps({ imported: [{ file: "/repo/test/a.test.ts" }], all: [{ file: "/repo/test/a.test.ts" }, { file: "/repo/test/b.test.ts" }], diff: "app/a.ts\n" });
     expect(testChanged(d)).toBe(0);
-    expect(d.capture).toHaveBeenCalledWith("git", ["diff", "--name-only", BASE, "HEAD"]);
+    expect(d.capture).toHaveBeenCalledWith("git", ["diff", "--name-only", "--no-renames", BASE, "HEAD"]);
     expect(d.run.mock.calls).toEqual([LIST_CHANGED, LIST_ALL, RUN_CHANGED]);
     expect(d.log).toHaveBeenCalledWith(`1 test file(s) are affected by the changes since ${BASE} through imports.`);
   });
@@ -149,6 +149,8 @@ describe("testsNamingPaths", () => {
     "test/c.test.ts": "readFileSync(`app/styles/tailwind.css`)",
     "test/d.test.ts": 'readFileSync("wrangler.json.bak")',
     "test/e.test.ts": "// wrangler.json is mentioned without quotes",
+    "test/f.test.ts": 'readFileSync(path.join(__dirname, "../server.json"))',
+    "test/g.test.ts": 'readFileSync("my-server.json")',
   };
   const files = Object.keys(sources);
 
@@ -158,6 +160,10 @@ describe("testsNamingPaths", () => {
       "test/b.test.ts",
       "test/c.test.ts",
     ]);
+  });
+
+  it("selects a test that names the changed file after a directory, as a relative path does", () => {
+    expect(testsNamingPaths(files, ["server.json"], (file: string) => sources[file])).toEqual(["test/f.test.ts"]);
   });
 
   it("reads nothing when nothing changed", () => {
