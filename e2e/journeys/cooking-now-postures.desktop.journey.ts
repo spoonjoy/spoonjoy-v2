@@ -101,6 +101,8 @@ async function photograph(browser: Browser, testInfo: TestInfo, posture: Posture
     await expect(page.getByRole("region", { name: "Cooking now" }).getByRole("article")).toHaveCount(1);
     await expect(page.getByTestId("cooking-now-hero")).toHaveAccessibleName("Lemon Herb Rice");
     await expect(page.getByTestId("cooking-now-cover-placeholder")).toHaveText("L");
+    // The strip follows the landing hero, so bring it into view for the screenshot.
+    await page.getByRole("region", { name: "Cooking now" }).evaluate((element) => element.scrollIntoView({ block: "start" }));
     await save(page, testInfo, `kitchen-${posture.name}`);
   } catch (error) {
     throw appendConsoleIssues(error, watcher.issues);

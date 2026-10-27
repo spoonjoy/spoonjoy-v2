@@ -36,7 +36,8 @@
 //
 // A visitor who started a recipe while signed out has it listed in this browser, and the Cooking now
 // strip appears after hydration. It follows the hero, so the hero's actions keep their place on the
-// first screen, and its own Back to action is uncovered once scrolled into view.
+// first screen, and its own Back to action is uncovered once scrolled into view. Opened at
+// /#cooking-now (the Cooking pill's link), the page brings the strip into view once it appears.
 import { devices, type Browser, type BrowserContextOptions, type TestInfo } from "@playwright/test";
 import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { COOKING_NOW_LOCAL_STORAGE_KEY } from "../../app/lib/cooking-now";
@@ -162,14 +163,21 @@ interface HeroShape {
   viewportHeight: number;
 }
 
-async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<{ placements: Placement[]; shape: HeroShape; backTo: string[] | null }> {
+interface Strip {
+  /** What covers Back to Lemon Herb Rice once it is scrolled into view. */
+  backTo: string[];
+  /** Where the strip's top sits on the screen after the page is opened at /#cooking-now. */
+  topFromLink: number;
+}
+
+async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<{ placements: Placement[]; shape: HeroShape; strip: Strip | null }> {
   const context = await browser.newContext({ ...device.context, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
   waitForHydrationOnLoad(page);
   const watcher = watchConsole(page);
   const placements: Placement[] = [];
   let shape: HeroShape | undefined;
-  let backTo: string[] | null = null;
+  let strip: Strip | null = null;
   try {
     await page.addInitScript(({ key, choice }) => {
       localStorage.setItem(key, choice);
@@ -261,7 +269,19 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     if (device.cookingNow) {
       const back = page.getByRole("link", { name: "Back to Lemon Herb Rice", exact: true });
       await back.evaluate((element) => element.scrollIntoView({ block: "center" }));
-      backTo = await coveringElements(back);
+      const backTo = await coveringElements(back);
+      // A fresh load at the pill's link: the strip is not in the server's page, so the router finds no
+      // #cooking-now to scroll to; the strip brings itself into view once it appears.
+      await page.goto("about:blank");
+      await page.goto("/#cooking-now");
+      await waitForHydration(page);
+      await page.getByTestId("local-cooking-now").waitFor();
+      await page.waitForFunction(() => {
+        const top = document.getElementById("cooking-now")?.getBoundingClientRect().top ?? -1;
+        return top >= 0 && top < window.innerHeight;
+      }, undefined, { timeout: 5_000 }).catch(() => undefined);
+      const topFromLink = await page.locator("#cooking-now").evaluate((element) => element.getBoundingClientRect().top);
+      strip = { backTo, topFromLink };
     }
   } catch (error) {
     throw appendConsoleIssues(error, watcher.issues);
@@ -270,16 +290,20 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     await context.close();
   }
   assertNoConsoleIssues(watcher.issues);
-  return { placements, shape: shape!, backTo };
+  return { placements, shape: shape!, strip };
 }
 
 async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, phones: Phone[], scheme: Scheme): Promise<void> {
-  const results: Array<{ phone: string; placements: Placement[]; shape: HeroShape; backTo: string[] | null }> = [];
+  const results: Array<{ phone: string; placements: Placement[]; shape: HeroShape; strip: Strip | null }> = [];
   try {
     for (const device of phones) {
-      const { placements, shape, backTo } = await firstScreen(browser, testInfo, device, scheme);
-      results.push({ phone: device.name, placements, shape, backTo });
-      expect.soft(backTo, `${device.name}, ${scheme}: what covers Back to Lemon Herb Rice once scrolled into view (none without a recipe in progress)`).toEqual(device.cookingNow ? [] : null);
+      const { placements, shape, strip } = await firstScreen(browser, testInfo, device, scheme);
+      results.push({ phone: device.name, placements, shape, strip });
+      expect.soft(strip === null, `${device.name}, ${scheme}: the Cooking now strip shows only with a recipe in progress`).toBe(!device.cookingNow);
+      expect.soft(strip?.backTo ?? [], `${device.name}, ${scheme}: what covers Back to Lemon Herb Rice once scrolled into view`).toEqual([]);
+      const linkTop = strip?.topFromLink ?? 0;
+      expect.soft(linkTop, `${device.name}, ${scheme}: opened at /#cooking-now, the strip's top is on screen`).toBeGreaterThanOrEqual(0);
+      expect.soft(linkTop, `${device.name}, ${scheme}: opened at /#cooking-now, the strip's top is on screen`).toBeLessThan(shape.viewportHeight);
       const hero = `${device.name}, ${scheme}: the hero (${JSON.stringify(shape)})`;
       if (device.hero === "compact") {
         expect.soft(shape.headlinePx, `${hero} has the compact 32px headline`).toBe(32);
