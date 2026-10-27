@@ -1,13 +1,24 @@
 name: QA Data Cleanup
 
-# Removes every disposable account on shared QA (scripts/cleanup-local-qa-data.mjs's codex-* and
-# e2e-passkey-* rules; native journey accounts younger than three hours are kept) with its recipes,
-# covers and photos, then fails if any image-cover smoke account is left. Manual dispatch from main
-# only. It shares the image-cover smoke's concurrency group, so it never deletes the account a
-# running smoke is using; GitHub keeps one pending run per group, so dispatching it while a smoke
-# runs and another waits cancels the waiting one.
+# Removes disposable accounts on shared QA (scripts/cleanup-local-qa-data.mjs's codex-* and
+# e2e-passkey-* rules) that are older than a cutoff, with their recipes, covers and photos, then
+# fails if any disposable account older than the cutoff is left. Accounts newer than the cutoff
+# stay, so a run still using one is never cut short: the longest runs that make these accounts on
+# shared QA (native Apple journeys, the image-cover smoke, the MCP OAuth canary) finish well
+# within the 6-hour default, and Journeys runs use their own databases.
+#
+# Daily at 07:23 UTC, when no scheduled QA job runs, and by hand from main with the same cutoff.
+# It shares the image-cover smoke's concurrency group, so the two never overlap; GitHub keeps one
+# pending run per group, so starting one while the other runs and a third waits cancels the waiting one.
 on:
+  schedule:
+    - cron: "23 7 * * *"
   workflow_dispatch:
+    inputs:
+      older_than_hours:
+        description: Delete only disposable accounts created more than this many hours ago
+        type: string
+        default: "6"
 
 permissions:
   contents: read
@@ -16,6 +27,8 @@ env:
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
+  # A scheduled run has no inputs, so it takes the same default as a manual one.
+  OLDER_THAN_HOURS: ${{ inputs.older_than_hours || '6' }}
 
 concurrency:
   group: qa-image-cover-smoke
@@ -27,6 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
+      - name: Check the cutoff
+        run: |
+          if ! [[ "$OLDER_THAN_HOURS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::older_than_hours must be a whole number of hours, at least 1 (got '$OLDER_THAN_HOURS')."
+            exit 1
+          fi
+
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
@@ -47,20 +67,23 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm run cleanup:remote:qa
+        run: node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS"
 
       - name: Remove disposable QA data
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm run cleanup:remote:qa:apply
+        run: node scripts/cleanup-local-qa-data.mjs --target-env qa --apply --older-than-hours "$OLDER_THAN_HOURS"
 
-      - name: Confirm no smoke account is left
+      # The dry run's JSON follows wrangler's log lines, so jq reads from the first line that opens it.
+      - name: Confirm no disposable account older than the cutoff is left
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        # wrangler's --json output can follow log lines, so jq reads from the first line that opens it.
         run: |
-          remaining="$(pnpm exec wrangler d1 execute DB --remote --env qa --json --command "SELECT COUNT(*) AS count FROM \"User\" WHERE email LIKE 'codex-smoke-%'" | awk 'found || /^\[/ { found = 1; print }' | jq -r '.[0].results[0].count')"
-          echo "Smoke accounts left in shared QA: $remaining"
+          counts="$(node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS" | awk 'found || /^\[/ { found = 1; print }')"
+          remaining="$(jq -r '[.[].results[] | select(.item == "disposable users")][0].count' <<<"$counts")"
+          kept="$(jq -r '[.[].results[] | select(.item == "disposable users kept because they are newer than the cutoff")][0].count' <<<"$counts")"
+          echo "Disposable accounts older than $OLDER_THAN_HOURS hours left: $remaining"
+          echo "Disposable accounts newer than the cutoff, kept: $kept"
           test "$remaining" = "0"

@@ -384,6 +384,54 @@ describe("cleanup-local-qa-data", () => {
     });
   });
 
+  it("reads --older-than-hours as a cutoff in seconds, and has none without it", () => {
+    expect(cleanup.parseCleanupArgs(["--target-env", "qa"])).toMatchObject({ minAgeSeconds: 0 });
+    expect(cleanup.parseCleanupArgs(["--target-env", "qa", "--older-than-hours", "6"])).toMatchObject({ minAgeSeconds: 21_600 });
+    for (const bad of ["0", "-1", "1.5", "six", "06"]) {
+      expect(() => cleanup.parseCleanupArgs(["--target-env", "qa", "--older-than-hours", bad])).toThrow(/whole number of hours, at least 1/);
+    }
+    expect(() => cleanup.parseCleanupArgs(["--older-than-hours"])).toThrow(/Missing value for --older-than-hours/);
+  });
+
+  it("leaves every SQL statement unchanged without a cutoff", () => {
+    expect(cleanup.disposableUserScope()).toEqual({ usersWhere: cleanup.DISPOSABLE_USER_WHERE, keepYoungSql: "", keptYoungCountSql: "" });
+    expect(cleanup.buildApplySql({ minAgeSeconds: 0 })).toBe(cleanup.buildApplySql());
+    expect(cleanup.buildDryRunSql({ minAgeSeconds: 0 })).toBe(cleanup.buildDryRunSql());
+  });
+
+  it("applies the cutoff to every statement that chooses disposable accounts, on a QA apply", async () => {
+    const stdout = writableBuffer();
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--apply", "--older-than-hours", "6"],
+      runCommand,
+      stdout: stdout.stream,
+      stderr: writableBuffer().stream,
+    });
+
+    expect(stdout.text()).toContain("Only disposable accounts created more than 6 hours ago, with their data.");
+    const sql = runCommand.mock.calls.map((call) => (call[1] as string[]).join(" "));
+    const choosing = sql.filter((command) => /disposable_users AS \(|INSERT INTO disposable_users/.test(command));
+    expect(choosing.length).toBeGreaterThan(5);
+    for (const command of choosing) expect(command).toContain("- 21600");
+    const softDeleting = sql.filter((command) => /soft_delete_recipes AS \(|INSERT INTO soft_delete_recipes/.test(command));
+    expect(softDeleting.length).toBeGreaterThan(0);
+    for (const command of softDeleting) expect(command).toContain("AND chefId NOT IN (SELECT id FROM User WHERE id IN ('demo_user_001'");
+  });
+
+  it("counts the accounts the cutoff keeps in a dry run", async () => {
+    const runCommand = vi.fn(async () => ({ stdout: wranglerJson(), stderr: "" }));
+    await cleanup.runCleanupCli({
+      argv: ["--target-env", "qa", "--older-than-hours", "6"],
+      runCommand,
+      stdout: writableBuffer().stream,
+      stderr: writableBuffer().stream,
+    });
+    const dryRun = (runCommand.mock.calls.at(-1)![1] as string[]).join(" ");
+    expect(dryRun).toContain("disposable users kept because they are newer than the cutoff");
+    expect(dryRun).toContain("- 21600");
+  });
+
   it("keeps the backwards-compatible missing-target default as a local dry-run", () => {
     expect(cleanup.parseCleanupArgs([])).toMatchObject({
       apply: false,
@@ -625,6 +673,7 @@ describe("cleanup-local-qa-data", () => {
 
     expect(stdout.text()).toContain("Usage: node scripts/cleanup-local-qa-data.mjs");
     expect(stdout.text()).toContain("--target-env local|qa|production");
+    expect(stdout.text()).toContain("--older-than-hours N");
     expect(runCommand).not.toHaveBeenCalled();
   });
 

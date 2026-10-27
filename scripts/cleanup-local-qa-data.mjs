@@ -86,6 +86,29 @@ export const DISPOSABLE_USER_WHERE = [
   STALE_NATIVE_JOURNEY_USER_WHERE,
 ].join("\n    OR ");
 
+/**
+ * The disposable accounts one run may delete. With a cutoff (`--older-than-hours`, which the
+ * scheduled QA Data Cleanup uses), only accounts older than it are disposable, so an account a
+ * test run is still using keeps its rows and photos. Its test-titled recipes are then kept too,
+ * not soft-deleted as if a person owned them. Without a cutoff the SQL is unchanged.
+ */
+export function disposableUserScope(minAgeSeconds = 0) {
+  if (minAgeSeconds <= 0) return { usersWhere: DISPOSABLE_USER_WHERE, keepYoungSql: "", keptYoungCountSql: "" };
+  const usersWhere = `(${DISPOSABLE_USER_WHERE})
+    AND ${USER_CREATED_AT_EPOCH_SECONDS_SQL} <= CAST(strftime('%s', 'now') AS INTEGER) - ${minAgeSeconds}`;
+  return {
+    usersWhere,
+    keptYoungCountSql: `SELECT 'disposable users kept because they are newer than the cutoff' AS item, COUNT(*) AS count
+FROM User
+WHERE (${DISPOSABLE_USER_WHERE})
+  AND id NOT IN (SELECT id FROM User WHERE ${usersWhere});
+
+`,
+    keepYoungSql: `
+  AND chefId NOT IN (SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE})`,
+  };
+}
+
 export function buildLegacyQaDemoOrphanReferenceCleanupSql() {
   return `
 DELETE FROM Unit
@@ -225,11 +248,12 @@ export function planQaR2Cleanup({
   return { deleteKeys, retainedKeys, blockers };
 }
 
-export function buildQaR2CandidateSql() {
+export function buildQaR2CandidateSql({ minAgeSeconds = 0 } = {}) {
+  const scope = disposableUserScope(minAgeSeconds);
   const userCandidates = `
 WITH
   disposable_users AS (
-    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+    SELECT id FROM User WHERE ${scope.usersWhere}
   ),
   candidate_r2_keys AS (
     SELECT 'delete' AS action, substr(photoUrl, length('/photos/') + 1) AS key, NULL AS reason
@@ -251,7 +275,7 @@ WHERE key IS NOT NULL AND key != '';
   const spoonCandidates = `
 WITH
   disposable_users AS (
-    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+    SELECT id FROM User WHERE ${scope.usersWhere}
   ),
   disposable_spoons AS (
     SELECT id, chefId, recipeId, photoUrl FROM RecipeSpoon
@@ -287,7 +311,7 @@ WHERE key IS NOT NULL AND key != '';
   const coverCandidates = (field) => `
 WITH
   disposable_users AS (
-    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+    SELECT id FROM User WHERE ${scope.usersWhere}
   ),
   hard_delete_recipes AS (
     SELECT id, chefId FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
@@ -329,13 +353,14 @@ WHERE key IS NOT NULL AND key != '';
   ].join("\n\n");
 }
 
-export function buildR2ReferenceSql(keys = []) {
+export function buildR2ReferenceSql(keys = [], { minAgeSeconds = 0 } = {}) {
+  const scope = disposableUserScope(minAgeSeconds);
   const values = unique(keys).map((key) => `(${sqlString(key)})`).join(", ");
   const referenceKeysCte = values === "" ? "SELECT NULL AS key WHERE 0" : `VALUES ${values}`;
   return `
 WITH
   disposable_users AS (
-    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+    SELECT id FROM User WHERE ${scope.usersWhere}
   ),
   hard_delete_recipes AS (
     SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
@@ -420,13 +445,14 @@ WHERE type IN ('table', 'virtual table')
 `.trim();
 }
 
-export function buildQaR2SearchReferenceSql(keys = []) {
+export function buildQaR2SearchReferenceSql(keys = [], { minAgeSeconds = 0 } = {}) {
+  const scope = disposableUserScope(minAgeSeconds);
   const values = unique(keys).map((key) => `(${sqlString(key)})`).join(", ");
   const searchKeysCte = values === "" ? "SELECT NULL AS key WHERE 0" : `VALUES ${values}`;
   return `
 WITH
   disposable_users AS (
-    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+    SELECT id FROM User WHERE ${scope.usersWhere}
   ),
   hard_delete_recipes AS (
     SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
@@ -435,7 +461,7 @@ WITH
     SELECT id FROM Recipe
     WHERE (${SUSPICIOUS_RECIPE_WHERE})
       AND chefId NOT IN (SELECT id FROM disposable_users)
-      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})
+      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})${scope.keepYoungSql}
   ),
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
@@ -466,11 +492,12 @@ WHERE key IS NOT NULL AND key != '';
   `.trim();
 }
 
-function cleanupTargetCtesSql() {
+function cleanupTargetCtesSql({ minAgeSeconds = 0 } = {}) {
+  const scope = disposableUserScope(minAgeSeconds);
   return `
 WITH
   disposable_users AS (
-    SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+    SELECT id FROM User WHERE ${scope.usersWhere}
   ),
   hard_delete_recipes AS (
     SELECT id FROM Recipe WHERE chefId IN (SELECT id FROM disposable_users)
@@ -479,7 +506,7 @@ WITH
     SELECT id FROM Recipe
     WHERE (${SUSPICIOUS_RECIPE_WHERE})
       AND chefId NOT IN (SELECT id FROM disposable_users)
-      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})
+      AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})${scope.keepYoungSql}
   ),
   disposable_spoons AS (
     SELECT id FROM RecipeSpoon
@@ -684,10 +711,10 @@ async function collectExistingSearchTables({ dbName, target, runCommand }) {
   return normalizeExistingSearchTables(rows.map((row) => row.name));
 }
 
-async function collectR2Candidates({ dbName, target, runCommand, existingSearchTables }) {
+async function collectR2Candidates({ dbName, target, runCommand, existingSearchTables, minAgeSeconds = 0 }) {
   const targetLabel = target.targetEnv === "local" ? "local" : "QA";
   const rows = [];
-  const candidateStatements = buildQaR2CandidateSql().split(/;\s*(?=WITH\b)/);
+  const candidateStatements = buildQaR2CandidateSql({ minAgeSeconds }).split(/;\s*(?=WITH\b)/);
   for (const statement of candidateStatements) {
     const result = await runCommand("pnpm", wranglerD1Args(dbName, statement, target), {
       encoding: "utf8",
@@ -707,7 +734,7 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
   const deleteKeys = unique(rows.filter((row) => row.action === "delete").map((row) => row.key));
   const retainedKeys = unique(rows.filter((row) => row.action === "retain").map((row) => row.key));
   if (deleteKeys.length > 0) {
-    const referenceResult = await runCommand("pnpm", wranglerD1Args(dbName, buildR2ReferenceSql(deleteKeys), target), {
+    const referenceResult = await runCommand("pnpm", wranglerD1Args(dbName, buildR2ReferenceSql(deleteKeys, { minAgeSeconds }), target), {
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
@@ -724,7 +751,7 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
     assertNoR2Blockers(referenceRows, targetLabel);
   }
   if (deleteKeys.length > 0 && existingSearchTables.has("SearchDocument")) {
-    const searchResult = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchReferenceSql(deleteKeys), target), {
+    const searchResult = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchReferenceSql(deleteKeys, { minAgeSeconds }), target), {
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
@@ -827,23 +854,24 @@ async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout
   return { deletedKeys, verifiedDeletedKeys };
 }
 
-export function buildDryRunSql() {
+export function buildDryRunSql({ minAgeSeconds = 0 } = {}) {
+  const scope = disposableUserScope(minAgeSeconds);
   return `
 WITH disposable_users AS (
-  SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+  SELECT id FROM User WHERE ${scope.usersWhere}
 )
 SELECT 'hard-delete recipes owned by disposable users' AS item, COUNT(*) AS count
 FROM Recipe
 WHERE chefId IN (SELECT id FROM disposable_users);
 
 WITH disposable_users AS (
-  SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+  SELECT id FROM User WHERE ${scope.usersWhere}
 )
 SELECT 'soft-delete suspicious recipes owned by non-disposable users' AS item, COUNT(*) AS count
 FROM Recipe
 WHERE (${SUSPICIOUS_RECIPE_WHERE})
   AND chefId NOT IN (SELECT id FROM disposable_users)
-  AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE});
+  AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})${scope.keepYoungSql};
 
 SELECT 'active suspicious recipes' AS item, COUNT(*) AS count
 FROM Recipe
@@ -855,20 +883,20 @@ WHERE deletedAt IS NOT NULL AND (${SUSPICIOUS_RECIPE_WHERE});
 
 SELECT 'disposable users' AS item, COUNT(*) AS count
 FROM User
-WHERE ${DISPOSABLE_USER_WHERE};
+WHERE ${scope.usersWhere};
 
-SELECT 'stale native journey users' AS item, COUNT(*) AS count
+${scope.keptYoungCountSql}SELECT 'stale native journey users' AS item, COUNT(*) AS count
 FROM User
 WHERE ${STALE_NATIVE_JOURNEY_USER_WHERE};
 
 WITH disposable_users AS (
-  SELECT id FROM User WHERE ${DISPOSABLE_USER_WHERE}
+  SELECT id FROM User WHERE ${scope.usersWhere}
 )
 SELECT 'spoons owned by disposable users' AS item, COUNT(*) AS count
 FROM RecipeSpoon
 WHERE chefId IN (SELECT id FROM disposable_users);
 
-${cleanupTargetCtesSql()}
+${cleanupTargetCtesSql({ minAgeSeconds })}
 SELECT 'cross-boundary cleanup blockers' AS item,
   ${cleanupBlockerQueries().map((query) => `/* ${query.blocker} */ (SELECT COUNT(*) ${query.fromWhere})`).join("\n  + ")} AS count;
 `.trim();
@@ -913,7 +941,8 @@ export function buildScratchCleanupSql() {
     .join("\n");
 }
 
-export function buildApplySql({ existingSearchTables = [] } = {}) {
+export function buildApplySql({ existingSearchTables = [], minAgeSeconds = 0 } = {}) {
+  const scope = disposableUserScope(minAgeSeconds);
   const searchCleanupSql = buildSearchCleanupSql(existingSearchTables);
   return `
 PRAGMA foreign_keys=ON;
@@ -924,7 +953,7 @@ ${buildScratchCleanupSql()}
 CREATE TABLE disposable_users (id TEXT PRIMARY KEY);
 INSERT INTO disposable_users
 SELECT id FROM User
-WHERE ${DISPOSABLE_USER_WHERE};
+WHERE ${scope.usersWhere};
 
 CREATE TABLE hard_delete_recipes (id TEXT PRIMARY KEY);
 INSERT INTO hard_delete_recipes
@@ -936,7 +965,7 @@ INSERT INTO soft_delete_recipes
 SELECT id FROM Recipe
 WHERE (${SUSPICIOUS_RECIPE_WHERE})
   AND chefId NOT IN (SELECT id FROM disposable_users)
-  AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE});
+  AND chefId NOT IN (SELECT id FROM User WHERE ${NATIVE_JOURNEY_USER_WHERE})${scope.keepYoungSql};
 
 CREATE TABLE disposable_spoons (id TEXT PRIMARY KEY);
 INSERT INTO disposable_spoons
@@ -1204,10 +1233,10 @@ ${dropExactScratchSql}
 `.trim();
 }
 
-export function buildBlockerReportSql() {
+export function buildBlockerReportSql({ minAgeSeconds = 0 } = {}) {
   return cleanupBlockerQueries()
     .map((query) => `
-${cleanupTargetCtesSql()}
+${cleanupTargetCtesSql({ minAgeSeconds })}
 SELECT ${sqlString(query.blocker)} AS blocker, ${query.rowId} AS rowId
 ${query.fromWhere};
 `.trim())
@@ -1267,7 +1296,17 @@ export function parseCleanupArgs(argv = process.argv.slice(2)) {
     apply: argv.includes("--apply"),
     dbName: requiredArgValue(argv, "--db") ?? "DB",
     target,
+    minAgeSeconds: olderThanSeconds(requiredArgValue(argv, "--older-than-hours")),
   };
+}
+
+/** `--older-than-hours N`: a whole number of hours, at least 1, as seconds; 0 (no cutoff) when absent. */
+export function olderThanSeconds(hours) {
+  if (hours === undefined) return 0;
+  if (!/^[1-9]\d*$/.test(hours)) {
+    throw new Error(`--older-than-hours must be a whole number of hours, at least 1 (got ${JSON.stringify(hours)}).`);
+  }
+  return Number(hours) * 60 * 60;
 }
 
 // In a Journeys run, `qa-run-scope prepare` rewrites wrangler.json env.qa so the DB binding points
@@ -1289,12 +1328,13 @@ export function formatCleanupTargetSummary(target) {
 }
 
 function printHelp(stdout) {
-  stdout.write(`Usage: node scripts/cleanup-local-qa-data.mjs [--target-env local|qa|production] [--apply] [--db DB]
+  stdout.write(`Usage: node scripts/cleanup-local-qa-data.mjs [--target-env local|qa|production] [--apply] [--db DB] [--older-than-hours N]
 
 Dry-runs by default. Missing --target-env remains a backwards-compatible local
 dry-run. Local apply mutates only local disposable QA data. QA apply mutates
 only exact validated disposable QA D1/R2 data. Production broad cleanup is
-read-only and refuses --apply.
+read-only and refuses --apply. --older-than-hours limits the run to disposable
+accounts created more than N hours ago, so accounts a test run is using stay.
   `);
 }
 
@@ -1308,9 +1348,9 @@ function cleanupResultMessage(options) {
   return "Dry run only. Production broad cleanup is read-only.\n";
 }
 
-async function assertNoCleanupBlockers({ dbName, target, runCommand }) {
+async function assertNoCleanupBlockers({ dbName, target, runCommand, minAgeSeconds = 0 }) {
   const blockers = [];
-  const blockerStatements = buildBlockerReportSql().split(/;\s*(?=WITH\b)/);
+  const blockerStatements = buildBlockerReportSql({ minAgeSeconds }).split(/;\s*(?=WITH\b)/);
   for (const statement of blockerStatements) {
     const result = await runCommand("pnpm", wranglerD1Args(dbName, statement, target), {
       encoding: "utf8",
@@ -1346,6 +1386,9 @@ export async function runCleanupCli({
     : options.target;
   for (const line of formatCleanupTargetSummary(summaryTarget)) {
     stdout.write(`${line}\n`);
+  }
+  if (options.minAgeSeconds > 0) {
+    stdout.write(`Only disposable accounts created more than ${options.minAgeSeconds / 3600} hours ago, with their data.\n`);
   }
 
   if (options.apply && options.target.targetEnv === "production") {
@@ -1396,6 +1439,7 @@ export async function runCleanupCli({
         target: options.target,
         runCommand,
         existingSearchTables,
+        minAgeSeconds: options.minAgeSeconds,
       });
       if (r2Candidates.retainedKeys.length > 0) {
         const targetLabel = options.target.targetEnv === "local" ? "local" : "QA";
@@ -1408,6 +1452,7 @@ export async function runCleanupCli({
         dbName: options.dbName,
         target: options.target,
         runCommand,
+        minAgeSeconds: options.minAgeSeconds,
       });
     }
 
@@ -1421,7 +1466,9 @@ export async function runCleanupCli({
       });
     }
 
-    const sql = options.apply ? buildApplySql({ existingSearchTables }) : buildDryRunSql();
+    const sql = options.apply
+      ? buildApplySql({ existingSearchTables, minAgeSeconds: options.minAgeSeconds })
+      : buildDryRunSql({ minAgeSeconds: options.minAgeSeconds });
     const args = wranglerD1Args(options.dbName, sql, options.target);
 
     const result = await runCommand("pnpm", args, {

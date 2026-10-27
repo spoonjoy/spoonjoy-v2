@@ -10,6 +10,7 @@ import {
   buildBlockerReportSql,
   buildExactOauthClientCleanupSql,
   buildScratchCleanupSql,
+  disposableUserScope,
 } from "../../scripts/cleanup-local-qa-data.mjs";
 import { buildMcpCanaryCleanupD1Args } from "../../scripts/smoke-live-helpers.mjs";
 
@@ -141,6 +142,38 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     db = undefined;
     if (tempRoot) rmSync(tempRoot, { recursive: true, force: true });
     tempRoot = undefined;
+  });
+
+  it("with a cutoff, deletes only disposable accounts older than it and keeps a run's fresh account and recipe", () => {
+    const sixHours = 6 * 60 * 60;
+    db = createCleanupDatabase();
+    db.exec(`
+      INSERT INTO User VALUES ('person', 'cook@example.com', 'cook', NULL, datetime('now', '-30 days'));
+      INSERT INTO User VALUES ('old-smoke', 'codex-smoke-old@example.com', 'codex_smoke_old', NULL, datetime('now', '-7 hours'));
+      INSERT INTO User VALUES ('fresh-smoke', 'codex-smoke-fresh@example.com', 'codex_smoke_fresh', NULL, datetime('now', '-5 minutes'));
+      INSERT INTO User VALUES ('old-native', 'codex-native-old-1@example.com', 'codex_native_old_1', NULL, datetime('now', '-7 hours'));
+      INSERT INTO User VALUES ('running-native', 'codex-native-run-1@example.com', 'codex_native_run_1', NULL, datetime('now', '-4 hours'));
+      INSERT INTO User VALUES ('undated-smoke', 'codex-smoke-undated@example.com', 'codex_smoke_undated', NULL, 'not a date');
+      INSERT INTO Recipe (id, title, chefId) VALUES ('old-recipe', 'Codex smoke skillet old', 'old-smoke');
+      INSERT INTO Recipe (id, title, chefId) VALUES ('fresh-recipe', 'Codex smoke skillet fresh', 'fresh-smoke');
+      INSERT INTO Recipe (id, title, chefId) VALUES ('person-test-recipe', 'Codex leftover', 'person');
+    `);
+
+    expect(buildBlockerReportSql({ minAgeSeconds: sixHours })
+      .split("\n\n")
+      .flatMap((statement) => db!.prepare(statement).all())).toEqual([]);
+    expect(db.prepare(disposableUserScope(sixHours).keptYoungCountSql).get()).toEqual({
+      item: "disposable users kept because they are newer than the cutoff",
+      count: 3,
+    });
+    db.exec(buildApplySql({ minAgeSeconds: sixHours }));
+
+    expect(ids(db, "User")).toEqual(["fresh-smoke", "person", "running-native", "undated-smoke"]);
+    expect(ids(db, "Recipe")).toEqual(["fresh-recipe", "person-test-recipe"]);
+    const deletedAt = (id: string) => (db!.prepare("SELECT deletedAt FROM Recipe WHERE id = ?").get(id) as { deletedAt: string | null }).deletedAt;
+    expect(deletedAt("fresh-recipe")).toBeNull();
+    expect(deletedAt("person-test-recipe")).not.toBeNull();
+    expect(scratchSchemaRows(db)).toEqual([]);
   });
 
   it("deletes populated disposable-user lineage while leaving lookalike OAuth graphs untouched", () => {
