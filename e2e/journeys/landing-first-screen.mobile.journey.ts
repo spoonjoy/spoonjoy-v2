@@ -31,9 +31,15 @@
 // description's first clause and the actions on one row sit above the tab bar. Playwright's
 // "landscape" iPhones leave out Safari's bars and the notch's side margins; the full-screen
 // entries are the same phones with the whole screen, as when Safari hides its bars. The Duo's outer
-// screen sideways swaps its measured 382 x 531 page.
+// screen sideways swaps its measured 382 x 531 page. Under 336 tall (the 13 mini's Safari page, the
+// first iPhone SE's whole 568 x 320 screen) the headline drops to 24px, one line from 568 wide.
+//
+// A visitor who started a recipe while signed out has it listed in this browser, and the Cooking now
+// strip appears after hydration. It follows the hero, so the hero's actions keep their place on the
+// first screen, and its own Back to action is uncovered once scrolled into view.
 import { devices, type Browser, type BrowserContextOptions, type TestInfo } from "@playwright/test";
 import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
+import { COOKING_NOW_LOCAL_STORAGE_KEY } from "../../app/lib/cooking-now";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
 import { waitForHydrationOnLoad } from "./support/app-ready";
 import { waitForHydration } from "./support/navigation";
@@ -43,13 +49,15 @@ type Scheme = "light" | "dark";
 
 /** Compact: a 32px headline and the description's first clause. Roomy: a 36px headline or larger and
  * the whole description. Sideways: the compact headline and clause, the actions on one row, and the
- * photo down to the foot of the screen. */
-type Hero = "compact" | "roomy" | "sideways";
+ * photo down to the foot of the screen; low sideways is the same with a 24px headline. */
+type Hero = "compact" | "roomy" | "sideways" | "low sideways";
 
 interface Phone {
   name: string;
   context: BrowserContextOptions;
   hero: Hero;
+  /** Whether this browser has a recipe in progress, so the Cooking now strip shows. */
+  cookingNow?: boolean;
 }
 
 function phone(name: string, hero: Hero): Phone {
@@ -112,12 +120,21 @@ const UPRIGHT: Phone[] = [
 const SIDEWAYS: Phone[] = [
   phone("iPhone 15 Pro Max landscape", "sideways"),
   phone("iPhone 15 landscape", "sideways"),
-  phone("iPhone 13 Mini landscape", "sideways"),
+  phone("iPhone 13 Mini landscape", "low sideways"),
   phone("iPhone SE (3rd gen) landscape", "sideways"),
+  phone("iPhone SE landscape", "low sideways"),
   fullScreen("iPhone 15 Pro Max landscape", 932, 430),
   fullScreen("iPhone 15 landscape", 852, 393),
   DUO_SIDEWAYS,
 ];
+
+const COOKING: Phone[] = [
+  { ...phone("iPhone 15", "roomy"), name: "iPhone 15, a recipe in progress", cookingNow: true },
+  { ...phone("iPhone 15 landscape", "sideways"), name: "iPhone 15 landscape, a recipe in progress", cookingNow: true },
+];
+
+/** QA's Lemon Herb Rice, one of five ingredients checked a moment ago, as the recipe page stores it. */
+const LEMON_RICE = "qa-kitchen-recipe-lemon-rice";
 
 const REST_OF_DESCRIPTION = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
 
@@ -145,19 +162,29 @@ interface HeroShape {
   viewportHeight: number;
 }
 
-async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<{ placements: Placement[]; shape: HeroShape }> {
+async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<{ placements: Placement[]; shape: HeroShape; backTo: string[] | null }> {
   const context = await browser.newContext({ ...device.context, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
   waitForHydrationOnLoad(page);
   const watcher = watchConsole(page);
   const placements: Placement[] = [];
   let shape: HeroShape | undefined;
+  let backTo: string[] | null = null;
   try {
     await page.addInitScript(({ key, choice }) => {
       localStorage.setItem(key, choice);
     }, { key: THEME_STORAGE_KEY, choice: scheme });
+    if (device.cookingNow) {
+      await page.addInitScript(({ key, id }) => {
+        localStorage.setItem(key, JSON.stringify({ [id]: {
+          recipe: { id, title: "Lemon Herb Rice", coverImageUrl: null }, listed: true, activeStepId: null, activeStepIndex: 0,
+          stepCount: 3, checkedCount: 1, totalCount: 5, allCheckedAt: null, touchedAt: Date.now(), progressKey: "journey" } }));
+      }, { key: COOKING_NOW_LOCAL_STORAGE_KEY, id: LEMON_RICE });
+    }
     await page.goto("/");
     await waitForHydration(page);
+    // The strip is read from this browser after hydration; measure once it is in place.
+    if (device.cookingNow) await page.getByTestId("local-cooking-now").waitFor();
     expect(await page.evaluate(() => document.documentElement.classList.contains("dark")), "the page shows the stored theme").toBe(scheme === "dark");
     // The hero's height depends on its typeface; the photo only has to be there for the screenshot.
     await page.evaluate(async () => {
@@ -231,6 +258,11 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     const shot = testInfo.outputPath(`landing-first-screen-${device.name.replace(/\W+/g, "-")}-${scheme}.png`);
     await page.screenshot({ path: shot });
     await testInfo.attach(`${device.name}, ${scheme}`, { path: shot, contentType: "image/png" });
+    if (device.cookingNow) {
+      const back = page.getByRole("link", { name: "Back to Lemon Herb Rice", exact: true });
+      await back.evaluate((element) => element.scrollIntoView({ block: "center" }));
+      backTo = await coveringElements(back);
+    }
   } catch (error) {
     throw appendConsoleIssues(error, watcher.issues);
   } finally {
@@ -238,21 +270,22 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     await context.close();
   }
   assertNoConsoleIssues(watcher.issues);
-  return { placements, shape: shape! };
+  return { placements, shape: shape!, backTo };
 }
 
 async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, phones: Phone[], scheme: Scheme): Promise<void> {
-  const results: Array<{ phone: string; placements: Placement[]; shape: HeroShape }> = [];
+  const results: Array<{ phone: string; placements: Placement[]; shape: HeroShape; backTo: string[] | null }> = [];
   try {
     for (const device of phones) {
-      const { placements, shape } = await firstScreen(browser, testInfo, device, scheme);
-      results.push({ phone: device.name, placements, shape });
+      const { placements, shape, backTo } = await firstScreen(browser, testInfo, device, scheme);
+      results.push({ phone: device.name, placements, shape, backTo });
+      expect.soft(backTo, `${device.name}, ${scheme}: what covers Back to Lemon Herb Rice once scrolled into view (none without a recipe in progress)`).toEqual(device.cookingNow ? [] : null);
       const hero = `${device.name}, ${scheme}: the hero (${JSON.stringify(shape)})`;
       if (device.hero === "compact") {
         expect.soft(shape.headlinePx, `${hero} has the compact 32px headline`).toBe(32);
         expect.soft(shape.description, `${hero} shows only the description's first clause`).not.toContain(REST_OF_DESCRIPTION);
-      } else if (device.hero === "sideways") {
-        expect.soft(shape.headlinePx, `${hero} has the compact 32px headline`).toBe(32);
+      } else if (device.hero === "sideways" || device.hero === "low sideways") {
+        expect.soft(shape.headlinePx, `${hero} has the ${device.hero === "sideways" ? "compact 32px" : "low 24px"} headline`).toBe(device.hero === "sideways" ? 32 : 24);
         expect.soft(shape.description, `${hero} shows only the description's first clause`).not.toContain(REST_OF_DESCRIPTION);
         expect.soft(shape.heroBottom, `${hero}: the photo reaches the foot of the screen`).toBeGreaterThanOrEqual(shape.viewportHeight - 1);
         const tops = placements.map(({ box }) => Math.round(box.top));
@@ -297,5 +330,13 @@ test.describe("Signed-out landing hero on a phone's or tablet's first screen", (
 
   test("every hero action is on screen and uncovered at page load on a phone held sideways in the dark theme", async ({ browser }, testInfo) => {
     await everyActionOnFirstScreen(browser, testInfo, SIDEWAYS, "dark");
+  });
+
+  test("every hero action is on screen and uncovered with a recipe in progress in the light theme", async ({ browser }, testInfo) => {
+    await everyActionOnFirstScreen(browser, testInfo, COOKING, "light");
+  });
+
+  test("every hero action is on screen and uncovered with a recipe in progress in the dark theme", async ({ browser }, testInfo) => {
+    await everyActionOnFirstScreen(browser, testInfo, COOKING, "dark");
   });
 });

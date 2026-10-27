@@ -145,8 +145,10 @@ describe("Ouro UI's theme mapping onto Spoonjoy's palette", () => {
     });
   });
 
-  it("gives the landing hero's actions a stronger photo line and a light amber main action, through tokens alone", () => {
+  it("gives the landing hero's actions a stronger photo line, a light amber main action and no press shrink, through tokens alone", () => {
     expect(LANDING_ACTIONS).toEqual({
+      // Pressed, a button keeps its size, so its edge stays on whole pixels (landing-readability.journey.ts).
+      "--ouro-press-scale": "1",
       "--border": "var(--sj-on-photo-muted)",
       "--ouro-action": "var(--sj-photo-action)",
       "--ouro-action-foreground": "var(--sj-on-photo-action)",
