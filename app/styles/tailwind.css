@@ -234,18 +234,25 @@
 /* The signed-out landing hero's actions, on the shaded photo with sj-on-charcoal: each button's
    edge must show against the photo at 3:1 (WCAG 1.4.11), measured from the real pixels by
    e2e/journeys/landing-readability.journey.ts. The outline buttons' 22–24% photo line measured
-   1.48–2.49:1, so they take the 76% muted photo-white (62% measured 3.09:1 pressed on desktop,
-   where the shrunken 1px border antialiases); the main action takes the photo action fill. Pressed,
-   they keep their size: Ouro's 0.97 press scale moved each edge between pixels, where on a screen
-   at one pixel per CSS px it blended into the photo at as little as 1.0:1 (desktop Chrome at
-   531 x 382, 568 x 320 and 712 x 327). The pressed fill and state layer still show the press. */
+   1.48–2.49:1, so they take the 76% muted photo-white; the main action takes the photo action fill.
+   Pressed, they keep their size: Ouro's 0.97 press scale moved each edge between pixels, where on
+   a screen at one pixel per CSS px it blended into the photo at as little as 1.0:1 (desktop Chrome
+   at 531 x 382, 568 x 320 and 712 x 327). They move down 1px instead, a whole pixel, and the main
+   action presses to its resting amber under the 14% state layer, a step darker than at rest
+   (the hover amber under that layer barely differed from rest). */
 .sj-landing-hero-actions {
   --ouro-press-scale: 1;
   --border: var(--sj-on-photo-muted);
   --ouro-action: var(--sj-photo-action);
   --ouro-action-foreground: var(--sj-on-photo-action);
   --ouro-action-hover: var(--sj-photo-action-hover);
-  --ouro-action-active: var(--sj-photo-action-hover);
+  --ouro-action-active: var(--sj-photo-action);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sj-landing-hero-actions [data-ouro="button"]:not([data-disabled]):active {
+    translate: 0 1px;
+  }
 }
 
 /* The shade over the signed-out landing photo. The photo has white plates and bright greens under

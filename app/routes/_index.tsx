@@ -206,8 +206,8 @@ export default function Index() {
 
         {/* Signed out, the recipes in progress live in this browser, so they appear after hydration. They
             follow the hero, so the hero does not jump down once they appear and its actions stay on the
-            first screen. The desktop "Cooking" pill links here and the tab bar's Home badge counts them
-            (e2e/journeys/landing-first-screen.mobile.journey.ts). */}
+            first screen (e2e/journeys/landing-first-screen.mobile.journey.ts). The desktop "Cooking"
+            pill's /#cooking-now link brings them into view. */}
         <LocalCookingNow />
 
         <section className="mx-auto grid max-w-6xl gap-6 px-5 py-10 sm:grid-cols-3 sm:px-8 lg:px-12">
