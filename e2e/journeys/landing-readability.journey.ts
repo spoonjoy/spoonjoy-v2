@@ -2,7 +2,8 @@
 // heading, description and three actions sit on a food photo under a dark gradient, so their
 // contrast depends on the photo, not just the theme's tokens. "Log in" and "Search Recipes" used to
 // be outline buttons with the page's dark ink and border on that dark photo. Coverage is checked
-// too; landing-first-screen.mobile.journey.ts checks the actions on a phone's first screen.
+// too; landing-first-screen.mobile.journey.ts checks the actions on a phone's first screen. Each
+// device runs it at its own size, and two phones held sideways run it as well.
 //
 // For each piece of hero text and each action, this measures the contrast of the text against the
 // pixels actually painted behind it (support/readability.ts), at rest and, for the actions, on
@@ -174,3 +175,24 @@ test.describe("Signed-out landing hero readability", () => {
     await heroIsReadable(page, testInfo, "dark");
   });
 });
+
+// A phone held sideways shows the hero's text and actions higher on the photo, where the bottom shade
+// is thinner (landing-first-screen.mobile.journey.ts). The 13 mini's Safari page (712 x 327) puts the
+// actions highest on the photo; the Duo's outer screen (531 x 382) puts "Search Recipes" furthest
+// right, where the side shade is thinnest.
+for (const { name, viewport } of [
+  { name: "an iPhone 13 mini held sideways", viewport: { width: 712, height: 327 } },
+  { name: "the iPhone Duo's outer screen held sideways", viewport: { width: 531, height: 382 } },
+]) {
+  test.describe(`Signed-out landing hero readability on ${name}`, () => {
+    test.use({ storageState: { cookies: [], origins: [] }, viewport });
+
+    test("every hero text and action is readable in the light theme", async ({ page }, testInfo) => {
+      await heroIsReadable(page, testInfo, "light");
+    });
+
+    test("every hero text and action is readable in the dark theme", async ({ page }, testInfo) => {
+      await heroIsReadable(page, testInfo, "dark");
+    });
+  });
+}

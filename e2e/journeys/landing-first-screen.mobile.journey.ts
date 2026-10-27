@@ -24,6 +24,14 @@
 // headline and the whole description, and still shows every action above the tab bar. The Duo's
 // inner screen (669 x 951 points, app/lib/fold.ts) and a tablet in portrait show the wide hero, which
 // fills 70% of the screen so the page does not end in a blank band above the tab bar.
+//
+// A phone held sideways is wide but under 480 tall, so the width rules alone gave it the desktop hero:
+// a 60px headline with the actions under the tab bar, past the first screen. It gets the sideways
+// hero instead: the photo fills the screen below the header, and the 32px headline, the
+// description's first clause and the actions on one row sit above the tab bar. Playwright's
+// "landscape" iPhones leave out Safari's bars and the notch's side margins; the full-screen
+// entries are the same phones with the whole screen, as when Safari hides its bars. The Duo's outer
+// screen sideways swaps its measured 382 x 531 page.
 import { devices, type Browser, type BrowserContextOptions, type TestInfo } from "@playwright/test";
 import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
@@ -34,8 +42,9 @@ import { coveringElements } from "./support/readability";
 type Scheme = "light" | "dark";
 
 /** Compact: a 32px headline and the description's first clause. Roomy: a 36px headline or larger and
- * the whole description. */
-type Hero = "compact" | "roomy";
+ * the whole description. Sideways: the compact headline and clause, the actions on one row, and the
+ * photo down to the foot of the screen. */
+type Hero = "compact" | "roomy" | "sideways";
 
 interface Phone {
   name: string;
@@ -74,7 +83,22 @@ const DUO_OPEN: Phone = {
   hero: "roomy",
 };
 
-const PHONES: Phone[] = [
+/** A landscape iPhone with the whole screen for the page. */
+function fullScreen(name: string, width: number, height: number): Phone {
+  return { name: `${name}, full screen`, context: { ...devices[name], viewport: { width, height } }, hero: "sideways" };
+}
+
+const DUO_SIDEWAYS: Phone = {
+  name: "iPhone Duo, one screen, sideways",
+  context: {
+    ...devices["iPhone 15 landscape"],
+    viewport: { width: 531, height: 382 },
+    screen: { width: 678, height: 466 },
+  },
+  hero: "sideways",
+};
+
+const UPRIGHT: Phone[] = [
   phone("iPhone SE", "compact"),
   phone("iPhone 13 Mini", "roomy"),
   phone("iPhone 15", "roomy"),
@@ -83,6 +107,16 @@ const PHONES: Phone[] = [
   DUO_SCREEN,
   DUO_OPEN,
   phone("iPad Pro 11", "roomy"),
+];
+
+const SIDEWAYS: Phone[] = [
+  phone("iPhone 15 Pro Max landscape", "sideways"),
+  phone("iPhone 15 landscape", "sideways"),
+  phone("iPhone 13 Mini landscape", "sideways"),
+  phone("iPhone SE (3rd gen) landscape", "sideways"),
+  fullScreen("iPhone 15 Pro Max landscape", 932, 430),
+  fullScreen("iPhone 15 landscape", 852, 393),
+  DUO_SIDEWAYS,
 ];
 
 const REST_OF_DESCRIPTION = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
@@ -107,6 +141,7 @@ interface HeroShape {
   headlinePx: number;
   description: string;
   heroHeight: number;
+  heroBottom: number;
   viewportHeight: number;
 }
 
@@ -148,6 +183,7 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
       headlinePx: await heading.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
       description: await heading.evaluate((element) => (element.nextElementSibling as HTMLElement).innerText.trim()),
       heroHeight: await hero.evaluate((element) => element.getBoundingClientRect().height),
+      heroBottom: await hero.evaluate((element) => element.getBoundingClientRect().bottom),
       viewportHeight: await page.evaluate(() => window.innerHeight),
     };
     for (const name of ACTIONS) {
@@ -205,16 +241,22 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
   return { placements, shape: shape! };
 }
 
-async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, scheme: Scheme): Promise<void> {
+async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, phones: Phone[], scheme: Scheme): Promise<void> {
   const results: Array<{ phone: string; placements: Placement[]; shape: HeroShape }> = [];
   try {
-    for (const device of PHONES) {
+    for (const device of phones) {
       const { placements, shape } = await firstScreen(browser, testInfo, device, scheme);
       results.push({ phone: device.name, placements, shape });
       const hero = `${device.name}, ${scheme}: the hero (${JSON.stringify(shape)})`;
       if (device.hero === "compact") {
         expect.soft(shape.headlinePx, `${hero} has the compact 32px headline`).toBe(32);
         expect.soft(shape.description, `${hero} shows only the description's first clause`).not.toContain(REST_OF_DESCRIPTION);
+      } else if (device.hero === "sideways") {
+        expect.soft(shape.headlinePx, `${hero} has the compact 32px headline`).toBe(32);
+        expect.soft(shape.description, `${hero} shows only the description's first clause`).not.toContain(REST_OF_DESCRIPTION);
+        expect.soft(shape.heroBottom, `${hero}: the photo reaches the foot of the screen`).toBeGreaterThanOrEqual(shape.viewportHeight - 1);
+        const tops = placements.map(({ box }) => Math.round(box.top));
+        expect.soft(new Set(tops).size, `${hero}: the actions share one row (tops ${tops.join(", ")})`).toBe(1);
       } else {
         expect.soft(shape.headlinePx, `${hero} has a headline of 36px or more`).toBeGreaterThanOrEqual(36);
         expect.soft(shape.description, `${hero} shows the whole description`).toContain(REST_OF_DESCRIPTION);
@@ -242,10 +284,18 @@ test.describe("Signed-out landing hero on a phone's or tablet's first screen", (
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("every hero action is on screen and uncovered at page load in the light theme", async ({ browser }, testInfo) => {
-    await everyActionOnFirstScreen(browser, testInfo, "light");
+    await everyActionOnFirstScreen(browser, testInfo, UPRIGHT, "light");
   });
 
   test("every hero action is on screen and uncovered at page load in the dark theme", async ({ browser }, testInfo) => {
-    await everyActionOnFirstScreen(browser, testInfo, "dark");
+    await everyActionOnFirstScreen(browser, testInfo, UPRIGHT, "dark");
+  });
+
+  test("every hero action is on screen and uncovered at page load on a phone held sideways in the light theme", async ({ browser }, testInfo) => {
+    await everyActionOnFirstScreen(browser, testInfo, SIDEWAYS, "light");
+  });
+
+  test("every hero action is on screen and uncovered at page load on a phone held sideways in the dark theme", async ({ browser }, testInfo) => {
+    await everyActionOnFirstScreen(browser, testInfo, SIDEWAYS, "dark");
   });
 });
