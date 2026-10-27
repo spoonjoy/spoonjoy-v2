@@ -178,7 +178,7 @@ export default function Index() {
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="sj-landing-hero-shade absolute inset-0" />
-          <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24 sideways-phone:pt-4 sideways-phone:pb-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)] sideways-phone:pl-[max(2rem,env(safe-area-inset-left))] sideways-phone:pr-[max(2rem,env(safe-area-inset-right))]">
+          <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24 sideways-phone:pt-4 sideways-phone:pb-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)]">
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo)]">
               The Recipe App
             </p>
