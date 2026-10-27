@@ -88,16 +88,22 @@ export const DISPOSABLE_USER_WHERE = [
 
 /**
  * The disposable accounts one run may delete. With a cutoff (`--older-than-hours`, which the
- * scheduled QA Data Cleanup uses), only accounts older than it are disposable, so an account a
- * test run is still using keeps its rows and photos. Its test-titled recipes are then kept too,
- * not soft-deleted as if a person owned them. Without a cutoff the SQL is unchanged.
+ * scheduled QA Data Cleanup uses), only accounts created at or before `createdBefore` (epoch
+ * seconds) are disposable, so an account a test run is still using keeps its rows and photos. Its
+ * test-titled recipes are then kept too, not soft-deleted as if a person owned them. The cutoff is a
+ * fixed number, not "now", so every statement in a run, and every run given the same `--as-of`,
+ * chooses the same accounts. Without a cutoff the SQL is unchanged.
  */
-export function disposableUserScope(minAgeSeconds = 0) {
-  if (minAgeSeconds <= 0) return { usersWhere: DISPOSABLE_USER_WHERE, keepYoungSql: "", keptYoungCountSql: "" };
-  const usersWhere = `(${DISPOSABLE_USER_WHERE})
-    AND ${USER_CREATED_AT_EPOCH_SECONDS_SQL} <= CAST(strftime('%s', 'now') AS INTEGER) - ${minAgeSeconds}`;
+export function disposableUserScope(createdBefore = 0) {
+  if (createdBefore <= 0) {
+    return { usersWhere: DISPOSABLE_USER_WHERE, staleNativeWhere: STALE_NATIVE_JOURNEY_USER_WHERE, keepYoungSql: "", keptYoungCountSql: "" };
+  }
+  const cutoffSql = `
+    AND ${USER_CREATED_AT_EPOCH_SECONDS_SQL} <= ${createdBefore}`;
+  const usersWhere = `(${DISPOSABLE_USER_WHERE})${cutoffSql}`;
   return {
     usersWhere,
+    staleNativeWhere: `${STALE_NATIVE_JOURNEY_USER_WHERE}${cutoffSql}`,
     keptYoungCountSql: `SELECT 'disposable users kept because they are newer than the cutoff' AS item, COUNT(*) AS count
 FROM User
 WHERE (${DISPOSABLE_USER_WHERE})
@@ -248,8 +254,8 @@ export function planQaR2Cleanup({
   return { deleteKeys, retainedKeys, blockers };
 }
 
-export function buildQaR2CandidateSql({ minAgeSeconds = 0 } = {}) {
-  const scope = disposableUserScope(minAgeSeconds);
+export function buildQaR2CandidateSql({ createdBefore = 0 } = {}) {
+  const scope = disposableUserScope(createdBefore);
   const userCandidates = `
 WITH
   disposable_users AS (
@@ -353,8 +359,8 @@ WHERE key IS NOT NULL AND key != '';
   ].join("\n\n");
 }
 
-export function buildR2ReferenceSql(keys = [], { minAgeSeconds = 0 } = {}) {
-  const scope = disposableUserScope(minAgeSeconds);
+export function buildR2ReferenceSql(keys = [], { createdBefore = 0 } = {}) {
+  const scope = disposableUserScope(createdBefore);
   const values = unique(keys).map((key) => `(${sqlString(key)})`).join(", ");
   const referenceKeysCte = values === "" ? "SELECT NULL AS key WHERE 0" : `VALUES ${values}`;
   return `
@@ -445,8 +451,8 @@ WHERE type IN ('table', 'virtual table')
 `.trim();
 }
 
-export function buildQaR2SearchReferenceSql(keys = [], { minAgeSeconds = 0 } = {}) {
-  const scope = disposableUserScope(minAgeSeconds);
+export function buildQaR2SearchReferenceSql(keys = [], { createdBefore = 0 } = {}) {
+  const scope = disposableUserScope(createdBefore);
   const values = unique(keys).map((key) => `(${sqlString(key)})`).join(", ");
   const searchKeysCte = values === "" ? "SELECT NULL AS key WHERE 0" : `VALUES ${values}`;
   return `
@@ -492,8 +498,8 @@ WHERE key IS NOT NULL AND key != '';
   `.trim();
 }
 
-function cleanupTargetCtesSql({ minAgeSeconds = 0 } = {}) {
-  const scope = disposableUserScope(minAgeSeconds);
+function cleanupTargetCtesSql({ createdBefore }) {
+  const scope = disposableUserScope(createdBefore);
   return `
 WITH
   disposable_users AS (
@@ -711,10 +717,10 @@ async function collectExistingSearchTables({ dbName, target, runCommand }) {
   return normalizeExistingSearchTables(rows.map((row) => row.name));
 }
 
-async function collectR2Candidates({ dbName, target, runCommand, existingSearchTables, minAgeSeconds = 0 }) {
+async function collectR2Candidates({ dbName, target, runCommand, existingSearchTables, createdBefore }) {
   const targetLabel = target.targetEnv === "local" ? "local" : "QA";
   const rows = [];
-  const candidateStatements = buildQaR2CandidateSql({ minAgeSeconds }).split(/;\s*(?=WITH\b)/);
+  const candidateStatements = buildQaR2CandidateSql({ createdBefore }).split(/;\s*(?=WITH\b)/);
   for (const statement of candidateStatements) {
     const result = await runCommand("pnpm", wranglerD1Args(dbName, statement, target), {
       encoding: "utf8",
@@ -734,7 +740,7 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
   const deleteKeys = unique(rows.filter((row) => row.action === "delete").map((row) => row.key));
   const retainedKeys = unique(rows.filter((row) => row.action === "retain").map((row) => row.key));
   if (deleteKeys.length > 0) {
-    const referenceResult = await runCommand("pnpm", wranglerD1Args(dbName, buildR2ReferenceSql(deleteKeys, { minAgeSeconds }), target), {
+    const referenceResult = await runCommand("pnpm", wranglerD1Args(dbName, buildR2ReferenceSql(deleteKeys, { createdBefore }), target), {
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
@@ -751,7 +757,7 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
     assertNoR2Blockers(referenceRows, targetLabel);
   }
   if (deleteKeys.length > 0 && existingSearchTables.has("SearchDocument")) {
-    const searchResult = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchReferenceSql(deleteKeys, { minAgeSeconds }), target), {
+    const searchResult = await runCommand("pnpm", wranglerD1Args(dbName, buildQaR2SearchReferenceSql(deleteKeys, { createdBefore }), target), {
       encoding: "utf8",
       maxBuffer: MAX_WRANGLER_BUFFER,
     });
@@ -854,8 +860,8 @@ async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout
   return { deletedKeys, verifiedDeletedKeys };
 }
 
-export function buildDryRunSql({ minAgeSeconds = 0 } = {}) {
-  const scope = disposableUserScope(minAgeSeconds);
+export function buildDryRunSql({ createdBefore = 0 } = {}) {
+  const scope = disposableUserScope(createdBefore);
   return `
 WITH disposable_users AS (
   SELECT id FROM User WHERE ${scope.usersWhere}
@@ -887,7 +893,7 @@ WHERE ${scope.usersWhere};
 
 ${scope.keptYoungCountSql}SELECT 'stale native journey users' AS item, COUNT(*) AS count
 FROM User
-WHERE ${STALE_NATIVE_JOURNEY_USER_WHERE};
+WHERE ${scope.staleNativeWhere};
 
 WITH disposable_users AS (
   SELECT id FROM User WHERE ${scope.usersWhere}
@@ -896,7 +902,7 @@ SELECT 'spoons owned by disposable users' AS item, COUNT(*) AS count
 FROM RecipeSpoon
 WHERE chefId IN (SELECT id FROM disposable_users);
 
-${cleanupTargetCtesSql({ minAgeSeconds })}
+${cleanupTargetCtesSql({ createdBefore })}
 SELECT 'cross-boundary cleanup blockers' AS item,
   ${cleanupBlockerQueries().map((query) => `/* ${query.blocker} */ (SELECT COUNT(*) ${query.fromWhere})`).join("\n  + ")} AS count;
 `.trim();
@@ -941,8 +947,8 @@ export function buildScratchCleanupSql() {
     .join("\n");
 }
 
-export function buildApplySql({ existingSearchTables = [], minAgeSeconds = 0 } = {}) {
-  const scope = disposableUserScope(minAgeSeconds);
+export function buildApplySql({ existingSearchTables = [], createdBefore = 0 } = {}) {
+  const scope = disposableUserScope(createdBefore);
   const searchCleanupSql = buildSearchCleanupSql(existingSearchTables);
   return `
 PRAGMA foreign_keys=ON;
@@ -1233,10 +1239,10 @@ ${dropExactScratchSql}
 `.trim();
 }
 
-export function buildBlockerReportSql({ minAgeSeconds = 0 } = {}) {
+export function buildBlockerReportSql({ createdBefore = 0 } = {}) {
   return cleanupBlockerQueries()
     .map((query) => `
-${cleanupTargetCtesSql({ minAgeSeconds })}
+${cleanupTargetCtesSql({ createdBefore })}
 SELECT ${sqlString(query.blocker)} AS blocker, ${query.rowId} AS rowId
 ${query.fromWhere};
 `.trim())
@@ -1278,7 +1284,7 @@ function defaultBaseUrlForTarget(targetEnv) {
   return DEFAULT_LOCAL_BASE_URL;
 }
 
-export function parseCleanupArgs(argv = process.argv.slice(2)) {
+export function parseCleanupArgs(argv = process.argv.slice(2), { nowSeconds = Math.floor(Date.now() / 1000) } = {}) {
   if (argv.includes("--remote")) {
     throw new Error("Refusing ambiguous --remote. Use --target-env qa or --target-env production.");
   }
@@ -1296,8 +1302,28 @@ export function parseCleanupArgs(argv = process.argv.slice(2)) {
     apply: argv.includes("--apply"),
     dbName: requiredArgValue(argv, "--db") ?? "DB",
     target,
-    minAgeSeconds: olderThanSeconds(requiredArgValue(argv, "--older-than-hours")),
+    createdBefore: cutoffEpochSeconds(argv, nowSeconds),
   };
+}
+
+/**
+ * `--older-than-hours N` (a whole number, at least 1) counted back from `--as-of` (epoch seconds,
+ * default now), as epoch seconds; 0 (no cutoff) without `--older-than-hours`.
+ */
+function cutoffEpochSeconds(argv, nowSeconds) {
+  const asOf = requiredArgValue(argv, "--as-of");
+  if (asOf !== undefined && !/^[1-9]\d*$/.test(asOf)) {
+    throw new Error(`--as-of must be a time in whole seconds since 1970 (got ${JSON.stringify(asOf)}).`);
+  }
+  const olderThan = olderThanSeconds(requiredArgValue(argv, "--older-than-hours"));
+  if (olderThan === 0) {
+    if (asOf !== undefined) throw new Error("--as-of only applies with --older-than-hours.");
+    return 0;
+  }
+  const createdBefore = (asOf === undefined ? nowSeconds : Number(asOf)) - olderThan;
+  // A cutoff at or before 1970 would read as "no cutoff" and delete accounts in use.
+  if (createdBefore <= 0) throw new Error(`--as-of ${asOf ?? nowSeconds} minus --older-than-hours is before 1970.`);
+  return createdBefore;
 }
 
 /** `--older-than-hours N`: a whole number of hours, at least 1, as seconds; 0 (no cutoff) when absent. */
@@ -1328,13 +1354,14 @@ export function formatCleanupTargetSummary(target) {
 }
 
 function printHelp(stdout) {
-  stdout.write(`Usage: node scripts/cleanup-local-qa-data.mjs [--target-env local|qa|production] [--apply] [--db DB] [--older-than-hours N]
+  stdout.write(`Usage: node scripts/cleanup-local-qa-data.mjs [--target-env local|qa|production] [--apply] [--db DB] [--older-than-hours N [--as-of SECONDS]]
 
 Dry-runs by default. Missing --target-env remains a backwards-compatible local
 dry-run. Local apply mutates only local disposable QA data. QA apply mutates
 only exact validated disposable QA D1/R2 data. Production broad cleanup is
 read-only and refuses --apply. --older-than-hours limits the run to disposable
-accounts created more than N hours ago, so accounts a test run is using stay.
+accounts created more than N hours before --as-of (seconds since 1970, default
+now), so accounts a test run is using stay.
   `);
 }
 
@@ -1348,9 +1375,9 @@ function cleanupResultMessage(options) {
   return "Dry run only. Production broad cleanup is read-only.\n";
 }
 
-async function assertNoCleanupBlockers({ dbName, target, runCommand, minAgeSeconds = 0 }) {
+async function assertNoCleanupBlockers({ dbName, target, runCommand, createdBefore }) {
   const blockers = [];
-  const blockerStatements = buildBlockerReportSql({ minAgeSeconds }).split(/;\s*(?=WITH\b)/);
+  const blockerStatements = buildBlockerReportSql({ createdBefore }).split(/;\s*(?=WITH\b)/);
   for (const statement of blockerStatements) {
     const result = await runCommand("pnpm", wranglerD1Args(dbName, statement, target), {
       encoding: "utf8",
@@ -1387,8 +1414,8 @@ export async function runCleanupCli({
   for (const line of formatCleanupTargetSummary(summaryTarget)) {
     stdout.write(`${line}\n`);
   }
-  if (options.minAgeSeconds > 0) {
-    stdout.write(`Only disposable accounts created more than ${options.minAgeSeconds / 3600} hours ago, with their data.\n`);
+  if (options.createdBefore > 0) {
+    stdout.write(`Only disposable accounts created before ${new Date(options.createdBefore * 1000).toISOString()}, with their data.\n`);
   }
 
   if (options.apply && options.target.targetEnv === "production") {
@@ -1439,7 +1466,7 @@ export async function runCleanupCli({
         target: options.target,
         runCommand,
         existingSearchTables,
-        minAgeSeconds: options.minAgeSeconds,
+        createdBefore: options.createdBefore,
       });
       if (r2Candidates.retainedKeys.length > 0) {
         const targetLabel = options.target.targetEnv === "local" ? "local" : "QA";
@@ -1452,7 +1479,7 @@ export async function runCleanupCli({
         dbName: options.dbName,
         target: options.target,
         runCommand,
-        minAgeSeconds: options.minAgeSeconds,
+        createdBefore: options.createdBefore,
       });
     }
 
@@ -1467,8 +1494,8 @@ export async function runCleanupCli({
     }
 
     const sql = options.apply
-      ? buildApplySql({ existingSearchTables, minAgeSeconds: options.minAgeSeconds })
-      : buildDryRunSql({ minAgeSeconds: options.minAgeSeconds });
+      ? buildApplySql({ existingSearchTables, createdBefore: options.createdBefore })
+      : buildDryRunSql({ createdBefore: options.createdBefore });
     const args = wranglerD1Args(options.dbName, sql, options.target);
 
     const result = await runCommand("pnpm", args, {

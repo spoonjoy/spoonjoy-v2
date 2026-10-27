@@ -9,6 +9,7 @@ import {
   buildApplySql,
   buildBlockerReportSql,
   buildExactOauthClientCleanupSql,
+  buildQaR2CandidateSql,
   buildScratchCleanupSql,
   disposableUserScope,
 } from "../../scripts/cleanup-local-qa-data.mjs";
@@ -144,32 +145,49 @@ describe("cleanup-local-qa-data executable ownership boundaries", () => {
     tempRoot = undefined;
   });
 
-  it("with a cutoff, deletes only disposable accounts older than it and keeps a run's fresh account and recipe", () => {
-    const sixHours = 6 * 60 * 60;
+  it("with a cutoff, deletes only disposable accounts older than it and keeps a run's fresh account, its rows and its photos", () => {
     db = createCleanupDatabase();
+    const createdBefore = (db.prepare("SELECT CAST(strftime('%s', 'now', '-6 hours') AS INTEGER) AS cutoff").get() as { cutoff: number }).cutoff;
     db.exec(`
       INSERT INTO User VALUES ('person', 'cook@example.com', 'cook', NULL, datetime('now', '-30 days'));
-      INSERT INTO User VALUES ('old-smoke', 'codex-smoke-old@example.com', 'codex_smoke_old', NULL, datetime('now', '-7 hours'));
-      INSERT INTO User VALUES ('fresh-smoke', 'codex-smoke-fresh@example.com', 'codex_smoke_fresh', NULL, datetime('now', '-5 minutes'));
+      INSERT INTO User VALUES ('old-smoke', 'codex-smoke-old@example.com', 'codex_smoke_old', '/photos/profiles/old-smoke/a.jpg', datetime('now', '-7 hours'));
+      INSERT INTO User VALUES ('fresh-smoke', 'codex-smoke-fresh@example.com', 'codex_smoke_fresh', '/photos/profiles/fresh-smoke/a.jpg', datetime('now', '-5 minutes'));
       INSERT INTO User VALUES ('old-native', 'codex-native-old-1@example.com', 'codex_native_old_1', NULL, datetime('now', '-7 hours'));
       INSERT INTO User VALUES ('running-native', 'codex-native-run-1@example.com', 'codex_native_run_1', NULL, datetime('now', '-4 hours'));
       INSERT INTO User VALUES ('undated-smoke', 'codex-smoke-undated@example.com', 'codex_smoke_undated', NULL, 'not a date');
       INSERT INTO Recipe (id, title, chefId) VALUES ('old-recipe', 'Codex smoke skillet old', 'old-smoke');
       INSERT INTO Recipe (id, title, chefId) VALUES ('fresh-recipe', 'Codex smoke skillet fresh', 'fresh-smoke');
       INSERT INTO Recipe (id, title, chefId) VALUES ('person-test-recipe', 'Codex leftover', 'person');
+      INSERT INTO RecipeSpoon (id, chefId, recipeId, note, photoUrl) VALUES ('old-spoon', 'old-smoke', 'old-recipe', NULL, '/photos/spoons/old-smoke/old-recipe/s.jpg');
+      INSERT INTO RecipeSpoon (id, chefId, recipeId, note, photoUrl) VALUES ('fresh-spoon', 'fresh-smoke', 'fresh-recipe', NULL, '/photos/spoons/fresh-smoke/fresh-recipe/s.jpg');
+      INSERT INTO Cookbook (id, authorId) VALUES ('fresh-cookbook', 'fresh-smoke');
+      INSERT INTO RecipeInCookbook (id, recipeId, cookbookId, addedById) VALUES ('fresh-ric', 'fresh-recipe', 'fresh-cookbook', 'fresh-smoke');
+      INSERT INTO ApiCredential (id, userId, oauthClientId) VALUES ('old-credential', 'old-smoke', NULL);
+      INSERT INTO ApiCredential (id, userId, oauthClientId) VALUES ('fresh-credential', 'fresh-smoke', NULL);
     `);
 
-    expect(buildBlockerReportSql({ minAgeSeconds: sixHours })
+    const photoKeys = buildQaR2CandidateSql({ createdBefore })
+      .split(/;\s*(?=WITH\b)/)
+      .flatMap((statement) => db!.prepare(statement).all() as Array<{ action: string; key: string }>)
+      .map((row) => `${row.action} ${row.key}`)
+      .sort();
+    expect(photoKeys).toEqual(["delete profiles/old-smoke/a.jpg", "delete spoons/old-smoke/old-recipe/s.jpg"]);
+    expect(buildBlockerReportSql({ createdBefore })
       .split("\n\n")
       .flatMap((statement) => db!.prepare(statement).all())).toEqual([]);
-    expect(db.prepare(disposableUserScope(sixHours).keptYoungCountSql).get()).toEqual({
+    expect(db.prepare(disposableUserScope(createdBefore).keptYoungCountSql).get()).toEqual({
       item: "disposable users kept because they are newer than the cutoff",
       count: 3,
     });
-    db.exec(buildApplySql({ minAgeSeconds: sixHours }));
+    db.exec(buildApplySql({ createdBefore }));
 
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(ids(db, "User")).toEqual(["fresh-smoke", "person", "running-native", "undated-smoke"]);
     expect(ids(db, "Recipe")).toEqual(["fresh-recipe", "person-test-recipe"]);
+    expect(ids(db, "RecipeSpoon")).toEqual(["fresh-spoon"]);
+    expect(ids(db, "Cookbook")).toEqual(["fresh-cookbook"]);
+    expect(ids(db, "RecipeInCookbook")).toEqual(["fresh-ric"]);
+    expect(ids(db, "ApiCredential")).toEqual(["fresh-credential"]);
     const deletedAt = (id: string) => (db!.prepare("SELECT deletedAt FROM Recipe WHERE id = ?").get(id) as { deletedAt: string | null }).deletedAt;
     expect(deletedAt("fresh-recipe")).toBeNull();
     expect(deletedAt("person-test-recipe")).not.toBeNull();

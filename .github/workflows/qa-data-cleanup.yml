@@ -7,6 +7,9 @@ name: QA Data Cleanup
 # shared QA (native Apple journeys, the image-cover smoke, the MCP OAuth canary) finish well
 # within the 6-hour default, and Journeys runs use their own databases.
 #
+# Every step counts the cutoff back from the same moment, the job's start (CLEANUP_AS_OF), so the
+# preview, the removal and the final check all choose the same accounts.
+#
 # Daily at 07:23 UTC, when no scheduled QA job runs, and by hand from main with the same cutoff.
 # It shares the image-cover smoke's concurrency group, so the two never overlap; GitHub keeps one
 # pending run per group, so starting one while the other runs and a third waits cancels the waiting one.
@@ -46,6 +49,7 @@ jobs:
             echo "::error::older_than_hours must be a whole number of hours, at least 1 (got '$OLDER_THAN_HOURS')."
             exit 1
           fi
+          echo "CLEANUP_AS_OF=$(date +%s)" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -67,13 +71,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS"
+        run: node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS" --as-of "$CLEANUP_AS_OF"
 
       - name: Remove disposable QA data
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/cleanup-local-qa-data.mjs --target-env qa --apply --older-than-hours "$OLDER_THAN_HOURS"
+        run: node scripts/cleanup-local-qa-data.mjs --target-env qa --apply --older-than-hours "$OLDER_THAN_HOURS" --as-of "$CLEANUP_AS_OF"
 
       # The dry run's JSON follows wrangler's log lines, so jq reads from the first line that opens it.
       - name: Confirm no disposable account older than the cutoff is left
@@ -81,7 +85,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          counts="$(node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS" | awk 'found || /^\[/ { found = 1; print }')"
+          set -o pipefail
+          counts="$(node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS" --as-of "$CLEANUP_AS_OF" | awk 'found || /^\[/ { found = 1; print }')"
           remaining="$(jq -r '[.[].results[] | select(.item == "disposable users")][0].count' <<<"$counts")"
           kept="$(jq -r '[.[].results[] | select(.item == "disposable users kept because they are newer than the cutoff")][0].count' <<<"$counts")"
           echo "Disposable accounts older than $OLDER_THAN_HOURS hours left: $remaining"

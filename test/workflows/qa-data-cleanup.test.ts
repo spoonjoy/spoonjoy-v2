@@ -20,6 +20,7 @@ const workflow = parseDocument(SOURCE).toJS() as Workflow;
 const smoke = read(".github/workflows/qa-image-cover-smoke.yml");
 const steps = workflow.jobs.cleanup.steps;
 const runs = steps.map((step) => step.run ?? "");
+const CUTOFF = '--older-than-hours "$OLDER_THAN_HOURS" --as-of "$CLEANUP_AS_OF"';
 
 describe("QA Data Cleanup workflow", () => {
   it("runs daily at a quiet hour and by hand, only on main, reading the repository and nothing else", () => {
@@ -43,16 +44,21 @@ describe("QA Data Cleanup workflow", () => {
     expect(runs[0]).toContain('[[ "$OLDER_THAN_HOURS" =~ ^[1-9][0-9]*$ ]]');
   });
 
+  it("fixes the moment the cutoff counts back from once, at the start, so every step chooses the same accounts", () => {
+    expect(runs[0]).toContain('echo "CLEANUP_AS_OF=$(date +%s)" >> "$GITHUB_ENV"');
+    expect(SOURCE.match(/CLEANUP_AS_OF=/g)).toHaveLength(1);
+  });
+
   it("previews, applies, then confirms nothing older than the cutoff is left, every time with the cutoff", () => {
-    const preview = runs.indexOf('node scripts/cleanup-local-qa-data.mjs --target-env qa --older-than-hours "$OLDER_THAN_HOURS"');
-    const apply = runs.indexOf('node scripts/cleanup-local-qa-data.mjs --target-env qa --apply --older-than-hours "$OLDER_THAN_HOURS"');
+    const preview = runs.indexOf(`node scripts/cleanup-local-qa-data.mjs --target-env qa ${CUTOFF}`);
+    const apply = runs.indexOf(`node scripts/cleanup-local-qa-data.mjs --target-env qa --apply ${CUTOFF}`);
     const confirm = runs.findIndex((run) => run.includes('test "$remaining" = "0"'));
     expect(preview).toBeGreaterThan(0);
     expect(apply).toBeGreaterThan(preview);
     expect(confirm).toBeGreaterThan(apply);
-    expect(runs[confirm]).toContain('--older-than-hours "$OLDER_THAN_HOURS"');
+    expect(runs[confirm]).toContain("set -o pipefail");
     for (const run of runs.filter((text) => text.includes("cleanup-local-qa-data.mjs"))) {
-      expect(run).toContain('--older-than-hours "$OLDER_THAN_HOURS"');
+      expect(run).toContain(CUTOFF);
     }
   });
 
