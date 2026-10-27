@@ -10,6 +10,15 @@ async function show(page: Page, body: string) {
   await page.setContent(`<!doctype html><html lang="en"><head><title>Gate</title></head><body style="margin:0;font:16px/1.5 sans-serif">${body}</body></html>`);
 }
 
+test.describe("the story check", () => {
+  test("fails a popup rendered outside the page's landmarks, as a story checks with its popups in its <main>", async ({ page }) => {
+    await show(page, `<main><h1>Gate</h1><button type="button" aria-expanded="true" aria-controls="herbs">Herbs</button></main><div id="herbs" role="listbox" aria-label="Herbs"><div role="option" aria-selected="false">Basil</div></div>`);
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/region/);
+    await page.evaluate(() => document.querySelector("main")!.append(document.querySelector("#herbs")!));
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
+  });
+});
+
 test.describe("text axe cannot judge", () => {
   test("fails faint text over a gradient", async ({ page }) => {
     await show(page, `<main><h1>Gate</h1><p style="color:#999;background:linear-gradient(#fff,#eee)">Faint text</p></main>`);
