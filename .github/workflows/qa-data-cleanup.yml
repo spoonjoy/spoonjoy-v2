@@ -25,7 +25,7 @@ jobs:
   cleanup:
     if: github.repository == 'spoonjoy/spoonjoy-v2' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
