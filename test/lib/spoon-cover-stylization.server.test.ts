@@ -1250,6 +1250,8 @@ describe("scheduleSpoonCoverStylization", () => {
           GOOGLE_API_KEY: "google-test",
           IMAGE_PROVIDER_PRIMARY: "sample",
           IMAGE_PROVIDER_FALLBACKS: "openai,gemini",
+          // A spent global budget stops paid covers, not free sample ones.
+          SPOONJOY_AI_DAILY_GENERATION_BUDGET: "0",
         },
         fetchImpl,
         bucket,
@@ -1270,6 +1272,7 @@ describe("scheduleSpoonCoverStylization", () => {
       expect.objectContaining({ httpMetadata: { contentType: "image/webp" } }),
     );
     await expect(db.imageGenLedger.count({ where: { userId, kind: "stylization" } })).resolves.toBe(1);
+    await expect(db.imageGenDailyBudget.count()).resolves.toBe(0);
     expect(errorSpy.error).not.toHaveBeenCalled();
   });
 

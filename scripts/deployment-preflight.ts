@@ -1430,9 +1430,19 @@ function stepHasId(lines: WorkflowLine[], stepStart: number, stepEnd: number, id
   return stepPropertyValue(lines, stepStart, stepEnd, "id") === id;
 }
 
+// QA makes covers from free sample images, so the smoke must not depend on a paid provider key.
+const QA_SMOKE_FORBIDDEN_TERMS = [
+  "deploy:auto",
+  "wrangler deploy",
+  "--target-env production",
+  "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+];
+
 function workflowHasForbiddenQaSmokeTerms(lines: WorkflowLine[]): boolean {
   const activeText = lines.map((line) => line.text).join("\n");
-  return ["deploy:auto", "wrangler deploy", "--target-env production"].some((term) => activeText.includes(term));
+  return QA_SMOKE_FORBIDDEN_TERMS.some((term) => activeText.includes(term));
 }
 
 function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
@@ -1441,8 +1451,8 @@ function qaSmokeStepOrderIsValid(order: Record<string, number>): boolean {
     order.checkout > order.cloudflare &&
     order.install > order.checkout &&
     order.prisma > order.install &&
-    order.providerSecrets > order.prisma &&
-    order.smoke > order.providerSecrets &&
+    order.sampleCovers > order.prisma &&
+    order.smoke > order.sampleCovers &&
     order.artifact > order.smoke
   );
 }
@@ -1508,27 +1518,11 @@ function cloudflareGateRunIsSafe(run: string): boolean {
   ]);
 }
 
-function qaProviderGateRunIsSafe(run: string): boolean {
-  return commandLinesEqual(run, [
-    'secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-    'echo "$secrets_json"',
-    `if ! printf '%s' "$secrets_json" | grep -Eq '"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)"'; then`,
-    'echo "ready=false" >> "$GITHUB_OUTPUT"',
-    'echo "Skipping QA image-cover smoke because no QA image-provider secret is configured."',
-    "exit 1",
-    "fi",
-    'echo "ready=true" >> "$GITHUB_OUTPUT"',
-  ]);
-}
-
 function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
   const lines = workflowLines(workflow);
   if (workflowHasForbiddenQaSmokeTerms(lines)) return false;
   const cloudflareReady = "steps.cloudflare.outputs.ready == 'true'";
-  const cloudflareAndProviderReady =
-    "steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'";
-  const artifactReady =
-    "always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'";
+  const artifactReady = "always() && steps.cloudflare.outputs.ready == 'true'";
 
   for (const [jobStart, jobEnd] of workflowJobBlocks(lines)) {
     const steps = childBlock(lines, jobStart, jobEnd, "steps");
@@ -1539,7 +1533,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       checkout: -1,
       install: -1,
       prisma: -1,
-      providerSecrets: -1,
+      sampleCovers: -1,
       smoke: -1,
       artifact: -1,
     };
@@ -1577,12 +1571,11 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
       }
 
       if (
-        stepHasId(lines, stepStart, stepEnd, "qa-secrets") &&
+        run === "node scripts/qa-sample-covers.mjs" &&
         stepHasEnvKeys(lines, stepStart, stepEnd, ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]) &&
-        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady) &&
-        qaProviderGateRunIsSafe(run)
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
-        order.providerSecrets = stepStart;
+        order.sampleCovers = stepStart;
       }
 
       if (
@@ -1593,7 +1586,7 @@ function workflowHasQaImageCoverSmokeGuards(workflow: string): boolean {
           "SPOONJOY_QA_SMOKE_BASE_URL",
           "SPOONJOY_QA_SMOKE_TARGET",
         ]) &&
-        stepIfEquals(lines, stepStart, stepEnd, cloudflareAndProviderReady)
+        stepIfEquals(lines, stepStart, stepEnd, cloudflareReady)
       ) {
         order.smoke = stepStart;
       }
@@ -1941,7 +1934,7 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
         workflowHasQaImageCoverSmokeGuards(inputs.qaImageCoverSmokeWorkflow) &&
         workflowHasGitDefaultBranchConfig(inputs.qaImageCoverSmokeWorkflow) &&
         workflowUsesCorepackPnpmSetup(inputs.qaImageCoverSmokeWorkflow),
-      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare and QA image-provider credentials, suppress checkout setup diagnostics, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
+      ".github/workflows/qa-image-cover-smoke.yml must run only on schedule/manual dispatch, guard Cloudflare credentials, put QA's sample cover images in place without requiring a paid image-provider key, suppress checkout setup diagnostics, use Corepack pnpm activation, and run the QA-only image-cover smoke without deploy commands."
     ),
     check(
       "Storybook deploy workflow",

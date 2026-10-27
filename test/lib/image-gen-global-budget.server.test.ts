@@ -80,6 +80,39 @@ describe("global AI generation budget", () => {
       await expect(db.imageGenDailyBudget.count()).resolves.toBe(0);
     });
 
+    it("lets a free (sample image) consume past a spent global budget, still under the chef's own cap", async () => {
+      const [payer, sampler] = await users(2);
+      const env = { SPOONJOY_AI_DAILY_GENERATION_BUDGET: "1" };
+      await expect(tryConsumeImageGenQuota(db, payer.id, "placeholder", { now, env, ...path() })).resolves.toBe(true);
+      await expect(tryConsumeImageGenQuota(db, payer.id, "placeholder", { now, env, ...path() })).resolves.toBe(false);
+
+      for (let index = 0; index < PLACEHOLDER_DAILY_CAP; index += 1) {
+        await expect(
+          tryConsumeImageGenQuota(db, sampler.id, "placeholder", { now, env, free: true, ...path() }),
+        ).resolves.toBe(true);
+      }
+      await expect(
+        tryConsumeImageGenQuota(db, sampler.id, "placeholder", { now, env, free: true, ...path() }),
+      ).resolves.toBe(false);
+
+      const sampled = await db.imageGenLedger.findMany({ where: { userId: sampler.id } });
+      expect(sampled.reduce((sum, row) => sum + row.count, 0)).toBe(PLACEHOLDER_DAILY_CAP);
+      const budgetRows = await db.imageGenDailyBudget.findMany();
+      expect(budgetRows.reduce((sum, row) => sum + row.count, 0)).toBe(1);
+    });
+
+    it("stops free consumes too when the kill switch is off", async () => {
+      const [chef] = await users(1);
+      const env = { SPOONJOY_AI_IMAGE_GENERATION: "off" };
+      await expect(tryConsumeImageGenQuota(db, chef.id, "placeholder", { now, env, free: true, ...path() })).resolves.toBe(false);
+      await expect(db.imageGenLedger.count()).resolves.toBe(0);
+    });
+
+    it("refuses a free consume for a user who is gone", async () => {
+      await expect(tryConsumeImageGenQuota(db, "missing-user", "placeholder", { now, free: true, ...path() })).resolves.toBe(false);
+      await expect(db.imageGenLedger.count()).resolves.toBe(0);
+    });
+
     it("does not hand units back when an account that spent them is deleted", async () => {
       const [spender, next] = await users(2);
       const env = { SPOONJOY_AI_DAILY_GENERATION_BUDGET: "1" };

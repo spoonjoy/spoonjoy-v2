@@ -1,0 +1,58 @@
+name: QA Data Cleanup
+
+# Removes disposable test data (smoke and scratch accounts, their recipes, covers and photos) from
+# shared QA with scripts/cleanup-local-qa-data.mjs, then fails if any image-cover smoke account is
+# left. Manual dispatch from main only. It shares the image-cover smoke's concurrency group, so it
+# never deletes the account a running smoke is using.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-image-cover-smoke
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'spoonjoy/spoonjoy-v2' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Show what the cleanup will remove
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm run cleanup:remote:qa
+
+      - name: Remove disposable QA data
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm run cleanup:remote:qa:apply
+
+      - name: Confirm no smoke account is left
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          remaining="$(pnpm exec wrangler d1 execute DB --remote --env qa --json --command "SELECT COUNT(*) AS count FROM \"User\" WHERE email LIKE 'codex-smoke-%'" | jq -r '.[0].results[0].count')"
+          echo "Smoke accounts left in shared QA: $remaining"
+          test "$remaining" = "0"

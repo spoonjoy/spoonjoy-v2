@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -124,6 +124,11 @@ function createImageCoverAdapters(page, baseUrl) {
       return new Uint8Array(await response.body())
     },
   }
+}
+
+function readQaImageProviderPrimary() {
+  const wrangler = JSON.parse(readFileSync('wrangler.json', 'utf8'))
+  return wrangler?.env?.qa?.vars?.IMAGE_PROVIDER_PRIMARY
 }
 
 async function listQaSecretNames() {
@@ -297,6 +302,7 @@ async function main() {
         stamp,
         maxPollAttempts: 30,
         pollDelayMs: 3_000,
+        qaImageProviderPrimary: readQaImageProviderPrimary(),
         listQaSecretNames,
         apiTool: adapters.apiTool,
         expectApiToolFailure: adapters.expectApiToolFailure,

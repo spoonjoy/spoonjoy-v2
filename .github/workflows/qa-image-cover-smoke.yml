@@ -71,36 +71,18 @@ jobs:
         if: steps.cloudflare.outputs.ready == 'true'
         run: pnpm prisma:generate
 
-      - name: Check QA image-provider secrets
-        id: qa-secrets
-        if: steps.cloudflare.outputs.ready == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          secrets_json="$(pnpm exec wrangler secret list --env qa)"
-          echo "$secrets_json"
-
-          if ! printf '%s' "$secrets_json" | grep -Eq '"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)"'; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping QA image-cover smoke because no QA image-provider secret is configured."
-            exit 1
-          fi
-
-          echo "ready=true" >> "$GITHUB_OUTPUT"
-
       # QA makes covers from these sample images instead of a paid generation call
       # (IMAGE_PROVIDER_PRIMARY=sample in wrangler.json's env.qa), so the smoke still runs every
-      # step of our cover pipeline but the provider call costs nothing.
+      # step of our cover pipeline but the provider call costs nothing, and QA needs no paid key.
       - name: Put the sample cover images in QA's photo bucket
-        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
+        if: steps.cloudflare.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/qa-sample-covers.mjs
 
       - name: Run QA image-cover smoke
-        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
+        if: steps.cloudflare.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -109,7 +91,7 @@ jobs:
         run: pnpm run smoke:qa:image-cover
 
       - name: Upload QA image-cover smoke artifacts
-        if: always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'
+        if: always() && steps.cloudflare.outputs.ready == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: qa-image-cover-smoke-artifacts

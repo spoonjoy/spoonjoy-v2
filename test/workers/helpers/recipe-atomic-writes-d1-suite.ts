@@ -717,6 +717,30 @@ describe("atomic recipe writes on Wrangler D1", () => {
       await expect(tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })).resolves.toBe(false);
     });
 
+    it("lets exactly one of many concurrent free consumes take the last unit", async () => {
+      await run(
+        `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt") VALUES ('atomic-ledger', ?, 'import', ?, ?, ?)`,
+        FRIEND,
+        DAY,
+        IMPORT_DAILY_CAP - 1,
+        DAY,
+      );
+
+      const results = await Promise.all(Array.from({ length: 8 }, () =>
+        tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database(), free: true })));
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(await ledger()).toEqual([{ count: IMPORT_DAILY_CAP }]);
+    });
+
+    it("counts concurrent free first consumes of the day in one row", async () => {
+      const results = await Promise.all(Array.from({ length: 5 }, () =>
+        tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database(), free: true })));
+
+      expect(results).toEqual([true, true, true, true, true]);
+      expect(await ledger()).toEqual([{ count: 5 }]);
+    });
+
     it("counts concurrent first consumes of the day in one row", async () => {
       const results = await Promise.all(Array.from({ length: 5 }, () =>
         tryConsumeImageGenQuota(prisma, FRIEND, "import", { now, d1: database() })));
