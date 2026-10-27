@@ -746,44 +746,82 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
   };
 }
 
+/**
+ * How many QA R2 keys are deleted at once. Each delete and each check is its own wrangler process of
+ * a few seconds, and shared QA can hold thousands of disposable photos, so one at a time takes
+ * hours. Four keeps the API requests well under Cloudflare's 1,200 per 5 minutes per token
+ * (scripts/count-cloudflare-requests.mjs), which Journeys runs share. Local cleanup stays one at a
+ * time: each local wrangler process opens the same .wrangler state.
+ */
+export const R2_DELETE_CONCURRENCY = 4;
+
+/** Deletes one key and proves it is gone. Answers whether the delete removed it (false: already missing). */
+async function deleteAndVerifyR2Key(key, { targetLabel, deleteArgs, getArgs, runCommand, stdout, sleep }) {
+  let deleted = false;
+  try {
+    await runR2Command({
+      runCommand,
+      args: deleteArgs(key),
+      options: { encoding: "utf8", maxBuffer: MAX_WRANGLER_BUFFER },
+      sleep,
+      stdout,
+      label: `delete of ${key}`,
+    });
+    deleted = true;
+  } catch (error) {
+    if (!isR2ObjectMissingError(error)) throw error;
+  }
+  try {
+    await runR2Command({
+      runCommand,
+      args: getArgs(key),
+      options: { encoding: "buffer", maxBuffer: MAX_WRANGLER_BUFFER },
+      sleep,
+      stdout,
+      label: `check that ${key} is gone`,
+    });
+  } catch (error) {
+    if (isR2ObjectMissingError(error)) return deleted;
+    throw error;
+  }
+  throw new Error(`${targetLabel} R2 object still exists after delete: ${key}`);
+}
+
 async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout, sleep }) {
   const targetLabel = targetEnv === "local" ? "local" : "QA";
-  const deleteArgs = targetEnv === "local" ? buildLocalR2DeleteArgs : buildQaR2DeleteArgs;
-  const getArgs = targetEnv === "local" ? buildLocalR2GetArgs : buildQaR2GetArgs;
-  const deletedKeys = [];
-  const verifiedDeletedKeys = [];
-  for (const key of deleteKeys) {
-    try {
-      await runR2Command({
-        runCommand,
-        args: deleteArgs(key),
-        options: { encoding: "utf8", maxBuffer: MAX_WRANGLER_BUFFER },
-        sleep,
-        stdout,
-        label: `delete of ${key}`,
-      });
-      deletedKeys.push(key);
-    } catch (error) {
-      if (!isR2ObjectMissingError(error)) throw error;
-    }
-    try {
-      await runR2Command({
-        runCommand,
-        args: getArgs(key),
-        options: { encoding: "buffer", maxBuffer: MAX_WRANGLER_BUFFER },
-        sleep,
-        stdout,
-        label: `check that ${key} is gone`,
-      });
-    } catch (error) {
-      if (isR2ObjectMissingError(error)) {
-        verifiedDeletedKeys.push(key);
-        continue;
-      }
-      throw error;
-    }
-    throw new Error(`${targetLabel} R2 object still exists after delete: ${key}`);
+  const keyDeps = {
+    targetLabel,
+    deleteArgs: targetEnv === "local" ? buildLocalR2DeleteArgs : buildQaR2DeleteArgs,
+    getArgs: targetEnv === "local" ? buildLocalR2GetArgs : buildQaR2GetArgs,
+    runCommand,
+    stdout,
+    sleep,
+  };
+  const concurrency = targetEnv === "local" ? 1 : R2_DELETE_CONCURRENCY;
+  if (deleteKeys.length > 0) {
+    const noun = deleteKeys.length === 1 ? "key" : "keys";
+    stdout.write(`Deleting ${deleteKeys.length} ${targetLabel} R2 ${noun}, ${concurrency} at a time.\n`);
   }
+  // Each worker takes the next key until none are left or any key has failed; the first failure
+  // is rethrown once the keys in flight finish.
+  const removed = new Array(deleteKeys.length);
+  const failures = [];
+  let next = 0;
+  async function worker() {
+    while (failures.length === 0 && next < deleteKeys.length) {
+      const index = next;
+      next += 1;
+      try {
+        removed[index] = await deleteAndVerifyR2Key(deleteKeys[index], keyDeps);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, deleteKeys.length) }, worker));
+  if (failures.length > 0) throw failures[0];
+  const deletedKeys = deleteKeys.filter((_, index) => removed[index]);
+  const verifiedDeletedKeys = [...deleteKeys];
   if (deletedKeys.length > 0) stdout.write(`Deleted ${targetLabel} R2 keys: ${deletedKeys.join(", ")}\n`);
   if (verifiedDeletedKeys.length > 0) stdout.write(`Verified deleted ${targetLabel} R2 keys: ${verifiedDeletedKeys.join(", ")}\n`);
   return { deletedKeys, verifiedDeletedKeys };

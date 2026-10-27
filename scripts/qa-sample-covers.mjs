@@ -14,6 +14,7 @@ import { readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { isTransientR2ApiError, R2_TRANSIENT_RETRY_DELAYS_MS } from "./cleanup-local-qa-data.mjs";
 
 export const QA_PHOTO_BUCKET = "spoonjoy-photos-qa";
 export const SAMPLE_COVER_DIR = "assets/sample-covers";
@@ -53,10 +54,22 @@ export async function main(deps = {}) {
     readdir = readdirSync,
     exec = promisify(nodeExecFile),
     log = console.log,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = deps;
   const uploads = sampleCoverUploads(readdir(SAMPLE_COVER_DIR));
   for (const upload of uploads) {
-    await exec("pnpm", wranglerPutArgs(upload));
+    // R2's API sometimes answers a put with a 500 or 429 for a moment; one of those failed the
+    // QA Image Cover Smoke before it started, so a transient refusal is retried.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await exec("pnpm", wranglerPutArgs(upload));
+        break;
+      } catch (error) {
+        if (attempt >= R2_TRANSIENT_RETRY_DELAYS_MS.length || !isTransientR2ApiError(error)) throw error;
+        log(`R2 refused ${upload.key} for a moment; trying again (retry ${attempt + 1} of ${R2_TRANSIENT_RETRY_DELAYS_MS.length}).`);
+        await sleep(R2_TRANSIENT_RETRY_DELAYS_MS[attempt]);
+      }
+    }
   }
   log(`Put ${uploads.length} sample cover images in ${QA_PHOTO_BUCKET}/${SAMPLE_COVER_PREFIX}.`);
   return uploads.length;
