@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { d1EpochMsSql, type D1ReadDatabase } from "~/lib/d1-read.server";
+import { d1EpochMsSql, type D1Query, type D1ReadDatabase } from "~/lib/d1-read.server";
 import { d1Timestamp, d1WriteBatch } from "~/lib/d1-write.server";
 import { retryD1Write } from "~/lib/d1-write-retry.server";
 import {
@@ -61,6 +61,14 @@ export interface ConsumeQuotaDeps {
   d1?: D1ReadDatabase | null;
   /** Kill switch and global daily budget. */
   env?: ImageGenBudgetEnv | null;
+  /**
+   * The generation costs nothing: QA's sample images (app/lib/sample-cover-images.server.ts).
+   * The global daily budget only bounds the provider bill, so a free consume neither spends it nor
+   * is stopped by it; otherwise test traffic using up the shared budget would fail QA's covers for
+   * no saving. The user's own cap and the kill switch still apply, so QA shows the same per-user
+   * limits as production.
+   */
+  free?: boolean;
 }
 
 /** Read a Prisma known-request-error code off an unknown throw, if present. */
@@ -121,6 +129,40 @@ const CONSUME_MARKER_CLIENT_KEY = "image-gen-consume";
 const CONSUME_MARKER_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * The first two statements of either consume batch: drop the chef's day-old markers, and create
+ * the day's ledger row at zero if it is missing (and the user still exists).
+ */
+function consumeOpeningStatements(userId: string, kind: ImageGenKind, bucketStart: Date, at: Date): D1Query[] {
+  const day = prismaD1Timestamp(bucketStart);
+  return [
+    [
+      `DELETE FROM "ApiIdempotencyKey"
+       WHERE "userId" = ? AND "clientKey" = '${CONSUME_MARKER_CLIENT_KEY}' AND ${d1EpochMsSql('"expiresAt"')} <= ?`,
+      userId,
+      at.getTime(),
+    ],
+    [
+      `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt")
+       SELECT ?, ?, ?, ?, 0, ?
+       WHERE EXISTS (SELECT 1 FROM "User" WHERE "id" = ?)
+         AND NOT EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE "userId" = ? AND "kind" = ? AND "bucketStart" IN (?, ?, ?))
+       ON CONFLICT ("userId", "kind", "bucketStart") DO NOTHING`,
+      crypto.randomUUID(),
+      userId,
+      kind,
+      day,
+      prismaD1Timestamp(at),
+      userId,
+      userId,
+      kind,
+      day,
+      bucketStart.toISOString(),
+      bucketStart.getTime(),
+    ],
+  ];
+}
+
+/**
  * The consume as one D1 batch: create the day's row at zero if it is missing (and the user
  * still exists), then add one only while the count is under the cap. D1 runs a batch as one
  * transaction and runs batches one at a time, so concurrent consumes cannot pass the cap and
@@ -151,28 +193,7 @@ async function tryConsumeImageGenQuotaOnD1(
   const marker = `"userId" = ? AND "clientKey" = '${CONSUME_MARKER_CLIENT_KEY}' AND "key" = ?`;
   const notSpentYet = `NOT EXISTS (SELECT 1 FROM "ApiIdempotencyKey" WHERE ${marker})`;
   const results = await retryD1Write({ scope: "image_gen.consume" }, () => d1WriteBatch(d1, [
-    [
-      `DELETE FROM "ApiIdempotencyKey"
-       WHERE "userId" = ? AND "clientKey" = '${CONSUME_MARKER_CLIENT_KEY}' AND ${d1EpochMsSql('"expiresAt"')} <= ?`,
-      userId,
-      at.getTime(),
-    ],
-    [
-      `INSERT INTO "ImageGenLedger" ("id", "userId", "kind", "bucketStart", "count", "updatedAt")
-       SELECT ?, ?, ?, ?, 0, ?
-       WHERE EXISTS (SELECT 1 FROM "User" WHERE "id" = ?)
-         AND NOT EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE ${sameDay})
-       ON CONFLICT ("userId", "kind", "bucketStart") DO NOTHING`,
-      crypto.randomUUID(),
-      userId,
-      kind,
-      day,
-      updatedAt,
-      userId,
-      userId,
-      kind,
-      ...dayForms,
-    ],
+    ...consumeOpeningStatements(userId, kind, bucketStart, at),
     [
       `INSERT INTO "ImageGenDailyBudget" ("bucketStart", "count", "updatedAt")
        SELECT ?, 0, ?
@@ -242,10 +263,80 @@ async function tryConsumeImageGenQuotaOnD1(
 }
 
 /**
+ * {@link tryConsumeImageGenQuotaOnD1} for a free consume: the user's cap only. With no global row
+ * to carry the consume's id, the marker does it: written as pending (status 0) only while the user
+ * has room and no earlier run of this consume spent, the increment runs only under a pending
+ * marker, and the marker is then settled (200). The batch is one transaction, so a pending marker
+ * never outlives it and a retry spends nothing more.
+ */
+async function tryConsumeFreeImageGenQuotaOnD1(
+  d1: D1ReadDatabase,
+  userId: string,
+  kind: ImageGenKind,
+  bucketStart: Date,
+  cap: number,
+  at: Date,
+): Promise<boolean> {
+  const day = prismaD1Timestamp(bucketStart);
+  const dayForms = [day, bucketStart.toISOString(), bucketStart.getTime()];
+  const sameDay = `"userId" = ? AND "kind" = ? AND "bucketStart" IN (?, ?, ?)`;
+  const updatedAt = prismaD1Timestamp(at);
+  const consumeId = crypto.randomUUID();
+  const marker = `"userId" = ? AND "clientKey" = '${CONSUME_MARKER_CLIENT_KEY}' AND "key" = ?`;
+  const results = await retryD1Write({ scope: "image_gen.consume" }, () => d1WriteBatch(d1, [
+    ...consumeOpeningStatements(userId, kind, bucketStart, at),
+    [
+      `INSERT INTO "ApiIdempotencyKey"
+         ("id", "userId", "credentialId", "clientKey", "key", "operation", "requestHash", "responseStatus", "expiresAt", "createdAt", "updatedAt")
+       SELECT ?, ?, NULL, '${CONSUME_MARKER_CLIENT_KEY}', ?, ?, ?, 0, ?, ?, ?
+       WHERE EXISTS (SELECT 1 FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ?)
+         AND NOT EXISTS (SELECT 1 FROM "ApiIdempotencyKey" WHERE ${marker})
+       ON CONFLICT DO NOTHING`,
+      consumeId,
+      userId,
+      consumeId,
+      `image_gen.consume.${kind}`,
+      kind,
+      d1Timestamp(new Date(at.getTime() + CONSUME_MARKER_TTL_MS)),
+      d1Timestamp(at),
+      d1Timestamp(at),
+      userId,
+      kind,
+      ...dayForms,
+      cap,
+      userId,
+      consumeId,
+    ],
+    [
+      // One row only, as in the paid batch.
+      `UPDATE "ImageGenLedger" SET "count" = "count" + 1, "updatedAt" = ?
+       WHERE "id" = (SELECT "id" FROM "ImageGenLedger" WHERE ${sameDay} AND "count" < ? LIMIT 1)
+         AND EXISTS (SELECT 1 FROM "ApiIdempotencyKey" WHERE ${marker} AND "responseStatus" = 0)`,
+      updatedAt,
+      userId,
+      kind,
+      ...dayForms,
+      cap,
+      userId,
+      consumeId,
+    ],
+    [
+      `UPDATE "ApiIdempotencyKey" SET "responseStatus" = 200 WHERE ${marker} AND "responseStatus" = 0`,
+      userId,
+      consumeId,
+    ],
+    [`SELECT 1 AS "spent" FROM "ApiIdempotencyKey" WHERE ${marker}`, userId, consumeId],
+  ]));
+  return results[results.length - 1]!.rows.length > 0;
+}
+
+/**
  * Atomically reserve one unit of the daily image-gen budget for `(userId, kind, today)`.
  * Returns true when the budget was incremented, false when the per-user cap or the global
- * daily budget is reached, the operator kill switch is off, or the user no longer exists. Safe to call concurrently — when two callers race on the very
- * first consume of the day, both will succeed and the ledger ends at count=2. With a D1
+ * daily budget is reached, the operator kill switch is off, or the user no longer exists. A
+ * `free` consume skips the global budget (see {@link ConsumeQuotaDeps.free}). Safe to call
+ * concurrently — when two callers race on the very first consume of the day, both will succeed
+ * and the ledger ends at count=2. With a D1
  * binding it is one atomic batch; Prisma's version runs as separate queries on D1.
  */
 export async function tryConsumeImageGenQuota(
@@ -264,7 +355,9 @@ export async function tryConsumeImageGenQuota(
 
   if (deps.d1) {
     try {
-      return await tryConsumeImageGenQuotaOnD1(deps.d1, userId, kind, bucketStart, cap, globalCap, at);
+      return deps.free
+        ? await tryConsumeFreeImageGenQuotaOnD1(deps.d1, userId, kind, bucketStart, cap, at)
+        : await tryConsumeImageGenQuotaOnD1(deps.d1, userId, kind, bucketStart, cap, globalCap, at);
     } catch (error) {
       // A D1 fault must not read as "quota exhausted": capture it, then rethrow.
       if (deps.postHogConfig) {
@@ -281,6 +374,7 @@ export async function tryConsumeImageGenQuota(
   // Prisma (no D1 binding: unit tests and local scripts). Spend the global unit first and
   // refund it if the per-user consume fails. This is not one transaction; production always
   // takes the atomic D1 batch above.
+  if (deps.free) return tryConsumeUserQuotaWithPrisma(db, userId, kind, bucketStart, cap, deps);
   if (!(await spendGlobalBudgetWithPrisma(db, bucketStart, globalCap))) return false;
   let consumedForUser = false;
   try {

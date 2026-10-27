@@ -23,6 +23,7 @@ import {
   photoKeyFromImageUrl,
   pollCoverGeneration,
   runImageCoverSmokeFlow,
+  sampleImageProviderPreflight,
   validateSmokePhotoKey,
 } from "../../scripts/smoke-image-cover-live.mjs";
 
@@ -439,6 +440,9 @@ describe("smoke image-cover helpers", () => {
       editProviders: ["gemini"],
     });
     expect(() => assertQaImageProviderSecrets(["SESSION_SECRET"])).toThrow(/OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY/);
+    expect(sampleImageProviderPreflight(" Sample ")).toEqual({ placeholderProvider: "sample", editProviders: ["sample"] });
+    expect(sampleImageProviderPreflight("openai")).toBeNull();
+    expect(sampleImageProviderPreflight(undefined)).toBeNull();
     expect(() => parseWranglerSecretNames("not json")).toThrow(/secret output/);
     expect(() => parseWranglerSecretNames("[not-json]")).toThrow(/Could not parse/);
     expect(() => parseWranglerSecretNames("{}")).toThrow(/secret output/);
@@ -594,6 +598,22 @@ describe("image-cover live smoke flow", () => {
     ]));
     expect(report.r2.retainedKeys).toEqual([]);
     expect(harness.verifiedDeletedKeys).toEqual(expect.arrayContaining(report.r2.deletedKeys));
+    expect(report.credentialRevocation).toMatchObject({ credentialId: "credential-1", revoked: true });
+  });
+
+  it("needs no paid provider key when QA makes covers from sample images", async () => {
+    const harness = createFlowHarness({
+      qaImageProviderPrimary: "sample",
+      listQaSecretNames: vi.fn(async () => {
+        harness.calls.push({ kind: "secrets" });
+        return ["SESSION_SECRET"];
+      }),
+    });
+
+    const report = await runImageCoverSmokeFlow(harness.options);
+
+    expect(harness.calls).not.toContainEqual({ kind: "secrets" });
+    expect(report.providerPreflight).toEqual({ placeholderProvider: "sample", editProviders: ["sample"] });
     expect(report.credentialRevocation).toMatchObject({ credentialId: "credential-1", revoked: true });
   });
 

@@ -326,7 +326,13 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
           coverId,
           title: "Pasta",
           description: null,
-          env: { ...paidKeys, IMAGE_PROVIDER_PRIMARY: "sample", IMAGE_PROVIDER_FALLBACKS: "openai,gemini" },
+          // A spent global budget stops paid covers, not free sample ones.
+          env: {
+            ...paidKeys,
+            IMAGE_PROVIDER_PRIMARY: "sample",
+            IMAGE_PROVIDER_FALLBACKS: "openai,gemini",
+            SPOONJOY_AI_DAILY_GENERATION_BUDGET: "0",
+          },
           fetchImpl,
           bucket,
           now: () => 4321,
@@ -347,8 +353,10 @@ describe("ai-placeholder-cover.server scheduleAiPlaceholderCover", () => {
         SAMPLE_BYTES,
         expect.objectContaining({ httpMetadata: { contentType: "image/jpeg" } }),
       );
-      // The rest of the pipeline runs as for a generated cover: quota spent, cover made active.
+      // The rest of the pipeline runs as for a generated cover: the chef's quota spent, cover made
+      // active. The global budget, which bounds the provider bill, is untouched.
       await expect(db.imageGenLedger.count({ where: { userId, kind: "placeholder" } })).resolves.toBe(1);
+      await expect(db.imageGenDailyBudget.count()).resolves.toBe(0);
       await expect(
         db.recipe.findUniqueOrThrow({ where: { id: recipeId }, select: { activeCoverId: true } }),
       ).resolves.toEqual({ activeCoverId: coverId });

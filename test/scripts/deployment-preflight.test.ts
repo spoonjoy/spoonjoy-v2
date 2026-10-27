@@ -150,23 +150,14 @@ function validQaImageCoverSmokeWorkflow(): string {
     "        if: steps.cloudflare.outputs.ready == 'true'",
     "      - run: pnpm prisma:generate",
     "        if: steps.cloudflare.outputs.ready == 'true'",
-    "      - name: Check QA image-provider secrets",
-    "        id: qa-secrets",
+    "      - name: Put the sample cover images in QA's photo bucket",
     "        if: steps.cloudflare.outputs.ready == 'true'",
     "        env:",
     "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
     "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
-    "        run: |",
-    "          secrets_json=\"$(pnpm exec wrangler secret list --env qa)\"",
-    "          echo \"$secrets_json\"",
-    "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-    "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
-    "            echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-    "            exit 1",
-    "          fi",
-    "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
+    "        run: node scripts/qa-sample-covers.mjs",
     "      - name: Run QA image-cover smoke",
-    "        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+    "        if: steps.cloudflare.outputs.ready == 'true'",
     "        env:",
     "          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
     "          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}",
@@ -174,7 +165,7 @@ function validQaImageCoverSmokeWorkflow(): string {
     "          SPOONJOY_QA_SMOKE_TARGET: --target-env qa",
     "        run: pnpm run smoke:qa:image-cover",
     "      - name: Upload QA image-cover smoke artifacts",
-    "        if: always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+    "        if: always() && steps.cloudflare.outputs.ready == 'true'",
     "        uses: actions/upload-artifact@v7",
     "        with:",
     "          path: qa-image-cover-smoke-artifacts/",
@@ -4373,49 +4364,15 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
   });
 
-  it("rejects QA image-cover workflows that echo provider gate commands instead of executing them", () => {
-    const inputs = validInputs();
-    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow()
-      .replace(
-        '          secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-        '          echo "secrets_json=\\"$(pnpm exec wrangler secret list --env qa)\\""',
-      )
-      .replace(
-        "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-        "          echo \"if ! printf '%s' \\\"$secrets_json\\\" | grep -Eq '\\\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\\\"'; then\"",
-      );
-
-    const result = validateDeploymentConfig(inputs);
-
-    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
-  });
-
-  it("rejects QA image-cover workflows that hide provider gate commands in a heredoc", () => {
+  it("rejects QA image-cover workflows that require a paid image-provider key again", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "        run: node scripts/qa-sample-covers.mjs",
       [
-        "        run: |",
-        '          secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-        '          echo "$secrets_json"',
-        "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-        "            echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
-        "            echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-        "            exit 1",
-        "          fi",
-        "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
-      ].join("\n"),
-      [
-        "        run: |",
-        "          cat <<'EOF'",
-        '          secrets_json="$(pnpm exec wrangler secret list --env qa)"',
-        '          echo "$secrets_json"',
-        "          if ! printf '%s' \"$secrets_json\" | grep -Eq '\"(OPENAI_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY)\"'; then",
-        "          echo \"ready=false\" >> \"$GITHUB_OUTPUT\"",
-        "          echo \"Skipping QA image-cover smoke because no QA image-provider secret is configured.\"",
-        "          exit 1",
-        "          fi",
-        "          echo \"ready=true\" >> \"$GITHUB_OUTPUT\"",
-        "          EOF",
+        "        run: node scripts/qa-sample-covers.mjs",
+        "      - name: Check QA image-provider secrets",
+        "        if: steps.cloudflare.outputs.ready == 'true'",
+        "        run: pnpm exec wrangler secret list --env qa | grep -q OPENAI_API_KEY",
       ].join("\n"),
     );
 
@@ -4424,7 +4381,19 @@ describe("deployment preflight", () => {
     expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
   });
 
-  it("rejects QA image-cover workflows that set provider ready true after skip branches", () => {
+  it("rejects QA image-cover workflows that do not put the sample cover images in place before the smoke", () => {
+    const inputs = validInputs();
+    inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replace(
+      "        run: node scripts/qa-sample-covers.mjs",
+      "        run: echo node scripts/qa-sample-covers.mjs",
+    );
+
+    const result = validateDeploymentConfig(inputs);
+
+    expect(result.errors.map((item) => item.name)).toContain("QA image-cover smoke workflow");
+  });
+
+  it("rejects QA image-cover workflows that set ready true after the skip branch", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow().replaceAll(
       "            exit 1\n",
@@ -4440,12 +4409,12 @@ describe("deployment preflight", () => {
     const inputs = validInputs();
     inputs.qaImageCoverSmokeWorkflow = validQaImageCoverSmokeWorkflow()
       .replace(
-        "        if: steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
-        "        if: always() || steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+        "      - name: Run QA image-cover smoke\n        if: steps.cloudflare.outputs.ready == 'true'",
+        "      - name: Run QA image-cover smoke\n        if: always() || steps.cloudflare.outputs.ready == 'true'",
       )
       .replace(
-        "        if: always() && steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
-        "        if: always() || steps.cloudflare.outputs.ready == 'true' && steps.qa-secrets.outputs.ready == 'true'",
+        "        if: always() && steps.cloudflare.outputs.ready == 'true'",
+        "        if: always() || steps.cloudflare.outputs.ready == 'true'",
       );
 
     const result = validateDeploymentConfig(inputs);
@@ -5130,7 +5099,7 @@ describe("package.json deploy scripts", () => {
 });
 
 describe("QA image-cover smoke workflow", () => {
-  it("runs only on manual dispatch and schedule with credential and QA secret gates", async () => {
+  it("runs only on manual dispatch and schedule with a credential gate and no paid-key gate", async () => {
     const workflow = await readFile(`${process.cwd()}/.github/workflows/qa-image-cover-smoke.yml`, "utf8");
     const result = validateDeploymentConfig({
       ...validInputs(),
