@@ -18,6 +18,12 @@
 // page below that banner, the tab bar's bottom edge is at 515, and the tab bar keeps
 // max(1rem, env(safe-area-inset-bottom)) below it, so the page ends at 531, above Safari's floating
 // address bar, which starts at 546.
+//
+// Only a short or narrow phone (the Duo's outer screen, the SE) gets the compact hero: a 32px headline
+// and the description's first clause. A phone at least 360 wide and 600 tall has room for the 36px
+// headline and the whole description, and still shows every action above the tab bar. The Duo's
+// inner screen (669 x 951 points, app/lib/fold.ts) and a tablet in portrait show the wide hero, which
+// fills 70% of the screen so the page does not end in a blank band above the tab bar.
 import { devices, type Browser, type BrowserContextOptions, type TestInfo } from "@playwright/test";
 import { THEME_STORAGE_KEY } from "../../app/lib/client-storage-schema";
 import { test, expect, appendConsoleIssues, assertNoConsoleIssues, watchConsole } from "./support/journey";
@@ -27,25 +33,51 @@ import { coveringElements } from "./support/readability";
 
 type Scheme = "light" | "dark";
 
+/** Compact: a 32px headline and the description's first clause. Roomy: a 36px headline or larger and
+ * the whole description. */
+type Hero = "compact" | "roomy";
+
 interface Phone {
   name: string;
   context: BrowserContextOptions;
+  hero: Hero;
 }
 
-function phone(name: string): Phone {
-  return { name, context: { ...devices[name] } };
+function phone(name: string, hero: Hero): Phone {
+  return { name, context: { ...devices[name] }, hero };
 }
 
 const DUO_SCREEN: Phone = {
   name: "iPhone Duo, one screen",
   context: {
-    ...phone("iPhone 15").context,
+    ...devices["iPhone 15"],
     viewport: { width: 382, height: 531 },
     screen: { width: 466, height: 678 },
   },
+  hero: "compact",
 };
 
-const PHONES: Phone[] = [phone("iPhone SE"), phone("iPhone 13 Mini"), phone("iPhone 15"), phone("iPhone 15 Pro Max"), DUO_SCREEN];
+const DUO_OPEN: Phone = {
+  name: "iPhone Duo, opened tall",
+  context: {
+    ...devices["iPhone 15"],
+    viewport: { width: 669, height: 951 },
+    screen: { width: 669, height: 951 },
+  },
+  hero: "roomy",
+};
+
+const PHONES: Phone[] = [
+  phone("iPhone SE", "compact"),
+  phone("iPhone 13 Mini", "roomy"),
+  phone("iPhone 15", "roomy"),
+  phone("iPhone 15 Pro Max", "roomy"),
+  DUO_SCREEN,
+  DUO_OPEN,
+  phone("iPad Pro 11", "roomy"),
+];
+
+const REST_OF_DESCRIPTION = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
 
 const ACTIONS = ["Start Your Kitchen", "Log in", "Search Recipes"] as const;
 
@@ -63,12 +95,20 @@ interface Placement {
   fallbackFont: string[];
 }
 
-async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<Placement[]> {
+interface HeroShape {
+  headlinePx: number;
+  description: string;
+  heroHeight: number;
+  viewportHeight: number;
+}
+
+async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, scheme: Scheme): Promise<{ placements: Placement[]; shape: HeroShape }> {
   const context = await browser.newContext({ ...device.context, storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
   waitForHydrationOnLoad(page);
   const watcher = watchConsole(page);
   const placements: Placement[] = [];
+  let shape: HeroShape | undefined;
   try {
     await page.addInitScript(({ key, choice }) => {
       localStorage.setItem(key, choice);
@@ -96,6 +136,12 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     const viewportWidth = await page.evaluate(() => window.innerWidth);
     const heading = page.getByRole("heading", { level: 1, name: "Your food should look as good as it tastes." });
     const hero = page.locator("section").filter({ has: heading });
+    shape = {
+      headlinePx: await heading.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+      description: await heading.evaluate((element) => (element.nextElementSibling as HTMLElement).innerText.trim()),
+      heroHeight: await hero.evaluate((element) => element.getBoundingClientRect().height),
+      viewportHeight: await page.evaluate(() => window.innerHeight),
+    };
     for (const name of ACTIONS) {
       const action = hero.getByRole("link", { name, exact: true });
       const box = await action.evaluate((element) => {
@@ -148,15 +194,25 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
     await context.close();
   }
   assertNoConsoleIssues(watcher.issues);
-  return placements;
+  return { placements, shape: shape! };
 }
 
 async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, scheme: Scheme): Promise<void> {
-  const results: Array<{ phone: string; placements: Placement[] }> = [];
+  const results: Array<{ phone: string; placements: Placement[]; shape: HeroShape }> = [];
   try {
     for (const device of PHONES) {
-      const placements = await firstScreen(browser, testInfo, device, scheme);
-      results.push({ phone: device.name, placements });
+      const { placements, shape } = await firstScreen(browser, testInfo, device, scheme);
+      results.push({ phone: device.name, placements, shape });
+      const hero = `${device.name}, ${scheme}: the hero (${JSON.stringify(shape)})`;
+      if (device.hero === "compact") {
+        expect.soft(shape.headlinePx, `${hero} has the compact 32px headline`).toBe(32);
+        expect.soft(shape.description, `${hero} shows only the description's first clause`).not.toContain(REST_OF_DESCRIPTION);
+      } else {
+        expect.soft(shape.headlinePx, `${hero} has a headline of 36px or more`).toBeGreaterThanOrEqual(36);
+        expect.soft(shape.description, `${hero} shows the whole description`).toContain(REST_OF_DESCRIPTION);
+        // 70% of the screen, up to 56rem: the page's short content then ends near the screen's foot.
+        expect.soft(shape.heroHeight, `${hero} fills 70% of the screen`).toBeGreaterThanOrEqual(Math.min(0.7 * shape.viewportHeight, 896) - 1);
+      }
       for (const { action, box, usableBottom, viewportWidth, covered, label, fallbackFont } of placements) {
         const where = `${device.name}, ${scheme}: "${action}" (top ${box.top}, bottom ${box.bottom}, usable to ${usableBottom})`;
         expect.soft(box.top, `${where} starts on screen`).toBeGreaterThanOrEqual(0);
@@ -174,7 +230,7 @@ async function everyActionOnFirstScreen(browser: Browser, testInfo: TestInfo, sc
   }
 }
 
-test.describe("Signed-out landing hero on a phone's first screen", () => {
+test.describe("Signed-out landing hero on a phone's or tablet's first screen", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test("every hero action is on screen and uncovered at page load in the light theme", async ({ browser }, testInfo) => {
