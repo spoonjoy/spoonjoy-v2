@@ -272,8 +272,8 @@ async function firstScreen(browser: Browser, testInfo: TestInfo, device: Phone, 
       const backTo = await coveringElements(back);
       // A fresh load at the pill's link: the strip is not in the server's page, so the router finds no
       // #cooking-now to scroll to; the strip brings itself into view once it appears.
-      await page.goto("about:blank");
-      await page.goto("/#cooking-now");
+      // A query makes it a new page load rather than a jump within this one.
+      await page.goto("/?from=pill#cooking-now");
       await waitForHydration(page);
       await page.getByTestId("local-cooking-now").waitFor();
       await page.waitForFunction(() => {
