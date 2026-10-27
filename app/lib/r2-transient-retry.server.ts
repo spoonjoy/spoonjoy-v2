@@ -7,12 +7,13 @@
  * (developers.cloudflare.com/r2/api/error-codes/) mark both as R2's own failures, to retry. A put
  * of the same body to the same key is idempotent, and every caller here writes a new random key,
  * so a second try can only store the object the first was meant to. Any other error, and the last
- * try's error, reaches the caller unchanged.
+ * try's error, reaches the caller unchanged. Each further try logs a platform_retry line with R2's
+ * code and no key, which the Journeys tail summary counts (scripts/summarize-worker-tail.jq).
  *
  * The body must be one R2 can send twice: bytes or a Blob, never a stream.
  */
 
-const TRANSIENT_R2_CODE = /\((?:10001|10043)\)\s*$/;
+const TRANSIENT_R2_CODE = /\((10001|10043)\)\s*$/;
 
 export const DEFAULT_R2_PUT_RETRY_DELAYS_MS: readonly number[] = [100, 400];
 
@@ -42,6 +43,8 @@ export async function putWithTransientRetry(
       return;
     } catch (error) {
       if (attempt >= delaysMs.length || !isTransientR2Error(error)) throw error;
+      const code = TRANSIENT_R2_CODE.exec((error as Error).message)![1];
+      console.warn(JSON.stringify({ event: "platform_retry", call: "r2.put", attempt: attempt + 2, code }));
       await sleep(delaysMs[attempt]);
     }
   }

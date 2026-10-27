@@ -21,8 +21,8 @@ export default defineConfig({
   // Cloudflare D1 database and cook-session Durable Object, and their storage sometimes holds
   // every call for 4 to 13 s on no CPU (issue #575; slowCalls in worker-tail-summary.json), so a
   // page waiting on one of those answers was failed at 5 s although it arrived. A journey checks
-  // what the app does, not how fast Cloudflare answers: the tail summary still counts and warns on
-  // every stalled request.
+  // what the app does, not how fast Cloudflare answers, and the Journeys log still warns on every
+  // request over 5 s (the "Stop QA Worker tail and summarise it" step).
   expect: { timeout: 15_000 },
   reporter: [["list"], ["html", { open: "never", outputFolder: reportFolder }]],
   use: {

@@ -4,12 +4,15 @@ import {
   isTransientR2Error,
   putWithTransientRetry,
 } from "~/lib/r2-transient-retry.server";
+import { expectConsoleWarning } from "../warning-policy";
 
 // R2's answer to the account photo upload in Journeys run 40562451574.
 const INTERNAL = "put: We encountered an internal error. Please try again. (10001)";
 const UNAVAILABLE = "put: Service unavailable. (10043)";
 const OPTIONS = { httpMetadata: { contentType: "image/webp" } };
 const BYTES = new Uint8Array([1]);
+const retried = (attempt: number, code: string) =>
+  JSON.stringify({ event: "platform_retry", call: "r2.put", attempt, code });
 
 describe("isTransientR2Error", () => {
   it.each([INTERNAL, UNAVAILABLE])("is R2's own failure: %s", (message) => {
@@ -49,6 +52,8 @@ describe("putWithTransientRetry", () => {
     };
     const sleep = vi.fn(async () => undefined);
     const body = new Blob(["image"]);
+    expectConsoleWarning(retried(2, "10001"));
+    expectConsoleWarning(retried(3, "10043"));
 
     await putWithTransientRetry(bucket, "covers/1.webp", body, OPTIONS, { sleep });
 
@@ -63,6 +68,7 @@ describe("putWithTransientRetry", () => {
   it("throws the last try's refusal instead of trying without a bound", async () => {
     const last = new Error(INTERNAL);
     const bucket = { put: vi.fn().mockRejectedValueOnce(new Error(INTERNAL)).mockRejectedValueOnce(last) };
+    expectConsoleWarning(retried(2, "10001"));
 
     await expect(putWithTransientRetry(bucket, "k", BYTES, OPTIONS, { delaysMs: [1], sleep: async () => undefined }))
       .rejects.toBe(last);
@@ -83,6 +89,7 @@ describe("putWithTransientRetry", () => {
     vi.useFakeTimers();
     try {
       const bucket = { put: vi.fn().mockRejectedValueOnce(new Error(INTERNAL)).mockResolvedValueOnce({}) };
+      expectConsoleWarning(retried(2, "10001"));
       const putting = putWithTransientRetry(bucket, "k", BYTES, OPTIONS);
       await vi.advanceTimersByTimeAsync(DEFAULT_R2_PUT_RETRY_DELAYS_MS[0] - 1);
       expect(bucket.put).toHaveBeenCalledTimes(1);

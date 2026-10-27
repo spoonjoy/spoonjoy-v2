@@ -9,6 +9,8 @@ function storageReset() {
   return Object.assign(new Error(RESET_MESSAGE), { retryable: true });
 }
 
+const replayed = (call: string) => JSON.stringify({ event: "platform_retry", call, attempt: 2 });
+
 function request(operation: "detail" | "start" | "patch" = "detail") {
   const body = operation === "patch" ? JSON.stringify({
     attemptId: "11111111-1111-4111-8111-111111111111",
@@ -71,6 +73,7 @@ describe("cook-session reads after a storage reset", () => {
       terminalAt: null,
     };
     const { env, get, requests } = environment(storageReset(), Response.json({ state }));
+    expectConsoleWarning(replayed("cook_session.read"));
 
     const response = await handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
 
@@ -91,6 +94,7 @@ describe("cook-session reads after a storage reset", () => {
   it("propagates a second failure instead of retrying without a bound", async () => {
     const second = storageReset();
     const { env, get } = environment(storageReset(), second);
+    expectConsoleWarning(replayed("cook_session.read"));
 
     await expect(handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true }))
       .rejects.toBe(second);
@@ -141,6 +145,7 @@ describe("cook-session reads after a storage reset", () => {
       terminalAt: null,
     };
     const { env, get, requests } = environment(storageReset(), Response.json({ state }, { status: 200 }));
+    expectConsoleWarning(replayed("cook_session.start"));
 
     const response = await handleCookSessionProtocolRequest(request("start"), env, "user-1", "start", { requireExpectedUser: true });
 

@@ -28,7 +28,8 @@
 # program, and so does `d1ReadReissues` for the d1_read_reissue lines. Likewise `stalledRequests`,
 # `slowCalls` and `isolates` read only the fixed fields of the slow_call, isolate_request and
 # isolate_colo lines (app/lib/slow-call.server.ts) a per-run QA Worker writes, each checked
-# against its expected shape.
+# against its expected shape, and `platformRetries` counts the platform_retry lines by their call
+# label alone.
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
@@ -334,6 +335,10 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
     | { total: length,
         answeredByReissue: ([.[] | select(.answeredBy == "reissue")] | length),
         failedBoth: ([.[] | select(.answeredBy == "neither")] | length) }),
+  # Platform faults our code absorbed by trying again (platform_retry lines: an R2 put R2 refused
+  # with its own error, a cook-session read or start the object failed as retryable), by call.
+  platformRetries: ([.[] | log_objects("platform_retry")[] | (.call | ident) // "other"]
+    | { total: length, byCall: (group_by(.) | map({ key: .[0], value: length }) | from_entries) }),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints

@@ -41,14 +41,30 @@ export const TRANSPORT_RETRY_DELAY_MS = 1_000;
 export async function loadAgainAfterTransportFailure<T>(
   load: () => Promise<T>,
   wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  onRetry: (error: Error) => void = () => undefined,
 ): Promise<T> {
+  const first = await load().then(
+    (answer) => ({ answer }),
+    (error: unknown) => {
+      if (!isTransportFailure(error)) throw error;
+      return { reset: error as Error };
+    },
+  );
+  if (!("reset" in first)) return first.answer;
+  onRetry(first.reset);
+  await wait(TRANSPORT_RETRY_DELAY_MS);
   try {
     return await load();
   } catch (error) {
-    if (!isTransportFailure(error)) throw error;
-    await wait(TRANSPORT_RETRY_DELAY_MS);
-    return load();
+    // Keep the first reset with the second failure, so the report shows both.
+    if (error instanceof Error && error.cause === undefined) error.cause = first.reset;
+    throw error;
   }
+}
+
+// Printed in the test's output, so a load that needed a second try is on record in the report.
+function reportLoadAgain(error: Error): void {
+  console.warn(`Journeys: loading the page again after its connection was reset (${error.message.split("\n")[0]})`);
 }
 
 /**
@@ -62,12 +78,12 @@ export function waitForHydrationOnLoad(page: Page): void {
   const goto = page.goto.bind(page);
   const reload = page.reload.bind(page);
   page.goto = async (url, options) => {
-    const response = await loadAgainAfterTransportFailure(() => goto(url, options));
+    const response = await loadAgainAfterTransportFailure(() => goto(url, options), undefined, reportLoadAgain);
     if (options?.waitUntil !== "commit") await waitForHydrationIfApp(page);
     return response;
   };
   page.reload = async (options) => {
-    const response = await loadAgainAfterTransportFailure(() => reload(options));
+    const response = await loadAgainAfterTransportFailure(() => reload(options), undefined, reportLoadAgain);
     if (options?.waitUntil !== "commit") await waitForHydrationIfApp(page);
     return response;
   };

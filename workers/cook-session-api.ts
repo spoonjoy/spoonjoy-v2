@@ -177,6 +177,7 @@ async function forwardToCookSession(
     // A reset can leave the old stub broken, so the replay, once, uses a fresh stub. Overloaded
     // objects need less traffic, not more. (Journeys run 40566824130 answered a start 503 when the
     // object threw "internal error".)
+    console.warn(JSON.stringify({ event: "platform_retry", call: method === "GET" ? "cook_session.read" : "cook_session.start", attempt: 2 }));
     await new Promise((resolve) => setTimeout(resolve, 100));
     response = await send(2);
   }

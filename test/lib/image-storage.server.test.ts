@@ -14,6 +14,7 @@ import {
   validateImageFileForStorage,
 } from "~/lib/image-storage.server";
 import type { PostHogServerConfig } from "~/lib/analytics-server";
+import { expectConsoleWarning } from "../warning-policy";
 
 const enabledPostHog: PostHogServerConfig = {
   enabled: true,
@@ -400,6 +401,7 @@ describe("image storage helpers", () => {
             .mockResolvedValueOnce(undefined),
         };
         const file = new File(["image"], "dish.webp", { type: "image/webp" });
+        expectConsoleWarning(JSON.stringify({ event: "platform_retry", call: "r2.put", attempt: 2, code: "10001" }));
 
         const storing = storeImage({
           bucket: bucket as unknown as R2Bucket,

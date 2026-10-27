@@ -54,20 +54,35 @@ describe("loadAgainAfterTransportFailure", () => {
       .mockRejectedValueOnce(new Error(WEBKIT_TLS_RESET))
       .mockResolvedValueOnce("answer");
     const wait = vi.fn(async () => undefined);
+    const onRetry = vi.fn();
 
-    await expect(loadAgainAfterTransportFailure(load, wait)).resolves.toBe("answer");
+    await expect(loadAgainAfterTransportFailure(load, wait, onRetry)).resolves.toBe("answer");
     expect(load).toHaveBeenCalledTimes(2);
     expect(wait).toHaveBeenCalledExactlyOnceWith(TRANSPORT_RETRY_DELAY_MS);
+    expect(onRetry).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message: WEBKIT_TLS_RESET }));
   });
 
-  it("throws the second failure instead of loading a third time", async () => {
+  it("throws the second failure, with the first as its cause, instead of loading a third time", async () => {
+    const first = new Error(WEBKIT_TLS_RESET);
     const second = new Error(WEBKIT_RESET);
     const load = vi.fn()
-      .mockRejectedValueOnce(new Error(WEBKIT_RESET))
+      .mockRejectedValueOnce(first)
       .mockRejectedValueOnce(second);
 
     await expect(loadAgainAfterTransportFailure(load, async () => undefined)).rejects.toBe(second);
+    expect(second.cause).toBe(first);
     expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a second failure's own cause, and throws a second failure that is not an Error", async () => {
+    const own = new Error("own cause");
+    const second = new Error(WEBKIT_RESET, { cause: own });
+    const twice = vi.fn().mockRejectedValueOnce(new Error(WEBKIT_RESET)).mockRejectedValueOnce(second);
+    await expect(loadAgainAfterTransportFailure(twice, async () => undefined)).rejects.toBe(second);
+    expect(second.cause).toBe(own);
+
+    const odd = vi.fn().mockRejectedValueOnce(new Error(WEBKIT_RESET)).mockRejectedValueOnce("gone");
+    await expect(loadAgainAfterTransportFailure(odd, async () => undefined)).rejects.toBe("gone");
   });
 
   it("throws every other failure at once", async () => {
