@@ -407,6 +407,11 @@ jobs:
           # a server failure, so name it in the log. Non-fatal for now.
           jq -r 'select(.hungInvocations > 0) | "::warning::Worker hangs: \(.hungInvocations) request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
+          # A stalled request waited on Cloudflare's storage (D1 or the cook-session object), not on
+          # our code. Journeys wait up to 15 s for an answer (playwright.journeys.config.ts), so a
+          # stall alone no longer fails a journey; name it here so it is not hidden either.
+          jq -r 'select(.stalledInvocations > 0) | "::warning::Platform stalls: \(.stalledInvocations) request(s) waited over 2 s on under 5 ms of CPU, the longest \([.stalledRequests[]?.wallTime] | max // 0) ms. See stalledRequests and slowCalls in worker-tail-summary.json (issue #575)."' \
+            test-results/worker-tail-summary.json || true
           # A transient D1 error (app/lib/d1-transient-retry.server.ts) is a platform failure, not a
           # bug in the change under test; name how many there were and how many a retry absorbed,
           # including the writes their operation retried safely (app/lib/d1-write-retry.server.ts).

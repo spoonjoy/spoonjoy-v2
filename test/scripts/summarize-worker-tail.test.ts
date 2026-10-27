@@ -806,6 +806,20 @@ describe("Journeys workflow tail wiring", () => {
     expect(warn({})).toBe("");
   });
 
+  it("warns, without failing, when requests stalled on the platform, with the longest wait", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(select\(\.stalledInvocations[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    // Journeys run 40590368708: three isolates waited on D1 at the same moment.
+    expect(warn({ stalledInvocations: 2, stalledRequests: [{ wallTime: 5372 }, { wallTime: 7195 }] }).trimEnd()).toBe(
+      "::warning::Platform stalls: 2 request(s) waited over 2 s on under 5 ms of CPU, the longest 7195 ms. See stalledRequests and slowCalls in worker-tail-summary.json (issue #575).",
+    );
+    expect(warn({ stalledInvocations: 1 }).trimEnd()).toContain("the longest 0 ms");
+    expect(warn({ stalledInvocations: 0, stalledRequests: [] })).toBe("");
+    expect(warn({})).toBe("");
+  });
+
   it("waits for late tail events before stopping the tail, bounded, so the last failures are kept", () => {
     // Tail events arrive seconds after their request ends. Stopping the tail as soon as the suite
     // finished lost the last ~6 s of events in runs 37934997247 and 37912555692, including the
