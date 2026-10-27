@@ -361,6 +361,7 @@ describe("cook-session calls that wait over a second", () => {
       SPOONJOY_QA_ERROR_LOGS: "1",
     } as unknown as CloudflareEnvironment;
 
+    expectConsoleWarning(replayed("cook_session.read"));
     const pending = handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
     await vi.advanceTimersByTimeAsync(100);
     expectConsoleWarning(JSON.stringify({
