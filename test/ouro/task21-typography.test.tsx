@@ -231,21 +231,25 @@ for (const theme of ["light", "dark"] as const) {
     const title = host.querySelector("h1")!;
     const copy = title.nextElementSibling as HTMLElement;
     const measurements = [];
-    for (const width of widths) {
-      await page.viewport(width, 900);
-      // Below 640px the hero is deliberately smaller so its actions fit on a phone's first screen
-      // (e2e/journeys/landing-first-screen.mobile.journey.ts): a 32/38 headline, 16/24 copy and only the
-      // copy's first clause. From 640px up it must still match the delivered ca829f3 classes exactly.
+    // A short or narrow phone (the iPhone Duo's outer screen, 382 x 531; the SE, 320 wide) gets the
+    // compact hero, so its actions fit on the first screen above the tab bar
+    // (e2e/journeys/landing-first-screen.mobile.journey.ts): a 32/38 headline, 16/24 copy and only the
+    // copy's first clause. A phone at least 360 x 600 gets a 36/40 headline and the whole copy at 16/24.
+    // From 640px up the hero must still match the delivered ca829f3 classes exactly.
+    const viewports = [[382, 531], [320, 900], ...widths.map((width) => [width, 900])];
+    for (const [width, height] of viewports) {
+      await page.viewport(width, height);
       const phone = width < 640;
-      const actual = phone
-        ? compareDelivered(title, "font-sj-display text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] max-w-4xl")
-        : compareDelivered(title, `${heading} mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20`);
-      expect(actual.fontSize).toBe(width >= 1280 ? "96px" : width >= 1024 ? "72px" : width >= 640 ? "60px" : "32px");
-      // The rest of the sentence sits in a span that phones hide; the witness keeps the same three parts
-      // so its line boxes compare one for one.
+      const compact = phone && (width < 360 || height < 600);
+      const actual = !phone
+        ? compareDelivered(title, `${heading} mt-5 max-w-4xl text-4xl/10 text-[var(--sj-on-photo)] sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20`)
+        : compareDelivered(title, `font-sj-display ${compact ? "text-[2rem]/[2.375rem]" : "text-4xl/10"} font-semibold tracking-normal text-[var(--sj-on-photo)] max-w-4xl`);
+      expect(actual.fontSize).toBe(width >= 1280 ? "96px" : width >= 1024 ? "72px" : width >= 640 ? "60px" : compact ? "32px" : "36px");
+      // The rest of the sentence sits in a span that compact phones hide; the witness keeps the same
+      // three parts so its line boxes compare one for one.
       const copyContent = (baseline: HTMLElement) => {
         const rest = document.createElement("span");
-        rest.className = "max-sm:hidden";
+        if (compact) rest.className = "hidden";
         rest.textContent = ", the notes you learn by doing, and the cookbooks that grow out of real meals";
         baseline.append("Spoonjoy is a photo-first kitchen for the recipes you actually cook", rest, ".");
       };
@@ -253,7 +257,8 @@ for (const theme of ["light", "dark"] as const) {
         ? compareDelivered(copy, "max-w-2xl text-base/6 text-[var(--sj-on-photo)]", copyContent)
         : compareDelivered(copy, `${text} mt-5 max-w-2xl text-lg/8 text-[var(--sj-on-photo)]`, copyContent);
       expect(copyActual.fontSize).toBe(phone ? "16px" : "18px");
-      measurements.push({ width, title: actual, copy: copyActual });
+      expect(copy.innerText.includes("cookbooks that grow"), `${width} x ${height} shows the whole copy`).toBe(!compact);
+      measurements.push({ width, height, title: actual, copy: copyActual });
     }
     await annotate(`T21_PHOTO_TYPE ${JSON.stringify({ theme, measurements })}`);
   });

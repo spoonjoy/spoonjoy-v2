@@ -203,6 +203,15 @@
   --ring: var(--sj-on-photo);
 }
 
+/* A phone with room for the signed-out landing hero's full headline and description: 360px or wider,
+   600px or taller, and narrower than sm. A shorter or narrower phone, such as the iPhone Duo's outer
+   screen (382 x 531) or the SE (320 x 568), keeps the compact hero (e2e/journeys/landing-first-screen.mobile.journey.ts). */
+@custom-variant tall-phone {
+  @media (width >= 22.5rem) and (width < 40rem) and (height >= 37.5rem) {
+    @slot;
+  }
+}
+
 /* The signed-out landing hero's actions, on the shaded photo with sj-on-charcoal: each button's
    edge must show against the photo at 3:1 (WCAG 1.4.11), measured from the real pixels by
    e2e/journeys/landing-readability.journey.ts. The outline buttons' 22–24% photo line measured
