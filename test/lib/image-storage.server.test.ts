@@ -391,6 +391,35 @@ describe("image storage helpers", () => {
       );
     });
 
+    it("puts the upload again when R2 answers with its own internal error (Journeys run 40562451574)", async () => {
+      vi.useFakeTimers();
+      try {
+        const bucket = {
+          put: vi.fn()
+            .mockRejectedValueOnce(new Error("put: We encountered an internal error. Please try again. (10001)"))
+            .mockResolvedValueOnce(undefined),
+        };
+        const file = new File(["image"], "dish.webp", { type: "image/webp" });
+
+        const storing = storeImage({
+          bucket: bucket as unknown as R2Bucket,
+          file,
+          namespace: "profiles/user-1",
+          now: () => 12345,
+          randomId: () => "upload-1",
+        });
+        await vi.runAllTimersAsync();
+
+        await expect(storing).resolves.toBe("/photos/profiles/user-1/12345-upload-1.webp");
+        expect(bucket.put.mock.calls.map((call) => call[0])).toEqual([
+          "profiles/user-1/12345-upload-1.webp",
+          "profiles/user-1/12345-upload-1.webp",
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("strips JPEG APP1 metadata before uploading to R2", async () => {
       const bucket = {
         put: vi.fn().mockResolvedValue(undefined),
