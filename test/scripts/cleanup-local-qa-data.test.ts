@@ -449,7 +449,7 @@ describe("cleanup-local-qa-data", () => {
     for (const command of choosing) expect(command).toContain("<= 1700000000");
     const softDeleting = sql.filter((command) => /soft_delete_recipes AS \(|INSERT INTO soft_delete_recipes/.test(command));
     expect(softDeleting.length).toBeGreaterThan(0);
-    for (const command of softDeleting) expect(command).toContain("AND chefId NOT IN (SELECT id FROM User WHERE id IN ('demo_user_001'");
+    for (const command of softDeleting) expect(command).toContain(`AND chefId NOT IN (SELECT id FROM User WHERE ${cleanup.DISPOSABLE_USER_WHERE})`);
   });
 
   it("counts the accounts the cutoff keeps in a dry run, and stale native accounts only past the cutoff", async () => {
