@@ -60,7 +60,7 @@
       "legacy-sarah-user-id"
     ],
     "reason": "Environment-gated cleanup must name each legacy identity exactly, including the one retired seed-qa.mjs account being swept from QA's D1 by its exact id and email; the pinned digest makes any expansion or unrelated source use review-visible.",
-    "sha256": "bed24cc30488638b9ac4335635865579fdfe28384bebf36e7e86454a4cf9b2f5"
+    "sha256": "d9958f26896c051d5e618c1f9eaa6665b4321c9301c2c82b879b15c0e00889e1"
   },
   {
     "path": "test/scripts/migration-0024-remove-legacy-demo-identities.test.ts",
