@@ -162,16 +162,21 @@ async function forwardToCookSession(
     )),
     onSlowCall,
   );
+  // A read, and a start, which resumes the session it finds (startCookSession): a start that
+  // already committed answers the same session again. A progress write is never replayed, because
+  // it may already have committed and its revision would then be stale.
+  const replayable = method === "GET" || suffix === "/start";
   let response: Response;
   try {
     response = await send(1);
   } catch (error) {
     const failure = error as Error & { retryable?: boolean; overloaded?: boolean };
-    if (method !== "GET" || !(error instanceof Error) || failure.retryable !== true || failure.overloaded === true) {
+    if (!replayable || !(error instanceof Error) || failure.retryable !== true || failure.overloaded === true) {
       throw error;
     }
-    // A reset can leave the old stub broken. Only replay a read, once, with a fresh stub;
-    // writes might already have committed, and overloaded objects need less traffic, not more.
+    // A reset can leave the old stub broken, so the replay, once, uses a fresh stub. Overloaded
+    // objects need less traffic, not more. (Journeys run 40566824130 answered a start 503 when the
+    // object threw "internal error".)
     await new Promise((resolve) => setTimeout(resolve, 100));
     response = await send(2);
   }
