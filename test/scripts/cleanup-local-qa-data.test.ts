@@ -579,6 +579,7 @@ describe("cleanup-local-qa-data", () => {
       cleanup.buildLocalR2DeleteArgs("spoons/codex-user/recipe-1/spoon.jpg"),
       cleanup.buildLocalR2GetArgs("spoons/codex-user/recipe-1/spoon.jpg"),
     ]));
+    expect(stdout.text()).toContain("Deleting 1 local R2 key, 1 at a time.");
     expect(stdout.text()).toContain("Verified deleted local R2 keys: spoons/codex-user/recipe-1/spoon.jpg");
   });
 
@@ -755,7 +756,7 @@ describe("cleanup-local-qa-data", () => {
     expect(joinedCalls.filter((command) => command.includes("candidate_r2_keys"))).not.toEqual(
       expect.arrayContaining([expect.stringContaining("FROM SearchDocument")]),
     );
-    // Keys are deleted several at a time, so only each key's own order is fixed: delete, then check.
+    // QA keys are deleted several at a time, so only each key's own order is fixed: delete, then check.
     const objectCalls = calls.filter((args) => args.includes("object")).map((args) => args.join(" "));
     const r2Keys = ["profiles/codex-user/avatar.jpg", "recipes/codex-user/recipe-1/source.jpg", "spoons/codex-user/recipe-1/spoon.jpg"];
     expect(objectCalls).toHaveLength(r2Keys.length * 2);
@@ -765,7 +766,7 @@ describe("cleanup-local-qa-data", () => {
       expect(deleteAt).toBeGreaterThan(-1);
       expect(getAt).toBeGreaterThan(deleteAt);
     }
-    expect(stdout.text()).toContain("Deleting 3 QA R2 keys, 8 at a time.");
+    expect(stdout.text()).toContain("Deleting 3 QA R2 keys, 4 at a time.");
     expect(joinedCalls.at(-1)).toContain(cleanup.buildScratchCleanupSql());
     expect(stdout.text()).toContain("Retained QA R2 keys: recipes/not-disposable/recipe-1/source.jpg");
     expect(stdout.text()).toContain("Skipped SearchDocument cleanup: table absent.");
@@ -1783,15 +1784,15 @@ describe("cleanup-local-qa-data", () => {
       return { runCommand, deletes, mostInFlight: () => mostInFlight };
     }
 
-    it("deletes eight at a time and verifies every key", async () => {
+    it("deletes four at a time and verifies every key", async () => {
       const stdout = writableBuffer();
       const run = manyKeysRun();
       await cleanup.runCleanupCli({ argv: ["--target-env", "qa", "--apply"], runCommand: run.runCommand, stdout: stdout.stream, stderr: writableBuffer().stream });
 
-      expect(cleanup.R2_DELETE_CONCURRENCY).toBe(8);
-      expect(run.mostInFlight()).toBe(8);
+      expect(cleanup.R2_DELETE_CONCURRENCY).toBe(4);
+      expect(run.mostInFlight()).toBe(4);
       expect(run.deletes).toHaveLength(keys.length);
-      expect(stdout.text()).toContain("Deleting 20 QA R2 keys, 8 at a time.");
+      expect(stdout.text()).toContain("Deleting 20 QA R2 keys, 4 at a time.");
       expect(stdout.text()).toContain(`Verified deleted QA R2 keys: ${keys.join(", ")}`);
     });
 

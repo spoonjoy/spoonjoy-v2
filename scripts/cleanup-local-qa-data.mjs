@@ -747,10 +747,13 @@ async function collectR2Candidates({ dbName, target, runCommand, existingSearchT
 }
 
 /**
- * How many R2 keys are deleted at once. Each delete and each check is its own wrangler process of a
- * few seconds, and shared QA can hold thousands of disposable photos, so one at a time takes hours.
+ * How many QA R2 keys are deleted at once. Each delete and each check is its own wrangler process of
+ * a few seconds, and shared QA can hold thousands of disposable photos, so one at a time takes
+ * hours. Four keeps the API requests well under Cloudflare's 1,200 per 5 minutes per token
+ * (scripts/count-cloudflare-requests.mjs), which Journeys runs share. Local cleanup stays one at a
+ * time: each local wrangler process opens the same .wrangler state.
  */
-export const R2_DELETE_CONCURRENCY = 8;
+export const R2_DELETE_CONCURRENCY = 4;
 
 /** Deletes one key and proves it is gone. Answers whether the delete removed it (false: already missing). */
 async function deleteAndVerifyR2Key(key, { targetLabel, deleteArgs, getArgs, runCommand, stdout, sleep }) {
@@ -794,8 +797,10 @@ async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout
     stdout,
     sleep,
   };
+  const concurrency = targetEnv === "local" ? 1 : R2_DELETE_CONCURRENCY;
   if (deleteKeys.length > 0) {
-    stdout.write(`Deleting ${deleteKeys.length} ${targetLabel} R2 keys, ${R2_DELETE_CONCURRENCY} at a time.\n`);
+    const noun = deleteKeys.length === 1 ? "key" : "keys";
+    stdout.write(`Deleting ${deleteKeys.length} ${targetLabel} R2 ${noun}, ${concurrency} at a time.\n`);
   }
   // Each worker takes the next key until none are left or any key has failed; the first failure
   // is rethrown once the keys in flight finish.
@@ -813,7 +818,7 @@ async function deleteAndVerifyR2Keys({ deleteKeys, targetEnv, runCommand, stdout
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(R2_DELETE_CONCURRENCY, deleteKeys.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(concurrency, deleteKeys.length) }, worker));
   if (failures.length > 0) throw failures[0];
   const deletedKeys = deleteKeys.filter((_, index) => removed[index]);
   const verifiedDeletedKeys = [...deleteKeys];
