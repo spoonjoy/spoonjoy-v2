@@ -13,7 +13,7 @@ async function show(page: Page, body: string) {
 test.describe("the story check", () => {
   test("fails a popup rendered outside the page's landmarks, as a story checks with its popups in its <main>", async ({ page }) => {
     await show(page, `<main><h1>Gate</h1><button type="button" aria-expanded="true" aria-controls="herbs">Herbs</button></main><div id="herbs" role="listbox" aria-label="Herbs"><div role="option" aria-selected="false">Basil</div></div>`);
-    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/region/);
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/violation region \(/);
     await page.evaluate(() => document.querySelector("main")!.append(document.querySelector("#herbs")!));
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
   });

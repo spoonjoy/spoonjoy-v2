@@ -4,7 +4,8 @@
 // text's contrast settles it. The scan covers what Storybook's own a11y addon covers, the story's
 // body without Storybook's chrome, with every rule: the `page` global renders the story in <main>
 // with its popups at the end of it, as the app does (.storybook/preview.tsx), so the landmark rule
-// (`region`) fails content outside every landmark, such as a popup left at the end of <body>.
+// (`region`) fails content outside every landmark. Stories show their popups closed, so an open
+// popup is checked by Ouro UI's own story check, not here.
 import { readFileSync } from "node:fs";
 import { test } from "../ouro-fixtures";
 import { COLOR_SCHEMES, auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
