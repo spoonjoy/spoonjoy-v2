@@ -1,14 +1,21 @@
 name: QA Data Cleanup
 
-# Removes disposable test data (smoke and scratch accounts, their recipes, covers and photos) from
-# shared QA with scripts/cleanup-local-qa-data.mjs, then fails if any image-cover smoke account is
-# left. Manual dispatch from main only. It shares the image-cover smoke's concurrency group, so it
-# never deletes the account a running smoke is using.
+# Removes every disposable account on shared QA (scripts/cleanup-local-qa-data.mjs's codex-* and
+# e2e-passkey-* rules; native journey accounts younger than three hours are kept) with its recipes,
+# covers and photos, then fails if any image-cover smoke account is left. Manual dispatch from main
+# only. It shares the image-cover smoke's concurrency group, so it never deletes the account a
+# running smoke is using; GitHub keeps one pending run per group, so dispatching it while a smoke
+# runs and another waits cancels the waiting one.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: init.defaultBranch
+  GIT_CONFIG_VALUE_0: main
 
 concurrency:
   group: qa-image-cover-smoke
@@ -52,7 +59,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # wrangler's --json output can follow log lines, so jq reads from the first line that opens it.
         run: |
-          remaining="$(pnpm exec wrangler d1 execute DB --remote --env qa --json --command "SELECT COUNT(*) AS count FROM \"User\" WHERE email LIKE 'codex-smoke-%'" | jq -r '.[0].results[0].count')"
+          remaining="$(pnpm exec wrangler d1 execute DB --remote --env qa --json --command "SELECT COUNT(*) AS count FROM \"User\" WHERE email LIKE 'codex-smoke-%'" | awk 'found || /^\[/ { found = 1; print }' | jq -r '.[0].results[0].count')"
           echo "Smoke accounts left in shared QA: $remaining"
           test "$remaining" = "0"
