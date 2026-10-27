@@ -31,7 +31,8 @@ for (const story of stories) {
       // done, which is when Storybook's a11y addon checks it, and in the theme asked for: the theme
       // decorator sets the class on <html> after the render. The audit then waits for fonts,
       // images and animations to settle.
-      await page.locator("#storybook-root > *").first().waitFor();
+      // The story's own first element: the page's <main> around it has no size when all it holds is fixed.
+      await page.locator("#storybook-root > :not([data-story-page]), [data-story-page] > :first-child").first().waitFor();
       const phase = await page.waitForFunction(() => {
         const render = (window as { __STORYBOOK_PREVIEW__?: { currentRender?: { phase?: string } } }).__STORYBOOK_PREVIEW__?.currentRender;
         return ["finished", "errored", "aborted"].includes(render?.phase ?? "") && render?.phase;
@@ -39,6 +40,11 @@ for (const story of stories) {
       if ((await phase.jsonValue()) !== "finished") throw new Error(`The story's render ended ${String(await phase.jsonValue())}, not finished.`);
       await page.waitForFunction((dark) => document.documentElement.classList.contains("dark") === dark, scheme === "dark");
 
+      // Storybook's hidden chrome holds links ahead of the story, so axe would not take a skip link
+      // for one (it must come before the page's first link). It is no part of the story.
+      await page.evaluate(() => {
+        for (const chrome of document.querySelectorAll(".sb-wrapper")) chrome.remove();
+      });
       const audit = await auditShownScheme(page, { target: "story" });
       if (audit.scheme !== scheme) throw new Error(`The story showed its ${audit.scheme} theme, not its ${scheme} one.`);
       await testInfo.attach("accessibility", { body: JSON.stringify(audit, null, 2), contentType: "application/json" });

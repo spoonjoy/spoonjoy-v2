@@ -25,7 +25,7 @@ function StoryPage({ children }: { children: ReactNode }) {
   if (ownMain) return <>{children}</>
   return (
     <OuroProvider portalContainer={popups}>
-      <main ref={main}>
+      <main ref={main} data-story-page="">
         {children}
         <div ref={popups} />
       </main>
