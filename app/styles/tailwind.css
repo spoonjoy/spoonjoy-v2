@@ -212,6 +212,16 @@
   }
 }
 
+/* A phone held sideways: landscape, under 480px tall and below lg, where the tab bar floats at the
+   foot of the screen. The width rules alone give it the desktop hero, whose headline and actions
+   fall under the tab bar and past the first screen, so the signed-out landing hero takes a
+   sideways layout instead (e2e/journeys/landing-first-screen.mobile.journey.ts). */
+@custom-variant sideways-phone {
+  @media (orientation: landscape) and (height < 30rem) and (width < 64rem) {
+    @slot;
+  }
+}
+
 /* The signed-out landing hero's actions, on the shaded photo with sj-on-charcoal: each button's
    edge must show against the photo at 3:1 (WCAG 1.4.11), measured from the real pixels by
    e2e/journeys/landing-readability.journey.ts. The outline buttons' 22–24% photo line measured
