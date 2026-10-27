@@ -167,7 +167,10 @@ export default function Index() {
       <div className="sj-page">
         {/* Signed out, the recipes in progress live in this browser, so they appear after hydration. */}
         <LocalCookingNow />
-        <section className="relative min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] overflow-hidden">
+        {/* A phone held sideways: the photo fills the screen below the 3.5rem header, and the bottom padding
+            keeps the text and actions above the tab bar (its 4rem height, the gap below it and a 1rem gap
+            above it, as html's scroll-padding-bottom). */}
+        <section className="relative min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] overflow-hidden">
           <img
             src={LANDING_FOOD_PHOTOS[2].src}
             alt={LANDING_FOOD_PHOTOS[2].alt}
@@ -175,23 +178,24 @@ export default function Index() {
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="sj-landing-hero-shade absolute inset-0" />
-          <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24">
+          <div className="relative z-10 flex min-h-[clamp(24rem,56svh,42rem)] tall-phone:min-h-[clamp(24rem,70svh,42rem)] sm:min-h-[clamp(32rem,70svh,56rem)] sideways-phone:min-h-[calc(100svh-3.5rem)] flex-col justify-end px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-8 sm:pt-20 sm:px-8 sm:pb-20 lg:px-12 lg:pb-24 sideways-phone:pt-4 sideways-phone:pb-[calc(max(1rem,env(safe-area-inset-bottom))+5rem)] sideways-phone:pl-[max(2rem,env(safe-area-inset-left))] sideways-phone:pr-[max(2rem,env(safe-area-inset-right))]">
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo)]">
               The Recipe App
             </p>
-            <h1 className="font-sj-display mt-3 max-w-4xl text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] tall-phone:mt-5 tall-phone:text-4xl/10 sm:mt-5 sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20">
+            <h1 className="font-sj-display mt-3 max-w-4xl text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] tall-phone:mt-5 tall-phone:text-4xl/10 sm:mt-5 sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20 sideways-phone:mt-2 sideways-phone:text-[2rem]/[2.375rem]">
               Your food should look as good as it tastes.
             </h1>
-            {/* A short or narrow phone shows the first clause only, so the actions fit on the first screen above
-                the tab bar (e2e/journeys/landing-first-screen.mobile.journey.ts). */}
-            <p className="mt-3 max-w-2xl text-base/6 text-[var(--sj-on-photo)] tall-phone:mt-5 sm:mt-5 sm:text-lg/8">
+            {/* A short, narrow or sideways phone shows the first clause only, so the actions fit on the first
+                screen above the tab bar (e2e/journeys/landing-first-screen.mobile.journey.ts). */}
+            <p className="mt-3 max-w-2xl text-base/6 text-[var(--sj-on-photo)] tall-phone:mt-5 sm:mt-5 sm:text-lg/8 sideways-phone:mt-2 sideways-phone:text-base/6">
               Spoonjoy is a photo-first kitchen for the recipes you actually cook
-              <span className="hidden tall-phone:inline sm:inline">, the notes you learn by doing, and the cookbooks that grow out of real meals</span>.
+              <span className="hidden tall-phone:inline sm:inline sideways-phone:hidden">, the notes you learn by doing, and the cookbooks that grow out of real meals</span>.
             </p>
             {/* Photo-white labels, borders and focus rings for the outline buttons, and a light amber main
                 action, so every button's edge shows on the shaded photo. */}
-            {/* On a phone the main action takes the full width and the other two share a row. */}
-            <div className="sj-on-charcoal sj-landing-hero-actions mt-6 grid grid-cols-2 gap-3 tall-phone:mt-8 sm:mt-8 sm:flex sm:flex-row">
+            {/* On a phone the main action takes the full width and the other two share a row; held sideways,
+                all three share one row. */}
+            <div className="sj-on-charcoal sj-landing-hero-actions mt-6 grid grid-cols-2 gap-3 tall-phone:mt-8 sm:mt-8 sm:flex sm:flex-row sideways-phone:mt-4 sideways-phone:flex sideways-phone:flex-wrap">
               <Button href="/signup" className="col-span-2">Start Your Kitchen</Button>
               <Button href="/login" variant="outline" tone="secondary">Log in</Button>
               <Button href="/search" variant="outline" tone="secondary">
