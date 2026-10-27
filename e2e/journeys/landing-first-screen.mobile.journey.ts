@@ -57,6 +57,13 @@ const DUO_SCREEN: Phone = {
   hero: "compact",
 };
 
+// The smallest phone that gets the roomy hero, where its actions have the least room to spare.
+const SMALLEST_ROOMY: Phone = {
+  name: "Smallest roomy phone, 360 x 600",
+  context: { ...devices["iPhone 15"], viewport: { width: 360, height: 600 } },
+  hero: "roomy",
+};
+
 const DUO_OPEN: Phone = {
   name: "iPhone Duo, opened tall",
   context: {
@@ -72,6 +79,7 @@ const PHONES: Phone[] = [
   phone("iPhone 13 Mini", "roomy"),
   phone("iPhone 15", "roomy"),
   phone("iPhone 15 Pro Max", "roomy"),
+  SMALLEST_ROOMY,
   DUO_SCREEN,
   DUO_OPEN,
   phone("iPad Pro 11", "roomy"),
