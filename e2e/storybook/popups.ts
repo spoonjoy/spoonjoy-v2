@@ -89,12 +89,18 @@ export async function auditEachPopupOpen(
     await page.mouse.move(0, 0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     try {
-      await page.waitForFunction((selector) => document.querySelector(selector) === null && document.querySelector("[data-ending-style]") === null, ANY_POPUP, WAIT);
+      await page.waitForFunction((selector) => document.querySelector(selector) === null, ANY_POPUP, WAIT);
     } catch {
       throw new Error(`A popup was already open before opening ${label}.`);
     }
+    // Anything else still closing (a collapsible, a toast) would move what the next audit sees.
+    try {
+      await page.waitForFunction(() => document.querySelector("[data-ending-style]") === null, undefined, WAIT);
+    } catch {
+      throw new Error(`Something was still closing ([data-ending-style]) before opening ${label}.`);
+    }
     if (opensOn === "hover") {
-      await handle.hover();
+      await handle.hover(WAIT);
     } else if (opensOn === "keyboard focus") {
       // A hover card opens on focus only from the keyboard.
       await page.keyboard.press("Shift");
@@ -103,7 +109,7 @@ export async function auditEachPopupOpen(
       await handle.focus();
       await page.keyboard.press("Enter");
     } else {
-      await handle.click();
+      await handle.click(WAIT);
     }
     // Attached, not visible: a popup can open with nothing in it to give it a size.
     const popup = page.locator(popupSelector).first();

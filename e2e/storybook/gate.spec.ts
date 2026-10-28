@@ -96,6 +96,52 @@ test.describe("the story check", () => {
     await expect(page.locator("#layer > *")).toHaveCount(0);
   });
 
+  test("moves the pointer and focus off the last trigger, so a tooltip its returning focus shows has closed before the next popup opens", async ({ page }) => {
+    // As Menu's "Icon Trigger" story: a menu trigger with a tooltip, which shows again when Escape returns focus to it.
+    await show(
+      page,
+      `<main><h1>Gate</h1><button type="button" id="more" aria-label="More" aria-haspopup="menu" aria-expanded="false" data-base-ui-tooltip-trigger="">…</button><div id="layer"></div></main>` +
+        `<script>
+          const button = document.querySelector("#more");
+          const layer = document.querySelector("#layer");
+          const popup = (attributes, text) => {
+            const element = document.createElement("div");
+            for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+            element.setAttribute("data-open", "");
+            element.textContent = text;
+            return element;
+          };
+          const tooltip = (open) => {
+            layer.querySelector("[data-ouro=tooltip]")?.remove();
+            if (open) layer.append(popup({ "data-ouro": "tooltip", role: "tooltip" }, "More actions"));
+          };
+          const menu = (open) => {
+            button.setAttribute("aria-expanded", String(open));
+            layer.querySelector("[role=menu]")?.remove();
+            if (!open) return;
+            const element = popup({ role: "menu", "aria-label": "More" }, "");
+            element.append(popup({ role: "menuitem", tabindex: "-1" }, "Share"));
+            layer.append(element);
+          };
+          button.addEventListener("mouseenter", () => tooltip(true));
+          button.addEventListener("mouseleave", () => tooltip(false));
+          button.addEventListener("focus", () => tooltip(true));
+          button.addEventListener("blur", () => tooltip(false));
+          button.addEventListener("click", () => menu(true));
+          document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") return;
+            menu(false);
+            tooltip(false);
+            button.focus();
+          });
+        </script>`,
+    );
+    const opened = await auditEachPopupOpen(page, "main", { target: "story" });
+    expect(opened.map(describePopup)).toEqual(['"More"', 'the tooltip of "More"']);
+    expect(describeAuditFailures(opened.map(({ audit }) => audit))).toBeNull();
+    await expect(page.locator("#layer > *")).toHaveCount(0);
+  });
+
   test("leaves out what Ouro UI's gate leaves out: Base UI's focus guards", async ({ page }) => {
     const ouro = readFileSync("app/lib/ouro/testing/axe.ts", "utf8").match(/const axeExclude: string\[\] = (\[.*\]);/)?.[1];
     expect(ouro && JSON.parse(ouro)).toEqual(AXE_EXCLUDE);
