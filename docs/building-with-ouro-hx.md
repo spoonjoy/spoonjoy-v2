@@ -15,7 +15,7 @@ The short version:
 HX ships through a shadcn registry, but it isn't a shadcn add-on. The registry is just how the files get to you. An item installs as plain source under `app/components/ouro/` and `app/lib/ouro/`:
 
 ```sh
-npx shadcn@4.21.1 add ourostack/ouro-ui/checklist#v1.2.10 ourostack/ouro-ui/number-field#v1.2.10
+npx shadcn@4.21.1 add ourostack/ouro-ui/checklist#v1.2.11 ourostack/ouro-ui/number-field#v1.2.11
 ```
 
 - **Pin the tag.** Install from a release tag, not from `main`. HX's own source names the installed release (`app/lib/ouro/dev.ts`), and [`/ouro-provenance.json`](../app/generated/ouro-provenance.json) reports it.[^tag]
@@ -81,7 +81,7 @@ A source rule and a census measure how much of the app is HX, and both may only 
 - **X-ray.** Open [the Test Kitchen](https://spoonjoy.app/test-kitchen?xray) and HX's `Inspector` outlines the HX components on the page. Its list links a component to its HX docs and to the Spoonjoy file that renders it, at the commit that's running.[^xray]
 - **`/llms.txt`** greets agents and links the Test Kitchen, the source, this guide, the provenance, the API and MCP.[^llms]
 
-[^tag]: test:test/scripts/generate-ouro-provenance.test.ts::files and items > reads the installed release from HX's own source verify:testExists(test/scripts/generate-ouro-provenance.test.ts::files and items > reads the installed release from HX's own source) verify:equals(app/generated/ouro-provenance.json#ouroTag)=v1.2.10
+[^tag]: test:test/scripts/generate-ouro-provenance.test.ts::files and items > reads the installed release from HX's own source verify:testExists(test/scripts/generate-ouro-provenance.test.ts::files and items > reads the installed release from HX's own source) verify:equals(app/generated/ouro-provenance.json#ouroTag)=v1.2.11
 [^complete]: test:test/hx-migration-complete.test.ts::complete HX migration > enrols every census journey and retains its fully marked structural snapshot verify:testExists(test/hx-migration-complete.test.ts::complete HX migration > enrols every census journey and retains its fully marked structural snapshot) verify:testExists(test/hx-migration-complete.test.ts::complete HX migration > keeps no source-rule waivers)
 [^pinned]: test:test/components/ui/design-system-hygiene.test.ts::Spoonjoy UI design-system hygiene > pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes verify:testExists(test/components/ui/design-system-hygiene.test.ts::Spoonjoy UI design-system hygiene > pins every file the HX CLI installed, in every folder and of every type, to the tag's bytes) verify:testExists(test/components/ui/design-system-hygiene.test.ts::Spoonjoy UI design-system hygiene > keeps no unpinned file in the folders HX installs into)
 [^cli]: .github/task21-v083-cli.mjs verify:fileLine(.github/task21-v083-cli.mjs, /assert\.deepEqual\(receipt\.after, expected, "CLI output must match the qualified public tag"\);/) verify:fileLine(.github/task21-v083-cli.mjs, /"Only qualified installed paths may change"/)
