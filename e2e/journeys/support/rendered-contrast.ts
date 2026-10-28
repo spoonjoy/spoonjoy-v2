@@ -10,8 +10,12 @@
 // that stops a measurement (a colour format the parser does not know, a line that cannot be brought
 // into view, an image that does not load, more than one faded ancestor) is an error, never a pass.
 // Text covered by an open modal dialog's layer and hidden from assistive technology (the page
-// behind the dialog) is inactive, which WCAG 1.4.3 exempts. An inactive line is skipped: the
-// element is judged by its other lines, and passes as inactive only when it has no other line.
+// behind the dialog) is inactive, which WCAG 1.4.3 exempts. So is a line an open popup covers (a
+// Select's list, a Menu, a Popover), as Ouro UI's audit hides it: what a popup paints over the
+// text is the popup's own. A line it covers only partly is inactive only while the popup also hides
+// the text from assistive technology; otherwise it is measured with the popup hidden. An inactive
+// line is skipped: the element is judged by its other lines, and passes as inactive only when it
+// has no other line.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { formatRgb, parseCssColor, requiredTextContrast, worstContrastOver, type Rgb, type Rgba } from "./contrast";
@@ -267,7 +271,18 @@ function installHelpers(): void {
         modal.getAttribute("aria-modal") !== "false" &&
         (modal instanceof HTMLDialogElement ? modal.matches(":modal") : modal.checkVisibility({ visibilityProperty: true })),
     ) ?? null;
-  page.__sjContrast = { describe, lines, runs, emptyField, hideText, unfade, restore, coverAt, modalOver };
+  // The open popup a layer over the text belongs to: a Base UI portal, exposed to assistive
+  // technology, that does not hold the text (Ouro UI's audit finds a popup's layers the same way).
+  const popupOf = (cover: Element, element: Element) => {
+    const portal = cover.closest("[data-base-ui-portal]");
+    return portal && !portal.contains(element) && !portal.closest('[aria-hidden="true"], [inert]') ? portal : null;
+  };
+  // Hides a popup's layer, its shadow too, until restore().
+  const hideLayer = (layer: Element) => {
+    override(layer, "transition", "none");
+    override(layer, "opacity", "0");
+  };
+  page.__sjContrast = { describe, lines, runs, emptyField, hideText, unfade, restore, coverAt, modalOver, popupOf, hideLayer };
 }
 
 interface Helpers {
@@ -280,6 +295,8 @@ interface Helpers {
   restore(): void;
   coverAt(element: Element, x: number, y: number): Element | "nothing" | null;
   modalOver(element: Element): Element | null;
+  popupOf(cover: Element, element: Element): Element | null;
+  hideLayer(layer: Element): void;
 }
 
 // Brings line `index` of the element's text into view and returns its box, or why it can't be
@@ -320,14 +337,22 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
     }
     if (covers.length > 0) {
       // Inactive only behind an open modal dialog that hides the text from assistive technology,
-      // with what covers it a layer the page can name. (A dialog over part of the line leaves the
-      // rest showing, still behind the dialog and as inactive.)
+      // with what covers it a layer the page can name, or under an open popup's layers. (A dialog
+      // over part of the line leaves the rest showing, still behind the dialog and as inactive.)
       const hidden = element.closest('[aria-hidden="true"], [inert]');
       const modal = helpers.modalOver(element);
       if (hidden && modal && covers.every((cover) => cover !== "nothing")) {
         return { inactive: `behind ${name(covers[0])} while ${helpers.describe(modal)} is open, and hidden from assistive technology by ${helpers.describe(hidden)}` };
       }
-      return { blocker: `line ${index + 1} is covered by ${name(covers[0])}` };
+      // Under an open popup: the whole line, or part of it when the popup also hides the text from
+      // assistive technology (Base UI's modal popups hide the rest of the page). A line a popup
+      // covers only partly, with the text still exposed, is measured with the popup hidden, so what
+      // shows of it is judged against what the page paints behind it.
+      const popups = covers.map((cover) => (cover === "nothing" ? null : helpers.popupOf(cover, element)));
+      if (!popups.every(Boolean)) return { blocker: `line ${index + 1} is covered by ${name(covers[0])}` };
+      const whole = covers.length === pointsOf(line.rect).length;
+      if (whole || hidden) return { inactive: `behind ${name(covers[0])}, part of the open popup ${helpers.describe(popups[0]!)}` };
+      for (const popup of new Set(popups)) helpers.hideLayer(popup!);
     }
     const points = pointsOf(line.rect);
 
@@ -438,7 +463,11 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
       inactive ??= line.inactive;
       continue;
     }
-    if ("blocker" in line) return { ...base, passed: false, textColor: runs[0].fill, error: line.blocker };
+    if ("blocker" in line) {
+      // A popup layer hidden for this line comes back before the audit goes on.
+      await page.evaluate(() => (window as unknown as { __sjContrast: Helpers }).__sjContrast.restore());
+      return { ...base, passed: false, textColor: runs[0].fill, error: line.blocker };
+    }
     const run = runs[line.run];
     await locator.evaluate((element) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.hideText(element));
     let rgba: Uint8Array;

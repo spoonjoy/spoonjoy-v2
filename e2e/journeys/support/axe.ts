@@ -31,24 +31,35 @@ export const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "u
  * What axe checks. "page" is the whole document with every rule. "story" is what Storybook's
  * own a11y addon checks for a story (@storybook/addon-a11y's a11yRunner), the body without
  * Storybook's chrome, but with every rule: the addon turns `region` off, and the story check
- * keeps it, since it renders each story in a page's <main> (.storybook/preview.tsx). There is no
- * other way to leave anything out.
+ * keeps it, since it renders each story in a page's <main> (.storybook/preview.tsx). Both leave
+ * out Base UI's focus guards and nothing else.
  */
 export type AxeTarget = "page" | "story";
 
+/**
+ * Left out of every scan, as Ouro UI's gate leaves them out (`axeExclude` in
+ * app/lib/ouro/testing/axe.ts, which runs only under Vitest's browser mode, so it is copied here
+ * and e2e/storybook/gate.spec.ts keeps the two the same). Base UI's focus guards around an open
+ * popup are visually hidden and never reached by Tab; in WebKit they take an unnamed
+ * role="button" on purpose, so VoiceOver's cursor lands on them and the popup's focus trap
+ * catches it.
+ */
+export const AXE_EXCLUDE = ["[data-base-ui-focus-guard]"];
+
+const PAGE = { exclude: AXE_EXCLUDE.map((selector) => [selector]) };
+
 const STORY = {
   include: [["body"]],
-  exclude: [[".sb-wrapper"], ["#storybook-docs"], ["#storybook-highlights-root"]],
+  exclude: [[".sb-wrapper"], ["#storybook-docs"], ["#storybook-highlights-root"], ...PAGE.exclude],
 };
 
 export async function runAxe(page: Page, target: AxeTarget = "page"): Promise<AxeResults> {
   await page.evaluate(axeSource);
   return page.evaluate(
-    ({ story }) => {
+    (context) => {
       const axe = (window as unknown as { axe: typeof import("axe-core") }).axe;
-      const context = story ? { include: story.include, exclude: story.exclude } : document;
       return axe.run(context, { resultTypes: ["violations", "incomplete"], preload: false });
     },
-    { story: target === "story" ? STORY : null },
+    target === "story" ? STORY : PAGE,
   ) as Promise<AxeResults>;
 }
