@@ -305,6 +305,88 @@ describe("audit", () => {
     expect(rules(await scanPage())).not.toContain("undecided aria-hidden-focus");
   });
 
+  // A page behind a modal that hides it with aria-hidden, not inert: axe cannot decide whether Tab
+  // reaches its link, so audit presses Tab around the page to find out.
+  const behindModal = (dialog: string) =>
+    (document.body.innerHTML = `<main aria-hidden="true"><h1>Page</h1><a href="#page">Behind the dialog</a></main><div role="dialog" aria-modal="true" aria-label="Edit">${dialog}</div>`);
+
+  it("leaves focus where its Tab walk found it: nothing focused stays so, and a focus ring shows after only if it showed before", async () => {
+    behindModal('<button type="button">Save</button>');
+    const save = document.querySelector<HTMLElement>('[role="dialog"] button')!;
+    expect(rules(await scanPage())).toContain("undecided aria-hidden-focus");
+    expect(document.activeElement).toBe(document.body);
+    for (const focusVisible of [false, true]) {
+      save.blur();
+      const options: FocusOptions & { focusVisible?: boolean } = { focusVisible };
+      save.focus(options);
+      expect(save.matches(":focus-visible")).toBe(focusVisible);
+      await scanPage();
+      expect([document.activeElement === save, save.matches(":focus-visible")]).toEqual([true, focusVisible]);
+    }
+  });
+
+  it("puts back a field's caret and selected text, which Tab into a field selects whole, and the page's selection", async () => {
+    behindModal('<input aria-label="Title" value="Short ribs braised"><textarea aria-label="Notes">Low and slow</textarea><p id="words">Some words</p>');
+    const title = document.querySelector("input")!;
+    title.focus();
+    title.setSelectionRange(3, 3);
+    await scanPage();
+    expect([document.activeElement === title, title.selectionStart, title.selectionEnd]).toEqual([true, 3, 3]);
+    const notes = document.querySelector("textarea")!;
+    notes.focus();
+    notes.setSelectionRange(1, 4, "backward");
+    await scanPage();
+    expect([notes.selectionStart, notes.selectionEnd, notes.selectionDirection]).toEqual([1, 4, "backward"]);
+    notes.blur();
+    const words = document.querySelector("#words")!.firstChild!;
+    document.getSelection()!.setBaseAndExtent(words, 2, words, 7);
+    await scanPage();
+    expect(document.getSelection()!.toString()).toBe("me wo");
+  });
+
+  it("passes a page whose content arrives during its Tab walk, as that is no change the walk made", async () => {
+    behindModal('<button type="button">Save</button>');
+    const dialog = document.querySelector('[role="dialog"]')!;
+    setTimeout(() => dialog.insertAdjacentHTML("beforeend", '<button type="button" aria-expanded="false">More</button>'), 30);
+    expect(rules(await scanPage())).toContain("undecided aria-hidden-focus");
+  });
+
+  it("fails, naming what changed, when its Tab walk closes a popup that focus leaving closes, which it cannot open again", async () => {
+    behindModal('<button type="button" aria-expanded="true" aria-controls="herbs">Herbs</button><div id="herbs" role="group" aria-label="Herbs list"><button type="button">Basil</button></div>');
+    const herbs = document.querySelector<HTMLElement>("[aria-expanded]")!;
+    const list = document.querySelector<HTMLElement>("#herbs")!;
+    // Focus leaving the trigger and its list closes the list, as a disclosure that closes on Tab does.
+    document.addEventListener("focusin", (event) => {
+      if (!herbs.contains(event.target as Node) && !list.contains(event.target as Node)) herbs.setAttribute("aria-expanded", "false");
+    });
+    herbs.focus();
+    await expect(scanPage()).rejects.toThrow('audit: its Tab walk changed what is open on the page and cannot change it back: <button> "Herbs" went from expanded to collapsed.');
+  });
+
+  it("puts back every scroll position it moves to measure text, the page's and a scrolled box's", async () => {
+    const gradient = "margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)";
+    mountPage(
+      `<div style="height:3000px"></div><p style="${gradient}">Far down the page</p>` +
+        `<div id="box" role="region" aria-label="Notes" tabindex="0" style="height:100px;overflow:auto"><div style="height:600px"></div><p style="${gradient}">Far down the box</p></div><div style="height:3000px"></div>`,
+    );
+    const box = document.querySelector<HTMLElement>("#box")!;
+    window.scrollTo(0, 100);
+    box.scrollTop = 50;
+    expect(describeFindings(await scanPage())).toBe("");
+    expect([window.scrollY, box.scrollTop]).toEqual([100, 50]);
+    expect(await measureTextContrast(box.querySelector("p")!, 4.5)).toEqual({ pass: true });
+    expect([window.scrollY, box.scrollTop]).toEqual([100, 50]);
+  });
+
+  it("leaves no trace on the focused field when it screenshots the page", async () => {
+    mountPage('<input aria-label="Title"><p id="text" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)">Text on a gradient</p>');
+    const field = document.querySelector("input")!;
+    field.focus();
+    expect(await measureTextContrast(document.querySelector("#text")!, 4.5)).toEqual({ pass: true });
+    expect(field.outerHTML).toBe('<input aria-label="Title">');
+    expect(document.activeElement).toBe(field);
+  });
+
   it("settles a link in running text whose block's background axe cannot read, as under an open list, by measuring the link against the text around it", async () => {
     // Each paragraph's text is all in elements, so axe reads its background at its middle, below
     // its line, where a box lies over it.

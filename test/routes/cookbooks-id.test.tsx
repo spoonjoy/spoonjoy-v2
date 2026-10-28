@@ -2097,7 +2097,7 @@ describe("Cookbooks $id Route", () => {
           fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
           fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-          expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't be reached");
+          expect(await screen.findByRole("alertdialog", { name: /^Spoonjoy couldn't be reached/ })).toBeInTheDocument();
           expect(sent).toEqual(["intent=delete"]);
           await waitFor(() => {
             expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -2118,8 +2118,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        // A destructive toast speaks through an alert; the toast itself is hidden from assistive tech.
-        expect(await screen.findByRole("alert")).toHaveTextContent("Spoonjoy couldn't save that just now.");
+        expect(await screen.findByRole("alertdialog", { name: /^Spoonjoy couldn't save that just now\./ })).toBeInTheDocument();
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();

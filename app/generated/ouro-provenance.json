@@ -1,6 +1,6 @@
 {
   "guide": "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
-  "ouroTag": "v1.2.8",
+  "ouroTag": "v1.2.10",
   "root": {
     "file": "app/root.tsx",
     "sources": [
