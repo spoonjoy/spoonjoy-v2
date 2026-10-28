@@ -114,12 +114,19 @@ export const MAX_RUN_WORKERS = 100;
 // [code: 10007]" (seen on run 37917989293). Deploying again is idempotent (assets already
 // uploaded are skipped), so the deploy is retried after these delays. The same bound applies
 // to the exact internal authentication server error seen during run 39088149235, not other
-// authentication or permission failures.
+// authentication or permission failures, and to a lost API connection or an API server error.
 export const DEPLOY_RETRY_DELAYS_MS = [5_000, 15_000, 30_000];
 const SCRIPT_NOT_FOUND_PATTERN = /\[code: 10007\]/;
 const INTERNAL_AUTH_SERVER_ERROR_PATTERN = /Internal authentication error: internal server error\s+\[code: 10500\]/;
-// A deploy that ended in 10007 has usually made the script and applied its Durable Object
-// migrations; while Cloudflare's reads lag, the next deploy sends them again and is refused.
+// The connection to Cloudflare's API failed before any answer (undici's "fetch failed" and the
+// socket errors under it), or the API answered a server error with a page instead of JSON, which
+// wrangler reports as "Received a malformed response from the API" with "-> 502 Bad Gateway".
+// Neither can come from the build or the config, which wrangler checks before it calls the API.
+const API_CONNECTION_FAILURE_PATTERN = /\bfetch failed\b|\b(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|EPIPE|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT))\b/;
+const API_SERVER_ERROR_PAGE_PATTERN = /Received a malformed response from the API[\s\S]*-> (50[0234])\b/;
+// A deploy that ended in 10007, or lost its connection, has usually made the script and applied
+// its Durable Object migrations; while Cloudflare's reads lag, the next deploy sends them again
+// and is refused.
 const MIGRATION_TAG_LAG_PATTERN = /Actor migration tag precondition failed, got tag '' when expected tag is '[^']+'.*\[code: 10079\]/s;
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
@@ -537,14 +544,19 @@ export async function deploy({ env, exec, fs, sleep, log }) {
     } catch (error) {
       const output = outputOf(error);
       log(output);
+      const serverErrorPage = API_SERVER_ERROR_PAGE_PATTERN.exec(output);
       const reason = SCRIPT_NOT_FOUND_PATTERN.test(output)
         ? `Cloudflare did not yet know ${state.workerName} (code 10007)`
         : INTERNAL_AUTH_SERVER_ERROR_PATTERN.test(output)
           ? `Cloudflare reported an internal authentication server error (code 10500) while deploying ${state.workerName}`
           : scriptMayExist && MIGRATION_TAG_LAG_PATTERN.test(output)
             ? `Cloudflare had not yet caught up with ${state.workerName}'s Durable Object migrations (code 10079)`
-            : undefined;
-      if (SCRIPT_NOT_FOUND_PATTERN.test(output)) scriptMayExist = true;
+            : serverErrorPage
+              ? `Cloudflare's API answered ${serverErrorPage[1]} while deploying ${state.workerName}`
+              : API_CONNECTION_FAILURE_PATTERN.test(output)
+                ? `The connection to Cloudflare's API failed while deploying ${state.workerName}`
+                : undefined;
+      if (SCRIPT_NOT_FOUND_PATTERN.test(output) || serverErrorPage || API_CONNECTION_FAILURE_PATTERN.test(output)) scriptMayExist = true;
       if (!reason || attempt >= DEPLOY_RETRY_DELAYS_MS.length) throw error;
       const delay = DEPLOY_RETRY_DELAYS_MS[attempt];
       log(`::warning::${reason}; deploying again in ${delay / 1000} s.`);

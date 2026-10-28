@@ -940,6 +940,63 @@ describe("deploy", () => {
     expect(log).toHaveBeenLastCalledWith("Deployed\n");
   });
 
+  const failedDeploy = (stderr: string) =>
+    Object.assign(new Error("Command failed: pnpm exec wrangler deploy"), { stdout: "", stderr });
+
+  it.each([
+    [
+      "a lost API connection",
+      "✘ [ERROR] fetch failed\n\n  TypeError: fetch failed\n  [cause]: Error: read ECONNRESET\n",
+      `The connection to Cloudflare's API failed while deploying ${IDENTITY.workerName}`,
+    ],
+    [
+      "an API socket that closed",
+      "✘ [ERROR] other side closed\n  code: 'UND_ERR_SOCKET'\n",
+      `The connection to Cloudflare's API failed while deploying ${IDENTITY.workerName}`,
+    ],
+    [
+      "an API server error page",
+      "✘ [ERROR] Received a malformed response from the API\n\n  <html><head><title>502 Bad Gateway</title></head>\n  PUT /accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2 -> 502 Bad Gateway\n",
+      `Cloudflare's API answered 502 while deploying ${IDENTITY.workerName}`,
+    ],
+  ])("deploys again after %s, and then accepts the migrations the first try applied", async (_case, stderr, reason) => {
+    const exec = vi.fn()
+      .mockRejectedValueOnce(failedDeploy(stderr))
+      .mockRejectedValueOnce(migrationTagLag)
+      .mockResolvedValueOnce({ stdout: "Deployed\n", stderr: "" });
+    const sleep = vi.fn(async () => {});
+    const log = vi.fn();
+
+    expect(await deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log })).toBe(3);
+    expect(log).toHaveBeenCalledWith(`::warning::${reason}; deploying again in 5 s.`);
+    expect(sleep.mock.calls.map(([ms]) => ms)).toEqual(DEPLOY_RETRY_DELAYS_MS.slice(0, 2));
+  });
+
+  it.each([
+    ["a build error", "✘ [ERROR] Build failed with 1 error:\n  app/entry.ts:1:7: ERROR: Expected \";\" but found \"x\"\n"],
+    ["a config error", "✘ [ERROR] Processing wrangler.json configuration:\n  - \"env.qa.d1_databases[0]\" bindings should have a string \"database_id\" field.\n"],
+    ["an API error with a JSON answer", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Script startup exceeded CPU time limit. [code: 10021]\n"],
+    ["an API client error page", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 413 Payload Too Large\n"],
+    ["an API 501", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 501 Not Implemented\n"],
+  ])("never deploys again after %s", async (_case, stderr) => {
+    const error = failedDeploy(stderr);
+    const exec = vi.fn().mockRejectedValueOnce(error);
+    const sleep = vi.fn(async () => {});
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(error);
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("stops deploying again after a bounded number of lost connections", async () => {
+    const error = failedDeploy("TypeError: fetch failed\n");
+    const exec = vi.fn().mockRejectedValue(error);
+    const sleep = vi.fn(async () => {});
+
+    await expect(deploy({ env: RUN_ENV, exec, fs: scopedFiles().fs, sleep, log: vi.fn() })).rejects.toBe(error);
+    expect(exec).toHaveBeenCalledTimes(DEPLOY_RETRY_DELAYS_MS.length + 1);
+  });
+
   it("preserves an exhausted internal server error instead of reporting a successful deploy", async () => {
     const exec = vi.fn().mockRejectedValue(internalAuthServerError);
     const sleep = vi.fn(async () => {});

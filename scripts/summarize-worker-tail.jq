@@ -21,6 +21,11 @@
 #   Without the switch (a production tail, or any other caller) no log line is kept.
 #   tailReconnects: how many times the tail had to reconnect after its connection dropped
 #   (default 0). Events between connections are lost, so a reconnected tail is incomplete too.
+#   tailConnections and suiteWindow (the Journeys workflow passes both): when the log came from
+#   overlapping tails, each connection's {tail, startedAt, endedAt} in epoch ms (endedAt null for
+#   one still open at the stop) and the {from, to} the suite ran in. The summary is then complete
+#   when at every moment of the suite at least one tail was connected, however often each
+#   reconnected; tailCoverage lists the gaps when none was.
 #
 # Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
 # d1_transient_error report (app/lib/d1-transient-retry.server.ts) or a d1_write_retry report
@@ -33,6 +38,34 @@
 
 def keep_error_logs: ($ARGS.named.keepErrorLogs == true);
 def tail_reconnects: ($ARGS.named.tailReconnects // 0 | if type == "number" then . else 0 end);
+
+# A connection is counted from tail_open_ms after it started, because wrangler prints nothing when
+# its socket opens, until tail_drop_ms before it ended, because wrangler notices a dead socket only
+# when a 10 s ping goes unanswered. A connection still open at the stop counts to the end.
+def tail_open_ms: 5000;
+def tail_drop_ms: 20000;
+def tail_coverage:
+  ($ARGS.named.tailConnections // null) as $connections
+  | ($ARGS.named.suiteWindow // null) as $window
+  | if ($connections | type) != "array" or ($window | type) != "object"
+       or ($window.from | type) != "number" or ($window.to | type) != "number" then null
+    else
+      [$connections[] | select(type == "object" and (.startedAt | type) == "number")
+        | { from: (.startedAt + tail_open_ms),
+            to: (if (.endedAt | type) == "number" then .endedAt - tail_drop_ms else $window.to end) }
+        | select(.to > .from)]
+      | sort_by(.from)
+      | reduce .[] as $connected ({ cursor: $window.from, gaps: [] };
+          (if $connected.from > .cursor then .gaps += [{ from: .cursor, to: ([$connected.from, $window.to] | min) }] else . end)
+          | .cursor = ([.cursor, $connected.to] | max))
+      | (.gaps + (if .cursor < $window.to then [{ from: .cursor, to: $window.to }] else [] end))
+      | map(select(.to > .from) | . + { ms: (.to - .from) })
+      | { tails: ([$connections[] | objects | .tail | strings] | unique | length),
+          connections: ([$connections[] | objects] | length),
+          uncoveredMs: (map(.ms) | add // 0),
+          gapCount: length,
+          gaps: .[0:10] }
+    end;
 
 # The d1_transient_error reports in an event's log lines, at any level, with only their fixed
 # fields: operation ("read" or "write") and willRetry.
@@ -268,10 +301,13 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
    else null end) as $errorLogs
 | def with_error_logs($index):
     $events[$index] | invocation + (if $errorLogs == null then {} else { errorLogs: ($errorLogs.lines[$index | tostring] // []) } end);
-{
-  complete: ($tailAliveAtStop == true and length > 0 and tail_reconnects == 0),
+  tail_coverage as $coverage
+| {
+  complete: ($tailAliveAtStop == true and length > 0
+    and (if $coverage == null then tail_reconnects == 0 else $coverage.uncoveredMs == 0 end)),
   tailAliveAtStop: ($tailAliveAtStop == true),
   tailReconnects: tail_reconnects,
+  tailCoverage: $coverage,
   firstEventTimestamp: (timestamps | if length == 0 then null else min end),
   lastEventTimestamp: (timestamps | if length == 0 then null else max end),
   totalInvocations: length,
@@ -336,9 +372,13 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
         answeredByReissue: ([.[] | select(.answeredBy == "reissue")] | length),
         failedBoth: ([.[] | select(.answeredBy == "neither")] | length) }),
   # Platform faults our code absorbed by trying again (platform_retry lines: an R2 put R2 refused
-  # with its own error, a cook-session read or start the object failed as retryable), by call.
-  platformRetries: ([.[] | log_objects("platform_retry")[] | (.call | ident) // "other"]
-    | { total: length, byCall: (group_by(.) | map({ key: .[0], value: length }) | from_entries) }),
+  # with its own error, a cook-session read or start the object failed as retryable or with
+  # Cloudflare's own internal error), by call, and how many of those errors Cloudflare had not
+  # marked retryable (`marked: false`).
+  platformRetries: ([.[] | log_objects("platform_retry")[]]
+    | { total: length,
+        byCall: (map((.call | ident) // "other") | group_by(.) | map({ key: .[0], value: length }) | from_entries),
+        unmarked: (map(select(.marked == false)) | length) }),
   slowest: ([.[] | select((.wallTime | type) == "number")] | sort_by(-.wallTime) | .[0:25] | map(invocation)),
   byPath: by_path,
   # Routes whose p95 CPU time is over the budget, worst first. The Journeys workflow prints
