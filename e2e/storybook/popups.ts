@@ -35,8 +35,9 @@ const WAIT = { timeout: 10_000 };
 export async function auditEachPopupOpen(page: Page, scope: string, { plainOpeners = [], ...options }: PopupOptions = {}): Promise<PopupAudit[]> {
   // Taken once, before any popup opens: a popup renders at the end of the page, so it adds triggers
   // of its own that this loop leaves to Ouro UI's checks, as Ouro's story check does.
-  const triggers = await page.locator(`${scope} ${TRIGGER}`).elementHandles();
-  const plain: ElementHandle[] = [];
+  // Every match is an element; Playwright types a list of handles as nodes.
+  const triggers = (await page.locator(`${scope} ${TRIGGER}`).elementHandles()) as ElementHandle<Element>[];
+  const plain: ElementHandle<Element>[] = [];
   for (const name of plainOpeners) {
     const button = await page.locator(scope).getByRole("button", { name, exact: true }).first().elementHandle({ timeout: 1_000 }).catch(() => null);
     if (!button) throw new Error(`No button named "${name}" (parameters.plainOpeners).`);
