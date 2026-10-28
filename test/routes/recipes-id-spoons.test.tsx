@@ -485,6 +485,7 @@ describe("Recipes $id route — spoons + provenance", () => {
     expect(await findShownAlert()).toHaveTextContent(D1_WRITE_UNAVAILABLE_MESSAGE);
     expect(screen.getByLabelText(/^note/i)).toHaveValue("saved once");
     expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).toBeNull();
 
     // Trying again sends the same cook token, so the server logs it at most once.
     await waitFor(() => expect(screen.getByRole("button", { name: /^log cook$/i })).toBeEnabled());
