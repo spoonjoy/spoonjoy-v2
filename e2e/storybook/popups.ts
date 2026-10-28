@@ -81,7 +81,15 @@ export async function auditEachPopupOpen(
     });
     if (!state.usable) continue;
     const label = describePopup({ trigger: state.name, kind });
-    if (await page.locator(`${openPopupSelector}, ${popupSelector}`).count()) throw new Error(`A popup was already open before opening ${label}.`);
+    // The last popup's trigger keeps the pointer and gets focus back as it closes, which can show its
+    // tooltip: move both away, and let what they showed close.
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    try {
+      await page.waitForFunction((selector) => document.querySelector(selector) === null, `${openPopupSelector}, ${popupSelector}`, WAIT);
+    } catch {
+      throw new Error(`A popup was already open before opening ${label}.`);
+    }
     if (opensOn === "hover") {
       await handle.hover();
     } else if (opensOn === "keyboard focus") {
