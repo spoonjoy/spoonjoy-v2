@@ -132,6 +132,8 @@ export const WithForm: Story = {
         <input
           data-test-harness=""
           placeholder="Less salt next time"
+          // Tailwind's base styles draw a placeholder at half the text color, below 4.5:1.
+          className="placeholder:text-muted-foreground"
           style={{
             fontWeight: 400, fontSize: "16px", lineHeight: "24px",
             padding: "10px 12px",

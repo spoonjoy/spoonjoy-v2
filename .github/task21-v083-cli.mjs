@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 // Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
-const acceptedHead = "073ddaaa41e28e149b1c207ea0898faf4fc91cbb";
-const tag = "v1.2.10";
-const tagCommit = "2e5de7bbdf15d3731da8774cd0e561bda9a3547d";
+const acceptedHead = "ed0feb8c4b71f2d3cfa66f1805e78d22f8821ea1";
+const tag = "v1.2.11";
+const tagCommit = "125822945010ab0e06185a3d4b801fddb7cea7ee";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,

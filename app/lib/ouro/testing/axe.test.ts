@@ -378,6 +378,25 @@ describe("audit", () => {
     expect([window.scrollY, box.scrollTop]).toEqual([100, 50]);
   });
 
+  it("puts back the scroll position of a scrolled box inside a shadow root", async () => {
+    const gradient = "margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)";
+    const scroller = (name: string) =>
+      `<div id="box" role="region" aria-label="${name}" tabindex="0" style="height:100px;overflow:auto"><div style="height:600px"></div><p style="${gradient}">Far down ${name}</p></div>`;
+    mountPage('<div id="host"></div>');
+    // A box in a shadow root, and another in a shadow root inside that one.
+    const outer = document.querySelector("#host")!.attachShadow({ mode: "open" });
+    outer.innerHTML = `${scroller("Notes")}<div id="inner"></div>`;
+    const inner = outer.querySelector("#inner")!.attachShadow({ mode: "open" });
+    inner.innerHTML = scroller("Steps");
+    const boxes = [outer, inner].map((root) => root.querySelector<HTMLElement>("#box")!);
+    boxes[0]!.scrollTop = 50;
+    boxes[1]!.scrollTop = 70;
+    expect(describeFindings(await scanPage())).toBe("");
+    expect(boxes.map((box) => box.scrollTop)).toEqual([50, 70]);
+    for (const box of boxes) expect(await measureTextContrast(box.querySelector("p")!, 4.5)).toEqual({ pass: true });
+    expect(boxes.map((box) => box.scrollTop)).toEqual([50, 70]);
+  });
+
   it("leaves no trace on the focused field when it screenshots the page", async () => {
     mountPage('<input aria-label="Title"><p id="text" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)">Text on a gradient</p>');
     const field = document.querySelector("input")!;
