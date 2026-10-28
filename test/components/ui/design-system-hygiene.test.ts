@@ -36,7 +36,7 @@ function listTextFiles(dirs: string[]): string[] {
 }
 
 // Every file the HX CLI installs from v1.2.10 (tag commit
-// cef017af04309b1102c869e32818b432ec5d8a6e), whatever its extension or folder: components, lib
+// 2e5de7bbdf15d3731da8774cd0e561bda9a3547d), whatever its extension or folder: components, lib
 // modules, specs, the census and source-rule kits and the claims checker. The CLI's binding
 // (.github/task21-v083-cli.mjs) checks the CLI's output against this same map, and the digest
 // below pins the map itself, including the CLI's omission of the checker's leading docs comment.
