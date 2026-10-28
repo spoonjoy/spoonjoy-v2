@@ -3059,7 +3059,7 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByRole("button", { name: "Increase scale" }));
       await user.click(screen.getByTestId("recipe-header-list-action"));
 
-      expect(await screen.findByText("2 items added at 1.25x")).toBeInTheDocument();
+      expect(await screen.findByRole("dialog", { name: "2 items added at 1.25x" })).toBeInTheDocument();
       expect(submittedScaleFactor).toBe("1.25");
     });
 
@@ -3117,7 +3117,7 @@ describe("Recipes $id Route", () => {
       await user.click(screen.getByTestId("recipe-header-list-action"));
       await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
       await user.click(screen.getByTestId("recipe-header-list-action"));
-      expect(await screen.findByText("1 items added at 1x")).toBeInTheDocument();
+      expect(await screen.findByRole("dialog", { name: "1 items added at 1x" })).toBeInTheDocument();
       await user.click(screen.getByTestId("recipe-header-list-action"));
       await waitFor(() => expect(tokens).toHaveLength(3));
       // Let the third answer render before the test ends, so its toast update lands inside act().
