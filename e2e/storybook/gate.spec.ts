@@ -122,16 +122,21 @@ test.describe("the story check", () => {
             const element = popup({ role: "menu", "aria-label": "More" }, "");
             element.append(popup({ role: "menuitem", tabindex: "-1" }, "Share"));
             layer.append(element);
+            // As Base UI's menu: focus moves into it, and Escape gives it back to the trigger.
+            element.querySelector("[role=menuitem]").focus();
           };
-          button.addEventListener("mouseenter", () => tooltip(true));
-          button.addEventListener("mouseleave", () => tooltip(false));
-          button.addEventListener("focus", () => tooltip(true));
-          button.addEventListener("blur", () => tooltip(false));
+          // The tooltip shows while its trigger is hovered or focused.
+          let hovered = false;
+          let focused = false;
+          const update = () => tooltip(hovered || focused);
+          button.addEventListener("mouseenter", () => ((hovered = true), update()));
+          button.addEventListener("mouseleave", () => ((hovered = false), update()));
+          button.addEventListener("focus", () => ((focused = true), update()));
+          button.addEventListener("blur", () => ((focused = false), update()));
           button.addEventListener("click", () => menu(true));
           document.addEventListener("keydown", (event) => {
             if (event.key !== "Escape") return;
             menu(false);
-            tooltip(false);
             button.focus();
           });
         </script>`,
