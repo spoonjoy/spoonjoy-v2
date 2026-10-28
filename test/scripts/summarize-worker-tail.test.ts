@@ -826,13 +826,27 @@ describe("Journeys workflow tail wiring", () => {
     const filter = /jq -r '(\[\.slowest\[\][\s\S]*?)' \\\n/.exec(run)?.[1];
     expect(filter).toBeDefined();
     const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    const get = (wallTime: number) => ({ method: "GET", wallTime });
     // Journeys run 40590368708: three isolates waited on D1 at the same moment.
-    expect(warn({ slowest: [{ wallTime: 11681 }, { wallTime: 7195 }, { wallTime: 4487 }] }).trimEnd()).toBe(
+    expect(warn({ slowest: [get(11681), get(7195), get(4487)] }).trimEnd()).toBe(
       "::warning::Slow requests: 2 took over 5 s, the longest 11681 ms. See slowest, stalledRequests and slowCalls in worker-tail-summary.json.",
     );
-    expect(warn({ slowest: Array.from({ length: 25 }, () => ({ wallTime: 6000 })) }).trimEnd()).toContain("Slow requests: 25 or more took over 5 s");
-    expect(warn({ slowest: [{ wallTime: 5000 }] })).toBe("");
+    expect(warn({ slowest: Array.from({ length: 25 }, () => get(6000)) }).trimEnd()).toContain("Slow requests: 25 or more took over 5 s");
+    expect(warn({ slowest: [get(5000)] })).toBe("");
     expect(warn({})).toBe("");
+  });
+
+  it("leaves out of the slow-request warning an invocation without an HTTP method, which no journey waits on", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(\[\.slowest\[\][\s\S]*?)' \\\n/.exec(run)?.[1];
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    // Journeys run 40607078374: the only invocation over 5 s had no path or method.
+    const background = { path: "", method: null, wallTime: 27285 };
+    expect(warn({ slowest: [background, { method: "GET", wallTime: 4543 }] })).toBe("");
+    expect(warn({ slowest: [background, { method: "POST", wallTime: 6000 }] }).trimEnd()).toContain("Slow requests: 1 took over 5 s, the longest 6000 ms.");
+    // The list holds the 25 slowest invocations, so a full list over 5 s may hide more requests.
+    expect(warn({ slowest: [background, ...Array.from({ length: 24 }, () => ({ method: "GET", wallTime: 6000 }))] }).trimEnd())
+      .toContain("Slow requests: 24 or more took over 5 s");
   });
 
   it("warns, without failing, on the platform faults our code tried again, by call", () => {
