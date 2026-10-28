@@ -121,6 +121,12 @@ export const TELEMETRY_GAP_ALLOWLIST: AllowlistEntry[] = [
       "One catch clears the slow-call timer and re-throws a call's synchronous error unchanged; another only keeps a throwing reporter from changing the call's outcome; the last turns a failed lookup of the isolate's location, evidence for a per-run QA Worker's log only, into a null location. The caller's error handling sees every error of its own call as it was.",
   },
   {
+    file: "app/lib/r2-transient-retry.server.ts",
+    category: "rethrow",
+    reason:
+      "Catch puts the object again only after R2 refused it with its own internal error or unavailability, logging a platform_retry line, and re-throws every other error, and the last try's, unchanged; the caller's own error handling captures the surfaced exception.",
+  },
+  {
     file: "app/lib/d1-write-retry.server.ts",
     category: "rethrow",
     reason:
