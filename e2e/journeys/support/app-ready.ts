@@ -24,9 +24,12 @@ async function waitForHydrationIfApp(page: Page): Promise<void> {
 // and a timeout, are not transport failures.
 const TRANSPORT_FAILURE = /Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b/;
 
-/** True when a page.goto or page.reload failed because its connection was reset before any answer. */
+/**
+ * True when a page.goto or page.reload failed because its connection was reset before any answer.
+ * Playwright puts the failure on the message's first line; later lines are its call log.
+ */
 export function isTransportFailure(error: unknown): boolean {
-  return error instanceof Error && !error.name.includes("Timeout") && TRANSPORT_FAILURE.test(error.message);
+  return error instanceof Error && !error.name.includes("Timeout") && TRANSPORT_FAILURE.test(error.message.split("\n")[0]);
 }
 
 export const TRANSPORT_RETRY_DELAY_MS = 1_000;

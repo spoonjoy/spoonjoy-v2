@@ -373,7 +373,10 @@ describe("warning gate", () => {
       loadRetryNote(new Error("page.goto: Error receiving data: Connection reset by peer")),
       loadRetryNote(new Error("page.goto: Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer")),
       assetRetryNote("/assets/heading-BIJmUf4w.js", 502, 2),
+      loadRetryNote(new Error("page.reload: net::ERR_SSL_PROTOCOL_ERROR at https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev/search?q=(rice)")),
       assetRetryNote("/assets/root-Dx_9a.css", 504, 3),
+      assetRetryNote("/assets/_user$id-Ab3_x.js", 503, 2),
+      assetRetryNote("/assets/logo@2x-Q1w2.png", 502, 3),
     ];
 
     it.each(notes)("tolerates %s", (line) => {
