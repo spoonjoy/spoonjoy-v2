@@ -4,11 +4,13 @@
 // text's contrast settles it. The scan covers what Storybook's own a11y addon covers, the story's
 // body without Storybook's chrome, with every rule: the `page` global renders the story in <main>
 // with its popups at the end of it, as the app does (.storybook/preview.tsx), so the landmark rule
-// (`region`) fails content outside every landmark. Stories show their popups closed, so an open
-// popup is checked by Ouro UI's own story check, not here.
+// (`region`) fails content outside every landmark. Then each popup the story can open (a Select's
+// list, a Menu, a Combobox's list, a Popover, a Dialog) is opened in turn and checked the same way,
+// as Ouro UI's own story check does, since a popup's content exists only while it is open.
 import { readFileSync } from "node:fs";
 import { test } from "../ouro-fixtures";
 import { COLOR_SCHEMES, auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
+import { auditEachPopupOpen } from "./popups";
 
 interface IndexEntry {
   type: string;
@@ -49,8 +51,16 @@ for (const story of stories) {
       const audit = await auditShownScheme(page, { target: "story" });
       if (audit.scheme !== scheme) throw new Error(`The story showed its ${audit.scheme} theme, not its ${scheme} one.`);
       await testInfo.attach("accessibility", { body: JSON.stringify(audit, null, 2), contentType: "application/json" });
-      const failure = describeAuditFailures([audit]);
-      if (failure) throw new Error(failure);
+      const opened = await auditEachPopupOpen(page, "#storybook-root", { target: "story" });
+      if (opened.length > 0) await testInfo.attach("accessibility with each popup open", { body: JSON.stringify(opened, null, 2), contentType: "application/json" });
+      const failures = [
+        describeAuditFailures([audit]),
+        ...opened.map(({ trigger, audit: open }) => {
+          const failure = describeAuditFailures([open]);
+          return failure && `With "${trigger}" open:\n${failure}`;
+        }),
+      ].filter(Boolean);
+      if (failures.length > 0) throw new Error(failures.join("\n"));
     });
   }
 }

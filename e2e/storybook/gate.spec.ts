@@ -5,6 +5,7 @@ import { expect, test } from "../ouro-fixtures";
 import { auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
 import { measureTextContrast } from "../journeys/support/rendered-contrast";
 import { verifyHiddenFocus } from "../journeys/support/undecided-checks";
+import { auditEachPopupOpen } from "./popups";
 
 async function show(page: Page, body: string) {
   await page.setContent(`<!doctype html><html lang="en"><head><title>Gate</title></head><body style="margin:0;font:16px/1.5 sans-serif">${body}</body></html>`);
@@ -16,6 +17,39 @@ test.describe("the story check", () => {
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/violation region \(/);
     await page.evaluate(() => document.querySelector("main")!.append(document.querySelector("#herbs")!));
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
+  });
+
+  test("opens each popup and fails what only the open popup holds, then closes it", async ({ page }) => {
+    // A menu whose only item has no name: Base UI renders a popup's content only while it is open.
+    await show(
+      page,
+      `<main><h1>Gate</h1><button type="button" id="herbs" aria-haspopup="menu" aria-expanded="false">Herbs</button><div id="menu"></div></main>` +
+        `<script>
+          const button = document.querySelector("#herbs");
+          const menu = document.querySelector("#menu");
+          const show = (open) => {
+            button.setAttribute("aria-expanded", String(open));
+            menu.replaceChildren();
+            if (!open) return;
+            const popup = document.createElement("div");
+            popup.setAttribute("role", "menu");
+            popup.setAttribute("aria-label", "Herbs");
+            popup.setAttribute("data-open", "");
+            const item = document.createElement("div");
+            item.setAttribute("role", "menuitem");
+            item.tabIndex = -1;
+            popup.append(item);
+            menu.append(popup);
+          };
+          button.addEventListener("click", () => show(true));
+          document.addEventListener("keydown", (event) => event.key === "Escape" && show(false));
+        </script>`,
+    );
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
+    const opened = await auditEachPopupOpen(page, "main", { target: "story" });
+    expect(opened.map(({ trigger }) => trigger)).toEqual(["Herbs"]);
+    expect(describeAuditFailures(opened.map(({ audit }) => audit))).toMatch(/violation aria-command-name \(/);
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
   });
 });
 
