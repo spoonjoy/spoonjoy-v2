@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
   OURO_SLOW_TOUCH_TRACE_PATTERN,
+  PNPM_SLOW_TARBALL_PATTERN,
   PNPM_TRANSIENT_FETCH_RETRY_PATTERN,
   findUnexpectedDiagnosticOutput,
   findUnexpectedWarnings,
@@ -337,6 +338,27 @@ describe("warning gate", () => {
     ].map((line, index) => [index + 1, line] as const))("tolerates transient retry notice %i", (_case, line) => {
       expect(findUnexpectedWarnings(`${line}\n`)).toEqual([]);
       expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+  });
+
+  describe("pnpm's slow download note", () => {
+    // The line Journeys run 40631270668's install printed, with pnpm's thin spaces around WARN.
+    const slow = "\u2009WARN\u2009 Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.npmjs.org/@floating-ui/core/-/core-1.8.0.tgz (GET)";
+
+    it("tolerates the note on either channel", () => {
+      expect(findUnexpectedWarnings(`${slow}\n`)).toEqual([]);
+      expect(findUnexpectedDiagnosticOutput("", `${slow}\n`)).toEqual([]);
+      const larger = "WARN  Tarball download average speed 1.5 MiB/s (size 12.3 MiB) is below 2 MiB/s: https://registry.npmjs.org/a/-/a-1.0.0.tgz (GET)";
+      expect(PNPM_SLOW_TARBALL_PATTERN.test(larger)).toBe(true);
+    });
+
+    it.each([
+      ["another registry host", "WARN  Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.example.com/a/-/a-1.0.0.tgz (GET)"],
+      ["extra text after the note", "WARN  Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.npmjs.org/a/-/a-1.0.0.tgz (GET) integrity mismatch"],
+      ["a different warning about tarballs", "WARN  Tarball integrity check failed: https://registry.npmjs.org/a/-/a-1.0.0.tgz (GET)"],
+    ])("fails %s", (_label, line) => {
+      expect(PNPM_SLOW_TARBALL_PATTERN.test(line)).toBe(false);
+      expect(findUnexpectedWarnings(`${line}\n`)).toEqual([line]);
     });
   });
 

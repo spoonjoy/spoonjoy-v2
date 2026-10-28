@@ -12,6 +12,14 @@ export const EXPECTED_PRISMA_D1_TRANSACTION_WARNING =
 export const PNPM_TRANSIENT_FETCH_RETRY_PATTERN =
   /^WARN(?:  | {2})GET https:\/\/registry\.npmjs\.org\/[A-Za-z0-9@%._~\/+-]+ error \((?:ERR_PNPM_FETCH_(?:429|5\d\d)|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ERR_SOCKET_TIMEOUT)\)\. Will retry in \d+(?:\.\d+)? seconds?\. \d+ retr(?:y|ies) left\.$/;
 
+// pnpm notes a registry download slower than its threshold, then finishes it:
+//   WARN  Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.npmjs.org/@floating-ui/core/-/core-1.8.0.tgz (GET)
+// It is the registry's speed, not a fault in what was installed (Journeys run 40631270668 failed
+// its shared QA deploy on it). Only that exact shape, for the npm registry, is tolerated; a
+// download that fails still fails the install.
+export const PNPM_SLOW_TARBALL_PATTERN =
+  /^WARN(?:  | {2})Tarball download average speed \d+(?:\.\d+)? [KM]iB\/s \(size \d+(?:\.\d+)? [KM]iB\) is below \d+ [KM]iB\/s: https:\/\/registry\.npmjs\.org\/[A-Za-z0-9@%._~\/+-]+ \(GET\)$/;
+
 // Ouro HX's touch test kit (app/lib/ouro/testing/commands.ts) reports a touch command that
 // succeeded but took longer than a second on stderr, with what it waited for, so a slow CI frame
 // can be read from the log:
@@ -23,7 +31,7 @@ export const OURO_SLOW_TOUCH_TRACE_PATTERN =
   /^touch(?:Step|Drag): the touch(?:Start|Move|End) at \(-?\d+, -?\d+\) took \d+ms\. Steps: .+\. Watches: .*\. Node's event loop ran up to \d+ms late\.$/;
 
 function isTolerableTransientRetry(text: string): boolean {
-  return PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(text) || OURO_SLOW_TOUCH_TRACE_PATTERN.test(text);
+  return PNPM_TRANSIENT_FETCH_RETRY_PATTERN.test(text) || PNPM_SLOW_TARBALL_PATTERN.test(text) || OURO_SLOW_TOUCH_TRACE_PATTERN.test(text);
 }
 
 const BRACKETED_WARNING_PATTERN = /(?:^|[\s([<{])\[\s*warn(?:ings?)?(?:\s*:\s*[^\]\r\n]+)?\s*\](?::|\s|$)/i;
