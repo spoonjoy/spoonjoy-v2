@@ -13,8 +13,9 @@
 // behind the dialog) is inactive, which WCAG 1.4.3 exempts. So is a line an open popup covers (a
 // Select's list, a Menu, a Popover), as Ouro UI's audit hides it: what a popup paints over the
 // text is the popup's own. A line it covers only partly is inactive only while the popup also hides
-// the text from assistive technology. An inactive line is skipped: the element is judged by its
-// other lines, and passes as inactive only when it has no other line.
+// the text from assistive technology; otherwise it is measured with the popup hidden. An inactive
+// line is skipped: the element is judged by its other lines, and passes as inactive only when it
+// has no other line.
 import type { Locator, Page } from "@playwright/test";
 import sharp from "sharp";
 import { formatRgb, parseCssColor, requiredTextContrast, worstContrastOver, type Rgb, type Rgba } from "./contrast";
@@ -276,7 +277,12 @@ function installHelpers(): void {
     const portal = cover.closest("[data-base-ui-portal]");
     return portal && !portal.contains(element) && !portal.closest('[aria-hidden="true"], [inert]') ? portal : null;
   };
-  page.__sjContrast = { describe, lines, runs, emptyField, hideText, unfade, restore, coverAt, modalOver, popupOf };
+  // Hides a popup's layer, its shadow too, until restore().
+  const hideLayer = (layer: Element) => {
+    override(layer, "transition", "none");
+    override(layer, "opacity", "0");
+  };
+  page.__sjContrast = { describe, lines, runs, emptyField, hideText, unfade, restore, coverAt, modalOver, popupOf, hideLayer };
 }
 
 interface Helpers {
@@ -290,6 +296,7 @@ interface Helpers {
   coverAt(element: Element, x: number, y: number): Element | "nothing" | null;
   modalOver(element: Element): Element | null;
   popupOf(cover: Element, element: Element): Element | null;
+  hideLayer(layer: Element): void;
 }
 
 // Brings line `index` of the element's text into view and returns its box, or why it can't be
@@ -339,11 +346,13 @@ async function lineInView(locator: Locator, index: number): Promise<LineResult> 
       }
       // Under an open popup: the whole line, or part of it when the popup also hides the text from
       // assistive technology (Base UI's modal popups hide the rest of the page). A line a popup
-      // covers only partly, with the text still exposed, is a blocker, since what shows of it is seen.
+      // covers only partly, with the text still exposed, is measured with the popup hidden, so what
+      // shows of it is judged against what the page paints behind it.
       const popups = covers.map((cover) => (cover === "nothing" ? null : helpers.popupOf(cover, element)));
+      if (!popups.every(Boolean)) return { blocker: `line ${index + 1} is covered by ${name(covers[0])}` };
       const whole = covers.length === pointsOf(line.rect).length;
-      if (popups.every(Boolean) && (whole || hidden)) return { inactive: `behind ${name(covers[0])}, part of the open popup ${helpers.describe(popups[0]!)}` };
-      return { blocker: `line ${index + 1} is covered by ${name(covers[0])}` };
+      if (whole || hidden) return { inactive: `behind ${name(covers[0])}, part of the open popup ${helpers.describe(popups[0]!)}` };
+      for (const popup of new Set(popups)) helpers.hideLayer(popup!);
     }
     const points = pointsOf(line.rect);
 

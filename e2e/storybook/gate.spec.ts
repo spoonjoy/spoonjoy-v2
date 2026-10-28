@@ -65,7 +65,7 @@ test.describe("the story check", () => {
     expect(describeAuditFailures([await auditShownScheme(page)])).toBeNull();
   });
 
-  test("passes page text an open popup covers, and fails text it covers only partly", async ({ page }) => {
+  test("passes page text an open popup covers, and measures what shows of text it covers only partly", async ({ page }) => {
     // Faint text under a popup's layer: Base UI renders each popup in a portal of its own.
     await show(
       page,
@@ -84,7 +84,9 @@ test.describe("the story check", () => {
       text.selectNodeContents(document.querySelector("#under")!);
       (layer.firstElementChild as HTMLElement).style.width = `${text.getBoundingClientRect().width / 3}px`;
     });
-    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/line 1 is covered by/);
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/color-contrast measured 1\.\d\d:1, needs 4\.5:1/);
+    await page.evaluate(() => document.querySelector<HTMLElement>("#under")!.style.setProperty("color", "#333"));
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
   });
 });
 
