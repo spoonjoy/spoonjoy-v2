@@ -23,6 +23,9 @@ export interface PopupOptions extends AuditOptions {
 
 const WAIT = { timeout: 10_000 };
 
+// Any popup the check opens, while it is open.
+const ANY_POPUP = [openPopupSelector, ...otherPopups.map(({ popup }) => popup)].join(", ");
+
 /** How a failure names an audited popup: the trigger's name, and the kind when it is not a plain popup. */
 export const describePopup = ({ trigger, kind }: Pick<PopupAudit, "trigger" | "kind">) => (kind === "popup" ? `"${trigger}"` : `the ${kind} of "${trigger}"`);
 
@@ -82,11 +85,11 @@ export async function auditEachPopupOpen(
     if (!state.usable) continue;
     const label = describePopup({ trigger: state.name, kind });
     // The last popup's trigger keeps the pointer and gets focus back as it closes, which can show its
-    // tooltip: move both away, and let what they showed close.
+    // tooltip: move both away, and let what they showed finish closing.
     await page.mouse.move(0, 0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     try {
-      await page.waitForFunction((selector) => document.querySelector(selector) === null, `${openPopupSelector}, ${popupSelector}`, WAIT);
+      await page.waitForFunction((selector) => document.querySelector(selector) === null && document.querySelector("[data-ending-style]") === null, ANY_POPUP, WAIT);
     } catch {
       throw new Error(`A popup was already open before opening ${label}.`);
     }
@@ -127,7 +130,7 @@ export async function auditEachPopupOpen(
           WAIT,
         );
       } catch {
-        throw new Error(`Escape did not close the popup ${label} opened.`);
+        throw new Error(kind === "popup" ? `Escape did not close the popup ${label} opened.` : `${label[0]!.toUpperCase()}${label.slice(1)} did not close.`);
       }
     } finally {
       await opened?.dispose();

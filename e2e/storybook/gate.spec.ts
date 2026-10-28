@@ -75,10 +75,16 @@ test.describe("the story check", () => {
             layer.replaceChildren(popup);
           };
           const hide = () => layer.replaceChildren();
+          // As Base UI's: a press closes a tooltip, and a hover card opens on focus only from the keyboard.
+          let keyboard = false;
+          document.addEventListener("keydown", () => (keyboard = true), true);
+          document.addEventListener("pointermove", () => (keyboard = false), true);
+          document.addEventListener("pointerdown", () => (keyboard = false), true);
           document.querySelector("#basil").addEventListener("mouseenter", () => show("tooltip"));
           document.querySelector("#basil").addEventListener("mouseleave", hide);
+          document.querySelector("#basil").addEventListener("pointerdown", hide);
           document.querySelector("#herbs").addEventListener("click", () => show("navigation-menu-popup"));
-          document.querySelector("#thyme").addEventListener("focus", () => show("hover-card"));
+          document.querySelector("#thyme").addEventListener("focus", () => keyboard && show("hover-card"));
           document.querySelector("#thyme").addEventListener("blur", hide);
           document.addEventListener("keydown", (event) => event.key === "Escape" && hide());
         </script>`,
