@@ -5,13 +5,13 @@
 // body without Storybook's chrome, with every rule: the `page` global renders the story in <main>
 // with its popups at the end of it, as the app does (.storybook/preview.tsx), so the landmark rule
 // (`region`) fails content outside every landmark. Then each popup the story can open (a Select's
-// list, a Menu, a Combobox's list, a Popover, a Dialog, a navigation panel) is opened in turn and
-// checked the same way, as Ouro UI's own story check does, since a popup's content exists only
-// while it is open.
+// list, a Menu, a Combobox's list, a Popover, a Dialog, a navigation panel, a tooltip, a hover card)
+// is opened in turn and checked the same way, as Ouro UI's own story check does, since a popup's
+// content exists only while it is open.
 import { readFileSync } from "node:fs";
 import { test } from "../ouro-fixtures";
 import { COLOR_SCHEMES, auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
-import { auditEachPopupOpen, type PopupAudit } from "./popups";
+import { auditEachPopupOpen, describePopup, type PopupAudit } from "./popups";
 
 interface IndexEntry {
   type: string;
@@ -68,9 +68,9 @@ for (const story of stories) {
       if (opened.length > 0) await testInfo.attach("accessibility with each popup open", { body: JSON.stringify(opened, null, 2), contentType: "application/json" });
       const failures = [
         describeAuditFailures([audit]),
-        ...opened.map(({ trigger, audit: open }) => {
-          const failure = describeAuditFailures([open]);
-          return failure && `With "${trigger}" open:\n${failure}`;
+        ...opened.map((popup) => {
+          const failure = describeAuditFailures([popup.audit]);
+          return failure && `With ${describePopup(popup)} open:\n${failure}`;
         }),
         openError,
       ].filter(Boolean);

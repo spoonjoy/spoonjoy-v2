@@ -7,7 +7,7 @@ import { AXE_EXCLUDE } from "../journeys/support/axe";
 import { auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
 import { measureTextContrast } from "../journeys/support/rendered-contrast";
 import { verifyHiddenFocus } from "../journeys/support/undecided-checks";
-import { auditEachPopupOpen } from "./popups";
+import { auditEachPopupOpen, describePopup } from "./popups";
 
 async function show(page: Page, body: string) {
   await page.setContent(`<!doctype html><html lang="en"><head><title>Gate</title></head><body style="margin:0;font:16px/1.5 sans-serif">${body}</body></html>`);
@@ -52,6 +52,42 @@ test.describe("the story check", () => {
     expect(opened.map(({ trigger }) => trigger)).toEqual(["Herbs"]);
     expect(describeAuditFailures(opened.map(({ audit }) => audit))).toMatch(/violation aria-command-name \(/);
     await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  });
+
+  test("hovers each tooltip's trigger, presses each navigation panel's and focuses each hover card's from the keyboard, and fails what only the open popup holds", async ({ page }) => {
+    // Each popup holds an image without a name, and exists only while it is open, as Base UI renders it.
+    await show(
+      page,
+      `<main><h1>Gate</h1><button type="button" id="basil" data-base-ui-tooltip-trigger="">Basil</button>` +
+        `<button type="button" id="herbs" data-ouro-control="navigation-menu" data-ouro-part="trigger">Herbs</button>` +
+        `<a href="#thyme" id="thyme" data-ouro-hover-card-trigger="">Thyme</a><div id="layer"></div></main>` +
+        `<script>
+          const layer = document.querySelector("#layer");
+          const show = (kind) => {
+            const popup = document.createElement("div");
+            popup.setAttribute("data-ouro", kind);
+            popup.setAttribute("data-open", "");
+            const image = document.createElement("img");
+            image.src = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+            image.width = 8;
+            image.height = 8;
+            popup.append(image);
+            layer.replaceChildren(popup);
+          };
+          const hide = () => layer.replaceChildren();
+          document.querySelector("#basil").addEventListener("mouseenter", () => show("tooltip"));
+          document.querySelector("#basil").addEventListener("mouseleave", hide);
+          document.querySelector("#herbs").addEventListener("click", () => show("navigation-menu-popup"));
+          document.querySelector("#thyme").addEventListener("focus", () => show("hover-card"));
+          document.querySelector("#thyme").addEventListener("blur", hide);
+          document.addEventListener("keydown", (event) => event.key === "Escape" && hide());
+        </script>`,
+    );
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
+    const opened = await auditEachPopupOpen(page, "main", { target: "story" });
+    expect(opened.map(describePopup)).toEqual(['the tooltip of "Basil"', 'the navigation panel of "Herbs"', 'the hover card of "Thyme"']);
+    for (const { audit } of opened) expect(describeAuditFailures([audit])).toMatch(/violation image-alt \(/);
+    await expect(page.locator("#layer > *")).toHaveCount(0);
   });
 
   test("leaves out what Ouro UI's gate leaves out: Base UI's focus guards", async ({ page }) => {
