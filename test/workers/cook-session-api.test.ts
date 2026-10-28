@@ -9,6 +9,8 @@ function storageReset() {
   return Object.assign(new Error(RESET_MESSAGE), { retryable: true });
 }
 
+const replayed = (call: string) => JSON.stringify({ event: "platform_retry", call, attempt: 2 });
+
 function request(operation: "detail" | "start" | "patch" = "detail") {
   const body = operation === "patch" ? JSON.stringify({
     attemptId: "11111111-1111-4111-8111-111111111111",
@@ -71,6 +73,7 @@ describe("cook-session reads after a storage reset", () => {
       terminalAt: null,
     };
     const { env, get, requests } = environment(storageReset(), Response.json({ state }));
+    expectConsoleWarning(replayed("cook_session.read"));
 
     const response = await handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
 
@@ -91,6 +94,7 @@ describe("cook-session reads after a storage reset", () => {
   it("propagates a second failure instead of retrying without a bound", async () => {
     const second = storageReset();
     const { env, get } = environment(storageReset(), second);
+    expectConsoleWarning(replayed("cook_session.read"));
 
     await expect(handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true }))
       .rejects.toBe(second);
@@ -113,11 +117,54 @@ describe("cook-session reads after a storage reset", () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 
-  it.each(["start", "patch"] as const)("never replays a %s write after a retryable failure", async (operation) => {
+  it("never replays a progress write after a retryable failure", async () => {
     const error = storageReset();
     const { env, get } = environment(error);
 
-    await expect(handleCookSessionProtocolRequest(request(operation), env, "user-1", operation, { requireExpectedUser: true }))
+    await expect(handleCookSessionProtocolRequest(request("patch"), env, "user-1", "patch", { requireExpectedUser: true }))
+      .rejects.toBe(error);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays a start once, with a fresh stub, after a retryable failure, because a start resumes the session it finds", async () => {
+    const state = {
+      version: 1,
+      recipeId: "recipe-1",
+      attemptId: "11111111-1111-4111-8111-111111111111",
+      status: "active",
+      revision: 0,
+      progress: {
+        activeStepIndex: 0,
+        activeStepId: null,
+        scaleFactor: 1,
+        checkedIngredientIds: [],
+        checkedStepOutputIds: [],
+      },
+      startedAt: "2026-10-27T19:30:00.000Z",
+      updatedAt: "2026-10-27T19:30:00.000Z",
+      terminalAt: null,
+    };
+    const { env, get, requests } = environment(storageReset(), Response.json({ state }, { status: 200 }));
+    expectConsoleWarning(replayed("cook_session.start"));
+
+    const response = await handleCookSessionProtocolRequest(request("start"), env, "user-1", "start", { requireExpectedUser: true });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ state });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(requests.map((sent) => `${sent.method} ${sent.url}`)).toEqual([
+      "POST https://cook-session.internal/api/cook-sessions/recipe-1/start",
+      "POST https://cook-session.internal/api/cook-sessions/recipe-1/start",
+    ]);
+  });
+
+  it.each([
+    ["unmarked errors", new Error(RESET_MESSAGE)],
+    ["overloaded objects", Object.assign(storageReset(), { overloaded: true })],
+  ])("does not replay a start for %s", async (_name, error) => {
+    const { env, get } = environment(error);
+
+    await expect(handleCookSessionProtocolRequest(request("start"), env, "user-1", "start", { requireExpectedUser: true }))
       .rejects.toBe(error);
     expect(get).toHaveBeenCalledTimes(1);
   });
@@ -314,6 +361,7 @@ describe("cook-session calls that wait over a second", () => {
       SPOONJOY_QA_ERROR_LOGS: "1",
     } as unknown as CloudflareEnvironment;
 
+    expectConsoleWarning(replayed("cook_session.read"));
     const pending = handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
     await vi.advanceTimersByTimeAsync(100);
     expectConsoleWarning(JSON.stringify({

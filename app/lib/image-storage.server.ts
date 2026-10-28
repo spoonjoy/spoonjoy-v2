@@ -1,4 +1,5 @@
 import { photoVariantKeys } from "~/lib/photo-variants";
+import { putWithTransientRetry } from "~/lib/r2-transient-retry.server";
 import { FOOD_IMAGE_TYPES, IMAGE_MAX_FILE_SIZE } from "~/lib/recipe-image";
 import {
   captureEvent,
@@ -583,7 +584,7 @@ export async function storeImage({
   const key = `${namespace}/${now()}-${randomId()}.${getImageExtension(file.name)}`;
   const storedFile = await stripUploadMetadata(file);
 
-  await bucket.put(key, storedFile, {
+  await putWithTransientRetry(bucket, key, storedFile, {
     httpMetadata: {
       contentType: storedFile.type,
     },

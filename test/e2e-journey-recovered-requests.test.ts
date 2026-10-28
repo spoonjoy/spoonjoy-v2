@@ -94,6 +94,16 @@ describe("the console gate and lost requests", () => {
     ])).resolves.toBeUndefined();
   });
 
+  it("passes when a page load reset before any answer was loaded again (support/app-ready.ts)", async () => {
+    // Journeys run 40592921397: WebKit's log for the landing page's reset load, at the page's URL.
+    const landing = "https://spoonjoy-v2-qa-run-40592921397-1.mendelow-studio.workers.dev/";
+    await expect(gate([
+      { failed: ["GET", landing, null] },
+      { log: RESET, url: landing },
+      { answered: ["GET", landing, null] },
+    ])).resolves.toBeUndefined();
+  });
+
   it.each([
     ["never sent again", [{ failed: ["POST", RENAME] }, { log: RESET, url: RENAME }]],
     ["sent again without an answer", [{ failed: ["POST", RENAME] }, { log: RESET, url: RENAME }, { failed: ["POST", RENAME] }]],

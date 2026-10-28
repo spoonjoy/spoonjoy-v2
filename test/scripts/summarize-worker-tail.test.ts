@@ -98,6 +98,7 @@ describe("summarize-worker-tail.jq", () => {
       "lastEventTimestamp",
       "nonOkInvocations",
       "outcomes",
+      "platformRetries",
       "serverErrorInvocations",
       "slowCalls",
       "slowest",
@@ -232,6 +233,20 @@ describe("summarize-worker-tail.jq", () => {
     expect(summary.d1ReadReissues).toEqual({ total: 4, answeredByReissue: 1, failedBoth: 1 });
     expect(raw).not.toContain(CANARIES.query);
     expect(raw).not.toContain(CANARIES.body);
+  });
+
+  it("counts the platform faults our code tried again, by call label alone", () => {
+    const line = (call: unknown) => JSON.stringify({ event: "platform_retry", call, attempt: 2, code: "10001", key: CANARIES.query });
+    const { summary, raw } = summarize([
+      { outcome: "ok", logs: [{ level: "warn", message: [line("r2.put")] }, { level: "warn", message: [line("r2.put")] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: [{ event: "platform_retry", call: "cook_session.start" }] }, { level: "warn", message: [line(CANARIES.body)] }] },
+      { outcome: "ok", logs: [{ level: "warn", message: ["not json"] }] },
+    ]);
+
+    expect(summary.platformRetries).toEqual({ total: 4, byCall: { "cook_session.start": 1, other: 1, "r2.put": 2 } });
+    expect(raw).not.toContain(CANARIES.query);
+    expect(raw).not.toContain(CANARIES.body);
+    expect(summarize([]).summary.platformRetries).toEqual({ total: 0, byCall: {} });
   });
 
   it("counts the writes an operation retried safely, found applied or gave up on, and leaves out of notRetriedWrites the ones it handled", () => {
@@ -803,6 +818,32 @@ describe("Journeys workflow tail wiring", () => {
       "::warning::Worker hangs: 11 request(s) failed with Error 1101 because the Workers runtime detected hung code. See hungInvocations and nonOkInvocations in worker-tail-summary.json.",
     );
     expect(warn({ hungInvocations: 0, stalledInvocations: 3 })).toBe("");
+    expect(warn({})).toBe("");
+  });
+
+  it("warns, without failing, on every request over 5 s whatever held it, with the longest", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(\[\.slowest\[\][\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    // Journeys run 40590368708: three isolates waited on D1 at the same moment.
+    expect(warn({ slowest: [{ wallTime: 11681 }, { wallTime: 7195 }, { wallTime: 4487 }] }).trimEnd()).toBe(
+      "::warning::Slow requests: 2 took over 5 s, the longest 11681 ms. See slowest, stalledRequests and slowCalls in worker-tail-summary.json.",
+    );
+    expect(warn({ slowest: Array.from({ length: 25 }, () => ({ wallTime: 6000 })) }).trimEnd()).toContain("Slow requests: 25 or more took over 5 s");
+    expect(warn({ slowest: [{ wallTime: 5000 }] })).toBe("");
+    expect(warn({})).toBe("");
+  });
+
+  it("warns, without failing, on the platform faults our code tried again, by call", () => {
+    const run = step("Stop QA Worker tail and summarise it").run ?? "";
+    const filter = /jq -r '(select\(\(\.platformRetries[\s\S]*?)' \\\n/.exec(run)?.[1];
+    expect(filter).toBeDefined();
+    const warn = (summary: object) => execFileSync("jq", ["-r", filter!], { input: JSON.stringify(summary), encoding: "utf8" });
+    expect(warn({ platformRetries: { total: 3, byCall: { "cook_session.start": 1, "r2.put": 2 } } }).trimEnd()).toBe(
+      "::warning::Platform retries: 3 call(s) tried again after a platform fault (cook_session.start 1, r2.put 2). See platformRetries in worker-tail-summary.json.",
+    );
+    expect(warn({ platformRetries: { total: 0, byCall: {} } })).toBe("");
     expect(warn({})).toBe("");
   });
 

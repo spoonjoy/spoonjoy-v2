@@ -91,7 +91,7 @@ export const DEFAULT_D1_RETRY_DELAYS_MS: readonly number[] = [50, 150, 400];
 
 /**
  * Longer than the slow D1 calls that still answer (about 1.0 to 1.2 s in Journeys runs), well
- * under a journey's five-second wait.
+ * under a journey's 15 s wait (playwright.journeys.config.ts).
  */
 export const DEFAULT_D1_READ_REISSUE_MS = 1500;
 
