@@ -3115,13 +3115,13 @@ describe("Recipes $id Route", () => {
       );
       await screen.findByRole("heading", { name: "Retry Add Recipe" });
       await user.click(screen.getByTestId("recipe-header-list-action"));
-      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
+      expect(await screen.findByRole("alertdialog", { name: message })).toBeInTheDocument();
       await user.click(screen.getByTestId("recipe-header-list-action"));
       expect(await screen.findByRole("dialog", { name: "1 items added at 1x" })).toBeInTheDocument();
       await user.click(screen.getByTestId("recipe-header-list-action"));
       await waitFor(() => expect(tokens).toHaveLength(3));
       // Let the third answer render before the test ends, so its toast update lands inside act().
-      await waitFor(() => expect(screen.getAllByRole("alert").some((alert) => alert.textContent?.includes(message))).toBe(true));
+      await waitFor(() => expect(screen.getAllByRole("alertdialog", { name: message })).toHaveLength(2));
 
       expect(tokens[0]).toMatch(/^[\w-]{8,}$/);
       // The tap after the 503 is the same add; the tap after a success is a new one.

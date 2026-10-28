@@ -1913,6 +1913,7 @@ describe("Cookbooks $id Route", () => {
         expect(rejected).toHaveAttribute("aria-invalid", "true");
         expect(rejected).toHaveAccessibleDescription("You already have a cookbook with this title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(screen.queryByText("You already have a cookbook with this title")).not.toBeInTheDocument();
@@ -1961,6 +1962,7 @@ describe("Cookbooks $id Route", () => {
         expect(await screen.findByText(/Spoonjoy couldn't save that just now\./)).toBeInTheDocument();
         expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
       });
 
       // Journeys run 39838941793: the second Save's request got no answer (WebKit's TLS handshake
@@ -2097,7 +2099,7 @@ describe("Cookbooks $id Route", () => {
           fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
           fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-          expect(await screen.findByRole("alertdialog", { name: /^Spoonjoy couldn't be reached/ })).toBeInTheDocument();
+          expect(await screen.findByRole("alertdialog", { name: "Spoonjoy couldn't be reached. Check your connection and try again." })).toBeInTheDocument();
           expect(sent).toEqual(["intent=delete"]);
           await waitFor(() => {
             expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -2118,7 +2120,7 @@ describe("Cookbooks $id Route", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Delete cookbook" }));
         fireEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
-        expect(await screen.findByRole("alertdialog", { name: /^Spoonjoy couldn't save that just now\./ })).toBeInTheDocument();
+        expect(await screen.findByRole("alertdialog", { name: "Spoonjoy couldn't save that just now. Please try again in a moment." })).toBeInTheDocument();
         // The page stays, and the dialog finishes closing before the test ends.
         await waitFor(() => {
           expect(screen.queryByText("Delete this cookbook?")).not.toBeInTheDocument();
@@ -2137,6 +2139,7 @@ describe("Cookbooks $id Route", () => {
           expect(screen.getByRole("textbox", { name: "Cookbook title" })).toHaveValue("Renamed Title");
         });
         expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("dialog")).not.toBeInTheDocument();
+        expect(within(screen.getByRole("region", { name: "Notifications" })).queryByRole("alertdialog")).not.toBeInTheDocument();
         expect(queryShownAlert()).toBeNull();
       });
     });
