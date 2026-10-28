@@ -34,13 +34,13 @@ interface GateFinding {
   rule: string;
   /** axe's impact, if it gave one, else null. */
   impact: string | null;
-  /** axe's one-line help for the rule. */
+  /** axe's one-line help for the rule, or the kit's for a placeholder, which axe does not check. */
   help: string;
   /** The node's selector. */
   target: string;
   /** Why it fails: axe's own summary, or what the measurement found. */
   summary: string;
-  /** True when axe left it undecided (`incomplete`) and a measurement failed it. */
+  /** True when a measurement failed it: one axe left undecided (`incomplete`), or a placeholder, which axe does not check. */
   undecided: boolean;
 }
 
@@ -82,6 +82,10 @@ function describeFindings(findings: GateFinding[]): string {
  * - an ARIA toggle inside a `<label>`, only when its name and description hold every word of the label;
  * - a field with two labels, only when `aria-labelledby` names it.
  *
+ * It also measures the placeholder of each field that shows one, which axe leaves out, as it
+ * measures text, and fails one below WCAG 1.4.3 as `color-contrast`. Like axe's contrast rule, it
+ * leaves out a disabled or inert field and one that does not show.
+ *
  * Anything else axe could not decide fails with axe's own message. A node that leaves the page
  * while it is measured means the page changed under the scan, so it scans the page again, and on
  * the third scan such a node fails. It throws on an axe-core older than the kit's minimum
@@ -103,6 +107,8 @@ function describeFindings(findings: GateFinding[]): string {
  * @claim "focusable content hidden from assistive technology," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a control hidden from assistive technology under a modal when Tab still reaches it, and passes it when the page is inert)
  * @claim "focusable content hidden from assistive technology," registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a control hidden at rest that shows itself in the event that focuses it, as a toast's dismiss button does)
  * @claim "an ARIA toggle inside a `<label>`, only" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a toggle inside a <label> whose text is its name and description, and fails one whose label says more)
+ * @claim "Like axe's contrast rule, it" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves out a placeholder axe leaves out: aria-disabled, inert under a modal dialog, off the page or clipped away)
+ * @claim "It also measures the placeholder of" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a faint placeholder, as Tailwind's base styles draw one at half the text color, and passes one that meets 4.5:1)
  * @claim "Anything else axe could not decide" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails what axe could not decide and the kit does not measure, with axe's own message)
  * @claim "It throws on an axe-core older than the kit's minimum" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > refuses an axe-core older than the kit's minimum, naming the version it needs and the version it found)
  * @claim "A node that leaves the page" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > scans the page again when a node it found leaves the page while it is measured, as a Searching… line does)
@@ -176,7 +182,7 @@ async function auditOnce(context: axe.ElementContext, last: boolean): Promise<Ga
   };
   // Text is measured in groups, one screenshot each: the largest box around it that fits the
   // screen, so a card's or a chart's text shares one picture.
-  const byRoot = new Map<Element, { node: axe.NodeResult; element: Element; required: number }[]>();
+  const byRoot = new Map<Element, Measured[]>();
   for (const { rule, node } of undecided) {
     if (rule.id !== "color-contrast") continue;
     const element = elementOf(node);
@@ -188,13 +194,20 @@ async function auditOnce(context: axe.ElementContext, last: boolean): Promise<Ga
     const root = screenRoot(element);
     byRoot.set(root, [...(byRoot.get(root) ?? []), { node, element, required: requiredRatio(element, data?.expectedContrastRatio) }]);
   }
+  // axe does not measure a placeholder, so the kit measures each one that shows.
+  for (const field of placeholderFields(context)) {
+    const root = screenRoot(field);
+    byRoot.set(root, [...(byRoot.get(root) ?? []), { node: null, element: field, required: requiredRatio(field, undefined, "::placeholder"), placeholder: true }]);
+  }
+  const placeholderFindings: GateFinding[] = [];
   for (const [root, items] of byRoot) {
     const verdicts = await measureTexts(root, items, last);
     for (const [index, item] of items.entries()) {
       // Scrolled for the group, a sticky part of the page can sit over the text: measured alone,
       // centered on the screen, it shows as a reader scrolls to it.
       const verdict = verdicts[index]!.pass || root === item.element ? verdicts[index]! : (await measureTexts(item.element, [item], last))[0]!;
-      measured.set(item.node, verdict);
+      if (item.node) measured.set(item.node, verdict);
+      else if (!verdict.pass) placeholderFindings.push({ rule: "color-contrast", impact: "serious", help: placeholderHelp, target: selectorOf(item.element), summary: verdict.reason, undecided: true });
     }
   }
   // A link in a block of text whose colors axe could not read, as when an open list lies over the
@@ -227,7 +240,172 @@ async function auditOnce(context: axe.ElementContext, last: boolean): Promise<Ga
     if (verdict.pass) continue;
     findings.push({ rule: rule.id, impact: rule.impact ?? null, help: rule.help, target: node.target.join(" "), summary: verdict.reason, undecided: true });
   }
-  return findings;
+  return [...findings, ...placeholderFindings];
+}
+
+/** Text {@link measureTexts} measures: a node axe could not decide, or the placeholder of a field, which axe leaves out. */
+interface Measured {
+  node?: axe.NodeResult | null;
+  element: Element;
+  required: number;
+  placeholder?: boolean;
+}
+
+const placeholderHelp = "Placeholder text must have sufficient color contrast with the field behind it";
+
+// Where a field's placeholder is drawn: its lines, as wide as the text, in the field's content box
+// (centered in an input, from the top in a textarea). Not the whole content box, whose edge can
+// touch the field's border.
+function placeholderBoxes(field: HTMLInputElement | HTMLTextAreaElement): DOMRect[] {
+  const [content] = textBoxes(field);
+  const style = getComputedStyle(field, "::placeholder");
+  const size = Number.parseFloat(style.fontSize);
+  const line = Number.parseFloat(style.lineHeight) || size * 1.2;
+  const measure = document.createElement("canvas").getContext("2d")!;
+  measure.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  const cased = style.textTransform === "uppercase" ? field.placeholder.toUpperCase() : style.textTransform === "lowercase" ? field.placeholder.toLowerCase() : field.placeholder;
+  const spacing = Number.parseFloat(style.letterSpacing) || 0;
+  // A textarea shows each line of its placeholder, wrapped to its width; an input shows one line.
+  const widths = (field instanceof HTMLTextAreaElement ? cased.split("\n") : [cased.replace(/\n/g, "")]).map((text) => measure.measureText(text).width + spacing * text.length);
+  const wide = Math.max(...widths);
+  const lines = field instanceof HTMLTextAreaElement ? widths.reduce((sum, width) => sum + Math.max(1, Math.ceil(width / content!.width)), 0) : 1;
+  const height = Math.min(content!.height, line * lines);
+  const width = Math.min(content!.width, wide);
+  const top = field instanceof HTMLTextAreaElement ? content!.top : content!.top + (content!.height - height) / 2;
+  const align = style.textAlign;
+  const end = align === "right" || align === "-webkit-right" || (align === "end" && style.direction !== "rtl") || (align === "start" && style.direction === "rtl");
+  const left = align === "center" || align === "-webkit-center" ? content!.left + (content!.width - width) / 2 : end ? content!.right - width : content!.left;
+  return [new DOMRect(left, top, width, height)];
+}
+
+// The text fields within `context` that show a placeholder, leaving out those axe's color-contrast
+// rule leaves out: a disabled field (`disabled` or `aria-disabled`), whose text need not meet
+// WCAG 1.4.3, an inert one (under `inert`, or outside an open modal <dialog>), and one that does
+// not show (hidden, off the page, or clipped away).
+function placeholderFields(context: axe.ElementContext): HTMLElement[] {
+  const spec = context as { include?: unknown; exclude?: unknown };
+  const object = typeof spec === "object" && spec !== null && !(spec instanceof Node) && !isList(spec) && ("include" in spec || "exclude" in spec);
+  // axe scans the whole page for a missing or empty include.
+  const empty = (part: unknown) => isList(part) && Array.from(part).length === 0;
+  const whole = object ? spec.include === undefined || empty(spec.include) : empty(context);
+  const include = whole ? [document.documentElement] : contextElements(object ? spec.include : context);
+  const exclude = object && spec.exclude !== undefined ? contextElements(spec.exclude) : [];
+  const modal = topModal();
+  return elementsWithin(document).filter(
+    (element): element is HTMLElement =>
+      (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) &&
+      element.matches(":placeholder-shown:enabled") &&
+      element.placeholder.trim() !== "" &&
+      !closestAcross(element, '[aria-disabled="true"], [inert]') &&
+      (!modal || holds(modal, element)) &&
+      shows(element) &&
+      include.some((root) => holds(root, element)) &&
+      !exclude.some((root) => holds(root, element)),
+  );
+}
+
+/** Whether a value is a list of nodes or selectors: an array, a NodeList, an HTMLCollection. */
+const isList = (value: unknown): value is ArrayLike<unknown> =>
+  Array.isArray(value) || value instanceof NodeList || value instanceof HTMLCollection;
+
+// The element or its nearest ancestor matching `selector`, across the shadow roots between them.
+function closestAcross(element: Element, selector: string): Element | null {
+  for (let node: Element | null = element; node; node = node.parentElement ?? (node.getRootNode() instanceof ShadowRoot ? (node.getRootNode() as ShadowRoot).host : null)) {
+    if (node.matches(selector)) return node;
+  }
+  return null;
+}
+
+// The open modal <dialog> on top, which leaves the rest of the page inert, or null. The top layer
+// keeps the order dialogs opened in, which the page cannot read, so the one at its own center is it.
+function topModal(): Element | null {
+  const modals = [...document.querySelectorAll("dialog:modal")];
+  const onTop = modals.find((dialog) => {
+    const box = dialog.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return hit !== null && dialog.contains(hit);
+  });
+  return onTop ?? modals.at(-1) ?? null;
+}
+
+// Whether an element shows: visible, with a size, on the page and not clipped away by a box around
+// it that hides what overflows it. A box that scrolls does not count: the field is scrolled to before
+// it is measured. Nor does a box that the element is positioned outside of.
+function shows(element: Element): boolean {
+  if (!element.checkVisibility({ visibilityProperty: true, opacityProperty: true })) return false;
+  const box = element.getBoundingClientRect();
+  if (box.width <= 1 || box.height <= 1 || box.right + window.scrollX <= 0 || box.bottom + window.scrollY <= 0) return false;
+  const { position } = getComputedStyle(element);
+  if (position === "fixed") return true;
+  // An absolutely positioned element escapes the boxes between it and the one it is positioned in.
+  const container = position === "absolute" ? (element as HTMLElement).offsetParent : null;
+  let escaped = container !== null;
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    if (parent === container) escaped = false;
+    if (escaped) continue;
+    const style = getComputedStyle(parent);
+    const clips = (value: string) => value === "hidden" || value === "clip";
+    if (!clips(style.overflowX) && !clips(style.overflowY)) continue;
+    const clip = parent.getBoundingClientRect();
+    if (Math.min(box.right, clip.right) - Math.max(box.left, clip.left) <= 1 || Math.min(box.bottom, clip.bottom) - Math.max(box.top, clip.top) <= 1) return false;
+  }
+  return true;
+}
+
+// The elements an axe context names: nodes, selectors, and paths into open shadow roots. A
+// selector into a frame names nothing here, as the kit measures only the page itself.
+function contextElements(part: unknown): Element[] {
+  if (part instanceof Document) return [part.documentElement];
+  if (part instanceof ShadowRoot) return [...part.children];
+  if (part instanceof Element) return [part];
+  if (typeof part === "string") return [...document.querySelectorAll(part)];
+  if (part instanceof NodeList || part instanceof HTMLCollection) return [...part].flatMap((node) => contextElements(node));
+  if (typeof part === "object" && part !== null && "fromShadowDom" in part) return throughShadow((part as { fromShadowDom: string[] }).fromShadowDom);
+  // A path through frames of one step stays on the page.
+  if (typeof part === "object" && part !== null && "fromFrames" in part) {
+    const steps = (part as { fromFrames: unknown[] }).fromFrames;
+    return steps.length === 1 ? (Array.isArray(steps[0]) ? throughShadow(steps[0] as string[]) : contextElements(steps[0])) : [];
+  }
+  if (!Array.isArray(part)) return [];
+  // In a list, an entry that is an array is a path through frames: one step stays on the page.
+  return part.flatMap((entry) => (!Array.isArray(entry) ? contextElements(entry) : entry.length !== 1 ? [] : Array.isArray(entry[0]) ? throughShadow(entry[0]) : contextElements(entry[0])));
+}
+
+// The elements a path of selectors names, each step inside the open shadow roots of the last.
+function throughShadow(path: string[]): Element[] {
+  let found: Element[] = [document.documentElement];
+  for (const [index, selector] of path.entries()) {
+    found = found.flatMap((host) => {
+      const scope = index === 0 ? document : host.shadowRoot;
+      return scope ? [...scope.querySelectorAll(selector)] : [];
+    });
+  }
+  return found;
+}
+
+// Whether `root` holds `element`, across the shadow roots between them.
+function holds(root: Element, element: Element): boolean {
+  for (let node: Node | null = element; node; node = node instanceof ShadowRoot ? node.host : node.parentNode) if (node === root) return true;
+  return false;
+}
+
+// A selector for an element, for a finding: its id, or its place under the nearest ancestor with one.
+// Inside a shadow root, the host's selector comes first, then the path within the root, as
+// Playwright's CSS selectors reach into open shadow roots.
+function selectorOf(element: Element): string {
+  const root = element.getRootNode() as Document | ShadowRoot;
+  const steps: string[] = [];
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    if (node.id && root.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1) {
+      steps.unshift(`#${CSS.escape(node.id)}`);
+      break;
+    }
+    const siblings = node.parentElement ? [...node.parentElement.children] : [...root.children];
+    const kin = siblings.filter((sibling) => sibling.localName === node!.localName);
+    steps.unshift(kin.length > 1 ? `${node.localName}:nth-of-type(${kin.indexOf(node) + 1})` : node.localName);
+  }
+  const path = steps.join(" > ");
+  return root instanceof ShadowRoot ? `${selectorOf(root.host)} ${path}` : path;
 }
 
 /** The checks a node did not pass: in axe's results, an undecided node lists only those. */
@@ -394,10 +572,10 @@ function selectionOf(focused: Element | null): () => void {
 
 // The contrast WCAG 1.4.3 asks of the element's text: axe's own figure when it gave one, else 3:1
 // for large text (24px, or 18.66px bold) and 4.5:1 for the rest.
-function requiredRatio(element: Element, expected: string | undefined): number {
+function requiredRatio(element: Element, expected: string | undefined, pseudo: string | null = null): number {
   const stated = expected ? Number.parseFloat(expected) : Number.NaN;
   if (Number.isFinite(stated)) return stated;
-  const style = getComputedStyle(element);
+  const style = getComputedStyle(element, pseudo);
   const size = Number.parseFloat(style.fontSize);
   const bold = Number.parseInt(style.fontWeight, 10) >= 700;
   return size >= 24 || (bold && size >= 18.66) ? 3 : 4.5;
@@ -526,6 +704,16 @@ async function settleTransitions(): Promise<void> {
   await Promise.race([finished, new Promise((resolve) => setTimeout(resolve, 3000))]);
 }
 
+// Whether an element shows, with an area, and its box stays where it is over a frame. As Playwright
+// does, a box hidden with `visibility` does not show.
+async function showsAndHoldsStill(element: Element): Promise<boolean> {
+  const before = element.getBoundingClientRect();
+  if (!element.isConnected || !element.checkVisibility({ visibilityProperty: true }) || before.width === 0 || before.height === 0) return false;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  const after = element.getBoundingClientRect();
+  return element.isConnected && after.x === before.x && after.y === before.y && after.width === before.width && after.height === before.height;
+}
+
 // The element's box as a canvas, two frames after a change to what it shows. Only the element is
 // taken: the browser paints a whole long page's screenshot wrongly away from where it is scrolled.
 async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
@@ -533,7 +721,18 @@ async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
   const image = new Image();
   // `caret: "initial"`: hiding the caret, Playwright leaves an empty style attribute on the focused
   // field. The measuring rules hide the caret themselves.
-  image.src = `data:image/png;base64,${await page.screenshot({ save: false, element, animations: "disabled", caret: "initial", timeout: 5000 })}`;
+  const take = () => page.screenshot({ save: false, element, animations: "disabled", caret: "initial", timeout: 5000 });
+  let data: string;
+  try {
+    data = await take();
+  } catch (error) {
+    // Vitest's Node process, which runs Playwright, can stall for seconds on other work while the
+    // page holds still, and the stall counts against the limit. A box that shows and holds still
+    // did not hold the screenshot up, so it gets one more try; a box with no area never shows.
+    if (!/Timeout/.test((error as Error).message) || !(await showsAndHoldsStill(element))) throw error;
+    data = await take();
+  }
+  image.src = `data:image/png;base64,${data}`;
   await image.decode();
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
@@ -544,6 +743,15 @@ async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
 }
 
 /**
+ * What keeps the page still while a measuring rule goes on and comes off: no color it changes
+ * eases there or back, as a link's underline does over its transition. A document's style sheet
+ * does not reach into shadow roots, so an element there can still ease.
+ *
+ * @claim "no color it changes eases there or back" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no transition running when it is done, its own text's or a link's elsewhere on the page)
+ */
+const still = "body *, body *::before, body *::after { transition: none !important; } ";
+
+/**
  * The rule that hides glyphs while the page behind them is screenshotted: the element's, and all
  * other text on the page too, as a tall heading's descenders reach into the line below, except
  * other text drawn over the element's, which is what it is seen against.
@@ -552,12 +760,22 @@ async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
  * @claim "except other text drawn over the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails text that other text is drawn over, as a tag without a background over a line)
  */
 const hideGlyphs =
+  still +
   "body * { -webkit-text-fill-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; caret-color: transparent !important; } " +
   "[data-ouro-measure-keep] { -webkit-text-fill-color: currentcolor !important; } " +
   "svg text, svg tspan { fill: transparent !important; stroke: transparent !important; } " +
   "[data-ouro-measure], [data-ouro-measure] * { color: transparent !important; -webkit-text-fill-color: transparent !important; " +
   "fill: transparent !important; stroke: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; caret-color: transparent !important; transition: none !important; } " +
-  "[data-ouro-measure-layer] { opacity: 0 !important; transition: none !important; }";
+  "[data-ouro-measure-layer] { opacity: 0 !important; transition: none !important; } " +
+  "::placeholder { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; }";
+
+// Takes a measuring rule off the page without easing back what it changed: the page takes its own
+// colors again while nothing eases, so nothing is left in motion for the next measurement to wait for.
+function lift(rule: HTMLStyleElement): void {
+  rule.textContent = still;
+  document.documentElement.getBoundingClientRect();
+  rule.remove();
+}
 
 /**
  * Measures text contrast that axe could not judge: waits for running transitions, hides the
@@ -566,8 +784,8 @@ const hideGlyphs =
  * is what the text is seen against.
  * Passes when the text color, as painted over that pixel, meets `required` (4.5 or 3). Where an open
  * popup covers the text (its shadow too), the covered part is hidden while it is open, and only what
- * still shows is measured. It puts back every scroll position it moves, and leaves nothing on the
- * focused field.
+ * still shows is measured. It puts back every scroll position it moves, leaves nothing on the
+ * focused field, and leaves no color easing outside shadow roots.
  *
  * @example
  * const verdict = await measureTextContrast(label, 4.5);
@@ -582,6 +800,7 @@ const hideGlyphs =
  * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back every scroll position it moves to measure text, the page's and a scrolled box's)
  * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back the scroll position of a scrolled box inside a shadow root)
  * @claim "leaves nothing on the focused field" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no trace on the focused field when it screenshots the page)
+ * @claim "and leaves no color easing" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no transition running when it is done, its own text's or a link's elsewhere on the page)
  */
 async function measureTextContrast(element: Element, required: number): Promise<Verdict> {
   return keepingScroll(async () => (await measureTexts(element, [{ element, required }], true))[0]!);
@@ -613,7 +832,8 @@ function screenRoot(element: Element): Element {
   let root = element;
   for (let parent = element.parentElement; parent && parent !== document.body && !root.hasAttribute("data-base-ui-portal"); parent = parent.parentElement) {
     const box = parent.getBoundingClientRect();
-    if (box.width > window.innerWidth || box.height > window.innerHeight) break;
+    // A box with no size, such as a popup's container around its fixed popup, cannot be screenshotted.
+    if (box.width > window.innerWidth || box.height > window.innerHeight || box.width === 0 || box.height === 0) break;
     root = parent;
   }
   return root;
@@ -637,11 +857,11 @@ function inView(element: Element, root: Element): boolean {
 // chart's many axis labels share one picture, unless some text is scrolled out of a box inside it
 // (a wide table's last columns), which is scrolled to and taken with the text that then shows.
 // Unless this is the `last` try, a node gone from the page throws PageChanged, so the scan runs again.
-async function measureTexts(root: Element, items: { element: Element; required: number }[], last: boolean): Promise<Verdict[]> {
+async function measureTexts(root: Element, items: Measured[], last: boolean): Promise<Verdict[]> {
   // Centered, so a sticky header does not sit over text that scrolled to the top edge.
   root.scrollIntoView({ block: "center", inline: "nearest" });
   await settleTransitions();
-  const verdicts = new Map<{ element: Element; required: number }, Verdict>();
+  const verdicts = new Map<Measured, Verdict>();
   let pending = [...items];
   while (pending.length > 0) {
     const first = pending[0]!;
@@ -733,7 +953,7 @@ async function measureLinkInText(link: Element, block: Element): Promise<Verdict
     return { pass: false, reason: `axe could not judge whether it stands out from the text around it, and it could not be screenshotted: ${(error as Error).message.split("\n")[0]}` };
   } finally {
     probe.remove();
-    hide.remove();
+    lift(hide);
   }
   const scale = context.canvas.width / (right - left);
   // Whether an element paints nothing of its own, as Base UI's invisible backdrop under a modal
@@ -806,24 +1026,26 @@ async function measureLinkInText(link: Element, block: Element): Promise<Verdict
 const hiddenFromAt = '[aria-hidden="true"], [inert]';
 
 // Measures each element's text against one screenshot of `root` as it is scrolled now.
-async function shoot(root: Element, items: { element: Element; required: number }[], last: boolean): Promise<Verdict[]> {
+async function shoot(root: Element, items: Measured[], last: boolean): Promise<Verdict[]> {
   if (!root.isConnected || items.some(({ element }) => !element.isConnected)) {
     if (!last) throw new PageChanged();
     return items.map(() => ({ pass: false, reason: keptChanging }));
   }
   // The boxes within the root, not on the screen: taking the screenshot can scroll the page.
   const start = root.getBoundingClientRect();
-  const texts = items.map(({ element, required }) => {
+  const texts = items.map(({ element, required, placeholder }) => {
     // Within the root: each line's box, or each letter's cell for SVG text.
-    const cells = (letterCells(element) ?? textBoxes(element).map((box) => ({ box, corners: null }))).map(({ box, corners }) => ({
+    const boxes = placeholder ? placeholderBoxes(element as HTMLInputElement | HTMLTextAreaElement) : textBoxes(element);
+    const cells = (letterCells(element) ?? boxes.map((box) => ({ box, corners: null }))).map(({ box, corners }) => ({
       box: new DOMRect(box.left - start.left, box.top - start.top, box.width, box.height),
       corners: corners?.map((corner) => ({ x: corner.x - start.left, y: corner.y - start.top })) ?? null,
     }));
-    // SVG text, such as a chart's axis labels, is painted with its fill.
-    const style = getComputedStyle(element);
+    // SVG text, such as a chart's axis labels, is painted with its fill; a placeholder with its own
+    // color and opacity.
+    const style = getComputedStyle(element, placeholder ? "::placeholder" : null);
     const color = toRgba(element instanceof SVGElement ? style.fill : style.color);
-    const fillOpacity = element instanceof SVGElement ? Number.parseFloat(style.fillOpacity) : 1;
-    return { element, required, cells, text: { ...color, a: color.a * fillOpacity * paintedOpacity(element) } };
+    const ownOpacity = element instanceof SVGElement ? Number.parseFloat(style.fillOpacity) : placeholder ? Number.parseFloat(style.opacity) : 1;
+    return { element, required, placeholder, cells, text: { ...color, a: color.a * ownOpacity * paintedOpacity(element) } };
   });
   // The open popups' layers (Base UI portals) the text is not in: whatever they paint over the text,
   // shadows included, is theirs. A second screenshot without them shows which pixels those are.
@@ -861,7 +1083,7 @@ async function shoot(root: Element, items: { element: Element; required: number 
     for (const { element } of items) element.removeAttribute("data-ouro-measure");
     for (const element of kept) element.removeAttribute("data-ouro-measure-keep");
     for (const layer of layers) layer.removeAttribute("data-ouro-measure-layer");
-    hide.remove();
+    lift(hide);
   }
   // A screenshot taken by selector can find a new element in the place of one that left the page.
   if (!root.isConnected || items.some(({ element }) => !element.isConnected)) {
@@ -874,8 +1096,8 @@ async function shoot(root: Element, items: { element: Element; required: number 
   let exposed: { other: Element; box: DOMRect }[] | undefined;
   const exposedBoxes = () =>
     (exposed ??= [...document.body.querySelectorAll("*")].filter((other) => !other.closest(hiddenFromAt)).map((other) => ({ other, box: other.getBoundingClientRect() })));
-  return texts.map(({ element, required, cells, text }) => {
-    if (cells.length === 0) return { pass: false, reason: "axe could not judge its contrast, and it has no text of its own to measure" };
+  return texts.map(({ element, required, placeholder, cells, text }) => {
+    if (cells.length === 0) return { pass: false, reason: placeholder ? "its placeholder has no box on the screen to measure" : "axe could not judge its contrast, and it has no text of its own to measure" };
     // Where an open popup covers the text, those pixels are the popup's, measured as its own text:
     // what a popup's layer paints, or any exposed layer over text the popup shuts off from assistive
     // technology. What still shows is measured. A layer hidden from assistive technology (an
@@ -915,6 +1137,7 @@ async function shoot(root: Element, items: { element: Element; required: number 
     if (measured === 0 && covered > 0) return { pass: true };
     if (worst === Number.POSITIVE_INFINITY) return { pass: false, reason: "axe could not judge its contrast, and its text is off the screen" };
     if (worst >= required) return { pass: true };
+    if (placeholder) return { pass: false, reason: `its placeholder measured ${worst.toFixed(2)}:1 against the worst pixel behind it, needs ${required}:1` };
     return { pass: false, reason: `measured ${worst.toFixed(2)}:1 against the worst pixel behind its text, needs ${required}:1` };
   });
 }
