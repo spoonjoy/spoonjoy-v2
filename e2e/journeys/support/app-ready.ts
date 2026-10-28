@@ -24,9 +24,12 @@ async function waitForHydrationIfApp(page: Page): Promise<void> {
 // and a timeout, are not transport failures.
 const TRANSPORT_FAILURE = /Connection reset by peer|Peer failed to perform TLS handshake|net::ERR_(?:CONNECTION_(?:RESET|CLOSED)|SSL_PROTOCOL_ERROR)\b/;
 
-/** True when a page.goto or page.reload failed because its connection was reset before any answer. */
+/**
+ * True when a page.goto or page.reload failed because its connection was reset before any answer.
+ * Playwright puts the failure on the message's first line; later lines are its call log.
+ */
 export function isTransportFailure(error: unknown): boolean {
-  return error instanceof Error && !error.name.includes("Timeout") && TRANSPORT_FAILURE.test(error.message);
+  return error instanceof Error && !error.name.includes("Timeout") && TRANSPORT_FAILURE.test(error.message.split("\n")[0]);
 }
 
 export const TRANSPORT_RETRY_DELAY_MS = 1_000;
@@ -63,8 +66,14 @@ export async function loadAgainAfterTransportFailure<T>(
 }
 
 // Printed in the test's output, so a load that needed a second try is on record in the report.
+// scripts/warning-gate.ts lets these notes through (JOURNEYS_RETRY_NOTE_PATTERN): a retry that
+// worked must not fail the step.
+export function loadRetryNote(error: Error): string {
+  return `Journeys: loading the page again after its connection was reset (${error.message.split("\n")[0]})`;
+}
+
 function reportLoadAgain(error: Error): void {
-  console.warn(`Journeys: loading the page again after its connection was reset (${error.message.split("\n")[0]})`);
+  console.warn(loadRetryNote(error));
 }
 
 // Cloudflare's own static file serving, in front of the Worker, sometimes answers a built file
@@ -103,8 +112,12 @@ export async function answerStaticAsset(
   }
 }
 
+export function assetRetryNote(path: string, status: number, attempt: number): string {
+  return `Journeys: static file ${path} answered ${status}; asking again (try ${attempt} of ${STATIC_ASSET_RETRY_DELAYS_MS.length + 1})`;
+}
+
 function reportAssetAgain(path: string, status: number, attempt: number): void {
-  console.warn(`Journeys: static file ${path} answered ${status}; asking again (try ${attempt} of ${STATIC_ASSET_RETRY_DELAYS_MS.length + 1})`);
+  console.warn(assetRetryNote(path, status, attempt));
 }
 
 /**

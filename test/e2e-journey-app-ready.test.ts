@@ -37,6 +37,7 @@ describe("isTransportFailure", () => {
     ["a name that does not resolve", new Error("page.goto: net::ERR_NAME_NOT_RESOLVED")],
     ["an aborted load", new Error("page.goto: net::ERR_ABORTED")],
     ["another error", new Error("Target page, context or browser has been closed")],
+    ["a reset mentioned only after the first line", new Error("page.goto: net::ERR_ABORTED\nCall log:\n  - Connection reset by peer")],
     ["a string", WEBKIT_RESET],
     ["nothing", undefined],
   ])("is never %s", (_case, error) => {
