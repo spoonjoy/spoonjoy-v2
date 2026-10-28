@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "../ouro-fixtures";
 import { COLOR_SCHEMES, auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
-import { auditEachPopupOpen } from "./popups";
+import { auditEachPopupOpen, type PopupAudit } from "./popups";
 
 interface IndexEntry {
   type: string;
@@ -58,10 +58,10 @@ for (const story of stories) {
         if (!story?.parameters) throw new Error("Storybook did not expose the story's parameters.");
         return story.parameters.plainOpeners ?? [];
       });
-      let opened: Awaited<ReturnType<typeof auditEachPopupOpen>> = [];
+      const opened: PopupAudit[] = [];
       let openError: string | null = null;
       try {
-        opened = await auditEachPopupOpen(page, "#storybook-root", { target: "story", plainOpeners });
+        await auditEachPopupOpen(page, "#storybook-root", { target: "story", plainOpeners }, opened);
       } catch (error) {
         openError = (error as Error).message;
       }

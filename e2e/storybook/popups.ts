@@ -32,7 +32,13 @@ const WAIT = { timeout: 10_000 };
  * it again. A popup's content exists only while it is open, so the audit of a story at rest never
  * sees it. Tooltips and hover cards are not opened.
  */
-export async function auditEachPopupOpen(page: Page, scope: string, { plainOpeners = [], ...options }: PopupOptions = {}): Promise<PopupAudit[]> {
+export async function auditEachPopupOpen(
+  page: Page,
+  scope: string,
+  { plainOpeners = [], ...options }: PopupOptions = {},
+  // Filled as each popup is audited, so the caller keeps them if a later one throws.
+  audits: PopupAudit[] = [],
+): Promise<PopupAudit[]> {
   // Taken once, before any popup opens: a popup renders at the end of the page, so it adds triggers
   // of its own that this loop leaves to Ouro UI's checks, as Ouro's story check does.
   // Every match is an element; Playwright types a list of handles as nodes.
@@ -43,7 +49,6 @@ export async function auditEachPopupOpen(page: Page, scope: string, { plainOpene
     if (!button) throw new Error(`No button named "${name}" (parameters.plainOpeners).`);
     if (!(await button.evaluate((element, trigger) => element.matches(trigger), TRIGGER))) plain.push(button);
   }
-  const audits: PopupAudit[] = [];
   for (const trigger of [...triggers, ...plain]) {
     const state = await trigger.evaluate((element) => {
       const tiny = (node: Element) => {

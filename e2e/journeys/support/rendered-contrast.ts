@@ -463,7 +463,11 @@ export async function measureTextContrast(page: Page, selector: string, axeReaso
       inactive ??= line.inactive;
       continue;
     }
-    if ("blocker" in line) return { ...base, passed: false, textColor: runs[0].fill, error: line.blocker };
+    if ("blocker" in line) {
+      // A popup layer hidden for this line comes back before the audit goes on.
+      await page.evaluate(() => (window as unknown as { __sjContrast: Helpers }).__sjContrast.restore());
+      return { ...base, passed: false, textColor: runs[0].fill, error: line.blocker };
+    }
     const run = runs[line.run];
     await locator.evaluate((element) => (window as unknown as { __sjContrast: Helpers }).__sjContrast.hideText(element));
     let rgba: Uint8Array;
