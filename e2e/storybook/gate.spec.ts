@@ -70,19 +70,20 @@ test.describe("the story check", () => {
     await show(
       page,
       `<main style="position:relative"><p id="under" style="margin:0;line-height:24px;color:#ccc">Under the panel</p>` +
-        `<div id="layer" data-base-ui-portal=""><div role="group" aria-label="Recipes" style="position:absolute;top:0;left:0;right:0;height:48px;background:#222;color:#eee"><p style="margin:0">Panel</p></div></div><h1>Gate</h1></main>`,
+        `<div id="layer" data-base-ui-portal=""><div role="group" aria-label="Recipes" style="position:absolute;top:0;left:0;right:0;height:48px;background:#222"></div></div><h1>Gate</h1></main>`,
     );
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
     await page.evaluate(() => document.querySelector("#layer")!.removeAttribute("data-base-ui-portal"));
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/line 1 is covered by/);
-    // Most of the line still shows, and the text is not hidden from assistive technology.
+    // The popup covers the middle third of the line, so axe cannot judge it; the rest still shows,
+    // and the text is not hidden from assistive technology.
     await page.evaluate(() => {
       const layer = document.querySelector("#layer")!;
       layer.setAttribute("data-base-ui-portal", "");
-      (layer.firstElementChild as HTMLElement).style.right = "auto";
       const text = document.createRange();
       text.selectNodeContents(document.querySelector("#under")!);
-      (layer.firstElementChild as HTMLElement).style.width = `${text.getBoundingClientRect().width / 3}px`;
+      const { width } = text.getBoundingClientRect();
+      Object.assign((layer.firstElementChild as HTMLElement).style, { left: `${width / 3}px`, right: "auto", width: `${width / 3}px` });
     });
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/color-contrast measured 1\.\d\d:1, needs 4\.5:1/);
     await page.evaluate(() => document.querySelector<HTMLElement>("#under")!.style.setProperty("color", "#333"));
