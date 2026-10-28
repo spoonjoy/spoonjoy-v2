@@ -413,11 +413,13 @@ jobs:
           tail_reconnects=$(( tail_connections > tail_count ? tail_connections - tail_count : 0 ))
           tail_connections_json=$({ awk '$2 == "start" { n[$1]++; start[$1 " " n[$1]] = $3 } $2 == "end" { end[$1 " " n[$1]] = $3 }
             END { for (k in start) { split(k, p, " "); printf "{\"tail\":\"%s\",\"startedAt\":%s,\"endedAt\":%s}\n", p[1], start[k], (k in end) ? end[k] : "null" } }' \
-            .worker-tail/connections.log 2>/dev/null || true; } | jq -c -s '.')
+            .worker-tail/connections.log 2>/dev/null || true; } | jq -c -s '.' || echo null)
           suite_start=$(cat .worker-tail/suite-start 2>/dev/null || echo null)
+          # wrangler may also report sampling mode on its error output rather than in the stream.
+          sampling_in_errors=$(grep -c "sampling mode" .worker-tail/tail.err 2>/dev/null || true)
           jq -s --argjson tailAliveAtStop "$tail_alive" --argjson tailReconnects "$tail_reconnects" --argjson keepErrorLogs true \
             --argjson tailConnections "${tail_connections_json:-null}" --argjson suiteWindow "{\"from\": ${suite_start:-null}, \"to\": $suite_end}" \
-            --slurpfile tailReads .worker-tail/read.json \
+            --slurpfile tailReads .worker-tail/read.json --argjson tailErrorOverloadNotices "${sampling_in_errors:-0}" \
             -f scripts/summarize-worker-tail.jq \
             .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
           if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
@@ -427,14 +429,14 @@ jobs:
             echo "::warning::The QA Worker log could not be summarised. There is no Worker-side evidence for this run."
           else
             jq -r 'select(.complete != true)
-              | if (.tailReads.overloadNotices // 0) > 0
-                then "::warning::Cloudflare dropped QA Worker log events: a tail was put in sampling mode \(.tailReads.overloadNotices) time(s). worker-tail-summary.json is partial evidence; see tailReads."
+              | if (.tailSamplingNotices // 0) > 0
+                then "::warning::Cloudflare dropped QA Worker log events: a tail was put in sampling mode \(.tailSamplingNotices) time(s). worker-tail-summary.json is partial evidence; see tailReads."
                 elif (.tailCoverage.uncoveredMs // 0) > 0
                 then "::warning::The QA Worker log missed \(.tailCoverage.uncoveredMs / 1000 | floor) s of the suite in \(.tailCoverage.gapCount) gap(s) when no tail was connected, the longest \(.tailCoverage.longestGapMs / 1000 | floor) s. Requests in those gaps are not in worker-tail-summary.json, so its counts (slow requests, stalls, errors, retries) are partial; see tailCoverage.gaps."
                 else "::warning::The QA Worker log is incomplete (a tail reconnected without a second one covering it, no tail was running when the suite finished, or it recorded no events). Treat worker-tail-summary.json as partial evidence, not as a run without Worker-side failures." end' \
               test-results/worker-tail-summary.json || true
           fi
-          jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, tailReads, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, slowestPaths: (.byPath | .[0:5]) }' \
+          jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, tailReads, tailSamplingNotices, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, slowestPaths: (.byPath | .[0:5]) }' \
             test-results/worker-tail-summary.json || true
           # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
           # a server failure, so name it in the log. Non-fatal for now.

@@ -109,6 +109,7 @@ describe("summarize-worker-tail.jq", () => {
       "tailCoverage",
       "tailReads",
       "tailReconnects",
+      "tailSamplingNotices",
       "totalInvocations",
     ]);
     expect(Object.keys(summary.d1TransientErrors).sort()).toEqual(["notRetried", "notRetriedWrites", "retried", "total", "writeOperations"]);
@@ -270,7 +271,12 @@ describe("summarize-worker-tail.jq", () => {
     expect(raw).not.toContain(CANARIES.body);
 
     const sampled = { ...delivered, tails: { ...delivered.tails, b: { ...delivered.tails.b, overloadNotices: 2 } } };
-    expect(summarize([hostileEvent()], true, reads(sampled)).summary).toMatchObject({ complete: false, tailReads: { overloadNotices: 2 } });
+    expect(summarize([hostileEvent()], true, reads(sampled)).summary).toMatchObject({ complete: false, tailReads: { overloadNotices: 2 }, tailSamplingNotices: 2 });
+    // Notices wrangler wrote to its error output count too.
+    expect(summarize([hostileEvent()], true, [...reads(delivered), "--argjson", "tailErrorOverloadNotices", "1"]).summary)
+      .toMatchObject({ complete: false, tailSamplingNotices: 1 });
+    expect(summarize([hostileEvent()], true, ["--argjson", "tailErrorOverloadNotices", "3"]).summary)
+      .toMatchObject({ complete: false, tailReads: null, tailSamplingNotices: 3 });
     expect(summarize([hostileEvent()], true, reads(null)).summary).toMatchObject({ complete: true, tailReads: null });
     expect(summarize([hostileEvent()], true, reads({ tails: { a: { events: -3, overloadNotices: "9" } } })).summary.tailReads)
       .toEqual({ tails: 1, eventsSeen: 0, eventsKept: 0, eventsPerTail: [0], overloadNotices: 0, unreadableLines: 0, cutOff: 0 });
@@ -983,10 +989,10 @@ describe("Journeys workflow tail wiring", () => {
     expect(stop).toContain('kill -9 -- "-$(cat "$pid_file")"');
     // Both tails' files are read into one stream, each invocation once (scripts/read-worker-tail.mjs).
     expect(stop).toContain("node scripts/read-worker-tail.mjs .worker-tail/events.ndjson .worker-tail/tail-*.json > .worker-tail/read.json");
-    expect(stop).toContain("--slurpfile tailReads .worker-tail/read.json");
+    expect(stop).toContain('--slurpfile tailReads .worker-tail/read.json --argjson tailErrorOverloadNotices "${sampling_in_errors:-0}"');
     expect(stop).toContain('--argjson tailReconnects "$tail_reconnects"');
     expect(stop).toContain('--argjson tailConnections "${tail_connections_json:-null}"');
-    expect(stop).toMatch(/jq '\{[^']*tailReconnects, tailCoverage, tailReads[^']*d1TransientErrors[^']*\}'/);
+    expect(stop).toMatch(/jq '\{[^']*tailReconnects, tailCoverage, tailReads, tailSamplingNotices[^']*d1TransientErrors[^']*\}'/);
   });
 
   it("prints what each tail delivered", () => {
@@ -1029,7 +1035,7 @@ describe("Journeys workflow tail wiring", () => {
     expect(warn({ complete: false, tailCoverage: { uncoveredMs: 27500, gapCount: 2, longestGapMs: 20900, gaps: [] } }).trimEnd()).toBe(
       "::warning::The QA Worker log missed 27 s of the suite in 2 gap(s) when no tail was connected, the longest 20 s. Requests in those gaps are not in worker-tail-summary.json, so its counts (slow requests, stalls, errors, retries) are partial; see tailCoverage.gaps.",
     );
-    expect(warn({ complete: false, tailReads: { overloadNotices: 2 }, tailCoverage: { uncoveredMs: 0 } }).trimEnd()).toBe(
+    expect(warn({ complete: false, tailSamplingNotices: 2, tailCoverage: { uncoveredMs: 0 } }).trimEnd()).toBe(
       "::warning::Cloudflare dropped QA Worker log events: a tail was put in sampling mode 2 time(s). worker-tail-summary.json is partial evidence; see tailReads.",
     );
     expect(warn({ complete: false, tailCoverage: { uncoveredMs: 0, gapCount: 0, gaps: [] } })).toContain("::warning::The QA Worker log is incomplete (a tail reconnected without a second one covering it, no tail was running when the suite finished, or it recorded no events).");

@@ -44,6 +44,18 @@ export function readJsonStream(text) {
       }
       continue;
     }
+    // A value starts only at column 0, so a "{" there means the open value was cut off.
+    if (line.startsWith("{")) {
+      unreadableLines += buffer.length;
+      const single = parseOrNull(line);
+      if (single !== null) {
+        values.push(single);
+        buffer = null;
+      } else {
+        buffer = [line];
+      }
+      continue;
+    }
     buffer.push(line);
     if (line.startsWith("}")) {
       const value = parseOrNull(buffer.join("\n"));

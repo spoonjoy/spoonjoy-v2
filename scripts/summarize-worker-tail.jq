@@ -69,9 +69,12 @@ def tail_coverage:
           longestGapMs: (map(.ms) | max // 0),
           gaps: .[0:10] }
     end;
+def count_of($value): if ($value | type) == "number" and $value >= 0 then $value else 0 end;
+# Sampling-mode notices in the tails' streams, plus any wrangler wrote to its error output
+# (tailErrorOverloadNotices).
+def tail_sampling_notices($reads): ($reads.overloadNotices // 0) + count_of($ARGS.named.tailErrorOverloadNotices // 0);
 # tailReads (the Journeys workflow passes it, from scripts/read-worker-tail.mjs): what the tails
 # delivered, reduced to its counts. A sampling-mode notice means Cloudflare dropped events.
-def count_of($value): if ($value | type) == "number" and $value >= 0 then $value else 0 end;
 def tail_reads:
   ($ARGS.named.tailReads // null | if type == "array" then .[0] else . end) as $reads
   | if ($reads | type) != "object" or ($reads.tails | type) != "object" then null
@@ -325,11 +328,12 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
 | {
   complete: ($tailAliveAtStop == true and length > 0
     and (if $coverage == null then tail_reconnects == 0 else $coverage.uncoveredMs == 0 end)
-    and (($reads.overloadNotices // 0) == 0)),
+    and tail_sampling_notices($reads) == 0),
   tailAliveAtStop: ($tailAliveAtStop == true),
   tailReconnects: tail_reconnects,
   tailCoverage: $coverage,
   tailReads: $reads,
+  tailSamplingNotices: tail_sampling_notices($reads),
   firstEventTimestamp: (timestamps | if length == 0 then null else min end),
   lastEventTimestamp: (timestamps | if length == 0 then null else max end),
   totalInvocations: length,

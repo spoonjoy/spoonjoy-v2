@@ -42,6 +42,16 @@ describe("readJsonStream", () => {
   });
 });
 
+describe("readJsonStream after a value cut off mid-stream", () => {
+  it("counts the cut-off lines as unreadable and still reads the next value", () => {
+    const cut = pretty(invocation(1)).split("\n").slice(0, 3);
+    expect(readJsonStream([...cut, pretty(invocation(2)), JSON.stringify(invocation(3)), ""].join("\n")))
+      .toEqual({ values: [invocation(2), invocation(3)], unreadableLines: 3, cutOff: false });
+    expect(readJsonStream([...cut, JSON.stringify(invocation(3)), ""].join("\n")))
+      .toEqual({ values: [invocation(3)], unreadableLines: 3, cutOff: false });
+  });
+});
+
 describe("tailNotice", () => {
   it("is the type of the tail's own message, bare or as the event", () => {
     expect(tailNotice(overload)).toBe("overload");
