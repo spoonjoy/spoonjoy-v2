@@ -87,6 +87,11 @@ function describeFindings(findings: GateFinding[]): string {
  * the third scan such a node fails. It throws on an axe-core older than the kit's minimum
  * (axe-version.ts), naming the version it found.
  *
+ * It leaves the page as it found it: focus where it was, with a focus ring only if it had one, the
+ * selection, and every scroll position. It throws, naming the change, when its Tab walk changes
+ * what is open on the page (an `aria-expanded`, a <dialog>, <details> or popover) and it does not
+ * change back within a second, as it cannot change it back itself.
+ *
  * @example
  * const findings = await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) });
  * expect(describeFindings(findings)).toBe("");
@@ -103,19 +108,41 @@ function describeFindings(findings: GateFinding[]): string {
  * @claim "A node that leaves the page" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > scans the page again when a node it found leaves the page while it is measured, as a Searching… line does)
  * @claim "A node that leaves the page" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails a node that leaves the page each time it is measured, three scans running)
  * @claim "a field with two labels, only when" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a field with two labels when aria-labelledby names it, and fails it when nothing settles which label names it)
+ * @claim "It leaves the page as it found it: focus" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves focus where its Tab walk found it: nothing focused stays so, and a focus ring shows after only if it showed before)
+ * @claim "It leaves the page as it found it: focus" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back a field's caret and selected text, which Tab into a field selects whole, and the page's selection)
+ * @claim "It throws, naming the change, when its Tab walk" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a page whose content arrives during its Tab walk, as that is no change the walk made)
+ * @claim "and every scroll position" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back every scroll position it moves to measure text, the page's and a scrolled box's)
+ * @claim "It throws, naming the change, when its Tab walk" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails, naming what changed, when its Tab walk closes a popup that focus leaving closes, which it cannot open again)
  */
 async function audit(context: axe.ElementContext): Promise<GateFinding[]> {
   // The registry names axe-core without a version, so an app keeps the one it has; an older one
   // decides some checks differently (link-in-text-block among them), so it must not pass quietly.
   requireAxe(axe.version, "audit");
-  // A node that leaves the page while it is measured (a "Searching…" line once results come) means
-  // the page changed under the scan: scan the page as it is now, and fail once it never holds still.
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await auditOnce(context, attempt === 3);
-    } catch (error) {
-      if (!(error instanceof PageChanged)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+  return keepingScroll(async () => {
+    // A node that leaves the page while it is measured (a "Searching…" line once results come) means
+    // the page changed under the scan: scan the page as it is now, and fail once it never holds still.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await auditOnce(context, attempt === 3);
+      } catch (error) {
+        if (!(error instanceof PageChanged)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      }
+    }
+  });
+}
+
+// Runs `work`, which scrolls the page to measure it, and puts every scroll position back after:
+// the page's and each scrolled box's.
+async function keepingScroll<T>(work: () => Promise<T>): Promise<T> {
+  const scrolled = [...document.querySelectorAll("*")].filter((element) => element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
+  const positions = scrolled.map((element) => ({ element, top: element.scrollTop, left: element.scrollLeft }));
+  try {
+    return await work();
+  } finally {
+    for (const { element, top, left } of positions) {
+      // "instant", or a page that scrolls smoothly would still be on its way back.
+      if (element.isConnected && (element.scrollTop !== top || element.scrollLeft !== left)) element.scrollTo({ top, left, behavior: "instant" });
     }
   }
 }
@@ -268,9 +295,14 @@ function labelSaysNoMore(element: Element): boolean {
 // Presses Tab once around the page from where focus is, two frames apart, and returns each element
 // inside one of `targets` that Tab focuses while it is still hidden from assistive technology when
 // the focus event reaches the document (after the page's own handlers, which may show it). Focus
-// goes back where it was.
+// goes back where it was, with a focus ring only if it had one, and nothing focused if nothing was,
+// and so does the selection or a field's caret. It throws when the walk changed what is open on
+// the page, which it cannot change back.
 async function tabReaches(targets: HTMLElement[]): Promise<HTMLElement[]> {
   const start = document.activeElement;
+  const ring = start?.matches(":focus-visible") ?? false;
+  const selection = selectionOf(start);
+  const opened = openState();
   const stops = document.querySelectorAll("a[href], button, input, select, textarea, [tabindex], [contenteditable]").length;
   const reached = new Set<HTMLElement>();
   const watch = (event: FocusEvent) => {
@@ -288,8 +320,69 @@ async function tabReaches(targets: HTMLElement[]): Promise<HTMLElement[]> {
   } finally {
     document.removeEventListener("focusin", watch);
   }
-  if (start instanceof HTMLElement && start.isConnected) start.focus();
+  const active = document.activeElement;
+  const back = start !== document.body && (start instanceof HTMLElement || start instanceof SVGElement) && start.isConnected ? start : null;
+  // Focused by the last press, the element keeps the ring the key gave it unless it is focused afresh.
+  if (active instanceof HTMLElement || active instanceof SVGElement) {
+    if (active !== back || active.matches(":focus-visible") !== ring) active.blur();
+  }
+  // A typed variable, not a literal: TypeScript 5.9's DOM types, which apps still build with, lack focusVisible.
+  const again: FocusOptions & { focusVisible?: boolean } = { preventScroll: true, focusVisible: ring };
+  if (back && document.activeElement !== back) back.focus(again);
+  selection();
+  // What the walk's focus showed (a tooltip, a fanned stack) eases back before the page is compared,
+  // and what closes or opens on a timer once focus moves gets a second to settle.
+  await settleTransitions();
+  let changed = changedState(opened, openState());
+  for (const deadline = performance.now() + 1000; changed && performance.now() < deadline; changed = changedState(opened, openState())) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  if (changed) {
+    throw new Error(
+      `audit: its Tab walk changed what is open on the page and cannot change it back: ${changed}. ` +
+        "The walk runs when a modal hides the page from assistive technology without making it inert, to learn whether Tab still reaches what it hides. " +
+        "Audit the page before that opens, or make what the modal hides inert, so axe decides without the walk.",
+    );
+  }
   return [...reached];
+}
+
+// What is open on the page, as triggers and popups state it: each `aria-expanded`, and each
+// <dialog>, <details> and popover.
+function openState(): Map<Element, string> {
+  const state = new Map<Element, string>();
+  for (const element of document.querySelectorAll("[aria-expanded]")) state.set(element, element.getAttribute("aria-expanded") === "true" ? "expanded" : "collapsed");
+  for (const element of document.querySelectorAll("dialog, details, [popover]")) state.set(element, element.matches("[open], :popover-open") ? "open" : "closed");
+  return state;
+}
+
+// The first difference between two `openState`s, in words, or null when there is none. Only what
+// was on the page both times counts: content that arrived or left on its own is no change the walk made.
+function changedState(before: Map<Element, string>, after: Map<Element, string>): string | null {
+  for (const [element, was] of before) {
+    const now = after.get(element);
+    if (now !== undefined && now !== was) return `${describe(element)} went from ${was} to ${now}`;
+  }
+  return null;
+}
+
+// Puts back, when called, the selection as it is now: a text field's caret or selected text when
+// one has focus (Tab into a field selects all of it), else the page's selection.
+function selectionOf(focused: Element | null): () => void {
+  if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) {
+    const { selectionStart, selectionEnd, selectionDirection } = focused;
+    // A field that has no caret (a checkbox, a number field) reports null.
+    if (selectionStart === null || selectionEnd === null) return () => undefined;
+    return () => focused.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? undefined);
+  }
+  const page = document.getSelection();
+  /* istanbul ignore if @preserve -- a document in a page always has a selection */
+  if (!page) return () => undefined;
+  const ranges = Array.from({ length: page.rangeCount }, (_, index) => page.getRangeAt(index).cloneRange());
+  return () => {
+    page.removeAllRanges();
+    for (const range of ranges) page.addRange(range);
+  };
 }
 
 // The contrast WCAG 1.4.3 asks of the element's text: axe's own figure when it gave one, else 3:1
@@ -431,7 +524,9 @@ async function settleTransitions(): Promise<void> {
 async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const image = new Image();
-  image.src = `data:image/png;base64,${await page.screenshot({ save: false, element, animations: "disabled", timeout: 5000 })}`;
+  // `caret: "initial"`: hiding the caret, Playwright leaves an empty style attribute on the focused
+  // field. The measuring rules hide the caret themselves.
+  image.src = `data:image/png;base64,${await page.screenshot({ save: false, element, animations: "disabled", caret: "initial", timeout: 5000 })}`;
   await image.decode();
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
@@ -450,7 +545,7 @@ async function screenshot(element: Element): Promise<CanvasRenderingContext2D> {
  * @claim "except other text drawn over the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails text that other text is drawn over, as a tag without a background over a line)
  */
 const hideGlyphs =
-  "body * { -webkit-text-fill-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; } " +
+  "body * { -webkit-text-fill-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; caret-color: transparent !important; } " +
   "[data-ouro-measure-keep] { -webkit-text-fill-color: currentcolor !important; } " +
   "svg text, svg tspan { fill: transparent !important; stroke: transparent !important; } " +
   "[data-ouro-measure], [data-ouro-measure] * { color: transparent !important; -webkit-text-fill-color: transparent !important; " +
@@ -464,7 +559,8 @@ const hideGlyphs =
  * is what the text is seen against.
  * Passes when the text color, as painted over that pixel, meets `required` (4.5 or 3). Where an open
  * popup covers the text (its shadow too), the covered part is hidden while it is open, and only what
- * still shows is measured.
+ * still shows is measured. It puts back every scroll position it moves, and leaves nothing on the
+ * focused field.
  *
  * @example
  * const verdict = await measureTextContrast(label, 4.5);
@@ -476,9 +572,11 @@ const hideGlyphs =
  * @claim "Where an open popup covers the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes text an open popup covers once the popup shuts it off from assistive technology, and measures what still shows)
  * @claim "Where an open popup covers the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes page text a popup's layer covers, which hides it while the popup is open, and measures what still shows)
  * @claim "Where an open popup covers the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > counts a popup's shadow on the text as the popup's, as it is drawn by the open popup)
+ * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back every scroll position it moves to measure text, the page's and a scrolled box's)
+ * @claim "leaves nothing on the focused field" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no trace on the focused field when it screenshots the page)
  */
 async function measureTextContrast(element: Element, required: number): Promise<Verdict> {
-  return (await measureTexts(element, [{ element, required }], true))[0]!;
+  return keepingScroll(async () => (await measureTexts(element, [{ element, required }], true))[0]!);
 }
 
 // The elements whose own text is drawn over the text of `measured` (half a line's height or more,

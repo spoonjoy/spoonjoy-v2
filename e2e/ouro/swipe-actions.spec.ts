@@ -11,7 +11,7 @@ test("a row's actions button gives the keyboard every swipe action, and Undo bri
   await expect(page.getByRole("menuitem")).toHaveText(["Pin", "Delete", "Share"]);
   await page.getByRole("menuitem", { name: "Delete" }).click();
   await expect(rows).toHaveCount(2);
-  await expect(page.getByText("Shakshuka deleted")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Shakshuka deleted" })).toBeVisible();
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(rows).toHaveCount(3);
   await expect(page.getByRole("link", { name: "Shakshuka" })).toBeVisible();

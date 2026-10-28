@@ -97,7 +97,16 @@ function ShowOnMount() {
 
 /** Three toasts, stacked: the newest in front and the older ones peeking above it. They stay until dismissed. */
 export const Stack: Story = {
-  parameters: { screenshot: { name: "toaster-stack" } },
+  parameters: {
+    screenshot: { name: "toaster-stack" },
+    conformance: {
+      focusExit: {
+        // Every dismiss button is reachable at rest. The last toast's leaves no toast to hand focus to, and a
+        // press that came from no control has nowhere to go back to, so focus stays on the page (Toaster's tests).
+        "toaster/close Dismiss": "the last toast's dismiss button, pressed with focus from nowhere, leaves focus on the page, as Toaster does on purpose",
+      },
+    },
+  },
   render: (args) => (
     <Surface>
       <span style={{ color: "var(--muted-foreground)" }}>Hover the toasts to fan them out.</span>
