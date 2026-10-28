@@ -46,7 +46,11 @@ export async function auditEachPopupOpen(page: Page, scope: string, options: Aud
       const disabled = element.matches(':disabled, [aria-disabled="true"], [data-disabled]');
       const clipped = tiny(element) || (element.parentElement !== null && tiny(element.parentElement));
       const shown = element.checkVisibility({ visibilityProperty: true });
-      const name = element.getAttribute("aria-label") ?? element.textContent?.trim() ?? "";
+      // Enough of the accessible name to tell the triggers apart: a combobox's input is named by its label.
+      const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      const labelledBy = (element.getAttribute("aria-labelledby") ?? "").split(/\s+/).map((id) => text(document.getElementById(id))).join(" ").trim();
+      const labels = element instanceof HTMLInputElement ? [...(element.labels ?? [])].map(text).join(" ") : "";
+      const name = element.getAttribute("aria-label")?.trim() || labelledBy || labels || text(element) || element.getAttribute("title") || element.tagName.toLowerCase();
       return { usable: shown && !disabled, clipped, name };
     });
     if (!state.usable) continue;
@@ -56,18 +60,36 @@ export async function auditEachPopupOpen(page: Page, scope: string, options: Aud
     } else {
       await trigger.click();
     }
+    // Attached, not visible: a popup can open with nothing in it to give it a size.
+    const popup = page.locator(OPEN_POPUP).first();
     try {
-      await page.locator(OPEN_POPUP).first().waitFor(WAIT);
+      await popup.waitFor({ ...WAIT, state: "attached" });
     } catch {
       throw new Error(`Opening "${state.name}" opened no popup.`);
     }
+    const opened = await popup.elementHandle();
     audits.push({ trigger: state.name, audit: await auditShownScheme(page, options) });
     if (await page.locator(OPEN_POPUP).count()) await page.keyboard.press("Escape");
+    // Gone, or hidden when it stays mounted, so its closing animation cannot cover the next popup's page.
     try {
-      await page.waitForFunction((popup) => document.querySelector(popup) === null, OPEN_POPUP, WAIT);
+      await page.waitForFunction(
+        ([selector, element]) => document.querySelector(selector) === null && (!element?.isConnected || !element.checkVisibility()),
+        [OPEN_POPUP, opened] as const,
+        WAIT,
+      );
     } catch {
       throw new Error(`Escape did not close the popup "${state.name}" opened.`);
     }
+    await settle(page);
   }
   return audits;
+}
+
+/** Waits until no finite animation or transition runs, as Ouro UI's story check does (`settle`). */
+async function settle(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity),
+    undefined,
+    WAIT,
+  );
 }

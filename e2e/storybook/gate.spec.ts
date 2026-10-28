@@ -1,7 +1,9 @@
 // The accessibility gate's own measurements (e2e/journeys/support), run in a real browser against
 // small pages whose answer is known, so a measurement that would pass a bad page fails here first.
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "../ouro-fixtures";
+import { AXE_EXCLUDE } from "../journeys/support/axe";
 import { auditShownScheme, describeAuditFailures } from "../journeys/support/accessibility";
 import { measureTextContrast } from "../journeys/support/rendered-contrast";
 import { verifyHiddenFocus } from "../journeys/support/undecided-checks";
@@ -50,6 +52,29 @@ test.describe("the story check", () => {
     expect(opened.map(({ trigger }) => trigger)).toEqual(["Herbs"]);
     expect(describeAuditFailures(opened.map(({ audit }) => audit))).toMatch(/violation aria-command-name \(/);
     await expect(page.locator('[role="menu"]')).toHaveCount(0);
+  });
+
+  test("leaves out what Ouro UI's gate leaves out: Base UI's focus guards", async ({ page }) => {
+    const ouro = readFileSync("app/lib/ouro/testing/axe.ts", "utf8").match(/const axeExclude: string\[\] = (\[.*\]);/)?.[1];
+    expect(ouro && JSON.parse(ouro)).toEqual(AXE_EXCLUDE);
+    const guard = '<span aria-hidden="true" tabindex="0" style="position:fixed;width:1px;height:1px;overflow:hidden"></span>';
+    await show(page, `<main><h1>Gate</h1><button type="button">Herbs</button>${guard}</main>`);
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/violation aria-hidden-focus \(/);
+    await page.evaluate(() => document.querySelector("span")!.setAttribute("data-base-ui-focus-guard", ""));
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
+    expect(describeAuditFailures([await auditShownScheme(page)])).toBeNull();
+  });
+
+  test("passes page text an open popup covers, which the scan with it closed measures", async ({ page }) => {
+    // Faint text under a popup's layer: Base UI renders each popup in a portal of its own.
+    await show(
+      page,
+      `<main style="position:relative"><p id="under" style="margin:0;line-height:24px;color:#ccc">Under the panel</p>` +
+        `<div id="layer" data-base-ui-portal=""><div role="group" aria-label="Recipes" style="position:absolute;top:0;left:0;right:0;height:48px;background:#222;color:#eee"><p style="margin:0">Panel</p></div></div><h1>Gate</h1></main>`,
+    );
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
+    await page.evaluate(() => document.querySelector("#layer")!.removeAttribute("data-base-ui-portal"));
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/line 1 is covered by/);
   });
 });
 
