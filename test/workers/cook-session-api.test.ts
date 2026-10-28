@@ -9,7 +9,12 @@ function storageReset() {
   return Object.assign(new Error(RESET_MESSAGE), { retryable: true });
 }
 
-const replayed = (call: string) => JSON.stringify({ event: "platform_retry", call, attempt: 2 });
+const replayed = (call: string, marked = true) => JSON.stringify({ event: "platform_retry", call, attempt: 2, marked });
+
+// The Workers runtime's message for the failure inside Cloudflare in Journeys run 40566824130.
+function cloudflareInternalError() {
+  return new Error("internal error; reference = 9fk2mq3c8b1d7e6a5h4j");
+}
 
 function request(operation: "detail" | "start" | "patch" = "detail") {
   const body = operation === "patch" ? JSON.stringify({
@@ -158,9 +163,40 @@ describe("cook-session reads after a storage reset", () => {
     ]);
   });
 
+  it("replays a start once after Cloudflare's own internal error, marked retryable or not", async () => {
+    const { env, get } = environment(cloudflareInternalError(), Response.json({ state: null }, { status: 201 }));
+    expectConsoleWarning(replayed("cook_session.start", false));
+
+    const response = await handleCookSessionProtocolRequest(request("start"), env, "user-1", "start", { requireExpectedUser: true });
+
+    expect(response.status).toBe(201);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("replays a read once after Cloudflare's own internal error", async () => {
+    const { env, get } = environment(cloudflareInternalError(), Response.json({ state: null }, { status: 200 }));
+    expectConsoleWarning(replayed("cook_session.read", false));
+
+    const response = await handleCookSessionProtocolRequest(request(), env, "user-1", "detail", { requireExpectedUser: true });
+
+    expect(response.status).toBe(200);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("never replays a progress write after Cloudflare's own internal error", async () => {
+    const error = cloudflareInternalError();
+    const { env, get } = environment(error);
+
+    await expect(handleCookSessionProtocolRequest(request("patch"), env, "user-1", "patch", { requireExpectedUser: true }))
+      .rejects.toBe(error);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ["unmarked errors", new Error(RESET_MESSAGE)],
     ["overloaded objects", Object.assign(storageReset(), { overloaded: true })],
+    ["an overloaded internal error", Object.assign(cloudflareInternalError(), { overloaded: true })],
+    ["a message that only mentions an internal error", new Error("recipe failed: internal error; reference = abc")],
   ])("does not replay a start for %s", async (_name, error) => {
     const { env, get } = environment(error);
 

@@ -57,8 +57,7 @@ test.describe("Recipe list action on iPhone", () => {
 
     await expect(listAction).toHaveText("Add to list");
     await listAction.click();
-    // The toast appears once QA's add-and-reload round trip finishes, which can be slow.
-    await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "4 items added at 1.25x", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "4 items added at 1.25x", exact: true })).toBeVisible();
     await expect(listAction).toHaveText("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();
