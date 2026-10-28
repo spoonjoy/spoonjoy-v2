@@ -88,9 +88,9 @@ function describeFindings(findings: GateFinding[]): string {
  * (axe-version.ts), naming the version it found.
  *
  * It leaves the page as it found it: focus where it was, with a focus ring only if it had one, the
- * selection, and every scroll position. It throws, naming the change, when its Tab walk changes
- * what is open on the page (an `aria-expanded`, a <dialog>, <details> or popover) and it does not
- * change back within a second, as it cannot change it back itself.
+ * selection, and every scroll position, in an open shadow root too. It throws, naming the change,
+ * when its Tab walk changes what is open on the page (an `aria-expanded`, a <dialog>, <details> or
+ * popover) and it does not change back within a second, as it cannot change it back itself.
  *
  * @example
  * const findings = await audit({ include: [document.documentElement], exclude: axeExclude.map((selector) => [selector]) });
@@ -112,6 +112,7 @@ function describeFindings(findings: GateFinding[]): string {
  * @claim "It leaves the page as it found it: focus" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back a field's caret and selected text, which Tab into a field selects whole, and the page's selection)
  * @claim "It throws, naming the change, when its Tab walk" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes a page whose content arrives during its Tab walk, as that is no change the walk made)
  * @claim "and every scroll position" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back every scroll position it moves to measure text, the page's and a scrolled box's)
+ * @claim "in an open shadow root too" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back the scroll position of a scrolled box inside a shadow root)
  * @claim "It throws, naming the change, when its Tab walk" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > fails, naming what changed, when its Tab walk closes a popup that focus leaving closes, which it cannot open again)
  */
 async function audit(context: axe.ElementContext): Promise<GateFinding[]> {
@@ -132,10 +133,16 @@ async function audit(context: axe.ElementContext): Promise<GateFinding[]> {
   });
 }
 
+// Every element in `root` and in the open shadow roots within it. A closed shadow root cannot be
+// reached from the page.
+function elementsWithin(root: Document | ShadowRoot): Element[] {
+  return [...root.querySelectorAll("*")].flatMap((element) => (element.shadowRoot ? [element, ...elementsWithin(element.shadowRoot)] : [element]));
+}
+
 // Runs `work`, which scrolls the page to measure it, and puts every scroll position back after:
-// the page's and each scrolled box's.
+// the page's and each scrolled box's, in an open shadow root too.
 async function keepingScroll<T>(work: () => Promise<T>): Promise<T> {
-  const scrolled = [...document.querySelectorAll("*")].filter((element) => element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
+  const scrolled = elementsWithin(document).filter((element) => element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth);
   const positions = scrolled.map((element) => ({ element, top: element.scrollTop, left: element.scrollLeft }));
   try {
     return await work();
@@ -573,6 +580,7 @@ const hideGlyphs =
  * @claim "Where an open popup covers the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > passes page text a popup's layer covers, which hides it while the popup is open, and measures what still shows)
  * @claim "Where an open popup covers the" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > counts a popup's shadow on the text as the popup's, as it is drawn by the open popup)
  * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back every scroll position it moves to measure text, the page's and a scrolled box's)
+ * @claim "It puts back every scroll position it moves" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > puts back the scroll position of a scrolled box inside a shadow root)
  * @claim "leaves nothing on the focused field" registry/ouro/lib/ouro/testing/axe.test.ts verify:testExists(registry/ouro/lib/ouro/testing/axe.test.ts::audit > leaves no trace on the focused field when it screenshots the page)
  */
 async function measureTextContrast(element: Element, required: number): Promise<Verdict> {
