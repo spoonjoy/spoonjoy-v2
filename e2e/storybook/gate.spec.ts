@@ -65,7 +65,7 @@ test.describe("the story check", () => {
     expect(describeAuditFailures([await auditShownScheme(page)])).toBeNull();
   });
 
-  test("passes page text an open popup covers, which the scan with it closed measures", async ({ page }) => {
+  test("passes page text an open popup covers, and fails text it covers only partly", async ({ page }) => {
     // Faint text under a popup's layer: Base UI renders each popup in a portal of its own.
     await show(
       page,
@@ -74,6 +74,16 @@ test.describe("the story check", () => {
     );
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toBeNull();
     await page.evaluate(() => document.querySelector("#layer")!.removeAttribute("data-base-ui-portal"));
+    expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/line 1 is covered by/);
+    // Most of the line still shows, and the text is not hidden from assistive technology.
+    await page.evaluate(() => {
+      const layer = document.querySelector("#layer")!;
+      layer.setAttribute("data-base-ui-portal", "");
+      (layer.firstElementChild as HTMLElement).style.right = "auto";
+      const text = document.createRange();
+      text.selectNodeContents(document.querySelector("#under")!);
+      (layer.firstElementChild as HTMLElement).style.width = `${text.getBoundingClientRect().width / 3}px`;
+    });
     expect(describeAuditFailures([await auditShownScheme(page, { target: "story" })])).toMatch(/line 1 is covered by/);
   });
 });
