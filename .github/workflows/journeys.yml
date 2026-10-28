@@ -410,9 +410,10 @@ jobs:
           # Journeys wait up to 15 s for an answer (playwright.journeys.config.ts), so a request
           # slower than Playwright's 5 s default no longer fails a journey by itself. Name every
           # such request here, whatever held it, so slowness is not hidden; stalledRequests and
-          # slowCalls say which waited on a platform call. Then name the platform faults our code
-          # absorbed by trying again (issue #575).
-          jq -r '[.slowest[]? | select(.wallTime > 5000)] | select(length > 0) | "::warning::Slow requests: \(length)\(if length == 25 then " or more" else "" end) took over 5 s, the longest \(map(.wallTime) | max) ms. See slowest, stalledRequests and slowCalls in worker-tail-summary.json."' \
+          # slowCalls say which waited on a platform call. An invocation without an HTTP method is
+          # no page's request, so no journey waited on it (Journeys run 40607078374: one of 27 s).
+          # Then name the platform faults our code absorbed by trying again (issue #575).
+          jq -r '[.slowest[]? | select(.wallTime > 5000)] as $slow | [$slow[] | select(.method != null)] | select(length > 0) | "::warning::Slow requests: \(length)\(if ($slow | length) == 25 then " or more" else "" end) took over 5 s, the longest \(map(.wallTime) | max) ms. See slowest, stalledRequests and slowCalls in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
           jq -r 'select((.platformRetries.total // 0) > 0) | "::warning::Platform retries: \(.platformRetries.total) call(s) tried again after a platform fault (\(.platformRetries.byCall | to_entries | map("\(.key) \(.value)") | join(", "))). See platformRetries in worker-tail-summary.json."' \
             test-results/worker-tail-summary.json || true
