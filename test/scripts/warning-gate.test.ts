@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assetRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
+  JOURNEYS_RETRY_NOTE_PATTERN,
   OURO_SLOW_TOUCH_TRACE_PATTERN,
   PNPM_SLOW_TARBALL_PATTERN,
   PNPM_TRANSIENT_FETCH_RETRY_PATTERN,
@@ -359,6 +361,37 @@ describe("warning gate", () => {
     ])("fails %s", (_label, line) => {
       expect(PNPM_SLOW_TARBALL_PATTERN.test(line)).toBe(false);
       expect(findUnexpectedWarnings(`${line}\n`)).toEqual([line]);
+    });
+  });
+
+  describe("the journeys' notes about a load or file they asked for again", () => {
+    // The notes app-ready.ts prints, for the resets Journeys runs 40592921397 and 40634883359 met
+    // and a static file answered 502 or 504.
+    const notes = [
+      loadRetryNote(new Error("page.goto: net::ERR_CONNECTION_RESET at https://spoonjoy-v2-qa-run-40634883359-1.mendelow-studio.workers.dev/login\nCall log:\n  - navigating")),
+      loadRetryNote(new Error("page.reload: net::ERR_CONNECTION_CLOSED at https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev/recipes?q=a")),
+      loadRetryNote(new Error("page.goto: Error receiving data: Connection reset by peer")),
+      loadRetryNote(new Error("page.goto: Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer")),
+      assetRetryNote("/assets/heading-BIJmUf4w.js", 502, 2),
+      assetRetryNote("/assets/root-Dx_9a.css", 504, 3),
+    ];
+
+    it.each(notes)("tolerates %s", (line) => {
+      expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(true);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+
+    it.each([
+      ["a load that timed out", loadRetryNote(new Error("page.goto: Timeout 60000ms exceeded."))],
+      ["a load that failed another way", loadRetryNote(new Error("page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.com/"))],
+      ["a file answered with another status", assetRetryNote("/assets/a.js", 500, 2)],
+      ["a file outside the built files", assetRetryNote("/photos/covers/a.jpg", 502, 2)],
+      ["a fourth try", assetRetryNote("/assets/a.js", 502, 4)],
+      ["extra text after a note", `${assetRetryNote("/assets/a.js", 502, 2)} and a page error`],
+      ["another note from the journeys", "Journeys: the page never hydrated"],
+    ])("still fails %s", (_label, line) => {
+      expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(false);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([line]);
     });
   });
 

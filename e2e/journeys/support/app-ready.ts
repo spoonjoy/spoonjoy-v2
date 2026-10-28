@@ -63,8 +63,14 @@ export async function loadAgainAfterTransportFailure<T>(
 }
 
 // Printed in the test's output, so a load that needed a second try is on record in the report.
+// scripts/warning-gate.ts lets these notes through (JOURNEYS_RETRY_NOTE_PATTERN): a retry that
+// worked must not fail the step.
+export function loadRetryNote(error: Error): string {
+  return `Journeys: loading the page again after its connection was reset (${error.message.split("\n")[0]})`;
+}
+
 function reportLoadAgain(error: Error): void {
-  console.warn(`Journeys: loading the page again after its connection was reset (${error.message.split("\n")[0]})`);
+  console.warn(loadRetryNote(error));
 }
 
 // Cloudflare's own static file serving, in front of the Worker, sometimes answers a built file
@@ -103,8 +109,12 @@ export async function answerStaticAsset(
   }
 }
 
+export function assetRetryNote(path: string, status: number, attempt: number): string {
+  return `Journeys: static file ${path} answered ${status}; asking again (try ${attempt} of ${STATIC_ASSET_RETRY_DELAYS_MS.length + 1})`;
+}
+
 function reportAssetAgain(path: string, status: number, attempt: number): void {
-  console.warn(`Journeys: static file ${path} answered ${status}; asking again (try ${attempt} of ${STATIC_ASSET_RETRY_DELAYS_MS.length + 1})`);
+  console.warn(assetRetryNote(path, status, attempt));
 }
 
 /**
