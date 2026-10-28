@@ -26,6 +26,8 @@
 #   one still open at the stop) and the {from, to} the suite ran in. The summary is then complete
 #   when at every moment of the suite at least one tail was connected, however often each
 #   reconnected; tailCoverage lists the gaps when none was.
+#   tailReads (with --slurpfile): scripts/read-worker-tail.mjs's counts of what each tail
+#   delivered. A tail Cloudflare put in sampling mode dropped events, so the summary is incomplete.
 #
 # Whatever the switches, `d1TransientErrors` counts the log lines whose message is a
 # d1_transient_error report (app/lib/d1-transient-retry.server.ts) or a d1_write_retry report
@@ -64,7 +66,24 @@ def tail_coverage:
           connections: ([$connections[] | objects] | length),
           uncoveredMs: (map(.ms) | add // 0),
           gapCount: length,
+          longestGapMs: (map(.ms) | max // 0),
           gaps: .[0:10] }
+    end;
+# tailReads (the Journeys workflow passes it, from scripts/read-worker-tail.mjs): what the tails
+# delivered, reduced to its counts. A sampling-mode notice means Cloudflare dropped events.
+def count_of($value): if ($value | type) == "number" and $value >= 0 then $value else 0 end;
+def tail_reads:
+  ($ARGS.named.tailReads // null | if type == "array" then .[0] else . end) as $reads
+  | if ($reads | type) != "object" or ($reads.tails | type) != "object" then null
+    else
+      [$reads.tails[] | objects] as $tails
+      | { tails: ($tails | length),
+          eventsSeen: count_of($reads.eventsSeen),
+          eventsKept: count_of($reads.eventsKept),
+          eventsPerTail: [$tails[] | count_of(.events)],
+          overloadNotices: ([$tails[] | count_of(.overloadNotices)] | add // 0),
+          unreadableLines: ([$tails[] | count_of(.unreadableLines)] | add // 0),
+          cutOff: ([$tails[] | count_of(.cutOff)] | add // 0) }
     end;
 
 # The d1_transient_error reports in an event's log lines, at any level, with only their fixed
@@ -302,12 +321,15 @@ def stalled: (.cpuTime | type) == "number" and (.wallTime | type) == "number" an
 | def with_error_logs($index):
     $events[$index] | invocation + (if $errorLogs == null then {} else { errorLogs: ($errorLogs.lines[$index | tostring] // []) } end);
   tail_coverage as $coverage
+| tail_reads as $reads
 | {
   complete: ($tailAliveAtStop == true and length > 0
-    and (if $coverage == null then tail_reconnects == 0 else $coverage.uncoveredMs == 0 end)),
+    and (if $coverage == null then tail_reconnects == 0 else $coverage.uncoveredMs == 0 end)
+    and (($reads.overloadNotices // 0) == 0)),
   tailAliveAtStop: ($tailAliveAtStop == true),
   tailReconnects: tail_reconnects,
   tailCoverage: $coverage,
+  tailReads: $reads,
   firstEventTimestamp: (timestamps | if length == 0 then null else min end),
   lastEventTimestamp: (timestamps | if length == 0 then null else max end),
   totalInvocations: length,

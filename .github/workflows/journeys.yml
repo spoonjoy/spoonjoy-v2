@@ -279,12 +279,17 @@ jobs:
           # its wrangler in one process group, which the summary step stops.
           for tail in a b; do
             setsid nohup bash -c '
-              tail=$1
+              tail=$1; short=0
               for connection in $(seq 1 100); do
+                started=$SECONDS
                 echo "$tail start $(date +%s%3N)" >> .worker-tail/connections.log
                 ./node_modules/.bin/wrangler tail "$SPOONJOY_QA_RUN_WORKER" --format json \
                   > ".worker-tail/tail-$tail-$connection.json" 2>> .worker-tail/tail.err < /dev/null || true
                 echo "$tail end $(date +%s%3N)" >> .worker-tail/connections.log
+                # A tail that cannot connect at all (a bad token, a missing Worker) gives up after
+                # 5 connections in a row that each lasted under 10 s.
+                if [ $((SECONDS - started)) -lt 10 ]; then short=$((short + 1)); else short=0; fi
+                if [ "$short" -ge 5 ]; then break; fi
                 sleep 2
               done
             ' tail-loop "$tail" > /dev/null 2>&1 < /dev/null &
@@ -396,37 +401,40 @@ jobs:
             sleep 2 || true
             for pid_file in .worker-tail/pid-*; do kill -9 -- "-$(cat "$pid_file")" 2>/dev/null || true; done
           fi
-          : > .worker-tail/events-all.ndjson
-          tail_connections=0
-          for tail_file in .worker-tail/tail-*.json; do
-            [ -f "$tail_file" ] || continue
-            tail_connections=$((tail_connections + 1))
-            # Keep only the JSON events (from the first line that opens an object), and stop at
-            # a value cut off by the kill or the drop instead of failing on it.
-            sed -n '/^{/,$p' "$tail_file" | jq -c '.' >> .worker-tail/events-all.ndjson 2>/dev/null || true
-          done
-          # Both tails see the same invocations: keep each once, in the order they happened.
-          jq -c -s 'unique | sort_by(.eventTimestamp // 0) | .[]' .worker-tail/events-all.ndjson > .worker-tail/events.ndjson || true
-          echo "QA Worker log: $(wc -l < .worker-tail/events-all.ndjson) events from both tails, $(wc -l < .worker-tail/events.ndjson) once each."
-          tail_count=$( (ls .worker-tail/pid-* 2>/dev/null || true) | wc -l)
+          # Both tails see the same invocations: keep each once, in the order they happened, and
+          # print what each tail delivered (scripts/read-worker-tail.mjs).
+          node scripts/read-worker-tail.mjs .worker-tail/events.ndjson .worker-tail/tail-*.json > .worker-tail/read.json \
+            || { : > .worker-tail/events.ndjson; echo null > .worker-tail/read.json; }
+          jq -r '.tails | to_entries[] | "QA Worker tail \(.key): \(.value.events) events over \(.value.connections) connection(s), \(.value.overloadNotices) sampling-mode notice(s), \(.value.unreadableLines) unreadable line(s), \(.value.cutOff) cut off."' \
+            .worker-tail/read.json 2>/dev/null || true
+          jq -r '"QA Worker log: \(.eventsSeen) events from both tails, \(.eventsKept) once each."' .worker-tail/read.json 2>/dev/null || true
+          tail_count=$(jq -r '.tails | length' .worker-tail/read.json 2>/dev/null || echo 0)
+          tail_connections=$(jq -r '[.tails[].connections] | add // 0' .worker-tail/read.json 2>/dev/null || echo 0)
           tail_reconnects=$(( tail_connections > tail_count ? tail_connections - tail_count : 0 ))
-          tail_connections_json=$(awk '$2 == "start" { n[$1]++; start[$1 " " n[$1]] = $3 } $2 == "end" { end[$1 " " n[$1]] = $3 }
+          tail_connections_json=$({ awk '$2 == "start" { n[$1]++; start[$1 " " n[$1]] = $3 } $2 == "end" { end[$1 " " n[$1]] = $3 }
             END { for (k in start) { split(k, p, " "); printf "{\"tail\":\"%s\",\"startedAt\":%s,\"endedAt\":%s}\n", p[1], start[k], (k in end) ? end[k] : "null" } }' \
-            .worker-tail/connections.log 2>/dev/null | jq -c -s '.' 2>/dev/null || echo null)
+            .worker-tail/connections.log 2>/dev/null || true; } | jq -c -s '.')
           suite_start=$(cat .worker-tail/suite-start 2>/dev/null || echo null)
           jq -s --argjson tailAliveAtStop "$tail_alive" --argjson tailReconnects "$tail_reconnects" --argjson keepErrorLogs true \
             --argjson tailConnections "${tail_connections_json:-null}" --argjson suiteWindow "{\"from\": ${suite_start:-null}, \"to\": $suite_end}" \
+            --slurpfile tailReads .worker-tail/read.json \
             -f scripts/summarize-worker-tail.jq \
             .worker-tail/events.ndjson > test-results/worker-tail-summary.json || true
           if [ -s .worker-tail/tail.err ]; then tail -n 20 .worker-tail/tail.err || true; fi
           rm -rf .worker-tail
-          # Say plainly how much of the suite the log missed, when both tails were down at once.
-          jq -r 'select(.complete != true) | if (.tailCoverage.uncoveredMs // 0) > 0
-            then "::warning::The QA Worker log missed \((.tailCoverage.uncoveredMs / 1000) | floor) s of the suite in \(.tailCoverage.gapCount) gap(s) when no tail was connected, the longest \((.tailCoverage.gaps | map(.ms) | max) / 1000 | floor) s. Requests in those gaps are not in worker-tail-summary.json, so its counts (slow requests, stalls, errors, retries) are partial; see tailCoverage.gaps."
-            else "::warning::The QA Worker log is incomplete (no tail was running when the suite finished, or it recorded no events). Treat worker-tail-summary.json as partial evidence, not as a run without Worker-side failures." end' \
-            test-results/worker-tail-summary.json 2>/dev/null \
-            || echo "::warning::The QA Worker log could not be summarised. There is no Worker-side evidence for this run."
-          jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, slowestPaths: (.byPath | .[0:5]) }' \
+          # Say plainly how much of the suite the log missed, and why.
+          if [ ! -s test-results/worker-tail-summary.json ]; then
+            echo "::warning::The QA Worker log could not be summarised. There is no Worker-side evidence for this run."
+          else
+            jq -r 'select(.complete != true)
+              | if (.tailReads.overloadNotices // 0) > 0
+                then "::warning::Cloudflare dropped QA Worker log events: a tail was put in sampling mode \(.tailReads.overloadNotices) time(s). worker-tail-summary.json is partial evidence; see tailReads."
+                elif (.tailCoverage.uncoveredMs // 0) > 0
+                then "::warning::The QA Worker log missed \(.tailCoverage.uncoveredMs / 1000 | floor) s of the suite in \(.tailCoverage.gapCount) gap(s) when no tail was connected, the longest \(.tailCoverage.longestGapMs / 1000 | floor) s. Requests in those gaps are not in worker-tail-summary.json, so its counts (slow requests, stalls, errors, retries) are partial; see tailCoverage.gaps."
+                else "::warning::The QA Worker log is incomplete (a tail reconnected without a second one covering it, no tail was running when the suite finished, or it recorded no events). Treat worker-tail-summary.json as partial evidence, not as a run without Worker-side failures." end' \
+              test-results/worker-tail-summary.json || true
+          fi
+          jq '{ complete, tailAliveAtStop, tailReconnects, tailCoverage, tailReads, totalInvocations, outcomes, nonOk: (.nonOkInvocations | length), serverErrors: (.serverErrorInvocations | length), hungInvocations, stalledInvocations, d1TransientErrors, slowestPaths: (.byPath | .[0:5]) }' \
             test-results/worker-tail-summary.json || true
           # A request the Workers runtime canceled as hung is a 500 (Error 1101) the browser sees as
           # a server failure, so name it in the log. Non-fatal for now.

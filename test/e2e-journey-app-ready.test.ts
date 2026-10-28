@@ -1,4 +1,5 @@
-// The journeys load a page once more when the first load's connection was reset before any answer
+// The journeys load a page once more when the first load's connection was reset before any answer,
+// and ask again for a built static file Cloudflare answered 502, 503 or 504
 // (e2e/journeys/support/app-ready.ts), and only then.
 import { describe, expect, it, vi } from "vitest";
 import { expectConsoleWarning } from "./warning-policy";
@@ -6,9 +7,9 @@ import {
   STATIC_ASSET_RETRY_DELAYS_MS,
   TRANSPORT_RETRY_DELAY_MS,
   answerStaticAsset,
-  isStaticAsset,
   isTransportFailure,
   loadAgainAfterTransportFailure,
+  waitForHydrationOnLoad,
 } from "../e2e/journeys/support/app-ready";
 
 // Playwright's errors for the two page loads that failed in Journeys run 40592921397.
@@ -117,23 +118,27 @@ describe("loadAgainAfterTransportFailure", () => {
   });
 });
 
-describe("isStaticAsset", () => {
-  const base = "https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev";
+describe("waitForHydrationOnLoad", () => {
+  it("routes only the app's own built files, before the first load", async () => {
+    const base = process.env.SPOONJOY_JOURNEYS_BASE_URL;
+    process.env.SPOONJOY_JOURNEYS_BASE_URL = "https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev/";
+    try {
+      const order: string[] = [];
+      const page = {
+        route: vi.fn(async () => { order.push("route"); }),
+        goto: vi.fn(async () => { order.push("goto"); return null; }),
+        reload: vi.fn(async () => null),
+        waitForFunction: vi.fn(async () => undefined),
+      };
+      waitForHydrationOnLoad(page as never);
+      await (page as unknown as { goto(url: string): Promise<unknown> }).goto("/recipes");
 
-  it("is a built file of the app under test", () => {
-    expect(isStaticAsset(new URL(`${base}/assets/reason-parts-BstUkRmX.js`), base)).toBe(true);
-  });
-
-  it.each([
-    ["a page", `${base}/recipes`],
-    ["a data request", `${base}/assets.data`],
-    ["another origin's assets", "https://example.test/assets/app.js"],
-  ])("is never %s", (_case, url) => {
-    expect(isStaticAsset(new URL(url), base)).toBe(false);
-  });
-
-  it("is nothing without a base URL", () => {
-    expect(isStaticAsset(new URL(`${base}/assets/app.js`), undefined)).toBe(false);
+      expect(page.route).toHaveBeenCalledExactlyOnceWith("https://spoonjoy-v2-qa-run-39850143035-1.mendelow-studio.workers.dev/assets/**", expect.any(Function));
+      expect(order).toEqual(["route", "goto"]);
+    } finally {
+      if (base === undefined) delete process.env.SPOONJOY_JOURNEYS_BASE_URL;
+      else process.env.SPOONJOY_JOURNEYS_BASE_URL = base;
+    }
   });
 });
 

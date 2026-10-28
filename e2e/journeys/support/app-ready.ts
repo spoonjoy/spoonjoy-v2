@@ -75,11 +75,6 @@ function reportLoadAgain(error: Error): void {
 const RETRYABLE_ASSET_STATUSES = new Set([502, 503, 504]);
 export const STATIC_ASSET_RETRY_DELAYS_MS: readonly number[] = [250, 1_000];
 
-/** True for a built static file of the app under test: same origin, path under /assets/. */
-export function isStaticAsset(url: URL, baseURL: string | undefined = process.env.SPOONJOY_JOURNEYS_BASE_URL): boolean {
-  return baseURL !== undefined && url.origin === new URL(baseURL).origin && url.pathname.startsWith("/assets/");
-}
-
 type AssetRoute = Pick<Route, "fetch" | "fulfill" | "continue" | "request">;
 
 /**
@@ -124,7 +119,11 @@ function reportAssetAgain(path: string, status: number, attempt: number): void {
 export function waitForHydrationOnLoad(page: Page): void {
   const goto = page.goto.bind(page);
   const reload = page.reload.bind(page);
-  const assetsRouted = page.route((url) => isStaticAsset(url), (route) => answerStaticAsset(route));
+  // A glob, not a function: Playwright pauses every request a function matcher might match.
+  const base = process.env.SPOONJOY_JOURNEYS_BASE_URL;
+  const assetsRouted = base
+    ? page.route(`${new URL(base).origin}/assets/**`, (route) => answerStaticAsset(route))
+    : Promise.resolve();
   // Awaited by the first load; a page closed before any load must not leave it unhandled.
   assetsRouted.catch(() => undefined);
   page.goto = async (url, options) => {

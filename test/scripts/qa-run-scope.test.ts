@@ -978,6 +978,7 @@ describe("deploy", () => {
     ["an API error with a JSON answer", "A request to the Cloudflare API (/accounts/x/workers/scripts/spoonjoy-v2-qa-run-1001-2) failed.\n  Script startup exceeded CPU time limit. [code: 10021]\n"],
     ["an API client error page", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 413 Payload Too Large\n"],
     ["an API 501", "✘ [ERROR] Received a malformed response from the API\n  PUT /accounts/x/workers/scripts/y -> 501 Not Implemented\n"],
+    ["an app log line that mentions a failed fetch", "✘ [ERROR] Uncaught Error: Image fetch failed\n  at app/lib/safe-image-fetch.server.ts\n"],
   ])("never deploys again after %s", async (_case, stderr) => {
     const error = failedDeploy(stderr);
     const exec = vi.fn().mockRejectedValueOnce(error);

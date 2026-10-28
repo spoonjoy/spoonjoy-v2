@@ -121,8 +121,8 @@ const INTERNAL_AUTH_SERVER_ERROR_PATTERN = /Internal authentication error: inter
 // The connection to Cloudflare's API failed before any answer (undici's "fetch failed" and the
 // socket errors under it), or the API answered a server error with a page instead of JSON, which
 // wrangler reports as "Received a malformed response from the API" with "-> 502 Bad Gateway".
-// Neither can come from the build or the config, which wrangler checks before it calls the API.
-const API_CONNECTION_FAILURE_PATTERN = /\bfetch failed\b|\b(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|EPIPE|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT))\b/;
+// Neither names a fault in the build or the config.
+const API_CONNECTION_FAILURE_PATTERN = /(?:\[ERROR\]|TypeError:) fetch failed\b|\b(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|EPIPE|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT))\b/;
 const API_SERVER_ERROR_PAGE_PATTERN = /Received a malformed response from the API[\s\S]*-> (50[0234])\b/;
 // A deploy that ended in 10007, or lost its connection, has usually made the script and applied
 // its Durable Object migrations; while Cloudflare's reads lag, the next deploy sends them again
