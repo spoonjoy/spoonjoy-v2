@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -9,10 +9,14 @@ import DatabaseSync from "better-sqlite3";
 import {
   claimRunDbDir,
   prepareWorkerDb,
+  processAlive,
   releaseRunDbDir,
+  releaseRunDbDirOnExit,
+  sweepStaleRunDbDirs,
   snapshotTemplate,
   workerDatabaseUrl,
   workerDbPath,
+  type SweepIo,
   type WorkerDbIo,
 } from "./worker-db";
 
@@ -195,4 +199,109 @@ describe("per-process test database", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+describe("run directories left behind", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  it("names a run's directory after the process that claimed it", () => {
+    const env: NodeJS.ProcessEnv = {};
+    const dir = claimRunDbDir(env, 4242)!;
+    try {
+      expect(dir.startsWith(tmpdir())).toBe(true);
+      expect(dir.slice(tmpdir().length).replace(/^\//, "")).toMatch(/^spoonjoy-vitest-db-4242-[^-]+$/);
+      expect(existsSync(dir)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("removes the directories of runs whose process has gone, and pid-less ones untouched for a day", () => {
+    const removed: string[] = [];
+    const io: SweepIo = {
+      list: () => [
+        "unrelated",
+        "spoonjoy-vitest-db-111-dead01",
+        "spoonjoy-vitest-db-222-live01",
+        "spoonjoy-vitest-db-OLD123",
+        "spoonjoy-vitest-db-NEW123",
+      ],
+      alive: (pid) => pid === 222,
+      modifiedMs: (path) => (path.endsWith("OLD123") ? 0 : 30 * HOUR),
+      remove: (path) => removed.push(path),
+    };
+
+    expect(sweepStaleRunDbDirs("/root", io, 25 * HOUR + 1)).toEqual(["/root/spoonjoy-vitest-db-111-dead01", "/root/spoonjoy-vitest-db-OLD123"]);
+    expect(removed).toEqual(["/root/spoonjoy-vitest-db-111-dead01", "/root/spoonjoy-vitest-db-OLD123"]);
+  });
+
+  it("sweeps a real directory, keeping a live run's", () => {
+    const root = mkdtempSync(join(tmpdir(), "spoonjoy-worker-db-sweep-"));
+    try {
+      const gone = spawnSync(process.execPath, ["-e", "0"]).pid;
+      for (const name of [`spoonjoy-vitest-db-${gone}-abc123`, `spoonjoy-vitest-db-${process.pid}-abc123`, "spoonjoy-vitest-db-old123", "spoonjoy-vitest-db-new123"]) {
+        mkdirSync(join(root, name));
+        writeFileSync(join(root, name, "template.db"), "");
+      }
+      const dayAndAMinuteAgo = (Date.now() - 24 * HOUR - 60_000) / 1000;
+      utimesSync(join(root, "spoonjoy-vitest-db-old123"), dayAndAMinuteAgo, dayAndAMinuteAgo);
+
+      sweepStaleRunDbDirs(root);
+      expect(readdirSync(root).sort()).toEqual([`spoonjoy-vitest-db-${process.pid}-abc123`, "spoonjoy-vitest-db-new123"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("counts a process another user runs as alive", () => {
+    const fail = (code: string) => () => {
+      throw Object.assign(new Error(code), { code });
+    };
+    expect(processAlive(process.pid)).toBe(true);
+    expect(processAlive(1, () => true)).toBe(true);
+    expect(processAlive(1, fail("EPERM"))).toBe(true);
+    expect(processAlive(1, fail("ESRCH"))).toBe(false);
+  });
+
+  it("releases the run's directory at exit, listening once however often the config is evaluated", () => {
+    const once = vi.fn();
+    const proc = { once } as unknown as NodeJS.Process;
+    const release = vi.fn();
+    releaseRunDbDirOnExit(proc, release);
+    releaseRunDbDirOnExit(proc, release);
+    expect(once).toHaveBeenCalledTimes(1);
+    expect(once).toHaveBeenCalledWith("exit", release);
+  });
+
+  it("leaves no run directory behind once a real Vitest run ends", () => {
+    const root = mkdtempSync(join(tmpdir(), "spoonjoy-worker-db-run-"));
+    const seen = join(root, "seen.txt");
+    const path = "test/support/__worker-db-cleanup-generated.test.ts";
+    writeFileSync(
+      path,
+      `import { writeFileSync } from "node:fs";\nimport { test } from "vitest";\n` +
+        `test("records its run directory", () => writeFileSync(${JSON.stringify(seen)}, process.env.SPOONJOY_TEST_DB_DIR ?? ""));\n`,
+    );
+    try {
+      const env: NodeJS.ProcessEnv = { ...process.env, TMPDIR: root };
+      for (const key of Object.keys(env)) {
+        if (key === "VITEST" || key.startsWith("VITEST_") || key.startsWith("SPOONJOY_TEST_DB_")) delete env[key];
+      }
+      const run = spawnSync(process.execPath, ["node_modules/vitest/vitest.mjs", "run", path], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env,
+        timeout: 90_000,
+      });
+      expect(run.status, run.stdout + run.stderr).toBe(0);
+
+      const dir = readFileSync(seen, "utf8");
+      expect(dir.startsWith(root)).toBe(true);
+      expect(existsSync(dir)).toBe(false);
+      expect(readdirSync(root).filter((name) => name.startsWith("spoonjoy-vitest-db-"))).toEqual([]);
+    } finally {
+      unlinkSync(path);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
