@@ -588,7 +588,7 @@ jobs:
         continue-on-error: true
         run: node scripts/count-cloudflare-requests.mjs summary "$SPOONJOY_CF_REQUEST_LOG" | tee -a "$GITHUB_STEP_SUMMARY"
 
-  # The shared QA Worker (spoonjoy-v2-qa, D1 spoonjoy-qa) mirrors main: native journeys and the
+  # The shared QA Worker (spoonjoy-v2-qa, D1 spoonjoy-qa-2) mirrors main: native journeys and the
   # QA Image Cover Smoke workflow run against it (both create their own accounts by signing up,
   # so neither needs this workflow to seed shared QA). After main's journeys pass, deploy main
   # there, applying main's migrations to shared QA. One deploy at a time, and only while the

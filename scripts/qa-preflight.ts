@@ -292,7 +292,7 @@ export function validateQaGeneratedBuildConfig(
     vars.SPOONJOY_BASE_URL === QA_BASE_URL &&
     vars.SPOONJOY_CSP_MODE === "enforce" &&
     postHogArtifactsMatch &&
-    db?.database_name === "spoonjoy-qa" &&
+    db?.database_name === "spoonjoy-qa-2" &&
     db.database_id === QA_D1_DATABASE_ID &&
     photos?.bucket_name === QA_R2_BUCKET &&
     hasExpectedRateLimitBindings &&

@@ -287,8 +287,8 @@ function validInputs(): DeploymentPreflightInputs {
           d1_databases: [
             {
               binding: "DB",
-              database_name: "spoonjoy-qa",
-              database_id: "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34",
+              database_name: "spoonjoy-qa-2",
+              database_id: "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1",
             },
           ],
           r2_buckets: [{ binding: "PHOTOS", bucket_name: "spoonjoy-photos-qa" }],
@@ -4945,7 +4945,7 @@ describe("deployment docs", () => {
     const docs = `${readme}\n${deployDoc}\n${deploymentDoc}`;
 
     for (const term of [
-      "spoonjoy-qa",
+      "spoonjoy-qa-2",
       "spoonjoy-photos-qa",
       "spoonjoy-v2-qa.mendelow-studio.workers.dev",
       "pnpm run qa:preflight",
@@ -5752,8 +5752,8 @@ describe("wrangler QA environment", () => {
     expect(qa?.d1_databases).toEqual([
       {
         binding: "DB",
-        database_name: "spoonjoy-qa",
-        database_id: "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34",
+        database_name: "spoonjoy-qa-2",
+        database_id: "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1",
       },
     ]);
     expect(qa?.r2_buckets).toEqual([{ binding: "PHOTOS", bucket_name: "spoonjoy-photos-qa" }]);

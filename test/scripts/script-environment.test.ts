@@ -48,7 +48,7 @@ describe("script target resolver", () => {
       targetEnv: "qa",
       baseUrl: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev/some-path",
       origin: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-      d1Target: "QA D1 spoonjoy-qa (--remote --env qa)",
+      d1Target: "QA D1 spoonjoy-qa-2 (--remote --env qa)",
       d1Args: ["--remote", "--env", "qa"],
       r2Target: "QA R2 spoonjoy-photos-qa (--remote)",
       r2Bucket: "spoonjoy-photos-qa",
@@ -154,7 +154,7 @@ describe("script target resolver", () => {
     expect(scriptTargetSummary(target)).toEqual([
       "Target environment: qa",
       "Base URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-      "D1 target: QA D1 spoonjoy-qa (--remote --env qa)",
+      "D1 target: QA D1 spoonjoy-qa-2 (--remote --env qa)",
       "R2 target: QA R2 spoonjoy-photos-qa (--remote)",
       "Destructive scope: QA disposable test data only",
     ]);

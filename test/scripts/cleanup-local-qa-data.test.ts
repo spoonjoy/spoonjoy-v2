@@ -368,7 +368,7 @@ describe("cleanup-local-qa-data", () => {
       target: {
         targetEnv: "qa",
         baseUrl: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-        d1Target: "QA D1 spoonjoy-qa (--remote --env qa)",
+        d1Target: "QA D1 spoonjoy-qa-2 (--remote --env qa)",
         r2Target: "QA R2 spoonjoy-photos-qa (--remote)",
         destructiveScope: "QA disposable test data only",
       },
@@ -436,7 +436,7 @@ describe("cleanup-local-qa-data", () => {
     expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-run-1-1" }] } } }))
       .toMatchObject({ baseUrl: target.baseUrl, d1Target: "QA run D1 spoonjoy-qa-run-1-1 (--remote --env qa, rewritten by qa-run-scope)" });
     expect(cleanup.resolveRunScopedQaTarget(target, "OTHER_DB", runConfig)).toBe(target);
-    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa" }] } } })).toBe(target);
+    expect(cleanup.resolveRunScopedQaTarget(target, "DB", { env: { qa: { d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-2" }] } } })).toBe(target);
     expect(cleanup.resolveRunScopedQaTarget(target, "DB", {})).toBe(target);
     const local = cleanup.parseCleanupArgs([]).target;
     expect(cleanup.resolveRunScopedQaTarget(local, "DB", runConfig)).toBe(local);
@@ -454,7 +454,7 @@ describe("cleanup-local-qa-data", () => {
 
     expect(readWranglerConfig).toHaveBeenCalledTimes(1);
     expect(stdout.text()).toContain("D1 target: QA run D1 spoonjoy-qa-run-9-1 (--remote --env qa, rewritten by qa-run-scope)\n");
-    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa ");
+    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa-2 ");
   });
 
   it("formats the target summary printed before cleanup commands", () => {
@@ -463,7 +463,7 @@ describe("cleanup-local-qa-data", () => {
     expect(cleanup.formatCleanupTargetSummary(options.target)).toEqual([
       "Target environment: qa",
       "Base URL: https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-      "D1 target: QA D1 spoonjoy-qa (--remote --env qa)",
+      "D1 target: QA D1 spoonjoy-qa-2 (--remote --env qa)",
       "R2 target: QA R2 spoonjoy-photos-qa (--remote)",
       "Destructive scope: QA disposable test data only",
     ]);

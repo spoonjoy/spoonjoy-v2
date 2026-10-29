@@ -94,7 +94,7 @@ For Ouroboros agent integration, see [`docs/ouroboros-mcp.md`](docs/ouroboros-mc
 | `pnpm typecheck` | TypeScript validation |
 | `pnpm run deploy:preflight` | Verify Cloudflare bindings, secrets docs, scripts, and migrations before production deploy |
 | `pnpm run qa:preflight` | Verify the isolated `spoonjoy-v2-qa` Worker config, QA D1/R2, required QA secrets, and QA R2 round trip |
-| `pnpm run deploy:qa` | Build with `CLOUDFLARE_ENV=qa`, migrate `spoonjoy-qa`, validate generated config with `SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG`, and deploy QA |
+| `pnpm run deploy:qa` | Build with `CLOUDFLARE_ENV=qa`, migrate `spoonjoy-qa-2`, validate generated config with `SPOONJOY_QA_PREFLIGHT_EXPECT_BUILD_CONFIG`, and deploy QA |
 | `pnpm run smoke:qa` | Run the live smoke against `spoonjoy-v2-qa.mendelow-studio.workers.dev` with `--target-env qa` cleanup |
 | `pnpm run cleanup:local` | Dry-run disposable cleanup against local D1 with `--target-env local` |
 | `pnpm run cleanup:local:apply` | Apply disposable cleanup to local D1 only |
@@ -225,7 +225,7 @@ pnpm exec prisma migrate diff --from-empty --to-schema-datamodel=./prisma/schema
 
 See [docs/deployment.md](./docs/deployment.md) for the full production checklist, local `.dev.vars` guidance, and common failure modes.
 
-The dedicated QA environment uses D1 `spoonjoy-qa`, R2 `spoonjoy-photos-qa`, per-run `codex-qa-seed-` seed users, disposable `codex-smoke-` users, and `SPOONJOY_CSP_MODE=enforce`. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=sample` (QA covers come from sample images), OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
+The dedicated QA environment uses D1 `spoonjoy-qa-2`, R2 `spoonjoy-photos-qa`, per-run `codex-qa-seed-` seed users, disposable `codex-smoke-` users, and `SPOONJOY_CSP_MODE=enforce`. Configure QA secrets with commands such as `wrangler secret put SESSION_SECRET --env qa` and verify them with `wrangler secret list --env qa`. QA docs also cover `POSTHOG_DISABLED=true`, `IMAGE_PROVIDER_PRIMARY=sample` (QA covers come from sample images), OAuth callback setup, WebAuthn origins, and the rule: Do not run broad production cleanup.
 
 ## Project Structure
 
