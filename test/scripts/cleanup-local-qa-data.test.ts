@@ -454,7 +454,7 @@ describe("cleanup-local-qa-data", () => {
 
     expect(readWranglerConfig).toHaveBeenCalledTimes(1);
     expect(stdout.text()).toContain("D1 target: QA run D1 spoonjoy-qa-run-9-1 (--remote --env qa, rewritten by qa-run-scope)\n");
-    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa ");
+    expect(stdout.text()).not.toContain("D1 target: QA D1 spoonjoy-qa-2 ");
   });
 
   it("formats the target summary printed before cleanup commands", () => {

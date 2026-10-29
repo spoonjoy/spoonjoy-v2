@@ -2189,7 +2189,7 @@ describe("smoke-live helpers", () => {
       target: {
         targetEnv: "qa",
         baseUrl: "https://spoonjoy-v2-qa.mendelow-studio.workers.dev",
-        d1Target: "QA D1 spoonjoy-qa (--remote --env qa)",
+        d1Target: "QA D1 spoonjoy-qa-2 (--remote --env qa)",
         r2Target: "QA R2 spoonjoy-photos-qa (--remote)",
         destructiveScope: "QA disposable test data only",
       },
