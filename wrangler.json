@@ -115,8 +115,8 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "spoonjoy-qa",
-          "database_id": "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34"
+          "database_name": "spoonjoy-qa-2",
+          "database_id": "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1"
         }
       ],
       "r2_buckets": [

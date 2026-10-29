@@ -45,7 +45,7 @@ Spoonjoy has a separate QA Worker and separate Cloudflare state for live/manual/
 QA resources:
 
 - Worker URL: `https://spoonjoy-v2-qa.mendelow-studio.workers.dev`
-- D1 database: `spoonjoy-qa`
+- D1 database: `spoonjoy-qa-2`
 - R2 bucket: `spoonjoy-photos-qa`
 - Rate-limit namespaces: `2001`, `2002`, `2003`, `2004`
 - `AUTH_IP_RATE_LIMITER` (namespace `2003`) is 60/minute in QA, vs. production's 20/minute (namespace `1003`): CI's Journeys workflow exercises QA from shared GitHub-hosted runner IPs (personas + per-run scratch users signing in, plus the journeys' own sign-ins), so QA needs headroom a single real client would never need. Production is deliberately left tighter; do not raise it to match QA.
@@ -56,7 +56,7 @@ QA resources:
 First-time QA resource creation:
 
 ```bash
-wrangler d1 create spoonjoy-qa
+wrangler d1 create spoonjoy-qa-2
 wrangler r2 bucket create spoonjoy-photos-qa
 ```
 

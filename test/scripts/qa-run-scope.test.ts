@@ -444,7 +444,7 @@ describe("sweepStaleRunStacks", () => {
       listDatabases: vi.fn(async () => [
         { name: "spoonjoy-qa-run-1-1", uuid: "stale-db", created_at: old },
         { name: "spoonjoy-qa-run-2-1", uuid: "fresh-db", created_at: fresh },
-        { name: "spoonjoy-qa", uuid: "shared", created_at: old },
+        { name: "spoonjoy-qa-2", uuid: "shared", created_at: old },
         { name: "spoonjoy", uuid: "production", created_at: old },
         { name: "spoonjoy-qa-run-x", uuid: "odd", created_at: old },
         { name: "copy-of-spoonjoy-qa-run-4-1", uuid: "not-a-prefix", created_at: old },
