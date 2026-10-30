@@ -59,7 +59,7 @@ function focusable(element: HTMLElement): boolean {
  * for jumps between sections of a long page.
  *
  * @group Navigation
- * @see https://ourostack.github.io/ouro-ui/docs/skip-link
+ * @see https://ui.ouro.bot/docs/skip-link
  *
  * @example
  * <body>

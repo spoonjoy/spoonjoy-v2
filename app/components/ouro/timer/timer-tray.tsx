@@ -172,7 +172,7 @@ function TrayRow({ item, words, silent, repeat, repeatFor, finalFocus }: TrayRow
  * Use `Timer` instead for one timer with all its controls.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer-tray
+ * @see https://ui.ouro.bot/docs/timer-tray
  *
  * @example
  * <TimerTray timers={[{ timerId: "pasta", label: "Pasta", duration: 600, href: "/steps/2" }]} />

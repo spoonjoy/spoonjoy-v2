@@ -130,7 +130,7 @@ let missingCheck: ReturnType<typeof setTimeout> | undefined;
  * and `Dialog` when the user must answer before going on.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/toaster
+ * @see https://ui.ouro.bot/docs/toaster
  *
  * @example
  * toast("Recipe saved", { tone: "success" });

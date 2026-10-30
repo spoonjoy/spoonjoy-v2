@@ -91,7 +91,7 @@ function SchemeIcon({ dark }: { dark: boolean }): JSX.Element {
  * `SegmentedControl` for other choices of how a view looks.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/color-scheme-toggle
+ * @see https://ui.ouro.bot/docs/color-scheme-toggle
  *
  * @example
  * <Navbar label="Main" items={items} actions={<ColorSchemeToggle />} />

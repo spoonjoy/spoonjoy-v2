@@ -94,7 +94,7 @@ const resolve = (scheme: ColorScheme, dark: boolean): ResolvedColorScheme => (sc
  * mode is whatever `.dark` class the app sets.
  *
  * @group App setup
- * @see https://ourostack.github.io/ouro-ui/docs/color-scheme-toggle
+ * @see https://ui.ouro.bot/docs/color-scheme-toggle
  * @example
  * // app/root.tsx (React Router):
  * <html lang="en" suppressHydrationWarning>
@@ -134,7 +134,7 @@ export function ColorSchemeProvider({ children, storageKey = COLOR_SCHEME_DEFAUL
  * one. Before hydration it reports the default scheme, as the server did.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/color-scheme-toggle
+ * @see https://ui.ouro.bot/docs/color-scheme-toggle
  * @example
  * const { resolved, setScheme } = useColorScheme();
  * <Switch label="Dark mode" checked={resolved === "dark"} onCheckedChange={(on) => setScheme(on ? "dark" : "light")} />

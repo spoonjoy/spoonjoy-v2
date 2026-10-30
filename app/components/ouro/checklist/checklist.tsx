@@ -182,7 +182,7 @@ const boxOf = (row: HTMLElement) => row.querySelector<HTMLElement>('[role="check
  * person ticks off.
  *
  * @group Lists
- * @see https://ourostack.github.io/ouro-ui/docs/checklist
+ * @see https://ui.ouro.bot/docs/checklist
  *
  * @example
  * <Checklist

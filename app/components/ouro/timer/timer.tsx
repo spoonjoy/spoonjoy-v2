@@ -129,7 +129,7 @@ function lengthOf(seconds: number): string {
  * Use `Progress` instead for how far a task has got, and `useTimer` for a timer of your own design.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer
+ * @see https://ui.ouro.bot/docs/timer
  *
  * @example
  * <Timer label="Pasta" duration={600} timerId="pasta" />

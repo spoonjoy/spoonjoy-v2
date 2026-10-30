@@ -96,7 +96,7 @@ function useScrollableCode(): RefCallback<HTMLPreElement> {
  * running text, and `CopyButton` for one value without a block around it.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/code-block
+ * @see https://ui.ouro.bot/docs/code-block
  *
  * @example
  * <CodeBlock language="bash" code="npx shadcn@latest add button" />

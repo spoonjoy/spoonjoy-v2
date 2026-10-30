@@ -200,7 +200,7 @@ function entryPoint(element: HTMLElement): HTMLElement {
  * `<form>` when nothing needs validating.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/form
+ * @see https://ui.ouro.bot/docs/form
  *
  * @example
  * import { formErrors } from "@/lib/ouro/form-answer";

@@ -248,7 +248,7 @@ function Choices(props: {
  * and `Switch` for on or off.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/radio-group
+ * @see https://ui.ouro.bot/docs/radio-group
  *
  * @example
  * <RadioGroup

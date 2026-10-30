@@ -52,7 +52,7 @@ async function resumeWithin(audio: AudioContext): Promise<void> {
  * it to every later `chime`.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer
+ * @see https://ui.ouro.bot/docs/timer
  *
  * @example
  * const context = useRef<AudioContext | null>(null);
@@ -85,7 +85,7 @@ function createChimeContext(): AudioContext | null {
  * attention back to the screen.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer
+ * @see https://ui.ouro.bot/docs/timer
  *
  * @example
  * const played = await chime({ context });
@@ -141,7 +141,7 @@ async function chime({ context }: ChimeOptions = {}): Promise<boolean> {
  * gets the alert.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer
+ * @see https://ui.ouro.bot/docs/timer
  *
  * @example
  * buzz();

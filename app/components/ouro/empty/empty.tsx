@@ -73,7 +73,7 @@ const levels = [2, 3, 4, 5, 6] as const;
  * still loading.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/empty
+ * @see https://ui.ouro.bot/docs/empty
  *
  * @example
  * <Empty

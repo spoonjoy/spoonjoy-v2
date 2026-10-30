@@ -30,7 +30,7 @@ const COLOR_SCHEME_DEFAULTS: { readonly storageKey: string; readonly defaultSche
  * the script changes before React hydrates. It is plain text, so a Server Component can call it.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/color-scheme-toggle
+ * @see https://ui.ouro.bot/docs/color-scheme-toggle
  * @example
  * <html lang="en" suppressHydrationWarning>
  *   <head>

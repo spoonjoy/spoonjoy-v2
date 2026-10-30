@@ -112,7 +112,7 @@ function textHint(token: string): string {
  * `Button`, pass plain text as children; the button styles it.
  *
  * @group Text
- * @see https://ourostack.github.io/ouro-ui/docs/text
+ * @see https://ui.ouro.bot/docs/text
  *
  * @example
  * <Text>Braise for three hours.</Text>

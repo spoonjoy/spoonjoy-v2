@@ -58,7 +58,7 @@ function returnTarget(card: HTMLElement, cameFrom: HTMLElement | null): HTMLElem
  * Use `useInstallPrompt` instead to offer installing from a control of your own, such as a menu item.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/install-prompt
+ * @see https://ui.ouro.bot/docs/install-prompt
  *
  * @example
  * <InstallPrompt className="mt-6" />
