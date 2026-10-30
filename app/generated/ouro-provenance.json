@@ -15,8 +15,10 @@
       "app/components/navigation/phone-brand-bar.tsx",
       "app/components/navigation/quick-actions.tsx",
       "app/components/navigation/recipes-section-nav.tsx",
+      "app/components/navigation/site-footer.tsx",
       "app/components/oauth.tsx",
       "app/components/spoonjoy-logo.tsx",
+      "app/components/xray/xray-provider.tsx",
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
       "app/hooks/use-cooking-now.ts",
@@ -26,6 +28,7 @@
       "app/lib/analytics.ts",
       "app/lib/api-auth.server.ts",
       "app/lib/api-idempotency.server.ts",
+      "app/lib/build-info.server.ts",
       "app/lib/canonical-host.server.ts",
       "app/lib/client-storage-schema.ts",
       "app/lib/cook-session-sync.ts",
@@ -51,6 +54,7 @@
       "app/lib/oauth-server.server.ts",
       "app/lib/openai-client.server.ts",
       "app/lib/openai-error.server.ts",
+      "app/lib/ouro-provenance.ts",
       "app/lib/push-client.ts",
       "app/lib/qa-error-logs.server.ts",
       "app/lib/rate-limit.server.ts",
@@ -63,6 +67,7 @@
     "components": [
       "button",
       "color-scheme-toggle",
+      "inspector",
       "install-prompt",
       "link",
       "navbar",
@@ -80,11 +85,15 @@
         "app/components/cooking-now/CookingNow.tsx",
         "app/components/errors/route-error.tsx",
         "app/components/navigation/phone-brand-bar.tsx",
+        "app/components/navigation/site-footer.tsx",
         "app/components/oauth.tsx",
         "app/root.tsx"
       ],
       "color-scheme-toggle": [
         "app/root.tsx"
+      ],
+      "inspector": [
+        "app/components/xray/xray-provider.tsx"
       ],
       "install-prompt": [
         "app/root.tsx"
@@ -92,6 +101,7 @@
       "link": [
         "app/components/cooking-now/CookingNow.tsx",
         "app/components/navigation/phone-brand-bar.tsx",
+        "app/components/navigation/site-footer.tsx",
         "app/root.tsx"
       ],
       "navbar": [
@@ -1098,12 +1108,11 @@
         "app/components/recipe/IngredientList.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
+        "app/components/xray/xray-provider.tsx",
         "app/hooks/use-viewport-top-var.ts",
-        "app/lib/build-info.server.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cook/local-cook-controller.ts",
         "app/lib/ingredient-affordances.ts",
-        "app/lib/ouro-provenance.server.ts",
         "app/lib/ouro-provenance.ts",
         "app/lib/quantity.ts",
         "app/lib/test-kitchen/content.ts",
@@ -1143,7 +1152,7 @@
           "app/routes/test-kitchen.tsx"
         ],
         "inspector": [
-          "app/routes/test-kitchen.tsx"
+          "app/components/xray/xray-provider.tsx"
         ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",

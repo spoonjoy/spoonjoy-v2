@@ -465,6 +465,11 @@ body:has(#cook) .sj-mobile-surface {
   padding-bottom: 0;
 }
 
+/* Cook mode is the whole screen, so the site footer (root.tsx's SiteFooter) steps aside too. */
+body:has(#cook) .sj-site-footer {
+  display: none;
+}
+
 .sj-page {
   min-height: 100svh;
   background: var(--sj-page);
