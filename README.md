@@ -1,6 +1,6 @@
 # Spoonjoy
 
-A recipe app for home cooks, built with React Router 7 on Cloudflare.[^stack] It is the reference app for building with [Ouro HX](https://ourostack.github.io/ouro-ui/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
+A recipe app for home cooks, built with React Router 7 on Cloudflare.[^stack] It is the reference app for building with [Ouro HX](https://ui.ouro.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
 
 ## Links
 

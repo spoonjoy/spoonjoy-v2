@@ -16,7 +16,7 @@ export function llmsText(origin: string) {
 - [Source](${SOURCE_REPOSITORY}): React Router on Cloudflare Workers
 - [Building with Ouro HX](${SOURCE_REPOSITORY}/blob/main/docs/building-with-ouro-hx.md): how Spoonjoy installs, themes and composes Ouro HX, and what to do when HX lacks a component
 - [Ouro HX provenance](${origin}/ouro-provenance.json): the Ouro HX release and, page by page, the files a page is built from and the HX components they render
-- [Ouro HX](https://ourostack.github.io/ouro-ui/): the component library
+- [Ouro HX](https://ui.ouro.bot/): the component library
 
 ## Use it from an agent
 

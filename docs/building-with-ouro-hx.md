@@ -1,6 +1,6 @@
 # Building with Ouro HX, the way Spoonjoy does
 
-Spoonjoy is a recipe app built on [Ouro HX](https://ourostack.github.io/ouro-ui/). Point an agent at this file and it should be able to build an app the same way. The sections link to the Spoonjoy files that do what they describe.
+Spoonjoy is a recipe app built on [Ouro HX](https://ui.ouro.bot/). Point an agent at this file and it should be able to build an app the same way. The sections link to the Spoonjoy files that do what they describe.
 
 The short version:
 
