@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
+import { Component, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SiteFooter } from "~/components/navigation/site-footer";
 import { XrayProvider, useXray } from "~/components/xray/xray-provider";
@@ -169,7 +170,19 @@ describe("SiteFooter", () => {
       useXray();
       return null;
     }
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => render(<Orphan />)).toThrow("useXray needs <XrayProvider>");
+    // An error boundary catches it, and the root reports it here instead of to the console.
+    class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+      state = { failed: false };
+      static getDerivedStateFromError() {
+        return { failed: true };
+      }
+      render() {
+        return this.state.failed ? <p>X-ray failed</p> : this.props.children;
+      }
+    }
+    const caught = vi.fn();
+    render(<Boundary><Orphan /></Boundary>, { onCaughtError: caught });
+    expect(screen.getByText("X-ray failed")).toBeInTheDocument();
+    expect(caught.mock.calls[0]?.[0]).toEqual(new Error("useXray needs <XrayProvider> around it (app/root.tsx renders one)"));
   });
 });
