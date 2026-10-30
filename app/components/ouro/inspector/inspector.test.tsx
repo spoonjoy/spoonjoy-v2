@@ -943,7 +943,7 @@ describe("Inspector", () => {
     );
     await drawn(1);
     await expect.element(page.getByRole("button", { name: "1 component", exact: true })).toBeVisible();
-    expect(tags()[0]!.getAttribute("href")).toBe("https://ourostack.github.io/ouro-ui/docs/button/");
+    expect(tags()[0]!.getAttribute("href")).toBe("https://ui.ouro.bot/docs/button/");
   });
 
   it("renders nothing while closed, and nothing on the server", async () => {

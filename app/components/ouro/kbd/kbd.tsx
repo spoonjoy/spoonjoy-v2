@@ -133,7 +133,7 @@ function label(key: string, platform: Platform): { text: string; name: string | 
  * Use plain `Text` instead for a key named in prose that isn't a shortcut to press.
  *
  * @group Text
- * @see https://ourostack.github.io/ouro-ui/docs/kbd
+ * @see https://ui.ouro.bot/docs/kbd
  *
  * @example
  * <Kbd keys={["mod", "k"]} />

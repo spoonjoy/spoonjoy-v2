@@ -137,7 +137,7 @@ function labelConnected(root: HTMLElement, data: string, labelId: string, native
  * `getByRole("alert")` finds only a Form's message about the whole form.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/field
+ * @see https://ui.ouro.bot/docs/field
  *
  * @example
  * <Field label="Email" name="email" required description="We never share it." error={errors?.email}>

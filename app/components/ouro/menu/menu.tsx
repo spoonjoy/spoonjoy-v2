@@ -401,7 +401,7 @@ function MenuSurface({
  * ouro-base.css), like Dialog and Sheet.
  *
  * @group Menus
- * @see https://ourostack.github.io/ouro-ui/docs/menu
+ * @see https://ui.ouro.bot/docs/menu
  *
  * @example
  * <Menu trigger={<Button variant="outline">Actions</Button>}>

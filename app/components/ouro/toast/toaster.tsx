@@ -98,7 +98,7 @@ export interface ToasterProps {
  * must answer before going on.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/toaster
+ * @see https://ui.ouro.bot/docs/toaster
  *
  * @example
  * <OuroProvider>

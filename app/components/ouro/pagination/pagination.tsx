@@ -178,7 +178,7 @@ function Chevron({ back }: { back?: boolean }): JSX.Element {
  * switch between a few named views.
  *
  * @group Navigation
- * @see https://ourostack.github.io/ouro-ui/docs/pagination
+ * @see https://ui.ouro.bot/docs/pagination
  *
  * @example
  * <Pagination page={3} pageCount={12} href="/recipes?page={page}" />

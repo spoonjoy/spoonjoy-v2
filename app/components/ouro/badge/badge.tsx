@@ -184,7 +184,7 @@ function badgeHint(token: string): string {
  * a message the reader must notice.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/badge
+ * @see https://ui.ouro.bot/docs/badge
  *
  * @example
  * <Badge>Draft</Badge>

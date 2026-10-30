@@ -214,7 +214,7 @@ function GripIcon(): JSX.Element {
  * `Resizable` to change sizes, not order.
  *
  * @group Lists
- * @see https://ourostack.github.io/ouro-ui/docs/reorderable
+ * @see https://ui.ouro.bot/docs/reorderable
  *
  * @example
  * <Reorderable

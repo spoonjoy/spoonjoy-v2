@@ -178,7 +178,7 @@ function ownedPaths(items: readonly TabBarItem[]): Array<{ path: string; index: 
  * destinations, and `Tabs` for views of one page.
  *
  * @group Navigation
- * @see https://ourostack.github.io/ouro-ui/docs/tab-bar
+ * @see https://ui.ouro.bot/docs/tab-bar
  *
  * @example
  * <TabBar

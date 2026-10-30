@@ -70,7 +70,7 @@ function spinnerHint(token: string): string {
  * loading.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/spinner
+ * @see https://ui.ouro.bot/docs/spinner
  *
  * @example
  * <Spinner />

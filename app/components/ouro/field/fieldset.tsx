@@ -42,7 +42,7 @@ export interface FieldsetProps {
  * choice uses their group component, which takes the same `legend`.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/fieldset
+ * @see https://ui.ouro.bot/docs/fieldset
  *
  * @example
  * <Fieldset legend="Shipping address" description="Where we send your order.">

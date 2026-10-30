@@ -132,7 +132,7 @@ const owner = { name: "TextArea", data: "text-area" };
  * is not text.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/text-area
+ * @see https://ui.ouro.bot/docs/text-area
  *
  * @example
  * <TextArea label="Notes" name="notes" description="Only you see these." />

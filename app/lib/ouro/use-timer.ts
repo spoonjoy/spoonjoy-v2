@@ -235,7 +235,7 @@ function update(key: string, entry: Entry, stored: TimerState | null): boolean {
  * Invalid state throws before changing the timer.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/use-timer
+ * @see https://ui.ouro.bot/docs/use-timer
  * @example
  * restoreTimer("pasta", { status: "paused", duration: 600, remainingMs: 120000 });
  * @claim "Imports a saved countdown" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > restores a %s snapshot without changing its original time)
@@ -264,7 +264,7 @@ export function restoreTimer(timerId: string, state: TimerState): boolean {
  * mounted state still resets.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/use-timer
+ * @see https://ui.ouro.bot/docs/use-timer
  * @example
  * resetTimer("pasta");
  * @claim "Cancels or dismisses a timer" registry/ouro/lib/ouro/use-timer.test.tsx verify:testExists(registry/ouro/lib/ouro/use-timer.test.tsx::timer state transfer > resets a stored timer with no mounted reader)
@@ -305,7 +305,7 @@ function remainingOf(stored: TimerState | null, duration: number, now: number): 
  * this hook for a timer of your own design.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer
+ * @see https://ui.ouro.bot/docs/timer
  *
  * @example
  * const timer = useTimer({ duration: 600, timerId: "pasta", onDone: () => chime() });
@@ -408,7 +408,7 @@ export function useTimer({ duration, timerId, onDone, fallback }: TimerOptions):
  * Seconds as a clock reads them: `9:05`, or `1:02:03` from an hour up.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/timer
+ * @see https://ui.ouro.bot/docs/timer
  *
  * @example
  * formatDuration(545); // "9:05"

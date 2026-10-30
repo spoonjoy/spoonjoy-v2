@@ -121,7 +121,7 @@ async function writeClipboard(text: string): Promise<boolean> {
  * Use `CodeBlock` instead for code or a command shown with its own copy button.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/copy-button
+ * @see https://ui.ouro.bot/docs/copy-button
  *
  * @example
  * <CopyButton value={apiKey} label="Copy key" />

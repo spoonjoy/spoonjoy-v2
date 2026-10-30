@@ -59,7 +59,7 @@ const line = "h-px min-w-0 flex-1 shrink border-0 bg-border";
  * and a `Heading` when the next group needs a name.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/separator
+ * @see https://ui.ouro.bot/docs/separator
  *
  * @example
  * <Separator className="my-4" />

@@ -210,7 +210,7 @@ const isCount = (value: unknown): value is number => typeof value === "number" &
  * instead when people need to jump to a page or share its URL.
  *
  * @group Lists
- * @see https://ourostack.github.io/ouro-ui/docs/show-more
+ * @see https://ui.ouro.bot/docs/show-more
  *
  * @example
  * <ShowMore items={reviews.map((review) => <Review key={review.id} {...review} />)} initialCount={3} />

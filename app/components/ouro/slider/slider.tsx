@@ -188,7 +188,7 @@ function defaultThumbLabels(count: number): string[] {
  * named choices.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/slider
+ * @see https://ui.ouro.bot/docs/slider
  *
  * @example
  * <Slider label="Servings" name="servings" defaultValue={4} min={1} max={12} showValue />

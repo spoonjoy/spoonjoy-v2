@@ -100,7 +100,7 @@ const cardClass =
  * options that switch a view, and `Select` for a long list.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/choice-card
+ * @see https://ui.ouro.bot/docs/choice-card
  *
  * @example
  * <ChoiceCard
