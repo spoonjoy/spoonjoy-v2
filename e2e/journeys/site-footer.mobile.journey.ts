@@ -54,6 +54,21 @@ test.describe("Site footer on a phone", () => {
     await expectFooterAboveTabBar(browser, DUO_SCREEN, personaStorageStatePath("chef"), "/");
   });
 
+  // X-ray's bar floats at the bottom of the screen, where the tab bar's middle tabs are.
+  test("X-ray's bar floats above the tab bar, whose tabs stay within reach", async ({ page }) => {
+    await page.goto("/recipes?xray");
+    await waitForHydration(page);
+    const bar = page.getByRole("region", { name: "X-ray", exact: true });
+    const tabBar = page.getByRole("navigation", { name: "Spoonjoy navigation" });
+    await expect(bar).toBeVisible();
+    await expect(tabBar).toBeVisible();
+    const barBox = (await bar.boundingBox())!;
+    const tabsBox = (await tabBar.boundingBox())!;
+    expect(barBox.y + barBox.height, "X-ray's bar ends above the tab bar").toBeLessThanOrEqual(tabsBox.y);
+    await tabBar.getByRole("link", { name: "Home", exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+  });
+
   test("steps aside in cook mode, the full-screen view", async ({ browser }) => {
     const context = await browser.newContext({ ...devices["iPhone 15"], storageState: { cookies: [], origins: [] } });
     try {

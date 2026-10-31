@@ -2,6 +2,7 @@ import { useLocation } from "react-router";
 import { BookOpen, Globe, Home, Library, LogIn, Search, ShoppingBag } from "lucide-react";
 import { useDockContext } from "./dock-context";
 import { TabBar, type TabBarItem } from "~/components/ouro/tab-bar/tab-bar";
+import { InstallPrompt } from "~/components/ouro/install-prompt/install-prompt";
 import { Toaster } from "~/components/ouro/toast/toaster";
 
 /**
@@ -87,6 +88,24 @@ export function useMobileNavEligibility(isAuthenticated: boolean) {
 export function MobileNavToaster({ isAuthenticated }: { isAuthenticated: boolean }) {
   const clearsTabBar = useMobileNavEligibility(isAuthenticated);
   return <Toaster className={clearsTabBar ? "max-lg:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)]" : undefined} />;
+}
+
+/**
+ * HX's install offer, floating above the phone's tab bar (its bottom margin, max(1rem, safe-area
+ * inset), plus its 4rem height and a gap). It shows only where the tab bar does, so it never covers
+ * sign-in, sign-up, a form or a single-decision page, where nothing below it makes room. Keeps
+ * Spoonjoy's earlier dismissal key, so a "Not now" stands.
+ */
+export function MobileNavInstallPrompt({ isAuthenticated }: { isAuthenticated: boolean }) {
+  if (!useMobileNavEligibility(isAuthenticated)) return null;
+  return (
+    <InstallPrompt
+      title="Install Spoonjoy"
+      description="Add Spoonjoy to your home screen for faster access and a more native feel."
+      storageKey="spoonjoy.pwa-install.dismissed-at"
+      className="fixed inset-x-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] z-40 mx-auto max-w-md print:hidden"
+    />
+  );
 }
 
 /** HX's tab bar on phones, below the lg breakpoint where the desktop Navbar takes over. */

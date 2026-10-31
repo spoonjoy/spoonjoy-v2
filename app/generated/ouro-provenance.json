@@ -96,7 +96,7 @@
         "app/components/xray/xray-provider.tsx"
       ],
       "install-prompt": [
-        "app/root.tsx"
+        "app/components/navigation/mobile-nav.tsx"
       ],
       "link": [
         "app/components/cooking-now/CookingNow.tsx",
@@ -1291,6 +1291,7 @@
       "components": [
         "button",
         "empty",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -1308,6 +1309,9 @@
         ],
         "empty": [
           "app/routes/my-recipes.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/my-recipes.tsx"
@@ -1413,6 +1417,7 @@
       "components": [
         "button",
         "empty",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -1432,6 +1437,9 @@
         "empty": [
           "app/routes/my-recipes.tsx",
           "app/routes/saved-recipes.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/my-recipes.tsx",
@@ -1644,6 +1652,7 @@
         "button",
         "empty",
         "heading",
+        "install-prompt",
         "item",
         "show-more",
         "tab-bar",
@@ -1664,6 +1673,9 @@
         ],
         "heading": [
           "app/routes/recipes._index.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/recipes._index.tsx"
@@ -1982,6 +1994,7 @@
         "file-field",
         "form",
         "heading",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -2064,6 +2077,9 @@
         ],
         "heading": [
           "app/routes/recipes.$id.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/components/recipe/SpoonsStrip.tsx"
@@ -2621,6 +2637,7 @@
       "components": [
         "button",
         "empty",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -2640,6 +2657,9 @@
         "empty": [
           "app/routes/cookbooks._index.tsx",
           "app/routes/my-recipes.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/cookbooks._index.tsx",
@@ -2815,6 +2835,7 @@
         "confirm-dialog",
         "empty",
         "form",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -2845,6 +2866,9 @@
         ],
         "form": [
           "app/routes/cookbooks.$id.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/cookbooks.$id.tsx"
