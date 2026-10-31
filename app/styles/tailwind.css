@@ -472,6 +472,16 @@ body:has(#cook) .sj-mobile-surface {
   padding-bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.5rem);
 }
 
+/* X-ray's bar sits max(1rem, safe-area inset) above the bottom of the screen, where the phone tab
+   bar is, and would cover its middle tabs. While the tab bar shows, the bar floats above it: the tab
+   bar's bottom margin, its 4rem height and a 0.5rem gap. Ouro UI's next release measures the tab
+   bar itself (ourostack/ouro-ui#317); drop this rule once Spoonjoy adopts it. */
+@media (width < 64rem) {
+  body:has(.sj-tab-bar) [data-ouro="inspector"] > section {
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 4.5rem);
+  }
+}
+
 /* Cook mode is the whole screen, so the site footer (root.tsx's SiteFooter) steps aside too. */
 body:has(#cook) .sj-site-footer {
   display: none;

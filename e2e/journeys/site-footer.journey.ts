@@ -81,6 +81,21 @@ test.describe("Site footer, signed out", () => {
     await expectXrayBarClearsFooter(page, "/login");
   });
 
+  // On a phone, X-ray's bar would sit where the tab bar's middle tabs are.
+  test("X-ray's bar floats above the phone tab bar, whose tabs stay within reach", async ({ page }) => {
+    await page.goto("/recipes?xray");
+    await waitForHydration(page);
+    const bar = page.getByRole("region", { name: "X-ray", exact: true });
+    await expect(bar).toBeVisible();
+    const tabBar = page.getByRole("navigation", { name: "Spoonjoy navigation" });
+    test.skip(!(await tabBar.isVisible()), "the tab bar shows only on phones");
+    const barBox = (await bar.boundingBox())!;
+    const tabsBox = (await tabBar.boundingBox())!;
+    expect(barBox.y + barBox.height).toBeLessThanOrEqual(tabsBox.y);
+    await tabBar.getByRole("link", { name: "Recipes", exact: true }).click();
+    await expect(page).toHaveURL(/\/recipes$/);
+  });
+
   test("the footer and the Test Kitchen's switch share one X-ray", async ({ page }) => {
     await expectFooter(page, "/test-kitchen");
     const xray = page.getByRole("switch", { name: "X-ray", exact: true });
