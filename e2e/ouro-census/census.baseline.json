@@ -11,6 +11,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -55,6 +63,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 9
         },
@@ -92,6 +104,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -161,6 +177,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Sign out everywhere\" [button/root] in main",
           "count": 1
         },
@@ -174,6 +194,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -291,6 +315,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
@@ -308,6 +336,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -403,7 +435,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -463,7 +503,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -516,6 +564,14 @@
         },
         {
           "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -591,7 +647,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -683,7 +747,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -751,6 +823,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -760,6 +836,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -821,6 +901,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 5
         },
@@ -858,6 +942,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -907,6 +995,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -916,6 +1008,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -977,6 +1073,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 5
         },
@@ -1017,6 +1117,10 @@
           "count": 1
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 1
         },
@@ -1045,7 +1149,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1117,7 +1229,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1193,7 +1313,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1397,6 +1525,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Agent clients\" [link/root] in main",
           "count": 1
         },
@@ -1418,6 +1550,10 @@
         },
         {
           "identity": "link \"Browser clients\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -1689,7 +1825,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Send request\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2117,6 +2261,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2157,6 +2309,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share Lemon Herb Rice\" [button/root] in region \"Recipe index\"",
           "count": 1
         },
@@ -2174,6 +2330,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2261,7 +2421,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2337,6 +2505,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2385,6 +2561,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2425,7 +2609,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2501,7 +2693,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"API guide\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2557,7 +2757,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2629,6 +2837,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2669,7 +2885,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2725,6 +2949,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -2770,6 +3002,14 @@
         },
         {
           "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2837,6 +3077,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
           "count": 1
         },
@@ -2846,6 +3090,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -2915,6 +3163,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 2
         },
@@ -2948,6 +3200,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3019,6 +3275,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -3048,6 +3308,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3117,6 +3381,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 6
         },
@@ -3169,6 +3437,10 @@
           "count": 1
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 2
         },
@@ -3217,11 +3489,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
           "count": 1
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3327,11 +3607,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
           "count": 1
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3429,11 +3717,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
           "count": 1
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3619,6 +3915,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -3660,6 +3960,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -3741,6 +4045,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 10
         },
@@ -3805,6 +4113,10 @@
           "count": 1
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 2
         },
@@ -3836,6 +4148,10 @@
       "log-cook-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [button/root] in contentinfo",
           "count": 1
         },
         {
@@ -3908,6 +4224,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4013,6 +4333,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -4058,6 +4382,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4147,6 +4475,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 10
         },
@@ -4219,6 +4551,10 @@
           "count": 1
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 2
         },
@@ -4254,6 +4590,10 @@
       "variation-dialog": [
         {
           "identity": "button \"\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"\" [button/root] in contentinfo",
           "count": 1
         },
         {
@@ -4322,6 +4662,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4501,6 +4845,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -4526,6 +4874,10 @@
         },
         {
           "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4598,6 +4950,14 @@
         },
         {
           "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4841,7 +5201,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -4917,7 +5285,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5001,7 +5377,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5089,6 +5473,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 3
         },
@@ -5134,6 +5522,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5203,6 +5595,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
           "count": 1
         },
@@ -5228,6 +5624,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5353,6 +5753,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
           "count": 1
         },
@@ -5378,6 +5782,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5471,6 +5879,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 3
         },
@@ -5519,6 +5931,10 @@
           "count": 1
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 1
         },
@@ -5559,7 +5975,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5651,11 +6075,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
         {
           "identity": "button \"Sign in with a passkey\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5715,11 +6147,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 2
         },
         {
           "identity": "button \"Sign up\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5799,6 +6239,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
@@ -5808,6 +6252,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5897,11 +6345,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -5967,6 +6423,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 4
         },
@@ -5992,6 +6452,10 @@
         },
         {
           "identity": "link \"\" [link/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6031,6 +6495,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
@@ -6040,6 +6508,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6117,6 +6589,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
@@ -6126,6 +6602,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6213,6 +6693,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
@@ -6222,6 +6706,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6307,6 +6795,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
@@ -6316,6 +6808,10 @@
         },
         {
           "identity": "link \"Account\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6411,6 +6907,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6468,6 +6972,14 @@
         },
         {
           "identity": "button \"Log in\" [button/root] in banner",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6601,6 +7113,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Start cooking\" [button/root] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
@@ -6661,6 +7177,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6703,7 +7223,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"23 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"25 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -6728,6 +7248,10 @@
         },
         {
           "identity": "button \"Reset the kitchen\" [button/root] in region \"What to try\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
           "count": 1
         },
         {
@@ -6795,6 +7319,10 @@
           "count": 13
         },
         {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [navigation-menu/link] in navigation \"Main navigation\"",
           "count": 1
         },
@@ -6841,6 +7369,14 @@
     "account-deleted": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Create a new account\" [link/root] in main",
           "count": 1
         },
@@ -6885,6 +7421,10 @@
           "count": 1
         },
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 8
         },
@@ -6906,6 +7446,10 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -6959,11 +7503,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Sign out everywhere\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "button \"Upload photo\" [image-field/choose] in group \"Profile photo\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7033,6 +7585,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 1
         },
@@ -7042,6 +7598,10 @@
         },
         {
           "identity": "button \"Upload photo\" [image-field/choose] in group \"Profile photo\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7093,6 +7653,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7125,6 +7693,14 @@
     "agent-connect-request": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7152,6 +7728,14 @@
     },
     "chef-profile": {
       "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "link \"Fellow chefs · 1\" [link/root] in navigation \"qa_kitchen_chef kitchen relationships\"",
           "count": 1
@@ -7221,6 +7805,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7285,6 +7877,14 @@
     "chefs": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -7325,11 +7925,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
         {
           "identity": "combobox \"\" [native-select/select] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7371,6 +7979,10 @@
       ],
       "delete-cookbook-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 5
         },
@@ -7397,6 +8009,10 @@
         {
           "identity": "link \"\" [item/link] in main",
           "count": 2
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -7441,11 +8057,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
         {
           "identity": "combobox \"Recipe\" [native-select/select] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7487,6 +8111,10 @@
       ],
       "remove-recipe-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 5
         },
@@ -7515,6 +8143,10 @@
           "count": 2
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 1
         },
@@ -7539,6 +8171,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cancel\" [button/root] in main",
           "count": 1
         },
@@ -7560,6 +8200,14 @@
       "default": [
         {
           "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7608,6 +8256,14 @@
       "default": [
         {
           "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -7787,6 +8443,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Agent clients\" [link/root] in main",
           "count": 1
         },
@@ -7808,6 +8468,10 @@
         },
         {
           "identity": "link \"Browser clients\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8075,7 +8739,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Send request\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8499,6 +9171,14 @@
     "fellow-chefs": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -8535,6 +9215,10 @@
     "home-chef": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share Lemon Herb Rice\" [button/root] in region \"Recipe index\"",
           "count": 1
         },
@@ -8548,6 +9232,10 @@
         },
         {
           "identity": "button \"Share Weeknight Dinners\" [button/root] in region \"Cookbooks\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8615,6 +9303,14 @@
     "home-newbie": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Chefs\" [button/root] in main",
           "count": 1
         },
@@ -8667,6 +9363,14 @@
     "home-signed-out": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -8711,6 +9415,14 @@
     "kitchen-visitors": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -8747,6 +9459,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Privacy\" [link/root] in main",
           "count": 1
         },
@@ -8779,11 +9499,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "generic \"TOKEN=sj_your_token_here claude mcp add --transport http \\\\ spoonjoy \\\\ https://spoonjoy.app/mcp \\\\ --header \\\"Authorization: Bearer $TOKEN\\\"\" [code-block/code] in main",
           "count": 1
         },
         {
           "identity": "link \"API guide\" [link/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8832,6 +9560,14 @@
       "default": [
         {
           "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -8891,6 +9627,14 @@
     "not-found": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Go home\" [button/root] in main",
           "count": 1
         },
@@ -8927,6 +9671,14 @@
     "oauth-authorize": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Skip to main content\" [skip-link/root] in -",
           "count": 1
         }
@@ -8934,6 +9686,14 @@
     },
     "oauth-callback": {
       "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
@@ -8982,6 +9742,14 @@
     },
     "privacy": {
       "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
@@ -9043,11 +9811,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
           "count": 1
         },
         {
           "identity": "link \"+ Add step\" [link/root] in region \"Recipe steps\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9077,6 +9853,10 @@
       ],
       "delete-step-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 2
         },
@@ -9099,6 +9879,10 @@
         {
           "identity": "link \"\" [button/root] in region \"Recipe steps\"",
           "count": 3
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -9157,6 +9941,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -9182,6 +9970,10 @@
         },
         {
           "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9231,6 +10023,10 @@
       ],
       "fork-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 6
         },
@@ -9268,6 +10064,10 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9315,7 +10115,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9377,7 +10185,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9431,7 +10247,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Upload image\" [image-field/choose] in group \"Recipe image\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9561,6 +10385,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -9598,6 +10426,10 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9659,6 +10491,10 @@
       ],
       "delete-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 10
         },
@@ -9711,6 +10547,10 @@
           "count": 3
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 2
         },
@@ -9736,6 +10576,10 @@
         }
       ],
       "log-cook-dialog": [
+        {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 10
@@ -9799,6 +10643,10 @@
         {
           "identity": "link \"\" [button/root] in main",
           "count": 3
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -9899,6 +10747,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -9940,6 +10792,10 @@
         },
         {
           "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -9988,6 +10844,10 @@
         }
       ],
       "save-dialog": [
+        {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 10
@@ -10049,6 +10909,10 @@
           "count": 3
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 2
         },
@@ -10086,6 +10950,10 @@
         }
       ],
       "variation-dialog": [
+        {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "button \"\" [button/root] in main",
           "count": 10
@@ -10141,6 +11009,10 @@
         {
           "identity": "link \"\" [button/root] in main",
           "count": 3
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
         },
         {
           "identity": "link \"\" [link/root] in main",
@@ -10283,6 +11155,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Share\" [share-button/trigger] in main",
           "count": 1
         },
@@ -10308,6 +11184,10 @@
         },
         {
           "identity": "checkbox \"parsley\" [checklist/box] in group \"Ingredients\"",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10376,6 +11256,14 @@
       "default": [
         {
           "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10615,6 +11503,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Cookbooks\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -10675,6 +11571,14 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Chefs\" [tabs/link] in navigation \"Search scope\"",
           "count": 1
         },
@@ -10728,6 +11632,14 @@
       "default": [
         {
           "identity": "button \"Search\" [button/root] in search",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10795,6 +11707,10 @@
     "shopping-list": {
       "clear-all-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 3
         },
@@ -10828,6 +11744,10 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -10893,6 +11813,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
           "count": 1
         },
@@ -10914,6 +11838,10 @@
         },
         {
           "identity": "combobox \"Recipe\" [native-select/select] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11015,6 +11943,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [checklist/hidden-input] in group \"Pantry\"",
           "count": 1
         },
@@ -11036,6 +11968,10 @@
         },
         {
           "identity": "combobox \"Recipe\" [native-select/select] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11113,6 +12049,10 @@
       ],
       "remove-item-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 3
         },
@@ -11149,6 +12089,10 @@
           "count": 1
         },
         {
+          "identity": "link \"\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"\" [link/root] in main",
           "count": 1
         },
@@ -11182,6 +12126,14 @@
       "default": [
         {
           "identity": "button \"Add\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11249,7 +12201,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11293,11 +12253,19 @@
     "sign-up": {
       "default": [
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Show password\" [text-field/show-password] in main",
           "count": 2
         },
         {
           "identity": "button \"Sign up\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11361,11 +12329,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "checkbox \"\" [switch/hidden-input] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11411,7 +12387,15 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11437,6 +12421,10 @@
       ],
       "remove-ingredient-dialog": [
         {
+          "identity": "button \"\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"\" [button/root] in main",
           "count": 4
         },
@@ -11450,6 +12438,10 @@
         },
         {
           "identity": "link \"\" [button/root] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11477,11 +12469,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "combobox \"Uses output from (optional)\" [select/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11515,11 +12515,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Update\" [button/root] in main",
           "count": 1
         },
         {
           "identity": "combobox \"Uses output from (optional)\" [select/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11563,11 +12571,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
         {
           "identity": "combobox \"Uses output from (optional)\" [select/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11609,11 +12625,19 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "checkbox \"\" [switch/hidden-input] in main",
           "count": 1
         },
         {
           "identity": "combobox \"Uses output from (optional)\" [select/trigger] in main",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
           "count": 1
         },
         {
@@ -11664,6 +12688,14 @@
     },
     "support": {
       "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
@@ -11720,6 +12752,14 @@
     },
     "terms": {
       "default": [
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
@@ -11851,6 +12891,10 @@
           "count": 1
         },
         {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "button \"Start cooking\" [button/root] in region \"Crispy Lemon Chickpeas\"",
           "count": 1
         },
@@ -11911,6 +12955,10 @@
           "count": 1
         },
         {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
+        },
+        {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",
           "count": 1
         },
@@ -11957,7 +13005,7 @@
       ],
       "xray": [
         {
-          "identity": "button \"19 components\" [inspector/list] in region \"X-ray\"",
+          "identity": "button \"21 components\" [inspector/list] in region \"X-ray\"",
           "count": 1
         },
         {
@@ -11974,6 +13022,10 @@
         },
         {
           "identity": "button \"Reset the kitchen\" [button/root] in region \"What to try\"",
+          "count": 1
+        },
+        {
+          "identity": "button \"See all the components\" [button/root] in contentinfo",
           "count": 1
         },
         {
@@ -12039,6 +13091,10 @@
         {
           "identity": "link \"\" [inspector/tag] in -",
           "count": 3
+        },
+        {
+          "identity": "link \"Built with Ouro HX\" [link/root] in contentinfo",
+          "count": 1
         },
         {
           "identity": "link \"Home\" [tab-bar/tab] in navigation \"Spoonjoy navigation\"",

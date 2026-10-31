@@ -49,6 +49,9 @@ import { useHistoryTrail } from "~/hooks/use-back-navigation";
 import { useUnsavedFormGuard } from "~/hooks/use-unsaved-form-guard";
 import { useCookingNow } from "~/hooks/use-cooking-now";
 import { CookingNowPill } from "~/components/cooking-now/CookingNow";
+import { SiteFooter } from "~/components/navigation/site-footer";
+import { XrayProvider } from "~/components/xray/xray-provider";
+import { UNKNOWN_SOURCE_SHA, buildSourceSha } from "~/lib/build-info.server";
 import "./styles/tailwind.css";
 import "./styles/fold.css";
 
@@ -87,7 +90,10 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const userId = await getUserId(request, context.cloudflare?.env);
   const oauthProviders = getConfiguredOAuthProviders(getOAuthEnv(context));
-  return { userId, oauthProviders };
+  // X-ray's Source links point at the commit that is running (main in a local build without git).
+  const built = buildSourceSha();
+  const sourceSha = built === UNKNOWN_SOURCE_SHA ? "main" : built;
+  return { userId, oauthProviders, sourceSha };
 }
 
 /**
@@ -198,7 +204,7 @@ function PopupLayer() {
 }
 
 export default function App() {
-  const { userId, oauthProviders } = useLoaderData<typeof loader>();
+  const { userId, oauthProviders, sourceSha } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigation = useNavigation();
   const posthog = usePostHog();
@@ -240,38 +246,41 @@ export default function App() {
   }, [userId, posthog]);
 
   return (
-    <DockContextProvider>
-      <RouteProgress active={navigation.state !== "idle"} />
-      {/* No isolation here or on <main>: popups render inside <main> and must stack over the top
-          bar and the phone tab bar, which a stacking context around them would stop. */}
-      <div className="sj-app-shell relative flex min-h-svh w-full flex-col">
-        {userId ? null : <PhoneBrandBar />}
-        <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
-          <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
+    <XrayProvider sourceSha={sourceSha}>
+      <DockContextProvider>
+        <RouteProgress active={navigation.state !== "idle"} />
+        {/* No isolation here or on <main>: popups render inside <main> and must stack over the top
+            bar and the phone tab bar, which a stacking context around them would stop. */}
+        <div className="sj-app-shell relative flex min-h-svh w-full flex-col">
+          {userId ? null : <PhoneBrandBar />}
+          <div className="sj-desktop-topbar sticky top-0 z-30 hidden lg:block">
+            <AppNavbar userId={userId} oauthProviders={oauthProviders} cookingNowCount={cookingNowCount} />
+          </div>
+          {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
+              max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
+              page never sits under it. */}
+          <main
+            id="main"
+            tabIndex={-1}
+            className="sj-desktop-surface sj-mobile-surface grow"
+          >
+            <Outlet />
+            <PopupLayer />
+          </main>
+          <SiteFooter />
         </div>
-        {/* The bottom padding clears the phone tab bar (MobileNav): its bottom margin,
-            max(1rem, safe-area inset), plus its 4rem height and a gap, so the last thing on a
-            page never sits under it. */}
-        <main
-          id="main"
-          tabIndex={-1}
-          className="sj-desktop-surface sj-mobile-surface grow"
-        >
-          <Outlet />
-          <PopupLayer />
-        </main>
-      </div>
-      <MobileNav isAuthenticated={!!userId} cookingNowCount={cookingNowCount} />
-      {/* Floats above the phone's tab bar (MobileNav): its bottom margin, max(1rem, safe-area inset),
-          plus its 4rem height and a gap. Keeps Spoonjoy's earlier dismissal key, so a "Not now" stands. */}
-      <InstallPrompt
-        title="Install Spoonjoy"
-        description="Add Spoonjoy to your home screen for faster access and a more native feel."
-        storageKey="spoonjoy.pwa-install.dismissed-at"
-        className="fixed inset-x-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] z-40 mx-auto max-w-md print:hidden"
-      />
-      <MobileNavToaster isAuthenticated={!!userId} />
-    </DockContextProvider>
+        <MobileNav isAuthenticated={!!userId} cookingNowCount={cookingNowCount} />
+        {/* Floats above the phone's tab bar (MobileNav): its bottom margin, max(1rem, safe-area inset),
+            plus its 4rem height and a gap. Keeps Spoonjoy's earlier dismissal key, so a "Not now" stands. */}
+        <InstallPrompt
+          title="Install Spoonjoy"
+          description="Add Spoonjoy to your home screen for faster access and a more native feel."
+          storageKey="spoonjoy.pwa-install.dismissed-at"
+          className="fixed inset-x-4 bottom-[calc(max(1rem,env(safe-area-inset-bottom))+5.25rem)] z-40 mx-auto max-w-md print:hidden"
+        />
+        <MobileNavToaster isAuthenticated={!!userId} />
+      </DockContextProvider>
+    </XrayProvider>
   );
 }
 
