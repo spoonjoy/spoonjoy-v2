@@ -91,6 +91,20 @@ describe("SiteFooter", () => {
     );
   });
 
+  it("makes room below itself for X-ray's bar while X-ray is on, and gives it back when X-ray closes", async () => {
+    const user = userEvent.setup();
+    renderSite();
+    const footer = screen.getByRole("contentinfo");
+    expect(footer).not.toHaveAttribute("data-xray");
+
+    await user.click(screen.getByRole("button", { name: "See all the components" }));
+    const bar = await screen.findByRole("region", { name: "X-ray" });
+    expect(footer).toHaveAttribute("data-xray", "");
+
+    await user.click(within(bar).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(footer).not.toHaveAttribute("data-xray"));
+  });
+
   it("opens X-ray on arrival with ?xray, on any page", async () => {
     renderSite("/recipes?xray");
     expect(await screen.findByRole("region", { name: "X-ray" })).toBeInTheDocument();
