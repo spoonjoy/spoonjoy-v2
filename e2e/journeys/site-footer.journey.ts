@@ -20,6 +20,27 @@ async function expectFooter(page: Page, path: string): Promise<void> {
   await expect(page.locator("main#main").getByRole("contentinfo")).toHaveCount(0);
 }
 
+/**
+ * Turns X-ray on from the footer, scrolls to the bottom and checks that X-ray's floating bar sits
+ * below the footer's link and button rather than over them.
+ */
+async function expectXrayBarClearsFooter(page: Page, path: string): Promise<void> {
+  await page.goto(path);
+  await waitForHydration(page);
+  const footer = page.getByRole("contentinfo");
+  await footer.getByRole("button", { name: "See all the components", exact: true }).click();
+  const bar = page.getByRole("region", { name: "X-ray", exact: true });
+  await expect(bar).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.scrollingElement!.scrollHeight));
+  await expect.poll(() => page.evaluate(() => Math.ceil(window.scrollY + window.innerHeight) >= document.scrollingElement!.scrollHeight - 1), { message: `${path}: scrolled to the bottom` }).toBe(true);
+  const barTop = (await bar.boundingBox())!.y;
+  for (const control of [footer.getByRole("link", { name: "Built with Ouro HX", exact: true }), footer.getByRole("button", { name: "See all the components", exact: true })]) {
+    await expect(control).toBeInViewport();
+    const box = (await control.boundingBox())!;
+    expect(box.y + box.height, `${path}: ${await control.textContent()} ends above X-ray's bar`).toBeLessThanOrEqual(barTop);
+  }
+}
+
 test.describe("Site footer, signed out", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -53,6 +74,11 @@ test.describe("Site footer, signed out", () => {
     await expect(list).toBeHidden();
     await bar.getByRole("button", { name: "Close", exact: true }).click();
     await expect(bar).toBeHidden();
+  });
+
+  // Signed out, the login page has no phone tab bar, so on the iPhone project too the bar would sit on the footer.
+  test("X-ray's bar leaves the footer readable on the login page", async ({ page }) => {
+    await expectXrayBarClearsFooter(page, "/login");
   });
 
   test("the footer and the Test Kitchen's switch share one X-ray", async ({ page }) => {

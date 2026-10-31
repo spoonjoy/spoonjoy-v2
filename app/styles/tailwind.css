@@ -465,6 +465,13 @@ body:has(#cook) .sj-mobile-surface {
   padding-bottom: 0;
 }
 
+/* X-ray's bar (HX Inspector) floats max(1rem, safe-area inset) above the bottom of the screen and is
+   2.5rem tall. While it shows, the footer takes that much more bottom padding plus a gap, so
+   scrolled to the bottom its link and button sit above the bar instead of under it. */
+.sj-site-footer[data-xray] {
+  padding-bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.5rem);
+}
+
 /* Cook mode is the whole screen, so the site footer (root.tsx's SiteFooter) steps aside too. */
 body:has(#cook) .sj-site-footer {
   display: none;
