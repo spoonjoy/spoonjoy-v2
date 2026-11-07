@@ -11,7 +11,7 @@
 
 Spoonjoy on the web: the recipe app, its API and its MCP server, on Cloudflare.
 
-[spoonjoy.app](https://spoonjoy.app) · [Test Kitchen](https://spoonjoy.app/test-kitchen) (cook a recipe, no account) · [API and MCP](https://spoonjoy.app/developers) · [Storybook](https://spoonjoy-storybook-cp6.pages.dev/) · [iPhone, iPad and Mac app](https://github.com/spoonjoy/spoonjoy-apple)
+[spoonjoy.app](https://spoonjoy.app) · [Test Kitchen](https://spoonjoy.app/test-kitchen) (cook a sample recipe) · [API and MCP](https://spoonjoy.app/developers) · [Storybook](https://spoonjoy-storybook-cp6.pages.dev/) · [iPhone, iPad and Mac app](https://github.com/spoonjoy/spoonjoy-apple)
 
 **Run it locally:** with Node 22 and pnpm 10, the commands in [Quick Start](#quick-start) open your own kitchen at http://localhost:5173.
 
