@@ -64,7 +64,7 @@ describe("dependency advisory refresh contract", () => {
       "form-data": "4.0.6",
       "joi@17": "17.13.8",
       "js-yaml@3": "3.15.2",
-      "lodash": "4.18.0",
+      "lodash": "4.18.1",
       "minimatch@3": "3.1.4",
       "minimatch@9": "9.0.7",
       "nanoid": "3.3.18",
