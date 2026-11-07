@@ -2,14 +2,20 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
+  AFFECTED_PATHS,
   FORCE_LABEL,
+  MAX_AFFECTED_SPECS,
   MAX_LISTED_FILES,
   NEVER_SKIP,
   SKIPPABLE_PATHS,
+  SMOKE_SPECS,
+  SPEC_FILE,
   decide,
+  headJourneySpecs,
   isCliEntry,
   pullRequestFiles,
   pullRequestLabels,
+  relatedSpecs,
   runCommand,
   runJourneysScope,
   skippableReason,
@@ -18,11 +24,24 @@ import {
 const REPOSITORY = "spoonjoy/spoonjoy-v2";
 const OUTPUT = "/tmp/github-output";
 const SUMMARY = "/tmp/github-step-summary";
+const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
+const SPECS = [
+  "e2e/journeys/cookbooks.journey.ts",
+  "e2e/journeys/hx-census.journey.ts",
+  "e2e/journeys/personas.setup.ts",
+  "e2e/journeys/round-trips.journey.ts",
+  "e2e/journeys/round-trips.mobile.journey.ts",
+  "e2e/journeys/shopping-list.journey.ts",
+  "e2e/journeys/shopping-list.mobile.journey.ts",
+  "e2e/journeys/sign-in.journey.ts",
+  "e2e/journeys/support",
+];
 
 function scopeEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     GITHUB_REPOSITORY: REPOSITORY,
     PR_NUMBER: "438",
+    HEAD_SHA,
     GITHUB_OUTPUT: OUTPUT,
     GITHUB_STEP_SUMMARY: SUMMARY,
     ...overrides,
@@ -32,7 +51,8 @@ function scopeEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
 function githubRunner({
   files = [[{ filename: "docs/guide.md" }]] as unknown,
   labels = [{ name: "documentation" }] as unknown,
-}: { files?: unknown; labels?: unknown } = {}) {
+  specs = SPECS.map((specPath) => ({ path: specPath })) as unknown,
+}: { files?: unknown; labels?: unknown; specs?: unknown } = {}) {
   return vi.fn(async (file: string, args: readonly string[]) => {
     const command = [file, ...args].join(" ");
     if (command === `gh api --paginate --slurp repos/${REPOSITORY}/pulls/438/files?per_page=100`) {
@@ -40,6 +60,9 @@ function githubRunner({
     }
     if (command === `gh api repos/${REPOSITORY}/issues/438/labels?per_page=100`) {
       return typeof labels === "string" ? labels : JSON.stringify(labels);
+    }
+    if (command === `gh api repos/${REPOSITORY}/contents/e2e/journeys?ref=${HEAD_SHA}`) {
+      return typeof specs === "string" ? specs : JSON.stringify(specs);
     }
     throw new Error(`Unexpected command: ${command}`);
   });
@@ -152,35 +175,114 @@ describe("skippableReason", () => {
 
 describe("decide", () => {
   it("skips only when every changed file is skippable", () => {
-    expect(decide({ files: ["docs/a.md", "test/a.test.ts", ".github/workflows/apple-release.yml"], labels: [] })).toEqual({
+    expect(decide({ files: ["docs/a.md", "test/a.test.ts", ".github/workflows/apple-release.yml"], labels: [], specs: SPECS })).toEqual({
       journeys: false,
+      mode: "skip",
+      census: false,
+      specs: [],
       why: expect.stringContaining("All 3 changed file(s)"),
     });
-    const mixed = decide({ files: ["docs/a.md", "app/routes/home.tsx"], labels: [] });
-    expect(mixed.journeys).toBe(true);
-    expect(mixed.why).toContain("1 changed file(s) can affect rendering or the Journeys run, for example `app/routes/home.tsx`.");
+    const mixed = decide({ files: ["docs/a.md", "package.json"], labels: [], specs: SPECS });
+    expect(mixed).toMatchObject({ journeys: true, mode: "full", census: true, specs: [] });
+    expect(mixed.why).toContain("1 changed file(s) are not app code or a journey spec, so the full suite runs, for example `package.json`.");
   });
 
-  it("shows at most ten of the files that need a run", () => {
-    const files = Array.from({ length: 12 }, (_, index) => `app/lib/file-${index}.ts`);
-    const { why } = decide({ files, labels: [] });
+  it("shows at most ten of the files that need the full suite", () => {
+    const files = Array.from({ length: 12 }, (_, index) => `workers/file-${index}.ts`);
+    const { why } = decide({ files, labels: [], specs: SPECS });
     expect(why).toContain("12 changed file(s)");
-    expect(why).toContain("`app/lib/file-9.ts`");
-    expect(why).not.toContain("`app/lib/file-10.ts`");
+    expect(why).toContain("`workers/file-9.ts`");
+    expect(why).not.toContain("`workers/file-10.ts`");
   });
 
-  it(`runs the suite for the \`${FORCE_LABEL}\` label even when every file is skippable`, () => {
-    expect(decide({ files: ["docs/a.md"], labels: ["bug", FORCE_LABEL] })).toEqual({
+  it(`runs the full suite for the \`${FORCE_LABEL}\` label even when every file is skippable`, () => {
+    expect(decide({ files: ["docs/a.md"], labels: ["bug", FORCE_LABEL], specs: SPECS })).toEqual({
       journeys: true,
+      mode: "full",
+      census: true,
+      specs: [],
       why: `The pull request has the \`${FORCE_LABEL}\` label.`,
     });
   });
 
-  it("runs the suite when the file list is empty or may be truncated", () => {
-    expect(decide({ files: [], labels: [] }).journeys).toBe(true);
-    const truncated = decide({ files: Array.from({ length: MAX_LISTED_FILES }, () => "docs/a.md"), labels: [] });
-    expect(truncated.journeys).toBe(true);
+  it("runs the full suite when the file list is empty or may be truncated", () => {
+    expect(decide({ files: [], labels: [], specs: SPECS }).mode).toBe("full");
+    const truncated = decide({ files: Array.from({ length: MAX_LISTED_FILES }, () => "app/a.ts"), labels: [], specs: SPECS });
+    expect(truncated.mode).toBe("full");
     expect(truncated.why).toContain("may be incomplete");
+  });
+
+  it("runs only the affected specs, the smoke set and the census for an app change", () => {
+    expect(decide({ files: ["app/routes/shopping-list.tsx", "docs/a.md"], labels: [], specs: SPECS })).toEqual({
+      journeys: true,
+      mode: "affected",
+      census: true,
+      specs: [
+        "e2e/journeys/round-trips.journey.ts",
+        "e2e/journeys/shopping-list.journey.ts",
+        "e2e/journeys/shopping-list.mobile.journey.ts",
+        "e2e/journeys/sign-in.journey.ts",
+      ],
+      why: expect.stringContaining("runs 4 affected journey spec(s) and the HX census"),
+    });
+  });
+
+  it("runs a changed spec without the census when no app code changed", () => {
+    const decision = decide({ files: ["e2e/journeys/cookbooks.journey.ts"], labels: [], specs: SPECS });
+    expect(decision).toMatchObject({ mode: "affected", census: false });
+    expect(decision.specs).toEqual([
+      "e2e/journeys/cookbooks.journey.ts",
+      "e2e/journeys/round-trips.journey.ts",
+      "e2e/journeys/sign-in.journey.ts",
+    ]);
+    expect(decision.why).not.toContain("census");
+    expect(decision.why).toContain("Add the `visual` label");
+  });
+
+  it.each([
+    ["the census journey", "e2e/journeys/hx-census.journey.ts"],
+    ["the personas setup", "e2e/journeys/personas.setup.ts"],
+    ["the journeys support code", "e2e/journeys/support/personas.ts"],
+    ["the explore suite", "e2e/journeys/app.explore.ts"],
+    ["a worker", "workers/cook-session.ts"],
+    ["a migration", "migrations/0042_add_column.sql"],
+  ])("runs the full suite when %s changes", (_name, file) => {
+    expect(decide({ files: ["app/root.tsx", file], labels: [], specs: SPECS }).mode).toBe("full");
+  });
+
+  it("runs the full suite when the specs could not be listed or none would run", () => {
+    expect(decide({ files: ["app/root.tsx"], labels: [] }).why).toContain("could not be listed");
+    expect(decide({ files: ["app/root.tsx"], labels: [], specs: ["e2e/journeys/personas.setup.ts"] }).why)
+      .toContain("No journey spec matches");
+  });
+
+  it("runs the full suite when too many specs are affected", () => {
+    const many = Array.from({ length: MAX_AFFECTED_SPECS + 1 }, (_, index) => `e2e/journeys/area-${index}.journey.ts`);
+    const decision = decide({ files: many, labels: [], specs: many });
+    expect(decision.mode).toBe("full");
+    expect(decision.why).toContain(`more than ${MAX_AFFECTED_SPECS}`);
+  });
+
+  it("keeps the affected rules exactly as reviewed", () => {
+    expect(AFFECTED_PATHS.map((pattern) => pattern.source)).toEqual(["^app\\/", "^stories\\/", "^public\\/"]);
+    expect(SMOKE_SPECS).toEqual(["e2e/journeys/sign-in.journey.ts", "e2e/journeys/round-trips.journey.ts"]);
+    expect(SPEC_FILE.test("e2e/journeys/cooking.mobile.journey.ts")).toBe(true);
+    expect(SPEC_FILE.test("e2e/journeys/hx-census.journey.ts")).toBe(false);
+    expect(SPEC_FILE.test("e2e/journeys/a b.journey.ts")).toBe(false);
+    expect(SPEC_FILE.test("e2e/journeys/support/x.journey.ts")).toBe(false);
+  });
+});
+
+describe("relatedSpecs", () => {
+  it("ties app files to specs by a shared word of five or more letters, folding plurals", () => {
+    const specs = ["e2e/journeys/cookbooks.journey.ts", "e2e/journeys/recipe-editing.journey.ts", "e2e/journeys/search.journey.ts"];
+    expect(relatedSpecs(["app/routes/cookbook.$id.tsx", "app/lib/recipes.server.ts"], specs))
+      .toEqual(["e2e/journeys/cookbooks.journey.ts", "e2e/journeys/recipe-editing.journey.ts"]);
+  });
+
+  it("ignores common path words and files outside app code", () => {
+    const specs = ["e2e/journeys/round-trips.mobile.journey.ts", "e2e/journeys/search.journey.ts"];
+    expect(relatedSpecs(["app/routes/index.tsx", "app/components/mobile/nav.tsx", "scripts/search.mjs"], specs)).toEqual([]);
   });
 });
 
@@ -212,6 +314,18 @@ describe("pull request lookups", () => {
   ])("rejects a label list that is %s", async (_name, labels) => {
     await expect(pullRequestLabels(githubRunner({ labels }), REPOSITORY, "438")).rejects.toThrow(/label list is malformed/);
   });
+
+  it("lists the head commit's journey specs", async () => {
+    expect(await headJourneySpecs(githubRunner(), REPOSITORY, HEAD_SHA)).toEqual(SPECS);
+  });
+
+  it.each([
+    ["not a list", JSON.stringify({ path: "e2e/journeys/a.journey.ts" })],
+    ["an entry without a path", JSON.stringify([{ name: "a.journey.ts" }])],
+    ["a null entry", JSON.stringify([null])],
+  ])("rejects a journey spec list that is %s", async (_name, specs) => {
+    await expect(headJourneySpecs(githubRunner({ specs }), REPOSITORY, HEAD_SHA)).rejects.toThrow(/spec list is malformed/);
+  });
 });
 
 describe("runJourneysScope", () => {
@@ -219,8 +333,22 @@ describe("runJourneysScope", () => {
     const { decision, appendFile, summary } = await scope(scopeEnv(), githubRunner());
     expect(decision.journeys).toBe(false);
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "journeys=false\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "mode=skip\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "census=false\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "specs=\n");
     expect(summary).toContain("### Journeys scope");
     expect(summary).toContain("The merge queue still runs it.");
+  });
+
+  it("writes the affected specs for an app change", async () => {
+    const { decision, appendFile } = await scope(scopeEnv(), githubRunner({ files: [[{ filename: "app/routes/shopping-list.tsx" }]] }));
+    expect(decision.mode).toBe("affected");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "mode=affected\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "census=true\n");
+    expect(appendFile).toHaveBeenCalledWith(
+      OUTPUT,
+      "specs=e2e/journeys/round-trips.journey.ts e2e/journeys/shopping-list.journey.ts e2e/journeys/shopping-list.mobile.journey.ts e2e/journeys/sign-in.journey.ts\n",
+    );
   });
 
   it("reads the labels at run time, so adding visual and re-running forces the suite", async () => {
@@ -236,10 +364,13 @@ describe("runJourneysScope", () => {
     ["a missing pull request number", scopeEnv({ PR_NUMBER: "" }), githubRunner(), "PR_NUMBER is required"],
     ["an unset pull request number", (({ PR_NUMBER: _unset, ...env }) => env)(scopeEnv()), githubRunner(), "PR_NUMBER is required"],
     ["a malformed pull request number", scopeEnv({ PR_NUMBER: "438/../../x" }), githubRunner(), "must be a pull request number"],
+    ["a missing head SHA", scopeEnv({ HEAD_SHA: "" }), githubRunner(), "HEAD_SHA is required"],
+    ["a malformed head SHA", scopeEnv({ HEAD_SHA: "main" }), githubRunner(), "must be a commit SHA"],
   ])("runs the suite on %s", async (_name, env, run, why) => {
     const { decision, appendFile, summary } = await scope(env, run as ReturnType<typeof githubRunner>);
     expect(decision.journeys).toBe(true);
     expect(appendFile).toHaveBeenCalledWith(OUTPUT, "journeys=true\n");
+    expect(appendFile).toHaveBeenCalledWith(OUTPUT, "mode=full\n");
     expect(summary).toContain(why);
   });
 
