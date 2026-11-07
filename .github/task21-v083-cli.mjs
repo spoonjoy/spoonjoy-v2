@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 // Preserved adoption source after integrating recipe drafts and the qualified main prerequisite.
-const acceptedHead = "b7aa592260c8fc736ff076bb3ec46c48a3c8d1c7";
-const tag = "v1.2.8";
-const tagCommit = "cef017af04309b1102c869e32818b432ec5d8a6e";
+const acceptedHead = "ca92e0c18a3ed6c9386cbd587e373b0da56287f8";
+const tag = "v1.2.13";
+const tagCommit = "36c22fe62b8783402d000df776c78620c15eafd9";
 // Every installed registry item, plus the v1.2.0 items Spoonjoy's screens now compose (SkipLink,
 // TabBar, RouteProgress, ColorSchemeToggle, PageHeader, CopyButton, CodeBlock, Timer, TimerTray,
 // Celebrate, ChoiceCard, ImageCropper, ImageField, ShareButton, SyncStatus, LocalDate,
@@ -67,7 +67,8 @@ assert.equal(installed.tag, tag);
 assert.equal(installed.tagCommit, tagCommit);
 const expected = installed.files;
 // Paths introduced by the initial v1.2.0 CLI run, by v1.2.5 (portal-container and the axe
-// helper's own test) and by v1.2.8 (the shared axe-core version check); every other path in this
+// helper's own test), by v1.2.8 (the shared axe-core version check) and by v1.2.12 (the
+// shared list of popups the story check opens); every other path in this
 // patch updates an existing file.
 const expectedNew = [
   "app/components/ouro/breadcrumb/breadcrumb.stories.tsx",
@@ -187,6 +188,7 @@ const expectedNew = [
   "app/lib/ouro/share.ts",
   "app/lib/ouro/testing/axe-version.ts",
   "app/lib/ouro/testing/axe.test.ts",
+  "app/lib/ouro/testing/popups.ts",
   "app/lib/ouro/use-install-prompt.test.tsx",
   "app/lib/ouro/use-install-prompt.ts",
   "app/lib/ouro/use-timer.test.tsx",

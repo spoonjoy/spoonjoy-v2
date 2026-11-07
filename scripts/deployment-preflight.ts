@@ -1849,8 +1849,8 @@ export function validateDeploymentConfig(inputs: DeploymentPreflightInputs): Dep
     ),
     check(
       "QA resource isolation",
-      qaDb?.database_name === "spoonjoy-qa" &&
-        qaDb.database_id === "c6c99e80-bd51-4cf2-b7c7-b7a6e27d3f34" &&
+      qaDb?.database_name === "spoonjoy-qa-2" &&
+        qaDb.database_id === "e29dc64f-e5ee-47a4-b17f-f68dbee5a1c1" &&
         qaDb.database_id !== productionDb?.database_id &&
         qaPhotos?.bucket_name === "spoonjoy-photos-qa" &&
         qaPhotos.bucket_name !== productionPhotos?.bucket_name &&

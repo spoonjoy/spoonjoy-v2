@@ -91,7 +91,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Use `InstallPrompt` instead for the whole offer, a card with Install and Not now.
  *
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/install-prompt
+ * @see https://ui.ouro.bot/docs/install-prompt
  *
  * @example
  * const { available, install } = useInstallPrompt();

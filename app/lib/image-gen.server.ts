@@ -2,6 +2,7 @@ import { makeFallbackPlaceholderSvg } from "~/lib/recipe-cover.server";
 import { getStoredImageKey, validateImageFileForStorage } from "~/lib/image-storage.server";
 import { FOOD_IMAGE_TYPES, RECIPE_IMAGE_SIZE_MESSAGE, RECIPE_IMAGE_TYPE_MESSAGE } from "~/lib/recipe-image";
 import { fetchSafeImageBytes } from "~/lib/safe-image-fetch.server";
+import { putWithTransientRetry } from "~/lib/r2-transient-retry.server";
 
 export { makeFallbackPlaceholderSvg };
 
@@ -574,7 +575,7 @@ async function persistGeneratedImage(
   const randomId = deps.randomId ? deps.randomId() : crypto.randomUUID();
   const extension = extensionForContentType(image.contentType);
   const key = `covers/${stamp}-${randomId}.${extension}`;
-  await deps.bucket.put(key, image.bytes, {
+  await putWithTransientRetry(deps.bucket, key, image.bytes, {
     httpMetadata: { contentType: image.contentType },
   });
   return `/photos/${key}`;

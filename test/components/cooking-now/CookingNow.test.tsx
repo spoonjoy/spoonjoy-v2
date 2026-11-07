@@ -158,6 +158,39 @@ describe("LocalCookingNow", () => {
     inRouter(<LocalCookingNow />);
     expect(screen.queryByTestId("local-cooking-now")).toBeNull();
   });
+
+  // The Cooking pill links to /#cooking-now. The strip appears only after hydration, after the
+  // router has looked for that id and found nothing, so it scrolls itself into view.
+  for (const [hash, scrolls] of [["#cooking-now", true], ["", false]] as const) {
+    it(`${scrolls ? "brings itself into view" : "leaves the scroll alone"} when the page is opened at "/${hash}"`, () => {
+      recordLocalCookingNow({
+        recipe: { id: "r1", title: "Lemon Herb Rice", coverImageUrl: null },
+        activeStepId: "s1",
+        activeStepIndex: 0,
+        stepCount: 3,
+        checkedIds: ["i1"],
+        totalCount: 4,
+        now: Date.now(),
+      });
+      const scrolled: Element[] = [];
+      const original = Object.getOwnPropertyDescriptor(Element.prototype, "scrollIntoView");
+      Object.defineProperty(Element.prototype, "scrollIntoView", {
+        configurable: true,
+        value(this: Element) {
+          scrolled.push(this);
+        },
+      });
+      window.history.replaceState(null, "", `/${hash}`);
+      try {
+        inRouter(<LocalCookingNow />);
+        expect(scrolled).toEqual(scrolls ? [screen.getByRole("region", { name: "Cooking now" })] : []);
+      } finally {
+        window.history.replaceState(null, "", "/");
+        if (original) Object.defineProperty(Element.prototype, "scrollIntoView", original);
+        else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+      }
+    });
+  }
 });
 
 describe("CookingNowPill", () => {

@@ -19,7 +19,7 @@ export interface InspectorProps {
   onOpenChange: (open: boolean) => void;
   /**
    * The address of an item's docs page, from its registry name, where each tag and the list link.
-   * Without it they link to Ouro's public docs, `https://ourostack.github.io/ouro-ui/docs/<item>/`.
+   * Without it they link to Ouro's public docs, `https://ui.ouro.bot/docs/<item>/`.
    * @claim "The address of an item's docs" registry/ouro/components/ouro/inspector/inspector.test.tsx verify:testExists(registry/ouro/components/ouro/inspector/inspector.test.tsx::Inspector > outlines every Ouro component on the page, each tagged with its item and linked to its docs)
    */
   docsHref?: ((item: string) => string) | undefined;
@@ -280,7 +280,7 @@ const moving = (own: Element) =>
 const noSubscription = () => () => {};
 
 /** Ouro's public docs page for an item. */
-const ouroDocs = (item: string) => `https://ourostack.github.io/ouro-ui/docs/${item}/`;
+const ouroDocs = (item: string) => `https://ui.ouro.bot/docs/${item}/`;
 
 /**
  * X-ray for a page built with Ouro HX: outlines every Ouro component on the page with its name,
@@ -301,7 +301,7 @@ const ouroDocs = (item: string) => `https://ourostack.github.io/ouro-ui/docs/${i
  * the `data-ouro`, `data-ouro-control` and `data-ouro-part` attributes X-ray reads are there too.
  *
  * @group App setup
- * @see https://ourostack.github.io/ouro-ui/docs/inspector
+ * @see https://ui.ouro.bot/docs/inspector
  *
  * @example
  * const [xray, setXray] = useState(false);

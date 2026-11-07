@@ -67,7 +67,7 @@ export type PageHeaderProps = Omit<HTMLAttributes<HTMLDivElement>, keyof PageHea
  * content with its own title inside a page.
  *
  * @group Layout
- * @see https://ourostack.github.io/ouro-ui/docs/page-header
+ * @see https://ui.ouro.bot/docs/page-header
  *
  * @example
  * <PageHeader

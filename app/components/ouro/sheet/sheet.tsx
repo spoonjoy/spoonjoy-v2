@@ -119,7 +119,7 @@ export type SheetProps = SheetWithTriggerProps | SheetControlledProps;
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
  * @group Overlays
- * @see https://ourostack.github.io/ouro-ui/docs/sheet
+ * @see https://ui.ouro.bot/docs/sheet
  *
  * @example
  * <Sheet title="Save to cookbook" trigger={<Button>Save</Button>}>

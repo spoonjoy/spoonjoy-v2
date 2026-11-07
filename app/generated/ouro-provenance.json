@@ -1,6 +1,6 @@
 {
   "guide": "https://github.com/spoonjoy/spoonjoy-v2/blob/main/docs/building-with-ouro-hx.md",
-  "ouroTag": "v1.2.8",
+  "ouroTag": "v1.2.13",
   "root": {
     "file": "app/root.tsx",
     "sources": [
@@ -15,8 +15,10 @@
       "app/components/navigation/phone-brand-bar.tsx",
       "app/components/navigation/quick-actions.tsx",
       "app/components/navigation/recipes-section-nav.tsx",
+      "app/components/navigation/site-footer.tsx",
       "app/components/oauth.tsx",
       "app/components/spoonjoy-logo.tsx",
+      "app/components/xray/xray-provider.tsx",
       "app/hooks/use-back-navigation.ts",
       "app/hooks/use-cook-session-sync.ts",
       "app/hooks/use-cooking-now.ts",
@@ -26,6 +28,7 @@
       "app/lib/analytics.ts",
       "app/lib/api-auth.server.ts",
       "app/lib/api-idempotency.server.ts",
+      "app/lib/build-info.server.ts",
       "app/lib/canonical-host.server.ts",
       "app/lib/client-storage-schema.ts",
       "app/lib/cook-session-sync.ts",
@@ -51,6 +54,7 @@
       "app/lib/oauth-server.server.ts",
       "app/lib/openai-client.server.ts",
       "app/lib/openai-error.server.ts",
+      "app/lib/ouro-provenance.ts",
       "app/lib/push-client.ts",
       "app/lib/qa-error-logs.server.ts",
       "app/lib/rate-limit.server.ts",
@@ -63,6 +67,7 @@
     "components": [
       "button",
       "color-scheme-toggle",
+      "inspector",
       "install-prompt",
       "link",
       "navbar",
@@ -80,18 +85,23 @@
         "app/components/cooking-now/CookingNow.tsx",
         "app/components/errors/route-error.tsx",
         "app/components/navigation/phone-brand-bar.tsx",
+        "app/components/navigation/site-footer.tsx",
         "app/components/oauth.tsx",
         "app/root.tsx"
       ],
       "color-scheme-toggle": [
         "app/root.tsx"
       ],
+      "inspector": [
+        "app/components/xray/xray-provider.tsx"
+      ],
       "install-prompt": [
-        "app/root.tsx"
+        "app/components/navigation/mobile-nav.tsx"
       ],
       "link": [
         "app/components/cooking-now/CookingNow.tsx",
         "app/components/navigation/phone-brand-bar.tsx",
+        "app/components/navigation/site-footer.tsx",
         "app/root.tsx"
       ],
       "navbar": [
@@ -174,6 +184,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -802,6 +813,7 @@
         "app/lib/openai-error.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover-service.server.ts",
@@ -1030,6 +1042,7 @@
         "app/lib/photo-lifecycle.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -1095,12 +1108,11 @@
         "app/components/recipe/IngredientList.tsx",
         "app/components/recipe/StepCard.tsx",
         "app/components/recipe/StepsSectionHeading.tsx",
+        "app/components/xray/xray-provider.tsx",
         "app/hooks/use-viewport-top-var.ts",
-        "app/lib/build-info.server.ts",
         "app/lib/cook-timers.ts",
         "app/lib/cook/local-cook-controller.ts",
         "app/lib/ingredient-affordances.ts",
-        "app/lib/ouro-provenance.server.ts",
         "app/lib/ouro-provenance.ts",
         "app/lib/quantity.ts",
         "app/lib/test-kitchen/content.ts",
@@ -1140,7 +1152,7 @@
           "app/routes/test-kitchen.tsx"
         ],
         "inspector": [
-          "app/routes/test-kitchen.tsx"
+          "app/components/xray/xray-provider.tsx"
         ],
         "number-field": [
           "app/components/cook/RecipeCookView.tsx",
@@ -1279,6 +1291,7 @@
       "components": [
         "button",
         "empty",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -1296,6 +1309,9 @@
         ],
         "empty": [
           "app/routes/my-recipes.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/my-recipes.tsx"
@@ -1374,6 +1390,7 @@
         "app/lib/photo-lifecycle.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -1400,6 +1417,7 @@
       "components": [
         "button",
         "empty",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -1419,6 +1437,9 @@
         "empty": [
           "app/routes/my-recipes.tsx",
           "app/routes/saved-recipes.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/my-recipes.tsx",
@@ -1495,6 +1516,7 @@
         "app/lib/photo-lifecycle.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -1602,6 +1624,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -1629,6 +1652,7 @@
         "button",
         "empty",
         "heading",
+        "install-prompt",
         "item",
         "show-more",
         "tab-bar",
@@ -1649,6 +1673,9 @@
         ],
         "heading": [
           "app/routes/recipes._index.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/recipes._index.tsx"
@@ -1721,6 +1748,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -1914,6 +1942,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-jobs-d1.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
@@ -1965,6 +1994,7 @@
         "file-field",
         "form",
         "heading",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -2047,6 +2077,9 @@
         ],
         "heading": [
           "app/routes/recipes.$id.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/components/recipe/SpoonsStrip.tsx"
@@ -2175,6 +2208,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -2603,6 +2637,7 @@
       "components": [
         "button",
         "empty",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -2622,6 +2657,9 @@
         "empty": [
           "app/routes/cookbooks._index.tsx",
           "app/routes/my-recipes.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/cookbooks._index.tsx",
@@ -2767,6 +2805,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -2796,6 +2835,7 @@
         "confirm-dialog",
         "empty",
         "form",
+        "install-prompt",
         "item",
         "item-group",
         "link",
@@ -2826,6 +2866,9 @@
         ],
         "form": [
           "app/routes/cookbooks.$id.tsx"
+        ],
+        "install-prompt": [
+          "app/components/navigation/mobile-nav.tsx"
         ],
         "item": [
           "app/routes/cookbooks.$id.tsx"
@@ -3017,6 +3060,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/push-client.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -3312,6 +3356,7 @@
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
         "app/lib/quantity.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -3457,6 +3502,7 @@
         "app/lib/photo-lifecycle.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -3554,6 +3600,7 @@
         "app/lib/photo-lifecycle.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover.server.ts",
@@ -3668,6 +3715,7 @@
         "app/lib/openai-error.server.ts",
         "app/lib/photo-variants.ts",
         "app/lib/qa-error-logs.server.ts",
+        "app/lib/r2-transient-retry.server.ts",
         "app/lib/rate-limit.server.ts",
         "app/lib/recipe-cover-schema.server.ts",
         "app/lib/recipe-cover-service.server.ts",

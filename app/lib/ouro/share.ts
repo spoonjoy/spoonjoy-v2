@@ -29,7 +29,7 @@ type ShareResult = "shared" | "copied" | "cancelled" | "failed";
  * desktop browsers do not.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/share-button
+ * @see https://ui.ouro.bot/docs/share-button
  *
  * @example
  * const label = canShare({ url }) ? "Share" : "Copy link";
@@ -73,7 +73,7 @@ function copyWithSelection(text: string): boolean {
  * may not use it (plain http, an older browser). Resolves whether it worked; never throws.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/share-button
+ * @see https://ui.ouro.bot/docs/share-button
  *
  * @example
  * if (await copyText(url)) toast("Link copied");
@@ -99,7 +99,7 @@ async function copyText(text: string): Promise<boolean> {
  * Use `ShareButton` instead for the whole button, with its "Link copied" confirmation.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/share-button
+ * @see https://ui.ouro.bot/docs/share-button
  *
  * @example
  * const result = await share({ url: location.href, title: document.title });

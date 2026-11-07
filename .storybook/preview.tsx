@@ -1,13 +1,44 @@
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { Preview } from '@storybook/react-vite'
 import { withThemeByClassName } from '@storybook/addon-themes'
 import { createMemoryRouter, RouterProvider } from 'react-router'
+import { OuroProvider } from '../app/lib/ouro/ouro-provider'
 import '../app/styles/tailwind.css'
 
 type RouterParameters = {
   initialEntries?: string[]
 }
 
+/**
+ * The story as a page shows it: in <main>, with Ouro UI's popups at the end of that <main>, as
+ * app/root.tsx places them. A story that renders its own <main> (a page layout) is left alone.
+ * The accessibility check turns it on (the `page` global), so content outside every landmark
+ * fails there. A popup is on the page only while it is open, and stories show their popups closed,
+ * so a popup left at the end of <body> fails only in Ouro UI's own story check, which opens each one.
+ */
+function StoryPage({ children }: { children: ReactNode }) {
+  const main = useRef<HTMLElement>(null)
+  const popups = useRef<HTMLDivElement>(null)
+  const [ownMain, setOwnMain] = useState(false)
+  useLayoutEffect(() => {
+    if (main.current?.querySelector('main, [role="main"]')) setOwnMain(true)
+  }, [])
+  if (ownMain) return <>{children}</>
+  return (
+    <OuroProvider portalContainer={popups}>
+      <main ref={main} data-story-page="">
+        {children}
+        <div ref={popups} />
+      </main>
+    </OuroProvider>
+  )
+}
+
 const preview: Preview = {
+  initialGlobals: {
+    page: false,
+  },
+
   parameters: {
     controls: {
       matchers: {
@@ -30,6 +61,7 @@ const preview: Preview = {
   },
 
   decorators: [
+    (Story, context) => (context.globals.page ? <StoryPage><Story /></StoryPage> : <Story />),
     (Story, context) => {
       const routerParameters = context.parameters.router as RouterParameters | undefined
       const router = createMemoryRouter(

@@ -104,6 +104,83 @@ describe("audit", () => {
     expect(findings.map((finding) => `${finding.undecided ? "undecided " : ""}${finding.rule} ${finding.target}`)).toEqual(["undecided color-contrast #faint"]);
   });
 
+  it("fails a faint placeholder, as Tailwind's base styles draw one at half the text color, and passes one that meets 4.5:1", async () => {
+    // Tailwind's preflight rule for placeholders, which the Sheet story's field once had.
+    const field = 'style="margin:4px;padding:4px 8px;font-size:16px;color:#111;background:#fff;border:1px solid #767676"';
+    mountPage(
+      "<style>#faint::placeholder { opacity: 1; color: color-mix(in oklab, currentcolor 50%, transparent); } #clear::placeholder { opacity: 1; color: #595959; }</style>" +
+        `<label>Name <input id="faint" placeholder="Your name" ${field}></label><label>Email <input id="clear" placeholder="you@example.com" ${field}></label>`,
+    );
+    const findings = await scanPage();
+    expect(findings.map((finding) => `${finding.undecided ? "undecided " : ""}${finding.rule} ${finding.target}`)).toEqual(["undecided color-contrast #faint"]);
+    expect(findings[0]!.summary).toMatch(/^its placeholder measured 3\.\d\d:1 against the worst pixel behind it, needs 4\.5:1$/);
+    // Once the field holds a value, the placeholder no longer shows.
+    document.querySelector<HTMLInputElement>("#faint")!.value = "Ari";
+    expect(describeFindings(await scanPage())).toBe("");
+  });
+
+  it("measures a placeholder against what is behind its text, not the border its field's box touches", async () => {
+    // A borderless input that fills its row, as Command's search input does, flush with a grey rule.
+    mountPage(
+      '<div style="display:flex;width:320px;margin-top:0.5px;border-top:1px solid #999;border-bottom:1px solid #999;background:#fff">' +
+        '<input aria-label="Search" placeholder="Type a command" style="flex:1;margin:0;padding:0;height:48px;border:0;outline:none;background:transparent;font-size:14px;color:#111"></div>' +
+        "<style>input::placeholder { opacity: 1; color: #595959; }</style>",
+    );
+    expect(describeFindings(await scanPage())).toBe("");
+  });
+
+  it("leaves out a placeholder axe leaves out: aria-disabled, inert under a modal dialog, off the page or clipped away", async () => {
+    const faint = 'style="padding:4px 8px;font-size:16px;color:#111;background:#fff;border:1px solid #767676"';
+    mountPage(
+      "<style>input::placeholder { opacity: 1; color: #bbb; }</style>" +
+        `<input aria-label="Shown" id="shown" placeholder="Shown" ${faint}>` +
+        `<input aria-label="Disabled" aria-disabled="true" placeholder="Disabled" ${faint}>` +
+        `<input aria-label="Off the page" placeholder="Off the page" ${faint.replace('style="', 'style="position:absolute;left:-9999px;')}>` +
+        `<div style="width:120px;height:0;overflow:hidden"><input aria-label="Clipped" placeholder="Clipped" ${faint}></div>`,
+    );
+    expect((await scanPage()).map((finding) => finding.target)).toEqual(["#shown"]);
+    // A field scrolled out of a scrolling box still shows once scrolled to, as axe holds.
+    document.querySelector("main")!.insertAdjacentHTML("beforeend", `<div style="height:120px;overflow:auto"><div style="height:400px"></div><input aria-label="Below" id="below" placeholder="Below" ${faint}></div>`);
+    expect((await scanPage()).map((finding) => finding.target)).toEqual(["#shown", "#below"]);
+    document.querySelector("#below")!.parentElement!.remove();
+    // Under a modal <dialog>, the page is inert; the dialog's own field is measured.
+    document.querySelector("main")!.insertAdjacentHTML("beforeend", `<dialog aria-label="Edit"><input aria-label="In the dialog" id="inside" placeholder="In the dialog" ${faint}></dialog>`);
+    document.querySelector("dialog")!.showModal();
+    expect((await scanPage()).filter((finding) => finding.summary.startsWith("its placeholder")).map((finding) => finding.target)).toEqual(["#inside"]);
+    document.querySelector("dialog")!.close();
+  });
+
+  it("screenshots a placeholder in a popup without its container, which has no size around the fixed popup", async () => {
+    mountPage("<p>Page</p>");
+    document.querySelector("main")!.insertAdjacentHTML(
+      "beforeend",
+      '<div data-base-ui-portal=""><div role="dialog" aria-label="Search" style="position:fixed;top:40px;left:40px;width:300px;padding:8px;background:#fff">' +
+        '<input aria-label="Search" id="search" placeholder="Search" style="font-size:16px;border:0;color:#111;background:#fff"></div></div>' +
+        "<style>#search::placeholder { opacity: 1; color: #bbb; }</style>",
+    );
+    const take = page.screenshot.bind(page);
+    const shots: { width: number; height: number }[] = [];
+    const spy = vi.spyOn(page, "screenshot").mockImplementation((options) => {
+      const box = (options as { element: Element }).element.getBoundingClientRect();
+      shots.push({ width: box.width, height: box.height });
+      return take(options);
+    });
+    try {
+      expect((await scanPage()).map((finding) => finding.target)).toEqual(["#search"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(shots.length).toBeGreaterThan(0);
+    expect(shots.filter(({ width, height }) => width === 0 || height === 0)).toEqual([]);
+  });
+
+  it("names a field in a shadow root by its host, then its place in the root", async () => {
+    mountPage('<div id="host"></div>');
+    const root = document.querySelector("#host")!.attachShadow({ mode: "open" });
+    root.innerHTML = '<style>input::placeholder { opacity: 1; color: #bbb; }</style><label>Name <input placeholder="Your name" style="font-size:16px;color:#111;background:#fff"></label>';
+    expect((await scanPage()).map((finding) => finding.target)).toEqual(["#host label > input"]);
+  });
+
   it("measures a heading's second line against the page, not the descenders of the line above", async () => {
     mountPage(
       '<h1 style="margin:0;font-size:64px;line-height:0.95;color:#111"><span style="display:block">Gyppy quip</span>' +
@@ -303,6 +380,152 @@ describe("audit", () => {
     stack.addEventListener("focusout", () => stack.setAttribute("aria-hidden", "true"));
     document.querySelector<HTMLElement>('[role="dialog"] button')!.focus();
     expect(rules(await scanPage())).not.toContain("undecided aria-hidden-focus");
+  });
+
+  // A page behind a modal that hides it with aria-hidden, not inert: axe cannot decide whether Tab
+  // reaches its link, so audit presses Tab around the page to find out.
+  const behindModal = (dialog: string) =>
+    (document.body.innerHTML = `<main aria-hidden="true"><h1>Page</h1><a href="#page">Behind the dialog</a></main><div role="dialog" aria-modal="true" aria-label="Edit">${dialog}</div>`);
+
+  it("leaves focus where its Tab walk found it: nothing focused stays so, and a focus ring shows after only if it showed before", async () => {
+    behindModal('<button type="button">Save</button>');
+    const save = document.querySelector<HTMLElement>('[role="dialog"] button')!;
+    expect(rules(await scanPage())).toContain("undecided aria-hidden-focus");
+    expect(document.activeElement).toBe(document.body);
+    for (const focusVisible of [false, true]) {
+      save.blur();
+      const options: FocusOptions & { focusVisible?: boolean } = { focusVisible };
+      save.focus(options);
+      expect(save.matches(":focus-visible")).toBe(focusVisible);
+      await scanPage();
+      expect([document.activeElement === save, save.matches(":focus-visible")]).toEqual([true, focusVisible]);
+    }
+  });
+
+  it("puts back a field's caret and selected text, which Tab into a field selects whole, and the page's selection", async () => {
+    behindModal('<input aria-label="Title" value="Short ribs braised"><textarea aria-label="Notes">Low and slow</textarea><p id="words">Some words</p>');
+    const title = document.querySelector("input")!;
+    title.focus();
+    title.setSelectionRange(3, 3);
+    await scanPage();
+    expect([document.activeElement === title, title.selectionStart, title.selectionEnd]).toEqual([true, 3, 3]);
+    const notes = document.querySelector("textarea")!;
+    notes.focus();
+    notes.setSelectionRange(1, 4, "backward");
+    await scanPage();
+    expect([notes.selectionStart, notes.selectionEnd, notes.selectionDirection]).toEqual([1, 4, "backward"]);
+    notes.blur();
+    const words = document.querySelector("#words")!.firstChild!;
+    document.getSelection()!.setBaseAndExtent(words, 2, words, 7);
+    await scanPage();
+    expect(document.getSelection()!.toString()).toBe("me wo");
+  });
+
+  it("passes a page whose content arrives during its Tab walk, as that is no change the walk made", async () => {
+    behindModal('<button type="button">Save</button>');
+    const dialog = document.querySelector('[role="dialog"]')!;
+    setTimeout(() => dialog.insertAdjacentHTML("beforeend", '<button type="button" aria-expanded="false">More</button>'), 30);
+    expect(rules(await scanPage())).toContain("undecided aria-hidden-focus");
+  });
+
+  it("fails, naming what changed, when its Tab walk closes a popup that focus leaving closes, which it cannot open again", async () => {
+    behindModal('<button type="button" aria-expanded="true" aria-controls="herbs">Herbs</button><div id="herbs" role="group" aria-label="Herbs list"><button type="button">Basil</button></div>');
+    const herbs = document.querySelector<HTMLElement>("[aria-expanded]")!;
+    const list = document.querySelector<HTMLElement>("#herbs")!;
+    // Focus leaving the trigger and its list closes the list, as a disclosure that closes on Tab does.
+    document.addEventListener("focusin", (event) => {
+      if (!herbs.contains(event.target as Node) && !list.contains(event.target as Node)) herbs.setAttribute("aria-expanded", "false");
+    });
+    herbs.focus();
+    await expect(scanPage()).rejects.toThrow('audit: its Tab walk changed what is open on the page and cannot change it back: <button> "Herbs" went from expanded to collapsed.');
+  });
+
+  it("puts back every scroll position it moves to measure text, the page's and a scrolled box's", async () => {
+    const gradient = "margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)";
+    mountPage(
+      `<div style="height:3000px"></div><p style="${gradient}">Far down the page</p>` +
+        `<div id="box" role="region" aria-label="Notes" tabindex="0" style="height:100px;overflow:auto"><div style="height:600px"></div><p style="${gradient}">Far down the box</p></div><div style="height:3000px"></div>`,
+    );
+    const box = document.querySelector<HTMLElement>("#box")!;
+    window.scrollTo(0, 100);
+    box.scrollTop = 50;
+    expect(describeFindings(await scanPage())).toBe("");
+    expect([window.scrollY, box.scrollTop]).toEqual([100, 50]);
+    expect(await measureTextContrast(box.querySelector("p")!, 4.5)).toEqual({ pass: true });
+    expect([window.scrollY, box.scrollTop]).toEqual([100, 50]);
+  });
+
+  it("puts back the scroll position of a scrolled box inside a shadow root", async () => {
+    const gradient = "margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)";
+    const scroller = (name: string) =>
+      `<div id="box" role="region" aria-label="${name}" tabindex="0" style="height:100px;overflow:auto"><div style="height:600px"></div><p style="${gradient}">Far down ${name}</p></div>`;
+    mountPage('<div id="host"></div>');
+    // A box in a shadow root, and another in a shadow root inside that one.
+    const outer = document.querySelector("#host")!.attachShadow({ mode: "open" });
+    outer.innerHTML = `${scroller("Notes")}<div id="inner"></div>`;
+    const inner = outer.querySelector("#inner")!.attachShadow({ mode: "open" });
+    inner.innerHTML = scroller("Steps");
+    const boxes = [outer, inner].map((root) => root.querySelector<HTMLElement>("#box")!);
+    boxes[0]!.scrollTop = 50;
+    boxes[1]!.scrollTop = 70;
+    expect(describeFindings(await scanPage())).toBe("");
+    expect(boxes.map((box) => box.scrollTop)).toEqual([50, 70]);
+    for (const box of boxes) expect(await measureTextContrast(box.querySelector("p")!, 4.5)).toEqual({ pass: true });
+    expect(boxes.map((box) => box.scrollTop)).toEqual([50, 70]);
+  });
+
+  it("leaves no trace on the focused field when it screenshots the page", async () => {
+    mountPage('<input aria-label="Title"><p id="text" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)">Text on a gradient</p>');
+    const field = document.querySelector("input")!;
+    field.focus();
+    expect(await measureTextContrast(document.querySelector("#text")!, 4.5)).toEqual({ pass: true });
+    expect(field.outerHTML).toBe('<input aria-label="Title">');
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("leaves no transition running when it is done, its own text's or a link's elsewhere on the page", async () => {
+    // Hiding glyphs turns colors transparent and putting them back turns them back, which would
+    // ease over each element's transition and leave the next measurement waiting for it.
+    mountPage(
+      '<p id="text" style="margin:0;padding:8px;color:#111;background:#fff;transition:color 400ms linear">Text whose color eases</p>' +
+        '<p style="margin:0;padding:8px;color:#111;background:#fff"><a href="#notes" style="color:#1d4ed8;transition:color 400ms linear,text-decoration-color 400ms linear">A link whose colors ease</a></p>',
+    );
+    expect(await measureTextContrast(document.querySelector("#text")!, 4.5)).toEqual({ pass: true });
+    expect(document.getAnimations().map((animation) => (animation as CSSTransition).transitionProperty)).toEqual([]);
+  });
+
+  it("tries a screenshot once more when it ran out of time on a box that shows and holds still, as when Vitest's own process stalled", async () => {
+    mountPage('<p id="text" style="margin:0;padding:8px;color:#111;background:linear-gradient(90deg,#fff,#eee)">Text on a gradient</p>');
+    const take = page.screenshot.bind(page);
+    const shots = vi.spyOn(page, "screenshot").mockRejectedValueOnce(new Error("locator.screenshot: Timeout 555ms exceeded.")).mockImplementation((options) => take(options));
+    try {
+      expect(await measureTextContrast(document.querySelector("#text")!, 4.5)).toEqual({ pass: true });
+      expect(shots).toHaveBeenCalledTimes(2);
+    } finally {
+      shots.mockRestore();
+    }
+  });
+
+  it("does not try a screenshot again on a box with no area, which never shows", async () => {
+    mountPage('<p id="flat" style="margin:0;height:0;color:#111;background:#fff">Text over a box with no height</p>');
+    const shots = vi.spyOn(page, "screenshot").mockRejectedValue(new Error("locator.screenshot: Timeout 5000ms exceeded."));
+    try {
+      expect(await measureTextContrast(document.querySelector("#flat")!, 4.5)).toEqual({ pass: false, reason: expect.stringMatching(/could not be screenshotted: locator\.screenshot: Timeout 5000ms exceeded\.$/) });
+      expect(shots).toHaveBeenCalledTimes(1);
+    } finally {
+      shots.mockRestore();
+    }
+  });
+
+  it("does not try a screenshot again on a box hidden with visibility, which Playwright never takes", async () => {
+    mountPage('<p id="hidden" style="margin:0;padding:8px;visibility:hidden;color:#111;background:#fff">Text in a hidden box</p>');
+    const shots = vi.spyOn(page, "screenshot").mockRejectedValue(new Error("locator.screenshot: Timeout 5000ms exceeded."));
+    try {
+      await measureTextContrast(document.querySelector("#hidden")!, 4.5);
+      expect(shots).toHaveBeenCalledTimes(1);
+    } finally {
+      shots.mockRestore();
+    }
   });
 
   it("settles a link in running text whose block's background axe cannot read, as under an open list, by measuring the link against the text around it", async () => {

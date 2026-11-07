@@ -167,7 +167,7 @@ function Icon({ children }: { children: ReactNode }): JSX.Element {
  * code, and `Slider` when an approximate value in a range is enough.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/number-field
+ * @see https://ui.ouro.bot/docs/number-field
  *
  * @example
  * <NumberField label="Servings" name="servings" defaultValue={4} min={1} max={24} />

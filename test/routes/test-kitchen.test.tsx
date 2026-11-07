@@ -6,20 +6,23 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_KITCHEN } from "~/lib/test-kitchen/content";
 import { TEST_KITCHEN_STORAGE_KEY, readTestKitchen } from "~/lib/test-kitchen/storage";
-import { pageProvenance } from "~/lib/ouro-provenance.server";
-import TestKitchen, { TestKitchenPage, loader, meta } from "~/routes/test-kitchen";
-import { createTestRoutesStub } from "../utils";
+import { SiteFooter } from "~/components/navigation/site-footer";
+import { XrayProvider } from "~/components/xray/xray-provider";
+import TestKitchen, { meta } from "~/routes/test-kitchen";
 
 const RECIPE_ID = TEST_KITCHEN.recipe.id;
 const firstStepIngredients = TEST_KITCHEN.recipe.ingredientsByStep.get(TEST_KITCHEN.recipe.steps[0]!.id)!;
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
-const provenance = pageProvenance("app/routes/test-kitchen.tsx", SHA);
 
+/** The page inside the site's X-ray and footer, as app/root.tsx renders it. */
 function page(path = "/test-kitchen") {
   return (
     <MemoryRouter initialEntries={[path]}>
-      <TestKitchenPage provenance={provenance} />
+      <XrayProvider sourceSha={SHA}>
+        <TestKitchen />
+        <SiteFooter />
+      </XrayProvider>
     </MemoryRouter>
   );
 }
@@ -36,7 +39,8 @@ describe("Test Kitchen", () => {
 
   beforeEach(() => {
     window.localStorage.clear();
-    fetchSpy = vi.spyOn(globalThis, "fetch");
+    // X-ray reads /ouro-provenance.json when it opens; there is no server here.
+    fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("{}", { status: 404 }));
   });
 
   afterEach(() => {
@@ -49,15 +53,6 @@ describe("Test Kitchen", () => {
     const tags = meta({} as Parameters<typeof meta>[0]);
     expect(tags).toContainEqual({ title: "Test Kitchen | Spoonjoy" });
     expect(tags.find((tag) => "name" in tag && tag.name === "description")).toBeTruthy();
-  });
-
-  it("loads only where its source lives, and renders from the route", async () => {
-    const data = loader({} as Parameters<typeof loader>[0]);
-    expect(data.provenance.file).toBe("app/routes/test-kitchen.tsx");
-
-    const Stub = createTestRoutesStub([{ path: "/test-kitchen", Component: TestKitchen, loader: () => data }]);
-    render(<Stub initialEntries={["/test-kitchen"]} />);
-    expect(await screen.findByRole("heading", { level: 1, name: "Spoonjoy Test Kitchen" })).toBeInTheDocument();
   });
 
   it("opens to anyone: the recipe, what to try, and a way to sign up, with no request of its own", async () => {
@@ -230,6 +225,16 @@ describe("Test Kitchen", () => {
     await user.click(within(screen.getByRole("region", { name: "X-ray" })).getByRole("button", { name: /close/i }));
     await waitFor(() => expect(screen.queryByRole("region", { name: "X-ray" })).not.toBeInTheDocument());
     expect(xray).not.toBeChecked();
+  });
+
+  it("shares the site's one X-ray: the footer's \"See all the components\" turns its switch on", async () => {
+    const user = userEvent.setup();
+    render(page());
+
+    await user.click(screen.getByRole("button", { name: "See all the components" }));
+    expect(await screen.findByRole("region", { name: "X-ray" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "X-ray" })).toBeChecked();
+    expect(screen.getAllByRole("region", { name: "X-ray" })).toHaveLength(1);
   });
 
   it("opens X-ray on arrival with ?xray", async () => {

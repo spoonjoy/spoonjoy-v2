@@ -196,7 +196,7 @@ function CloseIcon(): JSX.Element {
  * `new AxeBuilder({ page }).exclude("[data-base-ui-focus-guard]")`.
  *
  * @group Overlays
- * @see https://ourostack.github.io/ouro-ui/docs/dialog
+ * @see https://ui.ouro.bot/docs/dialog
  *
  * @example
  * <Dialog title="Edit recipe" trigger={<Button>Edit</Button>}>

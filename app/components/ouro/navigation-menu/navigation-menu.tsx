@@ -190,7 +190,7 @@ const example =
  * for a column of links.
  *
  * @group Navigation
- * @see https://ourostack.github.io/ouro-ui/docs/navigation-menu
+ * @see https://ui.ouro.bot/docs/navigation-menu
  *
  * @example
  * <NavigationMenu

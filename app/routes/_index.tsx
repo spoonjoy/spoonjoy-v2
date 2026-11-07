@@ -165,8 +165,6 @@ export default function Index() {
   if (!kitchenUser) {
     return (
       <div className="sj-page">
-        {/* Signed out, the recipes in progress live in this browser, so they appear after hydration. */}
-        <LocalCookingNow />
         {/* A phone held sideways: the photo fills the screen below the 3.5rem header, and the bottom padding
             keeps the text and actions above the tab bar (its 4rem height, the gap below it and a 1rem gap
             above it, as html's scroll-padding-bottom). */}
@@ -182,7 +180,7 @@ export default function Index() {
             <p className="font-sj-ui text-xs font-bold uppercase tracking-[0.2em] text-[var(--sj-on-photo)]">
               The Recipe App
             </p>
-            <h1 className="font-sj-display mt-3 max-w-4xl text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] tall-phone:mt-5 tall-phone:text-4xl/10 sm:mt-5 sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20 sideways-phone:mt-2 sideways-phone:text-[2rem]/[2.375rem]">
+            <h1 className="font-sj-display mt-3 max-w-4xl text-[2rem]/[2.375rem] font-semibold tracking-normal text-[var(--sj-on-photo)] tall-phone:mt-5 tall-phone:text-4xl/10 sm:mt-5 sm:text-6xl/14 lg:text-7xl/16 xl:text-8xl/20 sideways-phone:mt-2 sideways-phone:text-[2rem]/[2.375rem] low-sideways-phone:text-[1.5rem]/[1.875rem]">
               Your food should look as good as it tastes.
             </h1>
             {/* A short, narrow or sideways phone shows the first clause only, so the actions fit on the first
@@ -205,6 +203,12 @@ export default function Index() {
             </div>
           </div>
         </section>
+
+        {/* Signed out, the recipes in progress live in this browser, so they appear after hydration. They
+            follow the hero, so the hero does not jump down once they appear and its actions stay on the
+            first screen (e2e/journeys/landing-first-screen.mobile.journey.ts). The desktop "Cooking"
+            pill's /#cooking-now link brings them into view. */}
+        <LocalCookingNow />
 
         <section className="mx-auto grid max-w-6xl gap-6 px-5 py-10 sm:grid-cols-3 sm:px-8 lg:px-12">
           {[

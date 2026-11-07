@@ -187,7 +187,7 @@ function toneFromSeverity(value: unknown): ToneName {
  * the message under that field, and the `form` key shows it at the top of the form.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/alert
+ * @see https://ui.ouro.bot/docs/alert
  *
  * @example
  * <Alert tone="success" title="Recipe saved" />

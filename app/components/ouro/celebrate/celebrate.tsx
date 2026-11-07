@@ -60,7 +60,7 @@ const pieces = Array.from({ length: PIECES }, (_, index) => {
  *
  * @claim "The message waits about 1.5 s" registry/ouro/components/ouro/celebrate/celebrate.test.tsx verify:testExists(registry/ouro/components/ouro/celebrate/celebrate.test.tsx::Celebrate > says the message once after a delay when the moment starts, and again for the next one)
  * @group Feedback
- * @see https://ourostack.github.io/ouro-ui/docs/celebrate
+ * @see https://ui.ouro.bot/docs/celebrate
  *
  * @example
  * <Celebrate show={items.every((item) => item.checked)} message="List cleared" />

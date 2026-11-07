@@ -199,7 +199,7 @@ const above = {
  * plain horizontal layout with no list semantics.
  *
  * @group Lists
- * @see https://ourostack.github.io/ouro-ui/docs/item
+ * @see https://ui.ouro.bot/docs/item
  *
  * @example
  * <Item

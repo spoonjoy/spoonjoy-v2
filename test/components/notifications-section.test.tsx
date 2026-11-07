@@ -98,9 +98,9 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(/permission was denied|unable to enable/i),
-    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Permission was denied — re-enable notifications in your browser to continue." }),
+    ).toBeInTheDocument();
   });
 
   it("clicking Disable calls unsubscribeFromPush and reverts to Enable state on ok:true", async () => {
@@ -125,9 +125,7 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: false });
     fireEvent.click(screen.getByRole("button", { name: /enable notifications/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(/unable to enable notifications/i),
-    );
+    expect(await screen.findByRole("alertdialog", { name: "Unable to enable notifications." })).toBeInTheDocument();
   });
 
   it("clicking Disable on server error keeps the user marked as enabled and surfaces an error toast", async () => {
@@ -138,9 +136,7 @@ describe("NotificationsSection", () => {
     });
     renderWithToast({ initiallySubscribed: true });
     fireEvent.click(screen.getByRole("button", { name: /disable/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(/unable to disable/i),
-    );
+    expect(await screen.findByRole("alertdialog", { name: "Unable to disable notifications. Please try again." })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /disable/i }),
     ).toBeInTheDocument();
@@ -216,9 +212,9 @@ describe("NotificationsSection — preference toggles", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     // Rolled back to ON.
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(/unable to update notification preferences/i),
-    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Unable to update notification preferences. Please try again." }),
+    ).toBeInTheDocument();
   });
 
   it("toggle network error rolls back the optimistic state and shows an error toast", async () => {
@@ -229,9 +225,9 @@ describe("NotificationsSection — preference toggles", () => {
     fireEvent.click(sw);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(/unable to update notification preferences/i),
-    );
+    expect(
+      await screen.findByRole("alertdialog", { name: "Unable to update notification preferences. Please try again." }),
+    ).toBeInTheDocument();
   });
 
   it("disables all toggles when push is unsupported", () => {

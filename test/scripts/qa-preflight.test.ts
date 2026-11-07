@@ -108,7 +108,7 @@ function qaGeneratedBuildConfig() {
       VITE_POSTHOG_HOST: "https://us.i.posthog.com",
     },
     version_metadata: { binding: "CF_VERSION_METADATA" },
-    d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
+    d1_databases: [{ binding: "DB", database_name: "spoonjoy-qa-2", database_id: QA_D1_DATABASE_ID }],
     r2_buckets: [{ binding: "PHOTOS", bucket_name: QA_R2_BUCKET }],
     ratelimits: [
       { name: "API_TOKEN_RATE_LIMITER", namespace_id: "2001" },
@@ -282,8 +282,8 @@ describe("validateQaGeneratedBuildConfig", () => {
       d1_databases: [
         null,
         "bad",
-        { binding: "OTHER", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID },
-        { binding: "DB", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID },
+        { binding: "OTHER", database_name: "spoonjoy-qa-2", database_id: QA_D1_DATABASE_ID },
+        { binding: "DB", database_name: "spoonjoy-qa-2", database_id: QA_D1_DATABASE_ID },
       ],
       r2_buckets: [
         null,
@@ -340,7 +340,7 @@ describe("validateQaGeneratedBuildConfig", () => {
   it("fails closed when generated config arrays do not contain the required bindings", () => {
     const check = validateQaGeneratedBuildConfig({
       ...qaGeneratedBuildConfig(),
-      d1_databases: [{ binding: "OTHER", database_name: "spoonjoy-qa", database_id: QA_D1_DATABASE_ID }],
+      d1_databases: [{ binding: "OTHER", database_name: "spoonjoy-qa-2", database_id: QA_D1_DATABASE_ID }],
       r2_buckets: [{ binding: "OTHER", bucket_name: QA_R2_BUCKET }],
     });
 

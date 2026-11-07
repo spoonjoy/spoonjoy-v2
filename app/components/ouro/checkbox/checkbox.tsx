@@ -142,7 +142,7 @@ function CheckboxBox(props: {
  * `Switch` for a setting that applies at once, and `RadioGroup` when only one choice may be picked.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/checkbox
+ * @see https://ui.ouro.bot/docs/checkbox
  *
  * @example
  * <Checkbox label="Email me new recipes" name="newsletter" defaultChecked />

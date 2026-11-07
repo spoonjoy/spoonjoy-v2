@@ -1,6 +1,5 @@
 import type { Route } from "./+types/test-kitchen";
 import { useState } from "react";
-import { useLoaderData, useSearchParams } from "react-router";
 import { RecipeCookView } from "~/components/cook/RecipeCookView";
 import { CookTimerTray } from "~/components/recipe/CookTimers";
 import { SCALE_RANGE } from "~/components/cook/cook-controller";
@@ -8,15 +7,13 @@ import { CookbookPage } from "~/components/cookbook/page";
 import { PageHeader } from "~/components/ouro/page-header/page-header";
 import { AspectRatio } from "~/components/ouro/aspect-ratio/aspect-ratio";
 import { Button } from "~/components/ouro/button/button";
-import { Inspector } from "~/components/ouro/inspector/inspector";
 import { NumberField } from "~/components/ouro/number-field/number-field";
 import { Switch } from "~/components/ouro/switch/switch";
 import { Heading } from "~/components/ouro/text/heading";
 import { Text } from "~/components/ouro/text/text";
 import { claim } from "~/lib/ouro/claims";
 import { useLocalCookController } from "~/lib/cook/local-cook-controller";
-import { sourceHrefFor, type PageProvenance } from "~/lib/ouro-provenance";
-import { pageProvenance } from "~/lib/ouro-provenance.server";
+import { useXray } from "~/components/xray/xray-provider";
 import { scaleServingsText } from "~/lib/quantity";
 import { TEST_KITCHEN } from "~/lib/test-kitchen/content";
 import { resetTestKitchen, testKitchenProgressStorage } from "~/lib/test-kitchen/storage";
@@ -49,20 +46,9 @@ const WHAT_TO_TRY = [
   "Turn on X-ray to see every Ouro HX component on the page, with its docs and its source.",
 ];
 
-/** Only where this page's source lives: the recipe is bundled, and there is no account or database. */
-export function loader({}: Route.LoaderArgs) {
-  return { provenance: pageProvenance("app/routes/test-kitchen.tsx") };
-}
-
+/** The Test Kitchen. Its X-ray switch drives the site's one X-ray (root.tsx's XrayProvider), which the footer opens too. */
 export default function TestKitchen() {
-  const { provenance } = useLoaderData<typeof loader>();
-  return <TestKitchenPage provenance={provenance} />;
-}
-
-/** The Test Kitchen, given where its source lives (for X-ray's Source links). */
-export function TestKitchenPage({ provenance }: { provenance: PageProvenance }) {
-  const [searchParams] = useSearchParams();
-  const [xray, setXray] = useState(() => searchParams.has("xray"));
+  const { open: xray, setOpen: setXray } = useXray();
   // Resetting starts the kitchen over: a new controller, reading the storage it just emptied.
   const [visit, setVisit] = useState(0);
   const [resetWarning, setResetWarning] = useState(false);
@@ -81,7 +67,6 @@ export function TestKitchenPage({ provenance }: { provenance: PageProvenance }) 
         }}
       />
       {resetWarning ? <Alert tone="destructive" title="Some timer resets could not be saved. They may return after a reload." /> : null}
-      <Inspector open={xray} onOpenChange={setXray} sourceHref={sourceHrefFor(provenance)} />
     </>
   );
 }

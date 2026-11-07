@@ -312,7 +312,7 @@ const preventDefault = (event: MouseEvent) => event.preventDefault();
  * Use `Text` with an `<a>` instead when a link sits inside running text.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/button
+ * @see https://ui.ouro.bot/docs/button
  *
  * @example
  * <Button onClick={save} loading={saving}>Save</Button>

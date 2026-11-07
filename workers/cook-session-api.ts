@@ -141,6 +141,13 @@ async function readBoundedText(request: Request): Promise<string | null> {
   return new TextDecoder().decode(bytes);
 }
 
+// The Workers runtime's message for a failure inside Cloudflare, which names no cause of ours.
+const CLOUDFLARE_INTERNAL_ERROR = /^internal error; reference = \S+/;
+
+function isCloudflareInternalError(error: Error): boolean {
+  return CLOUDFLARE_INTERNAL_ERROR.test(error.message);
+}
+
 async function forwardToCookSession(
   namespace: NonNullable<CloudflareEnvironment["COOK_SESSIONS"]>,
   userId: string,
@@ -162,16 +169,24 @@ async function forwardToCookSession(
     )),
     onSlowCall,
   );
+  // A read, and a start, which resumes the session it finds (startCookSession): a start that
+  // already committed answers the same session again. A progress write is never replayed, because
+  // it may already have committed and its revision would then be stale.
+  const replayable = method === "GET" || suffix === "/start";
   let response: Response;
   try {
     response = await send(1);
   } catch (error) {
     const failure = error as Error & { retryable?: boolean; overloaded?: boolean };
-    if (method !== "GET" || !(error instanceof Error) || failure.retryable !== true || failure.overloaded === true) {
+    const marked = error instanceof Error && failure.retryable === true;
+    if (!replayable || !(error instanceof Error) || failure.overloaded === true || (!marked && !isCloudflareInternalError(error))) {
       throw error;
     }
-    // A reset can leave the old stub broken. Only replay a read, once, with a fresh stub;
-    // writes might already have committed, and overloaded objects need less traffic, not more.
+    // A reset can leave the old stub broken, so the replay, once, uses a fresh stub. Overloaded
+    // objects need less traffic, not more. Cloudflare's own "internal error; reference = …" is
+    // replayed whether or not it is marked retryable (Journeys run 40566824130 answered a start
+    // 503 on one, and Cloudflare documents no marking for it); `marked` records which it was.
+    console.warn(JSON.stringify({ event: "platform_retry", call: method === "GET" ? "cook_session.read" : "cook_session.start", attempt: 2, marked }));
     await new Promise((resolve) => setTimeout(resolve, 100));
     response = await send(2);
   }

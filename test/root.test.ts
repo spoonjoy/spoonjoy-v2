@@ -36,6 +36,25 @@ describe("root.tsx safe area and dock clearance", () => {
   });
 });
 
+describe("root.tsx site footer and X-ray", () => {
+  const source = readFileSync("app/root.tsx", "utf8");
+
+  it("puts the footer after <main>, before the phone tab bar and its room at the end of the page", () => {
+    const shell = source.slice(source.indexOf('<div className="sj-app-shell'));
+    expect(shell).toMatch(/<\/main>\n\s*<SiteFooter \/>\n\s*<\/div>\n\s*<MobileNav /);
+  });
+
+  it("wraps the whole app in one X-ray, at the running commit, so every page can open it", () => {
+    expect(source).toContain("<XrayProvider sourceSha={sourceSha}>");
+    expect(source.match(/<Inspector\b/g)).toBeNull();
+  });
+
+  it("hides the footer in cook mode, the full-screen view", () => {
+    const css = readFileSync("app/styles/tailwind.css", "utf8");
+    expect(css).toMatch(/body:has\(#cook\) \.sj-site-footer[^{]*\{\s*display: none;/);
+  });
+});
+
 describe("root.tsx meta()", () => {
   it("returns the plain brand title as the document default", () => {
     expect(meta()).toEqual([{ title: "Spoonjoy" }]);

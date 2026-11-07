@@ -55,7 +55,7 @@ export type LocalDateProps = Omit<TimeHTMLAttributes<HTMLTimeElement>, keyof Loc
  * a date inside a sentence you build.
  *
  * @group Text
- * @see https://ourostack.github.io/ouro-ui/docs/local-date
+ * @see https://ui.ouro.bot/docs/local-date
  *
  * @example
  * <LocalDate value={note.updatedAt} format="datetime" />

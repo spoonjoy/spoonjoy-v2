@@ -189,7 +189,13 @@ function CookingNowTimer({ recipeId }: { recipeId: string }) {
  */
 export function LocalCookingNow() {
   const { entries, now } = useCookingNow(false);
-  if (entries.length === 0) return null;
+  const shown = entries.length > 0;
+  // The Cooking pill links to /#cooking-now. This strip appears only after hydration, after the router
+  // has looked for that id and found nothing, so it brings itself into view when it appears.
+  useEffect(() => {
+    if (shown && window.location.hash === `#${COOKING_NOW_ANCHOR}`) document.getElementById(COOKING_NOW_ANCHOR)?.scrollIntoView();
+  }, [shown]);
+  if (!shown) return null;
 
   return (
     <div className="mx-auto max-w-6xl px-5 pt-8 sm:px-8 lg:px-12" data-testid="local-cooking-now">

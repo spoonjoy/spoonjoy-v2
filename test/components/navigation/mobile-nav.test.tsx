@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { MobileNav, MobileNavToaster } from "~/components/navigation/mobile-nav";
+import { MobileNav, MobileNavInstallPrompt, MobileNavToaster } from "~/components/navigation/mobile-nav";
 import { DockContext } from "~/components/navigation";
 
 function renderAt(path: string, isAuthenticated = true) {
@@ -168,5 +168,32 @@ describe("MobileNavToaster", () => {
     };
     expect(toaster("/")).toBe(true);
     expect(toaster("/recipes/new")).toBe(false);
+  });
+});
+
+describe("MobileNavInstallPrompt", () => {
+  it("offers the install only on pages with the tab bar, never over sign-in, sign-up or a form", async () => {
+    window.dispatchEvent(Object.assign(new Event("beforeinstallprompt", { cancelable: true }), {
+      prompt: () => Promise.resolve(),
+      userChoice: Promise.resolve({ outcome: "dismissed" }),
+    }));
+    const offered = async (path: string, isAuthenticated: boolean) => {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <MobileNavInstallPrompt isAuthenticated={isAuthenticated} />
+        </MemoryRouter>,
+      );
+      await act(async () => {});
+      const shown = screen.queryByRole("heading", { name: "Install Spoonjoy" }) !== null;
+      unmount();
+      return shown;
+    };
+    expect(await offered("/", false)).toBe(true);
+    expect(await offered("/recipes", false)).toBe(true);
+    expect(await offered("/", true)).toBe(true);
+    expect(await offered("/login", false)).toBe(false);
+    expect(await offered("/signup", false)).toBe(false);
+    expect(await offered("/logout", true)).toBe(false);
+    expect(await offered("/recipes/new", true)).toBe(false);
   });
 });

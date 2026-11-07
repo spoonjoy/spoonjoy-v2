@@ -143,7 +143,7 @@ function cardHint(token: string): string {
  * side by side), and `Stack` when the group needs no surface.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/card
+ * @see https://ui.ouro.bot/docs/card
  *
  * @example
  * <Card title="Pantry" description="What you have on hand" action={<Button variant="plain">Edit</Button>}>

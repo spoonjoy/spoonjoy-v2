@@ -51,18 +51,35 @@ async function identitiesOnPage(page) {
  * The state's multiset of visible control identities, once two readings a moment apart agree (late
  * data and lazy sections can still add controls after hydration and animations). It throws on an
  * axe-core older than the kits' minimum, naming the version it found, before it loads axe into the page.
+ * It leaves the page's own `window.axe`, or none, as it found it, and its own axe-core no longer
+ * listening for frame messages.
  * @param {Page} page
  * @param {{ attempts?: number, intervalMs?: number }} [options]
  * @returns {Promise<Multiset>}
  * @claim "once two readings a moment apart agree" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > loads axe-core, waits for animations, and returns the visible controls once two readings agree)
  * @claim "once two readings a moment apart agree" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > reads 20 times, 250 ms apart, by default)
  * @claim "It throws on an axe-core older than the kits' minimum" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > refuses an axe-core older than the kit's minimum before it loads axe into the page, naming the version it found)
+ * @claim "It leaves the page's own `window.axe`" scripts/kits/census-page.test.mjs verify:testExists(scripts/kits/census-page.test.mjs::collectCensus > puts back the page's own window.axe, or none, once it has read the page, even when the controls never settle)
  */
 export async function collectCensus(page, { attempts = SETTLE_ATTEMPTS, intervalMs = SETTLE_INTERVAL_MS } = {}) {
   // The registry names axe-core without a version, so an app keeps the one it has; the census reads
   // names with axe's own computation, so it needs the axe-core that audit needs.
   requireAxe(axe.version, "Ouro census");
-  await page.evaluate(axe.source);
+  let census;
+  try {
+    await page.evaluate(`window.${PAGE_AXE} = { had: Object.prototype.hasOwnProperty.call(window, "axe"), axe: window.axe };\n${axe.source}`);
+    census = await settledIdentities(page, attempts, intervalMs);
+  } catch (error) {
+    // A page that closed or moved on after a failure has nothing to put back, and the failure is the news.
+    await putBackAxe(page).catch(() => {});
+    throw error;
+  }
+  await putBackAxe(page);
+  return census;
+}
+
+/** Reads the page until a reading matches the one before it, or throws when `attempts` more readings differ. */
+async function settledIdentities(page, attempts, intervalMs) {
   let previous = JSON.stringify(toMultiset(await identitiesOnPage(page)));
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     await page.waitForTimeout(intervalMs);
@@ -72,6 +89,23 @@ export async function collectCensus(page, { attempts = SETTLE_ATTEMPTS, interval
   }
   throw new Error(`Ouro census: the page's controls never settled (${attempts} readings ${intervalMs} ms apart all differed).`);
 }
+
+/** Stops the census's axe-core listening for frame messages, and gives the page its own axe back. */
+function putBackAxe(page) {
+  return page.evaluate(
+    `(() => {
+      const saved = window.${PAGE_AXE};
+      if (!saved) return;
+      window.axe?.frameMessenger?.({ open: () => undefined, post: () => false });
+      delete window.${PAGE_AXE};
+      if (saved.had) window.axe = saved.axe;
+      else delete window.axe;
+    })()`,
+  );
+}
+
+/** Where the census keeps the page's own `window.axe` while its axe-core takes that name. */
+const PAGE_AXE = "__ouroCensusPageAxe";
 
 /**
  * The installed Ouro components' names, the only valid markers: the stem of each component file

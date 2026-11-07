@@ -65,7 +65,7 @@ export interface OuroProviderProps {
  * `app/layout.tsx`, which stays a Server Component.
  *
  * @group App setup
- * @see https://ourostack.github.io/ouro-ui/docs/ouro-provider
+ * @see https://ui.ouro.bot/docs/ouro-provider
  * @example
  * // React Router. app/components/ouro-router-link.tsx:
  * import type { ComponentProps } from "react";

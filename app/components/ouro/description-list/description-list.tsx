@@ -77,7 +77,7 @@ function itemWarnings(items: readonly DescriptionListItem[]): DevWarning[] {
  * a list of things a person opens or acts on.
  *
  * @group Display
- * @see https://ourostack.github.io/ouro-ui/docs/description-list
+ * @see https://ui.ouro.bot/docs/description-list
  *
  * @example
  * <DescriptionList

@@ -140,7 +140,7 @@ function linkHint(token: string): string {
  * the underline in the ring's colour instead, since an outline would cover the next character.
  *
  * @group Text
- * @see https://ourostack.github.io/ouro-ui/docs/link
+ * @see https://ui.ouro.bot/docs/link
  *
  * @example
  * <Link href="/recipes">Browse recipes</Link>

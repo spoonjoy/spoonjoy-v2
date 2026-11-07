@@ -80,7 +80,7 @@ function CheckIcon(props: SVGProps<SVGSVGElement>): JSX.Element {
  * for a share action inside a menu.
  *
  * @group Actions
- * @see https://ourostack.github.io/ouro-ui/docs/share-button
+ * @see https://ui.ouro.bot/docs/share-button
  *
  * @example
  * <ShareButton url={`https://example.com/notes/${note.id}`} title={note.title} />

@@ -51,7 +51,7 @@ export interface OuroTestOptions {
  * `pressTint` from testing/press.ts holds the mouse down on an element and proves its `:active` tint.
  * Each project extends your root config, so your Vite plugins and aliases apply. Needs
  * Playwright's browsers: `npx playwright install chromium webkit`. Needs Vitest 4.1.11 or
- * later; on Vitest 4, pass `page` (https://ourostack.github.io/ouro-ui/docs/testing.md).
+ * later; on Vitest 4, pass `page` (https://ui.ouro.bot/docs/testing.md).
  *
  * @example
  * // vitest.config.ts

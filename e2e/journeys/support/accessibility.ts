@@ -296,7 +296,7 @@ export async function auditShownScheme(page: Page, options: AuditOptions = {}): 
  */
 async function holdNotifications(page: Page) {
   const showing = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('[data-ouro="toaster"] [role="dialog"]')).some((toast) => toast.checkVisibility({ visibilityProperty: true })),
+    Array.from(document.querySelectorAll('[data-ouro="toaster"] :is([role="dialog"], [role="alertdialog"])')).some((toast) => toast.checkVisibility({ visibilityProperty: true })),
   );
   if (!showing) return null;
   const before = await page.evaluateHandle(() => document.activeElement);

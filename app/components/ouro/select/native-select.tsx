@@ -149,7 +149,7 @@ function ChevronIcon(): JSX.Element {
  * `multiple`), and `RadioGroup` for two to five choices that should all show.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/native-select
+ * @see https://ui.ouro.bot/docs/native-select
  *
  * @example
  * <NativeSelect

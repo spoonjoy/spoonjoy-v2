@@ -90,7 +90,7 @@ function duplicateValue(items: readonly SegmentedControlItem[]): string | undefi
  * form value that is submitted.
  *
  * @group Navigation
- * @see https://ourostack.github.io/ouro-ui/docs/segmented-control
+ * @see https://ui.ouro.bot/docs/segmented-control
  *
  * @example
  * <SegmentedControl

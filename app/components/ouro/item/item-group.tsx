@@ -66,7 +66,7 @@ const variants = {
  * `Card`s for larger tiles.
  *
  * @group Lists
- * @see https://ourostack.github.io/ouro-ui/docs/item-group
+ * @see https://ui.ouro.bot/docs/item-group
  *
  * @example
  * <ItemGroup label="Bearer credentials" empty="No active bearer credentials.">

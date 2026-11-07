@@ -140,7 +140,7 @@ function setInputFile(input: HTMLInputElement, file: File | null): void {
  * an image you already have.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/image-field
+ * @see https://ui.ouro.bot/docs/image-field
  *
  * @example
  * <ImageField label="Profile photo" name="photo" src={user.photoUrl} shape="circle" crop maxSize={5 * 1024 * 1024} onRemove={removePhoto} />

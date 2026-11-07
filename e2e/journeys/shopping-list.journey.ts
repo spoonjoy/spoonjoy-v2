@@ -287,8 +287,7 @@ test.describe("Shopping list", () => {
     await expect(scaleDisplay).toHaveValue("2");
 
     await listAction.click();
-    // The toast appears once QA's add-and-reload round trip finishes, which can be slow.
-    await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "3 items added at 2x", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("region", { name: "Notifications" }).getByRole("dialog", { name: "3 items added at 2x", exact: true })).toBeVisible();
     await expect(listAction).toHaveText("In list");
     await expect(listAction).toHaveAttribute("aria-pressed", "true");
     await expectAccessible();

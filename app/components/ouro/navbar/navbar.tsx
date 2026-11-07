@@ -132,7 +132,7 @@ const example = '<Navbar label="Main" items={[{ label: "Recipes", href: "/recipe
  * page. `StackedLayout` puts a Navbar above the page.
  *
  * @group Navigation
- * @see https://ourostack.github.io/ouro-ui/docs/navbar
+ * @see https://ui.ouro.bot/docs/navbar
  *
  * @example
  * <Navbar

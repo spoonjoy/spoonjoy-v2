@@ -207,7 +207,7 @@ function setInputFiles(input: HTMLInputElement, files: readonly File[]): void {
  * widget when files go straight to storage without a form.
  *
  * @group Forms
- * @see https://ourostack.github.io/ouro-ui/docs/file-field
+ * @see https://ui.ouro.bot/docs/file-field
  *
  * @example
  * <FileField label="Recipe photo" name="photo" accept="image/*" maxSize={5 * 1024 * 1024} error={errors?.photo} />

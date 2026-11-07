@@ -1,9 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assetRetryNote, loadRetryNote } from "../../e2e/journeys/support/app-ready";
 import {
   EXPECTED_PRISMA_D1_TRANSACTION_WARNING,
+  JOURNEYS_RETRY_NOTE_PATTERN,
   OURO_SLOW_TOUCH_TRACE_PATTERN,
+  PNPM_SLOW_TARBALL_PATTERN,
   PNPM_TRANSIENT_FETCH_RETRY_PATTERN,
   findUnexpectedDiagnosticOutput,
   findUnexpectedWarnings,
@@ -337,6 +340,61 @@ describe("warning gate", () => {
     ].map((line, index) => [index + 1, line] as const))("tolerates transient retry notice %i", (_case, line) => {
       expect(findUnexpectedWarnings(`${line}\n`)).toEqual([]);
       expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+  });
+
+  describe("pnpm's slow download note", () => {
+    // The line Journeys run 40631270668's install printed, with pnpm's thin spaces around WARN.
+    const slow = "\u2009WARN\u2009 Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.npmjs.org/@floating-ui/core/-/core-1.8.0.tgz (GET)";
+
+    it("tolerates the note on either channel", () => {
+      expect(findUnexpectedWarnings(`${slow}\n`)).toEqual([]);
+      expect(findUnexpectedDiagnosticOutput("", `${slow}\n`)).toEqual([]);
+      const larger = "WARN  Tarball download average speed 1.5 MiB/s (size 12.3 MiB) is below 2 MiB/s: https://registry.npmjs.org/a/-/a-1.0.0.tgz (GET)";
+      expect(PNPM_SLOW_TARBALL_PATTERN.test(larger)).toBe(true);
+    });
+
+    it.each([
+      ["another registry host", "WARN  Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.example.com/a/-/a-1.0.0.tgz (GET)"],
+      ["extra text after the note", "WARN  Tarball download average speed 40 KiB/s (size 44 KiB) is below 50 KiB/s: https://registry.npmjs.org/a/-/a-1.0.0.tgz (GET) integrity mismatch"],
+      ["a different warning about tarballs", "WARN  Tarball integrity check failed: https://registry.npmjs.org/a/-/a-1.0.0.tgz (GET)"],
+    ])("fails %s", (_label, line) => {
+      expect(PNPM_SLOW_TARBALL_PATTERN.test(line)).toBe(false);
+      expect(findUnexpectedWarnings(`${line}\n`)).toEqual([line]);
+    });
+  });
+
+  describe("the journeys' notes about a load or file they asked for again", () => {
+    // The notes app-ready.ts prints, for the resets Journeys runs 40592921397 and 40634883359 met
+    // and a static file answered 502 or 504.
+    const notes = [
+      loadRetryNote(new Error("page.goto: net::ERR_CONNECTION_RESET at https://spoonjoy-v2-qa-run-40634883359-1.mendelow-studio.workers.dev/login\nCall log:\n  - navigating")),
+      loadRetryNote(new Error("page.reload: net::ERR_CONNECTION_CLOSED at https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev/recipes?q=a")),
+      loadRetryNote(new Error("page.goto: Error receiving data: Connection reset by peer")),
+      loadRetryNote(new Error("page.goto: Peer failed to perform TLS handshake: Error receiving data: Connection reset by peer")),
+      assetRetryNote("/assets/heading-BIJmUf4w.js", 502, 2),
+      loadRetryNote(new Error("page.reload: net::ERR_SSL_PROTOCOL_ERROR at https://spoonjoy-v2-qa-run-1-1.mendelow-studio.workers.dev/search?q=(rice)")),
+      assetRetryNote("/assets/root-Dx_9a.css", 504, 3),
+      assetRetryNote("/assets/_user$id-Ab3_x.js", 503, 2),
+      assetRetryNote("/assets/logo@2x-Q1w2.png", 502, 3),
+    ];
+
+    it.each(notes)("tolerates %s", (line) => {
+      expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(true);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([]);
+    });
+
+    it.each([
+      ["a load that timed out", loadRetryNote(new Error("page.goto: Timeout 60000ms exceeded."))],
+      ["a load that failed another way", loadRetryNote(new Error("page.goto: net::ERR_NAME_NOT_RESOLVED at https://example.com/"))],
+      ["a file answered with another status", assetRetryNote("/assets/a.js", 500, 2)],
+      ["a file outside the built files", assetRetryNote("/photos/covers/a.jpg", 502, 2)],
+      ["a fourth try", assetRetryNote("/assets/a.js", 502, 4)],
+      ["extra text after a note", `${assetRetryNote("/assets/a.js", 502, 2)} and a page error`],
+      ["another note from the journeys", "Journeys: the page never hydrated"],
+    ])("still fails %s", (_label, line) => {
+      expect(JOURNEYS_RETRY_NOTE_PATTERN.test(line)).toBe(false);
+      expect(findUnexpectedDiagnosticOutput("", `${line}\n`)).toEqual([line]);
     });
   });
 

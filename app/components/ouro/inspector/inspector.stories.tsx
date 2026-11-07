@@ -8,7 +8,7 @@ import { Switch } from "~/components/ouro/switch/switch";
 
 // Layout here uses inline styles and the theme's CSS variables (shadcn's names).
 
-const docsHref = (item: string) => `https://ourostack.github.io/ouro-ui/docs/${item}/`;
+const docsHref = (item: string) => `https://ui.ouro.bot/docs/${item}/`;
 
 /** A themed panel. It follows the page's scheme (the `.dark` class on the root). */
 function Surface({ children }: { children: ReactNode }) {

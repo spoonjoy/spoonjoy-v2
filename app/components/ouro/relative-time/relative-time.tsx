@@ -68,7 +68,7 @@ const serverNow = () => 0;
  * Use `LocalDate` instead where the date itself matters, such as a due date.
  *
  * @group Text
- * @see https://ourostack.github.io/ouro-ui/docs/relative-time
+ * @see https://ui.ouro.bot/docs/relative-time
  *
  * @example
  * <RelativeTime value={comment.createdAt} />
