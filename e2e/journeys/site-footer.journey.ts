@@ -15,7 +15,7 @@ async function expectFooter(page: Page, path: string): Promise<void> {
   await expectNoHydrationErrors(page);
   const footer = page.getByRole("contentinfo");
   await expect(footer, `${path}: footer`).toBeVisible();
-  await expect(footer.getByRole("link", { name: "Built with Ouro HX", exact: true })).toHaveAttribute("href", "https://ui.ouro.bot/");
+  await expect(footer.getByRole("link", { name: "Built with Ouro HX", exact: true })).toHaveAttribute("href", "https://ui.ouroboros.bot/");
   await expect(footer.getByRole("button", { name: "See all the components", exact: true })).toBeVisible();
   await expect(page.locator("main#main").getByRole("contentinfo")).toHaveCount(0);
 }
