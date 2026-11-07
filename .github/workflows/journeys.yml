@@ -339,6 +339,7 @@ jobs:
           if [ "$SUITE" = "explore" ]; then
             pnpm run explore:qa
           elif [ "$MODE" = "affected" ]; then
+            set -f # SPECS is split on spaces and never globbed.
             for spec in $SPECS; do
               [[ "$spec" =~ ^e2e/journeys/[A-Za-z0-9_-]+(\.(mobile|desktop))?\.journey\.ts$ ]] || { echo "::error::Unexpected spec: $spec"; exit 1; }
             done

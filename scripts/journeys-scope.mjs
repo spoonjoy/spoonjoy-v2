@@ -8,8 +8,8 @@
 //     The run runs the changed specs, the specs whose names share a word with a changed file, and
 //     a smoke set; plus the HX census when app code changed, because its baseline fails on any
 //     control change and an author should see that before the queue.
-//   - full: anything else (dependencies, config, migrations, scripts, the journeys harness, any
-//     unknown path), the `visual` label, too many affected specs, or any doubt.
+//   - full: anything else (app-wide files such as app/root.tsx, app/routes.ts and app/styles/,
+//     dependencies, config, migrations, scripts, the journeys harness, any unknown path), the `visual` label, too many affected specs, or any doubt.
 //
 // Run in the Journeys workflow's `changes` job from the base branch's copy of this file, so a pull
 // request cannot change the rules for its own run. It reads the pull request's files and labels
@@ -62,6 +62,8 @@ export function skippableReason(file) {
 export const SPEC_FILE = /^e2e\/journeys\/(?!hx-census\.)[A-Za-z0-9_-]+(?:\.(?:mobile|desktop))?\.journey\.ts$/;
 // App code: a pull request that changes only these (and journey specs) gets the affected run.
 export const AFFECTED_PATHS = Object.freeze([/^app\//, /^stories\//, /^public\//]);
+// App files that every page uses: a change to one runs the full suite.
+export const APP_WIDE_PATHS = Object.freeze([/^app\/(?:root|routes|entry\.[a-z]+)\.tsx?$/, /^app\/styles\//]);
 // Always part of an affected run: signing in and moving around the app.
 export const SMOKE_SPECS = Object.freeze(["e2e/journeys/sign-in.journey.ts", "e2e/journeys/round-trips.journey.ts"]);
 // More than this many selected specs runs the full suite instead.
@@ -100,6 +102,10 @@ export function decide({ files, labels, specs = null }) {
       specs: [],
       why: `All ${files.length} changed file(s) are documentation, unit tests or other workflows, so this pull request's Journeys run skips the suite. The merge queue still runs it.`,
     };
+  }
+  const appWide = needsRun.filter((file) => APP_WIDE_PATHS.some((pattern) => pattern.test(file)));
+  if (appWide.length > 0) {
+    return full(`\`${appWide[0]}\` affects every page, so the full suite runs.`);
   }
   const outside = needsRun.filter((file) => !SPEC_FILE.test(file) && !AFFECTED_PATHS.some((pattern) => pattern.test(file)));
   if (outside.length > 0) {

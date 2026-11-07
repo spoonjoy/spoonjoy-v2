@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   AFFECTED_PATHS,
+  APP_WIDE_PATHS,
   FORCE_LABEL,
   MAX_AFFECTED_SPECS,
   MAX_LISTED_FILES,
@@ -247,12 +248,21 @@ describe("decide", () => {
     ["a worker", "workers/cook-session.ts"],
     ["a migration", "migrations/0042_add_column.sql"],
   ])("runs the full suite when %s changes", (_name, file) => {
-    expect(decide({ files: ["app/root.tsx", file], labels: [], specs: SPECS }).mode).toBe("full");
+    expect(decide({ files: ["app/routes/home.tsx", file], labels: [], specs: SPECS }).mode).toBe("full");
   });
 
+  it.each(["app/root.tsx", "app/routes.ts", "app/entry.client.tsx", "app/entry.server.tsx", "app/styles/tailwind.css"])(
+    "runs the full suite when the app-wide %s changes",
+    (file) => {
+      const decision = decide({ files: [file], labels: [], specs: SPECS });
+      expect(decision.mode).toBe("full");
+      expect(decision.why).toBe(`\`${file}\` affects every page, so the full suite runs.`);
+    },
+  );
+
   it("runs the full suite when the specs could not be listed or none would run", () => {
-    expect(decide({ files: ["app/root.tsx"], labels: [] }).why).toContain("could not be listed");
-    expect(decide({ files: ["app/root.tsx"], labels: [], specs: ["e2e/journeys/personas.setup.ts"] }).why)
+    expect(decide({ files: ["app/routes/home.tsx"], labels: [] }).why).toContain("could not be listed");
+    expect(decide({ files: ["app/routes/home.tsx"], labels: [], specs: ["e2e/journeys/personas.setup.ts"] }).why)
       .toContain("No journey spec matches");
   });
 
@@ -265,6 +275,7 @@ describe("decide", () => {
 
   it("keeps the affected rules exactly as reviewed", () => {
     expect(AFFECTED_PATHS.map((pattern) => pattern.source)).toEqual(["^app\\/", "^stories\\/", "^public\\/"]);
+    expect(APP_WIDE_PATHS.some((pattern) => pattern.test("app/routes/home.tsx"))).toBe(false);
     expect(SMOKE_SPECS).toEqual(["e2e/journeys/sign-in.journey.ts", "e2e/journeys/round-trips.journey.ts"]);
     expect(SPEC_FILE.test("e2e/journeys/cooking.mobile.journey.ts")).toBe(true);
     expect(SPEC_FILE.test("e2e/journeys/hx-census.journey.ts")).toBe(false);
