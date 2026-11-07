@@ -60,7 +60,7 @@ describe("SiteFooter", () => {
     renderSite();
     const footer = screen.getByRole("contentinfo");
     const credit = within(footer).getByRole("link", { name: "Built with Ouro HX" });
-    expect(credit).toHaveAttribute("href", "https://ui.ouro.bot/");
+    expect(credit).toHaveAttribute("href", "https://ui.ouroboros.bot/");
     expect(within(footer).getByRole("button", { name: "See all the components" })).toBeInTheDocument();
     expect(footer.closest("main")).toBeNull();
     // It stays off the page until asked: no X-ray and no request for the manifest.
