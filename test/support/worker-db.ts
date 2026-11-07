@@ -31,6 +31,7 @@ const SNAPSHOT_NAME = "template.db";
 // later run can tell a directory whose run was killed before its teardown (a SIGKILL, or a SIGTERM
 // Vitest does not handle) from one a live run still uses, and remove it: sweepStaleRunDbDirs.
 const RUN_DIR_PREFIX = "spoonjoy-vitest-db-";
+const RUN_DIR_OWNER = new RegExp(`^${RUN_DIR_PREFIX}(\\d+)-[^-]+$`);
 
 export function claimRunDbDir(
   env: NodeJS.ProcessEnv = process.env,
@@ -107,14 +108,26 @@ const fsSweepIo: SweepIo = {
 // owning process has gone, and pid-less ones untouched for a day. Returns what it removed.
 export function sweepStaleRunDbDirs(root: string = tmpdir(), io: SweepIo = fsSweepIo, now: number = Date.now()): string[] {
   const removed: string[] = [];
-  for (const name of io.list(root)) {
+  let names: string[];
+  try {
+    names = io.list(root);
+  } catch {
+    return removed;
+  }
+  for (const name of names) {
     if (!name.startsWith(RUN_DIR_PREFIX)) continue;
     const path = join(root, name);
-    const owner = /^spoonjoy-vitest-db-(\d+)-[^-]+$/.exec(name);
-    const stale = owner ? !io.alive(Number(owner[1])) : now - io.modifiedMs(path) > UNNAMED_OWNER_MAX_AGE_MS;
-    if (!stale) continue;
-    io.remove(path);
-    removed.push(path);
+    const owner = RUN_DIR_OWNER.exec(name);
+    // Best effort: another run may remove the same directory first, or it may belong to another
+    // user. Neither should stop this run from starting.
+    try {
+      const stale = owner ? !io.alive(Number(owner[1])) : now - io.modifiedMs(path) > UNNAMED_OWNER_MAX_AGE_MS;
+      if (!stale) continue;
+      io.remove(path);
+      removed.push(path);
+    } catch {
+      continue;
+    }
   }
   return removed;
 }

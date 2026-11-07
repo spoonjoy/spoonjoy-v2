@@ -235,6 +235,20 @@ describe("run directories left behind", () => {
     expect(removed).toEqual(["/root/spoonjoy-vitest-db-111-dead01", "/root/spoonjoy-vitest-db-OLD123"]);
   });
 
+  it("keeps going when a directory vanishes or cannot be removed", () => {
+    const fail = (code: string) => {
+      throw Object.assign(new Error(code), { code });
+    };
+    const io: SweepIo = {
+      list: () => ["spoonjoy-vitest-db-OLD123", "spoonjoy-vitest-db-111-theirs", "spoonjoy-vitest-db-222-dead01"],
+      alive: () => false,
+      modifiedMs: () => fail("ENOENT"),
+      remove: (path) => (path.endsWith("theirs") ? fail("EACCES") : undefined),
+    };
+    expect(sweepStaleRunDbDirs("/root", io, 25 * HOUR)).toEqual(["/root/spoonjoy-vitest-db-222-dead01"]);
+    expect(sweepStaleRunDbDirs("/missing", { ...io, list: () => fail("ENOENT") })).toEqual([]);
+  });
+
   it("sweeps a real directory, keeping a live run's", () => {
     const root = mkdtempSync(join(tmpdir(), "spoonjoy-worker-db-sweep-"));
     try {
@@ -276,7 +290,10 @@ describe("run directories left behind", () => {
   it("leaves no run directory behind once a real Vitest run ends", () => {
     const root = mkdtempSync(join(tmpdir(), "spoonjoy-worker-db-run-"));
     const seen = join(root, "seen.txt");
-    const path = "test/support/__worker-db-cleanup-generated.test.ts";
+    // Outside test/support (a rerun trigger for every test in watch mode), named per process so
+    // two runs never share it, and ignored by Git in case a killed run leaves it behind.
+    mkdirSync("test/generated", { recursive: true });
+    const path = `test/generated/worker-db-cleanup-${process.pid}.test.ts`;
     writeFileSync(
       path,
       `import { writeFileSync } from "node:fs";\nimport { test } from "vitest";\n` +
