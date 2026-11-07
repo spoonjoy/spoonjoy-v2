@@ -1,13 +1,28 @@
+<!-- spoonjoy:brand:start -->
+<p align="center">
+  <a href="https://spoonjoy.app"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/spoonjoy/.github/main/brand/headers/spoonjoy-v2-dark.webp">
+    <img src="https://raw.githubusercontent.com/spoonjoy/.github/main/brand/headers/spoonjoy-v2-light.webp" alt="The Spoonjoy home page open in a browser window, with a plate of lemon pantry pasta set beside it" width="100%">
+  </picture></a>
+</p>
+<!-- spoonjoy:brand:end -->
+
 # Spoonjoy
+
+Spoonjoy on the web: the recipe app, its API and its MCP server, on Cloudflare.
+
+[spoonjoy.app](https://spoonjoy.app) · [Test Kitchen](https://spoonjoy.app/test-kitchen) (cook a sample recipe) · [API and MCP](https://spoonjoy.app/developers) · [Storybook](https://spoonjoy-storybook-cp6.pages.dev/) · [iPhone, iPad and Mac app](https://github.com/spoonjoy/spoonjoy-apple)
+
+**Run it locally:** with Node 22 and pnpm 10, the commands in [Quick Start](#quick-start) open your own kitchen at http://localhost:5173.
 
 A recipe app for home cooks, built with React Router 7 on Cloudflare.[^stack] It is the reference app for building with [Ouro HX](https://ui.ouroboros.bot/): read [Building with Ouro HX](docs/building-with-ouro-hx.md).
 
 ## Links
 
-- **Storybook**: https://spoonjoy-storybook-cp6.pages.dev/
 - **Getting Started Guide**: [GUIDE.md](./GUIDE.md) — comprehensive walkthrough from clone to delighted
 - **Cloudflare Deployment Checklist**: [docs/deployment.md](./docs/deployment.md)
 - **Analytics & Privacy**: [docs/analytics-privacy.md](./docs/analytics-privacy.md)
+- **Agents**: [spoonjoy.app/llms.txt](https://spoonjoy.app/llms.txt), the [API](docs/api.md) and the [MCP connector](docs/claude-connector.md)
 
 ## Tech Stack
 
@@ -21,7 +36,7 @@ A recipe app for home cooks, built with React Router 7 on Cloudflare.[^stack] It
 
 ```bash
 # Clone and install
-git clone https://github.com/arimendelow/spoonjoy-v2.git
+git clone https://github.com/spoonjoy/spoonjoy-v2.git
 cd spoonjoy-v2
 pnpm install
 
